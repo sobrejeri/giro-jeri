@@ -262,6 +262,162 @@ router.put('/settings/:key', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── GET /api/admin/coupons ─────────────────────────────
+router.get('/coupons', requireAdmin, async (req, res, next) => {
+  try {
+    const { is_active, search, page = 1, limit = 50 } = req.query;
+    const offset = (page - 1) * limit;
+    let query = supabase
+      .from('coupons').select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
+    if (search) query = query.ilike('code', `%${search}%`);
+    const { data, error, count } = await query;
+    if (error) throw error;
+    res.json({ data, total: count, page: Number(page) });
+  } catch (err) { next(err); }
+});
+
+router.post('/coupons', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('coupons').insert({ ...req.body, created_by_user_id: req.user.id }).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+router.put('/coupons/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('coupons').update(req.body).eq('id', req.params.id).select().single();
+    if (error || !data) return res.status(404).json({ error: 'Cupom não encontrado' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.delete('/coupons/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('coupons').update({ is_active: false }).eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/seasons ─────────────────────────────
+router.get('/seasons', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('high_season_rules').select('*, regions(name)').order('start_month');
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.post('/seasons', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('high_season_rules').insert(req.body).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+router.put('/seasons/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('high_season_rules').update(req.body).eq('id', req.params.id).select().single();
+    if (error || !data) return res.status(404).json({ error: 'Regra não encontrada' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.delete('/seasons/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('high_season_rules').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/pricing-rules ───────────────────────
+router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
+  try {
+    const { region_id, tour_id } = req.query;
+    let query = supabase
+      .from('vehicle_pricing_rules')
+      .select('*, vehicles(name, vehicle_type), regions(name), tours(name)')
+      .order('created_at', { ascending: false });
+    if (region_id) query = query.eq('region_id', region_id);
+    if (tour_id)   query = query.eq('tour_id', tour_id);
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.post('/pricing-rules', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('vehicle_pricing_rules').insert(req.body).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+router.put('/pricing-rules/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('vehicle_pricing_rules').update(req.body).eq('id', req.params.id).select().single();
+    if (error || !data) return res.status(404).json({ error: 'Regra não encontrada' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.delete('/pricing-rules/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('vehicle_pricing_rules').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/financial-daily ─────────────────────
+// Série temporal para o gráfico de faturamento
+router.get('/financial-daily', requireAdmin, async (req, res, next) => {
+  try {
+    const { days = 30 } = req.query;
+    const since = dayjs().subtract(Number(days), 'day').format('YYYY-MM-DD');
+
+    const { data, error } = await supabase
+      .from('financial_ledger')
+      .select('amount, effective_date')
+      .eq('entry_type', 'booking_gross')
+      .eq('direction', 'inflow')
+      .gte('effective_date', since)
+      .order('effective_date');
+
+    if (error) throw error;
+
+    // Agrupa por dia
+    const byDay = {};
+    for (const row of data || []) {
+      const d = row.effective_date?.slice(0, 10) || '';
+      byDay[d] = (byDay[d] || 0) + Number(row.amount);
+    }
+
+    const series = Object.entries(byDay)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, total]) => ({ date, total }));
+
+    res.json(series);
+  } catch (err) { next(err); }
+});
+
 // ── Helpers ────────────────────────────────────────────
 function sum(rows, entryType, direction) {
   return rows

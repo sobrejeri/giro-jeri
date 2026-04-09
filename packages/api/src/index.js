@@ -10,6 +10,8 @@ import transfersRoutes from './routes/transfers.js';
 import bookingsRoutes from './routes/bookings.js';
 import paymentsRoutes from './routes/payments.js';
 import adminRoutes    from './routes/admin.js';
+import vehiclesRoutes from './routes/vehicles.js';
+import catalogRoutes  from './routes/catalog.js';
 import { regionsRouter } from './routes/regions.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
@@ -67,6 +69,8 @@ app.use('/api/bookings',  bookingsRoutes);
 app.use('/api/payments',  paymentsRoutes);
 app.use('/api/regions',   regionsRouter);
 app.use('/api/admin',     adminRoutes);
+app.use('/api/vehicles',  vehiclesRoutes);
+app.use('/api/catalog',   catalogRoutes);
 
 // ── Erros ──────────────────────────────────────────────
 app.use(notFound);
