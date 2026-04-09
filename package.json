@@ -1,0 +1,20 @@
+{
+  "name": "giro-jeri",
+  "version": "2.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev":            "npm run dev --workspace=packages/api",
+    "dev:api":        "npm run dev --workspace=packages/api",
+    "start":          "npm run start --workspace=packages/api",
+    "install:all":    "npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

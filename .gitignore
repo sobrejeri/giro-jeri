@@ -1,0 +1,53 @@
+# ── Dependências ──────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Variáveis de ambiente (NUNCA subir para o GitHub) ──
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+*.env
+
+# ── Build / dist ───────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# ── Logs ───────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# ── Sistema operacional ────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── Editor ─────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ── Testes ─────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Misc ───────────────────────────────────────────────
+.cache/
+tmp/
+temp/
