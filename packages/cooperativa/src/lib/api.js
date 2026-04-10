@@ -1,10 +1,45 @@
 const BASE = import.meta.env.VITE_API_URL || ''
 
-function getToken() {
-  return localStorage.getItem('giro_token')
+const STORAGE = {
+  token:   'giro_token',
+  refresh: 'giro_refresh',
+  user:    'giro_user',
 }
 
-async function request(path, options = {}) {
+function getToken()   { return localStorage.getItem(STORAGE.token)   }
+function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
+
+// Tenta renovar o access_token via refresh_token.
+// Retorna true se conseguiu, false se falhou.
+async function tryRefresh() {
+  const refreshToken = getRefresh()
+  if (!refreshToken) return false
+
+  try {
+    const res = await fetch(`${BASE}/api/auth/refresh`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (!res.ok) return false
+
+    const data = await res.json()
+    localStorage.setItem(STORAGE.token,   data.token)
+    localStorage.setItem(STORAGE.refresh, data.refresh_token)
+    if (data.user) localStorage.setItem(STORAGE.user, JSON.stringify(data.user))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function clearSession() {
+  Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
+  window.location.href = '/login'
+}
+
+// Faz uma requisição autenticada com re-tentativa automática após refresh.
+async function request(path, options = {}, isRetry = false) {
   const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
     headers: {
@@ -16,12 +51,15 @@ async function request(path, options = {}) {
   })
 
   if (res.status === 401) {
-    localStorage.removeItem('giro_token')
-    localStorage.removeItem('giro_user')
-    window.location.href = '/login'
+    if (!isRetry) {
+      const refreshed = await tryRefresh()
+      if (refreshed) return request(path, options, true)
+    }
+    clearSession()
     return null
   }
 
+  if (res.status === 204) return null
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
   return data

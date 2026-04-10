@@ -22,7 +22,7 @@ export default function Login() {
         setError('Acesso restrito a operadores e administradores.')
         return
       }
-      login(data.user, data.token)
+      login(data.user, data.token, data.refresh_token)
       navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err.message || 'Credenciais inválidas')

@@ -1,29 +1,49 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useCallback } from 'react'
 
 const AuthContext = createContext(null)
 
+const STORAGE = {
+  token:   'giro_admin_token',
+  refresh: 'giro_admin_refresh',
+  user:    'giro_admin_user',
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('giro_admin_user')) } catch { return null }
+    try { return JSON.parse(localStorage.getItem(STORAGE.user)) } catch { return null }
   })
-  const [token, setToken] = useState(() => localStorage.getItem('giro_admin_token') || null)
+  const [token, setToken]     = useState(() => localStorage.getItem(STORAGE.token)   || null)
+  const [refresh, setRefresh] = useState(() => localStorage.getItem(STORAGE.refresh) || null)
 
-  function login(userData, authToken) {
+  const login = useCallback((userData, accessToken, refreshToken) => {
     setUser(userData)
-    setToken(authToken)
-    localStorage.setItem('giro_admin_user', JSON.stringify(userData))
-    localStorage.setItem('giro_admin_token', authToken)
-  }
+    setToken(accessToken)
+    setRefresh(refreshToken)
+    localStorage.setItem(STORAGE.user,    JSON.stringify(userData))
+    localStorage.setItem(STORAGE.token,   accessToken)
+    localStorage.setItem(STORAGE.refresh, refreshToken)
+  }, [])
 
-  function logout() {
+  const updateTokens = useCallback((accessToken, refreshToken, userData) => {
+    setToken(accessToken)
+    setRefresh(refreshToken)
+    localStorage.setItem(STORAGE.token,   accessToken)
+    localStorage.setItem(STORAGE.refresh, refreshToken)
+    if (userData) {
+      setUser(userData)
+      localStorage.setItem(STORAGE.user, JSON.stringify(userData))
+    }
+  }, [])
+
+  const logout = useCallback(() => {
     setUser(null)
     setToken(null)
-    localStorage.removeItem('giro_admin_user')
-    localStorage.removeItem('giro_admin_token')
-  }
+    setRefresh(null)
+    Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
+  }, [])
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout }}>
+    <AuthContext.Provider value={{ user, token, refresh, login, logout, updateTokens }}>
       {children}
     </AuthContext.Provider>
   )

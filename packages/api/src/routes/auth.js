@@ -97,6 +97,33 @@ router.get('/me', authenticate, (req, res) => {
   res.json({ user: req.user });
 });
 
+// ── POST /api/auth/refresh ────────────────────────────
+router.post('/refresh', async (req, res, next) => {
+  try {
+    const { refresh_token } = req.body;
+    if (!refresh_token) {
+      return res.status(400).json({ error: 'refresh_token obrigatório' });
+    }
+
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+    if (error || !data.session) {
+      return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
+    }
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url')
+      .eq('auth_id', data.user.id)
+      .single();
+
+    res.json({
+      token:         data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      user:          profile,
+    });
+  } catch (err) { next(err); }
+});
+
 // ── POST /api/auth/logout ──────────────────────────────
 router.post('/logout', authenticate, async (req, res, next) => {
   try {

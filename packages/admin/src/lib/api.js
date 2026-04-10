@@ -1,10 +1,42 @@
 const BASE = import.meta.env.VITE_API_URL || ''
 
-function getToken() {
-  return localStorage.getItem('giro_admin_token')
+const STORAGE = {
+  token:   'giro_admin_token',
+  refresh: 'giro_admin_refresh',
+  user:    'giro_admin_user',
 }
 
-async function request(path, options = {}) {
+function getToken()   { return localStorage.getItem(STORAGE.token)   }
+function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
+
+async function tryRefresh() {
+  const refreshToken = getRefresh()
+  if (!refreshToken) return false
+
+  try {
+    const res = await fetch(`${BASE}/api/auth/refresh`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (!res.ok) return false
+
+    const data = await res.json()
+    localStorage.setItem(STORAGE.token,   data.token)
+    localStorage.setItem(STORAGE.refresh, data.refresh_token)
+    if (data.user) localStorage.setItem(STORAGE.user, JSON.stringify(data.user))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function clearSession() {
+  Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
+  window.location.href = '/login'
+}
+
+async function request(path, options = {}, isRetry = false) {
   const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
     headers: {
@@ -16,9 +48,11 @@ async function request(path, options = {}) {
   })
 
   if (res.status === 401) {
-    localStorage.removeItem('giro_admin_token')
-    localStorage.removeItem('giro_admin_user')
-    window.location.href = '/login'
+    if (!isRetry) {
+      const refreshed = await tryRefresh()
+      if (refreshed) return request(path, options, true)
+    }
+    clearSession()
     return null
   }
 
@@ -96,6 +130,6 @@ export const api = {
   getAuditLogs: (params = {}) => request(`/api/admin/audit-logs?${new URLSearchParams(params)}`),
 
   // Configurações
-  getSettings:   ()         => request('/api/admin/settings'),
+  getSettings:   ()          => request('/api/admin/settings'),
   updateSetting: (key, body) => request(`/api/admin/settings/${key}`, { method: 'PUT', body }),
 }
