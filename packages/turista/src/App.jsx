@@ -1,8 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
-import Layout from './components/layout/Layout'
-import Home      from './pages/Home'
-import Tours     from './pages/Tours'
+import Layout   from './components/layout/Layout'
+import Home     from './pages/Home'
+import Tours    from './pages/Tours'
 import TourDetail from './pages/TourDetail'
 import Transfers from './pages/Transfers'
 import Bookings  from './pages/Bookings'
@@ -17,9 +17,11 @@ function PrivateRoute({ children }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/login"   element={<Login />} />
+      {/* Auth — full screen, sem layout */}
+      <Route path="/login"    element={<Login />} />
       <Route path="/cadastro" element={<Register />} />
 
+      {/* App — mobile layout com bottom nav */}
       <Route path="/" element={<Layout />}>
         <Route index                   element={<Home />} />
         <Route path="passeios"         element={<Tours />} />
