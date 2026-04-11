@@ -17,11 +17,11 @@ const STATUS_COMMERCIAL = {
 }
 
 const STATUS_OPERATIONAL = {
-  completed: { label: 'Concluído', color: 'bg-brand text-white' },
-  cancelled:  { label: 'Cancelado', color: 'bg-gray-200 text-gray-500' },
-  in_progress:{ label: 'Em andamento', color: 'bg-green-100 text-green-700' },
-  assigned:   { label: 'Atribuído', color: 'bg-purple-100 text-purple-700' },
-  new:        { label: 'Novo', color: 'bg-blue-100 text-blue-700' },
+  completed:   { label: 'Concluído',     color: 'bg-brand text-white' },
+  cancelled:   { label: 'Cancelado',     color: 'bg-gray-200 text-gray-500' },
+  in_progress: { label: 'Em andamento',  color: 'bg-green-100 text-green-700' },
+  assigned:    { label: 'Atribuído',     color: 'bg-purple-100 text-purple-700' },
+  new:         { label: 'Novo',          color: 'bg-blue-100 text-blue-700' },
 }
 
 const TOUR_ICONS = [Zap, Sun, Waves, Anchor]
@@ -109,7 +109,7 @@ const STATUS_FILTERS = [
 ]
 
 export default function Bookings() {
-  const [search,    setSearch]    = useState('')
+  const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
   const { data, isLoading } = useQuery({
@@ -127,59 +127,61 @@ export default function Bookings() {
   return (
     <div className="flex flex-col min-h-full">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+      <div className="sticky top-0 md:top-14 z-10 bg-white border-b border-gray-100 px-4 md:px-6 py-3 flex items-center justify-between">
         <h1 className="font-bold text-gray-900 text-base">Minhas Reservas</h1>
         <Filter size={18} className="text-gray-500" />
       </div>
 
-      {/* Search + Filter */}
-      <div className="px-4 pt-4 pb-3 space-y-2">
-        <div className="flex items-center gap-2.5 h-11 px-3.5 bg-gray-50 rounded-xl border border-gray-100">
-          <Search size={15} className="text-gray-400 shrink-0" />
-          <input
-            className="flex-1 text-sm bg-transparent focus:outline-none text-gray-700 placeholder-gray-400"
-            placeholder="Buscar reserva..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-0.5">
-          {STATUS_FILTERS.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setStatusFilter(value)}
-              className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-semibold transition-colors ${
-                statusFilter === value ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* List */}
-      <div className="flex-1 px-4 pb-4">
-        {isLoading ? (
-          <PageSpinner />
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <PackageX size={48} className="mx-auto mb-4 text-gray-200" />
-            <p className="text-gray-500 text-sm mb-1">
-              {all.length === 0 ? 'Você ainda não tem reservas.' : 'Nenhuma reserva encontrada.'}
-            </p>
-            {all.length === 0 && (
-              <p className="text-xs text-gray-400">Faça sua primeira reserva de passeio ou transfer!</p>
-            )}
+      <div className="md:max-w-4xl md:mx-auto md:w-full md:px-6 md:py-6">
+        {/* Search + Filter */}
+        <div className="px-4 md:px-0 pt-4 pb-3 space-y-2">
+          <div className="flex items-center gap-2.5 h-11 px-3.5 bg-gray-50 rounded-xl border border-gray-100">
+            <Search size={15} className="text-gray-400 shrink-0" />
+            <input
+              className="flex-1 text-sm bg-transparent focus:outline-none text-gray-700 placeholder-gray-400"
+              placeholder="Buscar reserva..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-        ) : (
-          <div className="space-y-4">
-            {filtered.map((b, i) => (
-              <BookingCard key={b.id} booking={b} idx={i} />
+
+          <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-0.5">
+            {STATUS_FILTERS.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setStatusFilter(value)}
+                className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-semibold transition-colors ${
+                  statusFilter === value ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {label}
+              </button>
             ))}
           </div>
-        )}
+        </div>
+
+        {/* List */}
+        <div className="flex-1 px-4 md:px-0 pb-4">
+          {isLoading ? (
+            <PageSpinner />
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-16">
+              <PackageX size={48} className="mx-auto mb-4 text-gray-200" />
+              <p className="text-gray-500 text-sm mb-1">
+                {all.length === 0 ? 'Você ainda não tem reservas.' : 'Nenhuma reserva encontrada.'}
+              </p>
+              {all.length === 0 && (
+                <p className="text-xs text-gray-400">Faça sua primeira reserva de passeio ou transfer!</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0 lg:grid-cols-3">
+              {filtered.map((b, i) => (
+                <BookingCard key={b.id} booking={b} idx={i} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
