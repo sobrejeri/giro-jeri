@@ -5,6 +5,14 @@
 @layer base {
   body {
     @apply bg-white text-gray-900 font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  input[type="date"],
+  input[type="time"],
+  input[type="number"] {
+    -webkit-appearance: none;
   }
 }
 

@@ -64,17 +64,17 @@ export default function Home() {
 
   return (
     <div className="flex flex-col">
-      {/* Mobile-only header (logo + location) — desktop has TopNav */}
-      <div className="md:hidden bg-white px-5 pt-10 pb-4 flex items-center justify-between">
+      {/* Mobile-only header — desktop has TopNav */}
+      <div className="md:hidden bg-white px-5 pt-6 pb-4 flex items-center justify-between border-b border-gray-50">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-brand rounded-xl flex items-center justify-center">
             <MapPin size={15} className="text-white" />
           </div>
           <span className="font-display font-bold text-gray-900">Giro Jeri</span>
         </div>
-        <div className="flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1.5">
-          <MapPin size={12} className="text-brand" />
-          <span className="text-xs font-medium text-gray-700">Jericoacoara</span>
+        <div className="flex items-center gap-1.5 bg-orange-50 border border-brand/20 rounded-full px-3 py-1.5">
+          <MapPin size={11} className="text-brand" />
+          <span className="text-xs font-semibold text-brand">Jericoacoara</span>
         </div>
       </div>
 

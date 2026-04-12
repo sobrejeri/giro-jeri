@@ -35,5 +35,17 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    function ({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-hide': {
+          '-ms-overflow-style': 'none',
+          'scrollbar-width': 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        },
+        '.touch-callout-none': { '-webkit-touch-callout': 'none' },
+        '.tap-highlight-none': { '-webkit-tap-highlight-color': 'transparent' },
+      })
+    },
+  ],
 }
