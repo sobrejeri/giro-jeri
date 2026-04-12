@@ -6,9 +6,9 @@ import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import {
   MapPin, ChevronDown, MessageCircle, SlidersHorizontal,
-  Plus, Minus, ChevronRight, X, Check,
+  Plus, Minus, ChevronRight, X, Check, CheckCircle,
   Zap, Sun, Waves, Anchor, Clock, Users,
-  Star, TrendingDown, Crown,
+  Star, TrendingDown, Crown, Loader2,
 } from 'lucide-react'
 
 const TOUR_ICONS = {
@@ -19,9 +19,9 @@ const TOUR_ICONS = {
 }
 
 const BANNERS = [
-  { title: 'Conheça os passeios de Jericoacoara', sub: 'A praia mais bonita do Brasil', from: 'from-sky-900', to: 'to-teal-700' },
-  { title: 'Pôr do sol inesquecível nas dunas', sub: 'Uma experiência única', from: 'from-orange-900', to: 'to-amber-600' },
-  { title: 'Lagoa do Paraíso — águas cristalinas', sub: 'Reserve agora com desconto', from: 'from-teal-800', to: 'to-emerald-600' },
+  { title: 'Conheça os passeios de Jericoacoara', sub: 'A praia mais bonita do Brasil',       from: 'from-sky-900',    to: 'to-teal-700' },
+  { title: 'Pôr do sol inesquecível nas dunas',   sub: 'Uma experiência única',               from: 'from-orange-900', to: 'to-amber-600' },
+  { title: 'Lagoa do Paraíso — águas cristalinas', sub: 'Reserve agora com desconto',         from: 'from-teal-800',   to: 'to-emerald-600' },
 ]
 
 const DEPARTURE_OPTIONS = [
@@ -49,32 +49,23 @@ function computeSuggestions(vehicles, people) {
     return result
   }
 
-  const byCapDesc  = [...vehicles].sort((a, b) => b.seat_capacity - a.seat_capacity)
+  const byCapDesc   = [...vehicles].sort((a, b) => b.seat_capacity - a.seat_capacity)
   const byCheapSeat = [...vehicles].sort((a, b) =>
     Number(a.base_price) / a.seat_capacity - Number(b.base_price) / b.seat_capacity
   )
 
-  function totalPrice(qtys) {
-    return vehicles.reduce((s, v) => s + (qtys[v.id] || 0) * Number(v.base_price), 0)
-  }
-  function totalCap(qtys) {
-    return vehicles.reduce((s, v) => s + (qtys[v.id] || 0) * v.seat_capacity, 0)
-  }
-  function describe(qtys) {
-    return vehicles
-      .filter(v => (qtys[v.id] || 0) > 0)
-      .map(v => `${qtys[v.id]}x ${v.name}`)
-      .join(' + ')
-  }
+  function totalPrice(q) { return vehicles.reduce((s, v) => s + (q[v.id] || 0) * Number(v.base_price), 0) }
+  function totalCap(q)   { return vehicles.reduce((s, v) => s + (q[v.id] || 0) * v.seat_capacity, 0) }
+  function describe(q)   { return vehicles.filter(v => (q[v.id] || 0) > 0).map(v => `${q[v.id]}x ${v.name}`).join(' + ') }
 
   const rec     = fillGreedy(byCapDesc, people)
   const eco     = fillGreedy(byCheapSeat, people)
   const comfort = fillGreedy(byCapDesc, Math.ceil(people * 1.3))
 
   return [
-    { id: 'rec',  label: 'Recomendado',    Icon: Star,        bg: 'bg-brand',       combo: rec },
-    { id: 'eco',  label: 'Mais econômico', Icon: TrendingDown, bg: 'bg-green-500',   combo: eco },
-    { id: 'com',  label: 'Mais conforto',  Icon: Crown,       bg: 'bg-purple-500',  combo: comfort },
+    { id: 'rec', label: 'Recomendado',    Icon: Star,         bg: 'bg-brand',      combo: rec },
+    { id: 'eco', label: 'Mais econômico', Icon: TrendingDown, bg: 'bg-green-500',  combo: eco },
+    { id: 'com', label: 'Mais conforto',  Icon: Crown,        bg: 'bg-purple-500', combo: comfort },
   ]
     .filter(s => describe(s.combo))
     .map(s => ({ ...s, description: describe(s.combo), price: totalPrice(s.combo), capacity: totalCap(s.combo) }))
@@ -95,41 +86,37 @@ export default function Tours() {
   const [showDeparture, setShowDeparture] = useState(false)
   const [bannerIdx,     setBannerIdx]     = useState(0)
 
-  const { data: toursData,    isLoading: toursLoading    } = useQuery({ queryKey: ['tours'],    queryFn: () => api.getTours() })
+  // Booking state
+  const [bookingLoading, setBookingLoading] = useState(false)
+  const [bookingError,   setBookingError]   = useState('')
+  const [bookingResult,  setBookingResult]  = useState(null)
+
+  const { data: regionsData }                                                = useQuery({ queryKey: ['regions'],    queryFn: () => api.getRegions() })
+  const { data: toursData,    isLoading: toursLoading    }                  = useQuery({ queryKey: ['tours'],      queryFn: () => api.getTours() })
   const { data: vehiclesData, isLoading: vehiclesLoading } = useQuery({
     queryKey: ['tour-vehicles', selectedTour?.id],
     queryFn:  () => api.getTourVehicles(selectedTour.id),
     enabled:  !!selectedTour,
   })
 
-  const tours    = toursData?.tours    || toursData    || []
+  const regionId = (regionsData?.regions || regionsData || [])[0]?.id
+  const tours     = toursData?.tours    || toursData    || []
   const allVehicles = vehiclesData?.vehicles || vehiclesData || []
-  const vehicles = mode === 'private' ? allVehicles.filter(v => v.is_private_allowed) : allVehicles
+  const vehicles  = mode === 'private' ? allVehicles.filter(v => v.is_private_allowed) : allVehicles
 
   const suggestions = useMemo(() =>
     mode === 'private' && vehicles.length ? computeSuggestions(vehicles, people) : [],
     [vehicles, people, mode]
   )
 
-  const totalCapacity = useMemo(() =>
-    vehicles.reduce((s, v) => s + (vehicleQtys[v.id] || 0) * v.seat_capacity, 0),
-    [vehicles, vehicleQtys]
-  )
-
-  const privateTotalPrice = useMemo(() =>
-    vehicles.reduce((s, v) => s + (vehicleQtys[v.id] || 0) * Number(v.base_price), 0),
-    [vehicles, vehicleQtys]
-  )
-
-  const sharedTotalPrice = selectedTour?.is_shared_enabled
-    ? Number(selectedTour.shared_price_per_person) * people : 0
-
-  const totalPrice  = mode === 'shared' ? sharedTotalPrice : privateTotalPrice
-  const hasVehicles = Object.values(vehicleQtys).some(q => q > 0)
-  const capacityOk  = totalCapacity >= people
-  const canContinue = selectedTour && date && (mode === 'shared' ? true : hasVehicles && capacityOk)
-
-  const summaryChips = vehicles.filter(v => (vehicleQtys[v.id] || 0) > 0)
+  const totalCapacity   = useMemo(() => vehicles.reduce((s, v) => s + (vehicleQtys[v.id] || 0) * v.seat_capacity, 0), [vehicles, vehicleQtys])
+  const privateTotalPrice = useMemo(() => vehicles.reduce((s, v) => s + (vehicleQtys[v.id] || 0) * Number(v.base_price), 0), [vehicles, vehicleQtys])
+  const sharedTotalPrice  = selectedTour?.is_shared_enabled ? Number(selectedTour.shared_price_per_person) * people : 0
+  const totalPrice        = mode === 'shared' ? sharedTotalPrice : privateTotalPrice
+  const hasVehicles       = Object.values(vehicleQtys).some(q => q > 0)
+  const capacityOk        = totalCapacity >= people
+  const canContinue       = selectedTour && date && (mode === 'shared' ? true : hasVehicles && capacityOk)
+  const summaryChips      = vehicles.filter(v => (vehicleQtys[v.id] || 0) > 0)
 
   function changeQty(vehicleId, delta) {
     setVehicleQtys(prev => {
@@ -139,19 +126,74 @@ export default function Tours() {
     })
   }
 
-  function applySuggestion(combo) { setVehicleQtys(combo) }
+  function selectTour(t) { setSelectedTour(t); setVehicleQtys({}); setBookingError('') }
 
-  function selectTour(t) { setSelectedTour(t); setVehicleQtys({}) }
-
-  function handleContinue() {
+  async function handleContinue() {
     if (!token) { navigate('/login'); return }
-    if (!selectedTour) { alert('Selecione um passeio'); return }
-    if (!date)         { alert('Informe a data'); return }
-    if (mode === 'private' && !hasVehicles) { alert('Selecione ao menos um veículo'); return }
-    alert(`Em breve: fluxo de pagamento\n${selectedTour.name}\n${fmt(totalPrice)}`)
+    if (!selectedTour)                              { setBookingError('Selecione um passeio'); return }
+    if (!date)                                      { setBookingError('Informe a data'); return }
+    if (mode === 'private' && !hasVehicles)         { setBookingError('Selecione ao menos um veículo'); return }
+    if (mode === 'private' && !capacityOk)          { setBookingError(`Capacidade insuficiente para ${people} pessoas`); return }
+    if (!regionId)                                  { setBookingError('Erro: região não encontrada'); return }
+
+    setBookingLoading(true)
+    setBookingError('')
+    try {
+      const vehicleList = Object.entries(vehicleQtys).map(([vehicleId, quantity]) => ({ vehicleId, quantity }))
+      const result = await api.createBooking({
+        region_id:         regionId,
+        service_type:      'tour',
+        service_id:        selectedTour.id,
+        booking_mode:      mode,
+        service_date:      date,
+        service_time:      time || '08:00',
+        people_count:      people,
+        vehicles:          mode === 'private' ? vehicleList : [],
+        pickup_place_name: departure || undefined,
+        source_channel:    'app',
+      })
+      setBookingResult(result?.booking || result)
+    } catch (err) {
+      setBookingError(err.message || 'Erro ao criar reserva. Tente novamente.')
+    } finally {
+      setBookingLoading(false)
+    }
   }
 
-  const showSummaryBar = selectedTour || hasVehicles
+  // ── Success screen ──
+  if (bookingResult) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
+          <CheckCircle size={48} className="text-green-500" />
+        </div>
+        <h2 className="font-display font-bold text-2xl text-gray-900 mb-2">Reserva criada!</h2>
+        <p className="text-gray-500 text-sm mb-4">Seu código de reserva</p>
+        <div className="bg-brand/10 border border-brand/20 rounded-2xl px-8 py-4 mb-2">
+          <p className="font-mono font-bold text-2xl text-brand tracking-widest">
+            {bookingResult.booking_code}
+          </p>
+        </div>
+        <p className="text-xs text-gray-400 mb-8 max-w-xs">
+          Entraremos em contato pelo WhatsApp com os detalhes de pagamento e confirmação.
+        </p>
+        <div className="flex gap-3 w-full max-w-xs">
+          <button
+            onClick={() => { setBookingResult(null); setSelectedTour(null); setVehicleQtys({}) }}
+            className="flex-1 h-12 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-600 active:scale-95 transition-transform"
+          >
+            Novo passeio
+          </button>
+          <button
+            onClick={() => navigate('/minhas-reservas')}
+            className="flex-1 h-12 bg-brand text-white rounded-2xl text-sm font-bold shadow-lg shadow-brand/30 active:scale-95 transition-transform"
+          >
+            Minhas reservas
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-full bg-white tap-highlight-none">
@@ -159,7 +201,6 @@ export default function Tours() {
       {/* ── App Header ── */}
       <div className="sticky top-0 md:top-14 z-20 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="md:max-w-4xl md:mx-auto">
-          {/* Row 1: logo + actions */}
           <div className="flex items-center justify-between px-4 h-14">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-brand rounded-lg flex items-center justify-center">
@@ -176,13 +217,13 @@ export default function Tours() {
               >
                 <MessageCircle size={17} className="text-white" />
               </a>
-              <button className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center active:scale-95 transition-transform">
+              <button className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center">
                 <SlidersHorizontal size={16} className="text-gray-600" />
               </button>
             </div>
           </div>
 
-          {/* Row 2: location picker */}
+          {/* Location picker */}
           <div className="px-4 pb-3">
             <button
               onClick={() => setShowDeparture(v => !v)}
@@ -194,9 +235,8 @@ export default function Tours() {
               </span>
               <ChevronDown size={14} className={`text-gray-400 shrink-0 transition-transform ${showDeparture ? 'rotate-180' : ''}`} />
             </button>
-
             {showDeparture && (
-              <div className="mt-1 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+              <div className="mt-1 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden z-30">
                 {DEPARTURE_OPTIONS.map(opt => (
                   <button
                     key={opt}
@@ -216,7 +256,6 @@ export default function Tours() {
         </div>
       </div>
 
-      {/* ── Page content ── */}
       <div className="md:max-w-4xl md:mx-auto md:w-full">
 
         {/* Mode toggle */}
@@ -225,7 +264,7 @@ export default function Tours() {
             {[['private', 'Privativo'], ['shared', 'Compartilhado']].map(([val, label]) => (
               <button
                 key={val}
-                onClick={() => { setMode(val); setVehicleQtys({}) }}
+                onClick={() => { setMode(val); setVehicleQtys({}); setBookingError('') }}
                 className={`flex-1 h-10 rounded-xl text-sm font-bold transition-all active:scale-95 ${
                   mode === val ? 'bg-brand text-white shadow-md' : 'text-gray-500'
                 }`}
@@ -242,17 +281,13 @@ export default function Tours() {
             <div className={`absolute inset-0 bg-gradient-to-br ${BANNERS[bannerIdx].from} ${BANNERS[bannerIdx].to}`} />
             <div className="absolute inset-0 bg-black/20" />
             <div className="absolute bottom-0 left-0 right-0 p-4">
-              <p className="text-white font-bold text-base leading-tight drop-shadow">
-                {BANNERS[bannerIdx].title}
-              </p>
+              <p className="text-white font-bold text-base leading-tight drop-shadow">{BANNERS[bannerIdx].title}</p>
               <p className="text-white/70 text-xs mt-0.5">{BANNERS[bannerIdx].sub}</p>
             </div>
           </div>
           <div className="flex justify-center gap-1.5 mt-2.5">
             {BANNERS.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setBannerIdx(i)}
+              <button key={i} onClick={() => setBannerIdx(i)}
                 className={`rounded-full transition-all ${i === bannerIdx ? 'w-4 h-1.5 bg-brand' : 'w-1.5 h-1.5 bg-gray-300'}`}
               />
             ))}
@@ -261,24 +296,17 @@ export default function Tours() {
 
         {/* Date + Time + People */}
         <div className="px-4 mb-4 grid grid-cols-3 gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={e => setDate(e.target.value)}
+          <input type="date" value={date}
+            onChange={e => { setDate(e.target.value); setBookingError('') }}
             min={new Date().toISOString().split('T')[0]}
             className="h-10 px-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-brand"
           />
-          <input
-            type="time"
-            value={time}
-            onChange={e => setTime(e.target.value)}
+          <input type="time" value={time} onChange={e => setTime(e.target.value)}
             className="h-10 px-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-brand"
           />
           <div className="flex items-center gap-1.5 h-10 px-2 border border-gray-200 rounded-xl">
             <Users size={12} className="text-brand shrink-0" />
-            <input
-              type="number" min="1" max="50"
-              value={people}
+            <input type="number" min="1" max="50" value={people}
               onChange={e => setPeople(Math.max(1, Number(e.target.value) || 1))}
               className="w-full text-xs focus:outline-none"
             />
@@ -291,15 +319,13 @@ export default function Tours() {
           <div className="px-4 flex items-center justify-between mb-2.5">
             <p className="font-bold text-gray-900 text-sm">Passeios disponíveis</p>
             {selectedTour && (
-              <button
-                onClick={() => { setSelectedTour(null); setVehicleQtys({}) }}
+              <button onClick={() => { setSelectedTour(null); setVehicleQtys({}); setBookingError('') }}
                 className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
               >
                 <X size={12} /> Limpar
               </button>
             )}
           </div>
-
           {toursLoading ? (
             <div className="px-4"><PageSpinner /></div>
           ) : (
@@ -308,9 +334,7 @@ export default function Tours() {
                 const Icon = TOUR_ICONS[t.category?.slug] || Zap
                 const selected = selectedTour?.id === t.id
                 return (
-                  <button
-                    key={t.id}
-                    onClick={() => selectTour(t)}
+                  <button key={t.id} onClick={() => selectTour(t)}
                     className={`shrink-0 w-32 rounded-2xl overflow-hidden border-2 transition-all active:scale-95 ${
                       selected ? 'border-brand shadow-lg shadow-brand/20' : 'border-gray-100'
                     }`}
@@ -337,11 +361,6 @@ export default function Tours() {
                           R$ {Number(t.shared_price_per_person).toFixed(0)}/pax
                         </p>
                       )}
-                      {mode === 'private' && t.shared_price_per_person && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          a partir de R$ {Number(t.shared_price_per_person).toFixed(0)}
-                        </p>
-                      )}
                     </div>
                   </button>
                 )
@@ -350,7 +369,7 @@ export default function Tours() {
           )}
         </div>
 
-        {/* ── SHARED mode ── */}
+        {/* SHARED mode info */}
         {mode === 'shared' && selectedTour && selectedTour.is_shared_enabled && (
           <div className="px-4 mb-5">
             <div className="bg-gradient-to-br from-brand to-amber-500 rounded-2xl p-5">
@@ -358,152 +377,111 @@ export default function Tours() {
               <div className="flex items-end justify-between">
                 <div>
                   <p className="text-white/70 text-xs">por pessoa</p>
-                  <p className="text-white font-bold text-3xl leading-none">
-                    R$ {Number(selectedTour.shared_price_per_person).toFixed(0)}
-                  </p>
+                  <p className="text-white font-bold text-3xl leading-none">R$ {Number(selectedTour.shared_price_per_person).toFixed(0)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-white/60 text-xs">{people} pax · total</p>
-                  <p className="text-white font-bold text-xl leading-none">
-                    {fmt(sharedTotalPrice)}
-                  </p>
+                  <p className="text-white font-bold text-xl leading-none">{fmt(sharedTotalPrice)}</p>
                 </div>
               </div>
-              <p className="text-white/50 text-xs mt-3 leading-relaxed">
-                Você viaja com outros grupos. Ótimo custo-benefício!
-              </p>
+              <p className="text-white/50 text-xs mt-3 leading-relaxed">Você viaja com outros grupos. Ótimo custo-benefício!</p>
             </div>
           </div>
         )}
 
-        {/* ── PRIVATE mode: suggestions + catalog ── */}
+        {/* PRIVATE mode: suggestions + catalog */}
         {mode === 'private' && selectedTour && (
           <>
-            {/* Quick suggestions */}
             {vehiclesLoading ? (
               <div className="px-4 mb-5"><PageSpinner /></div>
-            ) : suggestions.length > 0 && (
-              <div className="mb-5">
-                <p className="px-4 font-bold text-gray-900 text-sm mb-2.5">Sugestões rápidas</p>
-                <div className="flex gap-3 px-4 overflow-x-auto scrollbar-hide pb-1">
-                  {suggestions.map(s => {
-                    const isApplied = JSON.stringify(vehicleQtys) === JSON.stringify(s.combo)
-                    return (
-                      <div key={s.id} className="shrink-0 w-44 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-                        <div className={`${s.bg} px-3 py-1.5 flex items-center gap-1.5`}>
-                          <s.Icon size={12} className="text-white" />
-                          <span className="text-white text-[11px] font-bold">{s.label}</span>
-                        </div>
-                        <div className="p-3">
-                          <p className="text-xs text-gray-800 font-semibold mb-0.5 line-clamp-2 leading-tight">
-                            {s.description}
-                          </p>
-                          <p className="text-[10px] text-gray-400 mb-2.5">
-                            {s.capacity} lugares · {fmt(s.price)}
-                          </p>
-                          <button
-                            onClick={() => applySuggestion(s.combo)}
-                            className={`w-full h-7 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                              isApplied
-                                ? 'bg-brand/10 text-brand'
-                                : 'bg-gray-900 text-white hover:bg-gray-700'
-                            }`}
-                          >
-                            {isApplied ? '✓ Aplicado' : 'Aplicar'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Vehicle catalog */}
-            {!vehiclesLoading && (
-              <div className="px-4 mb-5">
-                <p className="font-bold text-gray-900 text-sm mb-3">Catálogo de veículos</p>
-                {vehicles.length === 0 ? (
-                  <p className="text-sm text-gray-400 py-6 text-center">Nenhum veículo disponível para este passeio.</p>
-                ) : (
-                  <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
-                    {vehicles.map(v => {
-                      const qty = vehicleQtys[v.id] || 0
-                      const capPct = people > 0 ? Math.min(100, (qty * v.seat_capacity / people) * 100) : 0
-                      return (
-                        <div
-                          key={v.id}
-                          className={`rounded-2xl border-2 transition-all overflow-hidden ${
-                            qty > 0 ? 'border-brand' : 'border-gray-100'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 p-3.5">
-                            {/* Icon */}
-                            <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${
-                              qty > 0 ? 'bg-brand/10' : 'bg-gradient-to-br from-orange-50 to-amber-50'
-                            }`}>
-                              <Zap size={22} className={qty > 0 ? 'text-brand' : 'text-brand/40'} />
+            ) : (
+              <>
+                {suggestions.length > 0 && (
+                  <div className="mb-5">
+                    <p className="px-4 font-bold text-gray-900 text-sm mb-2.5">Sugestões rápidas</p>
+                    <div className="flex gap-3 px-4 overflow-x-auto scrollbar-hide pb-1">
+                      {suggestions.map(s => {
+                        const isApplied = JSON.stringify(vehicleQtys) === JSON.stringify(s.combo)
+                        return (
+                          <div key={s.id} className="shrink-0 w-44 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+                            <div className={`${s.bg} px-3 py-1.5 flex items-center gap-1.5`}>
+                              <s.Icon size={12} className="text-white" />
+                              <span className="text-white text-[11px] font-bold">{s.label}</span>
                             </div>
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-gray-900 text-sm leading-tight">{v.name}</p>
-                              <p className="text-xs text-gray-400 mt-0.5">
-                                {v.seat_capacity} lugares · {v.vehicle_type}
-                              </p>
-                              <p className="text-sm font-bold text-brand mt-1">{fmt(v.base_price)}</p>
-                            </div>
-                            {/* Stepper */}
-                            <div className="flex items-center gap-2 shrink-0">
-                              {qty > 0 ? (
-                                <>
-                                  <button
-                                    onClick={() => changeQty(v.id, -1)}
-                                    className="w-8 h-8 rounded-full border-2 border-gray-200 bg-white flex items-center justify-center active:scale-95"
-                                  >
-                                    <Minus size={14} className="text-gray-600" />
-                                  </button>
-                                  <span className="w-5 text-center font-bold text-gray-900 text-sm">{qty}</span>
-                                  <button
-                                    onClick={() => changeQty(v.id, 1)}
-                                    className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95"
-                                  >
-                                    <Plus size={14} className="text-white" />
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  onClick={() => changeQty(v.id, 1)}
-                                  className="h-9 px-4 bg-brand/10 text-brand text-sm font-bold rounded-xl active:scale-95 hover:bg-brand/20 transition-colors"
-                                >
-                                  Adicionar
-                                </button>
-                              )}
+                            <div className="p-3">
+                              <p className="text-xs text-gray-800 font-semibold mb-0.5 line-clamp-2 leading-tight">{s.description}</p>
+                              <p className="text-[10px] text-gray-400 mb-2.5">{s.capacity} lugares · {fmt(s.price)}</p>
+                              <button
+                                onClick={() => { setVehicleQtys(s.combo); setBookingError('') }}
+                                className={`w-full h-7 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                                  isApplied ? 'bg-brand/10 text-brand' : 'bg-gray-900 text-white'
+                                }`}
+                              >
+                                {isApplied ? '✓ Aplicado' : 'Aplicar'}
+                              </button>
                             </div>
                           </div>
-
-                          {/* Capacity bar */}
-                          {qty > 0 && (
-                            <div className="px-3.5 pb-3 flex items-center gap-2">
-                              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all ${capPct >= 100 ? 'bg-green-500' : 'bg-brand'}`}
-                                  style={{ width: `${capPct}%` }}
-                                />
-                              </div>
-                              <span className="text-[10px] text-gray-400 shrink-0">
-                                {qty * v.seat_capacity}/{people} pax
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
-              </div>
+
+                {vehicles.length > 0 && (
+                  <div className="px-4 mb-5">
+                    <p className="font-bold text-gray-900 text-sm mb-3">Catálogo de veículos</p>
+                    <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
+                      {vehicles.map(v => {
+                        const qty    = vehicleQtys[v.id] || 0
+                        const capPct = people > 0 ? Math.min(100, (qty * v.seat_capacity / people) * 100) : 0
+                        return (
+                          <div key={v.id} className={`rounded-2xl border-2 transition-all overflow-hidden ${qty > 0 ? 'border-brand' : 'border-gray-100'}`}>
+                            <div className="flex items-center gap-3 p-3.5">
+                              <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${qty > 0 ? 'bg-brand/10' : 'bg-gradient-to-br from-orange-50 to-amber-50'}`}>
+                                <Zap size={22} className={qty > 0 ? 'text-brand' : 'text-brand/40'} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-gray-900 text-sm leading-tight">{v.name}</p>
+                                <p className="text-xs text-gray-400 mt-0.5">{v.seat_capacity} lugares · {v.vehicle_type}</p>
+                                <p className="text-sm font-bold text-brand mt-1">{fmt(v.base_price)}</p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {qty > 0 ? (
+                                  <>
+                                    <button onClick={() => changeQty(v.id, -1)} className="w-8 h-8 rounded-full border-2 border-gray-200 bg-white flex items-center justify-center active:scale-95">
+                                      <Minus size={14} className="text-gray-600" />
+                                    </button>
+                                    <span className="w-5 text-center font-bold text-gray-900 text-sm">{qty}</span>
+                                    <button onClick={() => changeQty(v.id, 1)} className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95">
+                                      <Plus size={14} className="text-white" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button onClick={() => changeQty(v.id, 1)}
+                                    className="h-9 px-4 bg-brand/10 text-brand text-sm font-bold rounded-xl active:scale-95 hover:bg-brand/20 transition-colors"
+                                  >
+                                    Adicionar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {qty > 0 && (
+                              <div className="px-3.5 pb-3 flex items-center gap-2">
+                                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full transition-all ${capPct >= 100 ? 'bg-green-500' : 'bg-brand'}`} style={{ width: `${capPct}%` }} />
+                                </div>
+                                <span className="text-[10px] text-gray-400 shrink-0">{qty * v.seat_capacity}/{people} pax</span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
-            {/* Capacity warning */}
             {hasVehicles && !capacityOk && (
               <div className="mx-4 mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
                 <Users size={14} className="text-amber-500 shrink-0" />
@@ -515,24 +493,20 @@ export default function Tours() {
           </>
         )}
 
-        {/* Spacer so content doesn't hide behind summary bar */}
-        <div className={showSummaryBar ? 'h-28' : 'h-4'} />
+        <div className={`h-${bookingError ? '36' : '28'}`} />
       </div>
 
-      {/* ── Summary Bar (sticky, above bottom nav) ── */}
-      {showSummaryBar && (
+      {/* ── Summary Bar ── */}
+      {(selectedTour || hasVehicles) && (
         <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 shadow-[0_-6px_24px_rgba(0,0,0,0.08)] px-4 pt-3 pb-4 md:pb-3">
           <div className="md:max-w-4xl md:mx-auto">
-            {/* Vehicle chips */}
             {summaryChips.length > 0 && (
               <div className="flex gap-2 mb-2.5 overflow-x-auto scrollbar-hide">
                 {summaryChips.map(v => (
                   <div key={v.id} className="shrink-0 flex items-center gap-1.5 bg-brand/10 border border-brand/20 rounded-full px-2.5 py-1">
                     <span className="text-xs font-bold text-brand">{vehicleQtys[v.id]}x</span>
                     <span className="text-xs text-gray-700 whitespace-nowrap">{v.name}</span>
-                    <button onClick={() => changeQty(v.id, -(vehicleQtys[v.id]))} className="ml-0.5">
-                      <X size={10} className="text-gray-400" />
-                    </button>
+                    <button onClick={() => changeQty(v.id, -(vehicleQtys[v.id]))}><X size={10} className="text-gray-400 ml-0.5" /></button>
                   </div>
                 ))}
                 {capacityOk && totalCapacity > 0 && (
@@ -544,7 +518,10 @@ export default function Tours() {
               </div>
             )}
 
-            {/* Price + CTA */}
+            {bookingError && (
+              <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2 mb-2">{bookingError}</p>
+            )}
+
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 {totalPrice > 0 ? (
@@ -560,14 +537,14 @@ export default function Tours() {
               </div>
               <button
                 onClick={handleContinue}
-                disabled={!canContinue}
+                disabled={!canContinue || bookingLoading}
                 className={`h-12 px-6 rounded-2xl text-sm font-bold flex items-center gap-2 transition-all active:scale-95 ${
-                  canContinue
+                  canContinue && !bookingLoading
                     ? 'bg-brand text-white shadow-lg shadow-brand/30'
                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                Continuar <ChevronRight size={16} />
+                {bookingLoading ? <><Loader2 size={16} className="animate-spin" /> Reservando…</> : <>Continuar <ChevronRight size={16} /></>}
               </button>
             </div>
           </div>

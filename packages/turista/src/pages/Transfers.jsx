@@ -25,9 +25,10 @@ export default function Transfers() {
   const [time,      setTime]      = useState('')
   const [people,    setPeople]    = useState(2)
   const [selectedRoute, setSelectedRoute] = useState(null)
-  const [loading,   setLoading]   = useState(false)
-  const [success,   setSuccess]   = useState(false)
-  const [error,     setError]     = useState('')
+  const [loading,       setLoading]       = useState(false)
+  const [success,       setSuccess]       = useState(false)
+  const [bookingCode,   setBookingCode]   = useState(null)
+  const [error,         setError]         = useState('')
 
   // Quote form state
   const [qOrigin,   setQOrigin]   = useState('')
@@ -43,17 +44,49 @@ export default function Transfers() {
     queryFn:  () => api.getTransferRoutes(),
   })
 
+  const { data: regionsData } = useQuery({
+    queryKey: ['regions'],
+    queryFn:  () => api.getRegions(),
+  })
+
   const routes = routesData?.routes || routesData || []
 
   const totalPrice = selectedRoute
     ? Number(selectedRoute.default_price)
     : null
 
-  function handleBook() {
+  async function handleBook() {
     if (!token) { navigate('/login'); return }
-    if (!selectedRoute) { alert('Selecione uma rota'); return }
-    if (!date || !time)  { alert('Informe data e horário'); return }
-    alert(`Transfer reservado!\n${selectedRoute.origin_name} → ${selectedRoute.destination_name}\n${fmt(totalPrice)}`)
+    if (!selectedRoute) { setError('Selecione uma rota'); return }
+    if (!date)           { setError('Informe a data'); return }
+    if (!time)           { setError('Informe o horário'); return }
+
+    const regionId = (regionsData?.regions || regionsData || [])[0]?.id
+    if (!regionId) { setError('Região não encontrada'); return }
+
+    setLoading(true)
+    setError('')
+    try {
+      const result = await api.createBooking({
+        region_id:          regionId,
+        service_type:       'transfer',
+        service_id:         selectedRoute.id,
+        route_id:           selectedRoute.id,
+        booking_mode:       'private',
+        service_date:       date,
+        service_time:       time,
+        people_count:       people,
+        origin_text:        origin || selectedRoute.origin_name,
+        destination_text:   dest   || selectedRoute.destination_name,
+        source_channel:     'app',
+      })
+      setBookingCode(result?.booking?.booking_code || result?.booking_code)
+      setSuccess(true)
+    } catch (err) {
+      setError(err.message || 'Erro ao criar reserva')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleQuote(e) {
@@ -264,25 +297,60 @@ export default function Transfers() {
 
             <div className="flex-1" />
 
-            {/* Bottom bar */}
-            <div className="sticky bottom-0 md:static bg-white border-t md:border-t border-gray-100 px-4 md:px-0 py-3 flex items-center gap-4 md:mt-4">
-              {totalPrice ? (
-                <div>
-                  <p className="text-xs text-gray-400">Total</p>
-                  <p className="font-bold text-gray-900 text-lg">{fmt(totalPrice)}</p>
+            {/* Routes booking success */}
+            {success && bookingCode && (
+              <div className="px-4 md:px-0 mb-4">
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
+                  <CheckCircle size={32} className="text-green-500 mx-auto mb-2" />
+                  <p className="font-bold text-gray-900 mb-1">Transfer reservado!</p>
+                  <p className="text-xs text-gray-500 mb-2">Código de reserva</p>
+                  <p className="font-mono font-bold text-xl text-brand tracking-widest bg-white rounded-xl py-2 px-4 border border-brand/20 mb-3">
+                    {bookingCode}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setSuccess(false); setBookingCode(null); setSelectedRoute(null) }}
+                      className="flex-1 h-10 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600"
+                    >
+                      Nova reserva
+                    </button>
+                    <button
+                      onClick={() => navigate('/minhas-reservas')}
+                      className="flex-1 h-10 bg-brand text-white rounded-xl text-sm font-semibold"
+                    >
+                      Ver reservas
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <p className="text-xs text-gray-400 flex-1">Selecione uma rota</p>
-              )}
-              <Button
-                onClick={handleBook}
-                disabled={!selectedRoute}
-                className="flex-1 max-w-[160px] ml-auto"
-                size="lg"
-              >
-                Continuar <ChevronRight size={16} />
-              </Button>
-            </div>
+              </div>
+            )}
+
+            {/* Bottom bar */}
+            {!success && (
+              <div className="sticky bottom-0 md:static bg-white border-t md:border-t border-gray-100 px-4 md:px-0 py-3 flex flex-col gap-2 md:mt-4">
+                {error && (
+                  <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
+                )}
+                <div className="flex items-center gap-4">
+                  {totalPrice ? (
+                    <div>
+                      <p className="text-xs text-gray-400">Total</p>
+                      <p className="font-bold text-gray-900 text-lg">{fmt(totalPrice)}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 flex-1">Selecione uma rota</p>
+                  )}
+                  <Button
+                    onClick={handleBook}
+                    disabled={!selectedRoute || loading}
+                    className="flex-1 max-w-[160px] ml-auto"
+                    size="lg"
+                  >
+                    {loading ? 'Reservando…' : <>Continuar <ChevronRight size={16} /></>}
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
 
