@@ -6,9 +6,9 @@ import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import {
   MapPin, ChevronDown, MessageCircle, SlidersHorizontal,
-  Plus, Minus, ChevronRight, X, Check, CheckCircle,
+  Plus, Minus, ChevronRight, X, Check,
   Zap, Sun, Waves, Anchor, Clock, Users,
-  Star, TrendingDown, Crown, Loader2,
+  Star, TrendingDown, Crown,
 } from 'lucide-react'
 
 const TOUR_ICONS = {
@@ -86,10 +86,7 @@ export default function Tours() {
   const [showDeparture, setShowDeparture] = useState(false)
   const [bannerIdx,     setBannerIdx]     = useState(0)
 
-  // Booking state
-  const [bookingLoading, setBookingLoading] = useState(false)
-  const [bookingError,   setBookingError]   = useState('')
-  const [bookingResult,  setBookingResult]  = useState(null)
+  const [bookingError, setBookingError] = useState('')
 
   const { data: regionsData }                                                = useQuery({ queryKey: ['regions'],    queryFn: () => api.getRegions() })
   const { data: toursData,    isLoading: toursLoading    }                  = useQuery({ queryKey: ['tours'],      queryFn: () => api.getTours() })
@@ -128,79 +125,48 @@ export default function Tours() {
 
   function selectTour(t) { setSelectedTour(t); setVehicleQtys({}); setBookingError('') }
 
-  async function handleContinue() {
+  function handleContinue() {
     if (!token) { navigate('/login'); return }
-    if (!selectedTour)                              { setBookingError('Selecione um passeio'); return }
-    if (!date)                                      { setBookingError('Informe a data'); return }
-    if (mode === 'private' && !hasVehicles)         { setBookingError('Selecione ao menos um veículo'); return }
-    if (mode === 'private' && !capacityOk)          { setBookingError(`Capacidade insuficiente para ${people} pessoas`); return }
-    if (!regionId)                                  { setBookingError('Erro: região não encontrada'); return }
+    if (!selectedTour)                     { setBookingError('Selecione um passeio'); return }
+    if (!date)                             { setBookingError('Informe a data'); return }
+    if (mode === 'private' && !hasVehicles) { setBookingError('Selecione ao menos um veículo'); return }
+    if (mode === 'private' && !capacityOk) { setBookingError(`Capacidade insuficiente para ${people} pessoas`); return }
+    if (!regionId)                         { setBookingError('Erro: região não encontrada'); return }
 
-    setBookingLoading(true)
-    setBookingError('')
-    try {
-      const vehicleList = Object.entries(vehicleQtys).map(([vehicleId, quantity]) => ({ vehicleId, quantity }))
-      const result = await api.createBooking({
-        region_id:         regionId,
+    const vehicleList = Object.entries(vehicleQtys).map(([vehicleId, quantity]) => ({ vehicleId, quantity }))
+
+    const sharedPrice  = mode === 'shared' ? Number(selectedTour.shared_price_per_person) * people : 0
+    const privatePrice = mode === 'private' ? vehicles.reduce((s, v) => s + (vehicleQtys[v.id] || 0) * Number(v.base_price), 0) : 0
+    const total        = mode === 'shared' ? sharedPrice : privatePrice
+
+    const breakdown = mode === 'shared'
+      ? { label: `${people} pax × R$ ${Number(selectedTour.shared_price_per_person).toFixed(0)}`, total }
+      : { items: summaryChips.map(v => ({ label: `${vehicleQtys[v.id]}x ${v.name}`, value: vehicleQtys[v.id] * Number(v.base_price) })), total }
+
+    navigate('/checkout/resumo', {
+      state: {
         service_type:      'tour',
         service_id:        selectedTour.id,
+        service_name:      selectedTour.name,
         booking_mode:      mode,
         service_date:      date,
         service_time:      time || '08:00',
         people_count:      people,
         vehicles:          mode === 'private' ? vehicleList : [],
         pickup_place_name: departure || undefined,
+        region_id:         regionId,
         source_channel:    'app',
-      })
-      setBookingResult(result?.booking || result)
-    } catch (err) {
-      setBookingError(err.message || 'Erro ao criar reserva. Tente novamente.')
-    } finally {
-      setBookingLoading(false)
-    }
-  }
-
-  // ── Success screen ──
-  if (bookingResult) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
-          <CheckCircle size={48} className="text-green-500" />
-        </div>
-        <h2 className="font-display font-bold text-2xl text-gray-900 mb-2">Reserva criada!</h2>
-        <p className="text-gray-500 text-sm mb-4">Seu código de reserva</p>
-        <div className="bg-brand/10 border border-brand/20 rounded-2xl px-8 py-4 mb-2">
-          <p className="font-mono font-bold text-2xl text-brand tracking-widest">
-            {bookingResult.booking_code}
-          </p>
-        </div>
-        <p className="text-xs text-gray-400 mb-8 max-w-xs">
-          Entraremos em contato pelo WhatsApp com os detalhes de pagamento e confirmação.
-        </p>
-        <div className="flex gap-3 w-full max-w-xs">
-          <button
-            onClick={() => { setBookingResult(null); setSelectedTour(null); setVehicleQtys({}) }}
-            className="flex-1 h-12 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-600 active:scale-95 transition-transform"
-          >
-            Novo passeio
-          </button>
-          <button
-            onClick={() => navigate('/minhas-reservas')}
-            className="flex-1 h-12 bg-brand text-white rounded-2xl text-sm font-bold shadow-lg shadow-brand/30 active:scale-95 transition-transform"
-          >
-            Minhas reservas
-          </button>
-        </div>
-      </div>
-    )
+        breakdown,
+      },
+    })
   }
 
   return (
     <div className="flex flex-col min-h-full bg-white tap-highlight-none">
 
       {/* ── App Header ── */}
-      <div className="sticky top-0 md:top-14 z-20 bg-white/95 backdrop-blur border-b border-gray-100">
-        <div className="md:max-w-4xl md:mx-auto">
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-100">
+        <div>
           <div className="flex items-center justify-between px-4 h-14">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-brand rounded-lg flex items-center justify-center">
@@ -256,7 +222,7 @@ export default function Tours() {
         </div>
       </div>
 
-      <div className="md:max-w-4xl md:mx-auto md:w-full">
+      <div>
 
         {/* Mode toggle */}
         <div className="px-4 pt-4 pb-3">
@@ -430,7 +396,7 @@ export default function Tours() {
                 {vehicles.length > 0 && (
                   <div className="px-4 mb-5">
                     <p className="font-bold text-gray-900 text-sm mb-3">Catálogo de veículos</p>
-                    <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
+                    <div className="space-y-3">
                       {vehicles.map(v => {
                         const qty    = vehicleQtys[v.id] || 0
                         const capPct = people > 0 ? Math.min(100, (qty * v.seat_capacity / people) * 100) : 0
@@ -498,8 +464,8 @@ export default function Tours() {
 
       {/* ── Summary Bar ── */}
       {(selectedTour || hasVehicles) && (
-        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 shadow-[0_-6px_24px_rgba(0,0,0,0.08)] px-4 pt-3 pb-4 md:pb-3">
-          <div className="md:max-w-4xl md:mx-auto">
+        <div className="fixed bottom-[68px] left-1/2 -translate-x-1/2 w-full max-w-[430px] z-30 bg-white border-t border-gray-100 shadow-[0_-6px_24px_rgba(0,0,0,0.08)] px-4 pt-3 pb-4">
+          <div>
             {summaryChips.length > 0 && (
               <div className="flex gap-2 mb-2.5 overflow-x-auto scrollbar-hide">
                 {summaryChips.map(v => (
@@ -537,14 +503,14 @@ export default function Tours() {
               </div>
               <button
                 onClick={handleContinue}
-                disabled={!canContinue || bookingLoading}
+                disabled={!canContinue}
                 className={`h-12 px-6 rounded-2xl text-sm font-bold flex items-center gap-2 transition-all active:scale-95 ${
-                  canContinue && !bookingLoading
+                  canContinue
                     ? 'bg-brand text-white shadow-lg shadow-brand/30'
                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {bookingLoading ? <><Loader2 size={16} className="animate-spin" /> Reservando…</> : <>Continuar <ChevronRight size={16} /></>}
+                Continuar <ChevronRight size={16} />
               </button>
             </div>
           </div>
