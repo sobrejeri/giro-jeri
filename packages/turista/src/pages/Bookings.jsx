@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import {
   PackageX, Search, Calendar, Clock, Users, ChevronRight, Filter,
-  Zap, Waves, Sun, Anchor, X, AlertTriangle, Loader2, MapPin,
-  ArrowRight, CheckCircle, Tag,
+  Zap, Waves, Sun, Anchor, X, AlertTriangle, Loader2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -30,135 +30,6 @@ const STATUS_OPERATIONAL = {
 const TOUR_ICONS = [Zap, Sun, Waves, Anchor]
 
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR')}` }
-
-// ── Booking Detail Bottom Sheet ──────────────────────────────────
-function BookingDetailSheet({ bookingId, onClose }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['booking', bookingId],
-    queryFn:  () => api.getBooking(bookingId),
-    enabled:  !!bookingId,
-  })
-
-  const booking = data?.booking || data
-  if (!booking && isLoading) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col justify-end md:items-center md:justify-center">
-        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-        <div className="relative bg-white rounded-t-3xl md:rounded-3xl p-8 flex items-center justify-center min-h-[200px] md:w-full md:max-w-lg">
-          <PageSpinner />
-        </div>
-      </div>
-    )
-  }
-  if (!booking) return null
-
-  const commercial  = STATUS_COMMERCIAL[booking.status_commercial]   || { label: booking.status_commercial, color: 'bg-gray-100 text-gray-500' }
-  const operational = STATUS_OPERATIONAL[booking.status_operational] || null
-
-  let dateStr = '—'
-  if (booking.service_date) {
-    try { dateStr = format(new Date(booking.service_date + 'T00:00:00'), "d 'de' MMMM 'de' yyyy", { locale: ptBR }) } catch {}
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end md:items-center md:justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-t-3xl md:rounded-3xl md:w-full md:max-w-lg max-h-[85vh] overflow-y-auto">
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1 md:hidden">
-          <div className="w-10 h-1 bg-gray-200 rounded-full" />
-        </div>
-
-        <div className="px-5 pb-6 pt-2">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">
-                {booking.service_type === 'tour' ? 'Passeio' : 'Transfer'}
-              </p>
-              <h3 className="font-bold text-gray-900 text-lg leading-tight mt-0.5">{booking.booking_code}</h3>
-            </div>
-            <button onClick={onClose} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-              <X size={16} className="text-gray-600" />
-            </button>
-          </div>
-
-          {/* Status badges */}
-          <div className="flex gap-2 mb-5 flex-wrap">
-            <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${commercial.color}`}>
-              {commercial.label}
-            </span>
-            {operational && (
-              <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${operational.color}`}>
-                {operational.label}
-              </span>
-            )}
-          </div>
-
-          {/* Details */}
-          <div className="space-y-3 mb-5">
-            {[
-              { icon: Calendar, label: 'Data', value: dateStr },
-              { icon: Clock,    label: 'Horário', value: booking.service_time ? booking.service_time.slice(0,5) : '—' },
-              { icon: Users,    label: 'Pessoas', value: booking.people_count ? `${booking.people_count} pax` : '—' },
-              ...(booking.origin_text    ? [{ icon: MapPin,    label: 'Origem',  value: booking.origin_text }] : []),
-              ...(booking.destination_text ? [{ icon: ArrowRight, label: 'Destino', value: booking.destination_text }] : []),
-              ...(booking.booking_mode  ? [{ icon: Tag,       label: 'Modo',    value: booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado' }] : []),
-            ].map(({ icon: Icon, label, value }) => (
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-gray-50 rounded-xl flex items-center justify-center shrink-0">
-                  <Icon size={15} className="text-gray-500" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{label}</p>
-                  <p className="text-sm text-gray-900 font-medium">{value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Price */}
-          <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between mb-5">
-            <p className="text-sm text-gray-500">Total da reserva</p>
-            <p className="font-bold text-gray-900 text-xl">{fmt(booking.total_price)}</p>
-          </div>
-
-          {/* Vehicles */}
-          {booking.booking_vehicles?.length > 0 && (
-            <div className="mb-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Veículos</p>
-              <div className="space-y-2">
-                {booking.booking_vehicles.map((bv, i) => (
-                  <div key={i} className="flex items-center justify-between bg-brand/5 border border-brand/10 rounded-xl px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <Zap size={14} className="text-brand" />
-                      <span className="text-sm font-medium text-gray-900">{bv.vehicle?.name || 'Veículo'}</span>
-                    </div>
-                    <span className="text-xs text-brand font-bold">{bv.quantity}x · {fmt(bv.unit_price)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Special notes */}
-          {booking.special_notes && (
-            <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 mb-5">
-              <p className="text-xs text-amber-600 font-semibold mb-0.5">Observações</p>
-              <p className="text-sm text-amber-800">{booking.special_notes}</p>
-            </div>
-          )}
-
-          <button onClick={onClose}
-            className="w-full h-12 bg-gray-900 text-white text-sm font-bold rounded-2xl active:scale-95 transition-transform"
-          >
-            Fechar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── Cancel Confirm Dialog ────────────────────────────────────────
 function CancelDialog({ booking, onConfirm, onClose, loading }) {
@@ -272,12 +143,12 @@ const STATUS_FILTERS = [
 // ── Main Page ────────────────────────────────────────────────────
 export default function Bookings() {
   const queryClient = useQueryClient()
+  const navigate    = useNavigate()
 
   const [search,        setSearch]        = useState('')
   const [statusFilter,  setStatusFilter]  = useState('')
-  const [cancelTarget,  setCancelTarget]  = useState(null)   // booking object
+  const [cancelTarget,  setCancelTarget]  = useState(null)
   const [cancelLoading, setCancelLoading] = useState(false)
-  const [detailId,      setDetailId]      = useState(null)   // booking id
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-bookings'],
@@ -366,7 +237,7 @@ export default function Bookings() {
                   booking={b}
                   idx={i}
                   onCancel={setCancelTarget}
-                  onDetail={setDetailId}
+                  onDetail={(id) => navigate(`/minhas-reservas/${id}`)}
                 />
               ))}
             </div>
@@ -384,13 +255,6 @@ export default function Bookings() {
         />
       )}
 
-      {/* Booking detail sheet */}
-      {detailId && (
-        <BookingDetailSheet
-          bookingId={detailId}
-          onClose={() => setDetailId(null)}
-        />
-      )}
     </div>
   )
 }

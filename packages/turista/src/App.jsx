@@ -5,7 +5,8 @@ import Home     from './pages/Home'
 import Tours    from './pages/Tours'
 import TourDetail from './pages/TourDetail'
 import Transfers from './pages/Transfers'
-import Bookings  from './pages/Bookings'
+import Bookings       from './pages/Bookings'
+import BookingDetail  from './pages/BookingDetail'
 import Login     from './pages/Login'
 import Register  from './pages/Register'
 
@@ -27,7 +28,8 @@ export default function App() {
         <Route path="passeios"         element={<Tours />} />
         <Route path="passeios/:id"     element={<TourDetail />} />
         <Route path="transfers"        element={<Transfers />} />
-        <Route path="minhas-reservas"  element={<PrivateRoute><Bookings /></PrivateRoute>} />
+        <Route path="minhas-reservas"     element={<PrivateRoute><Bookings /></PrivateRoute>} />
+        <Route path="minhas-reservas/:id" element={<PrivateRoute><BookingDetail /></PrivateRoute>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
