@@ -92,4 +92,20 @@ export const api = {
 
   // Regiões
   getRegions: () => request('/api/regions'),
+
+  // Catálogo — Passeios
+  getCategories:     ()         => request('/api/catalog/categories'),
+  getCatalogTours:   ()         => request('/api/catalog/tours'),
+  createCatalogTour: (body)     => request('/api/catalog/tours', { method: 'POST', body }),
+  updateCatalogTour: (id, body) => request(`/api/catalog/tours/${id}`, { method: 'PUT', body }),
+  toggleCatalogTour: (id, flag) => request(`/api/catalog/tours/${id}`, { method: 'PUT', body: { is_active: flag } }),
+
+  // Catálogo — Transfers (serviços-pai das rotas)
+  getCatalogTransfers: () => request('/api/catalog/transfers'),
+
+  // Catálogo — Rotas de Transfer
+  getCatalogRoutes:   ()         => request('/api/catalog/transfer-routes'),
+  createCatalogRoute: (body)     => request('/api/catalog/transfer-routes', { method: 'POST', body }),
+  updateCatalogRoute: (id, body) => request(`/api/catalog/transfer-routes/${id}`, { method: 'PUT', body }),
+  toggleCatalogRoute: (id, flag) => request(`/api/catalog/transfer-routes/${id}`, { method: 'PUT', body: { is_active: flag } }),
 }
