@@ -9,6 +9,7 @@ import TourDetail      from './pages/TourDetail'
 import Transfers       from './pages/Transfers'
 import Bookings        from './pages/Bookings'
 import BookingDetail   from './pages/BookingDetail'
+import Profile         from './pages/Profile'
 import Login           from './pages/Login'
 import Register        from './pages/Register'
 
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="transfers"           element={<Transfers />} />
         <Route path="minhas-reservas"     element={<PrivateRoute><Bookings /></PrivateRoute>} />
         <Route path="minhas-reservas/:id" element={<PrivateRoute><BookingDetail /></PrivateRoute>} />
+        <Route path="perfil"              element={<Profile />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
