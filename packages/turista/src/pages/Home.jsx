@@ -4,8 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import {
-  MapPin, Bell, Star, Clock, Heart, ChevronRight,
-  Compass, Car, Users, CalendarCheck, Plane, ArrowRight,
+  Bell, Star, Clock, Heart, ChevronRight,
+  Compass, Car, ArrowRight,
   Zap, Sun, Waves, Anchor,
 } from 'lucide-react'
 
@@ -36,14 +36,6 @@ function gi(id = '') {
   let n = 0; for (let i = 0; i < id.length; i++) n += id.charCodeAt(i)
   return n % GRADIENTS.length
 }
-
-// ── Quick actions grid ────────────────────────────────────────────
-const QUICK_ACTIONS = [
-  { id: 'privativo',   label: 'Passeio Privativo', sub: 'Exclusivo para seu grupo',   icon: Compass,      bg: 'bg-orange-50', color: 'text-brand',     to: '/passeios' },
-  { id: 'compartilh',  label: 'Compartilhado',      sub: 'Divida com outros turistas', icon: Users,        bg: 'bg-blue-50',   color: 'text-blue-600',  to: '/passeios' },
-  { id: 'transfer',    label: 'Transfer',            sub: 'Aeroporto & hotel',          icon: Plane,        bg: 'bg-teal-50',   color: 'text-teal-600',  to: '/transfers' },
-  { id: 'reservas',    label: 'Minhas Reservas',     sub: 'Acompanhe seus passeios',    icon: CalendarCheck,bg: 'bg-purple-50', color: 'text-purple-600',to: '/minhas-reservas' },
-]
 
 // ── Tour card ─────────────────────────────────────────────────────
 function TourCard({ tour, isFav, onToggleFav }) {
@@ -123,187 +115,125 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F8F8F8]">
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="bg-white px-5 pt-6 md:pt-4 pb-3 sticky top-0 md:top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-2.5">
-            {/* Logo */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center">
-                <span className="text-white text-base">🌴</span>
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-brand leading-none">Giro Jeri</h1>
-                <p className="text-[10px] text-gray-400 leading-none mt-0.5">Passeios & Transfers</p>
-              </div>
-            </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => window.open('https://wa.me/5588999999999', '_blank')}
-                className="w-9 h-9 rounded-full bg-[#E8F8EE] flex items-center justify-center text-[#25D366] active:scale-95 transition-transform"
-              >
-                <WhatsAppIcon />
-              </button>
-              <button className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 relative active:scale-95 transition-transform">
-                <Bell size={18} />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand rounded-full ring-2 ring-white" />
-              </button>
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-brand flex items-center justify-center">
+              <span className="text-white text-sm">🌴</span>
+            </div>
+            <div>
+              <h1 className="text-[15px] font-bold text-gray-900 leading-none">Giro Jeri</h1>
+              <p className="text-[10px] text-gray-400 leading-none mt-0.5">Jericoacoara, CE</p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.open('https://wa.me/5588999999999', '_blank')}
+              className="w-8 h-8 rounded-full bg-[#E8F8EE] flex items-center justify-center text-[#25D366] active:scale-95 transition-transform"
+            >
+              <WhatsAppIcon />
+            </button>
+            <button className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 relative active:scale-95 transition-transform">
+              <Bell size={16} />
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-brand rounded-full" />
+            </button>
+          </div>
+        </div>
 
-          {/* Location */}
-          <button className="flex items-center gap-1.5 w-full bg-[#FAFAFA] rounded-xl px-3 py-2 border border-gray-100 active:bg-gray-50 transition-colors">
-            <MapPin size={13} className="text-brand" />
-            <span className="text-xs text-gray-700 font-medium">Jericoacoara, CE</span>
-            <ChevronRight size={13} className="text-gray-300 ml-auto" />
-          </button>
+        {/* Greeting */}
+        <div>
+          <p className="text-[13px] text-gray-400">Olá, {firstName} 👋</p>
+          <p className="text-[17px] font-bold text-gray-900 leading-tight">O que vamos reservar?</p>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto">
-        {/* ── Hero ────────────────────────────────────────────── */}
-        <section className="px-4 pt-5 pb-4 bg-white">
-          <h2 className="text-xl font-bold text-gray-900 leading-tight mb-0.5">
-            Olá, {firstName}! 👋
-          </h2>
-          <p className="text-gray-500 text-sm mb-4">O que você quer reservar hoje?</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            {/* Passeios */}
-            <button
-              onClick={() => navigate('/passeios')}
-              className="relative rounded-2xl overflow-hidden h-[130px] shadow-sm active:scale-[0.97] transition-transform"
-              style={{ background: 'linear-gradient(135deg,#FF6A00,#FF8C40)' }}
-            >
-              <div className="absolute inset-0 flex flex-col justify-between p-3.5">
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                  <Compass size={18} className="text-white" />
-                </div>
-                <div className="text-left">
-                  <p className="text-white font-bold text-[15px] leading-tight">Passeios</p>
-                  <p className="text-white/75 text-[11px] mt-0.5">Buggy · UTV · Hilux</p>
-                </div>
-              </div>
-              <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-white/10" />
-            </button>
-
-            {/* Transfers */}
-            <button
-              onClick={() => navigate('/transfers')}
-              className="relative rounded-2xl overflow-hidden h-[130px] shadow-sm active:scale-[0.97] transition-transform"
-              style={{ background: 'linear-gradient(135deg,#1A4D5F,#2A7090)' }}
-            >
-              <div className="absolute inset-0 flex flex-col justify-between p-3.5">
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                  <Car size={18} className="text-white" />
-                </div>
-                <div className="text-left">
-                  <p className="text-white font-bold text-[15px] leading-tight">Transfers</p>
-                  <p className="text-white/75 text-[11px] mt-0.5">Aeroporto · Hotel</p>
-                </div>
-              </div>
-              <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-white/10" />
-            </button>
-          </div>
-        </section>
-
-        {/* ── Promo Banner ─────────────────────────────────────── */}
-        <section className="px-4 py-3">
-          <div
-            className="relative h-[88px] rounded-2xl overflow-hidden flex items-center px-4"
-            style={{ background: 'linear-gradient(135deg,#FF6A00 0%,#FF8C40 50%,#FFB347 100%)' }}
+      {/* ── Hero CTAs ──────────────────────────────────────────── */}
+      <section className="px-4 pt-4 pb-3">
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => navigate('/passeios')}
+            className="relative rounded-2xl overflow-hidden h-[120px] active:scale-[0.97] transition-transform"
+            style={{ background: 'linear-gradient(135deg,#FF6A00,#FF9040)' }}
           >
-            <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-white/10" />
-            <div className="absolute -right-2 bottom-0 w-20 h-20 rounded-full bg-white/10" />
-            <div className="relative">
-              <div className="flex items-center gap-1 mb-0.5">
-                <Zap size={11} className="text-yellow-300" />
-                <span className="text-white/90 text-[10px] font-semibold uppercase tracking-wide">Oferta especial</span>
+            <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+            <div className="absolute inset-0 flex flex-col justify-between p-3">
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                <Compass size={16} className="text-white" />
               </div>
-              <p className="text-white font-bold text-[15px] leading-snug">
-                Garanta sua aventura<br />em Jericoacoara!
-              </p>
+              <div className="text-left">
+                <p className="text-white font-bold text-[14px]">Passeios</p>
+                <p className="text-white/70 text-[11px]">Buggy · UTV · Barco</p>
+              </div>
             </div>
-          </div>
-        </section>
+          </button>
 
-        {/* ── Quick Access ─────────────────────────────────────── */}
-        <section className="px-4 pb-3">
-          <div className="grid grid-cols-2 gap-2.5">
-            {QUICK_ACTIONS.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => navigate(a.to)}
-                className="bg-white rounded-xl p-3 flex items-center gap-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-gray-50 active:bg-gray-50 active:scale-[0.97] transition-all"
-              >
-                <div className={`w-9 h-9 rounded-lg ${a.bg} flex items-center justify-center shrink-0`}>
-                  <a.icon size={18} className={a.color} />
-                </div>
-                <div className="text-left min-w-0">
-                  <p className="text-[13px] font-semibold text-gray-900 leading-tight">{a.label}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{a.sub}</p>
-                </div>
-              </button>
+          <button
+            onClick={() => navigate('/transfers')}
+            className="relative rounded-2xl overflow-hidden h-[120px] active:scale-[0.97] transition-transform"
+            style={{ background: 'linear-gradient(135deg,#1A4D5F,#2E7D9A)' }}
+          >
+            <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+            <div className="absolute inset-0 flex flex-col justify-between p-3">
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                <Car size={16} className="text-white" />
+              </div>
+              <div className="text-left">
+                <p className="text-white font-bold text-[14px]">Transfers</p>
+                <p className="text-white/70 text-[11px]">Aeroporto · Hotel</p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      {/* ── Featured Tours ─────────────────────────────────────── */}
+      <section className="pt-2 pb-4">
+        <div className="px-4 mb-3 flex items-center justify-between">
+          <p className="text-[15px] font-bold text-gray-900">Em destaque</p>
+          <Link to="/passeios" className="flex items-center gap-0.5 text-xs font-semibold text-brand">
+            Ver todos <ArrowRight size={13} />
+          </Link>
+        </div>
+
+        {isLoading ? (
+          <div className="px-4 h-[160px] flex items-center justify-center">
+            <div className="w-5 h-5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : featured.length === 0 ? (
+          <p className="px-4 text-sm text-gray-400">Nenhum passeio disponível.</p>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto px-4 pb-1 scrollbar-hide">
+            {featured.map((tour) => (
+              <TourCard key={tour.id} tour={tour} isFav={favs.has(tour.id)} onToggleFav={toggleFav} />
             ))}
           </div>
-        </section>
+        )}
+      </section>
 
-        {/* ── Featured Tours ───────────────────────────────────── */}
-        <section className="py-3 bg-white border-t border-gray-50 mb-2">
-          <div className="px-4 mb-3 flex items-center justify-between">
-            <h3 className="text-[15px] font-bold text-gray-900">Passeios em destaque</h3>
-            <Link
-              to="/passeios"
-              className="flex items-center gap-0.5 text-xs font-semibold text-brand"
-            >
-              Ver todos <ArrowRight size={13} />
-            </Link>
-          </div>
-
-          {isLoading ? (
-            <div className="px-4 h-[160px] flex items-center justify-center">
-              <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+      {/* ── Transfers promo ────────────────────────────────────── */}
+      <section className="px-4 pb-4">
+        <button
+          onClick={() => navigate('/transfers')}
+          className="relative w-full h-[80px] rounded-2xl overflow-hidden flex items-center px-4 active:scale-[0.98] transition-transform"
+          style={{ background: 'linear-gradient(135deg,#1A4D5F,#2E7D9A)' }}
+        >
+          <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
+          <div className="absolute right-2 bottom-0 w-14 h-14 rounded-full bg-white/10" />
+          <div className="relative flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <Car size={18} className="text-white" />
             </div>
-          ) : featured.length === 0 ? (
-            <p className="px-4 text-sm text-gray-400">Nenhum passeio disponível.</p>
-          ) : (
-            <div className="flex gap-3 overflow-x-auto px-4 pb-3 scrollbar-hide">
-              {featured.map((tour) => (
-                <TourCard
-                  key={tour.id}
-                  tour={tour}
-                  isFav={favs.has(tour.id)}
-                  onToggleFav={toggleFav}
-                />
-              ))}
+            <div className="text-left">
+              <p className="text-white font-bold text-[13px]">Precisa de transfer?</p>
+              <p className="text-white/70 text-[11px]">Chegada e saída de Jericoacoara</p>
             </div>
-          )}
-        </section>
-
-        {/* ── How it works ─────────────────────────────────────── */}
-        <section className="px-4 py-4 bg-white border-t border-gray-50 mb-2">
-          <h3 className="text-[15px] font-bold text-gray-900 mb-3">Como funciona?</h3>
-          <div className="space-y-3 md:grid md:grid-cols-3 md:gap-4 md:space-y-0">
-            {[
-              { n: '1', color: 'bg-brand',     title: 'Escolha seu passeio',   desc: 'Selecione o destino e tipo de reserva' },
-              { n: '2', color: 'bg-[#1A4D5F]', title: 'Configure os detalhes', desc: 'Informe data, horário e número de pessoas' },
-              { n: '3', color: 'bg-[#00C853]', title: 'Confirme e pague',      desc: 'Reserva garantida em poucos minutos' },
-            ].map((s) => (
-              <div key={s.n} className="flex items-center gap-3 md:flex-col md:items-start md:bg-gray-50 md:rounded-2xl md:p-4">
-                <div className={`${s.color} w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold`}>
-                  {s.n}
-                </div>
-                <div>
-                  <p className="text-[13px] font-semibold text-gray-900">{s.title}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{s.desc}</p>
-                </div>
-              </div>
-            ))}
           </div>
-        </section>
-      </div>
+          <ChevronRight size={18} className="text-white/60 ml-auto relative" />
+        </button>
+      </section>
+
     </div>
   )
 }
