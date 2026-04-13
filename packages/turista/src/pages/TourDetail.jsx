@@ -9,7 +9,7 @@ import Input, { Select } from '../components/ui/Input'
 import Card from '../components/ui/Card'
 import {
   Clock, Users, ChevronLeft, CheckCircle, XCircle,
-  Zap, Sun, Waves, Anchor, Calendar, UserCheck, Loader2,
+  Zap, Sun, Waves, Anchor, Calendar, UserCheck,
 } from 'lucide-react'
 
 const CATEGORY_ICONS = {
@@ -33,12 +33,10 @@ export default function TourDetail() {
   const [vehicleId, setVehicleId] = useState('')
   const [date,      setDate]      = useState('')
   const [time,      setTime]      = useState('')
-  const [calcResult,   setCalcResult]   = useState(null)
-  const [calcLoading,  setCalcLoading]  = useState(false)
-  const [calcError,    setCalcError]    = useState('')
-  const [bookingLoading, setBookingLoading] = useState(false)
-  const [bookingError,   setBookingError]   = useState('')
-  const [bookedCode,     setBookedCode]     = useState(null)
+  const [calcResult,  setCalcResult]  = useState(null)
+  const [calcLoading, setCalcLoading] = useState(false)
+  const [calcError,   setCalcError]   = useState('')
+  const [bookingError, setBookingError] = useState('')
 
   const { data: tour, isLoading } = useQuery({
     queryKey: ['tour', id],
@@ -78,7 +76,7 @@ export default function TourDetail() {
     }
   }
 
-  async function handleBook() {
+  function handleBook() {
     if (!token) {
       navigate('/login', { state: { from: `/passeios/${id}` } })
       return
@@ -86,11 +84,12 @@ export default function TourDetail() {
     const regionId = (regionsData?.regions || regionsData || [])[0]?.id
     if (!regionId) { setBookingError('Região não encontrada'); return }
 
-    setBookingLoading(true)
-    setBookingError('')
-    try {
-      const vehicleList = (mode === 'private' && vehicleId) ? [{ vehicleId, quantity: 1 }] : []
-      const result = await api.createBooking({
+    const vehicleList = (mode === 'private' && vehicleId) ? [{ vehicleId, quantity: 1 }] : []
+    const selectedVehicle = privateVehicles.find((v) => v.id === vehicleId)
+
+    navigate('/checkout/resumo', {
+      state: {
+        // dados de criação da reserva
         region_id:    regionId,
         service_type: 'tour',
         service_id:   id,
@@ -99,14 +98,13 @@ export default function TourDetail() {
         service_time: time,
         people_count: Number(people),
         vehicles:     vehicleList,
-        source_channel: 'app',
-      })
-      setBookedCode(result?.booking?.booking_code || result?.booking_code)
-    } catch (err) {
-      setBookingError(err.message || 'Erro ao criar reserva')
-    } finally {
-      setBookingLoading(false)
-    }
+        // dados de exibição
+        service_name:  tour?.name || 'Passeio',
+        vehicle_name:  selectedVehicle?.name || null,
+        total_price:   calcResult?.total_price,
+        breakdown:     calcResult?.breakdown || null,
+      },
+    })
   }
 
   if (isLoading) return <PageSpinner />
@@ -279,22 +277,7 @@ export default function TourDetail() {
               </Button>
             </form>
 
-            {bookedCode ? (
-              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl text-center">
-                <CheckCircle size={32} className="text-green-500 mx-auto mb-2" />
-                <p className="font-bold text-gray-900 mb-1">Reserva criada!</p>
-                <p className="text-xs text-gray-500 mb-2">Código</p>
-                <p className="font-mono font-bold text-xl text-brand tracking-widest bg-white rounded-xl py-2 px-4 border border-brand/20">
-                  {bookedCode}
-                </p>
-                <button
-                  onClick={() => navigate('/minhas-reservas')}
-                  className="mt-3 w-full h-10 bg-brand text-white text-sm font-bold rounded-xl"
-                >
-                  Ver minhas reservas
-                </button>
-              </div>
-            ) : calcResult ? (
+            {calcResult ? (
               <div className="mt-4 p-4 bg-orange-50 rounded-xl">
                 <p className="text-xs text-gray-500 mb-1">Total estimado</p>
                 <p className="text-3xl font-bold text-brand">{fmt(calcResult.total_price)}</p>
@@ -310,8 +293,8 @@ export default function TourDetail() {
                 {bookingError && (
                   <p className="mt-2 text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{bookingError}</p>
                 )}
-                <Button className="w-full mt-4" onClick={handleBook} disabled={bookingLoading}>
-                  {bookingLoading ? <><Loader2 size={14} className="animate-spin mr-1" />Reservando…</> : 'Reservar agora'}
+                <Button className="w-full mt-4" onClick={handleBook}>
+                  Reservar agora
                 </Button>
               </div>
             ) : (

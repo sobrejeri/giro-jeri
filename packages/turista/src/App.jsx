@@ -1,7 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout          from './components/layout/Layout'
-import CheckoutLayout  from './components/layout/CheckoutLayout'
+import CheckoutLayout   from './components/layout/CheckoutLayout'
+import CheckoutSummary  from './pages/checkout/CheckoutSummary'
 import Home            from './pages/Home'
 import Tours           from './pages/Tours'
 import TourDetail      from './pages/TourDetail'
@@ -25,7 +26,8 @@ export default function App() {
 
       {/* Checkout — frame 430px, sem nav bars */}
       <Route path="/checkout" element={<PrivateRoute><CheckoutLayout /></PrivateRoute>}>
-        {/* telas de checkout serão adicionadas aqui */}
+        <Route path="resumo"    element={<CheckoutSummary />} />
+        {/* pagamento, processando, falha — a implementar */}
       </Route>
 
       {/* App — layout responsivo com nav */}
