@@ -1,3 +1,5 @@
+import { supabase } from './supabase'
+
 const BASE = import.meta.env.VITE_API_URL || ''
 
 const STORAGE = {
@@ -9,24 +11,16 @@ const STORAGE = {
 function getToken()   { return localStorage.getItem(STORAGE.token)   }
 function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
 
-// Tenta renovar o access_token via refresh_token.
-// Retorna true se conseguiu, false se falhou.
 async function tryRefresh() {
   const refreshToken = getRefresh()
   if (!refreshToken) return false
 
   try {
-    const res = await fetch(`${BASE}/api/auth/refresh`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ refresh_token: refreshToken }),
-    })
-    if (!res.ok) return false
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken })
+    if (error || !data.session) return false
 
-    const data = await res.json()
-    localStorage.setItem(STORAGE.token,   data.token)
-    localStorage.setItem(STORAGE.refresh, data.refresh_token)
-    if (data.user) localStorage.setItem(STORAGE.user, JSON.stringify(data.user))
+    localStorage.setItem(STORAGE.token,   data.session.access_token)
+    localStorage.setItem(STORAGE.refresh, data.session.refresh_token)
     return true
   } catch {
     return false

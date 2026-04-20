@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { api } from '../lib/api'
+import { supabase } from '../lib/supabase'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 
 export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const [form, setForm]     = useState({ email: '', password: '' })
-  const [error, setError]   = useState('')
+  const [form, setForm]       = useState({ email: '', password: '' })
+  const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
@@ -17,15 +17,27 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const data = await api.login(form)
-      if (!['operator', 'admin'].includes(data.user?.user_type)) {
-        setError('Acesso restrito a operadores e administradores.')
-        return
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email:    form.email,
+        password: form.password,
+      })
+      if (authError) throw new Error('Credenciais inválidas')
+
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url')
+        .eq('auth_id', data.user.id)
+        .single()
+
+      if (profileError || !profile) throw new Error('Perfil não encontrado. Contate o administrador.')
+      if (!['operator', 'admin'].includes(profile.user_type)) {
+        throw new Error('Acesso restrito a operadores e administradores.')
       }
-      login(data.user, data.token, data.refresh_token)
+
+      login(profile, data.session.access_token, data.session.refresh_token)
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      setError(err.message || 'Credenciais inválidas')
+      setError(err.message || 'Erro ao entrar')
     } finally {
       setLoading(false)
     }
