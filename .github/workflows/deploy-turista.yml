@@ -1,4 +1,4 @@
-name: Deploy Turista to GitHub Pages
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -28,8 +28,27 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Deploy to gh-pages branch
+      - name: Build cooperativa
+        run: npm run build --workspace=packages/cooperativa
+        env:
+          NODE_ENV: production
+
+      - name: Build admin
+        run: npm run build --workspace=packages/admin
+        env:
+          NODE_ENV: production
+
+      - name: Merge builds
+        run: |
+          mkdir -p dist
+          cp -r packages/turista/dist/. dist/
+          mkdir -p dist/cooperativa
+          cp -r packages/cooperativa/dist/. dist/cooperativa/
+          mkdir -p dist/admin
+          cp -r packages/admin/dist/. dist/admin/
+
+      - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: packages/turista/dist
+          publish_dir: dist
