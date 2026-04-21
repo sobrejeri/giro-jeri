@@ -27,11 +27,13 @@ jobs:
         run: npm run build --workspace=packages/turista
         env:
           NODE_ENV: production
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
       - name: Build cooperativa
         run: npm run build --workspace=packages/cooperativa
         env:
           NODE_ENV: production
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
@@ -39,6 +41,7 @@ jobs:
         run: npm run build --workspace=packages/admin
         env:
           NODE_ENV: production
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 

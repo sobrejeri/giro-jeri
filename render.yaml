@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: giro-jeri-api
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm run start --workspace=packages/api
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TURISTA_URL
+        value: https://sobrejeri.github.io
+      - key: COOP_URL
+        value: https://sobrejeri.github.io
+      - key: ADMIN_URL
+        value: https://sobrejeri.github.io
