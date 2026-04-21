@@ -1,6 +1,17 @@
-# Giro Jeri 🏄
+# Giro Jeri
 
-Plataforma digital de reservas para passeios e transfers em Jericoacoara e outras regiões litorâneas do Brasil.
+Plataforma digital de reservas para passeios e transfers em Jericoacoara.
+
+---
+
+## Apps em produção
+
+| App | URL | Acesso |
+|-----|-----|--------|
+| Turista | https://sobrejeri.github.io/giro-jeri/ | Público |
+| Cooperativa | https://sobrejeri.github.io/giro-jeri/cooperativa/ | `operator` ou `admin` |
+| Admin | https://sobrejeri.github.io/giro-jeri/admin/ | `admin` |
+| API | https://giro-jeri-api.onrender.com | Backend (Render) |
 
 ---
 
@@ -9,29 +20,24 @@ Plataforma digital de reservas para passeios e transfers em Jericoacoara e outra
 ```
 giro-jeri/
 ├── packages/
-│   └── api/                    # Backend Node.js + Express
-│       ├── src/
-│       │   ├── index.js        # Entry point
-│       │   ├── supabase.js     # Cliente Supabase (service role)
-│       │   ├── middleware/
-│       │   │   ├── auth.js     # JWT + validação de roles
-│       │   │   └── errorHandler.js
-│       │   ├── routes/
-│       │   │   ├── auth.js         # Registro, login, perfil
-│       │   │   ├── tours.js        # Passeios, veículos, cálculo
-│       │   │   ├── transfers.js    # Transfers + cotações
-│       │   │   ├── bookings.js     # Reservas
-│       │   │   ├── payments.js     # Pagamentos + webhook
-│       │   │   ├── regions.js      # Regiões
-│       │   │   └── admin.js        # Dashboard admin + operação
-│       │   └── services/
-│       │       └── priceEngine.js  # Motor de preços
-│       ├── .env.example
-│       └── package.json
-└── supabase/
-    └── migrations/
-        ├── 001_schema_completo.sql     # Schema base (30 tabelas)
-        └── 002_locations_and_quotes.sql # Localização + cotações
+│   ├── turista/        # App do turista (React + Vite, mobile-first)
+│   ├── cooperativa/    # Dashboard da cooperativa (React + Vite)
+│   ├── admin/          # Dashboard administrativo (React + Vite)
+│   └── api/            # Backend Node.js + Express
+│       └── src/
+│           ├── index.js
+│           ├── supabase.js
+│           ├── middleware/     auth.js, errorHandler.js
+│           ├── routes/         auth, tours, transfers, bookings,
+│           │                   payments, regions, admin, vehicles, catalog
+│           └── services/       priceEngine.js
+├── supabase/
+│   └── migrations/
+│       ├── 001_schema_completo.sql
+│       └── 002_locations_and_quotes.sql
+├── render.yaml                 # Configuração deploy API no Render
+└── .github/workflows/
+    └── deploy-turista.yml      # CI/CD GitHub Pages (3 apps)
 ```
 
 ---
@@ -40,33 +46,46 @@ giro-jeri/
 
 | Camada | Tecnologia |
 |--------|-----------|
-| Backend | Node.js 18+ + Express |
+| Frontend | React 18 + Vite + Tailwind CSS + TanStack Query |
+| Backend | Node.js 20 + Express |
 | Banco de dados | Supabase (PostgreSQL) |
 | Autenticação | Supabase Auth (JWT) |
-| Pagamentos | Mercado Pago |
-| Localização | Google Maps Platform |
-| Deploy API | Railway ou Render |
+| Storage de imagens | Supabase Storage (bucket `tour-images`) |
+| Deploy frontend | GitHub Pages (via `peaceiris/actions-gh-pages`) |
+| Deploy API | Render.com (free tier) |
+| Pagamentos | Mercado Pago (integração pendente) |
 
 ---
 
-## Configuração inicial
+## Configuração local
 
 ### 1. Pré-requisitos
 
-- Node.js 18+
+- Node.js 20+
 - Conta no [Supabase](https://supabase.com)
-- Conta no [Mercado Pago Developers](https://www.mercadopago.com.br/developers)
-- Chave da [Google Maps Platform](https://console.cloud.google.com) com Places API habilitada
 
 ### 2. Banco de dados
 
-1. Crie um projeto no Supabase
-2. Vá em **SQL Editor**
-3. Execute os arquivos de migration em ordem:
-   ```
-   supabase/migrations/001_schema_completo.sql
-   supabase/migrations/002_locations_and_quotes.sql
-   ```
+Execute no **SQL Editor** do Supabase na ordem:
+
+```
+supabase/migrations/001_schema_completo.sql
+supabase/migrations/002_locations_and_quotes.sql
+```
+
+Crie o bucket de imagens:
+
+```sql
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('tour-images', 'tour-images', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "upload_tour_images" ON storage.objects
+FOR INSERT TO authenticated WITH CHECK (bucket_id = 'tour-images');
+
+CREATE POLICY "public_tour_images" ON storage.objects
+FOR SELECT TO public USING (bucket_id = 'tour-images');
+```
 
 ### 3. Variáveis de ambiente
 
@@ -74,149 +93,82 @@ giro-jeri/
 cp packages/api/.env.example packages/api/.env
 ```
 
-Edite `packages/api/.env` com suas credenciais:
-
 ```env
-SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key
-
-PORT=3001
+# packages/api/.env
+SUPABASE_URL=https://poqiioyadddbuxcohwjy.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service_role_key>
 NODE_ENV=development
-
+PORT=3001
 TURISTA_URL=http://localhost:5173
 COOP_URL=http://localhost:5174
 ADMIN_URL=http://localhost:5175
+```
 
-GOOGLE_MAPS_API_KEY=sua_chave_google_maps
-MERCADO_PAGO_ACCESS_TOKEN=seu_token_mp
-MERCADO_PAGO_WEBHOOK_SECRET=seu_webhook_secret
+```bash
+# packages/cooperativa/.env e packages/admin/.env
+VITE_SUPABASE_URL=https://poqiioyadddbuxcohwjy.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon_key>
+VITE_API_URL=http://localhost:3001
 ```
 
 ### 4. Instalar e rodar
 
 ```bash
 npm install
-npm run dev
+npm run dev:all       # API + turista + cooperativa + admin
 ```
 
-A API sobe em `http://localhost:3001`.
-
-Teste: `http://localhost:3001/health`
+| App | URL local |
+|-----|-----------|
+| Turista | http://localhost:5173 |
+| Cooperativa | http://localhost:5174 |
+| Admin | http://localhost:5175 |
+| API | http://localhost:3001 |
 
 ---
 
-## Criar usuário admin
+## Criando usuários
 
-Depois de criar o projeto no Supabase:
-
-1. Vá em **Authentication → Users → Add user**
-2. Crie um usuário com email e senha
-3. No **SQL Editor**, execute:
+1. Supabase Dashboard → **Authentication → Users → Add user**
+2. Crie o usuário com email e senha
+3. SQL Editor:
 
 ```sql
-UPDATE users SET user_type = 'admin' WHERE email = 'seu@email.com';
+-- Admin
+INSERT INTO users (auth_id, full_name, email, user_type)
+SELECT id, 'Nome', 'email@exemplo.com', 'admin'
+FROM auth.users WHERE email = 'email@exemplo.com'
+ON CONFLICT (email) DO UPDATE SET user_type = 'admin', auth_id = EXCLUDED.auth_id;
+
+-- Operador (cooperativa)
+INSERT INTO users (auth_id, full_name, email, user_type)
+SELECT id, 'Nome', 'email@exemplo.com', 'operator'
+FROM auth.users WHERE email = 'email@exemplo.com'
+ON CONFLICT (email) DO UPDATE SET user_type = 'operator', auth_id = EXCLUDED.auth_id;
 ```
 
 ---
 
-## Principais endpoints
+## Deploy
 
-### Públicos
-```
-GET  /api/regions
-GET  /api/tours?region_id=...
-GET  /api/tours/:id
-GET  /api/transfers?region_id=...
-GET  /api/transfers/routes
-```
+### API (Render)
 
-### Autenticados
-```
-POST /api/auth/register
-POST /api/auth/login
-GET  /api/auth/me
+Configurado via `render.yaml`. Variáveis obrigatórias no painel do Render:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NODE_ENV=production`
+- `TURISTA_URL=https://sobrejeri.github.io`
+- `COOP_URL=https://sobrejeri.github.io`
+- `ADMIN_URL=https://sobrejeri.github.io`
 
-POST /api/tours/:id/calculate         # Calcula preço antes de reservar
-POST /api/tours/:id/suggest-vehicles  # Sugestão inteligente de veículos
+### Frontend (GitHub Pages)
 
-POST /api/transfers/calculate         # Preço de rota tabelada
-POST /api/transfers/quotes            # Solicitar cotação (rota livre)
-POST /api/transfers/quotes/:id/accept # Aceitar cotação
-POST /api/transfers/quotes/:id/reject # Recusar cotação
+Push para `main` ou `claude/giro-jeri-platform-GFBFR` dispara o CI.
 
-POST /api/bookings                    # Criar reserva
-GET  /api/bookings                    # Listar reservas
-GET  /api/bookings/:id                # Detalhe da reserva
-POST /api/bookings/:id/cancel         # Cancelar
-
-POST /api/payments/intent             # Criar intenção de pagamento
-POST /api/payments/webhook            # Webhook do gateway
-```
-
-### Operação
-```
-GET  /api/admin/operational           # Painel kanban
-POST /api/admin/operational/:id/assign  # Atribuir motorista/guia
-GET  /api/transfers/quotes/pending    # Cotações aguardando preço
-PATCH /api/transfers/quotes/:id/quote # Definir preço da cotação
-PATCH /api/bookings/:id/status        # Atualizar status operacional
-```
-
-### Admin
-```
-GET  /api/admin/stats
-GET  /api/admin/users
-GET  /api/admin/financial
-GET  /api/admin/settings
-PUT  /api/admin/settings/:key
-GET  /api/admin/audit-logs
-```
-
----
-
-## Motor de preços
-
-O backend é a **única fonte de verdade** para cálculos. O frontend nunca define preços.
-
-### Passeio privativo
-```
-Subtotal = Σ (preço do veículo × quantidade)
-Temporada = subtotal × 10%  (julho a janeiro)
-Total = subtotal + temporada - desconto_cupom
-```
-
-### Passeio compartilhado
-```
-Subtotal = preço_por_pessoa × quantidade_de_pessoas
-Temporada = subtotal × 10%  (julho a janeiro)
-Total = subtotal + temporada - desconto_cupom
-```
-
-### Transfer rota tabelada
-```
-Subtotal = preço_fixo_da_rota
-Temporada = subtotal × 10%  (julho a janeiro)
-Total = subtotal + temporada - desconto_cupom
-```
-
-### Transfer cotação livre
-```
-Preço definido manualmente pela cooperativa após solicitação.
-Fluxo: solicitar → cooperativa cota → cliente aceita/recusa → pagar
-```
-
----
-
-## Regras de negócio importantes
-
-| Regra | Valor | Configurável |
-|-------|-------|-------------|
-| Alta temporada | Julho a janeiro (+10%) | `high_season_rules` |
-| Antecedência mínima transfer | 4 horas | `transfer_min_advance_hours` |
-| Prazo para aceitar cotação | 2 horas | `quote_expiry_hours` |
-| Cancelamento gratuito passeio | até 24h antes | `cancellation_tour_hours` |
-| Cancelamento gratuito transfer | até 72h antes | `cancellation_transfer_days` |
-| Taxa da plataforma | 7% | `platform_fee_percent` |
+Secrets obrigatórios no repositório GitHub:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_API_URL` → URL da API no Render
 
 ---
 
@@ -225,30 +177,65 @@ Fluxo: solicitar → cooperativa cota → cliente aceita/recusa → pagar
 | Perfil | Acesso |
 |--------|--------|
 | `tourist` | App turista — reservas, pagamentos |
-| `operator` | Dashboard cooperativa — operação, despacho |
-| `agency` | Visão de reservas e comissões |
-| `admin` | Acesso total |
-| `finance` | Módulo financeiro |
+| `operator` | Dashboard cooperativa — operação, despacho, cotações |
+| `admin` | Acesso total — catálogo, usuários, financeiro |
+
+---
+
+## Principais endpoints da API
+
+```
+GET    /health
+
+POST   /api/auth/register
+POST   /api/auth/login
+GET    /api/auth/me
+POST   /api/auth/refresh
+
+GET    /api/regions
+GET    /api/tours
+GET    /api/tours/:id
+GET    /api/transfers
+GET    /api/vehicles
+
+POST   /api/tours/:id/calculate
+POST   /api/tours/:id/suggest-vehicles
+POST   /api/transfers/calculate
+POST   /api/transfers/quotes
+
+POST   /api/bookings
+GET    /api/bookings
+GET    /api/bookings/:id
+POST   /api/bookings/:id/cancel
+
+GET    /api/catalog/tours          (operator+)
+POST   /api/catalog/tours          (operator+)
+PUT    /api/catalog/tours/:id      (operator+)
+DELETE /api/catalog/tours/:id      (operator+)
+
+GET    /api/admin/stats            (admin)
+GET    /api/admin/users            (admin)
+GET    /api/admin/financial        (admin)
+GET    /api/admin/operational      (operator+)
+```
 
 ---
 
 ## Roadmap
 
-### MVP (atual)
-- [x] Schema completo do banco de dados
-- [x] API com motor de preços
-- [x] Fluxo de cotação de transfer
-- [x] Localização via Google Maps
-- [x] Webhook de pagamento
-- [ ] App do turista (React mobile-first)
-- [ ] Dashboard da cooperativa
-- [ ] Dashboard administrativo
+### Concluído
+- [x] Schema completo (30+ tabelas) + RLS
+- [x] API com motor de preços e cotações
+- [x] App turista mobile-first com design de aplicativo
+- [x] Dashboard cooperativa (kanban, cotações, veículos)
+- [x] Dashboard administrativo (catálogo, usuários, financeiro)
+- [x] Deploy automático GitHub Pages + Render
+- [x] Auth via Supabase direto no frontend
+- [x] Upload de imagens via Supabase Storage
+
+### Próximo
 - [ ] Integração Mercado Pago
 - [ ] Notificações WhatsApp
-
-### Fase 2
 - [ ] Programa de afiliados
-- [ ] Cupons inteligentes
-- [ ] Multi-região completo
-- [ ] CRM e remarketing
+- [ ] Multi-região
 - [ ] App mobile nativo
