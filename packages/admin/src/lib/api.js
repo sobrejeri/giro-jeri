@@ -75,10 +75,10 @@ export const api = {
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),
 
   // Catálogo — Tours
-  getTours:   (params = {}) => request(`/api/tours?${new URLSearchParams(params)}`),
-  getTour:    (id)          => request(`/api/tours/${id}`),
-  createTour: (body)        => request('/api/tours', { method: 'POST', body }),
-  updateTour: (id, body)    => request(`/api/tours/${id}`, { method: 'PUT', body }),
+  getTours:   (params = {}) => request(`/api/catalog/tours?${new URLSearchParams(params)}`),
+  getTour:    (id)          => request(`/api/catalog/tours/${id}`),
+  createTour: (body)        => request('/api/catalog/tours', { method: 'POST', body }),
+  updateTour: (id, body)    => request(`/api/catalog/tours/${id}`, { method: 'PUT', body }),
   deleteTour: (id)          => request(`/api/catalog/tours/${id}`, { method: 'DELETE' }),
 
   // Catálogo — Transfers

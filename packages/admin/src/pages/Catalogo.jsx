@@ -3,6 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Route, ImagePlus, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
+
+function slugify(text) {
+  return text.toString().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    + '-' + Date.now().toString(36)
+}
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -35,9 +42,15 @@ export default function Catalogo() {
   const fileRef = useRef(null)
   const qc = useQueryClient()
 
+  const { data: regionData } = useQuery({
+    queryKey: ['regions'],
+    queryFn:  () => api.getRegions(),
+  })
+  const regionId = regionData?.[0]?.id
+
   const { data: tours = [], isLoading: l1 } = useQuery({
     queryKey: ['admin-tours'],
-    queryFn:  () => api.getTours().then((r) => r.data || r),
+    queryFn:  () => api.getTours(),
   })
   const { data: transfers = [], isLoading: l2 } = useQuery({
     queryKey: ['admin-transfers'],
@@ -106,6 +119,10 @@ export default function Catalogo() {
       ...form,
       duration_hours: Number(form.duration_hours),
       max_people:     Number(form.max_people),
+    }
+    if (modal?.isNew) {
+      body.slug      = slugify(form.name)
+      body.region_id = regionId
     }
     if (imageFile) {
       setUploading(true)
