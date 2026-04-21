@@ -305,8 +305,14 @@ export default function Tours() {
                       selected ? 'border-brand shadow-lg shadow-brand/20' : 'border-gray-100'
                     }`}
                   >
-                    <div className="h-20 bg-gradient-to-br from-orange-100 to-amber-50 flex items-center justify-center relative">
-                      <Icon size={28} className="text-brand/30" />
+                    <div className="h-20 relative overflow-hidden">
+                      {t.cover_image_url ? (
+                        <img src={t.cover_image_url} alt={t.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="h-full bg-gradient-to-br from-orange-100 to-amber-50 flex items-center justify-center">
+                          <Icon size={28} className="text-brand/30" />
+                        </div>
+                      )}
                       {selected && (
                         <div className="absolute inset-0 bg-brand/10 flex items-center justify-center">
                           <div className="w-6 h-6 bg-brand rounded-full flex items-center justify-center shadow">

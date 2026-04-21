@@ -58,10 +58,16 @@ function TourCard({ tour, isFav, onToggleFav }) {
       className="shrink-0 w-[148px] rounded-2xl overflow-hidden bg-white shadow-[0_2px_12px_rgba(0,0,0,0.08)] active:scale-[0.96] transition-transform cursor-pointer"
     >
       {/* Image area */}
-      <div className={`h-[100px] bg-gradient-to-br ${from} ${to} relative flex items-end justify-start p-2.5`}>
-        <Icon size={38} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/20" />
+      <div className="h-[100px] relative overflow-hidden">
+        {tour.cover_image_url ? (
+          <img src={tour.cover_image_url} alt={tour.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className={`h-full bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
+            <Icon size={38} className="text-white/20" />
+          </div>
+        )}
         {tour.highlight_badge && (
-          <span className="relative z-10 bg-white/90 text-brand text-[9px] font-bold px-2 py-[3px] rounded-full">
+          <span className="absolute bottom-2 left-2 bg-white/90 text-brand text-[9px] font-bold px-2 py-[3px] rounded-full">
             {tour.highlight_badge}
           </span>
         )}
