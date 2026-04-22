@@ -92,7 +92,7 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
 /* ── Card de veículo no catálogo ────────────────────────────── */
 function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
   return (
-    <div className="bg-white rounded-2xl p-3 border border-gray-100 flex items-center gap-3">
+    <div className={`bg-white rounded-2xl p-3 border flex items-center gap-3 transition-all ${qty > 0 ? 'border-brand shadow-sm shadow-brand/10' : 'border-gray-100'}`}>
       <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
         {vehicle.image_url ? (
           <img src={vehicle.image_url} alt={vehicle.name} className="w-full h-full object-cover" />
@@ -264,13 +264,17 @@ export default function Tours() {
   const suggestion = useMemo(() => suggest(vehicles, people), [vehicles, people])
 
   /* ── Carrinho ─────────────────────────────────────────────── */
-  const cartTotal = Object.entries(cart)
+  const cartItems = Object.entries(cart)
     .filter(([, q]) => q > 0)
-    .reduce((sum, [id, q]) => {
-      const v = vehicles.find((x) => x.id === id)
-      return sum + (v?.base_price ? Number(v.base_price) * q : 0)
-    }, 0)
-  const cartHasItems = Object.values(cart).some((q) => q > 0)
+    .map(([id, qty]) => ({ vehicle: vehicles.find((x) => x.id === id), qty }))
+    .filter((x) => x.vehicle)
+
+  const cartTotal = cartItems.reduce(
+    (sum, { vehicle, qty }) => sum + (vehicle.base_price ? Number(vehicle.base_price) * qty : 0),
+    0,
+  )
+  const cartHasItems = cartItems.length > 0
+  const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
 
   const applySuggestion = () => {
     if (!suggestion) return
@@ -513,15 +517,32 @@ export default function Tours() {
       {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
       {mode === 'private' && cartHasItems && (
         <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
-          <button
-            onClick={() => navigate(`/passeios/${selectedTour?.id}`, { state: { cart, people, mode: 'private' } })}
-            className="w-full bg-brand text-white font-bold rounded-2xl py-4 text-[15px] shadow-xl shadow-brand/30 active:scale-[0.98] transition-transform flex items-center justify-between px-5"
-          >
-            <span>Continuar reserva</span>
-            <span className="text-[14px] font-extrabold">
-              {cartTotal > 0 ? `R$ ${cartTotal.toLocaleString('pt-BR')}` : '→'}
-            </span>
-          </button>
+          <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
+            {/* Resumo */}
+            <div className="flex-1 min-w-0 mr-3">
+              <p className="text-[13px] font-bold text-gray-900 truncate">
+                {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
+              </p>
+              <div className="flex items-center gap-1 mt-0.5">
+                <Users size={11} className="text-gray-400" />
+                <span className="text-[11px] text-gray-500">{cartCapacity}/{people}</span>
+              </div>
+            </div>
+            {/* Preço + botão */}
+            <div className="flex items-center gap-3 shrink-0">
+              {cartTotal > 0 && (
+                <span className="text-[15px] font-extrabold text-brand">
+                  R$ {cartTotal.toLocaleString('pt-BR')}
+                </span>
+              )}
+              <button
+                onClick={() => navigate(`/passeios/${selectedTour?.id}`, { state: { cart, people, mode: 'private' } })}
+                className="bg-brand text-white font-bold rounded-xl px-4 py-2.5 text-[13px] active:scale-95 transition-transform"
+              >
+                Continuar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
