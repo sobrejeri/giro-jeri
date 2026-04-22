@@ -1,441 +1,380 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useRef, useMemo } from 'react'
+import { useQuery }    from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { api } from '../lib/api'
-import { PageSpinner } from '../components/ui/Spinner'
-import Button from '../components/ui/Button'
-import { Textarea } from '../components/ui/Input'
+import { useAuth }     from '../contexts/AuthContext'
+import { api }         from '../lib/api'
 import {
-  MapPin, Calendar, Clock, Users, ChevronRight,
-  Minus, Plus, Check, Zap, ArrowRight, X,
-  MessageSquare, CheckCircle
+  MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
+  Minus, Plus, Car, X, Check, Info,
 } from 'lucide-react'
+import {
+  format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
+  isSameDay, isBefore, addMonths, subMonths, getDay, isToday, addDays,
+} from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
-function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR')}` }
+/* ── Date picker (bottom sheet) ─────────────────────────────── */
+function DateSheet({ value, onChange, onClose }) {
+  const today  = startOfDay(new Date())
+  const [view, setView] = useState(startOfMonth(value))
+  const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
+  const offset = getDay(startOfMonth(view))
+  const canPrev = !isBefore(subMonths(view, 1), startOfMonth(today))
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
+        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
+        <div className="flex items-center justify-between px-5 py-3">
+          <p className="text-[16px] font-bold text-gray-900">Escolha a data</p>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"><X size={14} className="text-gray-500" /></button>
+        </div>
+        <div className="flex items-center justify-between px-5 mb-3">
+          <button disabled={!canPrev} onClick={() => setView(m => subMonths(m, 1))}
+            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center disabled:opacity-30 active:scale-95">
+            <ChevronLeft size={16} className="text-gray-600" />
+          </button>
+          <p className="text-[14px] font-semibold text-gray-900 capitalize">{format(view, 'MMMM yyyy', { locale: ptBR })}</p>
+          <button onClick={() => setView(m => addMonths(m, 1))} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95">
+            <ChevronRight size={16} className="text-gray-600" />
+          </button>
+        </div>
+        <div className="grid grid-cols-7 px-4 mb-1">
+          {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 px-4 gap-y-0.5 mb-4">
+          {Array.from({ length: offset }).map((_, i) => <div key={`e${i}`} />)}
+          {days.map(day => {
+            const past = isBefore(day, today)
+            const sel  = isSameDay(day, value)
+            return (
+              <button key={day.toISOString()} disabled={past} onClick={() => { onChange(day); onClose() }}
+                className={`aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
+                  ${sel ? 'bg-brand text-white font-bold' : ''}
+                  ${!sel && isToday(day) ? 'text-brand font-bold' : ''}
+                  ${!sel && !isToday(day) && !past ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
+                  ${past ? 'text-gray-300 cursor-not-allowed' : ''}`}
+              >{format(day, 'd')}</button>
+            )
+          })}
+        </div>
+        <div className="px-4 pb-8">
+          <button onClick={onClose} className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">Confirmar</button>
+        </div>
+      </div>
+    </>
+  )
+}
 
+/* ── Route picker (bottom sheet) ────────────────────────────── */
+function RouteSheet({ title, options, selected, onSelect, onClose }) {
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
+        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
+        <div className="flex items-center justify-between px-5 py-3">
+          <p className="text-[16px] font-bold text-gray-900">{title}</p>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"><X size={14} className="text-gray-500" /></button>
+        </div>
+        <div className="px-4 pb-8 space-y-2 max-h-72 overflow-y-auto">
+          {options.map(opt => (
+            <button key={opt} onClick={() => { onSelect(opt); onClose() }}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border transition-all active:scale-[0.98] ${selected === opt ? 'border-brand bg-orange-50' : 'border-gray-100 bg-white'}`}
+            >
+              <div className="flex items-center gap-3">
+                <MapPin size={14} className={selected === opt ? 'text-brand' : 'text-gray-400'} />
+                <span className={`text-[13px] font-semibold ${selected === opt ? 'text-brand' : 'text-gray-800'}`}>{opt}</span>
+              </div>
+              {selected === opt && <Check size={14} className="text-brand" />}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+/* ── Vehicle row ─────────────────────────────────────────────── */
+function VehicleRow({ vehicle, price, selected, onSelect }) {
+  return (
+    <button onClick={onSelect}
+      className={`w-full flex items-center gap-3 px-4 py-3 transition-all active:scale-[0.99] ${selected ? 'bg-brand/5 border-l-4 border-brand' : 'border-l-4 border-transparent'}`}
+    >
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${selected ? 'bg-brand' : 'bg-gray-100'}`}>
+        <Car size={18} className={selected ? 'text-white' : 'text-gray-400'} />
+      </div>
+      <div className="flex-1 text-left min-w-0">
+        <p className={`text-[13px] font-bold truncate ${selected ? 'text-gray-900' : 'text-gray-800'}`}>{vehicle.name}</p>
+        <p className="text-[11px] text-gray-400 mt-0.5">Até {vehicle.seat_capacity} pessoas</p>
+      </div>
+      {price && (
+        <span className={`text-[14px] font-bold shrink-0 ${selected ? 'text-brand' : 'text-gray-700'}`}>
+          R$ {Number(price).toLocaleString('pt-BR')}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/* ── Main ───────────────────────────────────────────────────── */
 export default function Transfers() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
   const { token } = useAuth()
+  const timeRef   = useRef(null)
 
-  const [tab,       setTab]       = useState('routes')
-  const [origin,    setOrigin]    = useState('')
-  const [dest,      setDest]      = useState('')
-  const [date,      setDate]      = useState('')
-  const [time,      setTime]      = useState('')
-  const [people,    setPeople]    = useState(2)
-  const [selectedRoute, setSelectedRoute] = useState(null)
-  const [loading,       setLoading]       = useState(false)
-  const [success,       setSuccess]       = useState(false)
-  const [bookingCode,   setBookingCode]   = useState(null)
-  const [error,         setError]         = useState('')
+  const [origin,       setOrigin]       = useState('Jericoacoara')
+  const [dest,         setDest]         = useState('')
+  const [date,         setDate]         = useState(startOfDay(new Date()))
+  const [time,         setTime]         = useState('08:00')
+  const [people,       setPeople]       = useState(2)
+  const [selectedVId,  setSelectedVId]  = useState(null)
+  const [notes,        setNotes]        = useState('')
+  const [showDate,     setShowDate]     = useState(false)
+  const [showOrigin,   setShowOrigin]   = useState(false)
+  const [showDest,     setShowDest]     = useState(false)
+  const [loading,      setLoading]      = useState(false)
 
-  // Quote form state
-  const [qOrigin,   setQOrigin]   = useState('')
-  const [qDest,     setQDest]     = useState('')
-  const [qDate,     setQDate]     = useState('')
-  const [qTime,     setQTime]     = useState('')
-  const [qPeople,   setQPeople]   = useState(1)
-  const [qLuggage,  setQLuggage]  = useState(0)
-  const [qNotes,    setQNotes]    = useState('')
-
-  const { data: routesData, isLoading } = useQuery({
+  /* ── Queries ── */
+  const { data: routesData } = useQuery({
     queryKey: ['transfer-routes'],
     queryFn:  () => api.getTransferRoutes(),
   })
-
-  const { data: regionsData } = useQuery({
-    queryKey: ['regions'],
-    queryFn:  () => api.getRegions(),
+  const { data: vehiclesData } = useQuery({
+    queryKey: ['vehicles'],
+    queryFn:  () => api.getVehicles ? api.getVehicles() : Promise.resolve([]),
   })
 
-  const routes = routesData?.routes || routesData || []
+  const routes   = Array.isArray(routesData?.routes) ? routesData.routes
+                 : Array.isArray(routesData) ? routesData : []
+  const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
+                    .filter(v => v.is_transfer_allowed)
 
-  const totalPrice = selectedRoute
-    ? Number(selectedRoute.default_price)
-    : null
+  const origins   = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
+  const dests     = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
+  const matched   = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
+  const price     = matched ? Number(matched.default_price) : null
+  const selV      = vehicles.find(v => v.id === selectedVId)
+  const canBook   = !!matched && !!selectedVId && !!time
 
-  async function handleBook() {
+  const dateLabel = isToday(date) ? 'Hoje'
+    : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+    : format(date, 'd MMM', { locale: ptBR })
+
+  async function handleConfirm() {
     if (!token) { navigate('/login'); return }
-    if (!selectedRoute) { setError('Selecione uma rota'); return }
-    if (!date)           { setError('Informe a data'); return }
-    if (!time)           { setError('Informe o horário'); return }
-
-    const regionId = (regionsData?.regions || regionsData || [])[0]?.id
-    if (!regionId) { setError('Região não encontrada'); return }
-
-    setLoading(true)
-    setError('')
-    try {
-      const result = await api.createBooking({
-        region_id:          regionId,
-        service_type:       'transfer',
-        service_id:         selectedRoute.id,
-        route_id:           selectedRoute.id,
-        booking_mode:       'private',
-        service_date:       date,
-        service_time:       time,
-        people_count:       people,
-        origin_text:        origin || selectedRoute.origin_name,
-        destination_text:   dest   || selectedRoute.destination_name,
-        source_channel:     'app',
-      })
-      setBookingCode(result?.booking?.booking_code || result?.booking_code)
-      setSuccess(true)
-    } catch (err) {
-      setError(err.message || 'Erro ao criar reserva')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleQuote(e) {
-    e.preventDefault()
-    if (!token) { navigate('/login'); return }
-    setError('')
-    setLoading(true)
-    try {
-      await api.requestQuote({
-        origin_place_name:      qOrigin,
-        destination_place_name: qDest,
-        service_date:           qDate,
-        service_time:           qTime,
-        people_count:           Number(qPeople),
-        luggage_count:          Number(qLuggage),
-        special_notes:          qNotes || undefined,
-      })
-      setSuccess(true)
-    } catch (err) {
-      setError(err.message || 'Erro ao enviar cotação')
-    } finally {
-      setLoading(false)
-    }
+    if (!canBook) return
+    navigate('/checkout/resumo', {
+      state: {
+        service_name:        `Transfer ${origin} → ${dest}`,
+        service_type:        'transfer',
+        booking_mode:        'private',
+        service_date:        dateLabel,
+        service_time:        time,
+        people_count:        people,
+        origin_text:         origin,
+        destination_text:    dest,
+        vehicle_name:        selV?.name,
+        total_price:         price,
+        breakdown:           { 'Transfer': price },
+        region_id:           matched?.transfer_id,
+        service_id:          matched?.id,
+        vehicles:            selV ? [{ vehicle_id: selV.id, qty: 1 }] : [],
+      },
+    })
   }
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="min-h-screen bg-gray-50 pb-28">
       {/* Header */}
-      <div className="sticky top-0 md:top-14 z-10 bg-white border-b border-gray-100 px-4 md:px-6 py-3 flex items-center justify-between">
-        <h1 className="font-bold text-gray-900 text-base">Transfer</h1>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setTab('routes')}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${tab === 'routes' ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-          >
-            Rotas
+      <div className="bg-white px-4 pt-5 pb-3 shadow-sm">
+        <h1 className="text-[20px] font-extrabold text-gray-900">Transfer</h1>
+        <p className="text-[12px] text-gray-400 mt-0.5">Transporte privativo com motorista</p>
+      </div>
+
+      <div className="px-4 pt-4 space-y-3">
+
+        {/* ROTA */}
+        <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Rota</p>
+
+          <button onClick={() => setShowOrigin(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-50 active:bg-gray-50">
+            <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
+            <div className="flex-1 text-left">
+              <p className="text-[10px] text-gray-400">Origem</p>
+              <p className={`text-[13px] font-semibold ${origin ? 'text-gray-900' : 'text-gray-400'}`}>
+                {origin || 'Selecione o ponto de partida'}
+              </p>
+            </div>
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
           </button>
+
+          <button onClick={() => dests.length ? setShowDest(true) : null}
+            className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-100 active:bg-gray-50">
+            <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
+            <div className="flex-1 text-left">
+              <p className="text-[10px] text-gray-400">Destino</p>
+              <p className={`text-[13px] font-semibold ${dest ? 'text-gray-900' : 'text-gray-400'}`}>
+                {dest || (dests.length ? 'Selecione o destino' : 'Escolha a origem primeiro')}
+              </p>
+            </div>
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          </button>
+        </section>
+
+        {/* DATA & HORÁRIO */}
+        <section className="bg-white rounded-2xl border border-gray-100">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Data & Horário</p>
+          <div className="flex gap-2 px-4 pb-4">
+            <button onClick={() => setShowDate(true)}
+              className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform">
+              <Calendar size={13} className="text-brand" />
+              <div className="text-left">
+                <p className="text-[9px] text-gray-400 leading-none">Data</p>
+                <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{dateLabel}</p>
+              </div>
+            </button>
+            <button onClick={() => timeRef.current?.showPicker?.() || timeRef.current?.focus()}
+              className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform relative">
+              <Clock size={13} className="text-brand" />
+              <div className="text-left flex-1">
+                <p className="text-[9px] text-gray-400 leading-none">Horário</p>
+                <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{time || 'Selecionar'}</p>
+              </div>
+              <input
+                ref={timeRef}
+                type="time"
+                value={time}
+                onChange={e => setTime(e.target.value)}
+                className="absolute inset-0 opacity-0 w-full cursor-pointer"
+              />
+            </button>
+          </div>
+        </section>
+
+        {/* PASSAGEIROS */}
+        <section className="bg-white rounded-2xl border border-gray-100">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Passageiros</p>
+          <div className="flex items-center justify-between px-4 pb-4">
+            <div className="flex items-center gap-2">
+              <Users size={16} className="text-brand" />
+              <div>
+                <p className="text-[13px] font-bold text-gray-900">{people} passageiro{people !== 1 ? 's' : ''}</p>
+                <p className="text-[10px] text-gray-400">Passageiros adicionais a combinar</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPeople(p => Math.max(1, p - 1))}
+                className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center active:scale-95 transition-transform">
+                <Minus size={12} className="text-gray-600" />
+              </button>
+              <span className="text-[15px] font-bold text-gray-900 w-5 text-center tabular-nums">{people}</span>
+              <button onClick={() => setPeople(p => Math.min(20, p + 1))}
+                className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform">
+                <Plus size={12} className="text-white" />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* VEÍCULO */}
+        {vehicles.length > 0 && (
+          <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Veículo</p>
+            <div className="divide-y divide-gray-50">
+              {vehicles.map(v => (
+                <VehicleRow
+                  key={v.id}
+                  vehicle={v}
+                  price={price}
+                  selected={selectedVId === v.id}
+                  onSelect={() => setSelectedVId(v.id)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* OBSERVAÇÕES */}
+        <section className="bg-white rounded-2xl border border-gray-100">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Observações & Bagagens</p>
+          <div className="px-4 pb-4">
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Ex: 2 malas grandes, precisamos de cadeirinha..."
+              className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400"
+            />
+          </div>
+        </section>
+
+        {/* RESUMO */}
+        {matched && (
+          <section className="bg-white rounded-2xl border border-gray-100">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-3">Resumo do transfer</p>
+            <div className="px-4 pb-4 space-y-2.5">
+              {[
+                { dot: 'bg-brand',    label: 'Origem',      val: origin },
+                { dot: 'bg-gray-400', label: 'Destino',     val: dest   },
+                { icon: Calendar,     label: 'Data & Hora', val: `${dateLabel} às ${time || '—'}` },
+                { icon: Users,        label: 'Passageiros', val: `${people} pessoa${people !== 1 ? 's' : ''}` },
+                ...(selV ? [{ icon: Car, label: 'Veículo', val: selV.name }] : []),
+              ].map((row, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  {row.dot
+                    ? <div className={`w-2.5 h-2.5 rounded-full ${row.dot} shrink-0`} />
+                    : <row.icon size={13} className="text-brand shrink-0" />}
+                  <div className="flex-1 flex items-center justify-between">
+                    <p className="text-[12px] text-gray-400">{row.label}</p>
+                    <p className="text-[12px] font-semibold text-gray-800">{row.val}</p>
+                  </div>
+                </div>
+              ))}
+              <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+                <p className="text-[13px] font-bold text-gray-900">Total</p>
+                <p className="text-[16px] font-extrabold text-brand">R$ {price?.toLocaleString('pt-BR') ?? '—'}</p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Info */}
+        <div className="flex items-start gap-2 px-1">
+          <Info size={13} className="text-blue-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-gray-400 leading-relaxed">
+            Motorista aparecerá no local de embarque com placa identificada.
+            Cancelamento gratuito até 24h antes.
+          </p>
+        </div>
+      </div>
+
+      {/* Bottom CTA */}
+      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
+        <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
+          <div>
+            <p className="text-[10px] text-gray-400">Total estimado</p>
+            <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
+              {price ? `R$ ${price.toLocaleString('pt-BR')}` : 'Selecione a rota'}
+            </p>
+          </div>
           <button
-            onClick={() => setTab('quote')}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${tab === 'quote' ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+            onClick={canBook ? handleConfirm : undefined}
+            disabled={loading}
+            className={`font-bold rounded-xl px-5 py-2.5 text-[13px] transition-transform ${
+              canBook ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
           >
-            Cotação
+            {loading ? 'Aguarde…' : 'Confirmar Transfer'}
           </button>
         </div>
       </div>
 
-      <div className="md:max-w-4xl md:mx-auto md:w-full md:px-6 md:py-6 flex flex-col flex-1">
-
-        {/* TAB: Rotas tabeladas */}
-        {tab === 'routes' && (
-          <>
-            {/* Saída / Chegada — stack on mobile, side-by-side on desktop */}
-            <div className="md:grid md:grid-cols-2 md:gap-4">
-              <div className="px-4 md:px-0 pt-4 pb-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Saída</p>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3 h-11 px-3.5 bg-gray-50 rounded-xl border border-gray-100">
-                    <MapPin size={15} className="text-brand shrink-0" />
-                    <input
-                      className="flex-1 text-sm bg-transparent focus:outline-none text-gray-700 placeholder-gray-400"
-                      placeholder="Ponto de embarque"
-                      value={origin}
-                      onChange={(e) => setOrigin(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2 h-10 px-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <Calendar size={13} className="text-gray-400 shrink-0" />
-                      <input
-                        type="date"
-                        className="flex-1 text-sm bg-transparent focus:outline-none text-gray-700"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 h-10 px-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <Clock size={13} className="text-gray-400 shrink-0" />
-                      <input
-                        type="time"
-                        className="flex-1 text-sm bg-transparent focus:outline-none text-gray-700"
-                        value={time}
-                        onChange={(e) => setTime(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="px-4 md:px-0 pb-3 md:pt-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Chegada</p>
-                <div className="flex items-center gap-3 h-11 px-3.5 bg-gray-50 rounded-xl border border-gray-100">
-                  <MapPin size={15} className="text-gray-400 shrink-0" />
-                  <input
-                    className="flex-1 text-sm bg-transparent focus:outline-none text-gray-700 placeholder-gray-400"
-                    placeholder="Ponto de desembarque"
-                    value={dest}
-                    onChange={(e) => setDest(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Passageiros */}
-            <div className="px-4 md:px-0 pb-4">
-              <div className="flex items-center justify-between bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100">
-                <div className="flex items-center gap-2">
-                  <Users size={15} className="text-brand" />
-                  <p className="font-semibold text-gray-900 text-sm">Passageiros</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setPeople((p) => Math.max(1, p - 1))}
-                    className="w-7 h-7 rounded-full border border-gray-200 bg-white flex items-center justify-center">
-                    <Minus size={12} className="text-gray-600" />
-                  </button>
-                  <span className="font-bold text-gray-900 w-4 text-center">{people}</span>
-                  <button onClick={() => setPeople((p) => Math.min(20, p + 1))}
-                    className="w-7 h-7 rounded-full bg-brand flex items-center justify-center">
-                    <Plus size={12} className="text-white" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Destinos (rotas) */}
-            <div className="mb-4">
-              <p className="px-4 md:px-0 font-semibold text-gray-900 text-sm mb-2.5">Destinos</p>
-              {isLoading ? (
-                <div className="px-4 md:px-0"><PageSpinner /></div>
-              ) : (
-                <>
-                  {/* Mobile: horizontal scroll */}
-                  <div className="md:hidden flex gap-3 px-4 overflow-x-auto scrollbar-thin pb-1">
-                    {routes.map((r) => {
-                      const sel = selectedRoute?.id === r.id
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => setSelectedRoute(r)}
-                          className={`shrink-0 min-w-[140px] rounded-2xl p-3.5 border-2 transition-all text-left ${
-                            sel ? 'border-brand bg-brand text-white' : 'border-gray-100 bg-white text-gray-900 hover:border-gray-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1 mb-1.5">
-                            <MapPin size={11} className={sel ? 'text-white/70' : 'text-brand'} />
-                            <span className="text-xs font-medium truncate">{r.origin_name}</span>
-                          </div>
-                          <ArrowRight size={11} className={`mb-1.5 ${sel ? 'text-white/50' : 'text-gray-300'}`} />
-                          <p className="text-xs font-semibold truncate mb-2">{r.destination_name}</p>
-                          <p className={`text-sm font-bold ${sel ? 'text-white' : 'text-brand'}`}>
-                            {fmt(r.default_price)}
-                          </p>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {/* Desktop: grid */}
-                  <div className="hidden md:grid grid-cols-3 gap-3">
-                    {routes.map((r) => {
-                      const sel = selectedRoute?.id === r.id
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => setSelectedRoute(r)}
-                          className={`rounded-2xl p-4 border-2 transition-all text-left ${
-                            sel ? 'border-brand bg-brand text-white' : 'border-gray-100 bg-white text-gray-900 hover:border-gray-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <MapPin size={13} className={sel ? 'text-white/70' : 'text-brand'} />
-                            <span className="text-sm font-medium truncate">{r.origin_name}</span>
-                          </div>
-                          <ArrowRight size={14} className={`mb-2 ${sel ? 'text-white/50' : 'text-gray-300'}`} />
-                          <p className="text-sm font-semibold truncate mb-3">{r.destination_name}</p>
-                          <p className={`text-base font-bold ${sel ? 'text-white' : 'text-brand'}`}>
-                            {fmt(r.default_price)}
-                          </p>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Resumo */}
-            {selectedRoute && (
-              <div className="px-4 md:px-0 mb-4">
-                <p className="font-semibold text-gray-900 text-sm mb-2.5">Resumo do transfer</p>
-                <div className="bg-gray-50 rounded-2xl p-4 space-y-2.5">
-                  {[
-                    ['Origem', selectedRoute.origin_name],
-                    ['Destino', selectedRoute.destination_name],
-                    ['Passageiros', `${people} pessoa${people > 1 ? 's' : ''}`],
-                    ...(date ? [['Data', date]] : []),
-                    ...(time ? [['Horário', time]] : []),
-                    ...(selectedRoute.night_fee > 0 ? [['Taxa noturna', `+ ${fmt(selectedRoute.night_fee)}`]] : []),
-                    ...(selectedRoute.extra_stop_price > 0 ? [['Parada extra', `+ ${fmt(selectedRoute.extra_stop_price)}`]] : []),
-                  ].map(([label, value]) => (
-                    <div key={label} className="flex justify-between text-sm">
-                      <span className="text-gray-500">{label}</span>
-                      <span className="font-medium text-gray-900">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex-1" />
-
-            {/* Routes booking success */}
-            {success && bookingCode && (
-              <div className="px-4 md:px-0 mb-4">
-                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
-                  <CheckCircle size={32} className="text-green-500 mx-auto mb-2" />
-                  <p className="font-bold text-gray-900 mb-1">Transfer reservado!</p>
-                  <p className="text-xs text-gray-500 mb-2">Código de reserva</p>
-                  <p className="font-mono font-bold text-xl text-brand tracking-widest bg-white rounded-xl py-2 px-4 border border-brand/20 mb-3">
-                    {bookingCode}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { setSuccess(false); setBookingCode(null); setSelectedRoute(null) }}
-                      className="flex-1 h-10 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600"
-                    >
-                      Nova reserva
-                    </button>
-                    <button
-                      onClick={() => navigate('/minhas-reservas')}
-                      className="flex-1 h-10 bg-brand text-white rounded-xl text-sm font-semibold"
-                    >
-                      Ver reservas
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Bottom bar */}
-            {!success && (
-              <div className="sticky bottom-0 md:static bg-white border-t md:border-t border-gray-100 px-4 md:px-0 py-3 flex flex-col gap-2 md:mt-4">
-                {error && (
-                  <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
-                )}
-                <div className="flex items-center gap-4">
-                  {totalPrice ? (
-                    <div>
-                      <p className="text-xs text-gray-400">Total</p>
-                      <p className="font-bold text-gray-900 text-lg">{fmt(totalPrice)}</p>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 flex-1">Selecione uma rota</p>
-                  )}
-                  <Button
-                    onClick={handleBook}
-                    disabled={!selectedRoute || loading}
-                    className="flex-1 max-w-[160px] ml-auto"
-                    size="lg"
-                  >
-                    {loading ? 'Reservando…' : <>Continuar <ChevronRight size={16} /></>}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* TAB: Cotação personalizada */}
-        {tab === 'quote' && (
-          <div className="px-4 md:px-0 pt-4 pb-24 md:pb-8">
-            {success ? (
-              <div className="text-center py-16">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle size={32} className="text-green-500" />
-                </div>
-                <h3 className="font-bold text-gray-900 text-lg mb-2">Cotação enviada!</h3>
-                <p className="text-sm text-gray-500 mb-6 max-w-xs mx-auto">
-                  Nossa equipe vai entrar em contato com o valor em breve.
-                </p>
-                <Button variant="outline" onClick={() => { setSuccess(false); setQOrigin(''); setQDest('') }}>
-                  Nova cotação
-                </Button>
-              </div>
-            ) : (
-              <form onSubmit={handleQuote} className="space-y-4 md:max-w-lg">
-                <div className="md:grid md:grid-cols-2 md:gap-4 space-y-4 md:space-y-0">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Origem</p>
-                    <input
-                      className="w-full h-11 px-4 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand"
-                      placeholder="De onde você vai sair?"
-                      value={qOrigin}
-                      onChange={(e) => setQOrigin(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Destino</p>
-                    <input
-                      className="w-full h-11 px-4 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand"
-                      placeholder="Para onde você quer ir?"
-                      value={qDest}
-                      onChange={(e) => setQDest(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1.5">Data</p>
-                    <input type="date" required className="w-full h-11 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand"
-                      value={qDate} onChange={(e) => setQDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1.5">Horário</p>
-                    <input type="time" required className="w-full h-11 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand"
-                      value={qTime} onChange={(e) => setQTime(e.target.value)} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1.5">Passageiros</p>
-                    <input type="number" min="1" max="20" required className="w-full h-11 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand"
-                      value={qPeople} onChange={(e) => setQPeople(e.target.value)} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1.5">Bagagens</p>
-                    <input type="number" min="0" max="20" className="w-full h-11 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand"
-                      value={qLuggage} onChange={(e) => setQLuggage(e.target.value)} />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-1.5">Observações (opcional)</p>
-                  <textarea
-                    rows={3}
-                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand resize-none"
-                    placeholder="Endereço exato, necessidades especiais..."
-                    value={qNotes}
-                    onChange={(e) => setQNotes(e.target.value)}
-                  />
-                </div>
-                {error && <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-xl">{error}</p>}
-                <Button type="submit" size="lg" className="w-full" disabled={loading}>
-                  {loading ? 'Enviando…' : 'Solicitar cotação'}
-                </Button>
-              </form>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Sheets */}
+      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} />}
+      {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest('') }} onClose={() => setShowOrigin(false)} />}
+      {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={setDest} onClose={() => setShowDest(false)} />}
     </div>
   )
 }

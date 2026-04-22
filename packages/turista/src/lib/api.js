@@ -70,6 +70,9 @@ export const api = {
   // Regiões
   getRegions: () => request('/api/regions'),
 
+  // Veículos
+  getVehicles: (params = {}) => request(`/api/vehicles?${new URLSearchParams(params)}`),
+
   // Passeios
   getTours:        (params = {}) => request(`/api/tours?${new URLSearchParams(params)}`),
   getTour:         (id)          => request(`/api/tours/${id}`),
