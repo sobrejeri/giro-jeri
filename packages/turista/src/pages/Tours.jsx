@@ -524,20 +524,23 @@ export default function Tours() {
                 {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
               </p>
               <div className="flex items-center gap-1 mt-0.5">
-                <Users size={11} className="text-gray-400" />
-                <span className="text-[11px] text-gray-500">{cartCapacity}/{people}</span>
+                <Users size={11} className={cartCapacity >= people ? 'text-gray-400' : 'text-red-400'} />
+                <span className={`text-[11px] font-medium ${cartCapacity >= people ? 'text-gray-500' : 'text-red-400'}`}>
+                  {cartCapacity}/{people}
+                </span>
               </div>
             </div>
             {/* Preço + botão */}
             <div className="flex items-center gap-3 shrink-0">
               {cartTotal > 0 && (
-                <span className="text-[15px] font-extrabold text-brand">
+                <span className={`text-[15px] font-extrabold ${cartCapacity >= people ? 'text-brand' : 'text-gray-400'}`}>
                   R$ {cartTotal.toLocaleString('pt-BR')}
                 </span>
               )}
               <button
+                disabled={cartCapacity < people}
                 onClick={() => navigate(`/passeios/${selectedTour?.id}`, { state: { cart, people, mode: 'private' } })}
-                className="bg-brand text-white font-bold rounded-xl px-4 py-2.5 text-[13px] active:scale-95 transition-transform"
+                className="font-bold rounded-xl px-4 py-2.5 text-[13px] transition-all active:scale-95 disabled:cursor-not-allowed bg-brand text-white disabled:bg-gray-200 disabled:text-gray-400"
               >
                 Continuar
               </button>
