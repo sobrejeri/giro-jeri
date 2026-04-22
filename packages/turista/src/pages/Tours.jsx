@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import {
   MapPin, SlidersHorizontal, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
-  ChevronLeft, ChevronRight, X,
+  ChevronLeft, ChevronRight, X, Info, Bus,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth,
@@ -478,30 +478,85 @@ export default function Tours() {
         )}
 
         {/* ── Modo COMPARTILHADO ────────────────────────────── */}
-        {mode === 'shared' && selectedTour && (
-          <div className="bg-white rounded-2xl p-4 border border-gray-100">
-            <p className="text-[14px] font-bold text-gray-900">Passeio compartilhado</p>
-            <p className="text-[12px] text-gray-500 mt-1 mb-3">Divida com outros turistas e pague menos</p>
-            {selectedTour.shared_price_per_person ? (
-              <>
-                <div className="flex items-center justify-between py-2 border-t border-gray-100">
-                  <span className="text-[13px] text-gray-600">Preço por pessoa</span>
-                  <span className="text-[14px] font-bold text-gray-900">
-                    R$ {Number(selectedTour.shared_price_per_person).toLocaleString('pt-BR')}
-                  </span>
+        {mode === 'shared' && selectedTour && (() => {
+          const pricePerPerson = selectedTour.shared_price_per_person
+            ? Number(selectedTour.shared_price_per_person) : null
+          const sharedTotal = pricePerPerson ? pricePerPerson * people : 0
+
+          return (
+            <>
+              {/* Número de pessoas */}
+              <div className="bg-white rounded-2xl p-4 border border-gray-100">
+                <p className="text-[14px] font-bold text-gray-900">Número de pessoas</p>
+                <p className="text-[11px] text-gray-400 mt-0.5 mb-4">Preço calculado por pessoa</p>
+                <div className="flex items-center justify-between px-4">
+                  <button
+                    onClick={() => setPeople((p) => Math.max(1, p - 1))}
+                    className="w-11 h-11 rounded-full border-2 border-gray-200 flex items-center justify-center active:scale-95 transition-transform"
+                  >
+                    <Minus size={16} className="text-gray-500" />
+                  </button>
+                  <span className="text-[34px] font-extrabold text-gray-900 tabular-nums">{people}</span>
+                  <button
+                    onClick={() => setPeople((p) => p + 1)}
+                    className="w-11 h-11 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform"
+                  >
+                    <Plus size={16} className="text-white" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => navigate(`/passeios/${selectedTour.id}`, { state: { mode: 'shared', people } })}
-                  className="w-full mt-3 bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
-                >
-                  Reservar compartilhado
-                </button>
-              </>
-            ) : (
-              <p className="text-[13px] text-gray-400">Passeio não disponível em modo compartilhado.</p>
-            )}
-          </div>
-        )}
+              </div>
+
+              {/* Card de preço */}
+              {pricePerPerson ? (
+                <div className="bg-brand rounded-2xl p-4">
+                  <p className="text-white/70 text-[12px] font-medium">Preço por pessoa</p>
+                  <p className="text-white text-[30px] font-extrabold leading-tight mt-0.5">
+                    R$ {pricePerPerson.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-white/70 text-[12px] mt-0.5">
+                    {selectedTour.name}{selectedTour.duration_hours ? ` · ${selectedTour.duration_hours}h` : ''}
+                  </p>
+
+                  <div className="flex items-center justify-between mt-4 bg-white/15 rounded-xl px-3 py-2.5">
+                    <span className="text-white/80 text-[13px]">
+                      {people} {people === 1 ? 'pessoa' : 'pessoas'}
+                    </span>
+                    <span className="text-white font-bold text-[15px]">
+                      R$ {sharedTotal.toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-3 bg-white/10 rounded-xl px-3 py-2">
+                    <Bus size={13} className="text-white/70 shrink-0" />
+                    <span className="text-white/80 text-[11px]">
+                      Transporte em veículo coletivo com outros turistas
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl p-4 border border-gray-100">
+                  <p className="text-[13px] text-gray-400">Passeio não disponível em modo compartilhado.</p>
+                </div>
+              )}
+
+              {/* Como funciona */}
+              {pricePerPerson && (
+                <div className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100">
+                  <div className="flex items-start gap-2.5">
+                    <Info size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[13px] font-bold text-blue-900">Como funciona?</p>
+                      <p className="text-[11px] text-blue-700 leading-relaxed mt-0.5">
+                        O passeio é compartilhado com outros turistas em uma Jardineira.
+                        Valor fixo por pessoa, com guia incluso.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        })()}
 
       </div>
 
@@ -571,6 +626,53 @@ export default function Tours() {
                   Continuar
                 </button>
               </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── CTA fixo (modo compartilhado) ───────────────────────── */}
+      {mode === 'shared' && selectedTour?.shared_price_per_person && (() => {
+        const pricePerPerson = Number(selectedTour.shared_price_per_person)
+        const sharedTotal    = pricePerPerson * people
+        return (
+          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
+            <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
+              <div className="flex-1 min-w-0 mr-3">
+                <div className="flex items-center gap-1">
+                  <Users size={11} className="text-gray-400" />
+                  <span className="text-[12px] text-gray-500">
+                    {people} {people === 1 ? 'passageiro' : 'passageiros'}
+                  </span>
+                </div>
+                <p className="text-[16px] font-extrabold text-brand mt-0.5">
+                  R$ {sharedTotal.toLocaleString('pt-BR')}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/checkout/resumo', {
+                  state: {
+                    service_name:    selectedTour.name,
+                    service_type:    'tour',
+                    booking_mode:    'shared',
+                    service_date:    isToday(date) ? 'Hoje'
+                                       : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                                       : format(date, "d 'de' MMMM", { locale: ptBR }),
+                    service_time:    'A confirmar',
+                    people_count:    people,
+                    origin_text:     'Centro de Jericoacoara',
+                    total_price:     sharedTotal,
+                    breakdown:       { [`${people}x por pessoa`]: sharedTotal },
+                    cover_image_url: selectedTour.cover_image_url || null,
+                    region_id:       selectedTour.regions?.id,
+                    service_id:      selectedTour.id,
+                    vehicles:        [],
+                  },
+                })}
+                className="bg-brand text-white font-bold rounded-xl px-5 py-2.5 text-[13px] active:scale-95 transition-transform shrink-0"
+              >
+                Continuar
+              </button>
             </div>
           </div>
         )
