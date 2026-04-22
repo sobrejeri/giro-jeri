@@ -515,39 +515,47 @@ export default function Tours() {
       )}
 
       {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
-      {mode === 'private' && cartHasItems && (
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
-          <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-            {/* Resumo */}
-            <div className="flex-1 min-w-0 mr-3">
-              <p className="text-[13px] font-bold text-gray-900 truncate">
-                {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
-              </p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Users size={11} className={cartCapacity >= people ? 'text-gray-400' : 'text-red-400'} />
-                <span className={`text-[11px] font-medium ${cartCapacity >= people ? 'text-gray-500' : 'text-red-400'}`}>
-                  {cartCapacity}/{people}
-                </span>
+      {mode === 'private' && cartHasItems && (() => {
+        const canContinue = cartCapacity >= people
+        return (
+          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
+            <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
+              {/* Resumo */}
+              <div className="flex-1 min-w-0 mr-3">
+                <p className="text-[13px] font-bold text-gray-900 truncate">
+                  {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
+                </p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <Users size={11} className={canContinue ? 'text-gray-400' : 'text-red-400'} />
+                  <span className={`text-[11px] font-medium ${canContinue ? 'text-gray-500' : 'text-red-400'}`}>
+                    {cartCapacity}/{people}
+                  </span>
+                </div>
+              </div>
+              {/* Preço + botão */}
+              <div className="flex items-center gap-3 shrink-0">
+                {cartTotal > 0 && (
+                  <span className={`text-[15px] font-extrabold ${canContinue ? 'text-brand' : 'text-gray-400'}`}>
+                    R$ {cartTotal.toLocaleString('pt-BR')}
+                  </span>
+                )}
+                <button
+                  onClick={canContinue
+                    ? () => navigate(`/passeios/${selectedTour?.id}`, { state: { cart, people, mode: 'private' } })
+                    : undefined}
+                  className={`font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
+                    canContinue
+                      ? 'bg-brand text-white active:scale-95 cursor-pointer'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  Continuar
+                </button>
               </div>
             </div>
-            {/* Preço + botão */}
-            <div className="flex items-center gap-3 shrink-0">
-              {cartTotal > 0 && (
-                <span className={`text-[15px] font-extrabold ${cartCapacity >= people ? 'text-brand' : 'text-gray-400'}`}>
-                  R$ {cartTotal.toLocaleString('pt-BR')}
-                </span>
-              )}
-              <button
-                disabled={cartCapacity < people}
-                onClick={() => navigate(`/passeios/${selectedTour?.id}`, { state: { cart, people, mode: 'private' } })}
-                className="font-bold rounded-xl px-4 py-2.5 text-[13px] transition-all active:scale-95 disabled:cursor-not-allowed bg-brand text-white disabled:bg-gray-200 disabled:text-gray-400"
-              >
-                Continuar
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
