@@ -541,7 +541,26 @@ export default function Tours() {
                 )}
                 <button
                   onClick={canContinue
-                    ? () => navigate(`/passeios/${selectedTour?.id}`, { state: { cart, people, mode: 'private' } })
+                    ? () => navigate('/checkout/resumo', {
+                        state: {
+                          service_name:     selectedTour.name,
+                          service_type:     'tour',
+                          booking_mode:     'private',
+                          service_date:     isToday(date) ? 'Hoje'
+                                              : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                                              : format(date, "d 'de' MMMM", { locale: ptBR }),
+                          service_time:     'A confirmar',
+                          people_count:     people,
+                          origin_text:      'Centro de Jericoacoara',
+                          vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
+                          total_price:      cartTotal,
+                          breakdown:        { 'Veículos selecionados': cartTotal },
+                          cover_image_url:  selectedTour.cover_image_url || null,
+                          region_id:        selectedTour.regions?.id,
+                          service_id:       selectedTour.id,
+                          vehicles:         cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
+                        },
+                      })
                     : undefined}
                   className={`font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
                     canContinue

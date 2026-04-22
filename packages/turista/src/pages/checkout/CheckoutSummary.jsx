@@ -44,6 +44,7 @@ export default function CheckoutSummary() {
     vehicle_name,
     total_price,
     breakdown,
+    cover_image_url,
     // dados repassados para o próximo passo
     region_id,
     service_id,
@@ -93,9 +94,13 @@ export default function CheckoutSummary() {
         {/* Service Card */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
           <div className="h-[120px] relative">
-            <div className={`w-full h-full bg-gradient-to-br ${GRADIENTS[gi]} flex items-center justify-center`}>
-              <Icon size={44} className="text-brand/15" />
-            </div>
+            {cover_image_url ? (
+              <img src={cover_image_url} alt={service_name} className="w-full h-full object-cover" />
+            ) : (
+              <div className={`w-full h-full bg-gradient-to-br ${GRADIENTS[gi]} flex items-center justify-center`}>
+                <Icon size={44} className="text-brand/15" />
+              </div>
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
             <div className="absolute bottom-3 left-4 right-4">
               <div className="flex items-center gap-2 mb-1">
