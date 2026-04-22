@@ -237,13 +237,27 @@ export default function Tours() {
               <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">Hoje</p>
             </div>
           </button>
-          <button className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform">
+          <div className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
             <Users size={11} className="text-brand" />
             <div className="text-left">
               <p className="text-[9px] text-gray-400 leading-none">Pessoas</p>
-              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">{people}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <button
+                  onClick={() => setPeople((p) => Math.max(1, p - 1))}
+                  className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center active:scale-95"
+                >
+                  <Minus size={8} className="text-gray-600" />
+                </button>
+                <span className="text-[11px] font-semibold text-gray-700 w-4 text-center tabular-nums">{people}</span>
+                <button
+                  onClick={() => setPeople((p) => p + 1)}
+                  className="w-4 h-4 rounded-full bg-brand flex items-center justify-center active:scale-95"
+                >
+                  <Plus size={8} className="text-white" />
+                </button>
+              </div>
             </div>
-          </button>
+          </div>
         </div>
 
         {/* ── Escolha o passeio ─────────────────────────────── */}
@@ -272,27 +286,6 @@ export default function Tours() {
         {/* ── Modo PRIVATIVO ────────────────────────────────── */}
         {mode === 'private' && (
           <>
-            {/* Número de pessoas */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100">
-              <p className="text-[14px] font-bold text-gray-900">Número de pessoas</p>
-              <p className="text-[11px] text-gray-400 mt-0.5 mb-4">Usamos para sugerir veículos ideais</p>
-              <div className="flex items-center justify-center gap-5">
-                <button
-                  onClick={() => setPeople((p) => Math.max(1, p - 1))}
-                  className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center active:scale-95 transition-transform"
-                >
-                  <Minus size={15} className="text-gray-500" />
-                </button>
-                <span className="text-[26px] font-extrabold text-gray-900 w-8 text-center tabular-nums">{people}</span>
-                <button
-                  onClick={() => setPeople((p) => p + 1)}
-                  className="w-10 h-10 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform"
-                >
-                  <Plus size={15} className="text-white" />
-                </button>
-              </div>
-            </div>
-
             {/* Sugestões */}
             {suggestion && (
               <section>

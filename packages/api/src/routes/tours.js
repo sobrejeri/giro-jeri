@@ -82,8 +82,9 @@ router.get('/:id/vehicles', async (req, res, next) => {
     // Deduplica: para cada veículo, mantém o preço mais específico
     const map = new Map();
     for (const r of data || []) {
+      if (!r.vehicles) continue;
       if (!map.has(r.vehicles.id)) {
-        map.set(r.vehicles.id, { ...r.vehicles, price: r.base_price });
+        map.set(r.vehicles.id, { ...r.vehicles, base_price: r.base_price });
       }
     }
 
