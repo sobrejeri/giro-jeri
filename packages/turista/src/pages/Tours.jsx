@@ -5,7 +5,14 @@ import { api } from '../lib/api'
 import {
   MapPin, SlidersHorizontal, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
+  ChevronLeft, ChevronRight, X,
 } from 'lucide-react'
+import {
+  format, startOfDay, startOfMonth, endOfMonth,
+  eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths,
+  getDay, isToday, addDays,
+} from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 /* ── Gradiente fallback p/ cards sem imagem ─────────────────── */
 const GRADIENTS = [
@@ -134,6 +141,95 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
   )
 }
 
+/* ── Calendário (bottom sheet) ──────────────────────────────── */
+function DatePickerSheet({ value, onChange, onClose }) {
+  const today = startOfDay(new Date())
+  const [viewMonth, setViewMonth] = useState(startOfMonth(value))
+
+  const days = eachDayOfInterval({
+    start: startOfMonth(viewMonth),
+    end:   endOfMonth(viewMonth),
+  })
+  const offset = getDay(startOfMonth(viewMonth))
+  const canGoPrev = !isBefore(subMonths(viewMonth, 1), startOfMonth(today))
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 bg-gray-200 rounded-full" />
+        </div>
+
+        <div className="flex items-center justify-between px-5 py-3">
+          <p className="text-[16px] font-bold text-gray-900">Escolha a data</p>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+            <X size={16} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between px-5 mb-3">
+          <button
+            onClick={() => setViewMonth((m) => subMonths(m, 1))}
+            disabled={!canGoPrev}
+            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-transform"
+          >
+            <ChevronLeft size={16} className="text-gray-600" />
+          </button>
+          <p className="text-[14px] font-semibold text-gray-900 capitalize">
+            {format(viewMonth, 'MMMM yyyy', { locale: ptBR })}
+          </p>
+          <button
+            onClick={() => setViewMonth((m) => addMonths(m, 1))}
+            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <ChevronRight size={16} className="text-gray-600" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-7 px-4 mb-1">
+          {['D','S','T','Q','Q','S','S'].map((d, i) => (
+            <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 px-4 gap-y-0.5 mb-4">
+          {Array.from({ length: offset }).map((_, i) => <div key={`e${i}`} />)}
+          {days.map((day) => {
+            const past     = isBefore(day, today)
+            const selected = isSameDay(day, value)
+            const todayDay = isToday(day)
+            return (
+              <button
+                key={day.toISOString()}
+                disabled={past}
+                onClick={() => { onChange(day); onClose() }}
+                className={`aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
+                  ${selected  ? 'bg-brand text-white font-bold' : ''}
+                  ${!selected && todayDay ? 'text-brand font-bold' : ''}
+                  ${!selected && !todayDay && !past ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
+                  ${past ? 'text-gray-300 cursor-not-allowed' : ''}
+                `}
+              >
+                {format(day, 'd')}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="px-4 pb-8">
+          <button
+            onClick={onClose}
+            className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 /* ── Main ───────────────────────────────────────────────────── */
 export default function Tours() {
   const navigate = useNavigate()
@@ -141,6 +237,8 @@ export default function Tours() {
   const [mode, setMode] = useState('private')
   const [selectedId, setSelectedId] = useState(null)
   const [people, setPeople] = useState(2)
+  const [date, setDate] = useState(startOfDay(new Date()))
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
   const [cart, setCart] = useState({})
   const [favs, setFavs] = useState(new Set())
@@ -230,11 +328,18 @@ export default function Tours() {
               <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">Centro de Jericoacoara</p>
             </div>
           </button>
-          <button className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform">
+          <button
+            onClick={() => setShowDatePicker(true)}
+            className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform"
+          >
             <Calendar size={11} className="text-brand" />
             <div className="text-left">
               <p className="text-[9px] text-gray-400 leading-none">Data</p>
-              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">Hoje</p>
+              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">
+                {isToday(date) ? 'Hoje'
+                  : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                  : format(date, 'd MMM', { locale: ptBR })}
+              </p>
             </div>
           </button>
           <div className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
@@ -395,6 +500,15 @@ export default function Tours() {
         )}
 
       </div>
+
+      {/* ── Calendário ──────────────────────────────────────────── */}
+      {showDatePicker && (
+        <DatePickerSheet
+          value={date}
+          onChange={setDate}
+          onClose={() => setShowDatePicker(false)}
+        />
+      )}
 
       {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
       {mode === 'private' && cartHasItems && (
