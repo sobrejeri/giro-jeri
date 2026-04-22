@@ -213,7 +213,10 @@ export default function Bookings() {
     queryFn:  () => api.getMyBookings(),
   })
 
-  const all = (data?.bookings || data || []).map(b => ({ ...b, _status: resolveStatus(b) }))
+  const all = (
+    Array.isArray(data?.bookings) ? data.bookings :
+    Array.isArray(data) ? data : []
+  ).map(b => ({ ...b, _status: resolveStatus(b) }))
 
   const filtered = all.filter(b => {
     if (tab === 'ativos')     return ACTIVE_STATUSES.includes(b._status)
