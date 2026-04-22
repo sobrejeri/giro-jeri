@@ -95,25 +95,55 @@ function RouteSheet({ title, options, selected, onSelect, onClose }) {
   )
 }
 
-/* ── Vehicle row ─────────────────────────────────────────────── */
-function VehicleRow({ vehicle, price, selected, onSelect }) {
+/* ── Vehicle suggestion ─────────────────────────────────────── */
+function suggestVehicles(vehicles, people) {
+  if (!vehicles.length) return null
+  const single = vehicles.filter(v => v.seat_capacity >= people)
+                         .sort((a, b) => a.seat_capacity - b.seat_capacity)[0]
+  if (single) return { vehicle: single, qty: 1 }
+  const biggest = [...vehicles].sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
+  if (!biggest) return null
+  return { vehicle: biggest, qty: Math.ceil(people / biggest.seat_capacity) }
+}
+
+/* ── Vehicle row with qty controls ──────────────────────────── */
+function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
   return (
-    <button onClick={onSelect}
-      className={`w-full flex items-center gap-3 px-4 py-3 transition-all active:scale-[0.99] ${selected ? 'bg-brand/5 border-l-4 border-brand' : 'border-l-4 border-transparent'}`}
-    >
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${selected ? 'bg-brand' : 'bg-gray-100'}`}>
-        <Car size={18} className={selected ? 'text-white' : 'text-gray-400'} />
+    <div className={`flex items-center gap-3 px-4 py-3 transition-all border-l-4 ${qty > 0 ? 'border-brand bg-brand/5' : 'border-transparent'}`}>
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${qty > 0 ? 'bg-brand' : 'bg-gray-100'}`}>
+        <Car size={18} className={qty > 0 ? 'text-white' : 'text-gray-400'} />
       </div>
-      <div className="flex-1 text-left min-w-0">
-        <p className={`text-[13px] font-bold truncate ${selected ? 'text-gray-900' : 'text-gray-800'}`}>{vehicle.name}</p>
-        <p className="text-[11px] text-gray-400 mt-0.5">Até {vehicle.seat_capacity} pessoas</p>
+      <div className="flex-1 min-w-0 text-left">
+        <p className="text-[13px] font-bold text-gray-900 truncate">{vehicle.name}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <Users size={10} className="text-gray-400" />
+          <span className="text-[11px] text-gray-400">Até {vehicle.seat_capacity} pessoas</span>
+        </div>
+        {unitPrice && (
+          <p className="text-[11px] text-gray-500 mt-0.5">
+            R$ {Number(unitPrice).toLocaleString('pt-BR')}<span className="text-gray-400"> /veículo</span>
+          </p>
+        )}
       </div>
-      {price && (
-        <span className={`text-[14px] font-bold shrink-0 ${selected ? 'text-brand' : 'text-gray-700'}`}>
-          R$ {Number(price).toLocaleString('pt-BR')}
-        </span>
+      {qty === 0 ? (
+        <button onClick={onAdd}
+          className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform shrink-0">
+          <Plus size={14} className="text-white" />
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={onRemove}
+            className="w-7 h-7 rounded-full border border-gray-200 flex items-center justify-center active:scale-95 transition-transform">
+            <Minus size={11} className="text-gray-600" />
+          </button>
+          <span className="text-[14px] font-bold text-gray-900 w-4 text-center tabular-nums">{qty}</span>
+          <button onClick={onAdd}
+            className="w-7 h-7 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform">
+            <Plus size={11} className="text-white" />
+          </button>
+        </div>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -123,17 +153,17 @@ export default function Transfers() {
   const { token } = useAuth()
   const timeRef   = useRef(null)
 
-  const [origin,       setOrigin]       = useState('Jericoacoara')
-  const [dest,         setDest]         = useState('')
-  const [date,         setDate]         = useState(startOfDay(new Date()))
-  const [time,         setTime]         = useState('08:00')
-  const [people,       setPeople]       = useState(2)
-  const [selectedVId,  setSelectedVId]  = useState(null)
-  const [notes,        setNotes]        = useState('')
-  const [showDate,     setShowDate]     = useState(false)
-  const [showOrigin,   setShowOrigin]   = useState(false)
-  const [showDest,     setShowDest]     = useState(false)
-  const [loading,      setLoading]      = useState(false)
+  const [origin,     setOrigin]     = useState('Jericoacoara')
+  const [dest,       setDest]       = useState('')
+  const [date,       setDate]       = useState(startOfDay(new Date()))
+  const [time,       setTime]       = useState('08:00')
+  const [people,     setPeople]     = useState(2)
+  const [cart,       setCart]       = useState({})   // vehicleId → qty
+  const [notes,      setNotes]      = useState('')
+  const [showDate,   setShowDate]   = useState(false)
+  const [showOrigin, setShowOrigin] = useState(false)
+  const [showDest,   setShowDest]   = useState(false)
+  const [loading,    setLoading]    = useState(false)
 
   /* ── Queries ── */
   const { data: routesData } = useQuery({
@@ -150,12 +180,21 @@ export default function Transfers() {
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
                     .filter(v => v.is_transfer_allowed)
 
-  const origins   = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
-  const dests     = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
-  const matched   = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
-  const price     = matched ? Number(matched.default_price) : null
-  const selV      = vehicles.find(v => v.id === selectedVId)
-  const canBook   = !!matched && !!selectedVId && !!time
+  const origins    = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
+  const dests      = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
+  const matched    = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
+  const unitPrice  = matched ? Number(matched.default_price) : null
+
+  const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
+
+  const cartItems    = Object.entries(cart)
+    .filter(([, q]) => q > 0)
+    .map(([id, qty]) => ({ vehicle: vehicles.find(v => v.id === id), qty }))
+    .filter(x => x.vehicle)
+  const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
+  const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
+  const cartHasItems = cartItems.length > 0
+  const canBook      = !!matched && cartHasItems && cartCapacity >= people && !!time
 
   const dateLabel = isToday(date) ? 'Hoje'
     : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
@@ -166,20 +205,20 @@ export default function Transfers() {
     if (!canBook) return
     navigate('/checkout/resumo', {
       state: {
-        service_name:        `Transfer ${origin} → ${dest}`,
-        service_type:        'transfer',
-        booking_mode:        'private',
-        service_date:        dateLabel,
-        service_time:        time,
-        people_count:        people,
-        origin_text:         origin,
-        destination_text:    dest,
-        vehicle_name:        selV?.name,
-        total_price:         price,
-        breakdown:           { 'Transfer': price },
-        region_id:           matched?.transfer_id,
-        service_id:          matched?.id,
-        vehicles:            selV ? [{ vehicle_id: selV.id, qty: 1 }] : [],
+        service_name:     `Transfer ${origin} → ${dest}`,
+        service_type:     'transfer',
+        booking_mode:     'private',
+        service_date:     dateLabel,
+        service_time:     time,
+        people_count:     people,
+        origin_text:      origin,
+        destination_text: dest,
+        vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
+        total_price:      cartTotal,
+        breakdown:        { 'Veículos': cartTotal },
+        region_id:        matched?.transfer_id,
+        service_id:       matched?.id,
+        vehicles:         cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
       },
     })
   }
@@ -282,14 +321,49 @@ export default function Transfers() {
         {vehicles.length > 0 && (
           <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Veículo</p>
+
+            {/* Sugestão */}
+            {suggestion && (
+              <div className="mx-4 mb-3 bg-orange-50 rounded-2xl p-3 border border-orange-100 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center shrink-0">
+                  <Car size={18} className="text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-gray-900">
+                    {suggestion.qty > 1 ? `${suggestion.qty}x ` : ''}{suggestion.vehicle.name}
+                  </p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <Users size={10} className="text-gray-400" />
+                    <span className="text-[11px] text-gray-400">
+                      Até {suggestion.vehicle.seat_capacity * suggestion.qty} pessoas
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  {unitPrice && (
+                    <span className="text-[13px] font-bold text-brand">
+                      R$ {(unitPrice * suggestion.qty).toLocaleString('pt-BR')}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setCart({ [suggestion.vehicle.id]: suggestion.qty })}
+                    className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="divide-y divide-gray-50">
               {vehicles.map(v => (
                 <VehicleRow
                   key={v.id}
                   vehicle={v}
-                  price={price}
-                  selected={selectedVId === v.id}
-                  onSelect={() => setSelectedVId(v.id)}
+                  unitPrice={unitPrice}
+                  qty={cart[v.id] || 0}
+                  onAdd={() => setCart(c => ({ ...c, [v.id]: (c[v.id] || 0) + 1 }))}
+                  onRemove={() => setCart(c => ({ ...c, [v.id]: Math.max(0, (c[v.id] || 1) - 1) }))}
                 />
               ))}
             </div>
@@ -320,7 +394,7 @@ export default function Transfers() {
                 { dot: 'bg-gray-400', label: 'Destino',     val: dest   },
                 { icon: Calendar,     label: 'Data & Hora', val: `${dateLabel} às ${time || '—'}` },
                 { icon: Users,        label: 'Passageiros', val: `${people} pessoa${people !== 1 ? 's' : ''}` },
-                ...(selV ? [{ icon: Car, label: 'Veículo', val: selV.name }] : []),
+                ...(cartItems.length ? [{ icon: Car, label: 'Veículo', val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
               ].map((row, i) => (
                 <div key={i} className="flex items-center gap-3">
                   {row.dot
@@ -334,7 +408,7 @@ export default function Transfers() {
               ))}
               <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
                 <p className="text-[13px] font-bold text-gray-900">Total</p>
-                <p className="text-[16px] font-extrabold text-brand">R$ {price?.toLocaleString('pt-BR') ?? '—'}</p>
+                <p className="text-[16px] font-extrabold text-brand">R$ {cartTotal ? cartTotal.toLocaleString('pt-BR') : '—'}</p>
               </div>
             </div>
           </section>
@@ -356,7 +430,7 @@ export default function Transfers() {
           <div>
             <p className="text-[10px] text-gray-400">Total estimado</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-              {price ? `R$ ${price.toLocaleString('pt-BR')}` : 'Selecione a rota'}
+              {cartTotal ? `R$ ${cartTotal.toLocaleString('pt-BR')}` : 'Selecione a rota'}
             </p>
           </div>
           <button
