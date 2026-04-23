@@ -75,7 +75,7 @@ router.post('/login', async (req, res, next) => {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url')
+      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language')
       .eq('auth_id', data.user.id)
       .single();
 
@@ -112,7 +112,7 @@ router.post('/refresh', async (req, res, next) => {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url')
+      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language')
       .eq('auth_id', data.user.id)
       .single();
 
@@ -122,6 +122,43 @@ router.post('/refresh', async (req, res, next) => {
       user:          profile,
     });
   } catch (err) { next(err); }
+});
+
+// ── PATCH /api/auth/me ────────────────────────────────
+const updateProfileSchema = z.object({
+  full_name:               z.string().min(2).max(200).optional(),
+  phone:                   z.string().min(10).max(30).optional(),
+  birth_date:              z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  document_type:           z.enum(['cpf', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
+  document_number:         z.string().max(30).optional().nullable(),
+  nationality:             z.string().max(100).optional().nullable(),
+  gender:                  z.enum(['male', 'female', 'non_binary', 'prefer_not_to_say']).optional().nullable(),
+  emergency_contact_name:  z.string().max(200).optional().nullable(),
+  emergency_contact_phone: z.string().max(30).optional().nullable(),
+  language:                z.string().max(10).optional(),
+});
+
+router.patch('/me', authenticate, async (req, res, next) => {
+  try {
+    const body = updateProfileSchema.parse(req.body);
+
+    const { data: updated, error } = await supabase
+      .from('users')
+      .update({ ...body, updated_at: new Date().toISOString() })
+      .eq('id', req.user.id)
+      .select(
+        'id, full_name, email, phone, user_type, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language, profile_photo_url'
+      )
+      .single();
+
+    if (error) return res.status(400).json({ error: error.message });
+    res.json({ user: updated });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
 });
 
 // ── POST /api/auth/logout ──────────────────────────────

@@ -31,8 +31,16 @@ export function AuthProvider({ children }) {
     Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
   }, [])
 
+  const updateUser = useCallback((partial) => {
+    setUser((prev) => {
+      const next = { ...prev, ...partial }
+      localStorage.setItem(STORAGE.user, JSON.stringify(next))
+      return next
+    })
+  }, [])
+
   return (
-    <AuthContext.Provider value={{ user, token, refresh, login, logout }}>
+    <AuthContext.Provider value={{ user, token, refresh, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   )
