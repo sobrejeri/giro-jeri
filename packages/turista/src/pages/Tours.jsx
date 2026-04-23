@@ -599,6 +599,7 @@ export default function Tours() {
                           service_date:     isToday(date) ? 'Hoje'
                                               : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
                                               : format(date, "d 'de' MMMM", { locale: ptBR }),
+                          service_date_iso: format(date, 'yyyy-MM-dd'),
                           service_time:     'A confirmar',
                           people_count:     people,
                           origin_text:      'Centro de Jericoacoara',
@@ -647,21 +648,23 @@ export default function Tours() {
               <button
                 onClick={() => navigate('/checkout/resumo', {
                   state: {
-                    service_name:    selectedTour.name,
-                    service_type:    'tour',
-                    booking_mode:    'shared',
-                    service_date:    isToday(date) ? 'Hoje'
-                                       : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
-                                       : format(date, "d 'de' MMMM", { locale: ptBR }),
-                    service_time:    'A confirmar',
-                    people_count:    people,
-                    origin_text:     'Centro de Jericoacoara',
-                    total_price:     sharedTotal,
-                    breakdown:       { [`${people}x por pessoa`]: sharedTotal },
-                    cover_image_url: selectedTour.cover_image_url || null,
-                    region_id:       selectedTour.regions?.id,
-                    service_id:      selectedTour.id,
-                    vehicles:        [],
+                    service_name:     selectedTour.name,
+                    service_type:     'tour',
+                    booking_mode:     'shared',
+                    service_date:     isToday(date) ? 'Hoje'
+                                        : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                                        : format(date, "d 'de' MMMM", { locale: ptBR }),
+                    service_date_iso: format(date, 'yyyy-MM-dd'),
+                    service_time:     'A confirmar',
+                    people_count:     people,
+                    price_per_person: pricePerPerson,
+                    origin_text:      'Centro de Jericoacoara',
+                    total_price:      sharedTotal,
+                    breakdown:        { [`${people}x por pessoa`]: sharedTotal },
+                    cover_image_url:  selectedTour.cover_image_url || null,
+                    region_id:        selectedTour.regions?.id,
+                    service_id:       selectedTour.id,
+                    vehicles:         [],
                   },
                 })}
                 className="bg-brand text-white font-bold rounded-xl px-5 py-2.5 text-[13px] active:scale-95 transition-transform shrink-0"
