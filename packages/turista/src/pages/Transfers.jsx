@@ -13,6 +13,139 @@ import {
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
+/* ── Preset routes ──────────────────────────────────────────── */
+const PRESET_ROUTES = [
+  {
+    id: 'aero-jeri',
+    label: 'Aeroporto → Jeri',
+    origin: 'Aeroporto de Jericoacoara (JJD)',
+    dest: 'Vila de Jericoacoara',
+    duration: '~1h',
+    priceFrom: 250,
+    badge: 'Mais vendido',
+    bg: 'from-orange-400 to-amber-300',
+  },
+  {
+    id: 'fortaleza-jeri',
+    label: 'Fortaleza → Jeri',
+    origin: 'Fortaleza',
+    dest: 'Vila de Jericoacoara',
+    duration: '5–6h',
+    priceFrom: 800,
+    badge: 'Premium',
+    bg: 'from-purple-400 to-violet-300',
+  },
+  {
+    id: 'jeri-fortaleza',
+    label: 'Jeri → Fortaleza',
+    origin: 'Vila de Jericoacoara',
+    dest: 'Fortaleza',
+    duration: '~6h',
+    priceFrom: 900,
+    badge: null,
+    bg: 'from-blue-400 to-sky-300',
+  },
+  {
+    id: 'jijoca-jeri',
+    label: 'Jijoca → Jeri',
+    origin: 'Jijoca',
+    dest: 'Vila de Jericoacoara',
+    duration: '~1h',
+    priceFrom: 250,
+    badge: '4x4',
+    bg: 'from-teal-400 to-emerald-300',
+  },
+  {
+    id: 'jeri-jijoca',
+    label: 'Jeri → Jijoca',
+    origin: 'Vila de Jericoacoara',
+    dest: 'Jijoca',
+    duration: '~1h',
+    priceFrom: 250,
+    badge: null,
+    bg: 'from-teal-400 to-emerald-300',
+  },
+  {
+    id: 'jeri-prea',
+    label: 'Jeri → Preá',
+    origin: 'Vila de Jericoacoara',
+    dest: 'Preá',
+    duration: '~25min',
+    priceFrom: 80,
+    badge: 'Kitesurf',
+    bg: 'from-sky-400 to-cyan-300',
+  },
+  {
+    id: 'jeri-camocim',
+    label: 'Jeri → Camocim',
+    origin: 'Vila de Jericoacoara',
+    dest: 'Camocim',
+    duration: '1h30',
+    priceFrom: 250,
+    badge: null,
+    bg: 'from-indigo-400 to-blue-300',
+  },
+  {
+    id: 'jeri-barra',
+    label: 'Jeri → Barra Grande',
+    origin: 'Vila de Jericoacoara',
+    dest: 'Barra Grande (PI)',
+    duration: '~6h',
+    priceFrom: 800,
+    badge: 'Rota Emoções',
+    bg: 'from-rose-400 to-pink-300',
+  },
+  {
+    id: 'jeri-lencois',
+    label: 'Jeri → Lençóis',
+    origin: 'Vila de Jericoacoara',
+    dest: 'Barreirinhas (MA)',
+    duration: '7–8h',
+    priceFrom: 1200,
+    badge: 'Multi-destino',
+    bg: 'from-emerald-400 to-green-300',
+  },
+  {
+    id: 'jeri-hotel',
+    label: 'Hotel → Passeio',
+    origin: 'Vila de Jericoacoara',
+    dest: 'Pontos de embarque',
+    duration: '10–30min',
+    priceFrom: 50,
+    badge: null,
+    bg: 'from-amber-400 to-yellow-300',
+  },
+]
+
+function PresetCard({ route, onSelect }) {
+  return (
+    <button
+      onClick={onSelect}
+      className="flex-none w-[150px] rounded-2xl overflow-hidden shadow-sm border border-black/5 active:scale-95 transition-transform text-left"
+    >
+      <div className={`bg-gradient-to-br ${route.bg} px-3 pt-2.5 pb-2`}>
+        {route.badge && (
+          <span className="inline-block text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-1.5">
+            {route.badge}
+          </span>
+        )}
+        {!route.badge && <div className="mb-2.5" />}
+        <p className="text-white font-bold text-[13px] leading-tight">{route.label}</p>
+        <div className="flex items-center gap-1 mt-1">
+          <Clock size={9} className="text-white/70" />
+          <span className="text-[10px] text-white/80">{route.duration}</span>
+        </div>
+      </div>
+      <div className="bg-white px-3 py-2">
+        <p className="text-[9px] text-gray-400">Privativo a partir de</p>
+        <p className="text-[13px] font-extrabold text-gray-900">
+          R$ {route.priceFrom.toLocaleString('pt-BR')}
+        </p>
+      </div>
+    </button>
+  )
+}
+
 /* ── Date picker (bottom sheet) ─────────────────────────────── */
 function DateSheet({ value, onChange, onClose }) {
   const today  = startOfDay(new Date())
@@ -233,6 +366,20 @@ export default function Transfers() {
 
       <div className="px-4 pt-4 space-y-3">
 
+        {/* ROTAS POPULARES */}
+        <div>
+          <p className="text-[13px] font-bold text-gray-700 mb-2.5">Rotas populares</p>
+          <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+            {PRESET_ROUTES.map(r => (
+              <PresetCard
+                key={r.id}
+                route={r}
+                onSelect={() => { setOrigin(r.origin); setDest(r.dest); setCart({}) }}
+              />
+            ))}
+          </div>
+        </div>
+
         {/* ROTA */}
         <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Rota</p>
@@ -447,8 +594,8 @@ export default function Transfers() {
 
       {/* Sheets */}
       {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} />}
-      {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest('') }} onClose={() => setShowOrigin(false)} />}
-      {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={setDest} onClose={() => setShowDest(false)} />}
+      {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
+      {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
     </div>
   )
 }
