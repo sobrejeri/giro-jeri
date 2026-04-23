@@ -79,11 +79,6 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
             <span className="text-[10px] text-gray-400">{tour.duration_hours}h</span>
           </>}
         </div>
-        {tour.shared_price_per_person && (
-          <p className="text-brand font-bold text-[12px] mt-1">
-            R$ {Number(tour.shared_price_per_person).toLocaleString('pt-BR')}
-          </p>
-        )}
       </div>
     </div>
   )
