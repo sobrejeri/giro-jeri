@@ -41,7 +41,7 @@ function TourCard({ tour, isFav, onToggleFav }) {
 
   return (
     <div
-      onClick={() => navigate(`/passeios/${tour.id}`)}
+      onClick={() => navigate('/passeios', { state: { selectedId: tour.id } })}
       className="shrink-0 w-[158px] rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 active:scale-[0.96] transition-transform cursor-pointer"
     >
       <div className="h-[108px] relative overflow-hidden">

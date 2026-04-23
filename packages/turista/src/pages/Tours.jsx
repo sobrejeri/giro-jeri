@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import {
   MapPin, SlidersHorizontal, Calendar, Users,
@@ -228,9 +228,10 @@ function DatePickerSheet({ value, onChange, onClose }) {
 /* ── Main ───────────────────────────────────────────────────── */
 export default function Tours() {
   const navigate = useNavigate()
+  const { state: locationState } = useLocation()
 
   const [mode, setMode] = useState('private')
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
   const [people, setPeople] = useState(2)
   const [date, setDate] = useState(startOfDay(new Date()))
   const [showDatePicker, setShowDatePicker] = useState(false)
