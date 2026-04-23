@@ -131,7 +131,7 @@ export default function CheckoutSummary() {
   const hasVehicles    = isPrivateTour || isTransfer
 
   /* ── All hooks unconditionally ──────────────────────────── */
-  const [editing,       setEditing]  = useState(false)
+  const [editing,       setEditing]  = useState(ls?.open_editing === true)
   const [showDatePicker, setShowDP]  = useState(false)
   const [people,   setPeople]        = useState(ls?.people_count || 2)
   const [date,     setDate]          = useState(() =>

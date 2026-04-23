@@ -78,6 +78,7 @@ function TourCard({ tour, isFav, onToggleFav }) {
           region_id:        tour.regions?.id,
           service_id:       tour.id,
           vehicles:         suggested ? [{ vehicle_id: suggested.vehicle.id, qty: suggested.qty }] : [],
+          open_editing:     true,
         },
       })
     } catch {
