@@ -51,7 +51,23 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({ error: profileError.message });
     }
 
-    res.status(201).json({ message: 'Conta criada com sucesso', user: profile });
+    // Auto sign-in para retornar token imediatamente após o cadastro
+    const { data: session, error: signInError } = await supabase.auth.signInWithPassword({
+      email:    body.email,
+      password: body.password,
+    });
+
+    if (signInError || !session?.session) {
+      // Conta criada mas login automático falhou — pede login manual
+      return res.status(201).json({ message: 'Conta criada com sucesso. Faça login para continuar.' });
+    }
+
+    res.status(201).json({
+      message:       'Conta criada com sucesso',
+      token:         session.session.access_token,
+      refresh_token: session.session.refresh_token,
+      user:          profile,
+    });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Dados inválidos', details: err.errors });

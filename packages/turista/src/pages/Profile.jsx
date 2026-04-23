@@ -329,9 +329,15 @@ export default function Profile() {
             <p className="text-[12px] text-gray-400 mb-5">Acesse suas reservas e histórico</p>
             <button
               onClick={() => navigate('/login')}
-              className="w-full h-11 bg-brand text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
+              className="w-full h-11 bg-brand text-white rounded-xl font-bold text-sm active:scale-95 transition-transform mb-2"
             >
               Entrar
+            </button>
+            <button
+              onClick={() => navigate('/cadastro', { state: { tab: 'register' } })}
+              className="w-full h-11 border border-brand text-brand rounded-xl font-bold text-sm active:scale-95 transition-transform"
+            >
+              Cadastrar-se
             </button>
           </div>
         )}
