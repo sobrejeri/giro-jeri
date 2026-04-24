@@ -88,6 +88,27 @@ router.get('/:id/vehicles', async (req, res, next) => {
       }
     }
 
+    // Fallback: sem regras de preço → retorna todos os veículos ativos da região
+    if (map.size === 0) {
+      const { data: tour } = await supabase
+        .from('tours')
+        .select('region_id')
+        .eq('id', req.params.id)
+        .single();
+
+      if (tour?.region_id) {
+        const { data: fallback } = await supabase
+          .from('vehicles')
+          .select('id, name, vehicle_type, seat_capacity, luggage_capacity, image_url, description, display_order')
+          .eq('region_id', tour.region_id)
+          .eq('is_tour_allowed', true)
+          .eq('is_active', true)
+          .order('display_order');
+
+        return res.json(fallback || []);
+      }
+    }
+
     res.json(
       Array.from(map.values()).sort((a, b) => a.display_order - b.display_order)
     );
