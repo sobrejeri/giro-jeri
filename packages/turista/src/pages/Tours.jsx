@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useRegion } from '../contexts/RegionContext'
 import {
   MapPin, SlidersHorizontal, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
@@ -229,6 +230,7 @@ function DatePickerSheet({ value, onChange, onClose }) {
 export default function Tours() {
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
+  const { region } = useRegion()
 
   const [mode, setMode] = useState('private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
@@ -243,8 +245,8 @@ export default function Tours() {
 
   /* ── Queries ──────────────────────────────────────────────── */
   const { data: toursData, isLoading: toursLoading } = useQuery({
-    queryKey: ['tours'],
-    queryFn: () => api.getTours(),
+    queryKey: ['tours', region?.id],
+    queryFn: () => api.getTours(region?.id ? { region_id: region.id } : {}),
   })
   const tours = toursData?.tours || toursData || []
   const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]

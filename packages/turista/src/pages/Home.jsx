@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { useRegion } from '../contexts/RegionContext'
 import {
   Bell, Star, Clock, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
@@ -155,13 +156,14 @@ const STEPS = [
 
 export default function Home() {
   const navigate = useNavigate()
+  const { region, openPicker } = useRegion()
   const [favs, setFavs] = useState(new Set())
   const toggleFav = (id) =>
     setFavs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const { data: toursData, isLoading } = useQuery({
-    queryKey: ['tours', 'home'],
-    queryFn:  () => api.getTours({ limit: 12 }),
+    queryKey: ['tours', 'home', region?.id],
+    queryFn:  () => api.getTours({ limit: 12, ...(region?.id ? { region_id: region.id } : {}) }),
   })
   const tours    = toursData?.tours || toursData || []
   const featured = (tours.filter((t) => t.is_featured).length > 0
@@ -196,9 +198,12 @@ export default function Home() {
           </div>
         </div>
 
-        <button className="mt-2.5 flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 active:scale-95 transition-transform">
+        <button
+          onClick={openPicker}
+          className="mt-2.5 flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 active:scale-95 transition-transform"
+        >
           <MapPin size={11} className="text-brand shrink-0" />
-          <span className="text-[12px] font-semibold text-gray-700">Jericoacoara, CE</span>
+          <span className="text-[12px] font-semibold text-gray-700">{region?.name ?? 'Selecionar região'}</span>
           <ChevronRight size={11} className="text-gray-400 ml-0.5" />
         </button>
       </div>
