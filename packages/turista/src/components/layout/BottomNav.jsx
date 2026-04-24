@@ -1,17 +1,19 @@
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Home, Compass, Car, CalendarCheck, User } from 'lucide-react'
 
-const NAV = [
-  { to: '/',                icon: Home,         label: 'Início',    exact: true },
-  { to: '/passeios',        icon: Compass,      label: 'Passeios' },
-  { to: '/transfers',       icon: Car,          label: 'Translados' },
-  { to: '/minhas-reservas', icon: CalendarCheck, label: 'Reservas' },
-  { to: '/perfil',          icon: User,         label: 'Perfil' },
-]
-
 export default function BottomNav() {
-  const navigate  = useNavigate()
+  const navigate     = useNavigate()
   const { pathname } = useLocation()
+  const { t }        = useTranslation()
+
+  const NAV = [
+    { to: '/',                icon: Home,          label: t('nav.home'),      exact: true },
+    { to: '/passeios',        icon: Compass,       label: t('nav.tours') },
+    { to: '/transfers',       icon: Car,           label: t('nav.transfers') },
+    { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings') },
+    { to: '/perfil',          icon: User,          label: t('nav.profile') },
+  ]
 
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100">
