@@ -249,12 +249,23 @@ export default function Tours() {
   const tours = toursData?.tours || toursData || []
   const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
 
-  const { data: vehiclesData } = useQuery({
+  const { data: vehiclesData, isFetched: vehiclesFetched } = useQuery({
     queryKey: ['tour-vehicles', selectedTour?.id],
     queryFn: () => api.getTourVehicles(selectedTour.id),
     enabled: !!selectedTour?.id && mode === 'private',
   })
-  const vehicles = useMemo(() => vehiclesData || [], [vehiclesData])
+
+  // Fallback: se o passeio não tiver regras de preço, usa todos os veículos ativos
+  const { data: allVehiclesData } = useQuery({
+    queryKey: ['vehicles'],
+    queryFn: () => api.getVehicles({ is_active: 'true' }),
+    enabled: vehiclesFetched && (vehiclesData || []).length === 0 && mode === 'private',
+  })
+
+  const vehicles = useMemo(
+    () => (vehiclesData || []).length > 0 ? vehiclesData : (allVehiclesData || []),
+    [vehiclesData, allVehiclesData],
+  )
 
   /* ── Sugestão ─────────────────────────────────────────────── */
   const suggestion = useMemo(() => suggest(vehicles, people), [vehicles, people])
