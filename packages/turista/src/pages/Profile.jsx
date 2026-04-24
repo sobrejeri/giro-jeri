@@ -99,8 +99,8 @@ export default function Profile() {
       alert('Use uma imagem JPEG, PNG ou WebP.')
       return
     }
-    if (file.size > 1.5 * 1024 * 1024) {
-      alert('Imagem muito grande. Máximo 1,5 MB.')
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Imagem muito grande. Máximo 2 MB.')
       return
     }
 
