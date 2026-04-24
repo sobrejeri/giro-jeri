@@ -2,16 +2,30 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { api } from '../lib/api'
 
 const RegionContext = createContext(null)
-
 const STORAGE_KEY = 'giro_region'
+const DEFAULT_RADIUS_KM = 100
 
-function nearestRegion(regions, lat, lon) {
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * (Math.PI / 180)
+  const dLon = (lon2 - lon1) * (Math.PI / 180)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export function findRegionForCoords(lat, lon, regions) {
   let best = null
   let bestDist = Infinity
   for (const r of regions) {
     if (r.center_latitude == null || r.center_longitude == null) continue
-    const d = Math.hypot(r.center_latitude - lat, r.center_longitude - lon)
-    if (d < bestDist) { bestDist = d; best = r }
+    const d = haversineKm(lat, lon, r.center_latitude, r.center_longitude)
+    const radius = r.radius_km ?? r.service_radius_km ?? DEFAULT_RADIUS_KM
+    if (d <= radius && d < bestDist) {
+      bestDist = d
+      best = r
+    }
   }
   return best
 }
@@ -26,6 +40,7 @@ export function RegionProvider({ children }) {
   const [regions, setRegions] = useState([])
   const [showPicker, setShowPicker] = useState(false)
   const [detecting, setDetecting] = useState(false)
+  const [outsideError, setOutsideError] = useState(false)
 
   useEffect(() => {
     api.getRegions().then((data) => {
@@ -39,6 +54,7 @@ export function RegionProvider({ children }) {
 
   const selectRegion = useCallback((r) => {
     setRegionState(r)
+    setOutsideError(false)
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(r)) } catch {}
     setShowPicker(false)
   }, [])
@@ -46,22 +62,32 @@ export function RegionProvider({ children }) {
   const detectGPS = useCallback(() => {
     if (!navigator.geolocation) return
     setDetecting(true)
+    setOutsideError(false)
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         setDetecting(false)
-        if (!regions.length) return
-        const nearest = nearestRegion(regions, coords.latitude, coords.longitude)
-        if (nearest) selectRegion(nearest)
+        const found = findRegionForCoords(coords.latitude, coords.longitude, regions)
+        if (found) {
+          selectRegion(found)
+        } else {
+          setOutsideError(true)
+        }
       },
       () => { setDetecting(false) },
       { timeout: 8000 }
     )
   }, [regions, selectRegion])
 
-  const openPicker = useCallback(() => setShowPicker(true), [])
+  const openPicker = useCallback(() => { setOutsideError(false); setShowPicker(true) }, [])
 
   return (
-    <RegionContext.Provider value={{ region, regions, selectRegion, detectGPS, detecting, showPicker, openPicker, setShowPicker }}>
+    <RegionContext.Provider value={{
+      region, regions, selectRegion,
+      detectGPS, detecting,
+      showPicker, setShowPicker, openPicker,
+      outsideError, setOutsideError,
+      findRegionForCoords,
+    }}>
       {children}
     </RegionContext.Provider>
   )
