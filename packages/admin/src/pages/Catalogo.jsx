@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Route, ImagePlus, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Route, ImagePlus, X, Car, Users } from 'lucide-react'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 
@@ -24,10 +24,29 @@ const TOUR_EMPTY = {
 }
 const TRANSFER_EMPTY = { name: '', description: '', pricing_mode: 'fixed_route', is_active: true }
 const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true }
+const VEHICLE_EMPTY = {
+  name: '', vehicle_type: 'buggy', description: '',
+  seat_capacity: 4, luggage_capacity: 4,
+  is_private_allowed: true, is_shared_allowed: false,
+  is_transfer_allowed: false, is_tour_allowed: true,
+  is_active: true,
+}
+
+const VEHICLE_TYPES = [
+  { value: 'buggy',      label: 'Buggy' },
+  { value: 'jardineira', label: 'Jardineira' },
+  { value: 'hilux_4x4', label: 'Hilux 4x4' },
+  { value: 'boat',       label: 'Barco' },
+  { value: 'van',        label: 'Van' },
+  { value: 'sedan',      label: 'Sedan' },
+  { value: 'suv',        label: 'SUV' },
+  { value: 'other',      label: 'Outro' },
+]
 
 const TABS = [
   { key: 'tours',    label: 'Passeios'  },
   { key: 'transfers', label: 'Transfers' },
+  { key: 'vehicles', label: 'Veículos'  },
 ]
 
 export default function Catalogo() {
@@ -36,10 +55,15 @@ export default function Catalogo() {
   const [form, setForm]     = useState({})
   const [routeModal, setRouteModal] = useState(null)
   const [routeForm, setRouteForm]   = useState({})
+  const [vehicleModal, setVehicleModal] = useState(null)
+  const [vehicleForm, setVehicleForm]   = useState({})
   const [imageFile, setImageFile]   = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
+  const [vehicleImageFile, setVehicleImageFile]   = useState(null)
+  const [vehicleImagePreview, setVehicleImagePreview] = useState(null)
   const [uploading, setUploading]   = useState(false)
-  const fileRef = useRef(null)
+  const fileRef        = useRef(null)
+  const vehicleFileRef = useRef(null)
   const qc = useQueryClient()
 
   const { data: regionData } = useQuery({
@@ -60,7 +84,12 @@ export default function Catalogo() {
     queryKey: ['admin-routes'],
     queryFn:  () => api.getTransferRoutes(),
   })
+  const { data: vehicles = [], isLoading: l4 } = useQuery({
+    queryKey: ['vehicles'],
+    queryFn:  () => api.getVehicles(),
+  })
 
+  /* ── Tour mutations ──────────────────────────────────────── */
   const tourMut = useMutation({
     mutationFn: (body) =>
       modal?.isNew ? api.createTour(body) : api.updateTour(modal.id, body),
@@ -70,6 +99,8 @@ export default function Catalogo() {
     mutationFn: (id) => api.deleteTour(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-tours'] }),
   })
+
+  /* ── Transfer mutations ──────────────────────────────────── */
   const transferMut = useMutation({
     mutationFn: (body) =>
       modal?.isNew ? api.createTransfer(body) : api.updateTransfer(modal.id, body),
@@ -85,6 +116,20 @@ export default function Catalogo() {
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-routes'] }),
   })
 
+  /* ── Vehicle mutations ───────────────────────────────────── */
+  const vehicleMut = useMutation({
+    mutationFn: (body) =>
+      vehicleModal?.isNew
+        ? api.createVehicle(body)
+        : api.updateVehicle(vehicleModal.id, body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicles'] }); setVehicleModal(null) },
+  })
+  const deleteVehicleMut = useMutation({
+    mutationFn: (id) => api.deleteVehicle(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['vehicles'] }),
+  })
+
+  /* ── Open/close handlers ─────────────────────────────────── */
   function openNewTour() {
     setForm(TOUR_EMPTY); setImageFile(null); setImagePreview(null)
     setModal({ isNew: true })
@@ -98,6 +143,18 @@ export default function Catalogo() {
   function openNewRoute()      { setRouteForm(ROUTE_EMPTY); setRouteModal({ isNew: true }) }
   function openEditRoute(r)    { setRouteForm({ ...r });    setRouteModal(r) }
 
+  function openNewVehicle() {
+    setVehicleForm(VEHICLE_EMPTY)
+    setVehicleImageFile(null); setVehicleImagePreview(null)
+    setVehicleModal({ isNew: true })
+  }
+  function openEditVehicle(v) {
+    setVehicleForm({ ...v })
+    setVehicleImageFile(null); setVehicleImagePreview(v.image_url || null)
+    setVehicleModal(v)
+  }
+
+  /* ── Image handling ──────────────────────────────────────── */
   function handleFileChange(e) {
     const file = e.target.files[0]
     if (!file) return
@@ -105,14 +162,22 @@ export default function Catalogo() {
     setImagePreview(URL.createObjectURL(file))
   }
 
-  async function uploadImage(file) {
+  function handleVehicleFileChange(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setVehicleImageFile(file)
+    setVehicleImagePreview(URL.createObjectURL(file))
+  }
+
+  async function uploadImage(file, folder = 'tours') {
     const ext  = file.name.split('.').pop()
-    const path = `tours/${Date.now()}.${ext}`
+    const path = `${folder}/${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('tour-images').upload(path, file, { upsert: true })
     if (error) throw error
     return supabase.storage.from('tour-images').getPublicUrl(path).data.publicUrl
   }
 
+  /* ── Submit handlers ─────────────────────────────────────── */
   async function handleTourSubmit(e) {
     e.preventDefault()
     let body = {
@@ -126,7 +191,7 @@ export default function Catalogo() {
     }
     if (imageFile) {
       setUploading(true)
-      try { body.cover_image_url = await uploadImage(imageFile) }
+      try { body.cover_image_url = await uploadImage(imageFile, 'tours') }
       catch { alert('Erro ao fazer upload da imagem'); setUploading(false); return }
       setUploading(false)
     }
@@ -137,9 +202,30 @@ export default function Catalogo() {
     e.preventDefault()
     transferMut.mutate(form)
   }
+
   function handleRouteSubmit(e) {
     e.preventDefault()
     routeMut.mutate({ ...routeForm, default_price: Number(routeForm.default_price) })
+  }
+
+  async function handleVehicleSubmit(e) {
+    e.preventDefault()
+    let body = {
+      ...vehicleForm,
+      seat_capacity:    Number(vehicleForm.seat_capacity),
+      luggage_capacity: Number(vehicleForm.luggage_capacity),
+      region_id:        regionId,
+    }
+    if (vehicleModal?.isNew) {
+      body.slug = slugify(vehicleForm.name)
+    }
+    if (vehicleImageFile) {
+      setUploading(true)
+      try { body.image_url = await uploadImage(vehicleImageFile, 'vehicles') }
+      catch { alert('Erro ao fazer upload da imagem'); setUploading(false); return }
+      setUploading(false)
+    }
+    vehicleMut.mutate(body)
   }
 
   const isTransferModal = modal?._type === 'transfer'
@@ -161,7 +247,7 @@ export default function Catalogo() {
         ))}
       </div>
 
-      {/* Tours */}
+      {/* ── Tours ──────────────────────────────────────────────── */}
       {tab === 'tours' && (
         <Card>
           <CardHeader>
@@ -205,7 +291,7 @@ export default function Catalogo() {
         </Card>
       )}
 
-      {/* Transfers */}
+      {/* ── Transfers ──────────────────────────────────────────── */}
       {tab === 'transfers' && (
         <>
           <Card>
@@ -271,7 +357,72 @@ export default function Catalogo() {
         </>
       )}
 
-      {/* Modal tour / transfer */}
+      {/* ── Veículos ───────────────────────────────────────────── */}
+      {tab === 'vehicles' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Car size={16} className="text-gray-500" />
+                <h2 className="text-sm font-semibold text-gray-300">Veículos ({vehicles.length})</h2>
+              </div>
+              <Button size="sm" onClick={openNewVehicle}><Plus size={14} /> Novo Veículo</Button>
+            </div>
+          </CardHeader>
+          {l4 ? (
+            <CardBody><p className="text-sm text-gray-500">Carregando…</p></CardBody>
+          ) : (
+            <div className="divide-y divide-gray-800">
+              {vehicles.map((v) => (
+                <div key={v.id} className="flex items-center gap-3 px-5 py-3">
+                  {v.image_url ? (
+                    <img src={v.image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center shrink-0">
+                      <Car size={16} className="text-gray-500" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-200">{v.name}</p>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>{VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type}</span>
+                      <span>·</span>
+                      <Users size={10} className="text-gray-500" />
+                      <span>{v.seat_capacity} pax</span>
+                      {v.is_tour_allowed && <span className="text-brand/70">· Passeios</span>}
+                      {v.is_transfer_allowed && <span className="text-purple-400/70">· Transfer</span>}
+                      {v.is_shared_allowed && <span className="text-amber-400/70">· Compartilhado</span>}
+                    </div>
+                  </div>
+                  <Badge value={String(v.is_active)} />
+                  <div className="flex gap-1">
+                    <button onClick={() => openEditVehicle(v)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => confirm(`Desativar "${v.name}"?`) && deleteVehicleMut.mutate(v.id)}
+                      className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {vehicles.length === 0 && (
+                <CardBody>
+                  <div className="py-8 text-center">
+                    <Car size={32} className="mx-auto text-gray-700 mb-2" />
+                    <p className="text-sm text-gray-600">Nenhum veículo cadastrado.</p>
+                    <p className="text-xs text-gray-700 mt-1">Cadastre veículos para que apareçam nos passeios privativos.</p>
+                  </div>
+                </CardBody>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ── Modal tour / transfer ──────────────────────────────── */}
       <Modal
         open={!!modal}
         onClose={() => setModal(null)}
@@ -356,7 +507,7 @@ export default function Catalogo() {
         )}
       </Modal>
 
-      {/* Modal rota */}
+      {/* ── Modal rota ─────────────────────────────────────────── */}
       <Modal open={!!routeModal} onClose={() => setRouteModal(null)} title={routeModal?.isNew ? 'Nova Rota' : 'Editar Rota'} size="sm">
         <form onSubmit={handleRouteSubmit} className="space-y-4">
           <Input label="Origem" value={routeForm.origin_name || ''} onChange={(e) => setRouteForm({ ...routeForm, origin_name: e.target.value })} required />
@@ -365,6 +516,113 @@ export default function Catalogo() {
             value={routeForm.default_price || ''} onChange={(e) => setRouteForm({ ...routeForm, default_price: e.target.value })} required />
           <Button type="submit" className="w-full" disabled={routeMut.isPending}>
             {routeMut.isPending ? 'Salvando…' : 'Salvar Rota'}
+          </Button>
+        </form>
+      </Modal>
+
+      {/* ── Modal veículo ──────────────────────────────────────── */}
+      <Modal
+        open={!!vehicleModal}
+        onClose={() => setVehicleModal(null)}
+        title={vehicleModal?.isNew ? 'Novo Veículo' : 'Editar Veículo'}
+      >
+        <form onSubmit={handleVehicleSubmit} className="space-y-4">
+          {/* Foto do veículo */}
+          <div>
+            <p className="text-xs font-medium text-gray-400 mb-1.5">Foto do veículo</p>
+            <input ref={vehicleFileRef} type="file" accept="image/*" className="hidden" onChange={handleVehicleFileChange} />
+            {vehicleImagePreview ? (
+              <div className="relative">
+                <img src={vehicleImagePreview} className="w-full h-28 object-cover rounded-xl" />
+                <button type="button"
+                  onClick={() => { setVehicleImageFile(null); setVehicleImagePreview(null); setVehicleForm({ ...vehicleForm, image_url: '' }) }}
+                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center"
+                >
+                  <X size={12} className="text-white" />
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => vehicleFileRef.current?.click()}
+                className="w-full h-20 border-2 border-dashed border-gray-700 rounded-xl flex flex-col items-center justify-center gap-1.5 text-gray-600 hover:border-gray-500 hover:text-gray-400 transition-colors"
+              >
+                <ImagePlus size={18} />
+                <span className="text-xs">Clique para adicionar imagem</span>
+              </button>
+            )}
+          </div>
+
+          <Input
+            label="Nome"
+            value={vehicleForm.name || ''}
+            onChange={(e) => setVehicleForm({ ...vehicleForm, name: e.target.value })}
+            required
+          />
+
+          <Select
+            label="Tipo de veículo"
+            value={vehicleForm.vehicle_type || 'buggy'}
+            onChange={(e) => setVehicleForm({ ...vehicleForm, vehicle_type: e.target.value })}
+          >
+            {VEHICLE_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </Select>
+
+          <Textarea
+            label="Descrição"
+            rows={2}
+            value={vehicleForm.description || ''}
+            onChange={(e) => setVehicleForm({ ...vehicleForm, description: e.target.value })}
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Capacidade (pax)"
+              type="number" min={1}
+              value={vehicleForm.seat_capacity || ''}
+              onChange={(e) => setVehicleForm({ ...vehicleForm, seat_capacity: e.target.value })}
+              required
+            />
+            <Input
+              label="Bagagens"
+              type="number" min={0}
+              value={vehicleForm.luggage_capacity || ''}
+              onChange={(e) => setVehicleForm({ ...vehicleForm, luggage_capacity: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-gray-400">Disponível para</p>
+            {[
+              { key: 'is_tour_allowed',     label: 'Passeios privativos' },
+              { key: 'is_shared_allowed',   label: 'Passeios compartilhados' },
+              { key: 'is_transfer_allowed', label: 'Transfer' },
+              { key: 'is_private_allowed',  label: 'Contratação privada' },
+            ].map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 accent-brand"
+                  checked={!!vehicleForm[key]}
+                  onChange={(e) => setVehicleForm({ ...vehicleForm, [key]: e.target.checked })}
+                />
+                <span className="text-sm text-gray-300">{label}</span>
+              </label>
+            ))}
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-brand"
+              checked={!!vehicleForm.is_active}
+              onChange={(e) => setVehicleForm({ ...vehicleForm, is_active: e.target.checked })}
+            />
+            <span className="text-sm text-gray-300">Ativo (visível para turistas)</span>
+          </label>
+
+          <Button type="submit" className="w-full" disabled={vehicleMut.isPending || uploading}>
+            {uploading ? 'Enviando imagem…' : vehicleMut.isPending ? 'Salvando…' : 'Salvar Veículo'}
           </Button>
         </form>
       </Modal>

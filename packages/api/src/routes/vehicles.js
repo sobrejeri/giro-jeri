@@ -4,8 +4,8 @@ import { authenticate, requireOperator } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /api/vehicles — lista veículos (autenticado)
-router.get('/', authenticate, async (req, res, next) => {
+// GET /api/vehicles — lista veículos (público)
+router.get('/', async (req, res, next) => {
   try {
     const { region_id, vehicle_type, is_active } = req.query;
     let query = supabase.from('vehicles').select('*').order('name');
