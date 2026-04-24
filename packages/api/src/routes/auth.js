@@ -152,6 +152,7 @@ const updateProfileSchema = z.object({
   emergency_contact_name:  z.string().max(200).optional().nullable(),
   emergency_contact_phone: z.string().max(30).optional().nullable(),
   language:                z.string().max(10).optional(),
+  profile_photo_url:       z.string().max(2_500_000).optional().nullable(), // base64 ≤ ~2 MB
 });
 
 router.patch('/me', authenticate, async (req, res, next) => {

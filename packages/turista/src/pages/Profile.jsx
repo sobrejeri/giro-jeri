@@ -95,31 +95,29 @@ export default function Profile() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validação de tipo e tamanho no cliente
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       alert('Use uma imagem JPEG, PNG ou WebP.')
       return
     }
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Imagem muito grande. Máximo 2 MB.')
+    if (file.size > 1.5 * 1024 * 1024) {
+      alert('Imagem muito grande. Máximo 1,5 MB.')
       return
     }
 
     const reader = new FileReader()
     reader.onload = async (ev) => {
       const dataUrl = ev.target.result
-      setAvatarUrl(dataUrl)          // preview imediato
+      setAvatarUrl(dataUrl)       // preview imediato
       setUploadingPhoto(true)
       try {
-        const data = await api.uploadPhoto(dataUrl)
-        if (data?.url) {
-          setAvatarUrl(data.url)
-          updateUser({ profile_photo_url: data.url })
-          localStorage.removeItem(avatarKey) // URL agora vem do banco
+        // Salva o base64 diretamente em profile_photo_url no banco
+        const data = await api.updateProfile({ profile_photo_url: dataUrl })
+        if (data?.user) {
+          updateUser({ profile_photo_url: dataUrl })
+          localStorage.removeItem(avatarKey) // banco é a fonte agora
         }
       } catch {
-        // Mantém preview local como fallback
-        localStorage.setItem(avatarKey, dataUrl)
+        localStorage.setItem(avatarKey, dataUrl) // fallback offline
       } finally {
         setUploadingPhoto(false)
       }
