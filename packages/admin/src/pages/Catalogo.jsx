@@ -123,6 +123,7 @@ export default function Catalogo() {
         ? api.createVehicle(body)
         : api.updateVehicle(vehicleModal.id, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicles'] }); setVehicleModal(null) },
+    onError:   (err) => alert(`Erro ao salvar veículo: ${err.message}`),
   })
   const deleteVehicleMut = useMutation({
     mutationFn: (id) => api.deleteVehicle(id),
@@ -210,10 +211,16 @@ export default function Catalogo() {
 
   async function handleVehicleSubmit(e) {
     e.preventDefault()
+
+    if (!regionId) {
+      alert('Nenhuma região encontrada. Execute o SQL de seed (migrations/005_seed_dados_reais.sql) no Supabase antes de criar veículos.')
+      return
+    }
+
     let body = {
       ...vehicleForm,
       seat_capacity:    Number(vehicleForm.seat_capacity),
-      luggage_capacity: Number(vehicleForm.luggage_capacity),
+      luggage_capacity: Number(vehicleForm.luggage_capacity) || 0,
       region_id:        regionId,
     }
     if (vehicleModal?.isNew) {
@@ -221,8 +228,12 @@ export default function Catalogo() {
     }
     if (vehicleImageFile) {
       setUploading(true)
-      try { body.image_url = await uploadImage(vehicleImageFile, 'vehicles') }
-      catch { alert('Erro ao fazer upload da imagem'); setUploading(false); return }
+      try {
+        body.image_url = await uploadImage(vehicleImageFile, 'vehicles')
+      } catch {
+        // Upload falhou — salva sem imagem
+        console.warn('Upload de imagem falhou, salvando sem imagem')
+      }
       setUploading(false)
     }
     vehicleMut.mutate(body)

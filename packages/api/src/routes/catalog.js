@@ -1,13 +1,15 @@
 /**
- * /api/catalog — CRUD de tours, transfers e rotas (admin/operator)
+ * /api/catalog — CRUD de tours, transfers e rotas
+ * GETs: qualquer operador/admin autenticado
+ * POST/PUT/DELETE: somente admin
  */
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
-import { authenticate, requireOperator } from '../middleware/auth.js';
+import { authenticate, requireOperator, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 router.use(authenticate);
-router.use(requireOperator);
+router.use(requireOperator); // leitura: operador ou admin
 
 function slugify(text) {
   return text.toString().toLowerCase()
@@ -40,7 +42,7 @@ router.get('/tours', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/tours', async (req, res, next) => {
+router.post('/tours', requireAdmin, async (req, res, next) => {
   try {
     const { data: region } = await supabase
       .from('regions').select('id').limit(1).single();
@@ -72,7 +74,7 @@ router.post('/tours', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.put('/tours/:id', async (req, res, next) => {
+router.put('/tours/:id', requireAdmin, async (req, res, next) => {
   try {
     const {
       name, short_description, duration_hours, max_people,
@@ -100,7 +102,7 @@ router.put('/tours/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/tours/:id', async (req, res, next) => {
+router.delete('/tours/:id', requireAdmin, async (req, res, next) => {
   try {
     const { error } = await supabase
       .from('tours').update({ is_active: false }).eq('id', req.params.id);
@@ -120,7 +122,7 @@ router.get('/transfers', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/transfers', async (req, res, next) => {
+router.post('/transfers', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('transfers').insert(req.body).select().single();
@@ -129,7 +131,7 @@ router.post('/transfers', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.put('/transfers/:id', async (req, res, next) => {
+router.put('/transfers/:id', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('transfers').update(req.body).eq('id', req.params.id).select().single();
@@ -138,7 +140,7 @@ router.put('/transfers/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/transfers/:id', async (req, res, next) => {
+router.delete('/transfers/:id', requireAdmin, async (req, res, next) => {
   try {
     const { error } = await supabase
       .from('transfers').update({ is_active: false }).eq('id', req.params.id);
@@ -161,7 +163,7 @@ router.get('/transfer-routes', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/transfer-routes', async (req, res, next) => {
+router.post('/transfer-routes', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('transfer_routes').insert(req.body).select().single();
@@ -170,7 +172,7 @@ router.post('/transfer-routes', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.put('/transfer-routes/:id', async (req, res, next) => {
+router.put('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('transfer_routes').update(req.body).eq('id', req.params.id).select().single();
@@ -179,7 +181,7 @@ router.put('/transfer-routes/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/transfer-routes/:id', async (req, res, next) => {
+router.delete('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   try {
     const { error } = await supabase
       .from('transfer_routes').update({ is_active: false }).eq('id', req.params.id);
