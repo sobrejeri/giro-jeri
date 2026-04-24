@@ -177,6 +177,47 @@ router.patch('/me', authenticate, async (req, res, next) => {
   }
 });
 
+// ── POST /api/auth/me/photo ───────────────────────────
+router.post('/me/photo', authenticate, async (req, res, next) => {
+  try {
+    const { photo_data } = req.body;
+    if (!photo_data || typeof photo_data !== 'string') {
+      return res.status(400).json({ error: 'Dados de imagem ausentes' });
+    }
+
+    const match = photo_data.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+    if (!match) {
+      return res.status(400).json({ error: 'Formato inválido. Use JPEG, PNG ou WebP.' });
+    }
+
+    const [, mimeType, b64] = match;
+    const buffer = Buffer.from(b64, 'base64');
+
+    // Limite de 2 MB
+    if (buffer.byteLength > 2 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Imagem muito grande. Máximo 2 MB.' });
+    }
+
+    const ext  = mimeType.split('/')[1];
+    const path = `${req.user.id}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, buffer, { contentType: mimeType, upsert: true });
+
+    if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+
+    await supabase
+      .from('users')
+      .update({ profile_photo_url: publicUrl, updated_at: new Date().toISOString() })
+      .eq('id', req.user.id);
+
+    res.json({ url: publicUrl });
+  } catch (err) { next(err); }
+});
+
 // ── POST /api/auth/logout ──────────────────────────────
 router.post('/logout', authenticate, async (req, res, next) => {
   try {

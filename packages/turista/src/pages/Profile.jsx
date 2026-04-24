@@ -7,7 +7,7 @@ import { setLang, LANGS } from '../i18n/index.js'
 import {
   User, Mail, LogOut, ChevronRight, CalendarCheck,
   Shield, Bell, HelpCircle, Star, Camera, Pencil, Check, X,
-  Phone, Flag, AlertCircle, Globe,
+  Phone, Flag, AlertCircle, Globe, Loader2,
 } from 'lucide-react'
 
 function Field({ label, value, children }) {
@@ -30,7 +30,9 @@ export default function Profile() {
   const fileRef  = useRef(null)
 
   const avatarKey = `giro_avatar_${user?.id || 'guest'}`
-  const [avatarUrl, setAvatarUrl] = useState(() => localStorage.getItem(avatarKey) || null)
+  // Prioridade: URL do banco → fallback localStorage (offline/cache)
+  const [avatarUrl,      setAvatarUrl]      = useState(() => user?.profile_photo_url || localStorage.getItem(avatarKey) || null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   const [editing, setEditing] = useState(false)
   const [saving,  setSaving]  = useState(false)
@@ -92,11 +94,35 @@ export default function Profile() {
   function handlePhotoChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    // Validação de tipo e tamanho no cliente
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      alert('Use uma imagem JPEG, PNG ou WebP.')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Imagem muito grande. Máximo 2 MB.')
+      return
+    }
+
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const dataUrl = ev.target.result
-      setAvatarUrl(dataUrl)
-      localStorage.setItem(avatarKey, dataUrl)
+      setAvatarUrl(dataUrl)          // preview imediato
+      setUploadingPhoto(true)
+      try {
+        const data = await api.uploadPhoto(dataUrl)
+        if (data?.url) {
+          setAvatarUrl(data.url)
+          updateUser({ profile_photo_url: data.url })
+          localStorage.removeItem(avatarKey) // URL agora vem do banco
+        }
+      } catch {
+        // Mantém preview local como fallback
+        localStorage.setItem(avatarKey, dataUrl)
+      } finally {
+        setUploadingPhoto(false)
+      }
     }
     reader.readAsDataURL(file)
   }
@@ -135,12 +161,15 @@ export default function Profile() {
                   )}
                 </div>
                 <button
-                  onClick={() => fileRef.current?.click()}
+                  onClick={() => !uploadingPhoto && fileRef.current?.click()}
                   className="absolute bottom-0 right-0 w-8 h-8 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"
                 >
-                  <Camera size={14} className="text-white" />
+                  {uploadingPhoto
+                    ? <Loader2 size={14} className="text-white animate-spin" />
+                    : <Camera size={14} className="text-white" />
+                  }
                 </button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
               </div>
               <p className="font-extrabold text-gray-900 text-[18px] leading-tight break-words w-full">{user.full_name}</p>
               <div className="flex items-center gap-1.5 mt-1.5 text-gray-400">

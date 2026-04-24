@@ -65,7 +65,8 @@ export const api = {
   login:         (body) => request('/api/auth/login',    { method: 'POST', body }),
   register:      (body) => request('/api/auth/register', { method: 'POST', body }),
   me:            ()     => request('/api/auth/me'),
-  updateProfile: (body) => request('/api/auth/me',       { method: 'PATCH', body }),
+  updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),
+  uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),
   logout:        ()     => request('/api/auth/logout', { method: 'POST' }),
 
   // Regiões
