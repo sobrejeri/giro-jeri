@@ -105,22 +105,33 @@ export default function Profile() {
     }
 
     const reader = new FileReader()
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target.result
-      setAvatarUrl(dataUrl)       // preview imediato
-      setUploadingPhoto(true)
-      try {
-        // Salva o base64 diretamente em profile_photo_url no banco
-        const data = await api.updateProfile({ profile_photo_url: dataUrl })
-        if (data?.user) {
-          updateUser({ profile_photo_url: dataUrl })
-          localStorage.removeItem(avatarKey) // banco é a fonte agora
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onload = async () => {
+        // Redimensiona para máx 400×400px via Canvas antes de salvar
+        const MAX = 400
+        const scale = Math.min(1, MAX / img.width, MAX / img.height)
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width  * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+
+        setAvatarUrl(dataUrl)       // preview imediato
+        setUploadingPhoto(true)
+        try {
+          const data = await api.updateProfile({ profile_photo_url: dataUrl })
+          if (data?.user) {
+            updateUser({ profile_photo_url: dataUrl })
+            localStorage.removeItem(avatarKey)
+          }
+        } catch {
+          localStorage.setItem(avatarKey, dataUrl) // fallback offline
+        } finally {
+          setUploadingPhoto(false)
         }
-      } catch {
-        localStorage.setItem(avatarKey, dataUrl) // fallback offline
-      } finally {
-        setUploadingPhoto(false)
       }
+      img.src = ev.target.result
     }
     reader.readAsDataURL(file)
   }
