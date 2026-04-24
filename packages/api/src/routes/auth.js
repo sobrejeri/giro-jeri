@@ -163,9 +163,7 @@ router.patch('/me', authenticate, async (req, res, next) => {
       .from('users')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', req.user.id)
-      .select(
-        'id, full_name, email, phone, user_type, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language, profile_photo_url'
-      )
+      .select('id, full_name, email, phone, user_type, profile_photo_url, document_number, birth_date, language, preferred_region_id')
       .single();
 
     if (error) return res.status(400).json({ error: error.message });

@@ -33,6 +33,7 @@ export default function Profile() {
   // Prioridade: URL do banco → fallback localStorage (offline/cache)
   const [avatarUrl,      setAvatarUrl]      = useState(() => user?.profile_photo_url || localStorage.getItem(avatarKey) || null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError,     setPhotoError]     = useState('')
 
   const [editing, setEditing] = useState(false)
   const [saving,  setSaving]  = useState(false)
@@ -104,11 +105,11 @@ export default function Profile() {
       return
     }
 
+    setPhotoError('')
     const reader = new FileReader()
     reader.onload = (ev) => {
       const img = new Image()
       img.onload = async () => {
-        // Redimensiona para máx 400×400px via Canvas antes de salvar
         const MAX = 400
         const scale = Math.min(1, MAX / img.width, MAX / img.height)
         const canvas = document.createElement('canvas')
@@ -117,16 +118,20 @@ export default function Profile() {
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
 
-        setAvatarUrl(dataUrl)       // preview imediato
+        setAvatarUrl(dataUrl)
         setUploadingPhoto(true)
         try {
           const data = await api.updateProfile({ profile_photo_url: dataUrl })
           if (data?.user) {
             updateUser({ profile_photo_url: dataUrl })
             localStorage.removeItem(avatarKey)
+          } else {
+            setPhotoError('Foto salva só neste aparelho. Verifique a conexão.')
+            localStorage.setItem(avatarKey, dataUrl)
           }
-        } catch {
-          localStorage.setItem(avatarKey, dataUrl) // fallback offline
+        } catch (err) {
+          setPhotoError(err?.message || 'Erro ao salvar foto no servidor.')
+          localStorage.setItem(avatarKey, dataUrl)
         } finally {
           setUploadingPhoto(false)
         }
@@ -180,6 +185,9 @@ export default function Profile() {
                 </button>
                 <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
               </div>
+              {photoError && (
+                <p className="text-[11px] text-red-500 bg-red-50 rounded-lg px-3 py-1.5 mb-2 w-full text-center">{photoError}</p>
+              )}
               <p className="font-extrabold text-gray-900 text-[18px] leading-tight break-words w-full">{user.full_name}</p>
               <div className="flex items-center gap-1.5 mt-1.5 text-gray-400">
                 <Mail size={12} />
