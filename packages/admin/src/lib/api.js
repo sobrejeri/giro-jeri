@@ -99,11 +99,38 @@ export const api = {
   updateVehicle: (id, body)    => request(`/api/vehicles/${id}`, { method: 'PUT', body }),
   deleteVehicle: (id)          => request(`/api/vehicles/${id}`, { method: 'DELETE' }),
 
-  // Motor de preços
+  // Motor de preços (campos: service_id, base_price, high_season_price)
   getPricingRules:   (params = {}) => request(`/api/admin/pricing-rules?${new URLSearchParams(params)}`),
   createPricingRule: (body)        => request('/api/admin/pricing-rules', { method: 'POST', body }),
   updatePricingRule: (id, body)    => request(`/api/admin/pricing-rules/${id}`, { method: 'PUT', body }),
   deletePricingRule: (id)          => request(`/api/admin/pricing-rules/${id}`, { method: 'DELETE' }),
+  // Salva em lote todos os preços de um passeio (upsert por vehicle+service)
+  saveTourPricing: async (tourId, regionId, rows) => {
+    // rows: [{ vehicle_id, base_price, high_season_price?, existing_id? }]
+    const results = []
+    for (const row of rows) {
+      if (row.existing_id) {
+        const r = await request(`/api/admin/pricing-rules/${row.existing_id}`, {
+          method: 'PUT',
+          body: { base_price: row.base_price, high_season_price: row.high_season_price },
+        })
+        results.push(r)
+      } else {
+        const r = await request('/api/admin/pricing-rules', {
+          method: 'POST',
+          body: {
+            vehicle_id:        row.vehicle_id,
+            service_id:        tourId,
+            region_id:         regionId,
+            base_price:        row.base_price,
+            high_season_price: row.high_season_price,
+          },
+        })
+        results.push(r)
+      }
+    }
+    return results
+  },
 
   // Regiões
   getRegions:   ()         => request('/api/regions'),

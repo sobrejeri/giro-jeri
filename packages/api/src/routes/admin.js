@@ -346,13 +346,15 @@ router.delete('/seasons/:id', requireAdmin, async (req, res, next) => {
 // ── GET /api/admin/pricing-rules ───────────────────────
 router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
   try {
-    const { region_id, tour_id } = req.query;
+    const { region_id, service_id } = req.query;
     let query = supabase
       .from('vehicle_pricing_rules')
-      .select('*, vehicles(name, vehicle_type), regions(name), tours(name)')
+      .select('id, vehicle_id, region_id, service_type, service_id, pricing_mode, base_price, high_season_price, is_active, vehicles(id, name, vehicle_type), regions(id, name)')
+      .eq('service_type', 'tour')
+      .eq('is_active', true)
       .order('created_at', { ascending: false });
-    if (region_id) query = query.eq('region_id', region_id);
-    if (tour_id)   query = query.eq('tour_id', tour_id);
+    if (region_id)  query = query.eq('region_id', region_id);
+    if (service_id) query = query.eq('service_id', service_id);
     const { data, error } = await query;
     if (error) throw error;
     res.json(data);
@@ -361,8 +363,21 @@ router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
 
 router.post('/pricing-rules', requireAdmin, async (req, res, next) => {
   try {
+    const { vehicle_id, service_id, region_id, pricing_mode, base_price, high_season_price } = req.body;
     const { data, error } = await supabase
-      .from('vehicle_pricing_rules').insert(req.body).select().single();
+      .from('vehicle_pricing_rules')
+      .insert({
+        vehicle_id,
+        service_id: service_id || null,
+        service_type: 'tour',
+        region_id:  region_id || null,
+        pricing_mode: pricing_mode || 'per_vehicle',
+        base_price:         Number(base_price),
+        high_season_price:  high_season_price ? Number(high_season_price) : null,
+        is_active: true,
+      })
+      .select('id, vehicle_id, region_id, service_type, service_id, pricing_mode, base_price, high_season_price, vehicles(id, name), regions(id, name)')
+      .single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -370,8 +385,16 @@ router.post('/pricing-rules', requireAdmin, async (req, res, next) => {
 
 router.put('/pricing-rules/:id', requireAdmin, async (req, res, next) => {
   try {
+    const { base_price, high_season_price, pricing_mode, is_active } = req.body;
+    const updates = {};
+    if (base_price        !== undefined) updates.base_price        = Number(base_price);
+    if (high_season_price !== undefined) updates.high_season_price = high_season_price ? Number(high_season_price) : null;
+    if (pricing_mode      !== undefined) updates.pricing_mode      = pricing_mode;
+    if (is_active         !== undefined) updates.is_active         = is_active;
     const { data, error } = await supabase
-      .from('vehicle_pricing_rules').update(req.body).eq('id', req.params.id).select().single();
+      .from('vehicle_pricing_rules').update(updates).eq('id', req.params.id)
+      .select('id, vehicle_id, region_id, service_type, service_id, pricing_mode, base_price, high_season_price, vehicles(id, name), regions(id, name)')
+      .single();
     if (error || !data) return res.status(404).json({ error: 'Regra não encontrada' });
     res.json(data);
   } catch (err) { next(err); }
