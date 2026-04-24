@@ -4,11 +4,11 @@
     <meta charset="utf-8" />
     <title>Giro Jeri</title>
     <script>
-      // Salva o caminho atual no sessionStorage e redireciona para a raiz.
-      // O index.html lê esse valor e restaura a rota via history.replaceState.
+      // Salva o caminho completo e redireciona para a raiz do app.
+      // O index.html restaura a rota via history.replaceState.
       sessionStorage.redirect = location.pathname + location.search + location.hash;
     </script>
-    <meta http-equiv="refresh" content="0;URL='/'">
+    <meta http-equiv="refresh" content="0;URL='/giro-jeri/'">
   </head>
   <body></body>
 </html>
