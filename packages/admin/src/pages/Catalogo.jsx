@@ -450,6 +450,15 @@ export default function Catalogo() {
               <option value="by_vehicle">Por veículo</option>
               <option value="manual_quote">Cotação manual</option>
             </Select>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand"
+                checked={!!form.is_active}
+                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+              />
+              <span className="text-sm text-gray-300">Ativo (visível para turistas)</span>
+            </label>
             <Button type="submit" className="w-full" disabled={transferMut.isPending}>
               {transferMut.isPending ? 'Salvando…' : 'Salvar'}
             </Button>
@@ -510,6 +519,16 @@ export default function Catalogo() {
                 value={form.shared_price_per_person || ''}
                 onChange={(e) => setForm({ ...form, shared_price_per_person: e.target.value })} />
             )}
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand"
+                checked={!!form.is_active}
+                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+              />
+              <span className="text-sm text-gray-300">Ativo (visível para turistas)</span>
+            </label>
 
             <Button type="submit" className="w-full" disabled={tourMut.isPending || uploading}>
               {uploading ? 'Enviando imagem…' : tourMut.isPending ? 'Salvando…' : 'Salvar'}
