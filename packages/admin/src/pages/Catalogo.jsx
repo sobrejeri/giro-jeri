@@ -16,13 +16,18 @@ import Modal from '../components/ui/Modal'
 import Input, { Select, Textarea } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
+import LocationPicker from '../components/LocationPicker'
 
 const TOUR_EMPTY = {
   name: '', short_description: '', duration_hours: 2, max_people: 10,
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
+  latitude: null, longitude: null, service_radius_km: null,
 }
-const TRANSFER_EMPTY = { name: '', description: '', pricing_mode: 'fixed_route', is_active: true }
+const TRANSFER_EMPTY = {
+  name: '', description: '', pricing_mode: 'fixed_route', is_active: true,
+  latitude: null, longitude: null, service_radius_km: null,
+}
 const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true }
 const VEHICLE_EMPTY = {
   name: '', vehicle_type: 'buggy', description: '',
@@ -30,6 +35,7 @@ const VEHICLE_EMPTY = {
   is_private_allowed: true, is_shared_allowed: false,
   is_transfer_allowed: false, is_tour_allowed: true,
   is_active: true,
+  latitude: null, longitude: null, service_radius_km: null,
 }
 
 const VEHICLE_TYPES = [
@@ -450,6 +456,14 @@ export default function Catalogo() {
               <option value="by_vehicle">Por veículo</option>
               <option value="manual_quote">Cotação manual</option>
             </Select>
+            <LocationPicker
+              value={{
+                latitude:          form.latitude,
+                longitude:         form.longitude,
+                service_radius_km: form.service_radius_km,
+              }}
+              onChange={(next) => setForm({ ...form, ...next })}
+            />
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -519,6 +533,15 @@ export default function Catalogo() {
                 value={form.shared_price_per_person || ''}
                 onChange={(e) => setForm({ ...form, shared_price_per_person: e.target.value })} />
             )}
+
+            <LocationPicker
+              value={{
+                latitude:          form.latitude,
+                longitude:         form.longitude,
+                service_radius_km: form.service_radius_km,
+              }}
+              onChange={(next) => setForm({ ...form, ...next })}
+            />
 
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -640,6 +663,15 @@ export default function Catalogo() {
               </label>
             ))}
           </div>
+
+          <LocationPicker
+            value={{
+              latitude:          vehicleForm.latitude,
+              longitude:         vehicleForm.longitude,
+              service_radius_km: vehicleForm.service_radius_km,
+            }}
+            onChange={(next) => setVehicleForm({ ...vehicleForm, ...next })}
+          />
 
           <label className="flex items-center gap-2 cursor-pointer">
             <input
