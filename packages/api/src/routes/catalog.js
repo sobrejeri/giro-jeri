@@ -80,6 +80,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
       name, short_description, duration_hours, max_people,
       is_private_enabled, is_shared_enabled, shared_price_per_person,
       cover_image_url, category_id, is_active, display_order,
+      latitude, longitude, service_radius_km,
     } = req.body;
 
     const update = {};
@@ -94,6 +95,9 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (category_id        !== undefined) update.category_id             = category_id || null;
     if (is_active          !== undefined) update.is_active               = is_active;
     if (display_order      !== undefined) update.display_order           = display_order;
+    if (latitude           !== undefined) update.latitude                = latitude === '' || latitude === null ? null : Number(latitude);
+    if (longitude          !== undefined) update.longitude               = longitude === '' || longitude === null ? null : Number(longitude);
+    if (service_radius_km  !== undefined) update.service_radius_km       = service_radius_km === '' || service_radius_km === null ? null : Number(service_radius_km);
 
     const { data, error } = await supabase
       .from('tours').update(update).eq('id', req.params.id).select().single();
