@@ -1,6 +1,27 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, X, Loader, MapPin, Navigation } from 'lucide-react'
 
+const RADIUS_M = 90000 // 90 km
+
+async function overpassNearby(lat, lon) {
+  const q = `[out:json][timeout:15];(node["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${RADIUS_M},${lat},${lon});way["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${RADIUS_M},${lat},${lon}););out center;`
+  const res = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: q,
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.elements ?? [])
+    .filter((e) => e.tags?.name)
+    .map((e) => ({
+      place_id: e.id,
+      display_name: e.tags.name,
+      lat: String(e.lat ?? e.center?.lat),
+      lon: String(e.lon ?? e.center?.lon),
+      _nearby: true,
+    }))
+}
+
 async function nominatimSearch(q, viewbox) {
   const params = new URLSearchParams({
     q,
@@ -29,17 +50,33 @@ function shortName(displayName) {
 }
 
 export default function OriginPicker({ open, onClose, onSelect, region }) {
-  const [query, setQuery]         = useState('')
-  const [results, setResults]     = useState([])
-  const [loading, setLoading]     = useState(false)
+  const [query, setQuery]           = useState('')
+  const [results, setResults]       = useState([])
+  const [nearby, setNearby]         = useState([])
+  const [loadingNearby, setLoadingNearby] = useState(false)
+  const [loading, setLoading]       = useState(false)
   const [gpsLoading, setGpsLoading] = useState(false)
   const debounceRef = useRef(null)
+  const nearbyFetched = useRef(false)
 
   useEffect(() => {
     if (!open) { setQuery(''); setResults([]) }
   }, [open])
 
-  // Viewbox em volta da região para priorizar resultados locais (~150km).
+  // Fetch nearby accommodations once when the picker opens and region coords are available
+  useEffect(() => {
+    if (!open) return
+    if (nearbyFetched.current) return
+    if (region?.center_latitude == null || region?.center_longitude == null) return
+    nearbyFetched.current = true
+    setLoadingNearby(true)
+    overpassNearby(region.center_latitude, region.center_longitude)
+      .then(setNearby)
+      .catch(() => setNearby([]))
+      .finally(() => setLoadingNearby(false))
+  }, [open, region])
+
+  // Viewbox ~150 km around region to bias Nominatim results
   const viewbox = region?.center_latitude != null && region?.center_longitude != null
     ? `${Number(region.center_longitude) - 1.5},${Number(region.center_latitude) + 1.5},${Number(region.center_longitude) + 1.5},${Number(region.center_latitude) - 1.5}`
     : null
@@ -58,7 +95,7 @@ export default function OriginPicker({ open, onClose, onSelect, region }) {
 
   function pick(r) {
     onSelect({
-      name:      shortName(r.display_name),
+      name:      r._nearby ? r.display_name : shortName(r.display_name),
       latitude:  parseFloat(r.lat),
       longitude: parseFloat(r.lon),
     })
@@ -88,6 +125,9 @@ export default function OriginPicker({ open, onClose, onSelect, region }) {
   }
 
   if (!open) return null
+
+  const showNearby  = query.trim().length < 3
+  const displayList = showNearby ? nearby : results
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -136,7 +176,19 @@ export default function OriginPicker({ open, onClose, onSelect, region }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-2 mt-1">
-          {results.map((r) => (
+          {showNearby && (
+            <p className="px-3 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+              Pousadas e hotéis próximos · 90 km
+            </p>
+          )}
+
+          {showNearby && loadingNearby && (
+            <div className="flex justify-center py-8">
+              <Loader size={20} className="text-brand animate-spin" />
+            </div>
+          )}
+
+          {displayList.map((r) => (
             <button
               key={r.place_id}
               onClick={() => pick(r)}
@@ -146,10 +198,22 @@ export default function OriginPicker({ open, onClose, onSelect, region }) {
               <span className="text-[13px] text-gray-700 leading-snug">{r.display_name}</span>
             </button>
           ))}
-          {!loading && query.trim().length >= 3 && results.length === 0 && (
+
+          {showNearby && !loadingNearby && nearby.length === 0 && (
+            <p className="text-center text-sm text-gray-500 py-8">Nenhuma acomodação encontrada.</p>
+          )}
+
+          {!showNearby && !loading && results.length === 0 && (
             <p className="text-center text-sm text-gray-500 py-8">Nenhum resultado.</p>
           )}
-          {query.trim().length < 3 && (
+
+          {showNearby && nearby.length > 0 && (
+            <p className="text-center text-xs text-gray-400 py-3">
+              Ou digite para buscar qualquer endereço acima.
+            </p>
+          )}
+
+          {!showNearby && query.trim().length < 3 && (
             <p className="text-center text-xs text-gray-400 py-6">Digite ao menos 3 letras.</p>
           )}
         </div>
