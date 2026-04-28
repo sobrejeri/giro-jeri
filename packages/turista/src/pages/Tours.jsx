@@ -705,6 +705,7 @@ export default function Tours() {
         onClose={() => setShowOriginPicker(false)}
         onSelect={setOrigin}
         region={region}
+        userCoords={userCoords}
       />
     </div>
   )

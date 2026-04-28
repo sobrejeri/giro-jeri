@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, X, Loader, MapPin, Navigation } from 'lucide-react'
 
-const RADIUS_M = 90000 // 90 km
+const DEFAULT_RADIUS_KM = 20
 
-async function overpassNearby(lat, lon) {
-  const q = `[out:json][timeout:15];(node["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${RADIUS_M},${lat},${lon});way["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${RADIUS_M},${lat},${lon}););out center;`
+async function overpassNearby(lat, lon, radiusKm) {
+  const radiusM = Math.round(radiusKm * 1000)
+  const q = `[out:json][timeout:15];(node["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${radiusM},${lat},${lon});way["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${radiusM},${lat},${lon}););out center;`
   const res = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
     body: q,
@@ -49,7 +50,7 @@ function shortName(displayName) {
   return displayName.split(',').slice(0, 2).join(', ').trim()
 }
 
-export default function OriginPicker({ open, onClose, onSelect, region }) {
+export default function OriginPicker({ open, onClose, onSelect, region, userCoords }) {
   const [query, setQuery]           = useState('')
   const [results, setResults]       = useState([])
   const [nearby, setNearby]         = useState([])
@@ -57,24 +58,29 @@ export default function OriginPicker({ open, onClose, onSelect, region }) {
   const [loading, setLoading]       = useState(false)
   const [gpsLoading, setGpsLoading] = useState(false)
   const debounceRef = useRef(null)
-  const nearbyFetched = useRef(false)
 
   useEffect(() => {
     if (!open) { setQuery(''); setResults([]) }
   }, [open])
 
-  // Fetch nearby accommodations once when the picker opens and region coords are available
+  // Centra no GPS do usuário quando disponível; fallback é o centro da região.
+  // Raio = raio configurado da região (admin), com default conservador de 20 km.
+  const center = userCoords?.lat != null && userCoords?.lon != null
+    ? { lat: userCoords.lat, lon: userCoords.lon }
+    : region?.center_latitude != null && region?.center_longitude != null
+      ? { lat: Number(region.center_latitude), lon: Number(region.center_longitude) }
+      : null
+  const radiusKm = region?.radius_km ?? region?.service_radius_km ?? DEFAULT_RADIUS_KM
+
   useEffect(() => {
-    if (!open) return
-    if (nearbyFetched.current) return
-    if (region?.center_latitude == null || region?.center_longitude == null) return
-    nearbyFetched.current = true
+    if (!open || !center) return
     setLoadingNearby(true)
-    overpassNearby(region.center_latitude, region.center_longitude)
+    overpassNearby(center.lat, center.lon, radiusKm)
       .then(setNearby)
       .catch(() => setNearby([]))
       .finally(() => setLoadingNearby(false))
-  }, [open, region])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, center?.lat, center?.lon, radiusKm])
 
   // Viewbox ~150 km around region to bias Nominatim results
   const viewbox = region?.center_latitude != null && region?.center_longitude != null
@@ -178,7 +184,7 @@ export default function OriginPicker({ open, onClose, onSelect, region }) {
         <div className="flex-1 overflow-y-auto px-2 py-2 mt-1">
           {showNearby && (
             <p className="px-3 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-              Pousadas e hotéis próximos · 90 km
+              Pousadas e hotéis {userCoords ? 'próximos a você' : `em ${region?.name ?? 'sua região'}`} · {radiusKm} km
             </p>
           )}
 
