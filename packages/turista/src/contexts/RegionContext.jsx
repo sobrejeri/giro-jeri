@@ -2,8 +2,9 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { api } from '../lib/api'
 
 const RegionContext = createContext(null)
-const STORAGE_KEY = 'giro_region'
-const DEFAULT_RADIUS_KM = 100
+const STORAGE_KEY        = 'giro_region'
+const STORAGE_KEY_COORDS = 'giro_user_coords'
+const DEFAULT_RADIUS_KM  = 100
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371
@@ -41,6 +42,12 @@ export function RegionProvider({ children }) {
   const [showPicker, setShowPicker] = useState(false)
   const [detecting, setDetecting] = useState(false)
   const [outsideError, setOutsideError] = useState(false)
+  const [userCoords, setUserCoords] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_COORDS)
+      return saved ? JSON.parse(saved) : null
+    } catch { return null }
+  })
 
   useEffect(() => {
     api.getRegions().then((data) => {
@@ -66,6 +73,9 @@ export function RegionProvider({ children }) {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         setDetecting(false)
+        const next = { lat: coords.latitude, lon: coords.longitude }
+        setUserCoords(next)
+        try { localStorage.setItem(STORAGE_KEY_COORDS, JSON.stringify(next)) } catch {}
         const found = findRegionForCoords(coords.latitude, coords.longitude, regions)
         if (found) {
           selectRegion(found)
@@ -80,13 +90,24 @@ export function RegionProvider({ children }) {
 
   const openPicker = useCallback(() => { setOutsideError(false); setShowPicker(true) }, [])
 
+  // Monta os parâmetros de filtro geográfico para chamadas à API.
+  // Quando há GPS real do usuário, prioriza lat/lon (raio cai pra cada
+  // serviço); caso contrário, cai no filtro categórico por região.
+  const getServiceQuery = useCallback(() => {
+    if (userCoords?.lat != null && userCoords?.lon != null) {
+      return { lat: userCoords.lat, lon: userCoords.lon }
+    }
+    if (region?.id) return { region_id: region.id }
+    return {}
+  }, [userCoords, region])
+
   return (
     <RegionContext.Provider value={{
       region, regions, selectRegion,
-      detectGPS, detecting,
+      detectGPS, detecting, userCoords,
       showPicker, setShowPicker, openPicker,
       outsideError, setOutsideError,
-      findRegionForCoords,
+      findRegionForCoords, getServiceQuery,
     }}>
       {children}
     </RegionContext.Provider>

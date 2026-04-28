@@ -156,14 +156,15 @@ const STEPS = [
 
 export default function Home() {
   const navigate = useNavigate()
-  const { region, openPicker } = useRegion()
+  const { region, openPicker, userCoords, getServiceQuery } = useRegion()
   const [favs, setFavs] = useState(new Set())
   const toggleFav = (id) =>
     setFavs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
+  const geo = getServiceQuery()
   const { data: toursData, isLoading } = useQuery({
-    queryKey: ['tours', 'home', region?.id],
-    queryFn:  () => api.getTours({ limit: 12, ...(region?.id ? { region_id: region.id } : {}) }),
+    queryKey: ['tours', 'home', region?.id, userCoords?.lat, userCoords?.lon],
+    queryFn:  () => api.getTours({ limit: 12, ...geo }),
   })
   const tours    = toursData?.tours || toursData || []
   const featured = (tours.filter((t) => t.is_featured).length > 0

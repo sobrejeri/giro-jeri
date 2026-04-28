@@ -2,6 +2,7 @@ import { useState, useRef, useMemo } from 'react'
 import { useQuery }    from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
+import { useRegion }   from '../contexts/RegionContext'
 import { api }         from '../lib/api'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
@@ -284,6 +285,7 @@ function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
 export default function Transfers() {
   const navigate  = useNavigate()
   const { token } = useAuth()
+  const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef   = useRef(null)
 
   const [origin,     setOrigin]     = useState('Jericoacoara')
@@ -304,8 +306,8 @@ export default function Transfers() {
     queryFn:  () => api.getTransferRoutes(),
   })
   const { data: vehiclesData } = useQuery({
-    queryKey: ['vehicles'],
-    queryFn:  () => api.getVehicles ? api.getVehicles() : Promise.resolve([]),
+    queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
+    queryFn:  () => api.getVehicles ? api.getVehicles(getServiceQuery()) : Promise.resolve([]),
   })
 
   const routes   = Array.isArray(routesData?.routes) ? routesData.routes

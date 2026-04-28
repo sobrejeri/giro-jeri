@@ -230,7 +230,7 @@ function DatePickerSheet({ value, onChange, onClose }) {
 export default function Tours() {
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
-  const { region } = useRegion()
+  const { region, userCoords, getServiceQuery } = useRegion()
 
   const [mode, setMode] = useState('private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
@@ -244,9 +244,10 @@ export default function Tours() {
     setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   /* ── Queries ──────────────────────────────────────────────── */
+  const geo = getServiceQuery()
   const { data: toursData, isLoading: toursLoading } = useQuery({
-    queryKey: ['tours', region?.id],
-    queryFn: () => api.getTours(region?.id ? { region_id: region.id } : {}),
+    queryKey: ['tours', region?.id, userCoords?.lat, userCoords?.lon],
+    queryFn: () => api.getTours(geo),
   })
   const tours = toursData?.tours || toursData || []
   const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
@@ -259,8 +260,8 @@ export default function Tours() {
 
   // Fallback: se o passeio não tiver regras de preço, usa todos os veículos ativos
   const { data: allVehiclesData } = useQuery({
-    queryKey: ['vehicles'],
-    queryFn: () => api.getVehicles({ is_active: 'true' }),
+    queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
+    queryFn: () => api.getVehicles({ is_active: 'true', ...geo }),
     enabled: vehiclesFetched && (vehiclesData || []).length === 0 && mode === 'private',
   })
 
