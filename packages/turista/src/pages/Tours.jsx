@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import OriginPicker from '../components/OriginPicker'
 import {
   MapPin, SlidersHorizontal, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
@@ -240,6 +241,9 @@ export default function Tours() {
   const [filter, setFilter] = useState('recommended')
   const [cart, setCart] = useState({})
   const [favs, setFavs] = useState(new Set())
+  const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
+  const [showOriginPicker, setShowOriginPicker] = useState(false)
+  const originLabel = origin?.name || 'Centro de Jericoacoara'
   const toggleFav = (id) =>
     setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
@@ -335,11 +339,14 @@ export default function Tours() {
 
         {/* ── Filtros rápidos ───────────────────────────────── */}
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-          <button className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform">
-            <MapPin size={11} className="text-brand" />
-            <div className="text-left">
+          <button
+            onClick={() => setShowOriginPicker(true)}
+            className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px]"
+          >
+            <MapPin size={11} className="text-brand shrink-0" />
+            <div className="text-left min-w-0">
               <p className="text-[9px] text-gray-400 leading-none">Saída</p>
-              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">Centro de Jericoacoara</p>
+              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight truncate">{originLabel}</p>
             </div>
           </button>
           <button
@@ -617,7 +624,9 @@ export default function Tours() {
                           service_date_iso: format(date, 'yyyy-MM-dd'),
                           service_time:     'A confirmar',
                           people_count:     people,
-                          origin_text:      'Centro de Jericoacoara',
+                          origin_text:      originLabel,
+                          origin_latitude:  origin?.latitude  ?? null,
+                          origin_longitude: origin?.longitude ?? null,
                           vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
                           total_price:      cartTotal,
                           breakdown:        { 'Veículos selecionados': cartTotal },
@@ -690,6 +699,13 @@ export default function Tours() {
           </div>
         )
       })()}
+
+      <OriginPicker
+        open={showOriginPicker}
+        onClose={() => setShowOriginPicker(false)}
+        onSelect={setOrigin}
+        region={region}
+      />
     </div>
   )
 }
