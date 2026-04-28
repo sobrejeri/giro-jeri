@@ -4,7 +4,21 @@ import { api } from '../lib/api'
 const RegionContext = createContext(null)
 const STORAGE_KEY        = 'giro_region'
 const STORAGE_KEY_COORDS = 'giro_user_coords'
+const STORAGE_KEY_PLACE  = 'giro_user_place'
 const DEFAULT_RADIUS_KM  = 100
+
+async function reverseGeocode(lat, lon) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=pt-BR`
+    const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
+    if (!res.ok) return null
+    const data = await res.json()
+    const a = data.address ?? {}
+    const locality = a.village || a.town || a.suburb || a.neighbourhood || a.city || a.municipality
+    const state    = a.state_code || a.state
+    return [locality, state].filter(Boolean).join(', ') || null
+  } catch { return null }
+}
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371
@@ -48,6 +62,9 @@ export function RegionProvider({ children }) {
       return saved ? JSON.parse(saved) : null
     } catch { return null }
   })
+  const [userPlace, setUserPlace] = useState(() => {
+    try { return localStorage.getItem(STORAGE_KEY_PLACE) || null } catch { return null }
+  })
 
   useEffect(() => {
     api.getRegions().then((data) => {
@@ -66,27 +83,46 @@ export function RegionProvider({ children }) {
     setShowPicker(false)
   }, [])
 
+  const applyCoords = useCallback(async (lat, lon) => {
+    const next = { lat, lon }
+    setUserCoords(next)
+    try { localStorage.setItem(STORAGE_KEY_COORDS, JSON.stringify(next)) } catch {}
+    const found = findRegionForCoords(lat, lon, regions)
+    if (found) selectRegion(found)
+    const place = await reverseGeocode(lat, lon)
+    if (place) {
+      setUserPlace(place)
+      try { localStorage.setItem(STORAGE_KEY_PLACE, place) } catch {}
+    }
+    return found
+  }, [regions, selectRegion])
+
   const detectGPS = useCallback(() => {
     if (!navigator.geolocation) return
     setDetecting(true)
     setOutsideError(false)
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
+      async ({ coords }) => {
         setDetecting(false)
-        const next = { lat: coords.latitude, lon: coords.longitude }
-        setUserCoords(next)
-        try { localStorage.setItem(STORAGE_KEY_COORDS, JSON.stringify(next)) } catch {}
-        const found = findRegionForCoords(coords.latitude, coords.longitude, regions)
-        if (found) {
-          selectRegion(found)
-        } else {
-          setOutsideError(true)
-        }
+        const found = await applyCoords(coords.latitude, coords.longitude)
+        if (!found) setOutsideError(true)
       },
       () => { setDetecting(false) },
       { timeout: 8000 }
     )
-  }, [regions, selectRegion])
+  }, [applyCoords])
+
+  // Acompanha mudanças de localização em segundo plano, para manter
+  // o header e o filtro sempre alinhados à posição real do turista.
+  useEffect(() => {
+    if (!navigator.geolocation || regions.length === 0) return
+    const id = navigator.geolocation.watchPosition(
+      ({ coords }) => { applyCoords(coords.latitude, coords.longitude) },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 },
+    )
+    return () => navigator.geolocation.clearWatch(id)
+  }, [applyCoords, regions.length])
 
   const openPicker = useCallback(() => { setOutsideError(false); setShowPicker(true) }, [])
 
@@ -104,7 +140,7 @@ export function RegionProvider({ children }) {
   return (
     <RegionContext.Provider value={{
       region, regions, selectRegion,
-      detectGPS, detecting, userCoords,
+      detectGPS, detecting, userCoords, userPlace,
       showPicker, setShowPicker, openPicker,
       outsideError, setOutsideError,
       findRegionForCoords, getServiceQuery,
