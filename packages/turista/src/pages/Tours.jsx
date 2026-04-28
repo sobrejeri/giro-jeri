@@ -231,7 +231,7 @@ function DatePickerSheet({ value, onChange, onClose }) {
 export default function Tours() {
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
-  const { region, userCoords, userPlace, getServiceQuery } = useRegion()
+  const { region, userCoords, getServiceQuery } = useRegion()
 
   const [mode, setMode] = useState('private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
@@ -307,15 +307,7 @@ export default function Tours() {
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm">
         <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
-            <div className="flex items-center gap-1 mt-0.5">
-              <MapPin size={11} className="text-brand" />
-              <span className="text-[12px] text-gray-500">
-                {userPlace || (region?.name ? `${region.name}, CE` : 'Localizando…')}
-              </span>
-            </div>
-          </div>
+          <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
           <button className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center active:scale-95 transition-transform">
             <SlidersHorizontal size={15} className="text-gray-600" />
           </button>
