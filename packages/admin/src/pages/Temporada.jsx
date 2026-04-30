@@ -13,7 +13,23 @@ const MONTHS = [
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
 ]
 
-const EMPTY = { region_id: '', start_month: 7, end_month: 1, price_increase_percent: 10, is_active: true }
+// Converte mês (1-12) + ano corrente para uma data ISO no formato YYYY-MM-DD
+function monthToDate(month, isEnd) {
+  const year = new Date().getFullYear()
+  if (isEnd) {
+    // último dia do mês (se mês < start, assume próximo ano)
+    const d = new Date(year, month, 0) // day 0 = último dia do mês anterior
+    return d.toISOString().slice(0, 10)
+  }
+  return `${year}-${String(month).padStart(2, '0')}-01`
+}
+
+function dateToMonth(dateStr) {
+  if (!dateStr) return 1
+  return parseInt(dateStr.slice(5, 7), 10)
+}
+
+const EMPTY = { region_id: '', start_month: 7, end_month: 1, pct: 10, is_active: true }
 
 export default function Temporada() {
   const [modal, setModal] = useState(null)
@@ -36,18 +52,31 @@ export default function Temporada() {
 
   function openNew()   { setForm(EMPTY); setModal({ isNew: true }) }
   function openEdit(s) {
-    setForm({ region_id: s.region_id || '', start_month: s.start_month, end_month: s.end_month, price_increase_percent: s.price_increase_percent, is_active: s.is_active })
+    setForm({
+      region_id:   s.region_id || '',
+      start_month: dateToMonth(s.start_date),
+      end_month:   dateToMonth(s.end_date),
+      pct:         Number(s.additional_value),
+      is_active:   s.is_active,
+    })
     setModal(s)
   }
 
   function handleSubmit(e) {
     e.preventDefault()
+    const sm = Number(form.start_month)
+    const em = Number(form.end_month)
+    // Rótulo automático ex: "Julho – Janeiro"
+    const name = `${MONTHS[sm - 1]} – ${MONTHS[em - 1]}`
     saveMut.mutate({
-      ...form,
-      start_month: Number(form.start_month),
-      end_month: Number(form.end_month),
-      price_increase_percent: Number(form.price_increase_percent),
-      region_id: form.region_id || null,
+      name,
+      region_id:        form.region_id || null,
+      start_date:       monthToDate(sm, false),
+      end_date:         monthToDate(em, true),
+      additional_type:  'percentage',
+      additional_value: Number(form.pct),
+      applies_to:       'all',
+      is_active:        form.is_active,
     })
   }
 
@@ -59,7 +88,6 @@ export default function Temporada() {
         <Button onClick={openNew}><Plus size={16} /> Nova Regra</Button>
       </div>
 
-      {/* Info card */}
       <div className="bg-brand/10 border border-brand/20 rounded-xl p-4 text-sm">
         <p className="font-semibold text-brand mb-1">Como funciona</p>
         <p className="text-gray-400 text-xs leading-relaxed">
@@ -87,11 +115,9 @@ export default function Temporada() {
                   <Sun size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-200">
-                    {MONTHS[s.start_month - 1]} → {MONTHS[s.end_month - 1]}
-                  </p>
+                  <p className="text-sm font-semibold text-gray-200">{s.name}</p>
                   <p className="text-xs text-gray-500">
-                    {s.regions?.name || 'Todas as regiões'} · +{s.price_increase_percent}%
+                    {s.regions?.name || 'Todas as regiões'} · +{s.additional_value}%
                   </p>
                 </div>
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.is_active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
@@ -114,7 +140,6 @@ export default function Temporada() {
         </Card>
       )}
 
-      {/* Modal */}
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.isNew ? 'Nova Regra de Temporada' : 'Editar Regra'} size="sm">
         <form onSubmit={handleSubmit} className="space-y-4">
           <Select label="Região (vazio = todas)" value={form.region_id} onChange={(e) => setForm({ ...form, region_id: e.target.value })}>
@@ -132,8 +157,8 @@ export default function Temporada() {
           <Input
             label="Acréscimo (%)"
             type="number" min={0} max={200} step={1}
-            value={form.price_increase_percent}
-            onChange={(e) => setForm({ ...form, price_increase_percent: e.target.value })}
+            value={form.pct}
+            onChange={(e) => setForm({ ...form, pct: e.target.value })}
             required
           />
           <Button type="submit" className="w-full" disabled={saveMut.isPending}>

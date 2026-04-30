@@ -17,12 +17,10 @@ const fmt = (v) =>
 function getSeasonPct(seasons) {
   if (!seasons?.length) return null
   const today = new Date().toISOString().slice(0, 10)
-  // Primeiro: regra vigente
-  const active = seasons.find((s) => s.start_date <= today && s.end_date >= today && s.is_active)
+  const active = seasons.find((s) => s.is_active && s.start_date <= today && s.end_date >= today)
   if (active) return { pct: Number(active.additional_value), name: active.name }
-  // Segundo: próxima futura
   const upcoming = seasons
-    .filter((s) => s.start_date > today && s.is_active)
+    .filter((s) => s.is_active && s.start_date > today)
     .sort((a, b) => a.start_date.localeCompare(b.start_date))[0]
   if (upcoming) return { pct: Number(upcoming.additional_value), name: upcoming.name }
   return null
