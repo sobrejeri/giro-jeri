@@ -351,7 +351,6 @@ router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
       .from('vehicle_pricing_rules')
       .select('id, vehicle_id, region_id, service_type, service_id, pricing_mode, base_price, high_season_price, is_active, vehicles(id, name, vehicle_type), regions(id, name)')
       .eq('service_type', 'tour')
-      .eq('is_active', true)
       .order('created_at', { ascending: false });
     if (region_id)  query = query.eq('region_id', region_id);
     if (service_id) query = query.eq('service_id', service_id);

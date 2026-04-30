@@ -106,24 +106,24 @@ export const api = {
   deletePricingRule: (id)          => request(`/api/admin/pricing-rules/${id}`, { method: 'DELETE' }),
   // Salva em lote todos os preços de um passeio (upsert por vehicle+service)
   saveTourPricing: async (tourId, regionId, rows) => {
-    // rows: [{ vehicle_id, base_price, high_season_price?, existing_id? }]
+    // rows: [{ vehicle_id, base_price, existing_id? }]
+    // high_season_price é sempre calculado automaticamente pela % da temporada
     const results = []
     for (const row of rows) {
       if (row.existing_id) {
         const r = await request(`/api/admin/pricing-rules/${row.existing_id}`, {
           method: 'PUT',
-          body: { base_price: row.base_price, high_season_price: row.high_season_price },
+          body: { base_price: row.base_price, high_season_price: null },
         })
         results.push(r)
       } else {
         const r = await request('/api/admin/pricing-rules', {
           method: 'POST',
           body: {
-            vehicle_id:        row.vehicle_id,
-            service_id:        tourId,
-            region_id:         regionId,
-            base_price:        row.base_price,
-            high_season_price: row.high_season_price,
+            vehicle_id: row.vehicle_id,
+            service_id: tourId,
+            region_id:  regionId,
+            base_price: row.base_price,
           },
         })
         results.push(r)

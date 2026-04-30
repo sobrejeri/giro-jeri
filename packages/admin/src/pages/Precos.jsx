@@ -103,23 +103,27 @@ export default function Precos() {
     e.preventDefault()
     if (!tourId) return
     setSaving(true)
-    const rows = []
-    for (const [vehicleId, entry] of Object.entries(prices)) {
-      const base = entry.base?.trim()
-      if (!base || Number(base) <= 0) continue
-      rows.push({
-        vehicle_id:        vehicleId,
-        base_price:        Number(base),
-        high_season_price: entry.peak && Number(entry.peak) > 0 ? Number(entry.peak) : null,
-        existing_id:       entry.existing_id || null,
-      })
+    try {
+      const rows = []
+      for (const [vehicleId, entry] of Object.entries(prices)) {
+        const base = entry.base?.trim()
+        if (!base || Number(base) <= 0) continue
+        rows.push({
+          vehicle_id:  vehicleId,
+          base_price:  Number(base),
+          existing_id: entry.existing_id || null,
+        })
+      }
+      if (rows.length > 0) {
+        await api.saveTourPricing(tourId, regionId || null, rows)
+      }
+      qc.invalidateQueries({ queryKey: ['pricing-rules'] })
+      setModal(null)
+    } catch (err) {
+      alert(`Erro ao salvar: ${err.message}`)
+    } finally {
+      setSaving(false)
     }
-    if (rows.length > 0) {
-      await api.saveTourPricing(tourId, regionId || null, rows)
-    }
-    qc.invalidateQueries({ queryKey: ['pricing-rules'] })
-    setSaving(false)
-    setModal(null)
   }
 
   function toggleExpand(id) {
@@ -345,28 +349,24 @@ export default function Precos() {
                         <p className="text-xs text-gray-500">Até {v.seat_capacity} pessoas</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        label="Preço normal (R$)"
-                        type="number" min={0} step={0.01}
-                        placeholder="ex: 350,00"
-                        value={prices[v.id]?.base || ''}
-                        onChange={(e) => setPrice(v.id, 'base', e.target.value)}
-                      />
-                      <div>
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
                         <Input
-                          label="Alta temporada (R$)"
+                          label="Preço normal (R$)"
                           type="number" min={0} step={0.01}
-                          placeholder={autoCalcPeak ? `auto: ${fmt(autoCalcPeak)}` : 'opcional'}
-                          value={prices[v.id]?.peak || ''}
-                          onChange={(e) => setPrice(v.id, 'peak', e.target.value)}
+                          placeholder="ex: 350,00"
+                          value={prices[v.id]?.base || ''}
+                          onChange={(e) => setPrice(v.id, 'base', e.target.value)}
                         />
-                        {autoCalcPeak && !prices[v.id]?.peak && (
-                          <p className="text-[10px] text-amber-400 mt-1">
-                            +{season.pct}% = {fmt(autoCalcPeak)} (automático)
-                          </p>
-                        )}
                       </div>
+                      {season && (
+                        <div className="pb-1 text-right min-w-[110px]">
+                          <p className="text-[10px] text-gray-500 mb-0.5">Alta temporada (+{season.pct}%)</p>
+                          <p className="text-sm font-semibold text-amber-400">
+                            {autoCalcPeak ? fmt(autoCalcPeak) : '—'}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
