@@ -1,178 +1,153 @@
-import { useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, ToggleLeft, ToggleRight } from 'lucide-react'
+import { ToggleLeft, ToggleRight, Car, Users } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
-import Button from '../components/ui/Button'
-import Modal from '../components/ui/Modal'
-import Input, { Select } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 
-const VEHICLE_TYPES = [
-  { value: 'buggy',        label: 'Buggy'         },
-  { value: 'quadricycle',  label: 'Quadriciclo'   },
-  { value: 'jardineira',   label: 'Jardineira'    },
-  { value: 'hilux',        label: 'Hilux / SUV'   },
-  { value: 'van',          label: 'Van'           },
-  { value: 'boat',         label: 'Barco'         },
-  { value: 'motorbike',    label: 'Moto'          },
-  { value: 'other',        label: 'Outro'         },
-]
-
-const EMPTY = { name: '', vehicle_type: 'buggy', capacity: 4, license_plate: '', is_active: true }
+const TYPE_LABEL = {
+  buggy:      'Buggy',
+  jardineira: 'Jardineira',
+  hilux_4x4:  'Hilux 4x4',
+  boat:       'Barco',
+  van:        'Van',
+  sedan:      'Sedan',
+  suv:        'SUV',
+  other:      'Outro',
+}
 
 export default function Veiculos() {
-  const [modal, setModal]   = useState(null) // null | 'new' | vehicle obj
-  const [form, setForm]     = useState(EMPTY)
-  const qc                  = useQueryClient()
+  const qc = useQueryClient()
 
-  const { data: vehicles = [], isLoading } = useQuery({
+  const { data: vehicles = [], isLoading: lv } = useQuery({
     queryKey: ['vehicles'],
-    queryFn:  () => api.getVehicles(),
+    queryFn:  () => api.getVehicles({ is_active: 'true' }),
   })
 
-  const saveMut = useMutation({
-    mutationFn: (body) =>
-      modal === 'new' ? api.createVehicle(body) : api.updateVehicle(modal.id, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['vehicles'] })
-      setModal(null)
-    },
+  const { data: preferences = [], isLoading: lp } = useQuery({
+    queryKey: ['operator-prefs'],
+    queryFn:  () => api.getPreferences(),
   })
+
+  // Monta mapa rápido de preferências
+  const prefMap = useMemo(() => {
+    const map = {}
+    for (const p of preferences) {
+      if (p.entity_type === 'vehicle') map[p.entity_id] = p.is_active
+    }
+    return map
+  }, [preferences])
 
   const toggleMut = useMutation({
-    mutationFn: (v) => api.updateVehicle(v.id, { is_active: !v.is_active }),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['vehicles'] }),
+    mutationFn: ({ id, next }) => api.setPreference('vehicle', id, next),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['operator-prefs'] }),
+    onError:    (err) => alert(`Erro: ${err.message}`),
   })
 
-  function openNew() {
-    setForm(EMPTY)
-    setModal('new')
-  }
+  if (lv || lp) return <PageSpinner />
 
-  function openEdit(v) {
-    setForm({ name: v.name, vehicle_type: v.vehicle_type, capacity: v.capacity, license_plate: v.license_plate || '', is_active: v.is_active })
-    setModal(v)
-  }
-
-  function handleSubmit(e) {
-    e.preventDefault()
-    saveMut.mutate({ ...form, capacity: Number(form.capacity) })
-  }
-
-  if (isLoading) return <PageSpinner />
-
-  const active   = vehicles.filter((v) => v.is_active)
-  const inactive = vehicles.filter((v) => !v.is_active)
+  // Separa por status de preferência
+  const active   = vehicles.filter((v) => prefMap[v.id] !== false)
+  const inactive = vehicles.filter((v) => prefMap[v.id] === false)
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={openNew}>
-          <Plus size={16} /> Novo Veículo
-        </Button>
+      <div>
+        <h2 className="text-base font-semibold text-gray-200">Minha Frota</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Selecione os veículos com que sua cooperativa trabalha.
+          Apenas administradores podem cadastrar ou editar veículos.
+        </p>
       </div>
 
       {/* Ativos */}
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-gray-700">
-            Ativos <span className="text-gray-400 font-normal">({active.length})</span>
-          </h2>
+          <p className="text-sm font-semibold text-gray-300">
+            Trabalhando ({active.length})
+          </p>
         </CardHeader>
-        {active.length === 0 ? (
-          <CardBody><p className="text-sm text-gray-400">Nenhum veículo ativo.</p></CardBody>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {active.map((v) => <VehicleRow key={v.id} v={v} onEdit={openEdit} onToggle={toggleMut.mutate} />)}
-          </div>
-        )}
+        <div className="divide-y divide-gray-800">
+          {active.map((v) => (
+            <VehicleRow
+              key={v.id}
+              vehicle={v}
+              enabled
+              onToggle={() => toggleMut.mutate({ id: v.id, next: false })}
+              pending={toggleMut.isPending}
+            />
+          ))}
+          {active.length === 0 && (
+            <CardBody>
+              <p className="text-sm text-gray-600">Nenhum veículo ativado. Ative abaixo.</p>
+            </CardBody>
+          )}
+        </div>
       </Card>
 
       {/* Inativos */}
       {inactive.length > 0 && (
         <Card>
           <CardHeader>
-            <h2 className="text-sm font-semibold text-gray-400">
-              Inativos ({inactive.length})
-            </h2>
+            <p className="text-sm font-semibold text-gray-500">
+              Não trabalho com ({inactive.length})
+            </p>
           </CardHeader>
-          <div className="divide-y divide-gray-50">
-            {inactive.map((v) => <VehicleRow key={v.id} v={v} onEdit={openEdit} onToggle={toggleMut.mutate} />)}
+          <div className="divide-y divide-gray-800">
+            {inactive.map((v) => (
+              <VehicleRow
+                key={v.id}
+                vehicle={v}
+                enabled={false}
+                onToggle={() => toggleMut.mutate({ id: v.id, next: true })}
+                pending={toggleMut.isPending}
+              />
+            ))}
           </div>
         </Card>
       )}
 
-      {/* Modal */}
-      <Modal
-        open={!!modal}
-        onClose={() => setModal(null)}
-        title={modal === 'new' ? 'Novo Veículo' : 'Editar Veículo'}
-        size="sm"
-      >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Nome / Identificação"
-            placeholder="Ex: Buggy Branco #1"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            required
-          />
-          <Select
-            label="Tipo"
-            value={form.vehicle_type}
-            onChange={(e) => setForm({ ...form, vehicle_type: e.target.value })}
-          >
-            {VEHICLE_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </Select>
-          <Input
-            label="Capacidade (passageiros)"
-            type="number"
-            min={1}
-            max={50}
-            value={form.capacity}
-            onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-            required
-          />
-          <Input
-            label="Placa (opcional)"
-            placeholder="ABC-1234"
-            value={form.license_plate}
-            onChange={(e) => setForm({ ...form, license_plate: e.target.value })}
-          />
-          <Button type="submit" className="w-full" disabled={saveMut.isPending}>
-            {saveMut.isPending ? 'Salvando…' : 'Salvar'}
-          </Button>
-        </form>
-      </Modal>
+      {vehicles.length === 0 && (
+        <Card>
+          <CardBody>
+            <div className="py-10 text-center">
+              <Car size={32} className="mx-auto text-gray-700 mb-2" />
+              <p className="text-sm text-gray-600">Nenhum veículo no catálogo ainda.</p>
+              <p className="text-xs text-gray-700 mt-1">Aguarde o administrador cadastrar os veículos.</p>
+            </div>
+          </CardBody>
+        </Card>
+      )}
     </div>
   )
 }
 
-function VehicleRow({ v, onEdit, onToggle }) {
-  const typeLabel = VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type
+function VehicleRow({ vehicle: v, enabled, onToggle, pending }) {
   return (
-    <div className={`flex items-center gap-4 px-5 py-3 ${!v.is_active ? 'opacity-50' : ''}`}>
+    <div className={`flex items-center gap-3 px-5 py-3 transition-opacity ${enabled ? '' : 'opacity-50'}`}>
+      <div className="w-10 h-10 rounded-xl bg-gray-700 flex items-center justify-center overflow-hidden shrink-0">
+        {v.image_url
+          ? <img src={v.image_url} alt={v.name} className="w-full h-full object-cover" />
+          : <Car size={18} className="text-gray-500" />}
+      </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900">{v.name}</p>
-        <p className="text-xs text-gray-400">
-          {typeLabel} · {v.capacity} pax{v.license_plate ? ` · ${v.license_plate}` : ''}
-        </p>
+        <p className="text-sm font-medium text-gray-200">{v.name}</p>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span>{TYPE_LABEL[v.vehicle_type] || v.vehicle_type}</span>
+          <span>·</span>
+          <Users size={10} />
+          <span>{v.seat_capacity} pax</span>
+        </div>
       </div>
       <button
-        onClick={() => onEdit(v)}
-        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+        onClick={onToggle}
+        disabled={pending}
+        title={enabled ? 'Desativar da minha frota' : 'Ativar na minha frota'}
+        className="shrink-0 disabled:opacity-50"
       >
-        <Pencil size={14} />
-      </button>
-      <button
-        onClick={() => onToggle(v)}
-        className={`p-1.5 rounded-lg transition-colors ${v.is_active ? 'text-green-500 hover:bg-green-50' : 'text-gray-300 hover:bg-gray-100'}`}
-        title={v.is_active ? 'Desativar' : 'Ativar'}
-      >
-        {v.is_active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+        {enabled
+          ? <ToggleRight size={26} className="text-brand" />
+          : <ToggleLeft  size={26} className="text-gray-600" />}
       </button>
     </div>
   )

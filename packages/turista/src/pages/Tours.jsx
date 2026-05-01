@@ -1,7 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useRegion } from '../contexts/RegionContext'
+import OriginPicker from '../components/OriginPicker'
 import {
   MapPin, SlidersHorizontal, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
@@ -79,11 +81,6 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
             <span className="text-[10px] text-gray-400">{tour.duration_hours}h</span>
           </>}
         </div>
-        {tour.shared_price_per_person && (
-          <p className="text-brand font-bold text-[12px] mt-1">
-            R$ {Number(tour.shared_price_per_person).toLocaleString('pt-BR')}
-          </p>
-        )}
       </div>
     </div>
   )
@@ -233,32 +230,49 @@ function DatePickerSheet({ value, onChange, onClose }) {
 /* ── Main ───────────────────────────────────────────────────── */
 export default function Tours() {
   const navigate = useNavigate()
+  const { state: locationState } = useLocation()
+  const { region, userCoords, getServiceQuery } = useRegion()
 
   const [mode, setMode] = useState('private')
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
   const [people, setPeople] = useState(2)
   const [date, setDate] = useState(startOfDay(new Date()))
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
   const [cart, setCart] = useState({})
   const [favs, setFavs] = useState(new Set())
+  const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
+  const [showOriginPicker, setShowOriginPicker] = useState(false)
+  const originLabel = origin?.name || 'Centro de Jericoacoara'
   const toggleFav = (id) =>
     setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   /* ── Queries ──────────────────────────────────────────────── */
+  const geo = getServiceQuery()
   const { data: toursData, isLoading: toursLoading } = useQuery({
-    queryKey: ['tours'],
-    queryFn: () => api.getTours(),
+    queryKey: ['tours', region?.id, userCoords?.lat, userCoords?.lon],
+    queryFn: () => api.getTours(geo),
   })
   const tours = toursData?.tours || toursData || []
   const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
 
-  const { data: vehiclesData } = useQuery({
+  const { data: vehiclesData, isFetched: vehiclesFetched } = useQuery({
     queryKey: ['tour-vehicles', selectedTour?.id],
     queryFn: () => api.getTourVehicles(selectedTour.id),
     enabled: !!selectedTour?.id && mode === 'private',
   })
-  const vehicles = useMemo(() => vehiclesData || [], [vehiclesData])
+
+  // Fallback: se o passeio não tiver regras de preço, usa todos os veículos ativos
+  const { data: allVehiclesData } = useQuery({
+    queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
+    queryFn: () => api.getVehicles({ is_active: 'true', ...geo }),
+    enabled: vehiclesFetched && (vehiclesData || []).length === 0 && mode === 'private',
+  })
+
+  const vehicles = useMemo(
+    () => (vehiclesData || []).length > 0 ? vehiclesData : (allVehiclesData || []),
+    [vehiclesData, allVehiclesData],
+  )
 
   /* ── Sugestão ─────────────────────────────────────────────── */
   const suggestion = useMemo(() => suggest(vehicles, people), [vehicles, people])
@@ -293,13 +307,7 @@ export default function Tours() {
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm">
         <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
-            <div className="flex items-center gap-1 mt-0.5">
-              <MapPin size={11} className="text-brand" />
-              <span className="text-[12px] text-gray-500">Jericoacoara, CE</span>
-            </div>
-          </div>
+          <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
           <button className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center active:scale-95 transition-transform">
             <SlidersHorizontal size={15} className="text-gray-600" />
           </button>
@@ -325,11 +333,14 @@ export default function Tours() {
 
         {/* ── Filtros rápidos ───────────────────────────────── */}
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-          <button className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform">
-            <MapPin size={11} className="text-brand" />
-            <div className="text-left">
+          <button
+            onClick={() => setShowOriginPicker(true)}
+            className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px]"
+          >
+            <MapPin size={11} className="text-brand shrink-0" />
+            <div className="text-left min-w-0">
               <p className="text-[9px] text-gray-400 leading-none">Saída</p>
-              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">Centro de Jericoacoara</p>
+              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight truncate">{originLabel}</p>
             </div>
           </button>
           <button
@@ -604,9 +615,12 @@ export default function Tours() {
                           service_date:     isToday(date) ? 'Hoje'
                                               : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
                                               : format(date, "d 'de' MMMM", { locale: ptBR }),
+                          service_date_iso: format(date, 'yyyy-MM-dd'),
                           service_time:     'A confirmar',
                           people_count:     people,
-                          origin_text:      'Centro de Jericoacoara',
+                          origin_text:      originLabel,
+                          origin_latitude:  origin?.latitude  ?? null,
+                          origin_longitude: origin?.longitude ?? null,
                           vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
                           total_price:      cartTotal,
                           breakdown:        { 'Veículos selecionados': cartTotal },
@@ -652,21 +666,23 @@ export default function Tours() {
               <button
                 onClick={() => navigate('/checkout/resumo', {
                   state: {
-                    service_name:    selectedTour.name,
-                    service_type:    'tour',
-                    booking_mode:    'shared',
-                    service_date:    isToday(date) ? 'Hoje'
-                                       : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
-                                       : format(date, "d 'de' MMMM", { locale: ptBR }),
-                    service_time:    'A confirmar',
-                    people_count:    people,
-                    origin_text:     'Centro de Jericoacoara',
-                    total_price:     sharedTotal,
-                    breakdown:       { [`${people}x por pessoa`]: sharedTotal },
-                    cover_image_url: selectedTour.cover_image_url || null,
-                    region_id:       selectedTour.regions?.id,
-                    service_id:      selectedTour.id,
-                    vehicles:        [],
+                    service_name:     selectedTour.name,
+                    service_type:     'tour',
+                    booking_mode:     'shared',
+                    service_date:     isToday(date) ? 'Hoje'
+                                        : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                                        : format(date, "d 'de' MMMM", { locale: ptBR }),
+                    service_date_iso: format(date, 'yyyy-MM-dd'),
+                    service_time:     'A confirmar',
+                    people_count:     people,
+                    price_per_person: pricePerPerson,
+                    origin_text:      'Centro de Jericoacoara',
+                    total_price:      sharedTotal,
+                    breakdown:        { [`${people}x por pessoa`]: sharedTotal },
+                    cover_image_url:  selectedTour.cover_image_url || null,
+                    region_id:        selectedTour.regions?.id,
+                    service_id:       selectedTour.id,
+                    vehicles:         [],
                   },
                 })}
                 className="bg-brand text-white font-bold rounded-xl px-5 py-2.5 text-[13px] active:scale-95 transition-transform shrink-0"
@@ -677,6 +693,14 @@ export default function Tours() {
           </div>
         )
       })()}
+
+      <OriginPicker
+        open={showOriginPicker}
+        onClose={() => setShowOriginPicker(false)}
+        onSelect={setOrigin}
+        region={region}
+        userCoords={userCoords}
+      />
     </div>
   )
 }

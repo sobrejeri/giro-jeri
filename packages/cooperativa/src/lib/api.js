@@ -97,9 +97,17 @@ export const api = {
   // Catálogo — Transfers (serviços-pai das rotas)
   getCatalogTransfers: () => request('/api/catalog/transfers'),
 
-  // Catálogo — Rotas de Transfer
-  getCatalogRoutes:   ()         => request('/api/catalog/transfer-routes'),
-  createCatalogRoute: (body)     => request('/api/catalog/transfer-routes', { method: 'POST', body }),
-  updateCatalogRoute: (id, body) => request(`/api/catalog/transfer-routes/${id}`, { method: 'PUT', body }),
-  toggleCatalogRoute: (id, flag) => request(`/api/catalog/transfer-routes/${id}`, { method: 'PUT', body: { is_active: flag } }),
+  // Catálogo — Rotas de Transfer (somente leitura para cooperativa)
+  getCatalogRoutes: () => request('/api/catalog/transfer-routes'),
+
+  // Veículos (somente leitura)
+  getVehicles: (params = {}) => request(`/api/vehicles?${new URLSearchParams(params)}`),
+
+  // Preferências da cooperativa (opt-in por serviço)
+  getPreferences: () => request('/api/operator/preferences'),
+  setPreference:  (type, entityId, isActive) =>
+    request(`/api/operator/preferences/${type}/${entityId}`, {
+      method: 'PUT',
+      body:   { is_active: isActive },
+    }),
 }

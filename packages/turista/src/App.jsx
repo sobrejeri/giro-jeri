@@ -11,8 +11,7 @@ import Transfers       from './pages/Transfers'
 import Bookings        from './pages/Bookings'
 import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
-import Login           from './pages/Login'
-import Register        from './pages/Register'
+import Auth            from './pages/Auth'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -23,8 +22,8 @@ export default function App() {
   return (
     <Routes>
       {/* Auth — full screen, sem layout */}
-      <Route path="/login"    element={<Login />} />
-      <Route path="/cadastro" element={<Register />} />
+      <Route path="/login"    element={<Auth defaultTab="login" />} />
+      <Route path="/cadastro" element={<Auth defaultTab="register" />} />
 
       {/* Checkout — frame 430px, sem nav bars */}
       <Route path="/checkout" element={<PrivateRoute><CheckoutLayout /></PrivateRoute>}>
