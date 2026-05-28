@@ -439,6 +439,95 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/admin/bookings/manual ───────────────────
+// Cria reserva manual (walk-in, telefone, WhatsApp)
+router.post('/bookings/manual', requireAdmin, async (req, res, next) => {
+  try {
+    const {
+      customer_name, customer_phone, customer_email,
+      service_type = 'tour', service_id, service_name,
+      booking_mode = 'private',
+      service_date, service_time,
+      people_count = 1,
+      total_amount,
+      payment_method = 'cash',
+      payment_status = 'pending',
+      notes,
+      region_id,
+    } = req.body;
+
+    if (!service_date || !total_amount) {
+      return res.status(400).json({ error: 'service_date e total_amount são obrigatórios' });
+    }
+
+    // Busca ou cria um usuário "avulso" para o cliente
+    let userId = null;
+    if (customer_phone || customer_email) {
+      const query = customer_email
+        ? supabase.from('users').select('id').eq('email', customer_email).maybeSingle()
+        : supabase.from('users').select('id').eq('phone', customer_phone).maybeSingle();
+      const { data: existing } = await query;
+      if (existing) {
+        userId = existing.id;
+      } else {
+        const { data: newUser } = await supabase.from('users').insert({
+          full_name:  customer_name || 'Cliente Avulso',
+          email:      customer_email || null,
+          phone:      customer_phone || null,
+          user_type:  'tourist',
+          auth_id:    null,
+        }).select('id').single();
+        userId = newUser?.id;
+      }
+    }
+
+    const bookingCode = `GJM${Date.now().toString(36).toUpperCase().slice(-5)}`;
+    const isPaid      = payment_status === 'paid';
+
+    const { data: booking, error: bErr } = await supabase.from('bookings').insert({
+      booking_code:        bookingCode,
+      user_id:             userId,
+      region_id:           region_id || null,
+      service_type,
+      service_id:          service_id || null,
+      booking_mode,
+      service_date,
+      service_time:        service_time || null,
+      people_count:        Number(people_count),
+      total_amount:        Number(total_amount),
+      status_commercial:   isPaid ? 'paid' : 'awaiting_payment',
+      status_operational:  isPaid ? 'awaiting_dispatch' : 'not_started',
+      payment_status:      isPaid ? 'approved' : 'pending',
+      notes:               notes || `Reserva manual — ${customer_name || 'sem nome'}`,
+    }).select().single();
+
+    if (bErr) throw bErr;
+
+    // Cria registro de pagamento
+    const { data: payment } = await supabase.from('payments').insert({
+      booking_id:         booking.id,
+      gateway_name:       'manual',
+      payment_method,
+      payment_type:       'full',
+      amount_gross:       Number(total_amount),
+      gateway_fee_amount: 0,
+      currency:           'BRL',
+      status:             isPaid ? 'approved' : 'pending',
+      paid_at:            isPaid ? new Date().toISOString() : null,
+    }).select().single();
+
+    // Lança no ledger se pago
+    if (isPaid && payment) {
+      await supabase.from('financial_ledger').insert([
+        { booking_id: booking.id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${bookingCode}`, amount: Number(total_amount), direction: 'inflow', financial_status: 'received' },
+        { booking_id: booking.id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${bookingCode}`, amount: Number(total_amount), direction: 'inflow', financial_status: 'received' },
+      ]);
+    }
+
+    res.status(201).json({ booking_id: booking.id, booking_code: bookingCode });
+  } catch (err) { next(err); }
+});
+
 // ── Helpers ────────────────────────────────────────────
 function sum(rows, entryType, direction) {
   return rows

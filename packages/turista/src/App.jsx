@@ -1,9 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
-import Layout          from './components/layout/Layout'
-import CheckoutLayout   from './components/layout/CheckoutLayout'
-import CheckoutSummary  from './pages/checkout/CheckoutSummary'
-import CheckoutPayment  from './pages/checkout/CheckoutPayment'
+import Layout              from './components/layout/Layout'
+import CheckoutLayout      from './components/layout/CheckoutLayout'
+import CheckoutSummary     from './pages/checkout/CheckoutSummary'
+import CheckoutPayment     from './pages/checkout/CheckoutPayment'
+import CheckoutProcessando from './pages/checkout/CheckoutProcessando'
+import CheckoutSucesso     from './pages/checkout/CheckoutSucesso'
 import Home            from './pages/Home'
 import Tours           from './pages/Tours'
 import TourDetail      from './pages/TourDetail'
@@ -27,9 +29,10 @@ export default function App() {
 
       {/* Checkout — frame 430px, sem nav bars */}
       <Route path="/checkout" element={<PrivateRoute><CheckoutLayout /></PrivateRoute>}>
-        <Route path="resumo"    element={<CheckoutSummary />} />
-        <Route path="pagamento" element={<CheckoutPayment />} />
-        {/* processando, falha — a implementar */}
+        <Route path="resumo"      element={<CheckoutSummary />} />
+        <Route path="pagamento"   element={<CheckoutPayment />} />
+        <Route path="processando" element={<CheckoutProcessando />} />
+        <Route path="sucesso"     element={<CheckoutSucesso />} />
       </Route>
 
       {/* App — layout responsivo com nav */}

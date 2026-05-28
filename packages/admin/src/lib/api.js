@@ -132,6 +132,10 @@ export const api = {
     return results
   },
 
+  // Reservas manuais
+  createManualBooking:  (body) => request('/api/admin/bookings/manual', { method: 'POST', body }),
+  confirmPaymentManual: (body) => request('/api/payments/manual-confirm', { method: 'POST', body }),
+
   // Regiões
   getRegions:   ()         => request('/api/regions'),
   createRegion: (body)     => request('/api/regions', { method: 'POST', body }),
