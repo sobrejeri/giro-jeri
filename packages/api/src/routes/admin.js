@@ -446,6 +446,34 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
 
 // ── POST /api/admin/bookings/manual ───────────────────
 // Cria reserva manual (walk-in, telefone, WhatsApp)
+// ── GET /api/admin/bookings ────────────────────────────
+router.get('/bookings', requireAdmin, async (req, res, next) => {
+  try {
+    const { page = 1, limit = 30, search, status, service_type, date_from, date_to } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let query = supabase
+      .from('bookings')
+      .select(`
+        id, booking_code, service_type, booking_mode, service_date, service_time,
+        people_count, total_amount, status_commercial, status_operational, created_at,
+        users ( full_name, phone, email )
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1);
+
+    if (status)       query = query.eq('status_commercial', status);
+    if (service_type) query = query.eq('service_type', service_type);
+    if (date_from)    query = query.gte('service_date', date_from);
+    if (date_to)      query = query.lte('service_date', date_to);
+    if (search)       query = query.ilike('booking_code', `%${search}%`);
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+    res.json({ data: data || [], total: count || 0, page: Number(page) });
+  } catch (err) { next(err); }
+});
+
 router.post('/bookings/manual', requireAdmin, async (req, res, next) => {
   try {
     const {

@@ -3,13 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Route, ImagePlus, X, Car, Users } from 'lucide-react'
 import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
-
-function slugify(text) {
-  return text.toString().toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    + '-' + Date.now().toString(36)
-}
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -17,6 +10,13 @@ import Input, { Select, Textarea } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import LocationPicker from '../components/LocationPicker'
+
+function slugify(text) {
+  return text.toString().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    + '-' + Date.now().toString(36)
+}
 
 const TOUR_EMPTY = {
   name: '', short_description: '', duration_hours: 2, max_people: 10,

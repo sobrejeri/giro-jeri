@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, BookOpen, Tag, Globe, Ticket,
-  Sun, BarChart3, ScrollText, Settings, LogOut,
+  Sun, BarChart3, ScrollText, Settings, LogOut, CalendarCheck,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard'    },
   { separator: true, label: 'Gestão' },
   { to: '/usuarios',     icon: Users,           label: 'Usuários'      },
+  { to: '/reservas',     icon: CalendarCheck,   label: 'Reservas'      },
   { to: '/catalogo',     icon: BookOpen,        label: 'Catálogo'      },
   { to: '/precos',       icon: Tag,             label: 'Motor de Preços'},
   { to: '/regioes',      icon: Globe,           label: 'Regiões'       },

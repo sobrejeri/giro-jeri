@@ -1,6 +1,7 @@
 const styles = {
   draft:           'bg-gray-700 text-gray-300',
-  awaiting_payment:'bg-amber-900/40 text-amber-400',
+  pending_payment:  'bg-amber-900/40 text-amber-400',
+  awaiting_payment: 'bg-amber-900/40 text-amber-400',
   paid:            'bg-green-900/40 text-green-400',
   payment_failed:  'bg-red-900/40 text-red-400',
   cancelled:       'bg-gray-700 text-gray-400',
@@ -32,7 +33,7 @@ const styles = {
 }
 
 const labels = {
-  draft: 'Rascunho', awaiting_payment: 'Ag. Pagamento', paid: 'Pago',
+  draft: 'Rascunho', pending_payment: 'Ag. Pagamento', awaiting_payment: 'Ag. Pagamento', paid: 'Pago',
   payment_failed: 'Falha Pgto', cancelled: 'Cancelado', refunded: 'Reembolsado',
   new: 'Novo', awaiting_dispatch: 'Ag. Despacho', confirmed: 'Confirmado',
   assigned: 'Atribuído', en_route: 'A Caminho', in_progress: 'Em Andamento',

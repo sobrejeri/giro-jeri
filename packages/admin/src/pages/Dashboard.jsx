@@ -75,11 +75,7 @@ function NovaReservaModal({ open, onClose, onSuccess }) {
 
   const mut = useMutation({
     mutationFn: (body) => api.createManualBooking(body),
-    onSuccess: (data) => {
-      setSuccess(data)
-      onSuccess?.()
-    },
-    onError: (err) => alert(`Erro: ${err.message}`),
+    onSuccess: (data) => { setSuccess(data); onSuccess?.() },
   })
 
   function handleClose() {
@@ -298,6 +294,9 @@ function NovaReservaModal({ open, onClose, onSuccess }) {
                 />
               </div>
 
+              {mut.isError && (
+                <p className="text-sm text-red-400 text-center">{mut.error?.message || 'Erro ao criar reserva'}</p>
+              )}
               <div className="flex gap-2">
                 <Button type="button" variant="secondary" onClick={() => setStep(2)} className="flex-1">← Voltar</Button>
                 <Button type="submit" className="flex-1" disabled={mut.isPending || !form.total_amount || !form.service_date}>

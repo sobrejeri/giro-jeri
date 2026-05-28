@@ -132,7 +132,8 @@ export const api = {
     return results
   },
 
-  // Reservas manuais
+  // Reservas
+  getAdminBookings:     (params = {}) => request(`/api/admin/bookings?${new URLSearchParams(params)}`),
   createManualBooking:  (body) => request('/api/admin/bookings/manual', { method: 'POST', body }),
   confirmPaymentManual: (body) => request('/api/payments/manual-confirm', { method: 'POST', body }),
 
