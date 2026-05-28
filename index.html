@@ -14,10 +14,12 @@
     <title>Giro Jeri — Passeios em Jericoacoara</title>
     <meta name="description" content="Reserve passeios e transfers em Jericoacoara com facilidade. Buggys, lagoas, pôr do sol e muito mais." />
     <script>
-      (function(){
-        var r = sessionStorage.redirect;
-        delete sessionStorage.redirect;
-        if (r && r !== location.pathname) history.replaceState(null, null, r);
+      (function () {
+        var r = sessionStorage.getItem('spa_redirect');
+        if (r) {
+          sessionStorage.removeItem('spa_redirect');
+          if (r !== location.pathname) history.replaceState(null, null, r);
+        }
       })();
     </script>
     <script type="module" crossorigin src="/giro-jeri/assets/index-CrOBm9fm.js"></script>

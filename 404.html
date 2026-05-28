@@ -4,11 +4,24 @@
     <meta charset="utf-8" />
     <title>Giro Jeri</title>
     <script>
-      // Salva o caminho completo e redireciona para a raiz do app.
-      // O index.html restaura a rota via history.replaceState.
-      sessionStorage.redirect = location.pathname + location.search + location.hash;
+      (function () {
+        var path = location.pathname;
+        var dest;
+
+        // Roteia para o app correto com base no prefixo do caminho
+        if (path.startsWith('/giro-jeri/admin')) {
+          dest = '/giro-jeri/admin/';
+        } else if (path.startsWith('/giro-jeri/cooperativa')) {
+          dest = '/giro-jeri/cooperativa/';
+        } else {
+          dest = '/giro-jeri/';
+        }
+
+        // Salva o caminho completo para restaurar após o redirecionamento
+        sessionStorage.setItem('spa_redirect', path + location.search + location.hash);
+        location.replace(dest);
+      })();
     </script>
-    <meta http-equiv="refresh" content="0;URL='/giro-jeri/'">
   </head>
   <body></body>
 </html>
