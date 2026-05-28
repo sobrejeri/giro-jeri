@@ -71,7 +71,7 @@ export const api = {
 
   // Cotações
   getPendingQuotes: ()         => request('/api/transfers/quotes/pending'),
-  getAllQuotes:     ()         => request('/api/transfers/quotes'),
+  getQuotesHistory: ()         => request('/api/transfers/quotes/history'),
   setQuotePrice:   (id, body) => request(`/api/transfers/quotes/${id}/quote`, { method: 'PATCH', body }),
 
   // Veículos
@@ -99,9 +99,6 @@ export const api = {
 
   // Catálogo — Rotas de Transfer (somente leitura para cooperativa)
   getCatalogRoutes: () => request('/api/catalog/transfer-routes'),
-
-  // Veículos (somente leitura)
-  getVehicles: (params = {}) => request(`/api/vehicles?${new URLSearchParams(params)}`),
 
   // Preferências da cooperativa (opt-in por serviço)
   getPreferences: () => request('/api/operator/preferences'),

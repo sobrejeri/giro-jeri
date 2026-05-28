@@ -173,6 +173,20 @@ router.get('/quotes/pending', authenticate, requireOperator, async (req, res, ne
   } catch (err) { next(err); }
 });
 
+// ── GET /api/transfers/quotes/history — cotações já respondidas (operador)
+router.get('/quotes/history', authenticate, requireOperator, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('transfer_quotes')
+      .select('*, users(full_name, phone, email)')
+      .in('status', ['quoted', 'accepted', 'expired', 'rejected'])
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) { next(err); }
+});
+
 // ── PATCH /api/transfers/quotes/:id/quote — cooperativa define preço
 router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res, next) => {
   try {

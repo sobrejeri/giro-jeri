@@ -7,6 +7,8 @@ const TITLES = {
   '/despacho':   'Despacho',
   '/veiculos':   'Gestão de Veículos',
   '/financeiro': 'Relatório Financeiro',
+  '/passeios':   'Passeios que Executo',
+  '/rotas':      'Rotas de Transfer',
 }
 
 export default function Header() {

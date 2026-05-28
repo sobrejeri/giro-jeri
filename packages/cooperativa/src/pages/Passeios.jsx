@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ToggleLeft, ToggleRight, Compass, Clock, Users } from 'lucide-react'
 import { api } from '../lib/api'
@@ -17,6 +17,7 @@ function gi(id = '') {
 
 export default function Passeios() {
   const qc = useQueryClient()
+  const [toggleError, setToggleError] = useState(null)
 
   const { data: tours = [], isLoading: lt } = useQuery({
     queryKey: ['catalog-tours'],
@@ -38,8 +39,11 @@ export default function Passeios() {
 
   const toggleMut = useMutation({
     mutationFn: ({ id, next }) => api.setPreference('tour', id, next),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['operator-prefs'] }),
-    onError:    (err) => alert(`Erro: ${err.message}`),
+    onSuccess:  () => {
+      setToggleError(null)
+      qc.invalidateQueries({ queryKey: ['operator-prefs'] })
+    },
+    onError: (err) => setToggleError(err.message || 'Erro ao salvar preferência'),
   })
 
   if (lt || lp) return <PageSpinner />
@@ -50,19 +54,23 @@ export default function Passeios() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-base font-semibold text-gray-200">Passeios que Executo</h2>
+        <h2 className="text-base font-semibold text-gray-900">Passeios que Executo</h2>
         <p className="text-xs text-gray-500 mt-0.5">
           Selecione quais passeios sua cooperativa realiza.
           Apenas administradores podem criar ou editar passeios.
         </p>
       </div>
 
+      {toggleError && (
+        <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{toggleError}</p>
+      )}
+
       {/* Ativos */}
       <Card>
         <CardHeader>
-          <p className="text-sm font-semibold text-gray-300">Executo ({active.length})</p>
+          <p className="text-sm font-semibold text-gray-700">Executo ({active.length})</p>
         </CardHeader>
-        <div className="divide-y divide-gray-800">
+        <div className="divide-y divide-gray-100">
           {active.map((t) => (
             <TourRow
               key={t.id}
@@ -74,7 +82,7 @@ export default function Passeios() {
           ))}
           {active.length === 0 && (
             <CardBody>
-              <p className="text-sm text-gray-600">Nenhum passeio ativado. Ative abaixo.</p>
+              <p className="text-sm text-gray-400">Nenhum passeio ativado. Ative abaixo.</p>
             </CardBody>
           )}
         </div>
@@ -84,9 +92,9 @@ export default function Passeios() {
       {inactive.length > 0 && (
         <Card>
           <CardHeader>
-            <p className="text-sm font-semibold text-gray-500">Não executo ({inactive.length})</p>
+            <p className="text-sm font-semibold text-gray-400">Não executo ({inactive.length})</p>
           </CardHeader>
-          <div className="divide-y divide-gray-800">
+          <div className="divide-y divide-gray-100">
             {inactive.map((t) => (
               <TourRow
                 key={t.id}
@@ -104,9 +112,9 @@ export default function Passeios() {
         <Card>
           <CardBody>
             <div className="py-10 text-center">
-              <Compass size={32} className="mx-auto text-gray-700 mb-2" />
-              <p className="text-sm text-gray-600">Nenhum passeio no catálogo.</p>
-              <p className="text-xs text-gray-700 mt-1">Aguarde o administrador cadastrar os passeios.</p>
+              <Compass size={32} className="mx-auto text-gray-300 mb-2" />
+              <p className="text-sm text-gray-500">Nenhum passeio no catálogo.</p>
+              <p className="text-xs text-gray-400 mt-1">Aguarde o administrador cadastrar os passeios.</p>
             </div>
           </CardBody>
         </Card>
@@ -127,7 +135,7 @@ function TourRow({ tour: t, enabled, onToggle, pending }) {
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-200 truncate">{t.name}</p>
+        <p className="text-sm font-medium text-gray-900 truncate">{t.name}</p>
         <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
           {t.duration_hours && (
             <>

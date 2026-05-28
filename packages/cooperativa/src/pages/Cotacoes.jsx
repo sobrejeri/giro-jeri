@@ -39,8 +39,8 @@ export default function Cotacoes() {
   })
 
   const { data: all = [], isLoading: loadAll } = useQuery({
-    queryKey: ['quotes-all'],
-    queryFn:  () => api.getAllQuotes(),
+    queryKey: ['quotes-history'],
+    queryFn:  () => api.getQuotesHistory(),
   })
 
   const setQuoteMut = useMutation({
@@ -48,7 +48,7 @@ export default function Cotacoes() {
       api.setQuotePrice(id, { quoted_price: Number(quoted_price), operator_notes }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['quotes-pending'] })
-      qc.invalidateQueries({ queryKey: ['quotes-all'] })
+      qc.invalidateQueries({ queryKey: ['quotes-history'] })
       setModal(null)
       setPrice('')
       setNotes('')
@@ -117,7 +117,7 @@ export default function Cotacoes() {
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
                     <MapPin size={12} className="flex-shrink-0" />
                     <span className="truncate">
-                      {q.origin_description || '—'} → {q.destination_description || '—'}
+                      {q.origin_place_name || q.origin_description || '—'} → {q.destination_place_name || q.destination_description || '—'}
                     </span>
                   </div>
 
@@ -129,7 +129,7 @@ export default function Cotacoes() {
                     </span>
                     <span className="flex items-center gap-1">
                       <Users size={12} />
-                      {q.passengers} pax
+                      {q.people_count || q.passengers} pax
                     </span>
                     {q.quoted_price && (
                       <span className="flex items-center gap-1 text-green-700 font-medium">
@@ -139,10 +139,10 @@ export default function Cotacoes() {
                     )}
                   </div>
 
-                  {q.client_notes && (
+                  {(q.special_notes || q.client_notes) && (
                     <p className="text-xs text-gray-400 italic flex items-start gap-1">
                       <MessageSquare size={11} className="mt-0.5 flex-shrink-0" />
-                      {q.client_notes}
+                      {q.special_notes || q.client_notes}
                     </p>
                   )}
                   <p className="text-xs text-gray-300">Solicitado {fmtDate(q.created_at)}</p>
@@ -173,10 +173,10 @@ export default function Cotacoes() {
             <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
               <p className="font-medium text-gray-900">{modal.users?.full_name || 'Cliente'}</p>
               <p className="text-gray-500">
-                {modal.origin_description} → {modal.destination_description}
+                {modal.origin_place_name || modal.origin_description} → {modal.destination_place_name || modal.destination_description}
               </p>
               <p className="text-gray-500">
-                {modal.service_date} {modal.service_time?.slice(0, 5)} · {modal.passengers} pax
+                {modal.service_date} {modal.service_time?.slice(0, 5)} · {modal.people_count || modal.passengers} pax
               </p>
             </div>
 
