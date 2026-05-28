@@ -268,21 +268,26 @@ router.get('/coupons', requireAdmin, async (req, res, next) => {
     const { is_active, search, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
     let query = supabase
-      .from('coupons').select('*', { count: 'exact' })
+      .from('coupons')
+      .select('*, coupon_redemptions(count)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
     if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
     if (search) query = query.ilike('code', `%${search}%`);
     const { data, error, count } = await query;
     if (error) throw error;
-    res.json({ data, total: count, page: Number(page) });
+    const enriched = (data || []).map((c) => ({
+      ...c,
+      times_used: c.coupon_redemptions?.[0]?.count ?? 0,
+    }));
+    res.json({ data: enriched, total: count, page: Number(page) });
   } catch (err) { next(err); }
 });
 
 router.post('/coupons', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from('coupons').insert({ ...req.body, created_by_user_id: req.user.id }).select().single();
+      .from('coupons').insert(req.body).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
