@@ -13,7 +13,7 @@ import Badge from '../components/ui/Badge'
 const EMPTY = {
   code: '', title: '', discount_type: 'percentage', discount_value: '',
   usage_limit_total: '', valid_from: '', valid_until: '',
-  applicable_service_type: '', min_order_amount: '', is_active: true,
+  applicable_service_type: 'all', min_order_amount: '0', is_active: true,
 }
 
 const fmtDiscount = (c) => {
@@ -53,8 +53,8 @@ export default function Cupons() {
       usage_limit_total:       c.usage_limit_total || '',
       valid_from:              c.valid_from?.slice(0, 10) || '',
       valid_until:             c.valid_until?.slice(0, 10) || '',
-      applicable_service_type: c.applicable_service_type || '',
-      min_order_amount:        c.min_order_amount || '',
+      applicable_service_type: c.applicable_service_type || 'all',
+      min_order_amount:        c.min_order_amount ?? '0',
       is_active:               c.is_active,
     })
     setModal(c)
@@ -71,7 +71,7 @@ export default function Cupons() {
       min_order_amount:        form.min_order_amount  ? Number(form.min_order_amount)  : null,
       valid_from:              form.valid_from  || null,
       valid_until:             form.valid_until || null,
-      applicable_service_type: form.applicable_service_type || null,
+      applicable_service_type: form.applicable_service_type === 'all' ? null : form.applicable_service_type,
       is_active:               form.is_active,
     })
   }
@@ -175,7 +175,7 @@ export default function Cupons() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label={form.discount_type === 'percentage' ? 'Desconto (%)' : 'Desconto (R$)'}
+              label="Desconto (%)"
               type="number" min={0} step={form.discount_type === 'percentage' ? 1 : 0.01}
               max={form.discount_type === 'percentage' ? 100 : undefined}
               value={form.discount_value}
@@ -183,23 +183,24 @@ export default function Cupons() {
               required
             />
             <Input
-              label="Máx. usos (vazio = ilimitado)"
+              label="Máx. usos (opcional)"
               type="number" min={1}
               value={form.usage_limit_total}
               onChange={(e) => setForm({ ...form, usage_limit_total: e.target.value })}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Válido de" type="date" value={form.valid_from}  onChange={(e) => setForm({ ...form, valid_from: e.target.value })} />
-            <Input label="Válido até" type="date" value={form.valid_until} onChange={(e) => setForm({ ...form, valid_until: e.target.value })} />
+            <Input label="Válido de" type="date" value={form.valid_from}  onChange={(e) => setForm({ ...form, valid_from: e.target.value })} required />
+            <Input label="Válido até" type="date" value={form.valid_until} onChange={(e) => setForm({ ...form, valid_until: e.target.value })} required />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Select
               label="Tipo de serviço"
               value={form.applicable_service_type}
               onChange={(e) => setForm({ ...form, applicable_service_type: e.target.value })}
+              required
             >
-              <option value="">Todos</option>
+              <option value="all">Todos</option>
               <option value="tour">Passeios</option>
               <option value="transfer">Transfers</option>
             </Select>
@@ -208,7 +209,7 @@ export default function Cupons() {
               type="number" min={0} step={0.01}
               value={form.min_order_amount}
               onChange={(e) => setForm({ ...form, min_order_amount: e.target.value })}
-              placeholder="0"
+              required
             />
           </div>
           {saveMut.isError && (
