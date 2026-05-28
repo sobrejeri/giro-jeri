@@ -29,7 +29,7 @@ async function tryRefresh() {
 
 function clearSession() {
   Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
-  window.location.href = '/login'
+  window.location.href = (import.meta.env.BASE_URL || '/') + 'login'
 }
 
 // Faz uma requisição autenticada com re-tentativa automática após refresh.
