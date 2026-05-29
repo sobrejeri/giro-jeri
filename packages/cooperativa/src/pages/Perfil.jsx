@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { User, CreditCard, Building2, CheckCircle } from 'lucide-react'
+import { User, CreditCard, Building2, CheckCircle, Camera, Loader2 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
@@ -8,11 +8,11 @@ import Input, { Select } from '../components/ui/Input'
 import Button from '../components/ui/Button'
 
 const PIX_TYPES = [
-  { value: 'cpf',        label: 'CPF'            },
-  { value: 'cnpj',       label: 'CNPJ'           },
-  { value: 'email',      label: 'E-mail'         },
-  { value: 'phone',      label: 'Telefone'       },
-  { value: 'random_key', label: 'Chave aleatória'},
+  { value: 'cpf',        label: 'CPF'             },
+  { value: 'cnpj',       label: 'CNPJ'            },
+  { value: 'email',      label: 'E-mail'          },
+  { value: 'phone',      label: 'Telefone'        },
+  { value: 'random_key', label: 'Chave aleatória' },
 ]
 
 const ACCOUNT_TYPES = [
@@ -20,9 +20,15 @@ const ACCOUNT_TYPES = [
   { value: 'poupanca', label: 'Conta Poupança' },
 ]
 
+const DOC_TYPES = [
+  { value: 'cpf',  label: 'CPF',  placeholder: '000.000.000-00',      maxLength: 14 },
+  { value: 'cnpj', label: 'CNPJ', placeholder: '00.000.000/0001-00',  maxLength: 18 },
+]
+
 const EMPTY = {
   full_name:           '',
   phone:               '',
+  document_type:       'cpf',
   document_number:     '',
   birth_date:          '',
   pix_key_type:        '',
@@ -35,9 +41,12 @@ const EMPTY = {
 }
 
 export default function Perfil() {
-  const qc = useQueryClient()
-  const [form, setForm]       = useState(EMPTY)
-  const [saved, setSaved]     = useState(false)
+  const qc            = useQueryClient()
+  const fileRef       = useRef(null)
+  const [form, setForm]           = useState(EMPTY)
+  const [saved, setSaved]         = useState(false)
+  const [photoPreview, setPreview] = useState(null)
+  const [photoError, setPhotoError] = useState(null)
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['operator-profile'],
@@ -49,6 +58,7 @@ export default function Perfil() {
     setForm({
       full_name:           profile.full_name           || '',
       phone:               profile.phone               || '',
+      document_type:       profile.document_type       || 'cpf',
       document_number:     profile.document_number     || '',
       birth_date:          profile.birth_date          || '',
       pix_key_type:        profile.pix_key_type        || '',
@@ -70,8 +80,35 @@ export default function Perfil() {
     },
   })
 
+  const photoMut = useMutation({
+    mutationFn: (photo_data) => api.uploadPhoto(photo_data),
+    onSuccess: (data) => {
+      setPhotoError(null)
+      setPreview(data?.url || null)
+      qc.invalidateQueries({ queryKey: ['operator-profile'] })
+    },
+    onError: (err) => setPhotoError(err.message || 'Erro ao enviar foto'),
+  })
+
   function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  function handlePhotoChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      setPhotoError('Imagem muito grande. Máximo 2 MB.')
+      return
+    }
+    setPhotoError(null)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const base64 = ev.target.result
+      setPreview(base64)
+      photoMut.mutate(base64)
+    }
+    reader.readAsDataURL(file)
   }
 
   function handleSubmit(e) {
@@ -79,7 +116,7 @@ export default function Perfil() {
     saveMut.mutate({
       full_name:           form.full_name           || undefined,
       phone:               form.phone               || undefined,
-      document_type:       form.document_number ? 'cpf' : undefined,
+      document_type:       form.document_number ? form.document_type : null,
       document_number:     form.document_number     || null,
       birth_date:          form.birth_date          || null,
       pix_key_type:        form.pix_key_type        || null,
@@ -94,6 +131,10 @@ export default function Perfil() {
 
   if (isLoading) return <PageSpinner />
 
+  const currentPhoto = photoPreview || profile?.profile_photo_url
+  const initials     = (form.full_name || profile?.full_name || 'O')[0].toUpperCase()
+  const docMeta      = DOC_TYPES.find((d) => d.value === form.document_type) || DOC_TYPES[0]
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
 
@@ -107,6 +148,40 @@ export default function Perfil() {
         </CardHeader>
         <CardBody>
           <div className="space-y-4">
+
+            {/* Avatar */}
+            <div className="flex items-center gap-4">
+              <div className="relative group">
+                <div
+                  onClick={() => fileRef.current?.click()}
+                  className="w-20 h-20 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center cursor-pointer ring-2 ring-white shadow-sm"
+                >
+                  {currentPhoto ? (
+                    <img src={currentPhoto} alt="Foto" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-2xl font-bold text-brand">{initials}</span>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    {photoMut.isPending
+                      ? <Loader2 size={20} className="text-white animate-spin" />
+                      : <Camera size={20} className="text-white" />}
+                  </div>
+                </div>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Foto de perfil</p>
+                <p className="text-xs text-gray-400 mt-0.5">JPG, PNG ou WebP · máx. 2 MB</p>
+                {photoError && <p className="text-xs text-red-500 mt-1">{photoError}</p>}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Nome completo"
@@ -121,6 +196,7 @@ export default function Perfil() {
                 className="bg-gray-50 cursor-not-allowed"
               />
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Telefone / WhatsApp"
@@ -135,13 +211,29 @@ export default function Perfil() {
                 onChange={(e) => set('birth_date', e.target.value)}
               />
             </div>
-            <Input
-              label="CPF"
-              placeholder="000.000.000-00"
-              value={form.document_number}
-              onChange={(e) => set('document_number', e.target.value)}
-              maxLength={14}
-            />
+
+            {/* CPF / CNPJ */}
+            <div className="grid grid-cols-3 gap-3">
+              <Select
+                label="Tipo de documento"
+                value={form.document_type}
+                onChange={(e) => { set('document_type', e.target.value); set('document_number', '') }}
+              >
+                {DOC_TYPES.map((d) => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </Select>
+              <div className="col-span-2">
+                <Input
+                  label={docMeta.label}
+                  placeholder={docMeta.placeholder}
+                  value={form.document_number}
+                  onChange={(e) => set('document_number', e.target.value)}
+                  maxLength={docMeta.maxLength}
+                />
+              </div>
+            </div>
+
           </div>
         </CardBody>
       </Card>
@@ -169,11 +261,11 @@ export default function Perfil() {
             <Input
               label="Chave PIX"
               placeholder={
-                form.pix_key_type === 'cpf'        ? '000.000.000-00'        :
-                form.pix_key_type === 'cnpj'       ? '00.000.000/0001-00'    :
-                form.pix_key_type === 'email'      ? 'seu@email.com'         :
-                form.pix_key_type === 'phone'      ? '+55 88 99999-9999'     :
-                form.pix_key_type === 'random_key' ? 'Chave aleatória'       :
+                form.pix_key_type === 'cpf'        ? '000.000.000-00'       :
+                form.pix_key_type === 'cnpj'       ? '00.000.000/0001-00'   :
+                form.pix_key_type === 'email'      ? 'seu@email.com'        :
+                form.pix_key_type === 'phone'      ? '+55 88 99999-9999'    :
+                form.pix_key_type === 'random_key' ? 'Cole a chave aleatória' :
                 'Informe a chave'
               }
               value={form.pix_key}

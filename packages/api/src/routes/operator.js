@@ -12,6 +12,7 @@ import { authenticate, requireOperator } from '../middleware/auth.js';
 
 const PROFILE_FIELDS = `
   id, full_name, email, phone, document_type, document_number, birth_date,
+  profile_photo_url,
   pix_key_type, pix_key,
   bank_name, bank_agency, bank_account_number, bank_account_type, bank_document
 `.trim();
@@ -19,7 +20,7 @@ const PROFILE_FIELDS = `
 const profileSchema = z.object({
   full_name:           z.string().min(2).max(200).optional(),
   phone:               z.string().min(10).max(30).optional().nullable(),
-  document_type:       z.enum(['cpf', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
+  document_type:       z.enum(['cpf', 'cnpj', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
   document_number:     z.string().max(30).optional().nullable(),
   birth_date:          z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   pix_key_type:        z.enum(['cpf', 'cnpj', 'email', 'phone', 'random_key']).optional().nullable(),

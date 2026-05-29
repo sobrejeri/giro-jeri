@@ -101,8 +101,9 @@ export const api = {
   getCatalogRoutes: () => request('/api/catalog/transfer-routes'),
 
   // Perfil do operador + conta de recebimento
-  getProfile:    ()     => request('/api/operator/profile'),
-  updateProfile: (body) => request('/api/operator/profile', { method: 'PATCH', body }),
+  getProfile:    ()           => request('/api/operator/profile'),
+  updateProfile: (body)       => request('/api/operator/profile', { method: 'PATCH', body }),
+  uploadPhoto:   (photo_data) => request('/api/auth/me/photo', { method: 'POST', body: { photo_data } }),
 
   // Preferências da cooperativa (opt-in por serviço)
   getPreferences: () => request('/api/operator/preferences'),
