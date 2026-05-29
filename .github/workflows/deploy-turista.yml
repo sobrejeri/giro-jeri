@@ -54,6 +54,25 @@ jobs:
           mkdir -p dist/admin
           cp -r packages/admin/dist/. dist/admin/
 
+      - name: Create SPA 404.html
+        run: |
+          cat > dist/404.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head><meta charset="utf-8"><title>Giro Jeri</title></head>
+          <script>
+          (function(){
+            var l = window.location;
+            var p = l.pathname;
+            sessionStorage.setItem('spa_redirect', p + l.search + l.hash);
+            if      (p.indexOf('/admin')       !== -1) l.replace(l.protocol+'//'+l.host+'/giro-jeri/admin/');
+            else if (p.indexOf('/cooperativa') !== -1) l.replace(l.protocol+'//'+l.host+'/giro-jeri/cooperativa/');
+            else                                       l.replace(l.protocol+'//'+l.host+'/giro-jeri/');
+          })();
+          </script>
+          </html>
+          EOF
+
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
