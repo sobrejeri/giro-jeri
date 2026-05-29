@@ -49,14 +49,22 @@ export default function CheckoutPayment() {
       navigate('/checkout/processando', {
         state: {
           ...state,
-          payment_id:   result.payment_id,
-          booking_id:   result.booking_id,
-          booking_code: result.booking_code,
-          pix_code:     result.pix_code,
-          qr_base64:    result.qr_base64,
-          expires_at:   result.expires_at,
-          test_mode:    result.test_mode,
-          payment_method: method,
+          payment_id:        result.payment_id,
+          booking_id:        result.booking_id,
+          booking_code:      result.booking_code,
+          amount:            result.amount,
+          pix_code:          result.pix_code,
+          qr_base64:         result.qr_base64,
+          expires_at:        result.expires_at,
+          // manual payment fields
+          manual_mode:       result.manual_mode,
+          pix_key_type:      result.pix_key_type,
+          pix_key:           result.pix_key,
+          bank_name:         result.bank_name,
+          bank_agency:       result.bank_agency,
+          bank_account:      result.bank_account,
+          bank_account_type: result.bank_account_type,
+          payment_method:    method,
         },
       })
     } catch (err) {

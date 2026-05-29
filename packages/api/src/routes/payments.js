@@ -150,7 +150,7 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
   try {
     const { data: payment } = await supabase
       .from('payments')
-      .select('id, status, booking_id, gateway_transaction_id, expires_at, bookings(booking_code, status_commercial)')
+      .select('id, status, booking_id, gateway_name, gateway_transaction_id, expires_at, bookings(booking_code, status_commercial)')
       .eq('id', req.params.id)
       .single()
 
