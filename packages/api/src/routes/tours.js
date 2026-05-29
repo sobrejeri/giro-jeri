@@ -110,7 +110,7 @@ router.get('/:id/vehicles', async (req, res, next) => {
       if (tour?.region_id) q = q.eq('region_id', tour.region_id);
 
       const { data: fallback } = await q;
-      return res.json(fallback || []);
+      return res.json((fallback || []).map(v => ({ ...v, base_price: null })));
     }
 
     res.json(

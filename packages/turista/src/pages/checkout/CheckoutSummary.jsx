@@ -185,14 +185,17 @@ export default function CheckoutSummary() {
   const cartHasItems  = cartItems.length > 0
 
   const unitPriceFor = (vehicle) => {
-    if (isPrivateTour)                      return vehicle.base_price
+    if (isPrivateTour)                       return vehicle.base_price ?? null
     if (isTransfer && ls.transfer_unit_price) return ls.transfer_unit_price
     return null
   }
 
+  const hasPricing = !isPrivateTour || !cartHasItems ||
+    cartItems.every(({ vehicle }) => vehicle.base_price != null && !isNaN(Number(vehicle.base_price)))
+
   const activeTotal = (() => {
     if (isPrivateTour && cartHasItems)
-      return cartItems.reduce((s, { vehicle, qty }) => s + Number(vehicle.base_price) * qty, 0)
+      return cartItems.reduce((s, { vehicle, qty }) => s + (Number(vehicle.base_price) || 0) * qty, 0)
     if (isSharedTour && ls.price_per_person)
       return Number(ls.price_per_person) * people
     if (isTransfer && ls.transfer_unit_price && cartHasItems)
@@ -433,12 +436,20 @@ export default function CheckoutSummary() {
         {/* Price Breakdown */}
         <div className="bg-white rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
           <h2 className="text-[15px] font-bold text-gray-900 mb-3">Resumo de preços</h2>
+          {!hasPricing && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
+              <AlertCircle size={13} className="text-amber-500 shrink-0" />
+              <p className="text-[11px] text-amber-700">Preço não configurado para este passeio. Contate a cooperativa.</p>
+            </div>
+          )}
           <div className="space-y-2">
             {isPrivateTour && cartHasItems ? (
               cartItems.map(({ vehicle, qty }) => (
                 <div key={vehicle.id} className="flex items-center justify-between">
                   <span className="text-[13px] text-gray-500">{qty}x {vehicle.name}</span>
-                  <span className="text-[13px] font-semibold text-gray-900">R$ {fmt(Number(vehicle.base_price) * qty)}</span>
+                  <span className="text-[13px] font-semibold text-gray-900">
+                    {vehicle.base_price != null ? `R$ ${fmt(Number(vehicle.base_price) * qty)}` : '—'}
+                  </span>
                 </div>
               ))
             ) : (
@@ -451,7 +462,10 @@ export default function CheckoutSummary() {
             )}
             <div className="border-t border-gray-100 pt-2 mt-1 flex items-center justify-between">
               <span className="text-[15px] font-bold text-gray-900">Total</span>
-              <span className="text-[22px] font-bold text-brand">R$ {fmt(activeTotal)}</span>
+              {hasPricing
+                ? <span className="text-[22px] font-bold text-brand">R$ {fmt(activeTotal)}</span>
+                : <span className="text-[14px] font-semibold text-amber-600">A confirmar</span>
+              }
             </div>
           </div>
         </div>
@@ -479,7 +493,10 @@ export default function CheckoutSummary() {
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 z-30 px-4 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
         <div className="mb-3">
           <p className="text-[11px] text-gray-400">Total a pagar</p>
-          <p className="text-[20px] font-bold text-brand">R$ {fmt(activeTotal)}</p>
+          {hasPricing
+            ? <p className="text-[20px] font-bold text-brand">R$ {fmt(activeTotal)}</p>
+            : <p className="text-[14px] font-semibold text-amber-600">Preço a confirmar</p>
+          }
         </div>
         <div className="flex gap-2">
           {editing ? (
@@ -510,10 +527,15 @@ export default function CheckoutSummary() {
                 Editar
               </button>
               <button
-                onClick={() => navigate('/checkout/pagamento', { state: paymentState })}
-                className="flex-1 bg-brand text-white py-3 rounded-xl font-bold text-[14px] shadow-md active:bg-orange-700 active:scale-[0.97] transition-all"
+                onClick={hasPricing ? () => navigate('/checkout/pagamento', { state: paymentState }) : undefined}
+                disabled={!hasPricing}
+                className={`flex-1 py-3 rounded-xl font-bold text-[14px] transition-all ${
+                  hasPricing
+                    ? 'bg-brand text-white shadow-md active:bg-orange-700 active:scale-[0.97]'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
               >
-                Ir para pagamento
+                {hasPricing ? 'Ir para pagamento' : 'Sem preço configurado'}
               </button>
             </>
           )}

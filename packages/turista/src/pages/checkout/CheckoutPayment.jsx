@@ -23,10 +23,11 @@ export default function CheckoutPayment() {
   const {
     service_name, service_type, booking_mode,
     service_date, service_date_iso, service_time,
-    people_count, total_price, region_id, service_id,
+    people_count, total_price: rawPrice, region_id, service_id,
     vehicles = [], origin_text, destination_text, cover_image_url,
   } = state
 
+  const total_price = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
   const isPrivate    = booking_mode === 'private'
   const subtitleParts = [service_date, service_time, `${people_count} ${people_count === 1 ? 'pessoa' : 'pessoas'}`].filter(Boolean)
 
