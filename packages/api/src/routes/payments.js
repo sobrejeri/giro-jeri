@@ -1,12 +1,18 @@
 import { Router }    from 'express'
 import { supabase }  from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
-import { createPixPayment, getMpPaymentStatus } from '../services/mercadoPago.js'
 
 const router = Router()
 
+async function getPaymentSettings() {
+  const { data = [] } = await supabase
+    .from('system_settings')
+    .select('setting_key, setting_value')
+    .like('setting_key', 'payment_%')
+  return Object.fromEntries(data.map((s) => [s.setting_key, s.setting_value]))
+}
+
 // ── POST /api/payments/intent ───────────────────────────
-// Cria reserva + pagamento e retorna dados do PIX
 router.post('/intent', authenticate, async (req, res, next) => {
   try {
     const {
@@ -23,10 +29,14 @@ router.post('/intent', authenticate, async (req, res, next) => {
       return res.status(400).json({ error: 'Dados incompletos para criar reserva' })
     }
 
-    // ── 1. Gera código da reserva ──────────────────────
+    // ── 1. Lê configurações do gateway ─────────────────
+    const cfg     = await getPaymentSettings()
+    const gateway = cfg.payment_gateway || 'manual'
+
+    // ── 2. Gera código da reserva ──────────────────────
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
 
-    // ── 2. Cria a reserva ──────────────────────────────
+    // ── 3. Cria a reserva ──────────────────────────────
     const { data: booking, error: bErr } = await supabase
       .from('bookings')
       .insert({
@@ -52,7 +62,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     if (bErr) throw bErr
 
-    // ── 3. Insere veículos da reserva ──────────────────
+    // ── 4. Insere veículos da reserva ──────────────────
     if (vehicles.length > 0) {
       const vRows = vehicles.map((v) => ({
         booking_id:  booking.id,
@@ -63,40 +73,55 @@ router.post('/intent', authenticate, async (req, res, next) => {
       await supabase.from('booking_vehicles').insert(vRows)
     }
 
-    // ── 4. Cria o pagamento (PIX via MP) ───────────────
-    let pixData = null
-    let mpId    = null
+    // ── 5. Processa pagamento conforme gateway ─────────
+    let gatewayTransactionId = null
+    let expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+    let pixCode   = null
+    let qrBase64  = null
 
-    if (payment_method === 'pix') {
-      const userInfo = await supabase.from('users').select('full_name, email').eq('id', req.user.id).single()
-      pixData = await createPixPayment({
-        amount:      Number(total_price),
-        description: service_name || `Reserva ${bookingCode}`,
-        payerEmail:  userInfo.data?.email,
-        payerName:   userInfo.data?.full_name,
-        externalRef: booking.id,
-      })
-      mpId = pixData.mp_id
+    if (gateway === 'mercado_pago') {
+      // Import dinâmico para não quebrar quando não configurado
+      try {
+        const { createPixPayment } = await import('../services/mercadoPago.js')
+        const userInfo = await supabase.from('users').select('full_name, email').eq('id', req.user.id).single()
+        const pixData  = await createPixPayment({
+          amount:      Number(total_price),
+          description: service_name || `Reserva ${bookingCode}`,
+          payerEmail:  userInfo.data?.email,
+          payerName:   userInfo.data?.full_name,
+          externalRef: booking.id,
+        })
+        gatewayTransactionId = pixData.mp_id
+        expiresAt            = pixData.expires_at || expiresAt
+        pixCode              = pixData.pix_code
+        qrBase64             = pixData.qr_base64
+      } catch (mpErr) {
+        console.error('Mercado Pago error — falling back to manual:', mpErr.message)
+      }
     }
+    // asaas / pagarme: adapters a implementar quando credentials disponíveis
 
+    // ── 6. Registra pagamento ──────────────────────────
     const { data: payment, error: pErr } = await supabase
       .from('payments')
       .insert({
-        booking_id:              booking.id,
-        gateway_name:            'mercado_pago',
-        gateway_transaction_id:  mpId,
+        booking_id:             booking.id,
+        gateway_name:           gateway,
+        gateway_transaction_id: gatewayTransactionId,
         payment_method,
-        payment_type:            'full',
-        amount_gross:            Number(total_price),
-        gateway_fee_amount:      0,
-        currency:                'BRL',
-        status:                  'pending',
-        expires_at:              pixData?.expires_at || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        payment_type:           'full',
+        amount_gross:           Number(total_price),
+        gateway_fee_amount:     0,
+        currency:               'BRL',
+        status:                 'pending',
+        expires_at:             expiresAt,
       })
       .select()
       .single()
 
     if (pErr) throw pErr
+
+    const manual = gateway === 'manual' || !gatewayTransactionId
 
     res.json({
       booking_id:   booking.id,
@@ -104,9 +129,17 @@ router.post('/intent', authenticate, async (req, res, next) => {
       payment_id:   payment.id,
       amount:       Number(total_price),
       expires_at:   payment.expires_at,
-      pix_code:     pixData?.pix_code  || null,
-      qr_base64:    pixData?.qr_base64 || null,
-      test_mode:    pixData?.test_mode  || false,
+      // gateway-generated PIX (null when manual)
+      pix_code:     pixCode,
+      qr_base64:    qrBase64,
+      // manual payment: show platform's PIX/bank info
+      manual_mode:      manual,
+      pix_key_type:     manual ? (cfg.payment_admin_pix_key_type || null) : null,
+      pix_key:          manual ? (cfg.payment_admin_pix_key      || null) : null,
+      bank_name:        manual ? (cfg.payment_admin_bank_name    || null) : null,
+      bank_agency:      manual ? (cfg.payment_admin_bank_agency  || null) : null,
+      bank_account:     manual ? (cfg.payment_admin_bank_account || null) : null,
+      bank_account_type:manual ? (cfg.payment_admin_bank_account_type || null) : null,
     })
   } catch (err) { next(err) }
 })
@@ -130,9 +163,10 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
       return res.json({ status: 'expired', booking_id: payment.booking_id })
     }
 
-    // Se ainda pendente, consulta MP para atualização em tempo real
-    if (payment.status === 'pending' && payment.gateway_transaction_id && !payment.gateway_transaction_id.startsWith('TEST-')) {
+    // Se MP ativo e pendente, consulta gateway em tempo real
+    if (payment.status === 'pending' && payment.gateway_name === 'mercado_pago' && payment.gateway_transaction_id && !payment.gateway_transaction_id.startsWith('TEST-')) {
       try {
+        const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
         const mpStatus = await getMpPaymentStatus(payment.gateway_transaction_id)
         if (mpStatus === 'approved') {
           await onPaymentApproved(payment)

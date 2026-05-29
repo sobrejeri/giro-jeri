@@ -221,18 +221,20 @@ export default function CheckoutSummary() {
   ]
 
   const paymentState = {
-    region_id:    ls.region_id,
-    service_type: ls.service_type,
-    service_id:   ls.service_id,
-    booking_mode: ls.booking_mode,
-    service_date: dateLabel,
-    service_time: time || 'A confirmar',
-    people_count: people,
-    vehicles:     cartHasItems
+    region_id:       ls.region_id,
+    service_type:    ls.service_type,
+    service_id:      ls.service_id,
+    booking_mode:    ls.booking_mode,
+    service_date:    dateLabel,
+    service_date_iso: format(date, 'yyyy-MM-dd'),
+    service_time:    time || 'A confirmar',
+    people_count:    people,
+    vehicles:        cartHasItems
       ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty }))
       : ls.vehicles,
-    total_price:  activeTotal,
-    service_name: ls.service_name,
+    total_price:     activeTotal,
+    service_name:    ls.service_name,
+    cover_image_url: ls.cover_image_url || null,
   }
 
   const idx   = gi(ls.service_id || ls.service_name)
