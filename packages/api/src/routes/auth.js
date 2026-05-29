@@ -145,7 +145,7 @@ const updateProfileSchema = z.object({
   full_name:               z.string().min(2).max(200).optional(),
   phone:                   z.string().min(10).max(30).optional(),
   birth_date:              z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-  document_type:           z.enum(['cpf', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
+  document_type:           z.enum(['cpf', 'cnpj', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
   document_number:         z.string().max(30).optional().nullable(),
   nationality:             z.string().max(100).optional().nullable(),
   gender:                  z.enum(['male', 'female', 'non_binary', 'prefer_not_to_say']).optional().nullable(),

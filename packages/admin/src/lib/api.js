@@ -61,7 +61,9 @@ async function request(path, options = {}, isRetry = false) {
 export const api = {
   // Auth
   login: (body) => request('/api/auth/login', { method: 'POST', body }),
-  me:    () => request('/api/auth/me'),
+  me:           ()           => request('/api/auth/me'),
+  updateMe:     (body)       => request('/api/auth/me', { method: 'PATCH', body }),
+  uploadPhoto:  (photo_data) => request('/api/auth/me/photo', { method: 'POST', body: { photo_data } }),
 
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
