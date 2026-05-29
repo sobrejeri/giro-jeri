@@ -134,7 +134,7 @@ router.post('/users', requireAdmin, async (req, res, next) => {
 // ── PATCH /api/admin/users/:id ─────────────────────────
 router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   try {
-    const allowed = ['user_type', 'is_active', 'phone', 'email'];
+    const allowed = ['user_type', 'is_active', 'phone', 'email', 'platform_split_pct'];
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))
     );

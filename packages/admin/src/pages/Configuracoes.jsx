@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Settings, RotateCcw, CreditCard, Landmark, SplitSquareHorizontal,
-  Eye, EyeOff, CheckCircle,
+  Eye, EyeOff, CheckCircle, Pencil,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -201,6 +201,152 @@ function TabSistema({ settings, qc }) {
   )
 }
 
+// ── Split por Cooperativa ─────────────────────────────────
+function SplitPorCooperativa({ globalAdminPct, qc }) {
+  const [overrides, setOverrides] = useState({})
+  const [saved, setSaved]         = useState(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['operators-split'],
+    queryFn:  () => api.getUsers({ user_type: 'operator', limit: 100 }),
+  })
+
+  const operators = data?.data || []
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, pct }) => api.updateUser(id, { platform_split_pct: pct }),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['operators-split'] })
+      setOverrides((prev) => { const n = { ...prev }; delete n[id]; return n })
+      setSaved(id)
+      setTimeout(() => setSaved(null), 2500)
+    },
+  })
+
+  function startEdit(op) {
+    const current = op.platform_split_pct != null ? String(op.platform_split_pct) : String(globalAdminPct)
+    setOverrides((prev) => ({ ...prev, [op.id]: current }))
+  }
+
+  function cancelEdit(id) {
+    setOverrides((prev) => { const n = { ...prev }; delete n[id]; return n })
+  }
+
+  function saveEdit(op) {
+    const pct = overrides[op.id]
+    updateMut.mutate({ id: op.id, pct: pct === '' ? null : Number(pct) })
+  }
+
+  function clearOverride(op) {
+    updateMut.mutate({ id: op.id, pct: null })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <SplitSquareHorizontal size={16} className="text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-200">Split por Cooperativa</h2>
+        </div>
+      </CardHeader>
+      <CardBody>
+        <p className="text-xs text-gray-500 mb-4">
+          Percentual da plataforma por cooperativa. Quando não definido, usa o padrão global ({globalAdminPct}%).
+        </p>
+        {isLoading ? (
+          <p className="text-xs text-gray-600">Carregando cooperativas…</p>
+        ) : operators.length === 0 ? (
+          <p className="text-xs text-gray-600">Nenhuma cooperativa cadastrada.</p>
+        ) : (
+          <div className="space-y-2">
+            {operators.map((op) => {
+              const isEditing    = op.id in overrides
+              const hasOverride  = op.platform_split_pct != null
+              const isSaved      = saved === op.id
+              const adminPct     = hasOverride ? Number(op.platform_split_pct) : globalAdminPct
+              const operatorPct  = Math.max(0, 100 - adminPct)
+
+              return (
+                <div
+                  key={op.id}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-900 border border-gray-800"
+                >
+                  {/* Nome */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-200 truncate">{op.full_name}</p>
+                    <p className="text-xs text-gray-600 truncate">{op.email || op.phone || '—'}</p>
+                  </div>
+
+                  {/* Percentuais */}
+                  {isEditing ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={overrides[op.id]}
+                          onChange={(e) => setOverrides((prev) => ({ ...prev, [op.id]: e.target.value }))}
+                          className="w-16 h-8 px-2 rounded-lg border border-gray-600 bg-gray-800 text-sm text-gray-100 text-center focus:outline-none focus:border-brand"
+                        />
+                        <span className="text-xs text-gray-500">% admin</span>
+                      </div>
+                      <Button size="sm" onClick={() => saveEdit(op)} disabled={updateMut.isPending}>
+                        <Save size={13} />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => cancelEdit(op.id)}>
+                        <RotateCcw size={13} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 shrink-0">
+                      {isSaved ? (
+                        <span className="flex items-center gap-1 text-xs text-green-400">
+                          <CheckCircle size={13} /> Salvo!
+                        </span>
+                      ) : (
+                        <div className="text-right">
+                          <p className="text-xs text-gray-400">
+                            <span className="text-brand font-semibold">{adminPct}%</span>
+                            {' '}admin ·{' '}
+                            <span className="text-green-400 font-semibold">{operatorPct}%</span>
+                            {' '}cooperativa
+                          </p>
+                          {hasOverride ? (
+                            <p className="text-xs text-amber-500">personalizado</p>
+                          ) : (
+                            <p className="text-xs text-gray-600">padrão global</p>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => startEdit(op)}
+                        className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg transition-colors"
+                        title="Editar split"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      {hasOverride && (
+                        <button
+                          onClick={() => clearOverride(op)}
+                          className="p-1.5 text-gray-600 hover:text-amber-400 hover:bg-gray-700 rounded-lg transition-colors"
+                          title="Voltar ao padrão global"
+                        >
+                          <RotateCcw size={13} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
 // ── Pagamentos tab ────────────────────────────────────────
 function TabPagamentos({ settings, qc }) {
   const map = settingsToMap(settings)
@@ -345,6 +491,9 @@ function TabPagamentos({ settings, qc }) {
           </div>
         </CardBody>
       </Card>
+
+      {/* Split por cooperativa */}
+      <SplitPorCooperativa globalAdminPct={adminPct} qc={qc} />
 
       {/* Conta de recebimento da plataforma */}
       <Card>
