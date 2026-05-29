@@ -9,6 +9,7 @@ import Veiculos from './pages/Veiculos'
 import Financeiro from './pages/Financeiro'
 import Passeios from './pages/Passeios'
 import Rotas from './pages/Rotas'
+import Perfil from './pages/Perfil'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="passeios"   element={<Passeios />} />
         <Route path="rotas"      element={<Rotas />} />
+        <Route path="perfil"     element={<Perfil />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

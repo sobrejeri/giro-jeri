@@ -9,6 +9,7 @@ const TITLES = {
   '/financeiro': 'Relatório Financeiro',
   '/passeios':   'Passeios que Executo',
   '/rotas':      'Rotas de Transfer',
+  '/perfil':     'Meu Perfil',
 }
 
 export default function Header() {

@@ -100,6 +100,10 @@ export const api = {
   // Catálogo — Rotas de Transfer (somente leitura para cooperativa)
   getCatalogRoutes: () => request('/api/catalog/transfer-routes'),
 
+  // Perfil do operador + conta de recebimento
+  getProfile:    ()     => request('/api/operator/profile'),
+  updateProfile: (body) => request('/api/operator/profile', { method: 'PATCH', body }),
+
   // Preferências da cooperativa (opt-in por serviço)
   getPreferences: () => request('/api/operator/preferences'),
   setPreference:  (type, entityId, isActive) =>

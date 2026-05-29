@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, MessageSquare, Truck, Car, BarChart3, LogOut, Compass, MapPin } from 'lucide-react'
+import { LayoutDashboard, MessageSquare, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const NAV = [
@@ -10,6 +10,7 @@ const NAV = [
   { to: '/passeios',   icon: Compass,         label: 'Passeios'   },
   { to: '/rotas',      icon: MapPin,          label: 'Rotas'      },
   { to: '/financeiro', icon: BarChart3,       label: 'Financeiro' },
+  { to: '/perfil',     icon: UserCircle,      label: 'Meu Perfil' },
 ]
 
 export default function Sidebar() {
