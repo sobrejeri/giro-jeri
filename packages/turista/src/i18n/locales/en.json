@@ -162,6 +162,8 @@
       "cancelled": "Cancelled"
     },
     "active": "Active",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
     "history": "History",
     "all": "All"
   },

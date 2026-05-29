@@ -162,6 +162,8 @@
       "cancelled": "Cancelado"
     },
     "active": "Ativas",
+    "completed": "Concluídas",
+    "cancelled": "Canceladas",
     "history": "Histórico",
     "all": "Todas"
   },

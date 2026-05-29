@@ -250,8 +250,10 @@ export default function Tours() {
   /* ── Queries ──────────────────────────────────────────────── */
   const geo = getServiceQuery()
   const { data: toursData, isLoading: toursLoading } = useQuery({
-    queryKey: ['tours', region?.id, userCoords?.lat, userCoords?.lon],
+    queryKey: ['tours', region?.id],
     queryFn: () => api.getTours(geo),
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
   })
   const tours = toursData?.tours || toursData || []
   const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
@@ -260,13 +262,15 @@ export default function Tours() {
     queryKey: ['tour-vehicles', selectedTour?.id],
     queryFn: () => api.getTourVehicles(selectedTour.id),
     enabled: !!selectedTour?.id && mode === 'private',
+    staleTime: 5 * 60 * 1000,
   })
 
   // Fallback: se o passeio não tiver regras de preço, usa todos os veículos ativos
   const { data: allVehiclesData } = useQuery({
-    queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
+    queryKey: ['vehicles', region?.id],
     queryFn: () => api.getVehicles({ is_active: 'true', ...geo }),
     enabled: vehiclesFetched && (vehiclesData || []).length === 0 && mode === 'private',
+    staleTime: 5 * 60 * 1000,
   })
 
   const vehicles = useMemo(
