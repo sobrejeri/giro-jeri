@@ -67,7 +67,7 @@ function fmt(v) {
 }
 
 // ── Cancel Dialog ────────────────────────────────────────────────
-function CancelDialog({ bookingCode, onConfirm, onClose, loading }) {
+function CancelDialog({ bookingCode, onConfirm, onClose, loading, error }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -79,9 +79,12 @@ function CancelDialog({ bookingCode, onConfirm, onClose, loading }) {
         <p className="text-sm text-gray-500 text-center mb-1">
           Reserva <span className="font-semibold text-gray-700">{bookingCode}</span>
         </p>
-        <p className="text-xs text-gray-400 text-center mb-6">
+        <p className="text-xs text-gray-400 text-center mb-4">
           Esta ação não pode ser desfeita. Verifique a política de cancelamento antes de prosseguir.
         </p>
+        {error && (
+          <p className="text-xs text-red-500 bg-red-50 rounded-xl px-3 py-2 text-center mb-4">{error}</p>
+        )}
         <div className="flex gap-3">
           <button
             onClick={onClose}
@@ -111,6 +114,7 @@ export default function BookingDetail() {
   const [copied,        setCopied]        = useState(false)
   const [showCancel,    setShowCancel]    = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelError,   setCancelError]   = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['booking', id],
@@ -118,17 +122,18 @@ export default function BookingDetail() {
     enabled:  !!id,
   })
 
-  const booking = data?.booking || data
+  const booking = data
 
   async function handleConfirmCancel() {
     setCancelLoading(true)
+    setCancelError(null)
     try {
       await api.cancelBooking(id, { reason: 'Cancelado pelo cliente' })
       queryClient.invalidateQueries({ queryKey: ['my-bookings'] })
       queryClient.invalidateQueries({ queryKey: ['booking', id] })
       setShowCancel(false)
     } catch (err) {
-      alert(err.message || 'Erro ao cancelar')
+      setCancelError(err.message || 'Erro ao cancelar')
     } finally {
       setCancelLoading(false)
     }
@@ -182,8 +187,8 @@ export default function BookingDetail() {
     { icon: Calendar, label: 'Data',     value: dateStr },
     { icon: Clock,    label: 'Horário',  value: timeStr },
     { icon: Users,    label: 'Pessoas',  value: `${booking.people_count || '—'} ${booking.people_count === 1 ? 'pessoa' : 'pessoas'}` },
-    ...(booking.origin_text      ? [{ icon: MapPin, label: 'Origem',  value: booking.origin_text }]      : []),
-    ...(booking.destination_text ? [{ icon: MapPin, label: 'Destino', value: booking.destination_text }] : []),
+    ...(booking.pickup_place_name      ? [{ icon: MapPin, label: 'Origem',  value: booking.pickup_place_name }]      : []),
+    ...(booking.destination_place_name ? [{ icon: MapPin, label: 'Destino', value: booking.destination_place_name }] : []),
   ]
 
   return (
@@ -238,7 +243,7 @@ export default function BookingDetail() {
                 <p className="text-white font-bold text-base leading-tight">{serviceLabel}</p>
                 <p className="text-white/80 text-xs mt-0.5">{modeLabel}</p>
               </div>
-              <p className="text-white font-bold text-lg">{fmt(booking.total_price)}</p>
+              <p className="text-white font-bold text-lg">{fmt(booking.total_amount)}</p>
             </div>
           </div>
         </div>
@@ -319,7 +324,7 @@ export default function BookingDetail() {
                 <div key={i} className="flex items-center justify-between bg-brand/5 border border-brand/10 rounded-xl px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <Car size={14} className="text-brand" />
-                    <span className="text-sm font-medium text-gray-900">{bv.vehicle?.name || 'Veículo'}</span>
+                    <span className="text-sm font-medium text-gray-900">{bv.vehicle_name_snapshot || 'Veículo'}</span>
                   </div>
                   <span className="text-xs text-brand font-bold">{bv.quantity}x · {fmt(bv.unit_price)}</span>
                 </div>
@@ -395,8 +400,9 @@ export default function BookingDetail() {
         <CancelDialog
           bookingCode={booking.booking_code}
           onConfirm={handleConfirmCancel}
-          onClose={() => setShowCancel(false)}
+          onClose={() => { setShowCancel(false); setCancelError(null) }}
           loading={cancelLoading}
+          error={cancelError}
         />
       )}
     </div>

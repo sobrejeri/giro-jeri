@@ -49,7 +49,7 @@ function gi(id = '') { let n = 0; for (const c of id) n += c.charCodeAt(0); retu
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR')}` }
 
 /* ── Cancel Dialog ──────────────────────────────────────────── */
-function CancelDialog({ booking, onConfirm, onClose, loading }) {
+function CancelDialog({ booking, onConfirm, onClose, loading, error }) {
   const { t } = useTranslation()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -62,7 +62,10 @@ function CancelDialog({ booking, onConfirm, onClose, loading }) {
         <p className="text-sm text-gray-500 text-center mb-1">
           {booking.booking_code}
         </p>
-        <p className="text-xs text-gray-400 text-center mb-6">{t('bookings.cancelConfirm')}</p>
+        <p className="text-xs text-gray-400 text-center mb-4">{t('bookings.cancelConfirm')}</p>
+        {error && (
+          <p className="text-xs text-red-500 bg-red-50 rounded-xl px-3 py-2 text-center mb-4">{error}</p>
+        )}
         <div className="flex gap-3">
           <button onClick={onClose}
             className="flex-1 h-12 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-600 active:scale-95 transition-transform"
@@ -94,9 +97,9 @@ function BookingCard({ booking, onCancel, onDetail }) {
     try { dateStr = format(new Date(booking.service_date + 'T00:00:00'), "d MMM", { locale: ptBR }) } catch {}
   }
   const timeStr = booking.service_time ? booking.service_time.slice(0, 5) : '—'
-  const route   = booking.origin_text && booking.destination_text
-    ? `${booking.origin_text} → ${booking.destination_text}`
-    : booking.origin_text || null
+  const route   = booking.pickup_place_name && booking.destination_place_name
+    ? `${booking.pickup_place_name} → ${booking.destination_place_name}`
+    : booking.pickup_place_name || null
 
   const serviceName = booking.service_name
     || (isTour ? 'Passeio' : 'Transfer') + ' · ' + booking.booking_code
@@ -166,7 +169,7 @@ function BookingCard({ booking, onCancel, onDetail }) {
         <div className="flex items-center justify-between pt-0.5">
           <div>
             <p className="text-[10px] text-gray-400 leading-none">Total pago</p>
-            <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">{fmt(booking.total_price)}</p>
+            <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">{fmt(booking.total_amount)}</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -205,15 +208,16 @@ export default function Bookings() {
   const { t }       = useTranslation()
 
   const TABS = [
-    { id: 'todos',      label: t('bookings.all')     },
-    { id: 'ativos',     label: t('bookings.active')  },
-    { id: 'concluidos', label: t('bookings.status.completed') },
-    { id: 'cancelados', label: t('bookings.status.cancelled') },
+    { id: 'todos',      label: t('bookings.all')       },
+    { id: 'ativos',     label: t('bookings.active')    },
+    { id: 'concluidos', label: t('bookings.completed') },
+    { id: 'cancelados', label: t('bookings.cancelled') },
   ]
 
   const [tab,           setTab]           = useState('todos')
   const [cancelTarget,  setCancelTarget]  = useState(null)
   const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelError,   setCancelError]   = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-bookings'],
@@ -221,7 +225,7 @@ export default function Bookings() {
   })
 
   const all = (
-    Array.isArray(data?.bookings) ? data.bookings :
+    Array.isArray(data?.data) ? data.data :
     Array.isArray(data) ? data : []
   ).map(b => ({ ...b, _status: resolveStatus(b) }))
 
@@ -241,12 +245,13 @@ export default function Bookings() {
   async function handleCancelConfirm() {
     if (!cancelTarget) return
     setCancelLoading(true)
+    setCancelError(null)
     try {
       await api.cancelBooking(cancelTarget.id, { reason: 'Cancelado pelo cliente' })
       queryClient.invalidateQueries({ queryKey: ['my-bookings'] })
       setCancelTarget(null)
     } catch (err) {
-      alert(err.message || 'Erro ao cancelar reserva')
+      setCancelError(err.message || 'Erro ao cancelar reserva')
     } finally {
       setCancelLoading(false)
     }
@@ -326,8 +331,9 @@ export default function Bookings() {
         <CancelDialog
           booking={cancelTarget}
           onConfirm={handleCancelConfirm}
-          onClose={() => setCancelTarget(null)}
+          onClose={() => { setCancelTarget(null); setCancelError(null) }}
           loading={cancelLoading}
+          error={cancelError}
         />
       )}
     </div>

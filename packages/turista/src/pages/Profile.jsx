@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { setLang, LANGS } from '../i18n/index.js'
 import {
   User, Mail, LogOut, ChevronRight, CalendarCheck,
-  Shield, Bell, HelpCircle, Star, Camera, Pencil, Check, X,
+  Camera, Pencil, Check, X,
   Phone, Flag, AlertCircle, Globe, Loader2,
 } from 'lucide-react'
 
@@ -35,16 +35,13 @@ export default function Profile() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoError,     setPhotoError]     = useState('')
 
-  const [editing, setEditing] = useState(false)
-  const [saving,  setSaving]  = useState(false)
-  const [form,    setForm]    = useState({})
+  const [editing,   setEditing]   = useState(false)
+  const [saving,    setSaving]    = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [form,      setForm]      = useState({})
 
   const MENU = [
-    { icon: CalendarCheck, label: t('profile.menu.bookings'),      to: '/minhas-reservas' },
-    { icon: Star,          label: t('profile.menu.reviews'),       to: null },
-    { icon: Bell,          label: t('profile.menu.notifications'), to: null },
-    { icon: Shield,        label: t('profile.menu.privacy'),       to: null },
-    { icon: HelpCircle,    label: t('profile.menu.help'),          to: null },
+    { icon: CalendarCheck, label: t('profile.menu.bookings'), to: '/minhas-reservas' },
   ]
 
   const DOC_TYPES = [
@@ -79,6 +76,7 @@ export default function Profile() {
 
   async function saveEdit() {
     setSaving(true)
+    setSaveError(null)
     try {
       const payload = { ...form }
       Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null })
@@ -86,7 +84,7 @@ export default function Profile() {
       if (data?.user) updateUser(data.user)
       setEditing(false)
     } catch (err) {
-      alert(err.message || t('profile.saveError'))
+      setSaveError(err.message || t('profile.saveError'))
     } finally {
       setSaving(false)
     }
@@ -97,11 +95,11 @@ export default function Profile() {
     if (!file) return
 
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      alert('Use uma imagem JPEG, PNG ou WebP.')
+      setPhotoError('Use uma imagem JPEG, PNG ou WebP.')
       return
     }
     if (file.size > 2 * 1024 * 1024) {
-      alert('Imagem muito grande. Máximo 2 MB.')
+      setPhotoError('Imagem muito grande. Máximo 2 MB.')
       return
     }
 
@@ -121,17 +119,13 @@ export default function Profile() {
         setAvatarUrl(dataUrl)
         setUploadingPhoto(true)
         try {
-          const data = await api.updateProfile({ profile_photo_url: dataUrl })
-          if (data?.user) {
-            updateUser({ profile_photo_url: dataUrl })
+          const data = await api.uploadPhoto(dataUrl)
+          if (data?.url) {
+            updateUser({ profile_photo_url: data.url })
             localStorage.removeItem(avatarKey)
-          } else {
-            setPhotoError('Foto salva só neste aparelho. Verifique a conexão.')
-            localStorage.setItem(avatarKey, dataUrl)
           }
         } catch (err) {
           setPhotoError(err?.message || 'Erro ao salvar foto no servidor.')
-          localStorage.setItem(avatarKey, dataUrl)
         } finally {
           setUploadingPhoto(false)
         }
@@ -210,7 +204,7 @@ export default function Profile() {
                   </button>
                 ) : (
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setEditing(false)} className="text-gray-400 active:opacity-70"><X size={18} /></button>
+                    <button onClick={() => { setEditing(false); setSaveError(null) }} className="text-gray-400 active:opacity-70"><X size={18} /></button>
                     <button
                       onClick={saveEdit}
                       disabled={saving}
@@ -225,6 +219,9 @@ export default function Profile() {
               <div className="px-5 py-4 space-y-4">
                 {editing ? (
                   <>
+                    {saveError && (
+                      <p className="text-[11px] text-red-500 bg-red-50 rounded-xl px-3 py-2 text-center">{saveError}</p>
+                    )}
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.fullName')}</label>
                       <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} />
