@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
-import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark } from 'lucide-react'
+import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark, FlaskConical } from 'lucide-react'
 import { api } from '../../lib/api'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
@@ -176,9 +176,20 @@ export default function CheckoutProcessando() {
   // Manual mode: delegate to static PIX display
   if (state.manual_mode) return <ManualPayment state={state} />
 
-  const { pix_code, qr_base64, expires_at, payment_id, booking_code, total_price, amount } = state
+  const { pix_code, qr_base64, expires_at, payment_id, booking_code, total_price, amount, test_mode } = state
   const value = amount || total_price
   const { secs, display: countdown } = useCountdown(expires_at)
+
+  // Test mode: count down to auto-approval (15s from payment creation)
+  const [testSecsLeft, setTestSecsLeft] = useState(() => {
+    if (!test_mode || !payment_id) return 0
+    return 15
+  })
+  useEffect(() => {
+    if (!test_mode) return
+    const t = setInterval(() => setTestSecsLeft((s) => Math.max(0, s - 1)), 1000)
+    return () => clearInterval(t)
+  }, [test_mode])
 
   const poll = useCallback(async () => {
     if (!payment_id) return
@@ -269,6 +280,22 @@ export default function CheckoutProcessando() {
       </header>
 
       <main className="px-4 pt-4 pb-10 space-y-4">
+
+        {/* Test mode banner */}
+        {test_mode && (
+          <div className="bg-yellow-50 border border-yellow-300 rounded-2xl px-4 py-3 flex items-start gap-3">
+            <FlaskConical size={16} className="text-yellow-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[13px] font-bold text-yellow-800">Modo de teste ativo</p>
+              <p className="text-[12px] text-yellow-700 mt-0.5">
+                {testSecsLeft > 0
+                  ? `Pagamento aprovado automaticamente em ${testSecsLeft}s`
+                  : 'Aguardando confirmação do servidor…'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* QR Code */}
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 flex flex-col items-center">
           <p className="text-[13px] font-semibold text-gray-700 mb-4">Escaneie o QR Code no app do seu banco</p>
@@ -277,7 +304,7 @@ export default function CheckoutProcessando() {
           ) : (
             <div className="w-52 h-52 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2">
               <QrCode size={48} className="text-gray-300" />
-              <p className="text-[11px] text-gray-400 text-center">QR disponível após<br />configurar o gateway</p>
+              <p className="text-[11px] text-gray-400 text-center">{test_mode ? 'Teste — sem QR real' : 'QR disponível após\nconfigurar o gateway'}</p>
             </div>
           )}
           <div className="flex items-center gap-2 mt-4 text-[11px] text-gray-400">

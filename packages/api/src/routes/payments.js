@@ -79,7 +79,14 @@ router.post('/intent', authenticate, async (req, res, next) => {
     let pixCode   = null
     let qrBase64  = null
 
-    if (gateway === 'mercado_pago') {
+    if (gateway === 'test') {
+      const { createPaymentIntent: testIntent } = await import('../payments/test.js')
+      const d = await testIntent({ amount: Number(total_price), description: service_name || `Reserva ${bookingCode}` })
+      gatewayTransactionId = d.transaction_id
+      expiresAt            = d.expires_at
+      pixCode              = d.pix_code
+      qrBase64             = d.qr_base64
+    } else if (gateway === 'mercado_pago') {
       // Import dinâmico para não quebrar quando não configurado
       try {
         const { createPixPayment } = await import('../services/mercadoPago.js')
@@ -121,7 +128,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     if (pErr) throw pErr
 
-    const manual = gateway === 'manual' || !gatewayTransactionId
+    const manual    = gateway === 'manual' || !gatewayTransactionId
+    const test_mode = gateway === 'test'
 
     res.json({
       booking_id:   booking.id,
@@ -132,6 +140,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       // gateway-generated PIX (null when manual)
       pix_code:     pixCode,
       qr_base64:    qrBase64,
+      test_mode,
       // manual payment: show platform's PIX/bank info
       manual_mode:      manual,
       pix_key_type:     manual ? (cfg.payment_admin_pix_key_type || null) : null,
@@ -155,6 +164,15 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
       .single()
 
     if (!payment) return res.status(404).json({ error: 'Pagamento não encontrado' })
+
+    // Gateway de teste: auto-aprova após 15 segundos
+    if (payment.status === 'pending' && payment.gateway_name === 'test' && payment.gateway_transaction_id?.startsWith('TEST-')) {
+      const createdMs = parseInt(payment.gateway_transaction_id.replace('TEST-', ''), 10)
+      if (!isNaN(createdMs) && (Date.now() - createdMs) >= 15000) {
+        await onPaymentApproved(payment)
+        return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
+      }
+    }
 
     // Verifica se expirou
     if (payment.status === 'pending' && payment.expires_at && new Date(payment.expires_at) < new Date()) {

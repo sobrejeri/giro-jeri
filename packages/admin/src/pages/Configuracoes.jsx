@@ -54,6 +54,7 @@ const PAYMENT_KEYS = new Set([
 // ── Payment tab constants ─────────────────────────────────
 const GATEWAYS = [
   { value: 'manual',  label: 'Manual (sem gateway)' },
+  { value: 'test',    label: 'Modo de Teste (aprova em 15s)' },
   { value: 'asaas',   label: 'Asaas' },
   { value: 'pagarme', label: 'Pagar.me' },
 ]
@@ -413,7 +414,7 @@ function TabPagamentos({ settings, qc }) {
                 ))}
               </Select>
             </div>
-            {form.payment_gateway !== 'manual' && (
+            {form.payment_gateway !== 'manual' && form.payment_gateway !== 'test' && (
               <>
                 <MaskedInput
                   label="API Key"
