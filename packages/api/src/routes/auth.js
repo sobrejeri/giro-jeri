@@ -109,8 +109,19 @@ router.post('/login', async (req, res, next) => {
 });
 
 // ── GET /api/auth/me ───────────────────────────────────
-router.get('/me', authenticate, (req, res) => {
-  res.json({ user: req.user });
+router.get('/me', authenticate, async (req, res, next) => {
+  try {
+    const { data: profile, error } = await supabase
+      .from('users')
+      .select(`id, full_name, email, phone, user_type, profile_photo_url,
+               birth_date, document_type, document_number, preferred_region_id,
+               pix_key_type, pix_key, bank_name, bank_agency,
+               bank_account_number, bank_account_type, bank_document`)
+      .eq('id', req.user.id)
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ user: profile });
+  } catch (err) { next(err); }
 });
 
 // ── POST /api/auth/refresh ────────────────────────────
@@ -152,7 +163,14 @@ const updateProfileSchema = z.object({
   emergency_contact_name:  z.string().max(200).optional().nullable(),
   emergency_contact_phone: z.string().max(30).optional().nullable(),
   language:                z.string().max(10).optional(),
-  profile_photo_url:       z.string().max(3_000_000).optional().nullable(), // base64 de até 2 MB (~2.7 MB em base64)
+  profile_photo_url:       z.string().max(3_000_000).optional().nullable(),
+  pix_key_type:            z.enum(['cpf', 'cnpj', 'email', 'phone', 'random_key']).optional().nullable(),
+  pix_key:                 z.string().max(200).optional().nullable(),
+  bank_name:               z.string().max(100).optional().nullable(),
+  bank_agency:             z.string().max(20).optional().nullable(),
+  bank_account_number:     z.string().max(30).optional().nullable(),
+  bank_account_type:       z.enum(['corrente', 'poupanca']).optional().nullable(),
+  bank_document:           z.string().max(30).optional().nullable(),
 });
 
 router.patch('/me', authenticate, async (req, res, next) => {
@@ -163,7 +181,10 @@ router.patch('/me', authenticate, async (req, res, next) => {
       .from('users')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', req.user.id)
-      .select('id, full_name, email, phone, user_type, profile_photo_url, document_number, birth_date, language, preferred_region_id')
+      .select(`id, full_name, email, phone, user_type, profile_photo_url,
+               document_number, birth_date, language, preferred_region_id,
+               pix_key_type, pix_key, bank_name, bank_agency,
+               bank_account_number, bank_account_type, bank_document`)
       .single();
 
     if (error) return res.status(400).json({ error: error.message });

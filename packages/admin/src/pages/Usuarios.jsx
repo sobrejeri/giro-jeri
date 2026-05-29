@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Pencil, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
@@ -12,14 +12,26 @@ import Card from '../components/ui/Card'
 
 const USER_TYPES = ['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']
 
+const USER_TYPE_LABELS = {
+  tourist:   'Turista',
+  operator:  'Operador (Cooperativa)',
+  agency:    'Agência',
+  admin:     'Administrador',
+  finance:   'Financeiro',
+  affiliate: 'Afiliado',
+}
+
+const CREATE_EMPTY = { full_name: '', email: '', phone: '', password: '', user_type: 'tourist' }
+
 export default function Usuarios() {
-  const [page, setPage]         = useState(1)
-  const [search, setSearch]     = useState('')
-  const [typeFilter, setType]   = useState('')
+  const [page, setPage]           = useState(1)
+  const [search, setSearch]       = useState('')
+  const [typeFilter, setType]     = useState('')
   const [activeFilter, setActive] = useState('')
-  const [modal, setModal]       = useState(null)
-  const [form, setForm]         = useState({})
-  const qc                      = useQueryClient()
+  const [modal, setModal]         = useState(null)   // null | { mode: 'edit', user } | { mode: 'create' }
+  const [form, setForm]           = useState({})
+  const [createForm, setCreateForm] = useState(CREATE_EMPTY)
+  const qc                        = useQueryClient()
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page, search, typeFilter, activeFilter],
@@ -41,14 +53,40 @@ export default function Usuarios() {
     },
   })
 
+  const createMut = useMutation({
+    mutationFn: (body) => api.createUser(body),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      setModal(null)
+      setCreateForm(CREATE_EMPTY)
+    },
+  })
+
   function openEdit(u) {
-    setModal(u)
+    setModal({ mode: 'edit', user: u })
     setForm({ user_type: u.user_type, is_active: u.is_active })
+  }
+
+  function openCreate() {
+    setModal({ mode: 'create' })
+    setCreateForm(CREATE_EMPTY)
   }
 
   function handleSubmit(e) {
     e.preventDefault()
-    updateMut.mutate({ id: modal.id, ...form, is_active: form.is_active === 'true' || form.is_active === true })
+    updateMut.mutate({ id: modal.user.id, ...form, is_active: form.is_active === 'true' || form.is_active === true })
+  }
+
+  function handleCreate(e) {
+    e.preventDefault()
+    const body = {
+      full_name: createForm.full_name,
+      password:  createForm.password,
+      user_type: createForm.user_type,
+      ...(createForm.email ? { email: createForm.email } : {}),
+      ...(createForm.phone ? { phone: createForm.phone } : {}),
+    }
+    createMut.mutate(body)
   }
 
   const users  = data?.data || []
@@ -88,7 +126,11 @@ export default function Usuarios() {
             <option value="true">Ativos</option>
             <option value="false">Inativos</option>
           </select>
-          <span className="text-sm text-gray-500 ml-auto">{total} usuários</span>
+          <span className="text-sm text-gray-500">{total} usuários</span>
+          <Button size="sm" onClick={openCreate} className="ml-auto gap-1.5">
+            <UserPlus size={14} />
+            Novo Usuário
+          </Button>
         </div>
       </Card>
 
@@ -121,6 +163,7 @@ export default function Usuarios() {
                     <button
                       onClick={() => openEdit(u)}
                       className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Editar usuário"
                     >
                       <Pencil size={14} />
                     </button>
@@ -148,20 +191,81 @@ export default function Usuarios() {
         )}
       </Card>
 
+      {/* Modal criar usuário */}
+      <Modal
+        open={modal?.mode === 'create'}
+        onClose={() => setModal(null)}
+        title="Novo Usuário"
+        size="sm"
+      >
+        <form onSubmit={handleCreate} className="space-y-4">
+          <Input
+            label="Nome completo"
+            value={createForm.full_name}
+            onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+            required
+          />
+          <Input
+            label="E-mail"
+            type="email"
+            value={createForm.email}
+            onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+            placeholder="Obrigatório se não informar telefone"
+          />
+          <Input
+            label="Telefone / WhatsApp"
+            value={createForm.phone}
+            onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+            placeholder="+55 88 99999-9999"
+          />
+          <Input
+            label="Senha inicial"
+            type="password"
+            value={createForm.password}
+            onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+            required
+            minLength={6}
+            placeholder="Mínimo 6 caracteres"
+          />
+          <Select
+            label="Função na plataforma"
+            value={createForm.user_type}
+            onChange={(e) => setCreateForm({ ...createForm, user_type: e.target.value })}
+          >
+            {USER_TYPES.map((t) => (
+              <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
+            ))}
+          </Select>
+          {createMut.isError && (
+            <p className="text-sm text-red-400">{createMut.error?.message || 'Erro ao criar usuário'}</p>
+          )}
+          <Button type="submit" className="w-full" disabled={createMut.isPending}>
+            {createMut.isPending ? 'Criando…' : 'Criar Usuário'}
+          </Button>
+        </form>
+      </Modal>
+
       {/* Modal editar */}
-      <Modal open={!!modal} onClose={() => setModal(null)} title="Editar Usuário" size="sm">
-        {modal && (
+      <Modal
+        open={modal?.mode === 'edit'}
+        onClose={() => setModal(null)}
+        title="Editar Usuário"
+        size="sm"
+      >
+        {modal?.mode === 'edit' && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="bg-gray-900 rounded-lg p-3 text-sm">
-              <p className="font-medium text-gray-200">{modal.full_name}</p>
-              <p className="text-gray-500">{modal.email || modal.phone}</p>
+              <p className="font-medium text-gray-200">{modal.user.full_name}</p>
+              <p className="text-gray-500">{modal.user.email || modal.user.phone}</p>
             </div>
             <Select
-              label="Tipo"
+              label="Função na plataforma"
               value={form.user_type}
               onChange={(e) => setForm({ ...form, user_type: e.target.value })}
             >
-              {USER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              {USER_TYPES.map((t) => (
+                <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
+              ))}
             </Select>
             <Select
               label="Status"
@@ -171,6 +275,9 @@ export default function Usuarios() {
               <option value="true">Ativo</option>
               <option value="false">Inativo</option>
             </Select>
+            {updateMut.isError && (
+              <p className="text-sm text-red-400">{updateMut.error?.message || 'Erro ao salvar'}</p>
+            )}
             <Button type="submit" className="w-full" disabled={updateMut.isPending}>
               {updateMut.isPending ? 'Salvando…' : 'Salvar Alterações'}
             </Button>

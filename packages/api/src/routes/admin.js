@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
 import dayjs from 'dayjs';
@@ -73,6 +74,61 @@ router.get('/users', requireAdmin, async (req, res, next) => {
     if (error) throw error;
     res.json({ data, total: count, page: Number(page), limit: Number(limit) });
   } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/users ──────────────────────────────
+const createUserSchema = z.object({
+  full_name: z.string().min(2).max(200),
+  email:     z.string().email().optional(),
+  phone:     z.string().min(10).max(30).optional(),
+  password:  z.string().min(6),
+  user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
+}).refine((d) => d.email || d.phone, { message: 'Informe email ou telefone' });
+
+router.post('/users', requireAdmin, async (req, res, next) => {
+  try {
+    const body = createUserSchema.parse(req.body);
+
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email:         body.email,
+      phone:         body.phone,
+      password:      body.password,
+      email_confirm: true,
+    });
+    if (authError) return res.status(400).json({ error: authError.message });
+
+    const { data: profile, error: profileError } = await supabase
+      .from('users')
+      .insert({
+        auth_id:   authData.user.id,
+        full_name: body.full_name,
+        email:     body.email,
+        phone:     body.phone,
+        user_type: body.user_type,
+      })
+      .select('id, full_name, email, phone, user_type, is_active, created_at')
+      .single();
+
+    if (profileError) {
+      await supabase.auth.admin.deleteUser(authData.user.id);
+      return res.status(400).json({ error: profileError.message });
+    }
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'users',
+      entity_id:       profile.id,
+      action_type:     'create',
+      new_values_json: { user_type: body.user_type, email: body.email },
+    });
+
+    res.status(201).json(profile);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
 });
 
 // ── PATCH /api/admin/users/:id ─────────────────────────

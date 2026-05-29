@@ -71,6 +71,7 @@ export const api = {
 
   // Usuários
   getUsers:   (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),
+  createUser: (body)        => request('/api/admin/users', { method: 'POST', body }),
   updateUser: (id, body)    => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
 
   // Financeiro

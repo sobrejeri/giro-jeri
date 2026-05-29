@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { User, CheckCircle, Camera, Loader2 } from 'lucide-react'
+import { User, CheckCircle, Camera, Loader2, Landmark, CreditCard } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
@@ -12,12 +12,32 @@ const DOC_TYPES = [
   { value: 'cnpj', label: 'CNPJ', placeholder: '00.000.000/0001-00', maxLength: 18 },
 ]
 
+const PIX_TYPES = [
+  { value: 'cpf',        label: 'CPF',         placeholder: '000.000.000-00' },
+  { value: 'cnpj',       label: 'CNPJ',        placeholder: '00.000.000/0001-00' },
+  { value: 'email',      label: 'E-mail',       placeholder: 'seu@email.com' },
+  { value: 'phone',      label: 'Telefone',     placeholder: '+55 88 99999-9999' },
+  { value: 'random_key', label: 'Chave aleatória', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
+]
+
+const ACCOUNT_TYPES = [
+  { value: 'corrente', label: 'Conta Corrente' },
+  { value: 'poupanca', label: 'Conta Poupança' },
+]
+
 const EMPTY = {
-  full_name:       '',
-  phone:           '',
-  document_type:   'cpf',
-  document_number: '',
-  birth_date:      '',
+  full_name:            '',
+  phone:                '',
+  document_type:        'cpf',
+  document_number:      '',
+  birth_date:           '',
+  pix_key_type:         'cpf',
+  pix_key:              '',
+  bank_name:            '',
+  bank_agency:          '',
+  bank_account_number:  '',
+  bank_account_type:    'corrente',
+  bank_document:        '',
 }
 
 export default function Perfil() {
@@ -39,11 +59,18 @@ export default function Perfil() {
   useEffect(() => {
     if (!profile) return
     setForm({
-      full_name:       profile.full_name       || '',
-      phone:           profile.phone           || '',
-      document_type:   profile.document_type   || 'cpf',
-      document_number: profile.document_number || '',
-      birth_date:      profile.birth_date      || '',
+      full_name:           profile.full_name           || '',
+      phone:               profile.phone               || '',
+      document_type:       profile.document_type       || 'cpf',
+      document_number:     profile.document_number     || '',
+      birth_date:          profile.birth_date          || '',
+      pix_key_type:        profile.pix_key_type        || 'cpf',
+      pix_key:             profile.pix_key             || '',
+      bank_name:           profile.bank_name           || '',
+      bank_agency:         profile.bank_agency         || '',
+      bank_account_number: profile.bank_account_number || '',
+      bank_account_type:   profile.bank_account_type   || 'corrente',
+      bank_document:       profile.bank_document       || '',
     })
   }, [profile])
 
@@ -90,11 +117,18 @@ export default function Perfil() {
   function handleSubmit(e) {
     e.preventDefault()
     saveMut.mutate({
-      full_name:       form.full_name       || undefined,
-      phone:           form.phone           || undefined,
-      document_type:   form.document_number ? form.document_type : null,
-      document_number: form.document_number || null,
-      birth_date:      form.birth_date      || null,
+      full_name:            form.full_name       || undefined,
+      phone:                form.phone           || undefined,
+      document_type:        form.document_number ? form.document_type : null,
+      document_number:      form.document_number || null,
+      birth_date:           form.birth_date      || null,
+      pix_key_type:         form.pix_key         ? form.pix_key_type         : null,
+      pix_key:              form.pix_key         || null,
+      bank_name:            form.bank_name       || null,
+      bank_agency:          form.bank_agency     || null,
+      bank_account_number:  form.bank_account_number || null,
+      bank_account_type:    form.bank_account_number ? form.bank_account_type : null,
+      bank_document:        form.bank_document   || null,
     })
   }
 
@@ -200,6 +234,89 @@ export default function Perfil() {
               </div>
             </div>
 
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Chave PIX */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Landmark size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">Chave PIX</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="grid grid-cols-3 gap-3">
+            <Select
+              label="Tipo de chave"
+              value={form.pix_key_type}
+              onChange={(e) => { set('pix_key_type', e.target.value); set('pix_key', '') }}
+            >
+              {PIX_TYPES.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </Select>
+            <div className="col-span-2">
+              <Input
+                label="Chave"
+                value={form.pix_key}
+                onChange={(e) => set('pix_key', e.target.value)}
+                placeholder={PIX_TYPES.find((p) => p.value === form.pix_key_type)?.placeholder || ''}
+              />
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Dados Bancários */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CreditCard size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">Dados Bancários</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Banco"
+                placeholder="Ex: Nubank, Bradesco, Itaú"
+                value={form.bank_name}
+                onChange={(e) => set('bank_name', e.target.value)}
+              />
+              <Input
+                label="Agência"
+                placeholder="0000"
+                value={form.bank_agency}
+                onChange={(e) => set('bank_agency', e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Número da conta"
+                placeholder="00000-0"
+                value={form.bank_account_number}
+                onChange={(e) => set('bank_account_number', e.target.value)}
+              />
+              <Select
+                label="Tipo de conta"
+                value={form.bank_account_type}
+                onChange={(e) => set('bank_account_type', e.target.value)}
+              >
+                {ACCOUNT_TYPES.map((a) => (
+                  <option key={a.value} value={a.value}>{a.label}</option>
+                ))}
+              </Select>
+            </div>
+            <Input
+              label="CPF / CNPJ do titular"
+              placeholder="000.000.000-00"
+              value={form.bank_document}
+              onChange={(e) => set('bank_document', e.target.value)}
+              className="max-w-xs"
+            />
           </div>
         </CardBody>
       </Card>
