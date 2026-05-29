@@ -1,27 +1,14 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Giro Jeri</title>
-    <script>
-      (function () {
-        var path = location.pathname;
-        var dest;
-
-        // Roteia para o app correto com base no prefixo do caminho
-        if (path.startsWith('/giro-jeri/admin')) {
-          dest = '/giro-jeri/admin/';
-        } else if (path.startsWith('/giro-jeri/cooperativa')) {
-          dest = '/giro-jeri/cooperativa/';
-        } else {
-          dest = '/giro-jeri/';
-        }
-
-        // Salva o caminho completo para restaurar após o redirecionamento
-        sessionStorage.setItem('spa_redirect', path + location.search + location.hash);
-        location.replace(dest);
-      })();
-    </script>
-  </head>
-  <body></body>
+<head><meta charset="utf-8"><title>Giro Jeri</title></head>
+<script>
+(function(){
+  var l = window.location;
+  var p = l.pathname;
+  sessionStorage.setItem('spa_redirect', p + l.search + l.hash);
+  if      (p.indexOf('/admin')       !== -1) l.replace(l.protocol+'//'+l.host+'/giro-jeri/admin/');
+  else if (p.indexOf('/cooperativa') !== -1) l.replace(l.protocol+'//'+l.host+'/giro-jeri/cooperativa/');
+  else                                       l.replace(l.protocol+'//'+l.host+'/giro-jeri/');
+})();
+</script>
 </html>
