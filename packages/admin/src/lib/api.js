@@ -70,9 +70,10 @@ export const api = {
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),
 
   // Usuários
-  getUsers:   (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),
-  createUser: (body)        => request('/api/admin/users', { method: 'POST', body }),
-  updateUser: (id, body)    => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
+  getUsers:          (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),
+  createUser:        (body)        => request('/api/admin/users', { method: 'POST', body }),
+  updateUser:        (id, body)    => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
+  registerRecipient: (id)          => request(`/api/admin/users/${id}/register-recipient`, { method: 'POST', body: {} }),
 
   // Financeiro
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),

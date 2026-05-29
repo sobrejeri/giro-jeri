@@ -156,6 +156,66 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/admin/users/:id/register-recipient ──────
+router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: user, error: uErr } = await supabase
+      .from('users')
+      .select(`id, full_name, email, phone, user_type, document_type, document_number,
+               pix_key_type, pix_key, bank_name, bank_agency,
+               bank_account_number, bank_account_type, bank_document`)
+      .eq('id', req.params.id)
+      .single();
+
+    if (uErr || !user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (user.user_type !== 'operator') {
+      return res.status(400).json({ error: 'Apenas cooperativas podem ser registradas como recebedoras' });
+    }
+
+    // Lê gateway ativo das configurações
+    const { data: settingsRows = [] } = await supabase
+      .from('system_settings')
+      .select('setting_key, setting_value')
+      .like('setting_key', 'payment_%');
+    const cfg     = Object.fromEntries(settingsRows.map((s) => [s.setting_key, s.setting_value]));
+    const gateway = cfg.payment_gateway || 'manual';
+    const apiKey  = cfg.payment_gateway_api_key || '';
+    const env     = cfg.payment_gateway_env || 'sandbox';
+
+    let recipientId;
+
+    if (gateway === 'manual') {
+      const { createRecipient } = await import('../payments/manual.js');
+      recipientId = await createRecipient(user);
+    } else if (gateway === 'asaas') {
+      const { createRecipient } = await import('../payments/asaas.js');
+      recipientId = await createRecipient(user, apiKey, env);
+    } else if (gateway === 'pagarme') {
+      const { createRecipient } = await import('../payments/pagarme.js');
+      recipientId = await createRecipient(user, apiKey, env);
+    } else {
+      return res.status(400).json({ error: `Gateway '${gateway}' não suportado` });
+    }
+
+    await supabase.from('users')
+      .update({ gateway_recipient_id: recipientId, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'users',
+      entity_id:       user.id,
+      action_type:     'register_recipient',
+      new_values_json: { gateway, recipient_id: recipientId },
+    });
+
+    res.json({ recipient_id: recipientId, gateway });
+  } catch (err) {
+    if (err.message) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
 // ── GET /api/admin/financial ───────────────────────────
 router.get('/financial', requireAdmin, async (req, res, next) => {
   try {

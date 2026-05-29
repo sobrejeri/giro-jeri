@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react'
+import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
@@ -59,6 +59,17 @@ export default function Usuarios() {
       qc.invalidateQueries({ queryKey: ['users'] })
       setModal(null)
       setCreateForm(CREATE_EMPTY)
+    },
+  })
+
+  const recipientMut = useMutation({
+    mutationFn: (id) => api.registerRecipient(id),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      // Update snapshot in modal so badge updates immediately
+      if (modal?.mode === 'edit') {
+        setModal((m) => ({ ...m, user: { ...m.user, gateway_recipient_id: result?.recipient_id } }))
+      }
     },
   })
 
@@ -154,7 +165,16 @@ export default function Usuarios() {
                     <p className="font-medium text-gray-200">{u.full_name || '—'}</p>
                     <p className="text-xs text-gray-500">{u.email || u.phone || '—'}</p>
                   </td>
-                  <td className="px-5 py-3"><Badge value={u.user_type} /></td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <Badge value={u.user_type} />
+                      {u.user_type === 'operator' && (
+                        u.gateway_recipient_id
+                          ? <CheckCircle2 size={13} className="text-green-400" title="Recebimento ativo" />
+                          : <AlertCircle  size={13} className="text-amber-400" title="Recebimento não configurado" />
+                      )}
+                    </div>
+                  </td>
                   <td className="px-5 py-3"><Badge value={String(u.is_active)} /></td>
                   <td className="px-5 py-3 text-xs text-gray-500">
                     {u.created_at ? format(parseISO(u.created_at), 'dd/MM/yyyy') : '—'}
@@ -275,6 +295,56 @@ export default function Usuarios() {
               <option value="true">Ativo</option>
               <option value="false">Inativo</option>
             </Select>
+            {/* Recebimento — só para operadores */}
+            {modal?.mode === 'edit' && modal.user.user_type === 'operator' && (
+              <div className="border border-gray-700 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Landmark size={14} className="text-gray-500" />
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Recebimento no gateway</p>
+                </div>
+
+                {modal.user.gateway_recipient_id ? (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-green-400 shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-green-400">Ativo</p>
+                      <p className="text-[10px] text-gray-600 font-mono break-all">{modal.user.gateway_recipient_id}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {modal.user.pix_key ? (
+                      <>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                          <AlertCircle size={12} className="text-amber-400 shrink-0" />
+                          Cooperativa não registrada no gateway
+                        </div>
+                        <p className="text-[11px] text-gray-600">
+                          Chave PIX: <span className="text-gray-300 font-mono">{modal.user.pix_key}</span>
+                        </p>
+                        {recipientMut.isError && (
+                          <p className="text-xs text-red-400">{recipientMut.error?.message}</p>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="w-full"
+                          disabled={recipientMut.isPending}
+                          onClick={() => recipientMut.mutate(modal.user.id)}
+                        >
+                          {recipientMut.isPending ? 'Registrando…' : 'Registrar no gateway'}
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-600">
+                        Cooperativa ainda não cadastrou sua chave PIX no perfil.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {updateMut.isError && (
               <p className="text-sm text-red-400">{updateMut.error?.message || 'Erro ao salvar'}</p>
             )}
