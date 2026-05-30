@@ -75,11 +75,12 @@ function TourCard({ tour, isFav, onToggleFav }) {
           vehicle_name:     suggested ? `${suggested.qty}x ${suggested.vehicle.name}` : '',
           total_price:      totalPrice,
           breakdown:        suggested ? { [`${suggested.qty}x ${suggested.vehicle.name}`]: totalPrice } : {},
-          cover_image_url:  tour.cover_image_url || null,
-          region_id:        tour.regions?.id,
-          service_id:       tour.id,
-          vehicles:         suggested ? [{ vehicle_id: suggested.vehicle.id, qty: suggested.qty }] : [],
-          open_editing:     true,
+          cover_image_url:       tour.cover_image_url || null,
+          region_id:             tour.regions?.id,
+          service_id:            tour.id,
+          vehicles:              suggested ? [{ vehicle_id: suggested.vehicle.id, qty: suggested.qty }] : [],
+          booking_cutoff_time:   tour.booking_cutoff_time || null,
+          open_editing:          true,
         },
       })
     } catch {

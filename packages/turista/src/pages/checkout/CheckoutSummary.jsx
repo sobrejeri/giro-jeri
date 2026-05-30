@@ -27,8 +27,8 @@ function gi(str = '') {
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
 
 /* ── Date picker ────────────────────────────────────────────── */
-function DatePickerSheet({ value, onChange, onClose }) {
-  const today = startOfDay(new Date())
+function DatePickerSheet({ value, onChange, onClose, minDate: minDateProp }) {
+  const today = minDateProp || startOfDay(new Date())
   const [view, setView] = useState(startOfMonth(value))
   const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
   const offset = getDay(startOfMonth(view))
@@ -130,15 +130,30 @@ export default function CheckoutSummary() {
   const isTransfer     = ls?.service_type === 'transfer'
   const hasVehicles    = isPrivateTour || isTransfer
 
+  // ── Cutoff: passeios têm horário limite de solicitação ──
+  const cutoffMins = (() => {
+    if (!ls?.booking_cutoff_time || ls?.service_type !== 'tour') return null
+    const p = ls.booking_cutoff_time.split(':')
+    return parseInt(p[0]) * 60 + parseInt(p[1])
+  })()
+  const nowMins       = new Date().getHours() * 60 + new Date().getMinutes()
+  const isAfterCutoff = cutoffMins !== null && nowMins >= cutoffMins
+  const minDate       = isAfterCutoff ? addDays(startOfDay(new Date()), 1) : startOfDay(new Date())
+  const cutoffLabel   = ls?.booking_cutoff_time
+    ? `${ls.booking_cutoff_time.slice(0, 2)}h${ls.booking_cutoff_time.slice(3, 5)}`
+    : null
+
   /* ── All hooks unconditionally ──────────────────────────── */
   const [editing,       setEditing]  = useState(ls?.open_editing === true)
   const [showDatePicker, setShowDP]  = useState(false)
   const [people,   setPeople]        = useState(ls?.people_count || 2)
-  const [date,     setDate]          = useState(() =>
-    ls?.service_date_iso
-      ? new Date(ls.service_date_iso + 'T12:00:00')
-      : startOfDay(new Date())
-  )
+  const [date,     setDate]          = useState(() => {
+    if (ls?.service_date_iso) {
+      const d = new Date(ls.service_date_iso + 'T12:00:00')
+      return isBefore(d, minDate) ? minDate : d
+    }
+    return minDate
+  })
   const [time,     setTime]          = useState(() => {
     if (ls?.service_time && ls.service_time !== 'A confirmar') return ls.service_time
     // Padrão: 30 min a partir de agora, arredondado para próximo intervalo de 30min
@@ -270,6 +285,19 @@ export default function CheckoutSummary() {
       </header>
 
       <main className="px-4 pt-4 pb-36 space-y-3">
+
+        {/* Cutoff banner */}
+        {isAfterCutoff && cutoffLabel && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
+            <Clock size={15} className="text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[13px] font-bold text-amber-800">Reservas para hoje encerradas</p>
+              <p className="text-[12px] text-amber-700 mt-0.5 leading-relaxed">
+                Este passeio só aceita solicitações até {cutoffLabel}. A data mínima disponível é amanhã.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Service Hero */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
@@ -645,7 +673,7 @@ export default function CheckoutSummary() {
       </div>
 
       {showDatePicker && (
-        <DatePickerSheet value={date} onChange={setDate} onClose={() => setShowDP(false)} />
+        <DatePickerSheet value={date} onChange={setDate} onClose={() => setShowDP(false)} minDate={minDate} />
       )}
     </div>
   )
