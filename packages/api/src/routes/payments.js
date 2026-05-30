@@ -276,6 +276,15 @@ async function onPaymentApproved(payment) {
 
   const booking = payment.bookings || (await supabase.from('bookings').select('*').eq('id', payment.booking_id).single()).data
 
+  // If this booking came from a custom transfer quote, mark the quote as paid
+  if (booking?.service_type === 'transfer' && booking?.service_id) {
+    await supabase.from('transfer_quotes')
+      .update({ status: 'paid' })
+      .eq('id', booking.service_id)
+      .eq('status', 'accepted')
+      .catch(() => {}) // no-op if service_id is a route id (not a quote)
+  }
+
   const gatewayFee    = Math.round(payment.amount_gross * 0.035 * 100) / 100
   const platformFee   = Math.round(payment.amount_gross * 0.07  * 100) / 100
 

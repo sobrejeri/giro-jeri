@@ -6,7 +6,7 @@ import { useRegion }   from '../contexts/RegionContext'
 import { api }         from '../lib/api'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
-  Minus, Plus, Car, X, Check, Info,
+  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -286,7 +286,11 @@ export default function Transfers() {
   const navigate  = useNavigate()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
-  const timeRef   = useRef(null)
+  const timeRef      = useRef(null)
+  const customTimeRef = useRef(null)
+
+  // mode: 'rota' | 'custom'
+  const [mode, setMode] = useState('rota')
 
   const [origin,     setOrigin]     = useState('Jericoacoara')
   const [dest,       setDest]       = useState('')
@@ -299,6 +303,48 @@ export default function Transfers() {
   const [showOrigin, setShowOrigin] = useState(false)
   const [showDest,   setShowDest]   = useState(false)
   const [loading,    setLoading]    = useState(false)
+
+  // Custom ride state
+  const [customOrigin,   setCustomOrigin]   = useState('')
+  const [customDest,     setCustomDest]     = useState('')
+  const [customDate,     setCustomDate]     = useState(startOfDay(new Date()))
+  const [customTime,     setCustomTime]     = useState('08:00')
+  const [customPeople,   setCustomPeople]   = useState(2)
+  const [customNotes,    setCustomNotes]    = useState('')
+  const [showCustomDate, setShowCustomDate] = useState(false)
+  const [customLoading,  setCustomLoading]  = useState(false)
+  const [customSuccess,  setCustomSuccess]  = useState(false)
+  const [customError,    setCustomError]    = useState('')
+
+  async function handleRequestQuote() {
+    if (!token) { navigate('/login'); return }
+    if (!customOrigin.trim() || !customDest.trim() || !customTime) return
+    setCustomLoading(true)
+    setCustomError('')
+    try {
+      await api.requestQuote({
+        region_id:              region?.id || '',
+        origin_place_name:      customOrigin.trim(),
+        destination_place_name: customDest.trim(),
+        service_date:           format(customDate, 'yyyy-MM-dd'),
+        service_time:           customTime,
+        people_count:           customPeople,
+        luggage_count:          0,
+        special_notes:          customNotes.trim() || undefined,
+      })
+      setCustomSuccess(true)
+    } catch (err) {
+      setCustomError(err.message || 'Erro ao solicitar cotação')
+    } finally {
+      setCustomLoading(false)
+    }
+  }
+
+  const customDateLabel = isToday(customDate) ? 'Hoje'
+    : isSameDay(customDate, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+    : format(customDate, 'd MMM', { locale: ptBR })
+
+  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime
 
   /* ── Queries ── */
   const { data: routesData } = useQuery({
@@ -367,9 +413,185 @@ export default function Transfers() {
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm">
         <h1 className="text-[20px] font-extrabold text-gray-900">Transfer</h1>
         <p className="text-[12px] text-gray-400 mt-0.5">Transporte privativo com motorista</p>
+
+        {/* Mode toggle */}
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={() => setMode('rota')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-bold transition-all ${
+              mode === 'rota' ? 'bg-brand text-white shadow-sm' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            <Route size={13} />
+            Rota definida
+          </button>
+          <button
+            onClick={() => { setMode('custom'); setCustomSuccess(false); setCustomError('') }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-bold transition-all ${
+              mode === 'custom' ? 'bg-brand text-white shadow-sm' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            <Zap size={13} />
+            Corrida personalizada
+          </button>
+        </div>
       </div>
 
-      <div className="px-4 pt-4 space-y-3">
+      {/* ── CUSTOM RIDE FORM ─────────────────────────────────── */}
+      {mode === 'custom' && (
+        <div className="px-4 pt-4 space-y-3">
+          {customSuccess ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
+                <CheckCircle2 size={32} className="text-emerald-500" />
+              </div>
+              <p className="text-[18px] font-extrabold text-gray-900 mb-2">Cotação solicitada!</p>
+              <p className="text-[13px] text-gray-500 max-w-[240px] mb-6">
+                A cooperativa irá analisar e enviar um valor para você confirmar.
+              </p>
+              <button
+                onClick={() => navigate('/minhas-reservas')}
+                className="bg-brand text-white font-bold rounded-2xl px-6 py-3 text-[14px] active:scale-95 transition-transform"
+              >
+                Ver minhas cotações
+              </button>
+              <button
+                onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomNotes('') }}
+                className="mt-3 text-[13px] text-gray-400 underline"
+              >
+                Solicitar outra corrida
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
+                <Zap size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-[12px] text-amber-700 leading-relaxed">
+                  Informe os pontos de embarque e destino. A cooperativa confirma e envia o valor da corrida para você.
+                </p>
+              </div>
+
+              {/* Origin / Dest */}
+              <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Rota</p>
+                <div className="px-4 pb-4 space-y-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Embarque</label>
+                    <div className="flex items-center gap-2 mt-1 bg-gray-50 rounded-xl px-3 py-2.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
+                      <input
+                        type="text"
+                        value={customOrigin}
+                        onChange={e => setCustomOrigin(e.target.value)}
+                        placeholder="Ex: Hotel Jeri Beach"
+                        className="flex-1 text-[13px] text-gray-800 bg-transparent outline-none placeholder-gray-400"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Destino</label>
+                    <div className="flex items-center gap-2 mt-1 bg-gray-50 rounded-xl px-3 py-2.5">
+                      <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
+                      <input
+                        type="text"
+                        value={customDest}
+                        onChange={e => setCustomDest(e.target.value)}
+                        placeholder="Ex: Aeroporto de Jericoacoara"
+                        className="flex-1 text-[13px] text-gray-800 bg-transparent outline-none placeholder-gray-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Data & Horário */}
+              <section className="bg-white rounded-2xl border border-gray-100">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Data & Horário</p>
+                <div className="flex gap-2 px-4 pb-4">
+                  <button onClick={() => setShowCustomDate(true)}
+                    className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform">
+                    <Calendar size={13} className="text-brand" />
+                    <div className="text-left">
+                      <p className="text-[9px] text-gray-400 leading-none">Data</p>
+                      <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{customDateLabel}</p>
+                    </div>
+                  </button>
+                  <button onClick={() => customTimeRef.current?.showPicker?.() || customTimeRef.current?.focus()}
+                    className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform relative">
+                    <Clock size={13} className="text-brand" />
+                    <div className="text-left flex-1">
+                      <p className="text-[9px] text-gray-400 leading-none">Horário</p>
+                      <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{customTime || 'Selecionar'}</p>
+                    </div>
+                    <input
+                      ref={customTimeRef}
+                      type="time"
+                      value={customTime}
+                      onChange={e => setCustomTime(e.target.value)}
+                      className="absolute inset-0 opacity-0 w-full cursor-pointer"
+                    />
+                  </button>
+                </div>
+              </section>
+
+              {/* Passageiros */}
+              <section className="bg-white rounded-2xl border border-gray-100">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Passageiros</p>
+                <div className="flex items-center justify-between px-4 pb-4">
+                  <div className="flex items-center gap-2">
+                    <Users size={16} className="text-brand" />
+                    <p className="text-[13px] font-bold text-gray-900">{customPeople} passageiro{customPeople !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setCustomPeople(p => Math.max(1, p - 1))}
+                      className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center active:scale-95 transition-transform">
+                      <Minus size={12} className="text-gray-600" />
+                    </button>
+                    <span className="text-[15px] font-bold text-gray-900 w-5 text-center tabular-nums">{customPeople}</span>
+                    <button onClick={() => setCustomPeople(p => Math.min(20, p + 1))}
+                      className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform">
+                      <Plus size={12} className="text-white" />
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* Observações */}
+              <section className="bg-white rounded-2xl border border-gray-100">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Observações</p>
+                <div className="px-4 pb-4">
+                  <textarea
+                    rows={3}
+                    value={customNotes}
+                    onChange={e => setCustomNotes(e.target.value)}
+                    placeholder="Ex: 2 malas grandes, voo às 14h, precisamos de cadeirinha..."
+                    className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400"
+                  />
+                </div>
+              </section>
+
+              {customError && (
+                <p className="text-[12px] text-red-500 bg-red-50 rounded-xl px-4 py-2.5">{customError}</p>
+              )}
+
+              <div className="flex items-start gap-2 px-1">
+                <Info size={13} className="text-blue-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Valor a combinar. A cooperativa irá confirmar a corrida e enviar o preço para sua aprovação.
+                </p>
+              </div>
+            </>
+          )}
+
+          {showCustomDate && (
+            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} />
+          )}
+        </div>
+      )}
+
+      {/* ── FIXED ROUTE FORM ─────────────────────────────────── */}
+      {mode === 'rota' && (
+      <><div className="px-4 pt-4 space-y-3">
 
         {/* ROTAS POPULARES */}
         <div>
@@ -601,6 +823,23 @@ export default function Transfers() {
       {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} />}
       {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
       {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
+    </> )} {/* end mode === 'rota' */}
+
+      {/* Bottom CTA — Custom ride */}
+      {mode === 'custom' && !customSuccess && (
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
+          <button
+            onClick={canCustomBook ? handleRequestQuote : undefined}
+            disabled={customLoading || !canCustomBook}
+            className={`w-full font-bold rounded-2xl py-4 text-[14px] flex items-center justify-center gap-2 transition-transform shadow-xl ${
+              canCustomBook ? 'bg-brand text-white active:scale-[0.98] shadow-brand/20' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            <Send size={16} />
+            {customLoading ? 'Solicitando…' : 'Solicitar cotação'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

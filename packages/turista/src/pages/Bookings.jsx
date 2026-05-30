@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
@@ -7,7 +7,7 @@ import { PageSpinner } from '../components/ui/Spinner'
 import {
   Calendar, Clock, Users, Car, Search, Compass, MapPin,
   Star, RefreshCw, AlertTriangle, Loader2, Zap, Sun, Waves, Anchor,
-  ChevronRight, CalendarCheck,
+  ChevronRight, CalendarCheck, Check, X, MessageSquare,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -201,6 +201,122 @@ function BookingCard({ booking, onCancel, onDetail }) {
   )
 }
 
+/* ── Quote status helpers ───────────────────────────────────── */
+const QUOTE_STATUS = {
+  pending_quote: { label: 'Aguardando cotação', bg: 'bg-amber-400',  text: 'text-white', pulse: true  },
+  quoted:        { label: 'Proposta recebida',  bg: 'bg-blue-500',   text: 'text-white', pulse: false },
+  accepted:      { label: 'Aceita',             bg: 'bg-emerald-500',text: 'text-white', pulse: false },
+  paid:          { label: 'Paga',               bg: 'bg-gray-500',   text: 'text-white', pulse: false },
+  rejected:      { label: 'Recusada',           bg: 'bg-red-400',    text: 'text-white', pulse: false },
+  expired:       { label: 'Expirada',           bg: 'bg-gray-300',   text: 'text-gray-600', pulse: false },
+}
+
+function fmtDate(d) {
+  if (!d) return '—'
+  try { return format(new Date(d + 'T12:00:00'), "d MMM", { locale: ptBR }) } catch { return d }
+}
+
+/* ── Quote Card ─────────────────────────────────────────────── */
+function QuoteCard({ quote, onAccept, onReject, acceptLoading, rejectLoading }) {
+  const cfg = QUOTE_STATUS[quote.status] || QUOTE_STATUS.pending_quote
+
+  return (
+    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-violet-400 to-purple-300 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Car size={14} className="text-white/90" />
+            <span className="text-white font-bold text-[12px]">Corrida personalizada</span>
+          </div>
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.text} ${cfg.pulse ? 'animate-pulse' : ''}`}>
+            {cfg.label}
+          </span>
+        </div>
+        <p className="text-white font-bold text-[15px] mt-1 leading-tight truncate">
+          {quote.origin_place_name} → {quote.destination_place_name}
+        </p>
+      </div>
+
+      {/* Body */}
+      <div className="px-4 pt-3 pb-4 space-y-3">
+        <div className="flex items-center gap-4">
+          {[
+            { Icon: Calendar, val: fmtDate(quote.service_date) },
+            { Icon: Clock,    val: quote.service_time ? quote.service_time.slice(0,5) : '—' },
+            { Icon: Users,    val: `${quote.people_count || 1}` },
+          ].map(({ Icon, val }) => (
+            <div key={val} className="flex items-center gap-1.5">
+              <Icon size={13} className="text-brand shrink-0" />
+              <p className="text-[12px] font-semibold text-gray-800">{val}</p>
+            </div>
+          ))}
+        </div>
+
+        {quote.status === 'pending_quote' && (
+          <p className="text-[12px] text-amber-600 bg-amber-50 rounded-xl px-3 py-2">
+            Aguardando a cooperativa enviar o valor da corrida...
+          </p>
+        )}
+
+        {quote.status === 'quoted' && (
+          <div className="space-y-3">
+            <div className="bg-blue-50 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-blue-400">Proposta recebida</p>
+                <p className="text-[20px] font-extrabold text-gray-900">
+                  R$ {Number(quote.quoted_price).toLocaleString('pt-BR')}
+                </p>
+              </div>
+              {quote.quote_notes && (
+                <div className="flex items-start gap-1.5 max-w-[160px]">
+                  <MessageSquare size={12} className="text-blue-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-gray-500 leading-snug">{quote.quote_notes}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onReject(quote.id)}
+                disabled={rejectLoading}
+                className="flex-1 h-11 border-2 border-red-200 text-red-500 rounded-xl text-[13px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-60"
+              >
+                <X size={14} /> Recusar
+              </button>
+              <button
+                onClick={() => onAccept(quote)}
+                disabled={acceptLoading}
+                className="flex-[2] h-11 bg-emerald-500 text-white rounded-xl text-[13px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-60 shadow-sm"
+              >
+                {acceptLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                Aceitar e pagar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {quote.status === 'accepted' && (
+          <p className="text-[12px] text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
+            Cotação aceita! Aguardando confirmação do pagamento.
+          </p>
+        )}
+
+        {quote.status === 'paid' && (
+          <p className="text-[12px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
+            Corrida confirmada e paga. Motorista a caminho!
+          </p>
+        )}
+
+        {(quote.status === 'rejected' || quote.status === 'expired') && (
+          <p className="text-[12px] text-gray-400 bg-gray-50 rounded-xl px-3 py-2">
+            {quote.status === 'rejected' ? 'Você recusou esta proposta.' : 'Esta cotação expirou.'}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Main Page ──────────────────────────────────────────────── */
 export default function Bookings() {
   const queryClient = useQueryClient()
@@ -212,16 +328,24 @@ export default function Bookings() {
     { id: 'ativos',     label: t('bookings.active')    },
     { id: 'concluidos', label: t('bookings.completed') },
     { id: 'cancelados', label: t('bookings.cancelled') },
+    { id: 'cotacoes',   label: 'Cotações'              },
   ]
 
   const [tab,           setTab]           = useState('todos')
   const [cancelTarget,  setCancelTarget]  = useState(null)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError,   setCancelError]   = useState(null)
+  const [quoteActing,   setQuoteActing]   = useState(null) // quote id being accepted/rejected
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-bookings'],
     queryFn:  () => api.getMyBookings(),
+  })
+
+  const { data: quotesData, isLoading: quotesLoading } = useQuery({
+    queryKey: ['my-quotes'],
+    queryFn:  () => api.getMyQuotes(),
+    refetchInterval: tab === 'cotacoes' ? 10000 : false,
   })
 
   const all = (
@@ -257,6 +381,49 @@ export default function Bookings() {
     }
   }
 
+  async function handleAcceptQuote(quote) {
+    setQuoteActing(quote.id)
+    try {
+      const result = await api.acceptQuote(quote.id)
+      // Navigate to payment with quote_id as service_id
+      navigate('/checkout/pagamento', {
+        state: {
+          service_name:     `Corrida personalizada: ${quote.origin_place_name} → ${quote.destination_place_name}`,
+          service_type:     'transfer',
+          booking_mode:     'private',
+          service_date:     fmtDate(quote.service_date),
+          service_date_iso: quote.service_date,
+          service_time:     quote.service_time,
+          people_count:     quote.people_count,
+          total_price:      result.quoted_price,
+          origin_text:      quote.origin_place_name,
+          destination_text: quote.destination_place_name,
+          service_id:       result.quote_id,
+          quote_id:         result.quote_id,
+        },
+      })
+    } catch (err) {
+      alert(err.message || 'Erro ao aceitar cotação')
+    } finally {
+      setQuoteActing(null)
+    }
+  }
+
+  async function handleRejectQuote(quoteId) {
+    setQuoteActing(quoteId)
+    try {
+      await api.rejectQuote(quoteId, { rejection_reason: 'Recusado pelo cliente' })
+      queryClient.invalidateQueries({ queryKey: ['my-quotes'] })
+    } catch (err) {
+      alert(err.message || 'Erro ao recusar cotação')
+    } finally {
+      setQuoteActing(null)
+    }
+  }
+
+  const quotes = Array.isArray(quotesData) ? quotesData : []
+  const pendingQuotesCount = quotes.filter(q => q.status === 'quoted').length
+
   return (
     <div className="min-h-full bg-gray-50 pb-24">
       {/* Header */}
@@ -276,15 +443,15 @@ export default function Bookings() {
         </div>
 
         {/* Tabs */}
-        <div className="flex">
+        <div className="flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {TABS.map((t) => {
-            const count  = t.id !== 'todos' ? counts[t.id] : null
+            const count  = t.id === 'cotacoes' ? pendingQuotesCount : (t.id !== 'todos' ? counts[t.id] : null)
             const active = tab === t.id
             return (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`relative flex-1 pb-3 text-[12px] font-semibold transition-colors ${active ? 'text-brand' : 'text-gray-400'}`}
+                className={`relative shrink-0 flex-1 pb-3 px-1 text-[12px] font-semibold transition-colors ${active ? 'text-brand' : 'text-gray-400'}`}
               >
                 {t.label}
                 {count > 0 && (
@@ -301,7 +468,30 @@ export default function Bookings() {
 
       {/* List */}
       <main className="px-4 pt-4 space-y-3">
-        {isLoading ? (
+        {tab === 'cotacoes' ? (
+          quotesLoading ? (
+            <div className="py-16"><PageSpinner /></div>
+          ) : quotes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                <Car size={28} className="text-gray-300" />
+              </div>
+              <p className="text-[14px] font-semibold text-gray-500 mb-1">Nenhuma cotação ainda.</p>
+              <p className="text-[12px] text-gray-400">Solicite uma corrida personalizada na tela de Transfers.</p>
+            </div>
+          ) : (
+            quotes.map(q => (
+              <QuoteCard
+                key={q.id}
+                quote={q}
+                onAccept={handleAcceptQuote}
+                onReject={handleRejectQuote}
+                acceptLoading={quoteActing === q.id}
+                rejectLoading={quoteActing === q.id}
+              />
+            ))
+          )
+        ) : isLoading ? (
           <div className="py-16"><PageSpinner /></div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
