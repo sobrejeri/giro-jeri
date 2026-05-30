@@ -53,7 +53,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         destination_text:    destination_text || null,
         total_amount:        Number(total_price),
         status_commercial:   'awaiting_payment',
-        status_operational:  'not_started',
+        status_operational:  'new',
         payment_status:      'pending',
       })
       .select()
