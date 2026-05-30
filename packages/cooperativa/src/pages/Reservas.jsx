@@ -1,244 +1,339 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
 import {
-  Calendar, Clock, Users, Phone, CheckCircle2, MapPin,
-  MessageCircle, RefreshCw, Car, AlertCircle,
+  CalendarCheck, Clock, Users, MapPin, Car, CheckCircle2,
+  RefreshCw, AlertCircle, ChevronRight, Zap, PhoneCall,
 } from 'lucide-react'
 import { api } from '../lib/api'
-import { PageSpinner } from '../components/ui/Spinner'
-import Card, { CardBody } from '../components/ui/Card'
+
+function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }
+
+function timeAgo(isoDate) {
+  const diff = Math.floor((Date.now() - new Date(isoDate)) / 1000)
+  if (diff < 60)  return `${diff}s atrás`
+  if (diff < 3600) return `${Math.floor(diff / 60)}min atrás`
+  return `${Math.floor(diff / 3600)}h atrás`
+}
 
 function WhatsAppIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2.546 20.2A1 1 0 0 0 3.8 21.454l3.032-.892A9.957 9.957 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.966 7.966 0 0 1-4.229-1.206l-.294-.18-2.456.722.722-2.456-.18-.294A7.966 7.966 0 0 1 4.357 12c0-4.271 3.372-7.643 7.643-7.643S19.643 7.729 19.643 12 16.271 19.643 12 19.643z"/>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2.546 20.2A1 1 0 0 0 3.8 21.454l3.032-.892A9.957 9.957 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.966 7.966 0 0 1-4.229-1.206l-.294-.18-2.456.722.722-2.456-.18-.294A7.966 7.966 0 0 1 4.357 12c0-4.271 3.372-7.643 7.643-7.643S19.643 7.729 19.643 12 16.271 19.643 12 19.643z" />
     </svg>
   )
 }
 
-const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-
-function fmtDate(dateStr) {
-  if (!dateStr) return '—'
-  try { return format(new Date(dateStr + 'T12:00:00'), "d MMM yyyy", { locale: ptBR }) } catch { return dateStr }
-}
-
 function buildWhatsAppMsg(b) {
-  const clientPhone = b.users?.phone?.replace(/\D/g, '')
-  const serviceName = b.service_name || (b.service_type === 'tour' ? 'Passeio' : 'Transfer')
-  const msg = [
-    `🏄 *GIRO JERI — Reserva Confirmada!*`,
-    ``,
-    `Olá *${b.users?.full_name || 'cliente'}*!`,
-    `Sua reserva foi aceita e está confirmada.`,
-    ``,
-    `📋 *Detalhes:*`,
-    `• Serviço: ${serviceName}`,
-    `• Data: ${fmtDate(b.service_date)}`,
-    b.service_time ? `• Horário: ${b.service_time}` : null,
-    `• Pessoas: ${b.people_count}`,
-    b.origin_text ? `• Saída: ${b.origin_text}` : null,
-    b.destination_text ? `• Destino: ${b.destination_text}` : null,
-    `• Total: ${fmt(b.total_amount)}`,
-    `• Código: ${b.booking_code}`,
-    ``,
-    `Em breve entraremos em contato para confirmar os detalhes. Até logo! 🌊`,
-  ].filter((l) => l !== null).join('\n')
+  const clientName = b.users?.full_name || 'Cliente'
+  const type = b.service_type === 'tour' ? 'Passeio' : 'Transfer'
+  const mode = b.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
+  const date = b.service_date
+    ? new Date(b.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : '—'
+  const time = b.service_time ? b.service_time.slice(0, 5) : '—'
 
-  const phone = clientPhone ? `55${clientPhone}` : ''
-  return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+  let msg = `Olá ${clientName}! 👋\n\n`
+  msg += `Sou da cooperativa que aceitou sua reserva na Giro Jeri.\n\n`
+  msg += `📋 *Detalhes da reserva*\n`
+  msg += `Código: ${b.booking_code}\n`
+  msg += `Serviço: ${type} ${mode}\n`
+  msg += `Data: ${date} às ${time}\n`
+  msg += `Pessoas: ${b.people_count}\n`
+  if (b.origin_text)      msg += `Origem: ${b.origin_text}\n`
+  if (b.destination_text) msg += `Destino: ${b.destination_text}\n`
+  msg += `Valor: ${fmt(b.total_amount)}\n\n`
+  msg += `Vou entrar em contato para alinhar os detalhes. Qualquer dúvida, estou à disposição! 😊`
+
+  return encodeURIComponent(msg)
 }
 
-function BookingCard({ booking, onAccept, onComplete, accepting, completing }) {
-  const isPending = !booking.operator_id
-  const isActive  = booking.operator_id && booking.status_operational !== 'completed'
+// ── Toast simples ─────────────────────────────────────────
+function Toast({ message, type = 'info', onClose }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 4000)
+    return () => clearTimeout(t)
+  }, [onClose])
+
+  const bg = type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-emerald-500' : 'bg-gray-800'
 
   return (
-    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden ${isPending ? 'border-amber-200' : 'border-green-200'}`}>
-      {/* Header */}
-      <div className={`px-4 py-2.5 flex items-center justify-between ${isPending ? 'bg-amber-50' : 'bg-green-50'}`}>
-        <span className={`text-[11px] font-bold uppercase tracking-wide ${isPending ? 'text-amber-700' : 'text-green-700'}`}>
-          {isPending ? '⏳ Nova solicitação' : '✅ Em atendimento'}
-        </span>
-        <span className="text-[11px] text-gray-500 font-mono">{booking.booking_code}</span>
+    <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 ${bg} text-white text-sm font-semibold px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 max-w-xs text-center`}>
+      {type === 'error' && <AlertCircle size={15} className="shrink-0" />}
+      {type === 'success' && <CheckCircle2 size={15} className="shrink-0" />}
+      {message}
+    </div>
+  )
+}
+
+// ── Card de corrida disponível ────────────────────────────
+function PendingCard({ booking, onAccept, accepting }) {
+  const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
+  const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
+
+  return (
+    <div className="bg-white rounded-2xl border-2 border-brand/20 shadow-sm overflow-hidden">
+      {/* Header urgência */}
+      <div className="bg-brand/5 px-4 py-2 flex items-center justify-between border-b border-brand/10">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
+          <span className="text-[11px] font-bold text-brand uppercase tracking-wide">Nova solicitação</span>
+        </div>
+        <span className="text-[11px] text-gray-400">{timeAgo(booking.created_at)}</span>
       </div>
 
       <div className="p-4 space-y-3">
-        {/* Service name */}
-        <div>
-          <p className="text-[15px] font-bold text-gray-900">{booking.service_name || (booking.service_type === 'tour' ? 'Passeio' : 'Transfer')}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            {booking.service_type === 'tour' ? 'Passeio' : 'Transfer'} · {booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'}
-          </p>
+        {/* Tipo + modo */}
+        <div className="flex items-center gap-2">
+          <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">{type}</span>
+          <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">{mode}</span>
         </div>
 
-        {/* Details row */}
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { icon: Calendar, label: 'Data',    value: fmtDate(booking.service_date) },
-            { icon: Clock,    label: 'Horário', value: booking.service_time?.slice(0,5) || 'A confirmar' },
-            { icon: Users,    label: 'Pessoas', value: `${booking.people_count}` },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="bg-gray-50 rounded-lg px-2.5 py-2">
-              <p className="text-[10px] text-gray-400 flex items-center gap-1"><Icon size={10} />{label}</p>
-              <p className="text-[12px] font-semibold text-gray-900 mt-0.5">{value}</p>
+        {/* Detalhes */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-[13px] text-gray-700">
+            <CalendarCheck size={13} className="text-gray-400 shrink-0" />
+            <span className="font-semibold">
+              {booking.service_date
+                ? new Date(booking.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                : '—'}
+              {booking.service_time ? ` às ${booking.service_time.slice(0, 5)}` : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[13px] text-gray-700">
+            <Users size={13} className="text-gray-400 shrink-0" />
+            <span>{booking.people_count} {booking.people_count === 1 ? 'pessoa' : 'pessoas'}</span>
+          </div>
+          {booking.origin_text && (
+            <div className="flex items-start gap-2 text-[13px] text-gray-700">
+              <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
+              <span className="truncate">
+                {booking.origin_text}
+                {booking.destination_text ? ` → ${booking.destination_text}` : ''}
+              </span>
             </div>
-          ))}
+          )}
         </div>
 
-        {/* Route */}
-        {(booking.origin_text || booking.destination_text) && (
-          <div className="flex items-start gap-2 bg-gray-50 rounded-lg px-3 py-2">
-            <MapPin size={12} className="text-gray-400 shrink-0 mt-0.5" />
-            <p className="text-[12px] text-gray-600">
-              {booking.origin_text}{booking.destination_text ? ` → ${booking.destination_text}` : ''}
-            </p>
-          </div>
-        )}
-
-        {/* Client */}
-        <div className="flex items-center justify-between">
+        {/* Valor + botão */}
+        <div className="flex items-center justify-between pt-1 border-t border-gray-100 gap-3">
           <div>
-            <p className="text-[10px] text-gray-400">Cliente</p>
-            <p className="text-[13px] font-semibold text-gray-900">{booking.users?.full_name || '—'}</p>
-            {booking.users?.phone && (
-              <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                <Phone size={10} />{booking.users.phone}
-              </p>
-            )}
+            <p className="text-[11px] text-gray-400">Valor da corrida</p>
+            <p className="text-[20px] font-extrabold text-brand">{fmt(booking.total_amount)}</p>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] text-gray-400">Total</p>
-            <p className="text-[15px] font-bold text-gray-900">{fmt(booking.total_amount)}</p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 pt-1">
-          {isPending && (
-            <button
-              onClick={() => onAccept(booking.id)}
-              disabled={accepting === booking.id}
-              className="flex-1 flex items-center justify-center gap-2 bg-brand text-white rounded-lg py-2.5 text-[13px] font-bold disabled:opacity-60 hover:bg-orange-600 transition-colors"
-            >
-              {accepting === booking.id
-                ? <RefreshCw size={14} className="animate-spin" />
-                : <CheckCircle2 size={14} />}
-              {accepting === booking.id ? 'Aceitando…' : 'Aceitar corrida'}
-            </button>
-          )}
-
-          {isActive && (
-            <>
-              <a
-                href={buildWhatsAppMsg(booking)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 bg-[#25D366] text-white rounded-lg px-3 py-2.5 text-[12px] font-bold hover:bg-green-600 transition-colors"
-              >
-                <WhatsAppIcon /> WhatsApp
-              </a>
-              <button
-                onClick={() => onComplete(booking.id)}
-                disabled={completing === booking.id}
-                className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white rounded-lg py-2.5 text-[13px] font-bold disabled:opacity-60 hover:bg-gray-700 transition-colors"
-              >
-                {completing === booking.id
-                  ? <RefreshCw size={14} className="animate-spin" />
-                  : <CheckCircle2 size={14} />}
-                {completing === booking.id ? 'Concluindo…' : 'Concluir serviço'}
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => onAccept(booking.id)}
+            disabled={accepting}
+            className="flex items-center gap-2 bg-brand text-white font-bold px-5 py-3 rounded-2xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-brand/30"
+          >
+            {accepting
+              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aceitando…</>
+              : <><Zap size={15} /> Aceitar</>}
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
-export default function Reservas() {
-  const qc = useQueryClient()
-  const [tab, setTab] = useState('pending')
-  const [accepting, setAccepting] = useState(null)
-  const [completing, setCompleting] = useState(null)
-  const [error, setError] = useState(null)
+// ── Card de corrida aceita (minhas) ───────────────────────
+function MyCard({ booking, onComplete, completing }) {
+  const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
+  const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
+  const clientPhone = booking.users?.phone
+  const clientName  = booking.users?.full_name || 'Cliente'
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['operator-bookings'],
-    queryFn: () => api.getOperatorBookings(),
-    refetchInterval: 30_000,
+  const waNumber = clientPhone
+    ? `55${clientPhone.replace(/\D/g, '')}`
+    : null
+
+  const isCompleting = completing === booking.id
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Status badge */}
+      <div className="bg-emerald-50 px-4 py-2 flex items-center gap-2 border-b border-emerald-100">
+        <CheckCircle2 size={13} className="text-emerald-500" />
+        <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide">
+          {booking.status_operational === 'in_progress' ? 'Em andamento' : 'Aceita'}
+        </span>
+        <span className="ml-auto text-[11px] font-mono text-gray-400">{booking.booking_code}</span>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Tipo */}
+        <div className="flex items-center gap-2">
+          <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">{type}</span>
+          <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">{mode}</span>
+        </div>
+
+        {/* Cliente */}
+        <div className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[11px] text-gray-400">Cliente</p>
+            <p className="text-[14px] font-bold text-gray-900">{clientName}</p>
+            {clientPhone && <p className="text-[12px] text-gray-500">{clientPhone}</p>}
+          </div>
+          {clientPhone && (
+            <a
+              href={`tel:${clientPhone.replace(/\D/g, '')}`}
+              className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 active:scale-95 transition-transform"
+            >
+              <PhoneCall size={16} />
+            </a>
+          )}
+        </div>
+
+        {/* Detalhes */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-[13px] text-gray-700">
+            <CalendarCheck size={13} className="text-gray-400 shrink-0" />
+            <span className="font-semibold">
+              {booking.service_date
+                ? new Date(booking.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                : '—'}
+              {booking.service_time ? ` às ${booking.service_time.slice(0, 5)}` : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[13px] text-gray-700">
+            <Users size={13} className="text-gray-400 shrink-0" />
+            <span>{booking.people_count} {booking.people_count === 1 ? 'pessoa' : 'pessoas'}</span>
+          </div>
+          {booking.origin_text && (
+            <div className="flex items-start gap-2 text-[13px] text-gray-700">
+              <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
+              <span>{booking.origin_text}{booking.destination_text ? ` → ${booking.destination_text}` : ''}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between text-[13px]">
+          <span className="text-gray-400">Valor</span>
+          <span className="font-bold text-brand">{fmt(booking.total_amount)}</span>
+        </div>
+
+        {/* Ações */}
+        <div className="flex gap-2 pt-1 border-t border-gray-100">
+          {waNumber && (
+            <a
+              href={`https://wa.me/${waNumber}?text=${buildWhatsAppMsg(booking)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 flex items-center justify-center gap-2 bg-[#25D366] text-white font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-transform"
+            >
+              <WhatsAppIcon /> WhatsApp
+            </a>
+          )}
+          <button
+            onClick={() => onComplete(booking.id)}
+            disabled={isCompleting}
+            className="flex-1 flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-transform disabled:opacity-60"
+          >
+            {isCompleting
+              ? <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+              : <><Car size={14} /> Concluir</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Página principal ──────────────────────────────────────
+export default function Reservas() {
+  const [tab,       setTab]       = useState('pending')
+  const [toast,     setToast]     = useState(null)
+  const [accepting, setAccepting] = useState(null)
+  const [completing,setCompleting]= useState(null)
+  const queryClient = useQueryClient()
+
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey:        ['operator-bookings'],
+    queryFn:         () => api.getOperatorBookings(),
+    refetchInterval: 6000,
+    staleTime:       3000,
   })
 
   const pending = data?.pending || []
   const mine    = data?.mine    || []
 
-  async function handleAccept(id) {
-    setAccepting(id)
-    setError(null)
+  async function handleAccept(bookingId) {
+    if (accepting) return
+    setAccepting(bookingId)
     try {
-      await api.acceptBooking(id)
-      qc.invalidateQueries({ queryKey: ['operator-bookings'] })
+      await api.acceptBooking(bookingId)
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setToast({ message: 'Corrida aceita! Entre em contato com o cliente.', type: 'success' })
+      setTab('mine')
     } catch (err) {
-      setError(err.message || 'Erro ao aceitar reserva')
+      if (err.message?.includes('já foi aceita')) {
+        queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+        setToast({ message: 'Alguém aceitou essa corrida antes de você', type: 'error' })
+      } else {
+        setToast({ message: err.message || 'Erro ao aceitar corrida', type: 'error' })
+      }
     } finally {
       setAccepting(null)
     }
   }
 
-  async function handleComplete(id) {
-    setCompleting(id)
-    setError(null)
+  async function handleComplete(bookingId) {
+    if (completing) return
+    setCompleting(bookingId)
     try {
-      await api.completeBooking(id)
-      qc.invalidateQueries({ queryKey: ['operator-bookings'] })
+      await api.completeBooking(bookingId)
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setToast({ message: 'Corrida concluída!', type: 'success' })
     } catch (err) {
-      setError(err.message || 'Erro ao concluir serviço')
+      setToast({ message: err.message || 'Erro ao concluir', type: 'error' })
     } finally {
       setCompleting(null)
     }
   }
 
-  const TABS = [
-    { id: 'pending', label: 'Novas', count: pending.length },
-    { id: 'mine',    label: 'Em andamento', count: mine.length },
-  ]
-
-  const list = tab === 'pending' ? pending : mine
-
-  if (isLoading) return <PageSpinner />
-
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Reservas</h1>
-        <button onClick={() => refetch()} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
-          <RefreshCw size={14} /> Atualizar
+    <div className="p-6 max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Corridas</h1>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {pending.length > 0
+              ? `${pending.length} nova${pending.length > 1 ? 's' : ''} solicitaç${pending.length > 1 ? 'ões' : 'ão'} disponível${pending.length > 1 ? 'is' : ''}`
+              : 'Nenhuma solicitação no momento'}
+          </p>
+        </div>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors active:scale-95"
+        >
+          <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
         </button>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <AlertCircle size={15} className="text-red-500 shrink-0" />
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
-      )}
-
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
-        {TABS.map((t) => (
+      <div className="flex bg-gray-100 rounded-xl p-1 mb-5">
+        {[
+          { key: 'pending', label: 'Disponíveis', count: pending.length },
+          { key: 'mine',    label: 'Minhas corridas', count: mine.length },
+        ].map((t) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
-              tab === t.id ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
+              tab === t.key
+                ? 'bg-white shadow-sm text-gray-900'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             {t.label}
             {t.count > 0 && (
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-brand text-white' : 'bg-gray-200 text-gray-600'}`}>
+              <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                tab === t.key
+                  ? t.key === 'pending' ? 'bg-brand text-white' : 'bg-emerald-500 text-white'
+                  : 'bg-gray-300 text-gray-600'
+              }`}>
                 {t.count}
               </span>
             )}
@@ -246,31 +341,58 @@ export default function Reservas() {
         ))}
       </div>
 
-      {/* List */}
-      {list.length === 0 ? (
-        <Card>
-          <CardBody>
-            <div className="text-center py-8">
-              <Car size={32} className="text-gray-300 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-gray-500">
-                {tab === 'pending' ? 'Nenhuma solicitação nova' : 'Nenhuma corrida em andamento'}
-              </p>
-            </div>
-          </CardBody>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {list.map((b) => (
-            <BookingCard
-              key={b.id}
-              booking={b}
-              onAccept={handleAccept}
-              onComplete={handleComplete}
-              accepting={accepting}
-              completing={completing}
-            />
-          ))}
+      {/* Conteúdo */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-gray-400">
+          <RefreshCw size={24} className="animate-spin" />
         </div>
+      ) : tab === 'pending' ? (
+        pending.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <CalendarCheck size={40} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">Sem solicitações disponíveis</p>
+            <p className="text-xs mt-1">Novas corridas aparecerão aqui automaticamente</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {pending.map((b) => (
+              <PendingCard
+                key={b.id}
+                booking={b}
+                onAccept={handleAccept}
+                accepting={accepting === b.id}
+              />
+            ))}
+          </div>
+        )
+      ) : (
+        mine.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <Car size={40} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">Nenhuma corrida ativa</p>
+            <p className="text-xs mt-1">As corridas que você aceitar aparecerão aqui</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {mine.map((b) => (
+              <MyCard
+                key={b.id}
+                booking={b}
+                onComplete={handleComplete}
+                completing={completing}
+              />
+            ))}
+          </div>
+        )
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   )
