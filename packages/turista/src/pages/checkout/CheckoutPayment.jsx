@@ -25,6 +25,7 @@ export default function CheckoutPayment() {
     service_date, service_date_iso, service_time,
     people_count, total_price: rawPrice, region_id, service_id,
     vehicles = [], origin_text, destination_text, cover_image_url,
+    existing_booking_id,
   } = state
 
   const total_price = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
@@ -43,6 +44,7 @@ export default function CheckoutPayment() {
         origin_text, destination_text,
         total_price, payment_method: method,
         service_name, cover_image_url,
+        existing_booking_id: existing_booking_id || undefined,
       })
 
       if (!result) throw new Error('Erro ao iniciar pagamento')

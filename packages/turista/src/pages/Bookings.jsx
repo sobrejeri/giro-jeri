@@ -82,7 +82,7 @@ function CancelDialog({ booking, onConfirm, onClose, loading, error }) {
 }
 
 /* ── Booking Card ───────────────────────────────────────────── */
-function BookingCard({ booking, onCancel, onDetail }) {
+function BookingCard({ booking, onCancel, onDetail, onPay }) {
   const { t } = useTranslation()
   const STATUS_CFG = getStatusCfg(t)
   const status  = resolveStatus(booking)
@@ -174,7 +174,10 @@ function BookingCard({ booking, onCancel, onDetail }) {
 
           <div className="flex items-center gap-2">
             {status === 'waiting_payment' && (
-              <button className="bg-brand text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform shadow-sm shadow-brand/20">
+              <button
+                onClick={() => onPay?.(booking)}
+                className="bg-brand text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform shadow-sm shadow-brand/20"
+              >
                 Pagar agora
               </button>
             )}
@@ -424,6 +427,29 @@ export default function Bookings() {
   const quotes = Array.isArray(quotesData) ? quotesData : []
   const pendingQuotesCount = quotes.filter(q => q.status === 'quoted').length
 
+  function handlePay(booking) {
+    let dateStr = '—'
+    if (booking.service_date) {
+      try { dateStr = format(new Date(booking.service_date + 'T00:00:00'), "d MMM", { locale: ptBR }) } catch {}
+    }
+    navigate('/checkout/pagamento', {
+      state: {
+        service_name:        booking.service_name || `${booking.service_type === 'tour' ? 'Passeio' : 'Transfer'} · ${booking.booking_code}`,
+        service_type:        booking.service_type,
+        booking_mode:        booking.booking_mode || 'private',
+        service_date:        dateStr,
+        service_date_iso:    booking.service_date,
+        service_time:        booking.service_time,
+        people_count:        booking.people_count,
+        total_price:         booking.total_amount,
+        origin_text:         booking.origin_text || booking.pickup_place_name || null,
+        destination_text:    booking.destination_text || booking.destination_place_name || null,
+        cover_image_url:     booking.cover_image_url || null,
+        existing_booking_id: booking.id,
+      },
+    })
+  }
+
   return (
     <div className="min-h-full bg-gray-50 pb-24">
       {/* Header */}
@@ -512,6 +538,7 @@ export default function Bookings() {
               booking={b}
               onCancel={setCancelTarget}
               onDetail={(id) => navigate(`/minhas-reservas/${id}`)}
+              onPay={handlePay}
             />
           ))
         )}
