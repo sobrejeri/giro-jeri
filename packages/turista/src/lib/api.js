@@ -91,8 +91,9 @@ export const api = {
   rejectQuote:        (id, body)    => request(`/api/transfers/quotes/${id}/reject`, { method: 'POST', body }),
 
   // Pagamentos
-  createPaymentIntent: (body) => request('/api/payments/intent', { method: 'POST', body }),
-  getPaymentStatus:    (id)   => request(`/api/payments/${id}/status`),
+  createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
+  getPaymentStatus:       (id)   => request(`/api/payments/${id}/status`),
+  simulatePaymentApprove: (id)   => request(`/api/payments/${id}/simulate`, { method: 'POST', body: {} }),
 
   // Reservas
   createBooking: (body) => request('/api/bookings',     { method: 'POST', body }),

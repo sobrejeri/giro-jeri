@@ -255,6 +255,37 @@ router.post('/webhook', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── POST /api/payments/:id/simulate ───────────────────
+// Confirma pagamento automaticamente (somente gateway manual/sem chave PIX)
+router.post('/:id/simulate', authenticate, async (req, res, next) => {
+  try {
+    const { data: payment } = await supabase
+      .from('payments')
+      .select('*, bookings(user_id, booking_code, status_commercial)')
+      .eq('id', req.params.id)
+      .single()
+
+    if (!payment) return res.status(404).json({ error: 'Pagamento não encontrado' })
+
+    // Só funciona quando gateway é manual (sem integração real)
+    if (payment.gateway_name !== 'manual') {
+      return res.status(403).json({ error: 'Simulação disponível apenas no modo manual' })
+    }
+
+    // O pagamento deve pertencer ao usuário logado
+    if (payment.bookings?.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Acesso negado' })
+    }
+
+    if (payment.status === 'approved') {
+      return res.json({ ok: true, already: true })
+    }
+
+    await onPaymentApproved(payment)
+    res.json({ ok: true, booking_code: payment.bookings?.booking_code })
+  } catch (err) { next(err) }
+})
+
 // ── POST /api/payments/manual-confirm ─────────────────
 // Admin confirma pagamento manualmente (dinheiro/transferência)
 router.post('/manual-confirm', authenticate, async (req, res, next) => {

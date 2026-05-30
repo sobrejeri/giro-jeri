@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
-import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark, FlaskConical } from 'lucide-react'
+import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark, FlaskConical, Zap } from 'lucide-react'
 import { api } from '../../lib/api'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
@@ -29,8 +29,11 @@ function useCountdown(expiresAt) {
 
 // ── Manual payment (no gateway) ───────────────────────────
 function ManualPayment({ state }) {
-  const [copied, setCopied] = useState(false)
-  const { booking_code, amount, total_price, pix_key, pix_key_type, bank_name, bank_agency, bank_account, bank_account_type } = state
+  const navigate = useNavigate()
+  const [copied,        setCopied]        = useState(false)
+  const [simLoading,    setSimLoading]    = useState(false)
+  const [simError,      setSimError]      = useState('')
+  const { booking_code, amount, total_price, pix_key, pix_key_type, bank_name, bank_agency, bank_account, bank_account_type, payment_id, booking_id } = state
   const value = amount || total_price
 
   function handleCopy() {
@@ -39,6 +42,20 @@ function ManualPayment({ state }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
     })
+  }
+
+  async function handleSimulate() {
+    if (!payment_id) return
+    setSimLoading(true)
+    setSimError('')
+    try {
+      await api.simulatePaymentApprove(payment_id)
+      navigate('/checkout/sucesso', { state: { ...state, booking_id } })
+    } catch (err) {
+      setSimError(err.message || 'Erro ao simular pagamento')
+    } finally {
+      setSimLoading(false)
+    }
   }
 
   return (
@@ -117,6 +134,27 @@ function ManualPayment({ state }) {
                 <span className="font-semibold text-gray-800">{row.value}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Botão de teste — só aparece quando não há chave PIX real */}
+        {!pix_key && payment_id && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <FlaskConical size={14} className="text-yellow-600 shrink-0 mt-0.5" />
+              <p className="text-[12px] text-yellow-700 font-medium">
+                Modo de teste ativo. Clique abaixo para simular a confirmação do pagamento.
+              </p>
+            </div>
+            {simError && <p className="text-[11px] text-red-500">{simError}</p>}
+            <button
+              onClick={handleSimulate}
+              disabled={simLoading}
+              className="w-full flex items-center justify-center gap-2 bg-yellow-500 text-white font-bold rounded-xl py-3 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-60"
+            >
+              <Zap size={15} />
+              {simLoading ? 'Processando…' : 'Simular pagamento aprovado'}
+            </button>
           </div>
         )}
 
