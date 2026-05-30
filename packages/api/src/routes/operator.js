@@ -112,4 +112,108 @@ router.put('/preferences/:type/:entityId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── GET /api/operator/bookings ─────────────────────────
+router.get('/bookings', authenticate, async (req, res, next) => {
+  try {
+    if (!['operator','admin'].includes(req.user.user_type)) {
+      return res.status(403).json({ error: 'Acesso negado' })
+    }
+
+    const select = `
+      id, booking_code, service_type, service_name, booking_mode,
+      service_date, service_time, people_count,
+      total_amount, status_commercial, status_operational, operator_id,
+      origin_text, destination_text, cover_image_url,
+      users!bookings_user_id_fkey ( full_name, phone )
+    `
+
+    // Reservas pagas aguardando aceite (sem operador)
+    const { data: pending } = await supabase
+      .from('bookings')
+      .select(select)
+      .eq('status_commercial', 'paid')
+      .eq('status_operational', 'not_started')
+      .is('operator_id', null)
+      .order('service_date', { ascending: true })
+
+    // Reservas já aceitas por este operador (não concluídas/canceladas)
+    const { data: mine } = await supabase
+      .from('bookings')
+      .select(select)
+      .eq('operator_id', req.user.id)
+      .not('status_operational', 'in', '(completed,cancelled)')
+      .order('service_date', { ascending: true })
+
+    res.json({ pending: pending || [], mine: mine || [] })
+  } catch (err) { next(err) }
+})
+
+// ── POST /api/operator/bookings/:id/accept ─────────────
+router.post('/bookings/:id/accept', authenticate, async (req, res, next) => {
+  try {
+    if (!['operator','admin'].includes(req.user.user_type)) {
+      return res.status(403).json({ error: 'Acesso negado' })
+    }
+
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id, operator_id, status_commercial')
+      .eq('id', req.params.id)
+      .single()
+
+    if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' })
+    if (booking.operator_id) return res.status(409).json({ error: 'Reserva já aceita por outro operador' })
+    if (booking.status_commercial !== 'paid') return res.status(400).json({ error: 'Reserva não está paga' })
+
+    const { data, error } = await supabase
+      .from('bookings')
+      .update({ operator_id: req.user.id, status_operational: 'assigned' })
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    await supabase.from('audit_logs').insert({
+      user_id: req.user.id, action: 'booking.accept',
+      entity_type: 'booking', entity_id: req.params.id,
+    }).catch(() => {})
+
+    res.json(data)
+  } catch (err) { next(err) }
+})
+
+// ── POST /api/operator/bookings/:id/complete ───────────
+router.post('/bookings/:id/complete', authenticate, async (req, res, next) => {
+  try {
+    if (!['operator','admin'].includes(req.user.user_type)) {
+      return res.status(403).json({ error: 'Acesso negado' })
+    }
+
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id, operator_id')
+      .eq('id', req.params.id)
+      .single()
+
+    if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' })
+    if (booking.operator_id !== req.user.id && req.user.user_type !== 'admin') {
+      return res.status(403).json({ error: 'Sem permissão' })
+    }
+
+    const { data, error } = await supabase
+      .from('bookings')
+      .update({
+        status_operational: 'completed',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    res.json(data)
+  } catch (err) { next(err) }
+})
+
 export default router;

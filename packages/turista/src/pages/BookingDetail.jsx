@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -124,6 +124,14 @@ export default function BookingDetail() {
 
   const booking = data
 
+  useEffect(() => {
+    if (!booking) return
+    const status = resolveStatus(booking)
+    if (!['waiting_acceptance', 'confirmed'].includes(status)) return
+    const t = setInterval(() => queryClient.invalidateQueries({ queryKey: ['booking', id] }), 5000)
+    return () => clearInterval(t)
+  }, [booking, id, queryClient])
+
   async function handleConfirmCancel() {
     setCancelLoading(true)
     setCancelError(null)
@@ -232,6 +240,40 @@ export default function BookingDetail() {
             </div>
           </div>
         </div>
+
+        {/* Waiting acceptance indicator */}
+        {status === 'waiting_acceptance' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0 animate-pulse">
+              <Clock size={16} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="text-[13px] font-bold text-amber-800">Aguardando cooperativa aceitar</p>
+              <p className="text-[11px] text-amber-600 mt-0.5">Esta página atualiza automaticamente</p>
+            </div>
+          </div>
+        )}
+
+        {/* Cooperativa aceita — show operator card */}
+        {['confirmed', 'in_progress', 'completed'].includes(status) && booking.operator && (
+          <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle size={15} className="text-green-600" />
+              <p className="text-[13px] font-bold text-green-800">Cooperativa confirmada!</p>
+            </div>
+            <p className="text-[14px] font-semibold text-gray-900">{booking.operator.full_name}</p>
+            {booking.operator.phone && (
+              <a
+                href={`https://wa.me/55${booking.operator.phone.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 flex items-center gap-2 bg-[#25D366] text-white rounded-xl px-3 py-2 text-[13px] font-semibold w-fit"
+              >
+                <MessageCircle size={13} /> Falar no WhatsApp
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Service Card */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-sm">

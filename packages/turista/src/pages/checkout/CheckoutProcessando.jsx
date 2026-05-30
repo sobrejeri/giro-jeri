@@ -199,7 +199,7 @@ export default function CheckoutProcessando() {
       if (r.status === 'approved') {
         setStatus('approved')
         clearInterval(pollRef.current)
-        setTimeout(() => navigate('/checkout/sucesso', { state }), 800)
+        setTimeout(() => navigate('/checkout/sucesso', { state: { ...state, booking_id: state.booking_id } }), 800)
       } else if (['expired', 'failed', 'cancelled'].includes(r.status)) {
         setStatus(r.status)
         clearInterval(pollRef.current)
