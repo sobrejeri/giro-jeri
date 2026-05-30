@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import BottomNav from './BottomNav'
+import RegionPicker from '../RegionPicker'
 
 export default function Layout() {
   return (
@@ -10,6 +11,7 @@ export default function Layout() {
         </div>
         <BottomNav />
       </div>
+      <RegionPicker />
     </div>
   )
 }

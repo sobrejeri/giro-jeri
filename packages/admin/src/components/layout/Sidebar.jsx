@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, BookOpen, Tag, Globe, Ticket,
-  Sun, BarChart3, ScrollText, Settings, LogOut,
+  Sun, BarChart3, ScrollText, Settings, LogOut, CalendarCheck, UserCircle,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard'    },
   { separator: true, label: 'Gestão' },
   { to: '/usuarios',     icon: Users,           label: 'Usuários'      },
+  { to: '/reservas',     icon: CalendarCheck,   label: 'Reservas'      },
   { to: '/catalogo',     icon: BookOpen,        label: 'Catálogo'      },
   { to: '/precos',       icon: Tag,             label: 'Motor de Preços'},
   { to: '/regioes',      icon: Globe,           label: 'Regiões'       },
@@ -19,6 +20,7 @@ const NAV = [
   { to: '/financeiro',   icon: BarChart3,       label: 'Financeiro'    },
   { to: '/auditoria',    icon: ScrollText,      label: 'Auditoria'     },
   { to: '/configuracoes', icon: Settings,       label: 'Configurações' },
+  { to: '/perfil',        icon: UserCircle,     label: 'Meu Perfil'    },
 ]
 
 export default function Sidebar() {
@@ -65,8 +67,10 @@ export default function Sidebar() {
       {/* User */}
       <div className="px-3 py-4 border-t border-gray-800">
         <div className="flex items-center gap-3 px-3 py-2 mb-1">
-          <div className="w-7 h-7 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-bold flex-shrink-0">
-            {(user?.full_name || 'A')[0].toUpperCase()}
+          <div className="w-7 h-7 rounded-full bg-brand/20 overflow-hidden flex items-center justify-center text-brand text-xs font-bold flex-shrink-0">
+            {user?.profile_photo_url
+              ? <img src={user.profile_photo_url} alt="" className="w-full h-full object-cover" />
+              : (user?.full_name || 'A')[0].toUpperCase()}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-200 truncate">{user?.full_name || 'Admin'}</p>

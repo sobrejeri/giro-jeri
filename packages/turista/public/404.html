@@ -4,15 +4,23 @@
     <meta charset="utf-8" />
     <title>Giro Jeri</title>
     <script>
-      // SPA redirect for GitHub Pages
-      var l = window.location;
-      l.replace(
-        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-        l.pathname.split('/').slice(0, 2).join('/') +
-        '/?p=/' + l.pathname.slice(1).split('/').slice(1).join('/').replace(/&/g, '~and~') +
-        (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-        l.hash
-      );
+      (function () {
+        var path = location.pathname;
+        var dest;
+
+        // Roteia para o app correto com base no prefixo do caminho
+        if (path.startsWith('/giro-jeri/admin')) {
+          dest = '/giro-jeri/admin/';
+        } else if (path.startsWith('/giro-jeri/cooperativa')) {
+          dest = '/giro-jeri/cooperativa/';
+        } else {
+          dest = '/giro-jeri/';
+        }
+
+        // Salva o caminho completo para restaurar após o redirecionamento
+        sessionStorage.setItem('spa_redirect', path + location.search + location.hash);
+        location.replace(dest);
+      })();
     </script>
   </head>
   <body></body>

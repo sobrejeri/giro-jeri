@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
 import dayjs from 'dayjs';
@@ -75,10 +76,65 @@ router.get('/users', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/admin/users ──────────────────────────────
+const createUserSchema = z.object({
+  full_name: z.string().min(2).max(200),
+  email:     z.string().email().optional(),
+  phone:     z.string().min(10).max(30).optional(),
+  password:  z.string().min(6),
+  user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
+}).refine((d) => d.email || d.phone, { message: 'Informe email ou telefone' });
+
+router.post('/users', requireAdmin, async (req, res, next) => {
+  try {
+    const body = createUserSchema.parse(req.body);
+
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email:         body.email,
+      phone:         body.phone,
+      password:      body.password,
+      email_confirm: true,
+    });
+    if (authError) return res.status(400).json({ error: authError.message });
+
+    const { data: profile, error: profileError } = await supabase
+      .from('users')
+      .insert({
+        auth_id:   authData.user.id,
+        full_name: body.full_name,
+        email:     body.email,
+        phone:     body.phone,
+        user_type: body.user_type,
+      })
+      .select('id, full_name, email, phone, user_type, is_active, created_at')
+      .single();
+
+    if (profileError) {
+      await supabase.auth.admin.deleteUser(authData.user.id);
+      return res.status(400).json({ error: profileError.message });
+    }
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'users',
+      entity_id:       profile.id,
+      action_type:     'create',
+      new_values_json: { user_type: body.user_type, email: body.email },
+    });
+
+    res.status(201).json(profile);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
+});
+
 // ── PATCH /api/admin/users/:id ─────────────────────────
 router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   try {
-    const allowed = ['user_type', 'is_active', 'phone', 'email'];
+    const allowed = ['user_type', 'is_active', 'phone', 'email', 'platform_split_pct'];
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))
     );
@@ -98,6 +154,66 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
 
     res.json(data);
   } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/users/:id/register-recipient ──────
+router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: user, error: uErr } = await supabase
+      .from('users')
+      .select(`id, full_name, email, phone, user_type, document_type, document_number,
+               pix_key_type, pix_key, bank_name, bank_agency,
+               bank_account_number, bank_account_type, bank_document`)
+      .eq('id', req.params.id)
+      .single();
+
+    if (uErr || !user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (user.user_type !== 'operator') {
+      return res.status(400).json({ error: 'Apenas cooperativas podem ser registradas como recebedoras' });
+    }
+
+    // Lê gateway ativo das configurações
+    const { data: settingsRows = [] } = await supabase
+      .from('system_settings')
+      .select('setting_key, setting_value')
+      .like('setting_key', 'payment_%');
+    const cfg     = Object.fromEntries(settingsRows.map((s) => [s.setting_key, s.setting_value]));
+    const gateway = cfg.payment_gateway || 'manual';
+    const apiKey  = cfg.payment_gateway_api_key || '';
+    const env     = cfg.payment_gateway_env || 'sandbox';
+
+    let recipientId;
+
+    if (gateway === 'manual') {
+      const { createRecipient } = await import('../payments/manual.js');
+      recipientId = await createRecipient(user);
+    } else if (gateway === 'asaas') {
+      const { createRecipient } = await import('../payments/asaas.js');
+      recipientId = await createRecipient(user, apiKey, env);
+    } else if (gateway === 'pagarme') {
+      const { createRecipient } = await import('../payments/pagarme.js');
+      recipientId = await createRecipient(user, apiKey, env);
+    } else {
+      return res.status(400).json({ error: `Gateway '${gateway}' não suportado` });
+    }
+
+    await supabase.from('users')
+      .update({ gateway_recipient_id: recipientId, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'users',
+      entity_id:       user.id,
+      action_type:     'register_recipient',
+      new_values_json: { gateway, recipient_id: recipientId },
+    });
+
+    res.json({ recipient_id: recipientId, gateway });
+  } catch (err) {
+    if (err.message) return res.status(400).json({ error: err.message });
+    next(err);
+  }
 });
 
 // ── GET /api/admin/financial ───────────────────────────
@@ -268,21 +384,26 @@ router.get('/coupons', requireAdmin, async (req, res, next) => {
     const { is_active, search, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
     let query = supabase
-      .from('coupons').select('*', { count: 'exact' })
+      .from('coupons')
+      .select('*, coupon_redemptions(count)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
     if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
     if (search) query = query.ilike('code', `%${search}%`);
     const { data, error, count } = await query;
     if (error) throw error;
-    res.json({ data, total: count, page: Number(page) });
+    const enriched = (data || []).map((c) => ({
+      ...c,
+      times_used: c.coupon_redemptions?.[0]?.count ?? 0,
+    }));
+    res.json({ data: enriched, total: count, page: Number(page) });
   } catch (err) { next(err); }
 });
 
 router.post('/coupons', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from('coupons').insert({ ...req.body, created_by_user_id: req.user.id }).select().single();
+      .from('coupons').insert(req.body).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -310,7 +431,7 @@ router.delete('/coupons/:id', requireAdmin, async (req, res, next) => {
 router.get('/seasons', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from('high_season_rules').select('*, regions(name)').order('start_month');
+      .from('high_season_rules').select('*, regions(name)').order('start_date');
     if (error) throw error;
     res.json(data);
   } catch (err) { next(err); }
@@ -346,13 +467,14 @@ router.delete('/seasons/:id', requireAdmin, async (req, res, next) => {
 // ── GET /api/admin/pricing-rules ───────────────────────
 router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
   try {
-    const { region_id, tour_id } = req.query;
+    const { region_id, service_id } = req.query;
     let query = supabase
       .from('vehicle_pricing_rules')
-      .select('*, vehicles(name, vehicle_type), regions(name), tours(name)')
+      .select('id, vehicle_id, region_id, service_type, service_id, pricing_mode, base_price, high_season_price, is_active, vehicles(id, name, vehicle_type)')
+      .eq('service_type', 'tour')
       .order('created_at', { ascending: false });
-    if (region_id) query = query.eq('region_id', region_id);
-    if (tour_id)   query = query.eq('tour_id', tour_id);
+    if (region_id)  query = query.eq('region_id', region_id);
+    if (service_id) query = query.eq('service_id', service_id);
     const { data, error } = await query;
     if (error) throw error;
     res.json(data);
@@ -361,8 +483,20 @@ router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
 
 router.post('/pricing-rules', requireAdmin, async (req, res, next) => {
   try {
+    const { vehicle_id, service_id, region_id, pricing_mode, base_price } = req.body;
     const { data, error } = await supabase
-      .from('vehicle_pricing_rules').insert(req.body).select().single();
+      .from('vehicle_pricing_rules')
+      .insert({
+        vehicle_id,
+        service_id:   service_id || null,
+        service_type: 'tour',
+        region_id:    region_id || null,
+        pricing_mode: pricing_mode || 'per_vehicle',
+        base_price:   Number(base_price),
+        is_active:    true,
+      })
+      .select('id, vehicle_id, region_id, service_type, service_id, pricing_mode, base_price, high_season_price, is_active')
+      .single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -370,8 +504,16 @@ router.post('/pricing-rules', requireAdmin, async (req, res, next) => {
 
 router.put('/pricing-rules/:id', requireAdmin, async (req, res, next) => {
   try {
+    const { base_price, high_season_price, pricing_mode, is_active } = req.body;
+    const updates = {};
+    if (base_price        !== undefined) updates.base_price        = Number(base_price);
+    if (high_season_price !== undefined) updates.high_season_price = high_season_price != null ? Number(high_season_price) : null;
+    if (pricing_mode      !== undefined) updates.pricing_mode      = pricing_mode;
+    if (is_active         !== undefined) updates.is_active         = is_active;
     const { data, error } = await supabase
-      .from('vehicle_pricing_rules').update(req.body).eq('id', req.params.id).select().single();
+      .from('vehicle_pricing_rules').update(updates).eq('id', req.params.id)
+      .select('id, vehicle_id, region_id, service_type, service_id, pricing_mode, base_price, high_season_price, is_active')
+      .single();
     if (error || !data) return res.status(404).json({ error: 'Regra não encontrada' });
     res.json(data);
   } catch (err) { next(err); }
@@ -415,6 +557,123 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
       .map(([date, total]) => ({ date, total }));
 
     res.json(series);
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/bookings/manual ───────────────────
+// Cria reserva manual (walk-in, telefone, WhatsApp)
+// ── GET /api/admin/bookings ────────────────────────────
+router.get('/bookings', requireAdmin, async (req, res, next) => {
+  try {
+    const { page = 1, limit = 30, search, status, service_type, date_from, date_to } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let query = supabase
+      .from('bookings')
+      .select(`
+        id, booking_code, service_type, booking_mode, service_date, service_time,
+        people_count, total_amount, status_commercial, status_operational, created_at,
+        users ( full_name, phone, email )
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1);
+
+    if (status)       query = query.eq('status_commercial', status);
+    if (service_type) query = query.eq('service_type', service_type);
+    if (date_from)    query = query.gte('service_date', date_from);
+    if (date_to)      query = query.lte('service_date', date_to);
+    if (search)       query = query.ilike('booking_code', `%${search}%`);
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+    res.json({ data: data || [], total: count || 0, page: Number(page) });
+  } catch (err) { next(err); }
+});
+
+router.post('/bookings/manual', requireAdmin, async (req, res, next) => {
+  try {
+    const {
+      customer_name, customer_phone, customer_email,
+      service_type = 'tour', service_id, service_name,
+      booking_mode = 'private',
+      service_date, service_time,
+      people_count = 1,
+      total_amount,
+      payment_method = 'cash',
+      payment_status = 'pending',
+      notes,
+      region_id,
+    } = req.body;
+
+    if (!service_date || !total_amount) {
+      return res.status(400).json({ error: 'service_date e total_amount são obrigatórios' });
+    }
+
+    // Busca ou cria um usuário "avulso" para o cliente
+    let userId = null;
+    if (customer_phone || customer_email) {
+      const query = customer_email
+        ? supabase.from('users').select('id').eq('email', customer_email).maybeSingle()
+        : supabase.from('users').select('id').eq('phone', customer_phone).maybeSingle();
+      const { data: existing } = await query;
+      if (existing) {
+        userId = existing.id;
+      } else {
+        const { data: newUser } = await supabase.from('users').insert({
+          full_name:  customer_name || 'Cliente Avulso',
+          email:      customer_email || null,
+          phone:      customer_phone || null,
+          user_type:  'tourist',
+          auth_id:    null,
+        }).select('id').single();
+        userId = newUser?.id;
+      }
+    }
+
+    const bookingCode = `GJM${Date.now().toString(36).toUpperCase().slice(-5)}`;
+    const isPaid      = payment_status === 'paid';
+
+    const { data: booking, error: bErr } = await supabase.from('bookings').insert({
+      booking_code:        bookingCode,
+      user_id:             userId,
+      region_id:           region_id || null,
+      service_type,
+      service_id:          service_id || null,
+      booking_mode,
+      service_date,
+      service_time:        service_time || null,
+      people_count:        Number(people_count),
+      total_amount:        Number(total_amount),
+      status_commercial:   isPaid ? 'paid' : 'awaiting_payment',
+      status_operational:  isPaid ? 'awaiting_dispatch' : 'not_started',
+      payment_status:      isPaid ? 'approved' : 'pending',
+      notes:               notes || `Reserva manual — ${customer_name || 'sem nome'}`,
+    }).select().single();
+
+    if (bErr) throw bErr;
+
+    // Cria registro de pagamento
+    const { data: payment } = await supabase.from('payments').insert({
+      booking_id:         booking.id,
+      gateway_name:       'manual',
+      payment_method,
+      payment_type:       'full',
+      amount_gross:       Number(total_amount),
+      gateway_fee_amount: 0,
+      currency:           'BRL',
+      status:             isPaid ? 'approved' : 'pending',
+      paid_at:            isPaid ? new Date().toISOString() : null,
+    }).select().single();
+
+    // Lança no ledger se pago
+    if (isPaid && payment) {
+      await supabase.from('financial_ledger').insert([
+        { booking_id: booking.id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${bookingCode}`, amount: Number(total_amount), direction: 'inflow', financial_status: 'received' },
+        { booking_id: booking.id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${bookingCode}`, amount: Number(total_amount), direction: 'inflow', financial_status: 'received' },
+      ]);
+    }
+
+    res.status(201).json({ booking_id: booking.id, booking_code: bookingCode });
   } catch (err) { next(err); }
 });
 

@@ -29,7 +29,7 @@ async function tryRefresh() {
 
 function clearSession() {
   Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
-  window.location.href = '/login'
+  window.location.href = (import.meta.env.BASE_URL || '/') + 'login'
 }
 
 // Faz uma requisição autenticada com re-tentativa automática após refresh.
@@ -71,7 +71,7 @@ export const api = {
 
   // Cotações
   getPendingQuotes: ()         => request('/api/transfers/quotes/pending'),
-  getAllQuotes:     ()         => request('/api/transfers/quotes'),
+  getQuotesHistory: ()         => request('/api/transfers/quotes/history'),
   setQuotePrice:   (id, body) => request(`/api/transfers/quotes/${id}/quote`, { method: 'PATCH', body }),
 
   // Veículos
@@ -97,9 +97,25 @@ export const api = {
   // Catálogo — Transfers (serviços-pai das rotas)
   getCatalogTransfers: () => request('/api/catalog/transfers'),
 
-  // Catálogo — Rotas de Transfer
-  getCatalogRoutes:   ()         => request('/api/catalog/transfer-routes'),
-  createCatalogRoute: (body)     => request('/api/catalog/transfer-routes', { method: 'POST', body }),
-  updateCatalogRoute: (id, body) => request(`/api/catalog/transfer-routes/${id}`, { method: 'PUT', body }),
-  toggleCatalogRoute: (id, flag) => request(`/api/catalog/transfer-routes/${id}`, { method: 'PUT', body: { is_active: flag } }),
+  // Catálogo — Rotas de Transfer (somente leitura para cooperativa)
+  getCatalogRoutes: () => request('/api/catalog/transfer-routes'),
+
+  // Perfil do operador + conta de recebimento
+  getProfile:    ()           => request('/api/operator/profile'),
+  updateProfile: (body)       => request('/api/operator/profile', { method: 'PATCH', body }),
+  uploadPhoto:   (photo_data) => request('/api/auth/me/photo', { method: 'POST', body: { photo_data } }),
+
+  // Preferências da cooperativa (opt-in por serviço)
+  getPreferences: () => request('/api/operator/preferences'),
+  setPreference:  (type, entityId, isActive) =>
+    request(`/api/operator/preferences/${type}/${entityId}`, {
+      method: 'PUT',
+      body:   { is_active: isActive },
+    }),
+
+  // Corridas (modelo Uber — primeiro a aceitar)
+  getOperatorBookings: ()   => request('/api/operator/bookings'),
+  acceptBooking:       (id) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body: {} }),
+  startBooking:        (id) => request(`/api/operator/bookings/${id}/start`,    { method: 'POST', body: {} }),
+  completeBooking:     (id) => request(`/api/operator/bookings/${id}/complete`, { method: 'POST', body: {} }),
 }

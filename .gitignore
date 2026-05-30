@@ -54,3 +54,6 @@ temp/
 
 # ── Supabase CLI temp ──────────────────────────────────
 supabase/.temp/
+
+# ── Claude Code internal ───────────────────────────────
+.claude/

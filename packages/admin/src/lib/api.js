@@ -29,7 +29,7 @@ async function tryRefresh() {
 
 function clearSession() {
   Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
-  window.location.href = '/login'
+  window.location.href = (import.meta.env.BASE_URL || '/') + 'login'
 }
 
 async function request(path, options = {}, isRetry = false) {
@@ -61,15 +61,19 @@ async function request(path, options = {}, isRetry = false) {
 export const api = {
   // Auth
   login: (body) => request('/api/auth/login', { method: 'POST', body }),
-  me:    () => request('/api/auth/me'),
+  me:           ()           => request('/api/auth/me'),
+  updateMe:     (body)       => request('/api/auth/me', { method: 'PATCH', body }),
+  uploadPhoto:  (photo_data) => request('/api/auth/me/photo', { method: 'POST', body: { photo_data } }),
 
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),
 
   // Usuários
-  getUsers:   (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),
-  updateUser: (id, body)    => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
+  getUsers:          (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),
+  createUser:        (body)        => request('/api/admin/users', { method: 'POST', body }),
+  updateUser:        (id, body)    => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
+  registerRecipient: (id)          => request(`/api/admin/users/${id}/register-recipient`, { method: 'POST', body: {} }),
 
   // Financeiro
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),
@@ -99,11 +103,43 @@ export const api = {
   updateVehicle: (id, body)    => request(`/api/vehicles/${id}`, { method: 'PUT', body }),
   deleteVehicle: (id)          => request(`/api/vehicles/${id}`, { method: 'DELETE' }),
 
-  // Motor de preços
+  // Motor de preços (campos: service_id, base_price, high_season_price)
   getPricingRules:   (params = {}) => request(`/api/admin/pricing-rules?${new URLSearchParams(params)}`),
   createPricingRule: (body)        => request('/api/admin/pricing-rules', { method: 'POST', body }),
   updatePricingRule: (id, body)    => request(`/api/admin/pricing-rules/${id}`, { method: 'PUT', body }),
   deletePricingRule: (id)          => request(`/api/admin/pricing-rules/${id}`, { method: 'DELETE' }),
+  // Salva em lote todos os preços de um passeio (upsert por vehicle+service)
+  saveTourPricing: async (tourId, regionId, rows) => {
+    // rows: [{ vehicle_id, base_price, existing_id? }]
+    // high_season_price é sempre calculado automaticamente pela % da temporada
+    const results = []
+    for (const row of rows) {
+      if (row.existing_id) {
+        const r = await request(`/api/admin/pricing-rules/${row.existing_id}`, {
+          method: 'PUT',
+          body: { base_price: row.base_price, high_season_price: null },
+        })
+        results.push(r)
+      } else {
+        const r = await request('/api/admin/pricing-rules', {
+          method: 'POST',
+          body: {
+            vehicle_id: row.vehicle_id,
+            service_id: tourId,
+            region_id:  regionId,
+            base_price: row.base_price,
+          },
+        })
+        results.push(r)
+      }
+    }
+    return results
+  },
+
+  // Reservas
+  getAdminBookings:     (params = {}) => request(`/api/admin/bookings?${new URLSearchParams(params)}`),
+  createManualBooking:  (body) => request('/api/admin/bookings/manual', { method: 'POST', body }),
+  confirmPaymentManual: (body) => request('/api/payments/manual-confirm', { method: 'POST', body }),
 
   // Regiões
   getRegions:   ()         => request('/api/regions'),

@@ -1,25 +1,31 @@
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
-import { authenticate, requireOperator } from '../middleware/auth.js';
+import { authenticate, requireOperator, requireAdmin } from '../middleware/auth.js';
+import { filterByRadius } from '../services/geo.js';
 
 const router = Router();
 
-// GET /api/vehicles — lista veículos (autenticado)
-router.get('/', authenticate, async (req, res, next) => {
+// GET /api/vehicles — lista veículos (público)
+router.get('/', async (req, res, next) => {
   try {
-    const { region_id, vehicle_type, is_active } = req.query;
-    let query = supabase.from('vehicles').select('*').order('name');
+    const { region_id, vehicle_type, is_active, lat, lon, radius } = req.query;
+    let query = supabase
+      .from('vehicles')
+      .select('*, regions ( id, name, center_latitude, center_longitude, service_radius_km )')
+      .order('name');
     if (region_id)   query = query.eq('region_id', region_id);
     if (vehicle_type) query = query.eq('vehicle_type', vehicle_type);
     if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
     const { data, error } = await query;
     if (error) throw error;
-    res.json(data);
+
+    const filtered = lat && lon ? filterByRadius(data, lat, lon, radius) : data;
+    res.json(filtered);
   } catch (err) { next(err); }
 });
 
 // POST /api/vehicles — cria veículo (operador/admin)
-router.post('/', authenticate, requireOperator, async (req, res, next) => {
+router.post('/', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('vehicles').insert(req.body).select().single();
@@ -29,7 +35,7 @@ router.post('/', authenticate, requireOperator, async (req, res, next) => {
 });
 
 // PUT /api/vehicles/:id — atualiza veículo (operador/admin)
-router.put('/:id', authenticate, requireOperator, async (req, res, next) => {
+router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('vehicles').update(req.body).eq('id', req.params.id).select().single();
@@ -39,7 +45,7 @@ router.put('/:id', authenticate, requireOperator, async (req, res, next) => {
 });
 
 // DELETE /api/vehicles/:id — desativa veículo (operador/admin)
-router.delete('/:id', authenticate, requireOperator, async (req, res, next) => {
+router.delete('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { error } = await supabase
       .from('vehicles').update({ is_active: false }).eq('id', req.params.id);

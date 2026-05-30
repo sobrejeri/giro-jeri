@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import {
@@ -23,13 +24,15 @@ function resolveStatus(b) {
   return 'waiting_payment'
 }
 
-const STATUS_CFG = {
-  waiting_payment:    { label: 'Aguard. Pagamento',   bg: 'bg-amber-500',   text: 'text-white'      },
-  waiting_acceptance: { label: 'Aguard. Confirmação', bg: 'bg-orange-400',  text: 'text-white'      },
-  confirmed:          { label: 'Confirmado',           bg: 'bg-green-500',   text: 'text-white'      },
-  in_progress:        { label: 'Motorista a caminho', bg: 'bg-blue-500',    text: 'text-white'      },
-  completed:          { label: 'Concluído',            bg: 'bg-gray-500',    text: 'text-white'      },
-  cancelled:          { label: 'Cancelado',            bg: 'bg-red-500',     text: 'text-white'      },
+function getStatusCfg(t) {
+  return {
+    waiting_payment:    { label: t('bookings.status.waiting_payment'),    bg: 'bg-amber-500',  text: 'text-white' },
+    waiting_acceptance: { label: t('bookings.status.waiting_acceptance'), bg: 'bg-orange-400', text: 'text-white' },
+    confirmed:          { label: t('bookings.status.confirmed'),          bg: 'bg-green-500',  text: 'text-white' },
+    in_progress:        { label: t('bookings.status.in_progress'),        bg: 'bg-blue-500',   text: 'text-white' },
+    completed:          { label: t('bookings.status.completed'),          bg: 'bg-gray-500',   text: 'text-white' },
+    cancelled:          { label: t('bookings.status.cancelled'),          bg: 'bg-red-500',    text: 'text-white' },
+  }
 }
 
 const ACTIVE_STATUSES = ['waiting_payment', 'waiting_acceptance', 'confirmed', 'in_progress']
@@ -46,7 +49,8 @@ function gi(id = '') { let n = 0; for (const c of id) n += c.charCodeAt(0); retu
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR')}` }
 
 /* ── Cancel Dialog ──────────────────────────────────────────── */
-function CancelDialog({ booking, onConfirm, onClose, loading }) {
+function CancelDialog({ booking, onConfirm, onClose, loading, error }) {
+  const { t } = useTranslation()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -54,19 +58,22 @@ function CancelDialog({ booking, onConfirm, onClose, loading }) {
         <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <AlertTriangle size={28} className="text-red-500" />
         </div>
-        <h3 className="font-bold text-gray-900 text-lg text-center mb-2">Cancelar reserva?</h3>
+        <h3 className="font-bold text-gray-900 text-lg text-center mb-2">{t('bookings.cancel')}</h3>
         <p className="text-sm text-gray-500 text-center mb-1">
-          Reserva <span className="font-semibold text-gray-700">{booking.booking_code}</span>
+          {booking.booking_code}
         </p>
-        <p className="text-xs text-gray-400 text-center mb-6">Esta ação não pode ser desfeita.</p>
+        <p className="text-xs text-gray-400 text-center mb-4">{t('bookings.cancelConfirm')}</p>
+        {error && (
+          <p className="text-xs text-red-500 bg-red-50 rounded-xl px-3 py-2 text-center mb-4">{error}</p>
+        )}
         <div className="flex gap-3">
           <button onClick={onClose}
             className="flex-1 h-12 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-600 active:scale-95 transition-transform"
-          >Voltar</button>
+          >{t('bookings.cancelClose')}</button>
           <button onClick={onConfirm} disabled={loading}
             className="flex-1 h-12 bg-red-500 text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
           >
-            {loading ? <><Loader2 size={16} className="animate-spin" />Cancelando…</> : 'Confirmar'}
+            {loading ? <><Loader2 size={16} className="animate-spin" />{t('bookings.cancelling')}</> : t('bookings.cancelBtn')}
           </button>
         </div>
       </div>
@@ -76,6 +83,8 @@ function CancelDialog({ booking, onConfirm, onClose, loading }) {
 
 /* ── Booking Card ───────────────────────────────────────────── */
 function BookingCard({ booking, onCancel, onDetail }) {
+  const { t } = useTranslation()
+  const STATUS_CFG = getStatusCfg(t)
   const status  = resolveStatus(booking)
   const cfg     = STATUS_CFG[status] || STATUS_CFG.waiting_payment
   const idx     = gi(booking.id)
@@ -88,9 +97,9 @@ function BookingCard({ booking, onCancel, onDetail }) {
     try { dateStr = format(new Date(booking.service_date + 'T00:00:00'), "d MMM", { locale: ptBR }) } catch {}
   }
   const timeStr = booking.service_time ? booking.service_time.slice(0, 5) : '—'
-  const route   = booking.origin_text && booking.destination_text
-    ? `${booking.origin_text} → ${booking.destination_text}`
-    : booking.origin_text || null
+  const route   = booking.pickup_place_name && booking.destination_place_name
+    ? `${booking.pickup_place_name} → ${booking.destination_place_name}`
+    : booking.pickup_place_name || null
 
   const serviceName = booking.service_name
     || (isTour ? 'Passeio' : 'Transfer') + ' · ' + booking.booking_code
@@ -112,7 +121,7 @@ function BookingCard({ booking, onCancel, onDetail }) {
         <div className="absolute top-3 left-3">
           <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
             {isTour ? <Compass size={10} /> : <Car size={10} />}
-            {isTour ? 'Passeio' : 'Transfer'}
+            {isTour ? t('checkout.tour') : t('checkout.transfer')}
           </span>
         </div>
 
@@ -134,9 +143,9 @@ function BookingCard({ booking, onCancel, onDetail }) {
         {/* Date / Time / People */}
         <div className="flex items-center gap-4">
           {[
-            { Icon: Calendar, label: 'Data',    val: dateStr },
-            { Icon: Clock,    label: 'Hora',    val: timeStr },
-            { Icon: Users,    label: 'Pessoas', val: String(booking.people_count || '—') },
+            { Icon: Calendar, label: t('checkout.date'),    val: dateStr },
+            { Icon: Clock,    label: t('checkout.time'),    val: timeStr },
+            { Icon: Users,    label: t('checkout.people'),  val: String(booking.people_count || '—') },
           ].map(({ Icon: I, label, val }) => (
             <div key={label} className="flex items-center gap-1.5">
               <I size={13} className="text-brand shrink-0" />
@@ -160,7 +169,7 @@ function BookingCard({ booking, onCancel, onDetail }) {
         <div className="flex items-center justify-between pt-0.5">
           <div>
             <p className="text-[10px] text-gray-400 leading-none">Total pago</p>
-            <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">{fmt(booking.total_price)}</p>
+            <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">{fmt(booking.total_amount)}</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -193,20 +202,22 @@ function BookingCard({ booking, onCancel, onDetail }) {
 }
 
 /* ── Main Page ──────────────────────────────────────────────── */
-const TABS = [
-  { id: 'todos',      label: 'Todos'      },
-  { id: 'ativos',     label: 'Ativos'     },
-  { id: 'concluidos', label: 'Concluídos' },
-  { id: 'cancelados', label: 'Cancelados' },
-]
-
 export default function Bookings() {
   const queryClient = useQueryClient()
   const navigate    = useNavigate()
+  const { t }       = useTranslation()
+
+  const TABS = [
+    { id: 'todos',      label: t('bookings.all')       },
+    { id: 'ativos',     label: t('bookings.active')    },
+    { id: 'concluidos', label: t('bookings.completed') },
+    { id: 'cancelados', label: t('bookings.cancelled') },
+  ]
 
   const [tab,           setTab]           = useState('todos')
   const [cancelTarget,  setCancelTarget]  = useState(null)
   const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelError,   setCancelError]   = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-bookings'],
@@ -214,7 +225,7 @@ export default function Bookings() {
   })
 
   const all = (
-    Array.isArray(data?.bookings) ? data.bookings :
+    Array.isArray(data?.data) ? data.data :
     Array.isArray(data) ? data : []
   ).map(b => ({ ...b, _status: resolveStatus(b) }))
 
@@ -234,12 +245,13 @@ export default function Bookings() {
   async function handleCancelConfirm() {
     if (!cancelTarget) return
     setCancelLoading(true)
+    setCancelError(null)
     try {
       await api.cancelBooking(cancelTarget.id, { reason: 'Cancelado pelo cliente' })
       queryClient.invalidateQueries({ queryKey: ['my-bookings'] })
       setCancelTarget(null)
     } catch (err) {
-      alert(err.message || 'Erro ao cancelar reserva')
+      setCancelError(err.message || 'Erro ao cancelar reserva')
     } finally {
       setCancelLoading(false)
     }
@@ -251,7 +263,7 @@ export default function Bookings() {
       <header className="bg-white px-4 pt-5 pb-0 sticky top-0 z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-[20px] font-extrabold text-gray-900">Minhas Reservas</h1>
+            <h1 className="text-[20px] font-extrabold text-gray-900">{t('bookings.title')}</h1>
             <p className="text-[12px] text-gray-400 mt-0.5">
               {counts.ativos > 0
                 ? <><span className="font-semibold text-brand">{counts.ativos}</span> reserva{counts.ativos !== 1 ? 's' : ''} ativa{counts.ativos !== 1 ? 's' : ''}</>
@@ -319,8 +331,9 @@ export default function Bookings() {
         <CancelDialog
           booking={cancelTarget}
           onConfirm={handleCancelConfirm}
-          onClose={() => setCancelTarget(null)}
+          onClose={() => { setCancelTarget(null); setCancelError(null) }}
           loading={cancelLoading}
+          error={cancelError}
         />
       )}
     </div>

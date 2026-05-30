@@ -6,6 +6,7 @@ import {
   calculateTabbedTransfer,
   validateTransferAdvance,
 } from '../services/priceEngine.js';
+import { filterByRadius } from '../services/geo.js';
 import dayjs from 'dayjs';
 
 const router = Router();
@@ -13,14 +14,15 @@ const router = Router();
 // ── GET /api/transfers ─────────────────────────────────
 router.get('/', async (req, res, next) => {
   try {
-    const { region_id } = req.query;
+    const { region_id, lat, lon, radius } = req.query;
 
     let query = supabase
       .from('transfers')
       .select(`
         id, name, slug, short_description, pricing_mode,
         estimated_duration_minutes, is_active, display_order,
-        regions ( id, name ),
+        latitude, longitude, service_radius_km,
+        regions ( id, name, center_latitude, center_longitude, service_radius_km ),
         transfer_routes (
           id, origin_name, destination_name, default_price, is_active
         )
@@ -32,7 +34,9 @@ router.get('/', async (req, res, next) => {
 
     const { data, error } = await query;
     if (error) throw error;
-    res.json(data);
+
+    const filtered = lat && lon ? filterByRadius(data, lat, lon, radius) : data;
+    res.json(filtered);
   } catch (err) { next(err); }
 });
 
@@ -166,6 +170,20 @@ router.get('/quotes/pending', authenticate, requireOperator, async (req, res, ne
 
     if (error) throw error;
     res.json(data);
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/transfers/quotes/history — cotações já respondidas (operador)
+router.get('/quotes/history', authenticate, requireOperator, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('transfer_quotes')
+      .select('*, users(full_name, phone, email)')
+      .in('status', ['quoted', 'accepted', 'expired', 'rejected'])
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    res.json(data || []);
   } catch (err) { next(err); }
 });
 

@@ -266,12 +266,12 @@ router.get('/:id', authenticate, async (req, res, next) => {
       .from('bookings')
       .select(`
         *,
-        users ( full_name, phone, email ),
+        users!bookings_user_id_fkey ( full_name, phone, email ),
+        operator:users!bookings_operator_id_fkey ( full_name, phone ),
         regions ( name ),
         booking_vehicles ( * ),
         booking_items ( * ),
-        payments ( * ),
-        operational_assignments ( * )
+        payments ( * )
       `)
       .eq('id', req.params.id)
       .single();

@@ -62,10 +62,12 @@ async function request(path, options = {}, isRetry = false) {
 
 export const api = {
   // Auth
-  login:    (body) => request('/api/auth/login',    { method: 'POST', body }),
-  register: (body) => request('/api/auth/register', { method: 'POST', body }),
-  me:       ()     => request('/api/auth/me'),
-  logout:   ()     => request('/api/auth/logout', { method: 'POST' }),
+  login:         (body) => request('/api/auth/login',    { method: 'POST', body }),
+  register:      (body) => request('/api/auth/register', { method: 'POST', body }),
+  me:            ()     => request('/api/auth/me'),
+  updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),
+  uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),
+  logout:        ()     => request('/api/auth/logout', { method: 'POST' }),
 
   // Regiões
   getRegions: () => request('/api/regions'),
@@ -87,6 +89,10 @@ export const api = {
   getMyQuotes:        ()            => request('/api/transfers/quotes'),
   acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote:        (id, body)    => request(`/api/transfers/quotes/${id}/reject`, { method: 'POST', body }),
+
+  // Pagamentos
+  createPaymentIntent: (body) => request('/api/payments/intent', { method: 'POST', body }),
+  getPaymentStatus:    (id)   => request(`/api/payments/${id}/status`),
 
   // Reservas
   createBooking: (body) => request('/api/bookings',     { method: 'POST', body }),
