@@ -208,9 +208,10 @@ export default function CheckoutProcessando() {
   }, [payment_id, navigate, state])
 
   useEffect(() => {
-    pollRef.current = setInterval(poll, 4000)
+    // Modo de teste: verifica a cada 1s para aprovação instantânea
+    pollRef.current = setInterval(poll, test_mode ? 1000 : 4000)
     return () => clearInterval(pollRef.current)
-  }, [poll])
+  }, [poll, test_mode])
 
   useEffect(() => {
     if (secs === 0 && expires_at) {
@@ -287,11 +288,7 @@ export default function CheckoutProcessando() {
             <FlaskConical size={16} className="text-yellow-600 shrink-0 mt-0.5" />
             <div>
               <p className="text-[13px] font-bold text-yellow-800">Modo de teste ativo</p>
-              <p className="text-[12px] text-yellow-700 mt-0.5">
-                {testSecsLeft > 0
-                  ? `Pagamento aprovado automaticamente em ${testSecsLeft}s`
-                  : 'Aguardando confirmação do servidor…'}
-              </p>
+              <p className="text-[12px] text-yellow-700 mt-0.5">Aprovação automática em andamento…</p>
             </div>
           </div>
         )}

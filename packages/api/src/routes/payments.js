@@ -55,7 +55,6 @@ router.post('/intent', authenticate, async (req, res, next) => {
         status_commercial:   'awaiting_payment',
         status_operational:  'not_started',
         payment_status:      'pending',
-        notes:               null,
       })
       .select()
       .single()
@@ -165,13 +164,10 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
 
     if (!payment) return res.status(404).json({ error: 'Pagamento não encontrado' })
 
-    // Gateway de teste: auto-aprova após 15 segundos
-    if (payment.status === 'pending' && payment.gateway_name === 'test' && payment.gateway_transaction_id?.startsWith('TEST-')) {
-      const createdMs = parseInt(payment.gateway_transaction_id.replace('TEST-', ''), 10)
-      if (!isNaN(createdMs) && (Date.now() - createdMs) >= 15000) {
-        await onPaymentApproved(payment)
-        return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
-      }
+    // Gateway de teste: aprova na primeira consulta de status
+    if (payment.status === 'pending' && payment.gateway_name === 'test') {
+      await onPaymentApproved(payment)
+      return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
     }
 
     // Verifica se expirou
