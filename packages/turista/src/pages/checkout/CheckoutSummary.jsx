@@ -139,9 +139,16 @@ export default function CheckoutSummary() {
       ? new Date(ls.service_date_iso + 'T12:00:00')
       : startOfDay(new Date())
   )
-  const [time,     setTime]          = useState(
-    ls?.service_time && ls.service_time !== 'A confirmar' ? ls.service_time : ''
-  )
+  const [time,     setTime]          = useState(() => {
+    if (ls?.service_time && ls.service_time !== 'A confirmar') return ls.service_time
+    // Padrão: 30 min a partir de agora, arredondado para próximo intervalo de 30min
+    const now = new Date()
+    const totalMins = now.getHours() * 60 + now.getMinutes() + 30
+    const rounded   = Math.ceil(totalMins / 30) * 30
+    const h = Math.floor(rounded / 60) % 24
+    const m = rounded % 60
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+  })
   const [cart,     setCart]          = useState(() => {
     const c = {}
     for (const v of ls?.vehicles || []) {
@@ -203,8 +210,9 @@ export default function CheckoutSummary() {
     return ls.total_price
   })()
 
-  const capacityOk = !hasVehicles || (cartHasItems && cartCapacity >= people)
-  const canSave    = capacityOk
+  const capacityOk  = !hasVehicles || (cartHasItems && cartCapacity >= people)
+  const canSave     = capacityOk
+  const canProceed  = hasPricing && !!time
 
   const dateLabel = isToday(date) ? 'Hoje'
     : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
@@ -302,18 +310,108 @@ export default function CheckoutSummary() {
                 <Pen size={12} /> Editar
               </button>
             </div>
-            <div className="space-y-3">
-              {details.map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
+            <div className="space-y-2">
+
+              {/* Origin */}
+              {ls.origin_text && (
+                <div className="flex items-start gap-3 py-1">
                   <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
-                    <item.icon size={15} className="text-brand" />
+                    <MapPin size={15} className="text-brand" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-gray-400">{item.label}</p>
-                    <p className="text-[13px] font-semibold text-gray-900">{item.value}</p>
+                    <p className="text-[11px] text-gray-400">Saída</p>
+                    <p className="text-[13px] font-semibold text-gray-900">{ls.origin_text}</p>
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Destination */}
+              {ls.destination_text && (
+                <div className="flex items-start gap-3 py-1">
+                  <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
+                    <MapPin size={15} className="text-brand" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400">Destino</p>
+                    <p className="text-[13px] font-semibold text-gray-900">{ls.destination_text}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Date — tappable inline */}
+              <button
+                onClick={() => setShowDP(true)}
+                className="w-full flex items-center gap-3 py-1 active:bg-gray-50 rounded-xl transition-colors text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
+                  <Calendar size={15} className="text-brand" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-gray-400">Data</p>
+                  <p className="text-[13px] font-semibold text-gray-900">{dateLabel}</p>
+                </div>
+                <ChevronRight size={14} className="text-gray-300 shrink-0" />
+              </button>
+
+              {/* Time — tappable inline, required */}
+              <div className="relative">
+                <button
+                  onClick={() => timeRef.current?.showPicker?.() || timeRef.current?.focus()}
+                  className={`w-full flex items-center gap-3 py-1 active:bg-gray-50 rounded-xl transition-colors text-left ${!time ? 'bg-amber-50 rounded-xl' : ''}`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${!time ? 'bg-amber-100' : 'bg-orange-50'}`}>
+                    <Clock size={15} className={!time ? 'text-amber-500' : 'text-brand'} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400">
+                      Horário <span className="text-amber-500 font-bold">*</span>
+                    </p>
+                    <p className={`text-[13px] font-semibold ${time ? 'text-gray-900' : 'text-amber-500'}`}>
+                      {time || 'Selecionar horário'}
+                    </p>
+                  </div>
+                  <ChevronRight size={14} className="text-gray-300 shrink-0" />
+                </button>
+                <input
+                  ref={timeRef}
+                  type="time"
+                  value={time}
+                  onChange={e => setTime(e.target.value)}
+                  className="absolute inset-0 opacity-0 w-full cursor-pointer"
+                />
+              </div>
+
+              {/* People */}
+              <div className="flex items-start gap-3 py-1">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
+                  <Users size={15} className="text-brand" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-gray-400">Pessoas</p>
+                  <p className="text-[13px] font-semibold text-gray-900">{people} {people === 1 ? 'pessoa' : 'pessoas'}</p>
+                </div>
+              </div>
+
+              {/* Vehicle */}
+              {hasVehicles && vehicleLabel && (
+                <div className="flex items-start gap-3 py-1">
+                  <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
+                    <Car size={15} className="text-brand" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400">Veículo</p>
+                    <p className="text-[13px] font-semibold text-gray-900">{vehicleLabel}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Required hint */}
+              {!time && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-1">
+                  <AlertCircle size={12} className="text-amber-500 shrink-0" />
+                  <p className="text-[11px] text-amber-700 font-medium">Selecione o horário para continuar</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -335,26 +433,30 @@ export default function CheckoutSummary() {
               </button>
             </div>
 
-            {/* Time — transfers only */}
-            {isTransfer && (
-              <div>
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Horário</p>
+            {/* Time — todos os tipos */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Horário <span className="text-amber-500">*</span>
+              </p>
+              <div className="relative">
                 <button
                   onClick={() => timeRef.current?.showPicker?.() || timeRef.current?.focus()}
-                  className="w-full flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 active:scale-[0.98] transition-transform relative"
+                  className="w-full flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 active:scale-[0.98] transition-transform"
                 >
                   <Clock size={15} className="text-brand shrink-0" />
-                  <span className="text-[14px] font-semibold text-gray-800">{time || 'Selecionar'}</span>
-                  <input
-                    ref={timeRef}
-                    type="time"
-                    value={time}
-                    onChange={e => setTime(e.target.value)}
-                    className="absolute inset-0 opacity-0 w-full cursor-pointer"
-                  />
+                  <span className={`text-[14px] font-semibold ${time ? 'text-gray-800' : 'text-amber-500'}`}>
+                    {time || 'Selecionar horário'}
+                  </span>
                 </button>
+                <input
+                  ref={timeRef}
+                  type="time"
+                  value={time}
+                  onChange={e => setTime(e.target.value)}
+                  className="absolute inset-0 opacity-0 w-full cursor-pointer"
+                />
               </div>
-            )}
+            </div>
 
             {/* People */}
             <div>
@@ -527,15 +629,15 @@ export default function CheckoutSummary() {
                 Editar
               </button>
               <button
-                onClick={hasPricing ? () => navigate('/checkout/pagamento', { state: paymentState }) : undefined}
-                disabled={!hasPricing}
+                onClick={canProceed ? () => navigate('/checkout/pagamento', { state: paymentState }) : undefined}
+                disabled={!canProceed}
                 className={`flex-1 py-3 rounded-xl font-bold text-[14px] transition-all ${
-                  hasPricing
+                  canProceed
                     ? 'bg-brand text-white shadow-md active:bg-orange-700 active:scale-[0.97]'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {hasPricing ? 'Ir para pagamento' : 'Sem preço configurado'}
+                {!hasPricing ? 'Sem preço configurado' : !time ? 'Selecione o horário' : 'Ir para pagamento'}
               </button>
             </>
           )}
