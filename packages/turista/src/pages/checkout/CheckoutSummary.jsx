@@ -132,7 +132,7 @@ export default function CheckoutSummary() {
 
   // ── Cutoff: passeios têm horário limite de solicitação ──
   const cutoffMins = (() => {
-    if (!ls?.booking_cutoff_time || ls?.service_type !== 'tour') return null
+    if (!ls?.booking_cutoff_time) return null
     const p = ls.booking_cutoff_time.split(':')
     return parseInt(p[0]) * 60 + parseInt(p[1])
   })()

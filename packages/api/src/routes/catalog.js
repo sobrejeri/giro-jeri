@@ -159,7 +159,7 @@ router.get('/transfer-routes', async (req, res, next) => {
   try {
     const { transfer_id } = req.query;
     let query = supabase
-      .from('transfer_routes').select('*, transfers(id, name)').order('origin_name');
+      .from('transfer_routes').select('*, transfers(id, name, booking_cutoff_time)').order('origin_name');
     if (transfer_id) query = query.eq('transfer_id', transfer_id);
     const { data, error } = await query;
     if (error) throw error;

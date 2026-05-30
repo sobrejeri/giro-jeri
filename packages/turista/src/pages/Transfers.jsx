@@ -356,6 +356,7 @@ export default function Transfers() {
         region_id:           matched?.transfer_id,
         service_id:          matched?.id,
         vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
+        booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
       },
     })
   }
