@@ -199,7 +199,6 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
       .from('bookings')
       .update({
         status_operational: 'completed',
-        status_commercial:  'completed',
         completed_at:       new Date().toISOString(),
       })
       .eq('id', req.params.id)
