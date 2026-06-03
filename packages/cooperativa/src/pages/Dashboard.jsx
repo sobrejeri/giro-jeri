@@ -4,7 +4,11 @@ import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSe
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, RefreshCw, Clock, Users, Car, MapPin, UserCheck } from 'lucide-react'
+import {
+  ChevronLeft, ChevronRight, RefreshCw, Clock, Users, Car, MapPin,
+  UserCheck, Phone, TrendingUp, CalendarDays, AlertCircle, CheckCircle2,
+  Loader2,
+} from 'lucide-react'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -13,81 +17,112 @@ import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 
 const COLUMNS = [
-  { key: 'new',               label: 'Novo',           color: 'bg-blue-400'   },
-  { key: 'awaiting_dispatch', label: 'Ag. Despacho',   color: 'bg-amber-400'  },
-  { key: 'confirmed',         label: 'Confirmado',     color: 'bg-teal-400'   },
-  { key: 'assigned',          label: 'Atribuído',      color: 'bg-indigo-400' },
-  { key: 'en_route',          label: 'A Caminho',      color: 'bg-orange-400' },
-  { key: 'in_progress',       label: 'Em Andamento',   color: 'bg-brand'      },
-  { key: 'completed',         label: 'Concluído',      color: 'bg-green-400'  },
-  { key: 'occurrence',        label: 'Ocorrência',     color: 'bg-red-400'    },
+  { key: 'new',               label: 'Novo',           dot: 'bg-blue-500',   bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700'   },
+  { key: 'awaiting_dispatch', label: 'Ag. Despacho',   dot: 'bg-amber-500',  bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-700'  },
+  { key: 'confirmed',         label: 'Confirmado',     dot: 'bg-teal-500',   bg: 'bg-teal-50',   border: 'border-teal-200',   text: 'text-teal-700'   },
+  { key: 'assigned',          label: 'Atribuído',      dot: 'bg-indigo-500', bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700' },
+  { key: 'en_route',          label: 'A Caminho',      dot: 'bg-orange-500', bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700' },
+  { key: 'in_progress',       label: 'Em Andamento',   dot: 'bg-brand',      bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-800' },
+  { key: 'completed',         label: 'Concluído',      dot: 'bg-green-500',  bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700'  },
+  { key: 'occurrence',        label: 'Ocorrência',     dot: 'bg-red-500',    bg: 'bg-red-50',    border: 'border-red-200',    text: 'text-red-700'    },
 ]
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+function ServiceTypeChip({ type }) {
+  const map = {
+    tour:     { label: 'Passeio',  cls: 'bg-orange-100 text-orange-700' },
+    transfer: { label: 'Transfer', cls: 'bg-blue-100 text-blue-700'     },
+  }
+  const { label, cls } = map[type] || { label: type, cls: 'bg-gray-100 text-gray-600' }
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}`}>
+      {label}
+    </span>
+  )
+}
+
 // ── Card arrastável ────────────────────────────────────
 function BookingCard({ booking, onAssign, isDragOverlay = false }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: booking.id })
+
+  const dateStr = booking.service_date
+    ? format(new Date(booking.service_date + 'T12:00:00'), "dd 'de' MMM", { locale: ptBR })
+    : null
+  const timeStr = booking.service_time ? booking.service_time.slice(0, 5) : null
 
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={`bg-white rounded-lg border border-gray-100 p-3 cursor-grab active:cursor-grabbing select-none
+      className={`bg-white rounded-xl border border-gray-100 overflow-hidden cursor-grab active:cursor-grabbing select-none
         transition-all hover:shadow-md hover:border-gray-200
-        ${isDragging || isDragOverlay ? 'opacity-50 shadow-lg rotate-1' : 'shadow-sm'}`}
+        ${isDragging || isDragOverlay ? 'opacity-40 shadow-xl rotate-1 scale-105' : 'shadow-sm'}`}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="font-mono text-xs font-bold text-gray-400">{booking.booking_code}</span>
-        <Badge value={booking.service_type} />
-      </div>
+      {/* Top strip */}
+      <div className="h-1 w-full bg-gradient-to-r from-brand to-orange-300" />
 
-      <p className="text-sm font-semibold text-gray-900 mb-1 leading-tight truncate">
-        {booking.users?.full_name || '—'}
-      </p>
+      <div className="p-3 space-y-2.5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-1">
+          <div>
+            <p className="text-[11px] font-mono text-gray-400 leading-none">{booking.booking_code}</p>
+            <p className="text-[13px] font-bold text-gray-900 mt-0.5 leading-tight line-clamp-1">
+              {booking.users?.full_name || '—'}
+            </p>
+          </div>
+          <ServiceTypeChip type={booking.service_type} />
+        </div>
 
-      <div className="space-y-1 text-xs text-gray-500">
-        {booking.service_date && (
-          <div className="flex items-center gap-1.5">
-            <Clock size={11} />
-            <span>
-              {format(new Date(booking.service_date + 'T12:00:00'), 'dd/MM', { locale: ptBR })}
-              {booking.service_time ? ` · ${booking.service_time.slice(0, 5)}` : ''}
-            </span>
-          </div>
-        )}
-        {booking.people_count && (
-          <div className="flex items-center gap-1.5">
-            <Users size={11} />
-            <span>{booking.people_count} pax</span>
-          </div>
-        )}
-        {booking.booking_vehicles?.[0] && (
-          <div className="flex items-center gap-1.5">
-            <Car size={11} />
-            <span className="truncate">{booking.booking_vehicles[0].vehicle_name_snapshot}</span>
-          </div>
-        )}
-        {booking.pickup_place_name && (
-          <div className="flex items-center gap-1.5">
-            <MapPin size={11} className="flex-shrink-0" />
-            <span className="truncate">{booking.pickup_place_name}</span>
-          </div>
-        )}
-      </div>
+        {/* Details */}
+        <div className="space-y-1">
+          {(dateStr || timeStr) && (
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+              <Clock size={10} className="shrink-0 text-gray-400" />
+              <span className="font-medium">{dateStr}{timeStr ? ` · ${timeStr}` : ''}</span>
+            </div>
+          )}
+          {booking.people_count && (
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+              <Users size={10} className="shrink-0 text-gray-400" />
+              <span>{booking.people_count} pessoas</span>
+            </div>
+          )}
+          {booking.booking_vehicles?.[0] && (
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+              <Car size={10} className="shrink-0 text-gray-400" />
+              <span className="truncate">{booking.booking_vehicles[0].vehicle_name_snapshot}</span>
+            </div>
+          )}
+          {(booking.pickup_place_name || booking.origin_text) && (
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+              <MapPin size={10} className="shrink-0 text-gray-400" />
+              <span className="truncate">{booking.pickup_place_name || booking.origin_text}</span>
+            </div>
+          )}
+          {booking.users?.phone && (
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+              <Phone size={10} className="shrink-0 text-gray-400" />
+              <span>{booking.users.phone}</span>
+            </div>
+          )}
+        </div>
 
-      <div className="mt-2 pt-2 border-t border-gray-50 flex items-center justify-between">
-        <span className="text-xs font-bold text-gray-700">{fmt(booking.total_amount)}</span>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onAssign(booking) }}
-          className="p-1 text-gray-400 hover:text-brand transition-colors"
-          title="Despachar"
-        >
-          <UserCheck size={14} />
-        </button>
+        {/* Footer */}
+        <div className="flex items-center justify-between pt-1.5 border-t border-gray-50">
+          <span className="text-[13px] font-extrabold text-gray-800">{fmt(booking.total_amount)}</span>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onAssign(booking) }}
+            className="flex items-center gap-1 text-[11px] font-medium text-brand hover:bg-orange-50 rounded-lg px-2 py-1 transition-colors"
+            title="Despachar"
+          >
+            <UserCheck size={12} />
+            Despachar
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -96,29 +131,44 @@ function BookingCard({ booking, onAssign, isDragOverlay = false }) {
 // ── Coluna droppable ───────────────────────────────────
 function KanbanColumn({ column, bookings, onAssign }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.key })
+  const total = bookings.reduce((s, b) => s + Number(b.total_amount || 0), 0)
 
   return (
-    <div className="flex-shrink-0 w-60 flex flex-col">
-      <div className="flex items-center gap-2 mb-2 px-1">
-        <div className={`w-2.5 h-2.5 rounded-full ${column.color}`} />
-        <span className="text-sm font-semibold text-gray-700">{column.label}</span>
-        <span className="ml-auto text-xs font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
-          {bookings.length}
-        </span>
+    <div className="flex-shrink-0 w-64 flex flex-col gap-2">
+      {/* Column header */}
+      <div className={`rounded-xl px-3 py-2 border ${column.bg} ${column.border} flex items-center justify-between`}>
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${column.dot}`} />
+          <span className={`text-[12px] font-bold ${column.text}`}>{column.label}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {bookings.length > 0 && (
+            <span className="text-[10px] text-gray-400">{fmt(total)}</span>
+          )}
+          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+            bookings.length > 0 ? `${column.dot} text-white` : 'bg-gray-200 text-gray-500'
+          }`}>
+            {bookings.length}
+          </span>
+        </div>
       </div>
 
+      {/* Drop zone */}
       <div
         ref={setNodeRef}
-        className={`flex-1 min-h-24 rounded-xl p-2 space-y-2 transition-colors ${
-          isOver ? 'bg-brand/5 ring-2 ring-brand/20' : 'bg-gray-100/60'
+        className={`flex-1 min-h-32 rounded-xl p-2 space-y-2 transition-all ${
+          isOver
+            ? 'bg-brand/5 ring-2 ring-brand/30 scale-[1.01]'
+            : 'bg-gray-50/80'
         }`}
       >
         {bookings.map((b) => (
           <BookingCard key={b.id} booking={b} onAssign={onAssign} />
         ))}
         {bookings.length === 0 && (
-          <div className="h-16 flex items-center justify-center text-xs text-gray-300 border-2 border-dashed border-gray-200 rounded-lg">
-            Vazio
+          <div className="h-20 flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-200 rounded-xl">
+            <div className="w-5 h-5 rounded-full border-2 border-dashed border-gray-300" />
+            <span className="text-[10px] text-gray-300 font-medium">Sem reservas</span>
           </div>
         )}
       </div>
@@ -126,21 +176,59 @@ function KanbanColumn({ column, bookings, onAssign }) {
   )
 }
 
+// ── Barra de stats ─────────────────────────────────────
+function StatsBar({ columns, total, isLoading }) {
+  const active = (columns['assigned']?.length || 0)
+    + (columns['in_progress']?.length || 0)
+    + (columns['en_route']?.length || 0)
+  const pending = (columns['new']?.length || 0) + (columns['awaiting_dispatch']?.length || 0)
+  const completed = columns['completed']?.length || 0
+  const revenue = Object.values(columns).flat()
+    .reduce((s, b) => s + Number(b.total_amount || 0), 0)
+
+  const stats = [
+    { label: 'Total',     value: total,     icon: CalendarDays,  cls: 'text-gray-700',   sub: 'reservas'  },
+    { label: 'Pendentes', value: pending,   icon: AlertCircle,   cls: 'text-amber-600',  sub: 'aguardando' },
+    { label: 'Em curso',  value: active,    icon: Loader2,       cls: 'text-brand',       sub: 'em andamento' },
+    { label: 'Concluídas',value: completed, icon: CheckCircle2,  cls: 'text-green-600',  sub: 'finalizadas' },
+    { label: 'Receita',   value: fmt(revenue), icon: TrendingUp, cls: 'text-indigo-600', sub: 'total'      },
+  ]
+
+  return (
+    <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-gray-100 overflow-x-auto">
+      {stats.map(({ label, value, icon: Icon, cls, sub }) => (
+        <div key={label} className="flex items-center gap-2.5 shrink-0 bg-gray-50 rounded-xl px-3 py-2 min-w-[110px]">
+          <div className={`${cls}`}>
+            <Icon size={16} className={isLoading ? 'animate-spin' : ''} />
+          </div>
+          <div>
+            <p className={`text-[15px] font-extrabold leading-none ${cls}`}>{value}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5 capitalize">{sub}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Página principal ───────────────────────────────────
 export default function Dashboard() {
-  const [date, setDate]           = useState('all')
-  const [serviceType, setType]    = useState('')
-  const [activeId, setActiveId]   = useState(null)
-  const [assignModal, setAssign]  = useState(null)
-  const [form, setForm]           = useState({ real_vehicle_text: '', dispatch_notes: '' })
+  const [date, setDate]          = useState('all')
+  const [serviceType, setType]   = useState('')
+  const [activeId, setActiveId]  = useState(null)
+  const [assignModal, setAssign] = useState(null)
+  const [form, setForm]          = useState({ real_vehicle_text: '', dispatch_notes: '' })
 
   const qc      = useQueryClient()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['operational', date, serviceType],
-    queryFn:  () => api.getOperational({ ...(date !== 'all' ? { date } : {}), ...(serviceType ? { service_type: serviceType } : {}) }),
-    refetchInterval: 30_000,
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey:       ['operational', date, serviceType],
+    queryFn:        () => api.getOperational({
+      ...(date !== 'all' ? { date } : {}),
+      ...(serviceType ? { service_type: serviceType } : {}),
+    }),
+    refetchInterval: 15_000,
   })
 
   const updateStatus = useMutation({
@@ -180,77 +268,82 @@ export default function Dashboard() {
 
   function changeDate(days) {
     const base = date === 'all' ? format(new Date(), 'yyyy-MM-dd') : date
-    const d = new Date(base + 'T12:00:00')
+    const d    = new Date(base + 'T12:00:00')
     d.setDate(d.getDate() + days)
     setDate(format(d, 'yyyy-MM-dd'))
-  }
-
-  function handleAssignSubmit(e) {
-    e.preventDefault()
-    assignMut.mutate({ id: assignModal.id, ...form })
   }
 
   if (isLoading) return <PageSpinner />
 
   return (
     <div className="flex flex-col h-full -m-6">
-      {/* Toolbar */}
+
+      {/* ── Toolbar ─────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center flex-wrap gap-3 px-6 py-3 bg-white border-b border-gray-100">
-        {/* Date picker */}
+
+        {/* Date filter */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setDate('all')}
-            className={`h-9 px-3 rounded-lg text-sm font-medium border transition-colors ${
+            className={`h-9 px-3 rounded-lg text-sm font-semibold border transition-colors ${
               date === 'all'
-                ? 'bg-brand text-white border-brand'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                ? 'bg-brand text-white border-brand shadow-sm'
+                : 'border-gray-200 text-gray-500 hover:bg-gray-50'
             }`}
           >
-            Todos
+            Todos os dias
           </button>
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-            <button onClick={() => changeDate(-1)} className="p-2 hover:bg-gray-50 transition-colors">
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+            <button onClick={() => changeDate(-1)} className="p-2 hover:bg-gray-50 transition-colors text-gray-500">
               <ChevronLeft size={15} />
             </button>
             <input
               type="date"
               value={date === 'all' ? format(new Date(), 'yyyy-MM-dd') : date}
               onChange={(e) => setDate(e.target.value)}
-              className="px-2 text-sm font-medium text-gray-700 bg-transparent focus:outline-none"
+              className={`px-2 text-sm font-medium bg-transparent focus:outline-none ${
+                date === 'all' ? 'text-gray-300' : 'text-gray-700'
+              }`}
             />
-            <button onClick={() => changeDate(1)} className="p-2 hover:bg-gray-50 transition-colors">
+            <button onClick={() => changeDate(1)} className="p-2 hover:bg-gray-50 transition-colors text-gray-500">
               <ChevronRight size={15} />
             </button>
           </div>
         </div>
 
-        {/* Filtro tipo */}
+        {/* Tipo de serviço */}
         <select
           value={serviceType}
           onChange={(e) => setType(e.target.value)}
-          className="h-9 pl-3 pr-8 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:border-brand"
+          className="h-9 pl-3 pr-8 rounded-lg border border-gray-200 text-sm bg-white text-gray-700 focus:outline-none focus:border-brand"
         >
-          <option value="">Todos</option>
+          <option value="">Todos os tipos</option>
           <option value="tour">Passeios</option>
           <option value="transfer">Transfers</option>
         </select>
 
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-gray-500">
-            <span className="font-semibold text-gray-900">{data?.total || 0}</span> reservas
-          </span>
+        <div className="ml-auto flex items-center gap-2">
+          {isFetching && !isLoading && (
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              <Loader2 size={12} className="animate-spin" /> Atualizando…
+            </span>
+          )}
           <button
             onClick={() => qc.invalidateQueries({ queryKey: ['operational'] })}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+            title="Atualizar"
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
-      {/* Kanban */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
-        <div className="flex gap-3 p-5 h-full" style={{ minWidth: 'max-content' }}>
+      {/* ── Stats bar ──────────────────────────────────── */}
+      <StatsBar columns={columns} total={data?.total || 0} isLoading={isFetching && !isLoading} />
+
+      {/* ── Kanban ──────────────────────────────────────── */}
+      <div className="flex-1 overflow-x-auto overflow-y-auto bg-gray-100/50">
+        <div className="flex gap-3 p-5" style={{ minWidth: 'max-content', minHeight: '100%' }}>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -273,14 +366,26 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Modal de despacho */}
+      {/* ── Modal de despacho ──────────────────────────── */}
       <Modal
         open={!!assignModal}
         onClose={() => setAssign(null)}
         title={`Despachar — ${assignModal?.booking_code || ''}`}
         size="sm"
       >
-        <form onSubmit={handleAssignSubmit} className="space-y-4">
+        {assignModal && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-xl text-sm space-y-1">
+            <p className="font-semibold text-gray-800">{assignModal.users?.full_name}</p>
+            {assignModal.service_date && (
+              <p className="text-gray-500">
+                {format(new Date(assignModal.service_date + 'T12:00:00'), "dd 'de' MMMM", { locale: ptBR })}
+                {assignModal.service_time ? ` · ${assignModal.service_time.slice(0, 5)}` : ''}
+              </p>
+            )}
+            <p className="font-bold text-brand">{fmt(assignModal.total_amount)}</p>
+          </div>
+        )}
+        <form onSubmit={(e) => { e.preventDefault(); assignMut.mutate({ id: assignModal.id, ...form }) }} className="space-y-4">
           <Input
             label="Veículo (descrição)"
             placeholder="Ex: Buggy Branco GKR-1234"
