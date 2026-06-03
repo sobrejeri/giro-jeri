@@ -159,9 +159,8 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
     const { data, error } = await supabase
       .from('bookings')
       .update({
-        operator_id:         req.user.id,
-        status_commercial:   'confirmed',
-        status_operational:  'assigned',
+        operator_id:        req.user.id,
+        status_operational: 'assigned',
       })
       .eq('id', req.params.id)
       .is('operator_id', null)
