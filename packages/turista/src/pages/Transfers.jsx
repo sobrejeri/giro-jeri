@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { useQuery }    from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
@@ -6,13 +6,106 @@ import { useRegion }   from '../contexts/RegionContext'
 import { api }         from '../lib/api'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
-  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route,
+  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
   isSameDay, isBefore, addMonths, subMonths, getDay, isToday, addDays,
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+
+/* ── Place Autocomplete (Nominatim / OpenStreetMap) ─────────── */
+function usePlaceSuggestions(query) {
+  const [results,  setResults]  = useState([])
+  const [loading,  setLoading]  = useState(false)
+  const timerRef = useRef(null)
+
+  useEffect(() => {
+    if (!query || query.length < 3) { setResults([]); return }
+    clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const params = new URLSearchParams({
+          q:               query,
+          format:          'json',
+          limit:           '6',
+          addressdetails:  '1',
+          countrycodes:    'br',
+          'accept-language': 'pt-BR',
+          viewbox:         '-41.5,-3.8,-39.5,-2.0', // bias around Jericoacoara
+          bounded:         '0',
+        })
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+          headers: { 'User-Agent': 'GiroJeri/1.0 (sobrejeri@gmail.com)' },
+        })
+        const data = await res.json()
+        setResults(data.map(p => ({
+          id:    p.place_id,
+          label: p.display_name.split(',').slice(0, 3).join(', '),
+          full:  p.display_name,
+          lat:   parseFloat(p.lat),
+          lon:   parseFloat(p.lon),
+        })))
+      } catch { setResults([]) }
+      finally  { setLoading(false) }
+    }, 350)
+    return () => clearTimeout(timerRef.current)
+  }, [query])
+
+  return { results, loading }
+}
+
+function PlaceInput({ value, onChange, placeholder, dotClass }) {
+  const [open, setOpen]  = useState(false)
+  const wrapRef          = useRef(null)
+  const { results, loading } = usePlaceSuggestions(open ? value : '')
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
+        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotClass}`} />
+        <input
+          type="text"
+          value={value}
+          onChange={e => { onChange(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder}
+          className="flex-1 text-[13px] text-gray-800 bg-transparent outline-none placeholder-gray-400"
+        />
+        {loading && <Loader2 size={13} className="animate-spin text-gray-400 shrink-0" />}
+        {value && !loading && (
+          <button onClick={() => { onChange(''); setOpen(false) }} className="shrink-0">
+            <X size={13} className="text-gray-400" />
+          </button>
+        )}
+      </div>
+
+      {open && results.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+          {results.map(r => (
+            <button
+              key={r.id}
+              onClick={() => { onChange(r.label); setOpen(false) }}
+              className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0"
+            >
+              <MapPin size={13} className="text-brand shrink-0 mt-0.5" />
+              <span className="text-[12px] text-gray-700 leading-snug">{r.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /* ── Preset routes ──────────────────────────────────────────── */
 const PRESET_ROUTES = [
@@ -477,27 +570,23 @@ export default function Transfers() {
                 <div className="px-4 pb-4 space-y-3">
                   <div>
                     <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Embarque</label>
-                    <div className="flex items-center gap-2 mt-1 bg-gray-50 rounded-xl px-3 py-2.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
-                      <input
-                        type="text"
+                    <div className="mt-1">
+                      <PlaceInput
                         value={customOrigin}
-                        onChange={e => setCustomOrigin(e.target.value)}
+                        onChange={setCustomOrigin}
                         placeholder="Ex: Hotel Jeri Beach"
-                        className="flex-1 text-[13px] text-gray-800 bg-transparent outline-none placeholder-gray-400"
+                        dotClass="bg-brand"
                       />
                     </div>
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Destino</label>
-                    <div className="flex items-center gap-2 mt-1 bg-gray-50 rounded-xl px-3 py-2.5">
-                      <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
-                      <input
-                        type="text"
+                    <div className="mt-1">
+                      <PlaceInput
                         value={customDest}
-                        onChange={e => setCustomDest(e.target.value)}
+                        onChange={setCustomDest}
                         placeholder="Ex: Aeroporto de Jericoacoara"
-                        className="flex-1 text-[13px] text-gray-800 bg-transparent outline-none placeholder-gray-400"
+                        dotClass="border-2 border-gray-400 bg-transparent"
                       />
                     </div>
                   </div>
