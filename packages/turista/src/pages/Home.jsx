@@ -144,7 +144,7 @@ function TourCard({ tour, isFav, onToggleFav }) {
 
 const QUICK = [
   { icon: Compass,  bg: 'bg-orange-50', ic: 'text-brand',      title: 'Passeio Privativo', desc: 'Exclusivo para seu grupo',   route: '/passeios'  },
-  { icon: Users,    bg: 'bg-teal-50',   ic: 'text-teal-600',   title: 'Compartilhado',     desc: 'Divida com outros turistas', route: '/passeios'  },
+  { icon: Users,    bg: 'bg-teal-50',   ic: 'text-teal-600',   title: 'Compartilhado',     desc: 'Divida com outros turistas', route: '/passeios', state: { mode: 'shared' } },
   { icon: Plane,    bg: 'bg-blue-50',   ic: 'text-blue-600',   title: 'Transfer',           desc: 'Aeroporto & hotel',          route: '/transfers' },
   { icon: Calendar, bg: 'bg-purple-50', ic: 'text-purple-600', title: 'Minhas Reservas',    desc: 'Acompanhe seus passeios',    route: '/minhas-reservas'  },
 ]
@@ -278,10 +278,10 @@ export default function Home() {
 
         {/* ── Acesso rápido 2×2 ─────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-2.5">
-          {QUICK.map(({ icon: Icon, bg, ic, title, desc, route }) => (
+          {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
             <button
               key={title}
-              onClick={() => navigate(route)}
+              onClick={() => navigate(route, state ? { state } : undefined)}
               className="flex items-center gap-2.5 bg-white rounded-2xl p-3 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left"
             >
               <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>

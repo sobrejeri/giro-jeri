@@ -233,7 +233,7 @@ export default function Tours() {
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
-  const [mode, setMode] = useState('private')
+  const [mode, setMode] = useState(locationState?.mode || 'private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
   const [people, setPeople] = useState(2)
   const [date, setDate] = useState(startOfDay(new Date()))
