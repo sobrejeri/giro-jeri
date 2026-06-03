@@ -260,7 +260,8 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
 router.get('/operational', requireOperator, async (req, res, next) => {
   try {
     const { date, service_type } = req.query;
-    const targetDate = date || dayjs().format('YYYY-MM-DD');
+    const showAll    = !date || date === 'all';
+    const targetDate = showAll ? null : date;
 
     let query = supabase
       .from('bookings')
@@ -275,9 +276,11 @@ router.get('/operational', requireOperator, async (req, res, next) => {
         booking_vehicles ( vehicle_name_snapshot, quantity ),
         operational_assignments ( assignment_status, assigned_driver_user_id, real_vehicle_text )
       `)
-      .eq('service_date', targetDate)
       .not('status_commercial', 'in', '("draft","cancelled")')
+      .order('service_date')
       .order('service_time');
+
+    if (targetDate) query = query.eq('service_date', targetDate);
 
     if (service_type) query = query.eq('service_type', service_type);
 
@@ -293,7 +296,7 @@ router.get('/operational', requireOperator, async (req, res, next) => {
       if (grouped[key]) grouped[key].push(b);
     }
 
-    res.json({ date: targetDate, total: data?.length || 0, columns: grouped });
+    res.json({ date: targetDate || 'all', total: data?.length || 0, columns: grouped });
   } catch (err) { next(err); }
 });
 

@@ -49,10 +49,13 @@ function BookingCard({ booking, onAssign, isDragOverlay = false }) {
       </p>
 
       <div className="space-y-1 text-xs text-gray-500">
-        {booking.service_time && (
+        {booking.service_date && (
           <div className="flex items-center gap-1.5">
             <Clock size={11} />
-            <span>{booking.service_time.slice(0, 5)}</span>
+            <span>
+              {format(new Date(booking.service_date + 'T12:00:00'), 'dd/MM', { locale: ptBR })}
+              {booking.service_time ? ` · ${booking.service_time.slice(0, 5)}` : ''}
+            </span>
           </div>
         )}
         {booking.people_count && (
@@ -125,7 +128,7 @@ function KanbanColumn({ column, bookings, onAssign }) {
 
 // ── Página principal ───────────────────────────────────
 export default function Dashboard() {
-  const [date, setDate]           = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [date, setDate]           = useState('all')
   const [serviceType, setType]    = useState('')
   const [activeId, setActiveId]   = useState(null)
   const [assignModal, setAssign]  = useState(null)
@@ -136,7 +139,7 @@ export default function Dashboard() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['operational', date, serviceType],
-    queryFn:  () => api.getOperational({ date, ...(serviceType ? { service_type: serviceType } : {}) }),
+    queryFn:  () => api.getOperational({ ...(date !== 'all' ? { date } : {}), ...(serviceType ? { service_type: serviceType } : {}) }),
     refetchInterval: 30_000,
   })
 
@@ -176,7 +179,8 @@ export default function Dashboard() {
   }
 
   function changeDate(days) {
-    const d = new Date(date + 'T12:00:00')
+    const base = date === 'all' ? format(new Date(), 'yyyy-MM-dd') : date
+    const d = new Date(base + 'T12:00:00')
     d.setDate(d.getDate() + days)
     setDate(format(d, 'yyyy-MM-dd'))
   }
@@ -193,19 +197,31 @@ export default function Dashboard() {
       {/* Toolbar */}
       <div className="flex-shrink-0 flex items-center flex-wrap gap-3 px-6 py-3 bg-white border-b border-gray-100">
         {/* Date picker */}
-        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-          <button onClick={() => changeDate(-1)} className="p-2 hover:bg-gray-50 transition-colors">
-            <ChevronLeft size={15} />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setDate('all')}
+            className={`h-9 px-3 rounded-lg text-sm font-medium border transition-colors ${
+              date === 'all'
+                ? 'bg-brand text-white border-brand'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Todos
           </button>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="px-2 text-sm font-medium text-gray-700 bg-transparent focus:outline-none"
-          />
-          <button onClick={() => changeDate(1)} className="p-2 hover:bg-gray-50 transition-colors">
-            <ChevronRight size={15} />
-          </button>
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+            <button onClick={() => changeDate(-1)} className="p-2 hover:bg-gray-50 transition-colors">
+              <ChevronLeft size={15} />
+            </button>
+            <input
+              type="date"
+              value={date === 'all' ? format(new Date(), 'yyyy-MM-dd') : date}
+              onChange={(e) => setDate(e.target.value)}
+              className="px-2 text-sm font-medium text-gray-700 bg-transparent focus:outline-none"
+            />
+            <button onClick={() => changeDate(1)} className="p-2 hover:bg-gray-50 transition-colors">
+              <ChevronRight size={15} />
+            </button>
+          </div>
         </div>
 
         {/* Filtro tipo */}
