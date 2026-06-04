@@ -73,7 +73,7 @@ function BookingRow({ b, onDispatch }) {
 
           <Button size="sm" variant={isDispatched ? 'outline' : 'primary'} onClick={() => onDispatch(b)}>
             <UserCheck size={13} />
-            {isDispatched ? 'Reatribuir' : 'Despachar'}
+            {isDispatched ? 'Editar' : 'Despachar'}
           </Button>
         </div>
 
