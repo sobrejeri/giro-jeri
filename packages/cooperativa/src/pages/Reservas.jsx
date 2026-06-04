@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  CalendarCheck, Clock, Users, MapPin, Car, CheckCircle2,
-  RefreshCw, AlertCircle, ChevronRight, Zap, PhoneCall,
+  CalendarCheck, Users, MapPin, Car, CheckCircle2,
+  RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
 } from 'lucide-react'
 import { api } from '../lib/api'
 
@@ -24,28 +24,37 @@ function WhatsAppIcon() {
   )
 }
 
-function buildWhatsAppMsg(b) {
-  const clientName = b.users?.full_name || 'Cliente'
+function buildConfirmMsg(b) {
+  const name = b.users?.full_name?.split(' ')[0] || 'Cliente'
   const type = b.service_type === 'tour' ? 'Passeio' : 'Transfer'
   const mode = b.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
   const date = b.service_date
     ? new Date(b.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '—'
-  const time = b.service_time ? b.service_time.slice(0, 5) : '—'
+  const time  = b.service_time ? b.service_time.slice(0, 5) : '—'
+  const local = b.origin_text || b.pickup_place_name || ''
+  const dest  = b.destination_text || b.destination_place_name || ''
 
-  let msg = `Olá ${clientName}! 👋\n\n`
-  msg += `Sou da cooperativa que aceitou sua reserva na Giro Jeri.\n\n`
-  msg += `📋 *Detalhes da reserva*\n`
-  msg += `Código: ${b.booking_code}\n`
-  msg += `Serviço: ${type} ${mode}\n`
-  msg += `Data: ${date} às ${time}\n`
-  msg += `Pessoas: ${b.people_count}\n`
-  if (b.origin_text)      msg += `Origem: ${b.origin_text}\n`
-  if (b.destination_text) msg += `Destino: ${b.destination_text}\n`
-  msg += `Valor: ${fmt(b.total_amount)}\n\n`
-  msg += `Vou entrar em contato para alinhar os detalhes. Qualquer dúvida, estou à disposição! 😊`
+  const lines = [
+    `🌴 *Olá, ${name}! Sua reserva foi confirmada!*`,
+    ``,
+    `📋 *Código:* ${b.booking_code}`,
+    `🚗 *Serviço:* ${type} ${mode}`,
+    `📅 *Data:* ${date} às ${time}`,
+    `👥 *Pessoas:* ${b.people_count}`,
+    local ? `📍 *Embarque:* ${local}` : null,
+    dest  ? `🏁 *Destino:* ${dest}`  : null,
+    `💰 *Valor:* ${fmt(b.total_amount)} ✅ PAGO`,
+    ``,
+    `Em breve enviaremos os dados do veículo e motorista. Qualquer dúvida estamos à disposição! 😊`,
+    `_Giro Jeri — Passeios & Transfers_`,
+  ].filter(Boolean).join('\n')
 
-  return encodeURIComponent(msg)
+  return encodeURIComponent(lines)
+}
+
+function buildWhatsAppMsg(b) {
+  return buildConfirmMsg(b)
 }
 
 // ── Toast simples ─────────────────────────────────────────
@@ -137,17 +146,13 @@ function PendingCard({ booking, onAccept, accepting }) {
 }
 
 // ── Card de corrida aceita (minhas) ───────────────────────
-function MyCard({ booking, onComplete, completing }) {
+function MyCard({ booking, onConfirm, confirming }) {
   const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
   const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
   const clientPhone = booking.users?.phone
   const clientName  = booking.users?.full_name || 'Cliente'
-
-  const waNumber = clientPhone
-    ? `55${clientPhone.replace(/\D/g, '')}`
-    : null
-
-  const isCompleting = completing === booking.id
+  const waNumber    = clientPhone ? `55${clientPhone.replace(/\D/g, '')}` : null
+  const isSending   = confirming === booking.id
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -199,10 +204,14 @@ function MyCard({ booking, onComplete, completing }) {
             <Users size={13} className="text-gray-400 shrink-0" />
             <span>{booking.people_count} {booking.people_count === 1 ? 'pessoa' : 'pessoas'}</span>
           </div>
-          {booking.origin_text && (
+          {(booking.origin_text || booking.pickup_place_name) && (
             <div className="flex items-start gap-2 text-[13px] text-gray-700">
               <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
-              <span>{booking.origin_text}{booking.destination_text ? ` → ${booking.destination_text}` : ''}</span>
+              <span>
+                {booking.origin_text || booking.pickup_place_name}
+                {(booking.destination_text || booking.destination_place_name)
+                  ? ` → ${booking.destination_text || booking.destination_place_name}` : ''}
+              </span>
             </div>
           )}
         </div>
@@ -212,27 +221,22 @@ function MyCard({ booking, onComplete, completing }) {
           <span className="font-bold text-brand">{fmt(booking.total_amount)}</span>
         </div>
 
-        {/* Ações */}
-        <div className="flex gap-2 pt-1 border-t border-gray-100">
-          {waNumber && (
-            <a
-              href={`https://wa.me/${waNumber}?text=${buildWhatsAppMsg(booking)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex-1 flex items-center justify-center gap-2 bg-[#25D366] text-white font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-transform"
-            >
-              <WhatsAppIcon /> WhatsApp
-            </a>
-          )}
+        {/* Botão único: confirmar + WhatsApp */}
+        <div className="pt-1 border-t border-gray-100">
           <button
-            onClick={() => onComplete(booking.id)}
-            disabled={isCompleting}
-            className="flex-1 flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-transform disabled:opacity-60"
+            onClick={() => onConfirm(booking)}
+            disabled={isSending}
+            className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-green-500/20"
           >
-            {isCompleting
-              ? <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-              : <><Car size={14} /> Concluir</>}
+            {isSending
+              ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              : <><MessageCircle size={16} /> Confirmar e enviar WhatsApp</>}
           </button>
+          {!waNumber && (
+            <p className="text-[11px] text-center text-gray-400 mt-1.5">
+              Cliente sem WhatsApp cadastrado — a reserva será enviada para despacho mesmo assim
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -241,10 +245,10 @@ function MyCard({ booking, onComplete, completing }) {
 
 // ── Página principal ──────────────────────────────────────
 export default function Reservas() {
-  const [tab,       setTab]       = useState('pending')
-  const [toast,     setToast]     = useState(null)
-  const [accepting, setAccepting] = useState(null)
-  const [completing,setCompleting]= useState(null)
+  const [tab,        setTab]       = useState('pending')
+  const [toast,      setToast]     = useState(null)
+  const [accepting,  setAccepting] = useState(null)
+  const [confirming, setConfirming]= useState(null)
   const queryClient = useQueryClient()
 
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -277,17 +281,26 @@ export default function Reservas() {
     }
   }
 
-  async function handleComplete(bookingId) {
-    if (completing) return
-    setCompleting(bookingId)
+  async function handleConfirm(booking) {
+    if (confirming) return
+    setConfirming(booking.id)
     try {
-      await api.completeBooking(bookingId)
+      // 1. Muda status para aguardar despacho
+      await api.confirmBooking(booking.id)
       queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
-      setToast({ message: 'Corrida concluída!', type: 'success' })
+
+      // 2. Abre WhatsApp com os dados da reserva (se cliente tem telefone)
+      const phone = booking.users?.phone
+      if (phone) {
+        const intl = `55${phone.replace(/\D/g, '')}`
+        window.open(`https://wa.me/${intl}?text=${buildConfirmMsg(booking)}`, '_blank')
+      }
+
+      setToast({ message: 'Reserva enviada para despacho! WhatsApp aberto.', type: 'success' })
     } catch (err) {
-      setToast({ message: err.message || 'Erro ao concluir', type: 'error' })
+      setToast({ message: err.message || 'Erro ao confirmar', type: 'error' })
     } finally {
-      setCompleting(null)
+      setConfirming(null)
     }
   }
 
@@ -378,8 +391,8 @@ export default function Reservas() {
               <MyCard
                 key={b.id}
                 booking={b}
-                onComplete={handleComplete}
-                completing={completing}
+                onConfirm={handleConfirm}
+                confirming={confirming}
               />
             ))}
           </div>

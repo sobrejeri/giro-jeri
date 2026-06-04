@@ -192,6 +192,21 @@ router.post('/bookings/:id/start', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── POST /api/operator/bookings/:id/confirm ───────────
+// Operador confirma com o cliente → booking volta para fila de despacho
+router.post('/bookings/:id/confirm', async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('bookings')
+      .update({ status_operational: 'awaiting_dispatch' })
+      .eq('id', req.params.id)
+      .eq('operator_id', req.user.id)
+
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
 // ── POST /api/operator/bookings/:id/complete ──────────
 router.post('/bookings/:id/complete', async (req, res, next) => {
   try {
