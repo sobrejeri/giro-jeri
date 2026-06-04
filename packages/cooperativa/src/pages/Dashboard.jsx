@@ -7,9 +7,10 @@ import { ptBR } from 'date-fns/locale'
 import {
   ChevronLeft, ChevronRight, RefreshCw, Clock, Users, Car, MapPin,
   UserCheck, Phone, TrendingUp, CalendarDays, AlertCircle, CheckCircle2,
-  Loader2, MessageCircle, Send,
+  Loader2, MessageCircle, Send, Download, FileText,
 } from 'lucide-react'
 import { api } from '../lib/api'
+import { downloadOrderPDF, shareOrderPDF } from '../lib/orderPDF'
 import Badge from '../components/ui/Badge'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
@@ -216,8 +217,10 @@ export default function Dashboard() {
   const [date, setDate]          = useState('all')
   const [serviceType, setType]   = useState('')
   const [activeId, setActiveId]  = useState(null)
-  const [assignModal, setAssign] = useState(null)
-  const [form, setForm]          = useState({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
+  const [assignModal, setAssign]         = useState(null)
+  const [dispatchedBooking, setDispatched] = useState(null)
+  const [savedForm, setSavedForm]          = useState(null)
+  const [form, setForm]                    = useState({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
 
   const qc      = useQueryClient()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
@@ -240,43 +243,16 @@ export default function Dashboard() {
     mutationFn: ({ id, ...body }) => api.assignBooking(id, body),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['operational'] })
-      if (form.driver_phone) openDriverWhatsApp(assignModal, form)
+      setSavedForm({ ...form })
+      setDispatched(assignModal)
       setAssign(null)
       setForm({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
     },
   })
 
-  function openDriverWhatsApp(booking, f) {
-    const phone = f.driver_phone.replace(/\D/g, '')
-    const intl  = phone.startsWith('55') ? phone : `55${phone}`
-    const dateStr = booking.service_date
-      ? format(new Date(booking.service_date + 'T12:00:00'), "dd/MM/yyyy", { locale: ptBR })
-      : '—'
-    const timeStr  = booking.service_time ? booking.service_time.slice(0, 5) : ''
-    const local    = booking.pickup_place_name || booking.origin_text || '—'
-    const destino  = booking.destination_place_name || booking.destination_text || ''
-    const veiculo  = f.real_vehicle_text || booking.booking_vehicles?.[0]?.vehicle_name_snapshot || '—'
-    const tipo     = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
-    const msg = [
-      `🚗 *DESPACHO DE SERVIÇO — GIRO JERI*`,
-      ``,
-      `📋 *Código:* ${booking.booking_code}`,
-      `🗂️ *Tipo:* ${tipo}`,
-      ``,
-      `👤 *Cliente:* ${booking.users?.full_name || '—'}`,
-      booking.users?.phone ? `📞 *Tel. cliente:* ${booking.users.phone}` : null,
-      ``,
-      `📅 *Data:* ${dateStr}${timeStr ? ` às ${timeStr}` : ''}`,
-      `👥 *Pessoas:* ${booking.people_count || '—'}`,
-      `🚙 *Veículo:* ${veiculo}`,
-      `📍 *Embarque:* ${local}`,
-      destino ? `🏁 *Destino:* ${destino}` : null,
-      ``,
-      `💰 *Valor:* ${fmt(booking.total_amount)}`,
-      f.dispatch_notes ? `\n📝 *Obs:* ${f.dispatch_notes}` : null,
-    ].filter(Boolean).join('\n')
-
-    window.open(`https://wa.me/${intl}?text=${encodeURIComponent(msg)}`, '_blank')
+  function closeDispatch() {
+    setDispatched(null)
+    setSavedForm(null)
   }
 
   const columns     = data?.columns || {}
@@ -399,6 +375,99 @@ export default function Dashboard() {
           </DndContext>
         </div>
       </div>
+
+      {/* ── Modal Ordem de Serviço (pós-despacho) ──────── */}
+      <Modal
+        open={!!dispatchedBooking}
+        onClose={closeDispatch}
+        title="Ordem de Serviço gerada"
+        size="sm"
+      >
+        {dispatchedBooking && savedForm && (
+          <div className="space-y-4">
+            {/* Resumo */}
+            <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center shrink-0">
+                <FileText size={18} className="text-green-600" />
+              </div>
+              <div>
+                <p className="font-bold text-green-800 text-sm">Despacho confirmado!</p>
+                <p className="text-green-600 text-xs mt-0.5">
+                  OS Nº {dispatchedBooking.booking_code} · {dispatchedBooking.users?.full_name}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-500 text-center">
+              Selecione como deseja compartilhar a Ordem de Serviço:
+            </p>
+
+            {/* Baixar PDF */}
+            <button
+              onClick={() => downloadOrderPDF(dispatchedBooking, savedForm)}
+              className="w-full flex items-center gap-3 p-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors text-left"
+            >
+              <div className="w-9 h-9 bg-gray-200 rounded-lg flex items-center justify-center shrink-0">
+                <Download size={16} className="text-gray-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Baixar PDF</p>
+                <p className="text-xs text-gray-400">Salvar OS-{dispatchedBooking.booking_code}.pdf</p>
+              </div>
+            </button>
+
+            {/* Enviar ao motorista */}
+            <button
+              onClick={() => shareOrderPDF(dispatchedBooking, savedForm, 'driver')}
+              disabled={!savedForm.driver_phone}
+              className={`w-full flex items-center gap-3 p-3.5 border rounded-xl transition-colors text-left ${
+                savedForm.driver_phone
+                  ? 'bg-green-50 hover:bg-green-100 border-green-200'
+                  : 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
+                <MessageCircle size={16} className="text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-green-800">Enviar ao Motorista</p>
+                <p className="text-xs text-green-600">
+                  {savedForm.driver_phone
+                    ? `WhatsApp ${savedForm.driver_phone} · baixa PDF + abre chat`
+                    : 'Informe o WhatsApp do motorista no despacho'}
+                </p>
+              </div>
+            </button>
+
+            {/* Enviar ao cliente */}
+            <button
+              onClick={() => shareOrderPDF(dispatchedBooking, savedForm, 'client')}
+              disabled={!dispatchedBooking.users?.phone}
+              className={`w-full flex items-center gap-3 p-3.5 border rounded-xl transition-colors text-left ${
+                dispatchedBooking.users?.phone
+                  ? 'bg-green-50 hover:bg-green-100 border-green-200'
+                  : 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
+                <MessageCircle size={16} className="text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-green-800">Enviar ao Cliente</p>
+                <p className="text-xs text-green-600">
+                  {dispatchedBooking.users?.phone
+                    ? `WhatsApp ${dispatchedBooking.users.phone} · baixa PDF + abre chat`
+                    : 'Cliente sem telefone cadastrado'}
+                </p>
+              </div>
+            </button>
+
+            <button onClick={closeDispatch} className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors">
+              Fechar
+            </button>
+          </div>
+        )}
+      </Modal>
 
       {/* ── Modal de despacho ──────────────────────────── */}
       <Modal
