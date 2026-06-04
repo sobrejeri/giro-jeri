@@ -269,20 +269,17 @@ router.get('/operational', requireOperator, async (req, res, next) => {
         id, booking_code, service_type, booking_mode,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
-        pickup_place_name, pickup_latitude, pickup_longitude,
-        destination_place_name, destination_latitude, destination_longitude,
-        special_notes,
-        users ( full_name, phone ),
-        booking_vehicles ( vehicle_name_snapshot, quantity ),
-        operational_assignments ( assignment_status, assigned_driver_user_id, real_vehicle_text )
+        pickup_place_name, destination_place_name, special_notes,
+        origin_text, destination_text,
+        users!bookings_user_id_fkey ( full_name, phone ),
+        booking_vehicles ( vehicle_name_snapshot, quantity )
       `)
-      .not('status_commercial', 'in', '("draft","cancelled")')
-      .order('service_date')
-      .order('service_time');
+      .neq('status_commercial', 'draft')
+      .neq('status_commercial', 'cancelled')
+      .order('service_date', { ascending: true });
 
-    if (targetDate) query = query.eq('service_date', targetDate);
-
-    if (service_type) query = query.eq('service_type', service_type);
+    if (targetDate)    query = query.eq('service_date', targetDate);
+    if (service_type)  query = query.eq('service_type', service_type);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -576,7 +573,7 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
       .select(`
         id, booking_code, service_type, booking_mode, service_date, service_time,
         people_count, total_amount, status_commercial, status_operational, created_at,
-        users ( full_name, phone, email )
+        users!bookings_user_id_fkey ( full_name, phone, email )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
@@ -648,7 +645,7 @@ router.post('/bookings/manual', requireAdmin, async (req, res, next) => {
       people_count:        Number(people_count),
       total_amount:        Number(total_amount),
       status_commercial:   isPaid ? 'paid' : 'awaiting_payment',
-      status_operational:  isPaid ? 'awaiting_dispatch' : 'not_started',
+      status_operational:  isPaid ? 'awaiting_dispatch' : 'new',
       payment_status:      isPaid ? 'approved' : 'pending',
       notes:               notes || `Reserva manual — ${customer_name || 'sem nome'}`,
     }).select().single();
