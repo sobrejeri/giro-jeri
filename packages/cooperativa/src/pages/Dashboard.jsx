@@ -138,37 +138,10 @@ function BookingCard({ booking, colStrip, onAssign, isDragOverlay = false }) {
   )
 }
 
-// ── Coluna compacta (vazia) ────────────────────────────
-function EmptyColumn({ column }) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.key })
-  return (
-    <div className="flex-shrink-0 w-10 flex flex-col gap-1.5">
-      <div className={`rounded-xl px-1 py-3 border ${column.bg} ${column.border} flex flex-col items-center gap-2`}>
-        <div className={`w-2 h-2 rounded-full ${column.dot} shrink-0`} />
-        <span
-          className={`text-[9px] font-bold ${column.text} whitespace-nowrap`}
-          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-        >
-          {column.label}
-        </span>
-        <span className="text-[9px] text-gray-300 font-medium">0</span>
-      </div>
-      <div
-        ref={setNodeRef}
-        className={`flex-1 min-h-20 rounded-xl border-2 transition-all ${
-          isOver ? 'border-brand/40 bg-brand/5' : 'border-dashed border-gray-200'
-        }`}
-      />
-    </div>
-  )
-}
-
-// ── Coluna droppable (com cards) ───────────────────────
+// ── Coluna droppable (uniforme) ────────────────────────
 function KanbanColumn({ column, bookings, onAssign }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.key })
   const total = bookings.reduce((s, b) => s + Number(b.total_amount || 0), 0)
-
-  if (bookings.length === 0) return <EmptyColumn column={column} />
 
   const sorted = [...bookings].sort((a, b) => {
     if (!a.service_time) return 1
@@ -177,15 +150,17 @@ function KanbanColumn({ column, bookings, onAssign }) {
   })
 
   return (
-    <div className="flex-shrink-0 w-[248px] flex flex-col gap-2">
+    <div className="flex-shrink-0 w-[260px] flex flex-col gap-2">
       <div className={`rounded-xl px-3 py-2.5 border ${column.bg} ${column.border} flex items-center justify-between`}>
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${column.dot}`} />
           <span className={`text-[12px] font-bold ${column.text}`}>{column.label}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-gray-400 font-medium">{fmt(total)}</span>
-          <span className={`min-w-[20px] text-center text-[11px] font-bold px-1.5 py-0.5 rounded-full ${column.dot} text-white`}>
+          {total > 0 && <span className="text-[10px] text-gray-400 font-medium">{fmt(total)}</span>}
+          <span className={`min-w-[20px] text-center text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+            bookings.length > 0 ? `${column.dot} text-white` : 'bg-gray-200 text-gray-400'
+          }`}>
             {bookings.length}
           </span>
         </div>
@@ -193,13 +168,19 @@ function KanbanColumn({ column, bookings, onAssign }) {
 
       <div
         ref={setNodeRef}
-        className={`flex-1 min-h-32 rounded-xl p-2 space-y-2 transition-all ${
+        className={`flex-1 rounded-xl p-2 space-y-2 transition-all ${
           isOver ? 'bg-brand/5 ring-2 ring-brand/30' : 'bg-gray-50/80'
         }`}
       >
         {sorted.map((b) => (
           <BookingCard key={b.id} booking={b} colStrip={column.strip} onAssign={onAssign} />
         ))}
+        {bookings.length === 0 && (
+          <div className="h-full min-h-[120px] flex flex-col items-center justify-center gap-1.5 text-gray-300">
+            <div className="w-6 h-6 rounded-full border-2 border-dashed border-gray-300" />
+            <span className="text-[10px] font-medium">Sem reservas</span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -394,7 +375,7 @@ export default function Dashboard() {
 
       {/* ── Kanban ──────────────────────────────────────── */}
       <div className="flex-1 overflow-x-auto overflow-y-auto bg-gray-100/60">
-        <div className="flex gap-3 p-4 items-start" style={{ minWidth: 'max-content', minHeight: '100%' }}>
+        <div className="flex gap-3 p-4 items-stretch" style={{ minWidth: 'max-content', minHeight: '100%' }}>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
