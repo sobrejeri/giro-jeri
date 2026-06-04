@@ -93,7 +93,7 @@ function BookingRow({ b, onDispatch, onViewOS }) {
 }
 
 export default function Despacho() {
-  const [date, setDate]       = useState('all')
+  const [date, setDate]       = useState(format(new Date(), 'yyyy-MM-dd'))
   const [modal, setModal]     = useState(null)
   const [osModal, setOsModal] = useState(null)
   const [form, setForm]       = useState({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
