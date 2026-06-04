@@ -21,81 +21,94 @@ const fmt = (v) =>
 const PENDING_STATUSES    = ['new', 'awaiting_dispatch', 'confirmed']
 const DISPATCHED_STATUSES = ['assigned', 'en_route', 'in_progress']
 
-function BookingRow({ b, onDispatch, onViewOS }) {
+function BookingRow({ b, onDispatch }) {
   const dateStr = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), "dd/MM", { locale: ptBR }) : ''
-  const local  = b.pickup_place_name || b.origin_text || ''
-  const dest   = b.destination_place_name || b.destination_text || ''
+  const local        = b.pickup_place_name || b.origin_text || ''
+  const dest         = b.destination_place_name || b.destination_text || ''
   const isDispatched = DISPATCHED_STATUSES.includes(b.status_operational)
+  const assign       = b.operational_assignments?.[0]
+  const formForOS    = {
+    real_vehicle_text: assign?.real_vehicle_text || '',
+    dispatch_notes:    assign?.dispatch_notes    || '',
+    driver_phone:      '',
+  }
 
   return (
     <Card className={`transition-colors ${isDispatched ? 'border-green-200 bg-green-50/30' : 'hover:border-brand/20'}`}>
-      <CardBody className="flex items-center gap-4">
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-xs font-bold text-gray-400">{b.booking_code}</span>
-            <Badge value={b.service_type} />
-            {isDispatched && (
-              <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                <CheckCircle2 size={9} /> Despachado
-              </span>
-            )}
-          </div>
-
-          <p className="text-sm font-semibold text-gray-900">{b.users?.full_name || '—'}</p>
-
-          <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-            {dateStr && (
-              <span className="flex items-center gap-1">
-                <Clock size={10} />{dateStr}{b.service_time ? ` · ${b.service_time.slice(0,5)}` : ''}
-              </span>
-            )}
-            {b.people_count && (
-              <span className="flex items-center gap-1"><Users size={10} />{b.people_count} pax</span>
-            )}
-            <span className="font-semibold text-gray-700">{fmt(b.total_amount)}</span>
-          </div>
-
-          {local && (
-            <p className="text-xs text-gray-400 truncate flex items-center gap-1">
-              <MapPin size={9} />{local}{dest ? ` → ${dest}` : ''}
-            </p>
-          )}
-
-          {b.operational_assignments?.[0]?.real_vehicle_text && (
-            <div className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
-              <Car size={11} />{b.operational_assignments[0].real_vehicle_text}
+      <CardBody className="space-y-3">
+        {/* Info principal */}
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-xs font-bold text-gray-400">{b.booking_code}</span>
+              <Badge value={b.service_type} />
+              {isDispatched && (
+                <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  <CheckCircle2 size={9} /> Despachado
+                </span>
+              )}
             </div>
-          )}
-        </div>
+            <p className="text-sm font-semibold text-gray-900">{b.users?.full_name || '—'}</p>
+            <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+              {dateStr && (
+                <span className="flex items-center gap-1">
+                  <Clock size={10} />{dateStr}{b.service_time ? ` · ${b.service_time.slice(0,5)}` : ''}
+                </span>
+              )}
+              {b.people_count && <span className="flex items-center gap-1"><Users size={10} />{b.people_count} pax</span>}
+              <span className="font-semibold text-gray-700">{fmt(b.total_amount)}</span>
+            </div>
+            {local && (
+              <p className="text-xs text-gray-400 truncate flex items-center gap-1">
+                <MapPin size={9} />{local}{dest ? ` → ${dest}` : ''}
+              </p>
+            )}
+            {assign?.real_vehicle_text && (
+              <div className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
+                <Car size={11} />{assign.real_vehicle_text}
+              </div>
+            )}
+          </div>
 
-        <div className="flex flex-col gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant={isDispatched ? 'outline' : 'primary'}
-            onClick={() => onDispatch(b)}
-          >
+          <Button size="sm" variant={isDispatched ? 'outline' : 'primary'} onClick={() => onDispatch(b)}>
             <UserCheck size={13} />
             {isDispatched ? 'Reatribuir' : 'Despachar'}
           </Button>
-          {isDispatched && (
-            <button
-              onClick={() => onViewOS(b)}
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand transition-colors justify-center"
-            >
-              <FileText size={12} /> Ver OS
-            </button>
-          )}
         </div>
+
+        {/* Ações pós-despacho */}
+        {isDispatched && (
+          <div className="flex items-center gap-2 pt-2 border-t border-green-100 flex-wrap">
+            <button
+              onClick={() => downloadOrderPDF(b, formForOS)}
+              className="flex items-center gap-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              <FileText size={12} /> Baixar PDF
+            </button>
+            <button
+              onClick={() => shareOrderPDF(b, formForOS, 'driver')}
+              className="flex items-center gap-1.5 text-xs font-medium bg-green-100 hover:bg-green-200 text-green-700 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              <MessageCircle size={12} /> WhatsApp Motorista
+            </button>
+            <button
+              onClick={() => shareOrderPDF(b, formForOS, 'client')}
+              disabled={!b.users?.phone}
+              className="flex items-center gap-1.5 text-xs font-medium bg-green-100 hover:bg-green-200 text-green-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <MessageCircle size={12} /> WhatsApp Cliente
+            </button>
+          </div>
+        )}
       </CardBody>
     </Card>
   )
 }
 
 export default function Despacho() {
-  const [date, setDate]       = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [date, setDate]       = useState('all')
   const [modal, setModal]     = useState(null)
-  const [osModal, setOsModal] = useState(null)
   const [form, setForm]       = useState({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
   const qc                    = useQueryClient()
 
@@ -204,7 +217,7 @@ export default function Despacho() {
         ) : (
           <div className="space-y-3">
             {pending.map((b) => (
-              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} onViewOS={setOsModal} />
+              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} />
             ))}
           </div>
         )}
@@ -218,7 +231,7 @@ export default function Despacho() {
           </h3>
           <div className="space-y-3">
             {dispatched.map((b) => (
-              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} onViewOS={setOsModal} />
+              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} />
             ))}
           </div>
         </div>
@@ -261,31 +274,6 @@ export default function Despacho() {
         </form>
       </Modal>
 
-      {/* ── Modal OS ────────────────────────────────────── */}
-      <Modal open={!!osModal} onClose={() => setOsModal(null)}
-        title={`OS — ${osModal?.booking_code || ''}`} size="sm">
-        {osModal && (
-          <div className="space-y-3">
-            <button onClick={() => downloadOrderPDF(osModal, { real_vehicle_text: osModal.operational_assignments?.[0]?.real_vehicle_text || '', dispatch_notes: '', driver_phone: '' })}
-              className="w-full flex items-center gap-3 p-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-left">
-              <FileText size={16} className="text-gray-500" />
-              <div>
-                <p className="text-sm font-semibold">Baixar PDF</p>
-                <p className="text-xs text-gray-400">OS-{osModal.booking_code}.pdf</p>
-              </div>
-            </button>
-            <button onClick={() => shareOrderPDF(osModal, { real_vehicle_text: osModal.operational_assignments?.[0]?.real_vehicle_text || '', dispatch_notes: osModal.operational_assignments?.[0]?.dispatch_notes || '', driver_phone: '' }, 'client')}
-              disabled={!osModal.users?.phone}
-              className="w-full flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-xl text-left disabled:opacity-50">
-              <MessageCircle size={16} className="text-green-600" />
-              <div>
-                <p className="text-sm font-semibold text-green-800">Reenviar ao Cliente</p>
-                <p className="text-xs text-green-600">{osModal.users?.phone || 'Sem telefone'}</p>
-              </div>
-            </button>
-          </div>
-        )}
-      </Modal>
     </div>
   )
 }
