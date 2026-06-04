@@ -307,30 +307,52 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       dispatch_notes,
     } = req.body;
 
-    // Upsert no despacho
-    const { data, error } = await supabase
+    const bookingId = req.params.id;
+    const payload   = {
+      booking_id:                bookingId,
+      assigned_operator_user_id: req.user.id,
+      assigned_driver_user_id:   assigned_driver_user_id || null,
+      assigned_guide_user_id:    assigned_guide_user_id   || null,
+      real_vehicle_text:         real_vehicle_text        || null,
+      dispatch_notes:            dispatch_notes           || null,
+      assignment_status:         'assigned',
+      updated_at:                new Date().toISOString(),
+    };
+
+    // Verifica se já existe um assignment para essa reserva
+    const { data: existing } = await supabase
       .from('operational_assignments')
-      .upsert({
-        booking_id:               req.params.id,
-        assigned_operator_user_id: req.user.id,
-        assigned_driver_user_id,
-        assigned_guide_user_id,
-        real_vehicle_text,
-        dispatch_notes,
-        assignment_status: 'assigned',
-      }, { onConflict: 'booking_id' })
-      .select()
-      .single();
+      .select('id')
+      .eq('booking_id', bookingId)
+      .maybeSingle();
 
-    if (error) throw error;
+    let result;
+    if (existing) {
+      const { data, error } = await supabase
+        .from('operational_assignments')
+        .update(payload)
+        .eq('id', existing.id)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    } else {
+      const { data, error } = await supabase
+        .from('operational_assignments')
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    }
 
-    // Atualiza status operacional
+    // Atualiza status operacional da reserva
     await supabase
       .from('bookings')
       .update({ status_operational: 'assigned' })
-      .eq('id', req.params.id);
+      .eq('id', bookingId);
 
-    res.json(data);
+    res.json(result);
   } catch (err) { next(err); }
 });
 
