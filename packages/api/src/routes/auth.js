@@ -111,17 +111,20 @@ router.post('/login', async (req, res, next) => {
 
     if (error) return res.status(401).json({ error: 'Credenciais incorretas' });
 
-    const PROFILE_COLS = 'id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language';
+    // Conjunto mínimo de colunas — garantidamente presentes em qualquer instância
+    const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number';
 
     // Primeiro tenta pelo auth_id (caminho normal)
-    let { data: profile } = await supabase
+    let { data: profile, error: pErr1 } = await supabase
       .from('users').select(PROFILE_COLS).eq('auth_id', data.user.id).maybeSingle();
+    if (pErr1) console.error('[login] auth_id lookup error', pErr1);
 
     // Fallback: lookup por email (caso o auth_id na tabela esteja dessincronizado/NULL)
     const fallbackEmail = authEmail || data.user.email;
     if (!profile && fallbackEmail) {
-      const { data: byEmail } = await supabase
+      const { data: byEmail, error: pErr2 } = await supabase
         .from('users').select(PROFILE_COLS).eq('email', fallbackEmail).maybeSingle();
+      if (pErr2) console.error('[login] email lookup error', pErr2);
       if (byEmail) {
         profile = byEmail;
         await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byEmail.id);
@@ -131,10 +134,11 @@ router.post('/login', async (req, res, next) => {
     // Último fallback: lookup por document_number quando vier de CNPJ
     if (!profile && body.cnpj) {
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
-      const { data: byCnpj } = await supabase
+      const { data: byCnpj, error: pErr3 } = await supabase
         .from('users').select(PROFILE_COLS)
         .eq('document_number', cnpjDigits)
-        .eq('document_type', 'cnpj').maybeSingle();
+        .maybeSingle();
+      if (pErr3) console.error('[login] cnpj lookup error', pErr3);
       if (byCnpj) {
         profile = byCnpj;
         await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byCnpj.id);
@@ -220,9 +224,9 @@ router.post('/refresh', async (req, res, next) => {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language')
+      .select('id, full_name, email, phone, user_type, profile_photo_url, document_number')
       .eq('auth_id', data.user.id)
-      .single();
+      .maybeSingle();
 
     res.json({
       token:         data.session.access_token,
