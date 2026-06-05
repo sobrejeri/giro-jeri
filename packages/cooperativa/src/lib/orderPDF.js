@@ -99,7 +99,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   let y = 0
 
   // ── Cabeçalho branco — Cooperativa ────────────────────
-  const HEADER_H = 38
+  const HEADER_H = 30
   doc.setFillColor(...WHITE)
   doc.rect(0, 0, pageW, HEADER_H, 'F')
 
@@ -107,10 +107,10 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setFillColor(...BRAND)
   doc.rect(0, 0, 4, HEADER_H, 'F')
 
-  const LOGO_SZ  = 28  // tamanho do logo/placeholder
+  const LOGO_SZ  = 22
   const LOGO_X   = 10
-  const LOGO_Y   = 5
-  const TEXT_X   = LOGO_X + LOGO_SZ + 5
+  const LOGO_Y   = 4
+  const TEXT_X   = LOGO_X + LOGO_SZ + 4
 
   if (coopLogoB64) {
     // Logo carregado como base64
@@ -126,41 +126,41 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   // Nome da cooperativa
   const availW = COL - TEXT_X - 4
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
+  doc.setFontSize(11)
   doc.setTextColor(...DARK)
   const nameLines = doc.splitTextToSize(coopName.toUpperCase(), availW)
-  doc.text(nameLines, TEXT_X, 14)
+  doc.text(nameLines, TEXT_X, 11)
 
-  let infoY = 14 + nameLines.length * 6
+  let infoY = 11 + nameLines.length * 5
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8)
+  doc.setFontSize(7.5)
   doc.setTextColor(...GRAY)
 
   if (coopCNPJ) {
     const docLabel = cooperativa?.document_type === 'cnpj' ? 'CNPJ' : 'CPF'
     doc.text(`${docLabel}: ${coopCNPJ}`, TEXT_X, infoY)
-    infoY += 5
+    infoY += 4.5
   }
   if (coopPhone) {
     doc.text(`Tel: ${coopPhone}`, TEXT_X, infoY)
-    infoY += 5
+    infoY += 4.5
   }
   doc.text('Jericoacoara — CE', TEXT_X, infoY)
 
   // OS info (lado direito)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(8.5)
+  doc.setFontSize(8)
   doc.setTextColor(...GRAY)
-  doc.text('ORDEM DE SERVIÇO', pageW - M, 10, { align: 'right' })
+  doc.text('ORDEM DE SERVIÇO', pageW - M, 9, { align: 'right' })
 
-  doc.setFontSize(16)
+  doc.setFontSize(14)
   doc.setTextColor(...BRAND)
-  doc.text(`Nº ${booking.booking_code}`, pageW - M, 20, { align: 'right' })
+  doc.text(`Nº ${booking.booking_code}`, pageW - M, 18, { align: 'right' })
 
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(7.5)
+  doc.setFontSize(7)
   doc.setTextColor(...GRAY)
-  doc.text(`Emitida em ${issued}`, pageW - M, 27, { align: 'right' })
+  doc.text(`Emitida em ${issued}`, pageW - M, 25, { align: 'right' })
 
   // Borda inferior do cabeçalho
   doc.setDrawColor(...LGRAY)
@@ -175,7 +175,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setTextColor(...WHITE)
   doc.text('GIRO JERI — PLATAFORMA DE PASSEIOS & TRANSFERS · JERICOACOARA, CE', pageW / 2, HEADER_H + 5.5, { align: 'center' })
 
-  y = HEADER_H + 16
+  y = HEADER_H + 10
 
   // ── 1. DADOS DO VEÍCULO / MOTORISTA ───────────────────
   y = sectionTitle(doc, '1. DADOS DO VEÍCULO / MOTORISTA', M, y, CW)
@@ -185,15 +185,14 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   if (form.driver_name) {
     dataField(doc, 'NOME DO MOTORISTA:', form.driver_name, COL + 2, y, colW2)
   }
-  y += 14
+  y += 11
 
   if (form.driver_phone) {
     dataField(doc, 'WHATSAPP DO MOTORISTA:', form.driver_phone, M, y, colW2)
-    y += 12
+    y += 9
   }
 
-  hline(doc, M, y, CW)
-  y += 8
+  y += 4
 
   // ── 2. DADOS DO SERVIÇO ────────────────────────────────
   y = sectionTitle(doc, '2. DADOS DO SERVIÇO', M, y, CW)
@@ -201,32 +200,32 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
 
   dataField(doc, 'TIPO DE SERVIÇO:', `${tipo} — ${modo}`, M, y, colW2)
   dataField(doc, 'DATA DO SERVIÇO:', dateLong, COL + 2, y, colW2)
-  y += 14
+  y += 11
 
   dataField(doc, 'Nº DE PASSAGEIROS:', `${booking.people_count || '—'} pessoa(s)`, M, y, colW2)
   if (booking.service_time) {
     dataField(doc, 'HORÁRIO DE SAÍDA:', `${timeStr}hs`, COL + 2, y, colW2)
   }
-  y += 14
+  y += 11
 
   // Caixa SAÍDA / DATA
   doc.setFillColor(...XLGRAY)
-  doc.roundedRect(M, y, CW, 13, 1.5, 1.5, 'F')
+  doc.roundedRect(M, y, CW, 11, 1.5, 1.5, 'F')
   doc.setDrawColor(...LGRAY)
   doc.setLineWidth(0.3)
-  doc.roundedRect(M, y, CW, 13, 1.5, 1.5, 'S')
+  doc.roundedRect(M, y, CW, 11, 1.5, 1.5, 'S')
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
+  doc.setFontSize(10)
   doc.setTextColor(...DARK)
-  doc.text(`SAÍDA: ${timeStr}hs`, COL - 15, y + 8.5, { align: 'right' })
+  doc.text(`SAÍDA: ${timeStr}hs`, COL - 15, y + 7, { align: 'right' })
   doc.setTextColor(...LGRAY)
-  doc.text('|', COL, y + 8.5, { align: 'center' })
+  doc.text('|', COL, y + 7, { align: 'center' })
   doc.setTextColor(...DARK)
-  doc.text(`DATA: ${dateStr}`, COL + 15, y + 8.5, { align: 'left' })
-  y += 19
+  doc.text(`DATA: ${dateStr}`, COL + 15, y + 7, { align: 'left' })
+  y += 15
 
   // Tabela Partida / Chegada
-  const tH   = 9.5
+  const tH   = 7.5
   const labW = 52
 
   doc.setFillColor(...XLGRAY)
@@ -238,13 +237,13 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.rect(M, y, CW, tH, 'S')
   doc.line(M + labW, y, M + labW, y + tH)
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
+  doc.setFontSize(8)
   doc.setTextColor(...GRAY)
-  doc.text('Destino da Partida:', M + 3, y + 6.2)
+  doc.text('Destino da Partida:', M + 3, y + 4.8)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
+  doc.setFontSize(9)
   doc.setTextColor(...DARK)
-  doc.text(origin.toUpperCase(), M + labW + 5, y + 6.2)
+  doc.text(origin.toUpperCase(), M + labW + 5, y + 4.8)
   y += tH
 
   doc.setFillColor(...XLGRAY)
@@ -255,14 +254,14 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.rect(M, y, CW, tH, 'S')
   doc.line(M + labW, y, M + labW, y + tH)
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
+  doc.setFontSize(8)
   doc.setTextColor(...GRAY)
-  doc.text('Destino da Chegada:', M + 3, y + 6.2)
+  doc.text('Destino da Chegada:', M + 3, y + 4.8)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
+  doc.setFontSize(9)
   doc.setTextColor(...DARK)
-  doc.text(dest.toUpperCase(), M + labW + 5, y + 6.2)
-  y += tH + 8
+  doc.text(dest.toUpperCase(), M + labW + 5, y + 4.8)
+  y += tH + 5
 
   // ── 3. DADOS DO CLIENTE ────────────────────────────────
   y = sectionTitle(doc, '3. DADOS DO CLIENTE', M, y, CW)
@@ -272,16 +271,15 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   if (booking.users?.phone) {
     dataField(doc, 'TELEFONE / WHATSAPP:', booking.users.phone, COL + 2, y, colW2)
   }
-  y += 14
-  hline(doc, M, y, CW)
-  y += 8
+  y += 11
+  y += 4
 
   // ── 4. LISTAGEM DE PASSAGEIROS ─────────────────────────
   y = sectionTitle(doc, '4. LISTAGEM DE PASSAGEIROS', M, y, CW)
   y += 2
 
   const pCols = [CW * 0.62, CW * 0.38]
-  const pRowH = 9
+  const pRowH = 7
 
   doc.setFillColor(210, 210, 210)
   doc.rect(M, y, CW, pRowH, 'F')
@@ -290,10 +288,10 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.rect(M, y, CW, pRowH, 'S')
   doc.line(M + pCols[0], y, M + pCols[0], y + pRowH)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(8)
+  doc.setFontSize(7.5)
   doc.setTextColor(...GRAY)
-  doc.text('NOME COMPLETO DO PASSAGEIRO', M + 4, y + 6)
-  doc.text('DOCUMENTO', M + pCols[0] + 4, y + 6)
+  doc.text('NOME COMPLETO DO PASSAGEIRO', M + 4, y + 4.8)
+  doc.text('DOCUMENTO', M + pCols[0] + 4, y + 4.8)
   y += pRowH
 
   const rowCount = Math.max(Number(booking.people_count || 1), 5)
@@ -306,17 +304,17 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
     doc.line(M + pCols[0], y, M + pCols[0], y + pRowH)
     if (i === 0 && booking.users?.full_name) {
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
-      doc.setTextColor(...DARK)
-      doc.text(booking.users.full_name.toUpperCase(), M + 4, y + 6.2)
-      doc.setFont('helvetica', 'bold')
       doc.setFontSize(8.5)
+      doc.setTextColor(...DARK)
+      doc.text(booking.users.full_name.toUpperCase(), M + 4, y + 4.8)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8)
       doc.setTextColor(40, 120, 40)
-      doc.text('APRESENTAR', M + pCols[0] + 4, y + 6.2)
+      doc.text('APRESENTAR', M + pCols[0] + 4, y + 4.8)
     }
     y += pRowH
   }
-  y += 8
+  y += 5
 
   // ── 5. OBSERVAÇÕES ─────────────────────────────────────
   const notes = [form.dispatch_notes, booking.special_notes].filter(Boolean).join(' | ')
@@ -339,20 +337,20 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
 
   // ── 6. VALOR TOTAL ─────────────────────────────────────
   doc.setFillColor(...BRAND)
-  doc.roundedRect(M, y, CW, 14, 2, 2, 'F')
+  doc.roundedRect(M, y, CW, 11, 2, 2, 'F')
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
+  doc.setFontSize(9)
   doc.setTextColor(...WHITE)
-  doc.text('VALOR TOTAL:', M + 6, y + 9)
-  doc.setFontSize(14)
-  doc.text(fmtMoney(booking.total_amount), pageW - M - 4, y + 9.5, { align: 'right' })
-  y += 14
+  doc.text('VALOR TOTAL:', M + 6, y + 7.5)
+  doc.setFontSize(12)
+  doc.text(fmtMoney(booking.total_amount), pageW - M - 4, y + 7.5, { align: 'right' })
+  y += 11
 
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8)
+  doc.setFontSize(7.5)
   doc.setTextColor(50, 130, 50)
-  doc.text('✓  PAGAMENTO CONFIRMADO', M + 4, y + 5)
-  y += 14
+  doc.text('✓  PAGAMENTO CONFIRMADO', M + 4, y + 4)
+  y += 9
 
   // ── Termos de Responsabilidade ─────────────────────────
   const termsText =
@@ -366,13 +364,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
     `Ao assinar abaixo, o cliente declara ter lido, compreendido e aceito integralmente estes termos.`
 
   const termsLines = doc.splitTextToSize(termsText, CW - 8)
-  const termsBoxH  = termsLines.length * 4.2 + 8
-
-  // Se não houver espaço suficiente para os termos + assinaturas, adiciona nova página
-  if (y + termsBoxH + 50 > pageH - 12) {
-    doc.addPage()
-    y = 20
-  }
+  const termsBoxH  = termsLines.length * 3.6 + 7
 
   doc.setFillColor(252, 252, 255)
   doc.setDrawColor(180, 180, 210)
@@ -381,18 +373,18 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.rect(M, y, CW, termsBoxH, 'S')
 
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(7)
+  doc.setFontSize(6.5)
   doc.setTextColor(60, 60, 100)
-  doc.text('⚠  TERMOS DE RESPONSABILIDADE', M + 4, y + 5)
+  doc.text('⚠  TERMOS DE RESPONSABILIDADE', M + 4, y + 4.5)
 
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(6.5)
+  doc.setFontSize(6)
   doc.setTextColor(70, 70, 70)
-  doc.text(termsLines, M + 4, y + 10)
-  y += termsBoxH + 6
+  doc.text(termsLines, M + 4, y + 9)
+  y += termsBoxH + 5
 
   // ── Assinaturas ────────────────────────────────────────
-  const sigTop = Math.max(y + 2, y + 2)
+  const sigTop = Math.max(y + 2, pageH - 38)
   const sigW   = 72
   const sig1X  = M + 6
   const sig2X  = pageW - M - sigW - 6
