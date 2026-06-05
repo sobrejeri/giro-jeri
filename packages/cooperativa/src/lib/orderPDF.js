@@ -175,11 +175,11 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setTextColor(...WHITE)
   doc.text('GIRO JERI — PLATAFORMA DE PASSEIOS & TRANSFERS · JERICOACOARA, CE', pageW / 2, HEADER_H + 5.5, { align: 'center' })
 
-  y = HEADER_H + 10
+  y = HEADER_H + 7
 
   // ── 1. DADOS DO VEÍCULO / MOTORISTA ───────────────────
   y = sectionTitle(doc, '1. DADOS DO VEÍCULO / MOTORISTA', M, y, CW)
-  y += 2
+  y += 1
 
   dataField(doc, 'VEÍCULO (MODELO / PLACA / COR):', vehicle, M, y, colW2)
   if (form.driver_name) {
@@ -196,36 +196,36 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
 
   // ── 2. DADOS DO SERVIÇO ────────────────────────────────
   y = sectionTitle(doc, '2. DADOS DO SERVIÇO', M, y, CW)
-  y += 2
+  y += 1
 
   dataField(doc, 'TIPO DE SERVIÇO:', `${tipo} — ${modo}`, M, y, colW2)
   dataField(doc, 'DATA DO SERVIÇO:', dateLong, COL + 2, y, colW2)
-  y += 11
+  y += 10
 
   dataField(doc, 'Nº DE PASSAGEIROS:', `${booking.people_count || '—'} pessoa(s)`, M, y, colW2)
   if (booking.service_time) {
     dataField(doc, 'HORÁRIO DE SAÍDA:', `${timeStr}hs`, COL + 2, y, colW2)
   }
-  y += 11
+  y += 10
 
   // Caixa SAÍDA / DATA
   doc.setFillColor(...XLGRAY)
-  doc.roundedRect(M, y, CW, 11, 1.5, 1.5, 'F')
+  doc.roundedRect(M, y, CW, 10, 1.5, 1.5, 'F')
   doc.setDrawColor(...LGRAY)
   doc.setLineWidth(0.3)
-  doc.roundedRect(M, y, CW, 11, 1.5, 1.5, 'S')
+  doc.roundedRect(M, y, CW, 10, 1.5, 1.5, 'S')
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
+  doc.setFontSize(9.5)
   doc.setTextColor(...DARK)
-  doc.text(`SAÍDA: ${timeStr}hs`, COL - 15, y + 7, { align: 'right' })
+  doc.text(`SAÍDA: ${timeStr}hs`, COL - 15, y + 6.5, { align: 'right' })
   doc.setTextColor(...LGRAY)
-  doc.text('|', COL, y + 7, { align: 'center' })
+  doc.text('|', COL, y + 6.5, { align: 'center' })
   doc.setTextColor(...DARK)
-  doc.text(`DATA: ${dateStr}`, COL + 15, y + 7, { align: 'left' })
-  y += 15
+  doc.text(`DATA: ${dateStr}`, COL + 15, y + 6.5, { align: 'left' })
+  y += 13
 
   // Tabela Partida / Chegada
-  const tH   = 7.5
+  const tH   = 7
   const labW = 52
 
   doc.setFillColor(...XLGRAY)
@@ -261,22 +261,22 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setFontSize(9)
   doc.setTextColor(...DARK)
   doc.text(dest.toUpperCase(), M + labW + 5, y + 4.8)
-  y += tH + 5
+  y += tH + 3
 
   // ── 3. DADOS DO CLIENTE ────────────────────────────────
   y = sectionTitle(doc, '3. DADOS DO CLIENTE', M, y, CW)
-  y += 2
+  y += 1
 
   dataField(doc, 'NOME:', booking.users?.full_name || '—', M, y, colW2)
   if (booking.users?.phone) {
     dataField(doc, 'TELEFONE / WHATSAPP:', booking.users.phone, COL + 2, y, colW2)
   }
-  y += 11
-  y += 4
+  y += 10
+  y += 3
 
   // ── 4. LISTAGEM DE PASSAGEIROS ─────────────────────────
   y = sectionTitle(doc, '4. LISTAGEM DE PASSAGEIROS', M, y, CW)
-  y += 2
+  y += 1
 
   const pCols = [CW * 0.62, CW * 0.38]
   const pRowH = 7
@@ -294,7 +294,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.text('DOCUMENTO', M + pCols[0] + 4, y + 4.8)
   y += pRowH
 
-  const rowCount = Math.max(Number(booking.people_count || 1), 5)
+  const rowCount = Math.max(Number(booking.people_count || 1), 3)
   for (let i = 0; i < rowCount; i++) {
     const bg = i % 2 === 0 ? WHITE : [252, 252, 252]
     doc.setFillColor(...bg)
@@ -314,7 +314,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
     }
     y += pRowH
   }
-  y += 5
+  y += 3
 
   // ── 5. OBSERVAÇÕES ─────────────────────────────────────
   const notes = [form.dispatch_notes, booking.special_notes].filter(Boolean).join(' | ')
@@ -353,15 +353,12 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   y += 9
 
   // ── Termos de Responsabilidade ─────────────────────────
+  const coopRef = coopName !== 'Giro Jeri Passeios & Transfers' ? `"${coopName}"` : 'a cooperativa parceira credenciada'
   const termsText =
-    `TERMOS DE RESPONSABILIDADE: O serviço descrito nesta Ordem de Serviço será ` +
-    `executado integralmente pela cooperativa prestadora identificada neste documento ` +
-    (coopName !== 'Giro Jeri Passeios & Transfers' ? `("${coopName}"), ` : '') +
-    `que assume plena responsabilidade pela qualidade, segurança e cumprimento do serviço contratado. ` +
-    `A plataforma GIRO JERI atua exclusivamente como intermediária tecnológica de conexão entre ` +
-    `clientes e cooperativas parceiras credenciadas, não sendo responsável pela execução ` +
-    `do serviço, por eventuais imprevistos, danos ou ocorrências durante a realização do mesmo. ` +
-    `Ao assinar abaixo, o cliente declara ter lido, compreendido e aceito integralmente estes termos.`
+    `TERMOS DE RESPONSABILIDADE: Este serviço será executado integralmente por ${coopRef}, ` +
+    `que assume plena responsabilidade pela qualidade, segurança e cumprimento do contratado. ` +
+    `A plataforma GIRO JERI atua exclusivamente como intermediária tecnológica, não sendo responsável ` +
+    `pela execução, imprevistos ou danos durante o serviço. Ao assinar, o cliente declara aceitar estes termos.`
 
   const termsLines = doc.splitTextToSize(termsText, CW - 8)
   const termsBoxH  = termsLines.length * 3.6 + 7
