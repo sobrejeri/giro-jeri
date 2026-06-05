@@ -354,8 +354,39 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.text('✓  PAGAMENTO CONFIRMADO', M + 4, y + 5)
   y += 14
 
+  // ── Termos de Responsabilidade ─────────────────────────
+  const termsText =
+    `TERMOS DE RESPONSABILIDADE: O serviço descrito nesta Ordem de Serviço será ` +
+    `executado integralmente pela cooperativa prestadora identificada neste documento ` +
+    (coopName !== 'Giro Jeri Passeios & Transfers' ? `("${coopName}"), ` : '') +
+    `que assume plena responsabilidade pela qualidade, segurança e cumprimento do serviço contratado. ` +
+    `A plataforma GIRO JERI atua exclusivamente como intermediária tecnológica de conexão entre ` +
+    `clientes e cooperativas parceiras credenciadas, não sendo responsável pela execução ` +
+    `do serviço, por eventuais imprevistos, danos ou ocorrências durante a realização do mesmo. ` +
+    `Ao assinar abaixo, o cliente declara ter lido, compreendido e aceito integralmente estes termos.`
+
+  const termsLines = doc.splitTextToSize(termsText, CW - 8)
+  const termsBoxH  = termsLines.length * 4.2 + 8
+
+  doc.setFillColor(252, 252, 255)
+  doc.setDrawColor(180, 180, 210)
+  doc.setLineWidth(0.3)
+  doc.rect(M, y, CW, termsBoxH, 'F')
+  doc.rect(M, y, CW, termsBoxH, 'S')
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(7)
+  doc.setTextColor(60, 60, 100)
+  doc.text('⚠  TERMOS DE RESPONSABILIDADE', M + 4, y + 5)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(6.5)
+  doc.setTextColor(70, 70, 70)
+  doc.text(termsLines, M + 4, y + 10)
+  y += termsBoxH + 6
+
   // ── Assinaturas ────────────────────────────────────────
-  const sigTop = Math.max(y + 4, pageH - 44)
+  const sigTop = Math.max(y + 2, pageH - 44)
   const sigW   = 72
   const sig1X  = M + 6
   const sig2X  = pageW - M - sigW - 6
@@ -505,5 +536,7 @@ function buildClientMessage(booking, form) {
     ``,
     `_Obrigado por escolher a Giro Jeri! Qualquer dúvida estamos à disposição._`,
     `_Sua Ordem de Serviço está em anexo._`,
+    ``,
+    `⚠️ *AVISO DE RESPONSABILIDADE:* O serviço contratado será executado integralmente pela cooperativa parceira credenciada responsável por este atendimento. A plataforma GIRO JERI atua exclusivamente como intermediária tecnológica e não se responsabiliza pela execução do serviço, por imprevistos, danos ou ocorrências durante a sua realização.`,
   ].filter(Boolean).join('\n')
 }
