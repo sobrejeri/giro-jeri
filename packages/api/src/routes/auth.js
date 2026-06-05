@@ -111,14 +111,25 @@ router.post('/login', async (req, res, next) => {
 
     if (error) return res.status(401).json({ error: 'Credenciais incorretas' });
 
-    const { data: profile, error: profileErr } = await supabase
-      .from('users')
-      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language')
-      .eq('auth_id', data.user.id)
-      .single();
+    const PROFILE_COLS = 'id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language';
 
-    if (profileErr || !profile) {
-      console.error('[login] profile lookup failed', { auth_id: data.user.id, error: profileErr });
+    // Primeiro tenta pelo auth_id (caminho normal)
+    let { data: profile } = await supabase
+      .from('users').select(PROFILE_COLS).eq('auth_id', data.user.id).maybeSingle();
+
+    // Fallback: lookup por email do auth (caso o auth_id na tabela esteja dessincronizado/NULL)
+    if (!profile && data.user.email) {
+      const { data: byEmail } = await supabase
+        .from('users').select(PROFILE_COLS).eq('email', data.user.email).maybeSingle();
+      if (byEmail) {
+        profile = byEmail;
+        // Auto-corrige o vínculo para evitar o problema em logins futuros
+        await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byEmail.id);
+      }
+    }
+
+    if (!profile) {
+      console.error('[login] profile lookup failed', { auth_id: data.user.id, email: data.user.email });
       return res.status(500).json({ error: 'Perfil não encontrado para este usuário. Contate o suporte.' });
     }
 
