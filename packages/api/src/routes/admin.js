@@ -81,17 +81,35 @@ const createUserSchema = z.object({
   full_name: z.string().min(2).max(200),
   email:     z.string().email().optional(),
   phone:     z.string().min(10).max(30).optional(),
+  cnpj:      z.string().min(14).max(18).optional(),
   password:  z.string().min(6),
   user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
-}).refine((d) => d.email || d.phone, { message: 'Informe email ou telefone' });
+}).refine((d) => {
+  if (d.user_type === 'operator') return !!d.cnpj;
+  return d.email || d.phone;
+}, { message: 'Operador requer CNPJ; outros perfis requerem email ou telefone' });
 
 router.post('/users', requireAdmin, async (req, res, next) => {
   try {
     const body = createUserSchema.parse(req.body);
 
+    // Operadores autenticam via CNPJ → e-mail sintético interno
+    let authEmail = body.email;
+    let authPhone = body.phone;
+    let docNumber = null;
+    let docType   = null;
+
+    if (body.user_type === 'operator' && body.cnpj) {
+      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      authEmail = `${cnpjDigits}@op.girojeri.app`;
+      authPhone = undefined;
+      docNumber = cnpjDigits;
+      docType   = 'cnpj';
+    }
+
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email:         body.email,
-      phone:         body.phone,
+      email:         authEmail,
+      phone:         authPhone,
       password:      body.password,
       email_confirm: true,
     });
@@ -100,13 +118,15 @@ router.post('/users', requireAdmin, async (req, res, next) => {
     const { data: profile, error: profileError } = await supabase
       .from('users')
       .insert({
-        auth_id:   authData.user.id,
-        full_name: body.full_name,
-        email:     body.email,
-        phone:     body.phone,
-        user_type: body.user_type,
+        auth_id:         authData.user.id,
+        full_name:       body.full_name,
+        email:           authEmail,
+        phone:           authPhone,
+        user_type:       body.user_type,
+        document_number: docNumber,
+        document_type:   docType,
       })
-      .select('id, full_name, email, phone, user_type, is_active, created_at')
+      .select('id, full_name, email, phone, user_type, is_active, created_at, document_number')
       .single();
 
     if (profileError) {

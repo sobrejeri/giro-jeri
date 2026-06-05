@@ -21,7 +21,7 @@ const USER_TYPE_LABELS = {
   affiliate: 'Afiliado',
 }
 
-const CREATE_EMPTY = { full_name: '', email: '', phone: '', password: '', user_type: 'tourist' }
+const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist' }
 
 export default function Usuarios() {
   const [page, setPage]           = useState(1)
@@ -90,12 +90,17 @@ export default function Usuarios() {
 
   function handleCreate(e) {
     e.preventDefault()
+    const isOp = createForm.user_type === 'operator'
     const body = {
       full_name: createForm.full_name,
       password:  createForm.password,
       user_type: createForm.user_type,
-      ...(createForm.email ? { email: createForm.email } : {}),
-      ...(createForm.phone ? { phone: createForm.phone } : {}),
+      ...(isOp
+        ? { cnpj: createForm.cnpj }
+        : {
+            ...(createForm.email ? { email: createForm.email } : {}),
+            ...(createForm.phone ? { phone: createForm.phone } : {}),
+          }),
     }
     createMut.mutate(body)
   }
@@ -163,7 +168,11 @@ export default function Usuarios() {
                 <tr key={u.id} className="hover:bg-gray-750 transition-colors">
                   <td className="px-5 py-3">
                     <p className="font-medium text-gray-200">{u.full_name || '—'}</p>
-                    <p className="text-xs text-gray-500">{u.email || u.phone || '—'}</p>
+                    <p className="text-xs text-gray-500">
+                      {u.user_type === 'operator' && u.document_number
+                        ? `CNPJ: ${u.document_number}`
+                        : u.email || u.phone || '—'}
+                    </p>
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-1.5">
@@ -219,25 +228,47 @@ export default function Usuarios() {
         size="sm"
       >
         <form onSubmit={handleCreate} className="space-y-4">
+          <Select
+            label="Função na plataforma"
+            value={createForm.user_type}
+            onChange={(e) => setCreateForm({ ...createForm, user_type: e.target.value, email: '', phone: '', cnpj: '' })}
+          >
+            {USER_TYPES.map((t) => (
+              <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
+            ))}
+          </Select>
           <Input
             label="Nome completo"
             value={createForm.full_name}
             onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
             required
           />
-          <Input
-            label="E-mail"
-            type="email"
-            value={createForm.email}
-            onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-            placeholder="Obrigatório se não informar telefone"
-          />
-          <Input
-            label="Telefone / WhatsApp"
-            value={createForm.phone}
-            onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-            placeholder="+55 88 99999-9999"
-          />
+          {createForm.user_type === 'operator' ? (
+            <Input
+              label="CNPJ"
+              value={createForm.cnpj}
+              onChange={(e) => setCreateForm({ ...createForm, cnpj: e.target.value })}
+              placeholder="00.000.000/0001-00"
+              inputMode="numeric"
+              required
+            />
+          ) : (
+            <>
+              <Input
+                label="E-mail"
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                placeholder="Obrigatório se não informar telefone"
+              />
+              <Input
+                label="Telefone / WhatsApp"
+                value={createForm.phone}
+                onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                placeholder="+55 88 99999-9999"
+              />
+            </>
+          )}
           <Input
             label="Senha inicial"
             type="password"
@@ -247,15 +278,6 @@ export default function Usuarios() {
             minLength={6}
             placeholder="Mínimo 6 caracteres"
           />
-          <Select
-            label="Função na plataforma"
-            value={createForm.user_type}
-            onChange={(e) => setCreateForm({ ...createForm, user_type: e.target.value })}
-          >
-            {USER_TYPES.map((t) => (
-              <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
-            ))}
-          </Select>
           {createMut.isError && (
             <p className="text-sm text-red-400">{createMut.error?.message || 'Erro ao criar usuário'}</p>
           )}

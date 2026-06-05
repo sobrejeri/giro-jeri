@@ -17,6 +17,7 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email:    z.string().email().optional(),
   phone:    z.string().optional(),
+  cnpj:     z.string().optional(),
   password: z.string().min(1),
 });
 
@@ -81,9 +82,30 @@ router.post('/login', async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
 
+    // Login por CNPJ: busca o e-mail sintético gerado pelo admin
+    let authEmail  = body.email;
+    let authPhone  = body.phone;
+
+    if (body.cnpj) {
+      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const { data: opUser, error: lookupErr } = await supabase
+        .from('users')
+        .select('email')
+        .eq('document_number', cnpjDigits)
+        .eq('document_type', 'cnpj')
+        .eq('user_type', 'operator')
+        .single();
+
+      if (lookupErr || !opUser) {
+        return res.status(401).json({ error: 'CNPJ não encontrado ou não autorizado' });
+      }
+      authEmail = opUser.email;
+      authPhone = undefined;
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email:    body.email,
-      phone:    body.phone,
+      email:    authEmail,
+      phone:    authPhone,
       password: body.password,
     });
 
