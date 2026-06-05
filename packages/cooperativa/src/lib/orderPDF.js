@@ -94,6 +94,8 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   const coopName    = cooperativa?.full_name      || 'Giro Jeri Passeios & Transfers'
   const coopCNPJ    = cooperativa?.document_number
   const coopPhone   = cooperativa?.phone
+  const coopAddress = cooperativa?.address
+  const coopCEP     = cooperativa?.cep
   const coopLogoB64 = cooperativa?.logoBase64 || null
 
   let y = 0
@@ -145,7 +147,13 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
     doc.text(`Tel: ${coopPhone}`, TEXT_X, infoY)
     infoY += 4.5
   }
-  doc.text('Jericoacoara — CE', TEXT_X, infoY)
+  if (coopAddress) {
+    const addrLines = doc.splitTextToSize(coopAddress, availW)
+    doc.text(addrLines, TEXT_X, infoY)
+    infoY += addrLines.length * 4
+  }
+  const locationLine = coopCEP ? `CEP: ${coopCEP} · Jericoacoara — CE` : 'Jericoacoara — CE'
+  doc.text(locationLine, TEXT_X, infoY)
 
   // OS info (lado direito)
   doc.setFont('helvetica', 'bold')

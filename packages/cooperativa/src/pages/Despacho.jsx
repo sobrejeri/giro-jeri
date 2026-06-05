@@ -126,10 +126,12 @@ export default function Despacho() {
   })
 
   const cooperativa = profile ? {
-    full_name:        profile.full_name,
-    document_type:    profile.document_type,
-    document_number:  profile.document_number,
-    phone:            profile.phone,
+    full_name:         profile.full_name,
+    document_type:     profile.document_type,
+    document_number:   profile.document_number,
+    phone:             profile.phone,
+    address:           profile.address,
+    cep:               profile.cep,
     profile_photo_url: profile.profile_photo_url,
   } : null
 

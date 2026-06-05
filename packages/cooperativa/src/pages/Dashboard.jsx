@@ -239,6 +239,8 @@ export default function Dashboard() {
     document_type:     profile.document_type,
     document_number:   profile.document_number,
     phone:             profile.phone,
+    address:           profile.address,
+    cep:               profile.cep,
     profile_photo_url: profile.profile_photo_url,
   } : null
 
