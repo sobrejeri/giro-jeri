@@ -117,20 +117,40 @@ router.post('/login', async (req, res, next) => {
     let { data: profile } = await supabase
       .from('users').select(PROFILE_COLS).eq('auth_id', data.user.id).maybeSingle();
 
-    // Fallback: lookup por email do auth (caso o auth_id na tabela esteja dessincronizado/NULL)
-    if (!profile && data.user.email) {
+    // Fallback: lookup por email (caso o auth_id na tabela esteja dessincronizado/NULL)
+    const fallbackEmail = authEmail || data.user.email;
+    if (!profile && fallbackEmail) {
       const { data: byEmail } = await supabase
-        .from('users').select(PROFILE_COLS).eq('email', data.user.email).maybeSingle();
+        .from('users').select(PROFILE_COLS).eq('email', fallbackEmail).maybeSingle();
       if (byEmail) {
         profile = byEmail;
-        // Auto-corrige o vínculo para evitar o problema em logins futuros
         await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byEmail.id);
       }
     }
 
+    // Último fallback: lookup por document_number quando vier de CNPJ
+    if (!profile && body.cnpj) {
+      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const { data: byCnpj } = await supabase
+        .from('users').select(PROFILE_COLS)
+        .eq('document_number', cnpjDigits)
+        .eq('document_type', 'cnpj').maybeSingle();
+      if (byCnpj) {
+        profile = byCnpj;
+        await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byCnpj.id);
+      }
+    }
+
     if (!profile) {
-      console.error('[login] profile lookup failed', { auth_id: data.user.id, email: data.user.email });
-      return res.status(500).json({ error: 'Perfil não encontrado para este usuário. Contate o suporte.' });
+      console.error('[login] profile lookup failed', {
+        auth_id:    data.user.id,
+        auth_email: data.user.email,
+        used_email: authEmail,
+        used_cnpj:  body.cnpj,
+      });
+      return res.status(500).json({
+        error: `Perfil não encontrado (auth_id=${data.user.id?.slice(0,8)}, email=${data.user.email})`,
+      });
     }
 
     res.json({
