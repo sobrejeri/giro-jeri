@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle, KeyRound, Copy } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
@@ -23,14 +23,21 @@ const USER_TYPE_LABELS = {
 
 const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist' }
 
+function genPassword(len = 10) {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+  return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
+
 export default function Usuarios() {
   const [page, setPage]           = useState(1)
   const [search, setSearch]       = useState('')
   const [typeFilter, setType]     = useState('')
   const [activeFilter, setActive] = useState('')
-  const [modal, setModal]         = useState(null)   // null | { mode: 'edit', user } | { mode: 'create' }
+  const [modal, setModal]         = useState(null)   // null | { mode: 'edit', user } | { mode: 'create' } | { mode: 'reset', user }
   const [form, setForm]           = useState({})
   const [createForm, setCreateForm] = useState(CREATE_EMPTY)
+  const [resetPwd, setResetPwd]   = useState('')
+  const [resetCopied, setResetCopied] = useState(false)
   const qc                        = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -62,6 +69,13 @@ export default function Usuarios() {
     },
   })
 
+  const resetMut = useMutation({
+    mutationFn: ({ id, new_password }) => api.resetUserPassword(id, new_password),
+    onSuccess: () => {
+      // Mantém o modal aberto para mostrar a senha; admin fecha manualmente
+    },
+  })
+
   const recipientMut = useMutation({
     mutationFn: (id) => api.registerRecipient(id),
     onSuccess: (result) => {
@@ -81,6 +95,25 @@ export default function Usuarios() {
   function openCreate() {
     setModal({ mode: 'create' })
     setCreateForm(CREATE_EMPTY)
+  }
+
+  function openReset(u) {
+    setModal({ mode: 'reset', user: u })
+    setResetPwd(genPassword())
+    setResetCopied(false)
+    resetMut.reset()
+  }
+
+  function handleResetSubmit(e) {
+    e.preventDefault()
+    if (!resetPwd || resetPwd.length < 6) return
+    resetMut.mutate({ id: modal.user.id, new_password: resetPwd })
+  }
+
+  function copyPwd() {
+    navigator.clipboard?.writeText(resetPwd)
+    setResetCopied(true)
+    setTimeout(() => setResetCopied(false), 1500)
   }
 
   function handleSubmit(e) {
@@ -372,6 +405,78 @@ export default function Usuarios() {
             )}
             <Button type="submit" className="w-full" disabled={updateMut.isPending}>
               {updateMut.isPending ? 'Salvando…' : 'Salvar Alterações'}
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => openReset(modal.user)}
+              className="flex items-center justify-center gap-1.5 w-full text-xs text-gray-400 hover:text-amber-400 py-2"
+            >
+              <KeyRound size={13} />
+              Redefinir senha
+            </button>
+          </form>
+        )}
+      </Modal>
+
+      {/* Modal redefinir senha */}
+      <Modal
+        open={modal?.mode === 'reset'}
+        onClose={() => setModal(null)}
+        title="Redefinir Senha"
+        size="sm"
+      >
+        {modal?.mode === 'reset' && (
+          <form onSubmit={handleResetSubmit} className="space-y-4">
+            <div className="bg-gray-900 rounded-lg p-3 text-sm">
+              <p className="font-medium text-gray-200">{modal.user.full_name}</p>
+              <p className="text-gray-500 text-xs">
+                {modal.user.user_type === 'operator' && modal.user.document_number
+                  ? `CNPJ: ${modal.user.document_number}`
+                  : modal.user.email || modal.user.phone}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">Nova senha</label>
+              <div className="flex gap-2">
+                <input
+                  value={resetPwd}
+                  onChange={(e) => setResetPwd(e.target.value)}
+                  className="flex-1 h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 font-mono focus:outline-none focus:border-brand"
+                  minLength={6}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={copyPwd}
+                  title="Copiar"
+                  className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-gray-400 hover:text-brand"
+                >
+                  {resetCopied ? <CheckCircle2 size={14} className="text-green-400" /> : <Copy size={14} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResetPwd(genPassword())}
+                  className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-xs text-gray-400 hover:text-brand"
+                >
+                  Gerar
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">Mínimo 6 caracteres. Copie e envie ao usuário por canal seguro.</p>
+            </div>
+
+            {resetMut.isError && (
+              <p className="text-sm text-red-400">{resetMut.error?.message || 'Erro ao redefinir'}</p>
+            )}
+            {resetMut.isSuccess && (
+              <p className="text-sm text-green-400 bg-green-900/20 px-3 py-2 rounded-lg">
+                Senha atualizada. Envie a nova senha ao usuário.
+              </p>
+            )}
+
+            <Button type="submit" className="w-full" disabled={resetMut.isPending}>
+              {resetMut.isPending ? 'Atualizando…' : 'Confirmar Nova Senha'}
             </Button>
           </form>
         )}

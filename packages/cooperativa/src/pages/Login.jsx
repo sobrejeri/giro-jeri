@@ -83,6 +83,21 @@ export default function Login() {
           <p className="mt-5 text-center text-xs text-gray-400">
             Acesso com CNPJ cadastrado pelo administrador da plataforma.
           </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              const phone = import.meta.env.VITE_ADMIN_WHATSAPP || '5588999999999'
+              const cnpj  = form.cnpj || '____________'
+              const msg = encodeURIComponent(
+                `Olá! Preciso redefinir a senha da minha cooperativa.\n\nCNPJ: ${cnpj}`
+              )
+              window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
+            }}
+            className="block mx-auto mt-2 text-xs text-brand hover:underline"
+          >
+            Esqueci minha senha → falar com o administrador
+          </button>
         </div>
       </div>
     </div>

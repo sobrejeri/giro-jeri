@@ -15,6 +15,8 @@ export default function Login() {
   const [form,    setForm]    = useState({ email: '', password: '' })
   const [error,   setError]   = useState('')
   const [loading, setLoading] = useState(false)
+  const [forgotMsg,  setForgotMsg]  = useState('')
+  const [forgotLoad, setForgotLoad] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -28,6 +30,26 @@ export default function Login() {
       setError(err.message || 'Credenciais inválidas')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleForgot() {
+    if (!form.email) {
+      setForgotMsg('Informe o e-mail no campo acima para receber o link.')
+      return
+    }
+    setForgotLoad(true)
+    setForgotMsg('')
+    try {
+      await api.forgotPassword({
+        email: form.email,
+        redirect_url: `${window.location.origin}${import.meta.env.BASE_URL || '/'}login`,
+      })
+      setForgotMsg('Se este e-mail estiver cadastrado, você receberá um link de redefinição em instantes.')
+    } catch {
+      setForgotMsg('Se este e-mail estiver cadastrado, você receberá um link de redefinição em instantes.')
+    } finally {
+      setForgotLoad(false)
     }
   }
 
@@ -67,6 +89,20 @@ export default function Login() {
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
               {loading ? 'Entrando…' : 'Entrar'}
             </Button>
+
+            <button
+              type="button"
+              onClick={handleForgot}
+              disabled={forgotLoad}
+              className="block w-full text-center text-xs text-gray-500 hover:text-brand"
+            >
+              {forgotLoad ? 'Enviando…' : 'Esqueci minha senha'}
+            </button>
+            {forgotMsg && (
+              <p className="text-xs text-center text-gray-600 bg-amber-50 px-3 py-2 rounded-lg">
+                {forgotMsg}
+              </p>
+            )}
           </form>
 
           <p className="text-center text-sm text-gray-500 mt-6">

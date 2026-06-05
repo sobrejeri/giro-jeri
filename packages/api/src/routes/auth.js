@@ -146,6 +146,29 @@ router.get('/me', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/auth/forgot-password ────────────────────
+const forgotSchema = z.object({
+  email:        z.string().email(),
+  redirect_url: z.string().url().optional(),
+});
+
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { email, redirect_url } = forgotSchema.parse(req.body);
+
+    // Não revela se o e-mail existe (boa prática de segurança)
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirect_url,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'E-mail inválido' });
+    }
+    next(err);
+  }
+});
+
 // ── POST /api/auth/refresh ────────────────────────────
 router.post('/refresh', async (req, res, next) => {
   try {

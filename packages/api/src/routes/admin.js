@@ -151,6 +151,40 @@ router.post('/users', requireAdmin, async (req, res, next) => {
   }
 });
 
+// ── POST /api/admin/users/:id/reset-password ───────────
+const resetPasswordSchema = z.object({
+  new_password: z.string().min(6).max(72),
+});
+
+router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) => {
+  try {
+    const { new_password } = resetPasswordSchema.parse(req.body);
+
+    const { data: target } = await supabase
+      .from('users').select('auth_id, full_name').eq('id', req.params.id).single();
+    if (!target?.auth_id) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const { error } = await supabase.auth.admin.updateUserById(target.auth_id, {
+      password: new_password,
+    });
+    if (error) return res.status(400).json({ error: error.message });
+
+    await supabase.from('audit_logs').insert({
+      user_id:     req.user.id,
+      entity_type: 'users',
+      entity_id:   req.params.id,
+      action_type: 'reset_password',
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Senha inválida (mínimo 6 caracteres)' });
+    }
+    next(err);
+  }
+});
+
 // ── PATCH /api/admin/users/:id ─────────────────────────
 router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   try {
