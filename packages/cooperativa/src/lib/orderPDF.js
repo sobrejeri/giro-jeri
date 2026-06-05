@@ -368,6 +368,12 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   const termsLines = doc.splitTextToSize(termsText, CW - 8)
   const termsBoxH  = termsLines.length * 4.2 + 8
 
+  // Se não houver espaço suficiente para os termos + assinaturas, adiciona nova página
+  if (y + termsBoxH + 50 > pageH - 12) {
+    doc.addPage()
+    y = 20
+  }
+
   doc.setFillColor(252, 252, 255)
   doc.setDrawColor(180, 180, 210)
   doc.setLineWidth(0.3)
@@ -386,7 +392,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   y += termsBoxH + 6
 
   // ── Assinaturas ────────────────────────────────────────
-  const sigTop = Math.max(y + 2, pageH - 44)
+  const sigTop = Math.max(y + 2, y + 2)
   const sigW   = 72
   const sig1X  = M + 6
   const sig2X  = pageW - M - sigW - 6
