@@ -358,7 +358,8 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
     `TERMOS DE RESPONSABILIDADE: Este serviço será executado integralmente por ${coopRef}, ` +
     `que assume plena responsabilidade pela qualidade, segurança e cumprimento do contratado. ` +
     `A plataforma GIRO JERI atua exclusivamente como intermediária tecnológica, não sendo responsável ` +
-    `pela execução, imprevistos ou danos durante o serviço. Ao assinar, o cliente declara aceitar estes termos.`
+    `pela execução, imprevistos ou danos durante o serviço. O recebimento deste documento via WhatsApp ` +
+    `confirma o conhecimento e aceite destes termos pelo cliente.`
 
   const termsLines = doc.splitTextToSize(termsText, CW - 8)
   const termsBoxH  = termsLines.length * 3.6 + 7
@@ -378,37 +379,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setFontSize(6)
   doc.setTextColor(70, 70, 70)
   doc.text(termsLines, M + 4, y + 9)
-  y += termsBoxH + 5
-
-  // ── Assinaturas ────────────────────────────────────────
-  const sigTop = Math.max(y + 2, pageH - 38)
-  const sigW   = 72
-  const sig1X  = M + 6
-  const sig2X  = pageW - M - sigW - 6
-
-  doc.setDrawColor(...GRAY)
-  doc.setLineWidth(0.4)
-
-  doc.line(sig1X, sigTop, sig1X + sigW, sigTop)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8)
-  doc.setTextColor(...GRAY)
-  doc.text('Assinatura do Motorista / Operador', sig1X + sigW / 2, sigTop + 5, { align: 'center' })
-  if (form.driver_name) {
-    doc.setFontSize(7)
-    doc.setTextColor(...DARK)
-    doc.text(form.driver_name.toUpperCase(), sig1X + sigW / 2, sigTop + 9.5, { align: 'center' })
-  }
-
-  doc.line(sig2X, sigTop, sig2X + sigW, sigTop)
-  doc.setFontSize(8)
-  doc.setTextColor(...GRAY)
-  doc.text('Assinatura do Cliente', sig2X + sigW / 2, sigTop + 5, { align: 'center' })
-  if (booking.users?.full_name) {
-    doc.setFontSize(7)
-    doc.setTextColor(...DARK)
-    doc.text(booking.users.full_name.toUpperCase(), sig2X + sigW / 2, sigTop + 9.5, { align: 'center' })
-  }
+  y += termsBoxH + 3
 
   // ── Rodapé ─────────────────────────────────────────────
   const footY = pageH - 10
