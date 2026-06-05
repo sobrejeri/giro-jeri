@@ -109,7 +109,7 @@ function BookingRow({ b, onDispatch }) {
 export default function Despacho() {
   const [date, setDate]       = useState('all')
   const [modal, setModal]     = useState(null)
-  const [form, setForm]       = useState({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
+  const [form, setForm]       = useState({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
   const qc                    = useQueryClient()
 
   const { data, isLoading, isFetching } = useQuery({
@@ -123,7 +123,7 @@ export default function Despacho() {
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['dispatch'] })
       setModal(null)
-      setForm({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
+      setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
     },
   })
 
@@ -139,6 +139,7 @@ export default function Despacho() {
     setModal(booking)
     setForm({
       real_vehicle_text: assign?.real_vehicle_text || '',
+      driver_name:       '',
       dispatch_notes:    assign?.dispatch_notes    || '',
       driver_phone:      '',
     })
@@ -254,9 +255,12 @@ export default function Despacho() {
               <p className="font-bold text-brand">{fmt(modal.total_amount)}</p>
             </div>
           )}
-          <Input label="Veículo (descrição)" placeholder="Ex: Buggy Branco GKR-1234"
+          <Input label="Veículo (modelo / placa / cor)" placeholder="Ex: Hilux Branca · GKR-1234"
             value={form.real_vehicle_text}
             onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })} />
+          <Input label="Nome do motorista" placeholder="Ex: João da Silva"
+            value={form.driver_name}
+            onChange={(e) => setForm({ ...form, driver_name: e.target.value })} />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp do motorista</label>
             <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-brand/30 focus-within:border-brand bg-white">

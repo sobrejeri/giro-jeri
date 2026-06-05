@@ -215,7 +215,7 @@ export default function Dashboard() {
   const [assignModal, setAssign]           = useState(null)
   const [dispatchedBooking, setDispatched] = useState(null)
   const [savedForm, setSavedForm]          = useState(null)
-  const [form, setForm]                    = useState({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
+  const [form, setForm]                    = useState({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
 
   const qc = useQueryClient()
 
@@ -235,7 +235,7 @@ export default function Dashboard() {
       setSavedForm({ ...form })
       setDispatched(assignModal)
       setAssign(null)
-      setForm({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' })
+      setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
     },
   })
 
@@ -535,7 +535,7 @@ export default function Dashboard() {
       {/* ── Modal de despacho ──────────────────────────── */}
       <Modal
         open={!!assignModal}
-        onClose={() => { setAssign(null); setForm({ real_vehicle_text: '', dispatch_notes: '', driver_phone: '' }) }}
+        onClose={() => { setAssign(null); setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' }) }}
         title={`Despachar — ${assignModal?.booking_code || ''}`}
         size="md"
       >
@@ -612,10 +612,16 @@ export default function Dashboard() {
               className="space-y-4"
             >
               <Input
-                label="Veículo (descrição)"
-                placeholder="Ex: Buggy Branco GKR-1234"
+                label="Veículo (modelo / placa / cor)"
+                placeholder="Ex: Hilux Branca · GKR-1234"
                 value={form.real_vehicle_text}
                 onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })}
+              />
+              <Input
+                label="Nome do motorista"
+                placeholder="Ex: João da Silva"
+                value={form.driver_name}
+                onChange={(e) => setForm({ ...form, driver_name: e.target.value })}
               />
 
               <div>
