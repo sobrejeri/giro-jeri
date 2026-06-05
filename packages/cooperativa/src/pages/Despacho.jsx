@@ -21,7 +21,7 @@ const fmt = (v) =>
 const PENDING_STATUSES    = ['new', 'awaiting_dispatch', 'confirmed']
 const DISPATCHED_STATUSES = ['assigned', 'en_route', 'in_progress']
 
-function BookingRow({ b, onDispatch }) {
+function BookingRow({ b, onDispatch, cooperativa }) {
   const dateStr = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), "dd/MM", { locale: ptBR }) : ''
   const local        = b.pickup_place_name || b.origin_text || ''
@@ -30,6 +30,7 @@ function BookingRow({ b, onDispatch }) {
   const assign       = b.operational_assignments?.[0]
   const formForOS    = {
     real_vehicle_text: assign?.real_vehicle_text || '',
+    driver_name:       assign?.driver_name       || '',
     dispatch_notes:    assign?.dispatch_notes    || '',
     driver_phone:      '',
   }
@@ -81,19 +82,19 @@ function BookingRow({ b, onDispatch }) {
         {isDispatched && (
           <div className="flex items-center gap-2 pt-2 border-t border-green-100 flex-wrap">
             <button
-              onClick={() => downloadOrderPDF(b, formForOS)}
+              onClick={() => downloadOrderPDF(b, formForOS, cooperativa)}
               className="flex items-center gap-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg px-3 py-1.5 transition-colors"
             >
               <FileText size={12} /> Baixar PDF
             </button>
             <button
-              onClick={() => shareOrderPDF(b, formForOS, 'driver')}
+              onClick={() => shareOrderPDF(b, formForOS, 'driver', cooperativa)}
               className="flex items-center gap-1.5 text-xs font-medium bg-green-100 hover:bg-green-200 text-green-700 rounded-lg px-3 py-1.5 transition-colors"
             >
               <MessageCircle size={12} /> WhatsApp Motorista
             </button>
             <button
-              onClick={() => shareOrderPDF(b, formForOS, 'client')}
+              onClick={() => shareOrderPDF(b, formForOS, 'client', cooperativa)}
               disabled={!b.users?.phone}
               className="flex items-center gap-1.5 text-xs font-medium bg-green-100 hover:bg-green-200 text-green-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -117,6 +118,20 @@ export default function Despacho() {
     queryFn:  () => api.getOperational(date !== 'all' ? { date } : {}),
     refetchInterval: 15_000,
   })
+
+  const { data: profile } = useQuery({
+    queryKey: ['operator-profile'],
+    queryFn:  () => api.getProfile(),
+    staleTime: 5 * 60_000,
+  })
+
+  const cooperativa = profile ? {
+    full_name:        profile.full_name,
+    document_type:    profile.document_type,
+    document_number:  profile.document_number,
+    phone:            profile.phone,
+    profile_photo_url: profile.profile_photo_url,
+  } : null
 
   const assignMut = useMutation({
     mutationFn: ({ id, ...body }) => api.assignBooking(id, body),
@@ -218,7 +233,7 @@ export default function Despacho() {
         ) : (
           <div className="space-y-3">
             {pending.map((b) => (
-              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} />
+              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} cooperativa={cooperativa} />
             ))}
           </div>
         )}
@@ -232,7 +247,7 @@ export default function Despacho() {
           </h3>
           <div className="space-y-3">
             {dispatched.map((b) => (
-              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} />
+              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} cooperativa={cooperativa} />
             ))}
           </div>
         </div>

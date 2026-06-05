@@ -95,7 +95,7 @@ function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
 }
 
 // ── Linha da tabela ────────────────────────────────────
-function BookingRow({ b, onAssign }) {
+function BookingRow({ b, onAssign, cooperativa }) {
   const st       = STATUS[b.status_operational] || STATUS.new
   const name     = b.users?.full_name || '—'
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?'
@@ -177,7 +177,7 @@ function BookingRow({ b, onAssign }) {
         <div className="flex items-center justify-end gap-1">
           {dispatched && (
             <button
-              onClick={() => downloadOrderPDF(b, formForOS)}
+              onClick={() => downloadOrderPDF(b, formForOS, cooperativa)}
               className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               title="Baixar OS em PDF"
             >
@@ -227,6 +227,20 @@ export default function Dashboard() {
     }),
     refetchInterval: 15_000,
   })
+
+  const { data: profile } = useQuery({
+    queryKey: ['operator-profile'],
+    queryFn:  () => api.getProfile(),
+    staleTime: 5 * 60_000,
+  })
+
+  const cooperativa = profile ? {
+    full_name:         profile.full_name,
+    document_type:     profile.document_type,
+    document_number:   profile.document_number,
+    phone:             profile.phone,
+    profile_photo_url: profile.profile_photo_url,
+  } : null
 
   const assignMut = useMutation({
     mutationFn: ({ id, ...body }) => api.assignBooking(id, body),
@@ -422,7 +436,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} />)}
+              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} cooperativa={cooperativa} />)}
             </tbody>
           </table>
 
@@ -477,7 +491,7 @@ export default function Dashboard() {
             <p className="text-sm text-gray-500 text-center">Como deseja compartilhar a Ordem de Serviço?</p>
 
             <button
-              onClick={() => downloadOrderPDF(dispatchedBooking, savedForm)}
+              onClick={() => downloadOrderPDF(dispatchedBooking, savedForm, cooperativa)}
               className="w-full flex items-center gap-3 p-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors text-left"
             >
               <div className="w-9 h-9 bg-gray-200 rounded-lg flex items-center justify-center shrink-0">
@@ -490,7 +504,7 @@ export default function Dashboard() {
             </button>
 
             <button
-              onClick={() => shareOrderPDF(dispatchedBooking, savedForm, 'driver')}
+              onClick={() => shareOrderPDF(dispatchedBooking, savedForm, 'driver', cooperativa)}
               disabled={!savedForm.driver_phone}
               className={`w-full flex items-center gap-3 p-3.5 border rounded-xl transition-colors text-left ${
                 savedForm.driver_phone ? 'bg-green-50 hover:bg-green-100 border-green-200' : 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
@@ -508,7 +522,7 @@ export default function Dashboard() {
             </button>
 
             <button
-              onClick={() => shareOrderPDF(dispatchedBooking, savedForm, 'client')}
+              onClick={() => shareOrderPDF(dispatchedBooking, savedForm, 'client', cooperativa)}
               disabled={!dispatchedBooking.users?.phone}
               className={`w-full flex items-center gap-3 p-3.5 border rounded-xl transition-colors text-left ${
                 dispatchedBooking.users?.phone ? 'bg-green-50 hover:bg-green-100 border-green-200' : 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'

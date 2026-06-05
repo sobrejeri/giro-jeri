@@ -22,6 +22,22 @@ function fmtDateLong(s) {
   try { return format(new Date(s + 'T12:00:00'), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) } catch { return s }
 }
 
+// ── Carrega imagem remota como base64 ──────────────────
+async function fetchBase64(url) {
+  if (!url) return null
+  try {
+    const resp = await fetch(url)
+    if (!resp.ok) return null
+    const blob = await resp.blob()
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload  = () => resolve(reader.result)
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
+
 // ── Helpers de desenho ─────────────────────────────────
 function sectionTitle(doc, text, x, y, w) {
   doc.setFillColor(...XLGRAY)
@@ -55,14 +71,14 @@ function dataField(doc, label, value, x, y, maxW) {
   return y + 5 + lines.length * 4.5
 }
 
-// ── Gerador principal ──────────────────────────────────
-export function generateOrderPDF(booking, form) {
+// ── Gerador principal (síncrono — logo já em base64) ───
+export function generateOrderPDF(booking, form, cooperativa = null) {
   const doc   = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
-  const M     = 18            // margem lateral
-  const CW    = pageW - M * 2 // largura do conteúdo
-  const COL   = pageW / 2     // centro
+  const M     = 18
+  const CW    = pageW - M * 2
+  const COL   = pageW / 2
 
   const issued   = format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
   const dateStr  = fmtDate(booking.service_date)
@@ -72,40 +88,94 @@ export function generateOrderPDF(booking, form) {
   const dest     = booking.destination_place_name || booking.destination_text  || '—'
   const vehicle  = form.real_vehicle_text || booking.booking_vehicles?.[0]?.vehicle_name_snapshot || '—'
   const tipo     = booking.service_type === 'tour'    ? 'Passeio'       : 'Transfer'
-  const modo     = booking.booking_mode === 'shared'  ? 'Compartilhado' : 'Privativo'
+  const modo     = booking.booking_mode  === 'shared' ? 'Compartilhado' : 'Privativo'
   const colW2    = CW / 2 - 4
+
+  const coopName    = cooperativa?.full_name      || 'Giro Jeri Passeios & Transfers'
+  const coopCNPJ    = cooperativa?.document_number
+  const coopPhone   = cooperativa?.phone
+  const coopLogoB64 = cooperativa?.logoBase64 || null
 
   let y = 0
 
-  // ── Faixa laranja superior ─────────────────────────────
+  // ── Cabeçalho branco — Cooperativa ────────────────────
+  const HEADER_H = 38
+  doc.setFillColor(...WHITE)
+  doc.rect(0, 0, pageW, HEADER_H, 'F')
+
+  // Borda laranja lateral esquerda
   doc.setFillColor(...BRAND)
-  doc.rect(0, 0, pageW, 32, 'F')
+  doc.rect(0, 0, 4, HEADER_H, 'F')
 
+  const LOGO_SZ  = 28  // tamanho do logo/placeholder
+  const LOGO_X   = 10
+  const LOGO_Y   = 5
+  const TEXT_X   = LOGO_X + LOGO_SZ + 5
+
+  if (coopLogoB64) {
+    // Logo carregado como base64
+    try {
+      doc.addImage(coopLogoB64, 'PNG', LOGO_X, LOGO_Y, LOGO_SZ, LOGO_SZ)
+    } catch {
+      drawLogoPlaceholder(doc, coopName, LOGO_X, LOGO_Y, LOGO_SZ)
+    }
+  } else {
+    drawLogoPlaceholder(doc, coopName, LOGO_X, LOGO_Y, LOGO_SZ)
+  }
+
+  // Nome da cooperativa
+  const availW = COL - TEXT_X - 4
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(22)
-  doc.setTextColor(...WHITE)
-  doc.text('GIRO JERI', M, 14)
+  doc.setFontSize(12)
+  doc.setTextColor(...DARK)
+  const nameLines = doc.splitTextToSize(coopName.toUpperCase(), availW)
+  doc.text(nameLines, TEXT_X, 14)
 
+  let infoY = 14 + nameLines.length * 6
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
-  doc.setTextColor(255, 220, 180)
-  doc.text('PASSEIOS & TRANSFERS — JERICOACOARA, CE', M, 21)
-  doc.text('girojeri.com.br', M, 27)
+  doc.setFontSize(8)
+  doc.setTextColor(...GRAY)
 
+  if (coopCNPJ) {
+    const docLabel = cooperativa?.document_type === 'cnpj' ? 'CNPJ' : 'CPF'
+    doc.text(`${docLabel}: ${coopCNPJ}`, TEXT_X, infoY)
+    infoY += 5
+  }
+  if (coopPhone) {
+    doc.text(`Tel: ${coopPhone}`, TEXT_X, infoY)
+    infoY += 5
+  }
+  doc.text('Jericoacoara — CE', TEXT_X, infoY)
+
+  // OS info (lado direito)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.setTextColor(...WHITE)
-  doc.text('ORDEM DE SERVIÇO', pageW - M, 11, { align: 'right' })
+  doc.setFontSize(8.5)
+  doc.setTextColor(...GRAY)
+  doc.text('ORDEM DE SERVIÇO', pageW - M, 10, { align: 'right' })
 
-  doc.setFontSize(18)
-  doc.text(`Nº ${booking.booking_code}`, pageW - M, 21, { align: 'right' })
+  doc.setFontSize(16)
+  doc.setTextColor(...BRAND)
+  doc.text(`Nº ${booking.booking_code}`, pageW - M, 20, { align: 'right' })
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
-  doc.setTextColor(255, 220, 180)
-  doc.text(`Emitida em ${issued}`, pageW - M, 28, { align: 'right' })
+  doc.setTextColor(...GRAY)
+  doc.text(`Emitida em ${issued}`, pageW - M, 27, { align: 'right' })
 
-  y = 40
+  // Borda inferior do cabeçalho
+  doc.setDrawColor(...LGRAY)
+  doc.setLineWidth(0.3)
+  doc.line(0, HEADER_H, pageW, HEADER_H)
+
+  // ── Faixa laranja — subtítulo ─────────────────────────
+  doc.setFillColor(...BRAND)
+  doc.rect(0, HEADER_H, pageW, 8, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8)
+  doc.setTextColor(...WHITE)
+  doc.text('GIRO JERI — PLATAFORMA DE PASSEIOS & TRANSFERS · JERICOACOARA, CE', pageW / 2, HEADER_H + 5.5, { align: 'center' })
+
+  y = HEADER_H + 16
 
   // ── 1. DADOS DO VEÍCULO / MOTORISTA ───────────────────
   y = sectionTitle(doc, '1. DADOS DO VEÍCULO / MOTORISTA', M, y, CW)
@@ -159,7 +229,6 @@ export function generateOrderPDF(booking, form) {
   const tH   = 9.5
   const labW = 52
 
-  // Linha 1 — partida
   doc.setFillColor(...XLGRAY)
   doc.rect(M, y, labW, tH, 'F')
   doc.setFillColor(...WHITE)
@@ -178,7 +247,6 @@ export function generateOrderPDF(booking, form) {
   doc.text(origin.toUpperCase(), M + labW + 5, y + 6.2)
   y += tH
 
-  // Linha 2 — chegada
   doc.setFillColor(...XLGRAY)
   doc.rect(M, y, labW, tH, 'F')
   doc.setFillColor(...WHITE)
@@ -215,7 +283,6 @@ export function generateOrderPDF(booking, form) {
   const pCols = [CW * 0.62, CW * 0.38]
   const pRowH = 9
 
-  // Cabeçalho da tabela
   doc.setFillColor(210, 210, 210)
   doc.rect(M, y, CW, pRowH, 'F')
   doc.setDrawColor(...LGRAY)
@@ -229,10 +296,7 @@ export function generateOrderPDF(booking, form) {
   doc.text('DOCUMENTO', M + pCols[0] + 4, y + 6)
   y += pRowH
 
-  // Linhas de passageiros — cliente na primeira, resto em branco
-  const totalPax = Math.max(Number(booking.people_count || 1), 1)
-  const rowCount = Math.max(totalPax, 5)
-
+  const rowCount = Math.max(Number(booking.people_count || 1), 5)
   for (let i = 0; i < rowCount; i++) {
     const bg = i % 2 === 0 ? WHITE : [252, 252, 252]
     doc.setFillColor(...bg)
@@ -254,7 +318,7 @@ export function generateOrderPDF(booking, form) {
   }
   y += 8
 
-  // ── 5. OBSERVAÇÕES (opcional) ──────────────────────────
+  // ── 5. OBSERVAÇÕES ─────────────────────────────────────
   const notes = [form.dispatch_notes, booking.special_notes].filter(Boolean).join(' | ')
   if (notes) {
     y = sectionTitle(doc, '5. OBSERVAÇÕES', M, y, CW)
@@ -263,10 +327,10 @@ export function generateOrderPDF(booking, form) {
     doc.setFontSize(8.5)
     doc.setTextColor(...DARK)
     const noteLines = doc.splitTextToSize(notes, CW - 8)
+    const noteBoxH  = noteLines.length * 5 + 7
     doc.setFillColor(255, 253, 235)
     doc.setDrawColor(220, 190, 80)
     doc.setLineWidth(0.3)
-    const noteBoxH = noteLines.length * 5 + 7
     doc.rect(M, y - 3, CW, noteBoxH, 'F')
     doc.rect(M, y - 3, CW, noteBoxH, 'S')
     doc.text(noteLines, M + 4, y + 1.5)
@@ -328,22 +392,38 @@ export function generateOrderPDF(booking, form) {
   doc.setFontSize(7)
   doc.setTextColor(...WHITE)
   doc.text(
-    'Giro Jeri — Passeios & Transfers · Jericoacoara, CE · Documento gerado automaticamente · Cancele com 24h de antecedência.',
+    'Giro Jeri — Plataforma de Passeios & Transfers · Jericoacoara, CE · Documento gerado automaticamente',
     pageW / 2, footY + 2, { align: 'center' }
   )
 
   return doc
 }
 
-// ── Exportações públicas ───────────────────────────────
-export function downloadOrderPDF(booking, form) {
-  generateOrderPDF(booking, form).save(`OS-${booking.booking_code}.pdf`)
+// ── Placeholder de logo (iniciais em caixa) ────────────
+function drawLogoPlaceholder(doc, name, x, y, size) {
+  const initials = (name || 'GJ')
+    .split(/[\s-]+/).filter(Boolean).slice(0, 2)
+    .map((w) => w[0].toUpperCase()).join('')
+
+  doc.setFillColor(...BRAND)
+  doc.roundedRect(x, y, size, size, 3, 3, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(size * 0.45)
+  doc.setTextColor(...WHITE)
+  doc.text(initials, x + size / 2, y + size * 0.62, { align: 'center' })
 }
 
-export async function shareOrderPDF(booking, form, target = 'driver') {
-  const doc  = generateOrderPDF(booking, form)
-  const blob = doc.output('blob')
-  const file = new File([blob], `OS-${booking.booking_code}.pdf`, { type: 'application/pdf' })
+// ── Exportações públicas (assíncronas — carregam logo) ──
+export async function downloadOrderPDF(booking, form, cooperativa = null) {
+  const enriched = await _enrichWithLogo(cooperativa)
+  generateOrderPDF(booking, form, enriched).save(`OS-${booking.booking_code}.pdf`)
+}
+
+export async function shareOrderPDF(booking, form, target = 'driver', cooperativa = null) {
+  const enriched = await _enrichWithLogo(cooperativa)
+  const doc      = generateOrderPDF(booking, form, enriched)
+  const blob     = doc.output('blob')
+  const file     = new File([blob], `OS-${booking.booking_code}.pdf`, { type: 'application/pdf' })
 
   if (navigator.canShare?.({ files: [file] })) {
     try {
@@ -365,9 +445,14 @@ export async function shareOrderPDF(booking, form, target = 'driver') {
 
   const intl = phone.startsWith('55') ? phone : `55${phone}`
   const msg  = target === 'driver' ? buildDriverMessage(booking, form) : buildClientMessage(booking, form)
-
   window.open(`https://wa.me/${intl}?text=${encodeURIComponent(msg)}`, '_blank')
   return 'downloaded'
+}
+
+async function _enrichWithLogo(cooperativa) {
+  if (!cooperativa) return null
+  const logoBase64 = await fetchBase64(cooperativa.profile_photo_url)
+  return { ...cooperativa, logoBase64 }
 }
 
 function buildDriverMessage(booking, form) {
@@ -412,7 +497,7 @@ function buildClientMessage(booking, form) {
     `📅 *Data:* ${dateStr} às ${timeStr}hs`,
     `👥 *Pessoas:* ${booking.people_count || '—'}`,
     `🚙 *Veículo:* ${vehicle}`,
-    form.driver_name  ? `👨‍✈️ *Motorista:* ${form.driver_name}`  : null,
+    form.driver_name  ? `👨‍✈️ *Motorista:* ${form.driver_name}`     : null,
     form.driver_phone ? `📞 *Tel. motorista:* ${form.driver_phone}` : null,
     `📍 *Local de embarque:* ${origin}`,
     ``,
