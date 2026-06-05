@@ -111,11 +111,16 @@ router.post('/login', async (req, res, next) => {
 
     if (error) return res.status(401).json({ error: 'Credenciais incorretas' });
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileErr } = await supabase
       .from('users')
       .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language')
       .eq('auth_id', data.user.id)
       .single();
+
+    if (profileErr || !profile) {
+      console.error('[login] profile lookup failed', { auth_id: data.user.id, error: profileErr });
+      return res.status(500).json({ error: 'Perfil não encontrado para este usuário. Contate o suporte.' });
+    }
 
     res.json({
       token:         data.session.access_token,

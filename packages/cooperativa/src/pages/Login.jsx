@@ -34,8 +34,11 @@ export default function Login() {
       if (!data) throw new Error('Credenciais inválidas')
 
       const user = data.user
-      if (!['operator', 'admin'].includes(user?.user_type)) {
-        throw new Error('Acesso restrito a operadores.')
+      if (!user) {
+        throw new Error('Perfil não encontrado. Contate o administrador.')
+      }
+      if (!['operator', 'admin'].includes(user.user_type)) {
+        throw new Error(`Acesso restrito a operadores. (tipo atual: ${user.user_type})`)
       }
 
       login(user, data.token, data.refresh_token)
