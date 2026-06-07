@@ -81,17 +81,35 @@ const createUserSchema = z.object({
   full_name: z.string().min(2).max(200),
   email:     z.string().email().optional(),
   phone:     z.string().min(10).max(30).optional(),
+  cnpj:      z.string().min(14).max(18).optional(),
   password:  z.string().min(6),
   user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
-}).refine((d) => d.email || d.phone, { message: 'Informe email ou telefone' });
+}).refine((d) => {
+  if (d.user_type === 'operator') return !!d.cnpj;
+  return d.email || d.phone;
+}, { message: 'Operador requer CNPJ; outros perfis requerem email ou telefone' });
 
 router.post('/users', requireAdmin, async (req, res, next) => {
   try {
     const body = createUserSchema.parse(req.body);
 
+    // Operadores autenticam via CNPJ → e-mail sintético interno
+    let authEmail = body.email;
+    let authPhone = body.phone;
+    let docNumber = null;
+    let docType   = null;
+
+    if (body.user_type === 'operator' && body.cnpj) {
+      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      authEmail = `${cnpjDigits}@op.girojeri.app`;
+      authPhone = undefined;
+      docNumber = cnpjDigits;
+      docType   = 'cnpj';
+    }
+
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email:         body.email,
-      phone:         body.phone,
+      email:         authEmail,
+      phone:         authPhone,
       password:      body.password,
       email_confirm: true,
     });
@@ -100,13 +118,15 @@ router.post('/users', requireAdmin, async (req, res, next) => {
     const { data: profile, error: profileError } = await supabase
       .from('users')
       .insert({
-        auth_id:   authData.user.id,
-        full_name: body.full_name,
-        email:     body.email,
-        phone:     body.phone,
-        user_type: body.user_type,
+        auth_id:         authData.user.id,
+        full_name:       body.full_name,
+        email:           authEmail,
+        phone:           authPhone,
+        user_type:       body.user_type,
+        document_number: docNumber,
+        document_type:   docType,
       })
-      .select('id, full_name, email, phone, user_type, is_active, created_at')
+      .select('id, full_name, email, phone, user_type, is_active, created_at, document_number')
       .single();
 
     if (profileError) {
@@ -126,6 +146,40 @@ router.post('/users', requireAdmin, async (req, res, next) => {
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
+});
+
+// ── POST /api/admin/users/:id/reset-password ───────────
+const resetPasswordSchema = z.object({
+  new_password: z.string().min(6).max(72),
+});
+
+router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) => {
+  try {
+    const { new_password } = resetPasswordSchema.parse(req.body);
+
+    const { data: target } = await supabase
+      .from('users').select('auth_id, full_name').eq('id', req.params.id).single();
+    if (!target?.auth_id) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const { error } = await supabase.auth.admin.updateUserById(target.auth_id, {
+      password: new_password,
+    });
+    if (error) return res.status(400).json({ error: error.message });
+
+    await supabase.from('audit_logs').insert({
+      user_id:     req.user.id,
+      entity_type: 'users',
+      entity_id:   req.params.id,
+      action_type: 'reset_password',
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Senha inválida (mínimo 6 caracteres)' });
     }
     next(err);
   }
@@ -260,7 +314,8 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
 router.get('/operational', requireOperator, async (req, res, next) => {
   try {
     const { date, service_type } = req.query;
-    const targetDate = date || dayjs().format('YYYY-MM-DD');
+    const showAll    = !date || date === 'all';
+    const targetDate = showAll ? null : date;
 
     let query = supabase
       .from('bookings')
@@ -268,18 +323,17 @@ router.get('/operational', requireOperator, async (req, res, next) => {
         id, booking_code, service_type, booking_mode,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
-        pickup_place_name, pickup_latitude, pickup_longitude,
-        destination_place_name, destination_latitude, destination_longitude,
-        special_notes,
-        users ( full_name, phone ),
-        booking_vehicles ( vehicle_name_snapshot, quantity ),
-        operational_assignments ( assignment_status, assigned_driver_user_id, real_vehicle_text )
+        pickup_place_name, destination_place_name, special_notes,
+        origin_text, destination_text,
+        users!bookings_user_id_fkey ( full_name, phone ),
+        booking_vehicles ( vehicle_name_snapshot, quantity )
       `)
-      .eq('service_date', targetDate)
-      .not('status_commercial', 'in', '("draft","cancelled")')
-      .order('service_time');
+      .neq('status_commercial', 'draft')
+      .neq('status_commercial', 'cancelled')
+      .order('service_date', { ascending: true });
 
-    if (service_type) query = query.eq('service_type', service_type);
+    if (targetDate)    query = query.eq('service_date', targetDate);
+    if (service_type)  query = query.eq('service_type', service_type);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -293,7 +347,7 @@ router.get('/operational', requireOperator, async (req, res, next) => {
       if (grouped[key]) grouped[key].push(b);
     }
 
-    res.json({ date: targetDate, total: data?.length || 0, columns: grouped });
+    res.json({ date: targetDate || 'all', total: data?.length || 0, columns: grouped });
   } catch (err) { next(err); }
 });
 
@@ -307,30 +361,52 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       dispatch_notes,
     } = req.body;
 
-    // Upsert no despacho
-    const { data, error } = await supabase
+    const bookingId = req.params.id;
+    const payload   = {
+      booking_id:                bookingId,
+      assigned_operator_user_id: req.user.id,
+      assigned_driver_user_id:   assigned_driver_user_id || null,
+      assigned_guide_user_id:    assigned_guide_user_id   || null,
+      real_vehicle_text:         real_vehicle_text        || null,
+      dispatch_notes:            dispatch_notes           || null,
+      assignment_status:         'assigned',
+      updated_at:                new Date().toISOString(),
+    };
+
+    // Verifica se já existe um assignment para essa reserva
+    const { data: existing } = await supabase
       .from('operational_assignments')
-      .upsert({
-        booking_id:               req.params.id,
-        assigned_operator_user_id: req.user.id,
-        assigned_driver_user_id,
-        assigned_guide_user_id,
-        real_vehicle_text,
-        dispatch_notes,
-        assignment_status: 'assigned',
-      }, { onConflict: 'booking_id' })
-      .select()
-      .single();
+      .select('id')
+      .eq('booking_id', bookingId)
+      .maybeSingle();
 
-    if (error) throw error;
+    let result;
+    if (existing) {
+      const { data, error } = await supabase
+        .from('operational_assignments')
+        .update(payload)
+        .eq('id', existing.id)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    } else {
+      const { data, error } = await supabase
+        .from('operational_assignments')
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    }
 
-    // Atualiza status operacional
+    // Atualiza status operacional da reserva
     await supabase
       .from('bookings')
       .update({ status_operational: 'assigned' })
-      .eq('id', req.params.id);
+      .eq('id', bookingId);
 
-    res.json(data);
+    res.json(result);
   } catch (err) { next(err); }
 });
 
@@ -573,7 +649,7 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
       .select(`
         id, booking_code, service_type, booking_mode, service_date, service_time,
         people_count, total_amount, status_commercial, status_operational, created_at,
-        users ( full_name, phone, email )
+        users!bookings_user_id_fkey ( full_name, phone, email )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
@@ -645,7 +721,7 @@ router.post('/bookings/manual', requireAdmin, async (req, res, next) => {
       people_count:        Number(people_count),
       total_amount:        Number(total_amount),
       status_commercial:   isPaid ? 'paid' : 'awaiting_payment',
-      status_operational:  isPaid ? 'awaiting_dispatch' : 'not_started',
+      status_operational:  isPaid ? 'awaiting_dispatch' : 'new',
       payment_status:      isPaid ? 'approved' : 'pending',
       notes:               notes || `Reserva manual — ${customer_name || 'sem nome'}`,
     }).select().single();

@@ -17,6 +17,7 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email:    z.string().email().optional(),
   phone:    z.string().optional(),
+  cnpj:     z.string().optional(),
   password: z.string().min(1),
 });
 
@@ -81,19 +82,80 @@ router.post('/login', async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
 
+    // Login por CNPJ: busca o e-mail sintético gerado pelo admin
+    let authEmail  = body.email;
+    let authPhone  = body.phone;
+
+    if (body.cnpj) {
+      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const { data: opUser, error: lookupErr } = await supabase
+        .from('users')
+        .select('email')
+        .eq('document_number', cnpjDigits)
+        .eq('document_type', 'cnpj')
+        .eq('user_type', 'operator')
+        .single();
+
+      if (lookupErr || !opUser) {
+        return res.status(401).json({ error: 'CNPJ não encontrado ou não autorizado' });
+      }
+      authEmail = opUser.email;
+      authPhone = undefined;
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email:    body.email,
-      phone:    body.phone,
+      email:    authEmail,
+      phone:    authPhone,
       password: body.password,
     });
 
     if (error) return res.status(401).json({ error: 'Credenciais incorretas' });
 
-    const { data: profile } = await supabase
-      .from('users')
-      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language')
-      .eq('auth_id', data.user.id)
-      .single();
+    // Conjunto mínimo de colunas — garantidamente presentes em qualquer instância
+    const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number';
+
+    // Primeiro tenta pelo auth_id (caminho normal)
+    let { data: profile, error: pErr1 } = await supabase
+      .from('users').select(PROFILE_COLS).eq('auth_id', data.user.id).maybeSingle();
+    if (pErr1) console.error('[login] auth_id lookup error', pErr1);
+
+    // Fallback: lookup por email (caso o auth_id na tabela esteja dessincronizado/NULL)
+    const fallbackEmail = authEmail || data.user.email;
+    if (!profile && fallbackEmail) {
+      const { data: byEmail, error: pErr2 } = await supabase
+        .from('users').select(PROFILE_COLS).eq('email', fallbackEmail).maybeSingle();
+      if (pErr2) console.error('[login] email lookup error', pErr2);
+      if (byEmail) {
+        profile = byEmail;
+        await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byEmail.id);
+      }
+    }
+
+    // Último fallback: lookup por document_number quando vier de CNPJ
+    if (!profile && body.cnpj) {
+      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const { data: byCnpj, error: pErr3 } = await supabase
+        .from('users').select(PROFILE_COLS)
+        .eq('document_number', cnpjDigits)
+        .maybeSingle();
+      if (pErr3) console.error('[login] cnpj lookup error', pErr3);
+      if (byCnpj) {
+        profile = byCnpj;
+        await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byCnpj.id);
+      }
+    }
+
+    if (!profile) {
+      console.error('[login] profile lookup failed', {
+        auth_id:    data.user.id,
+        auth_email: data.user.email,
+        used_email: authEmail,
+        used_cnpj:  body.cnpj,
+      });
+      return res.status(500).json({
+        error: `Perfil não encontrado (auth_id=${data.user.id?.slice(0,8)}, email=${data.user.email})`,
+      });
+    }
 
     res.json({
       token:         data.session.access_token,
@@ -124,6 +186,29 @@ router.get('/me', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/auth/forgot-password ────────────────────
+const forgotSchema = z.object({
+  email:        z.string().email(),
+  redirect_url: z.string().url().optional(),
+});
+
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { email, redirect_url } = forgotSchema.parse(req.body);
+
+    // Não revela se o e-mail existe (boa prática de segurança)
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirect_url,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'E-mail inválido' });
+    }
+    next(err);
+  }
+});
+
 // ── POST /api/auth/refresh ────────────────────────────
 router.post('/refresh', async (req, res, next) => {
   try {
@@ -139,9 +224,9 @@ router.post('/refresh', async (req, res, next) => {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url, birth_date, document_type, document_number, nationality, gender, emergency_contact_name, emergency_contact_phone, language')
+      .select('id, full_name, email, phone, user_type, profile_photo_url, document_number')
       .eq('auth_id', data.user.id)
-      .single();
+      .maybeSingle();
 
     res.json({
       token:         data.session.access_token,

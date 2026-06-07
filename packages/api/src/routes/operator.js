@@ -12,7 +12,7 @@ import { authenticate, requireOperator } from '../middleware/auth.js';
 
 const PROFILE_FIELDS = `
   id, full_name, email, phone, document_type, document_number, birth_date,
-  profile_photo_url,
+  profile_photo_url, address, cep,
   pix_key_type, pix_key,
   bank_name, bank_agency, bank_account_number, bank_account_type, bank_document
 `.trim();
@@ -23,6 +23,8 @@ const profileSchema = z.object({
   document_type:       z.enum(['cpf', 'cnpj', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
   document_number:     z.string().max(30).optional().nullable(),
   birth_date:          z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  address:             z.string().max(300).optional().nullable(),
+  cep:                 z.string().max(9).optional().nullable(),
   pix_key_type:        z.enum(['cpf', 'cnpj', 'email', 'phone', 'random_key']).optional().nullable(),
   pix_key:             z.string().max(200).optional().nullable(),
   bank_name:           z.string().max(100).optional().nullable(),
@@ -159,9 +161,8 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
     const { data, error } = await supabase
       .from('bookings')
       .update({
-        operator_id:         req.user.id,
-        status_commercial:   'confirmed',
-        status_operational:  'assigned',
+        operator_id:        req.user.id,
+        status_operational: 'assigned',
       })
       .eq('id', req.params.id)
       .is('operator_id', null)
@@ -193,6 +194,21 @@ router.post('/bookings/:id/start', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── POST /api/operator/bookings/:id/confirm ───────────
+// Operador confirma com o cliente → booking volta para fila de despacho
+router.post('/bookings/:id/confirm', async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('bookings')
+      .update({ status_operational: 'awaiting_dispatch' })
+      .eq('id', req.params.id)
+      .eq('operator_id', req.user.id)
+
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
 // ── POST /api/operator/bookings/:id/complete ──────────
 router.post('/bookings/:id/complete', async (req, res, next) => {
   try {
@@ -200,7 +216,6 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
       .from('bookings')
       .update({
         status_operational: 'completed',
-        status_commercial:  'completed',
         completed_at:       new Date().toISOString(),
       })
       .eq('id', req.params.id)

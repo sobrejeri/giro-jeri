@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle, KeyRound, Copy } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
@@ -21,16 +21,23 @@ const USER_TYPE_LABELS = {
   affiliate: 'Afiliado',
 }
 
-const CREATE_EMPTY = { full_name: '', email: '', phone: '', password: '', user_type: 'tourist' }
+const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist' }
+
+function genPassword(len = 10) {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+  return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
 
 export default function Usuarios() {
   const [page, setPage]           = useState(1)
   const [search, setSearch]       = useState('')
   const [typeFilter, setType]     = useState('')
   const [activeFilter, setActive] = useState('')
-  const [modal, setModal]         = useState(null)   // null | { mode: 'edit', user } | { mode: 'create' }
+  const [modal, setModal]         = useState(null)   // null | { mode: 'edit', user } | { mode: 'create' } | { mode: 'reset', user }
   const [form, setForm]           = useState({})
   const [createForm, setCreateForm] = useState(CREATE_EMPTY)
+  const [resetPwd, setResetPwd]   = useState('')
+  const [resetCopied, setResetCopied] = useState(false)
   const qc                        = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -62,6 +69,13 @@ export default function Usuarios() {
     },
   })
 
+  const resetMut = useMutation({
+    mutationFn: ({ id, new_password }) => api.resetUserPassword(id, new_password),
+    onSuccess: () => {
+      // Mantém o modal aberto para mostrar a senha; admin fecha manualmente
+    },
+  })
+
   const recipientMut = useMutation({
     mutationFn: (id) => api.registerRecipient(id),
     onSuccess: (result) => {
@@ -83,6 +97,25 @@ export default function Usuarios() {
     setCreateForm(CREATE_EMPTY)
   }
 
+  function openReset(u) {
+    setModal({ mode: 'reset', user: u })
+    setResetPwd(genPassword())
+    setResetCopied(false)
+    resetMut.reset()
+  }
+
+  function handleResetSubmit(e) {
+    e.preventDefault()
+    if (!resetPwd || resetPwd.length < 6) return
+    resetMut.mutate({ id: modal.user.id, new_password: resetPwd })
+  }
+
+  function copyPwd() {
+    navigator.clipboard?.writeText(resetPwd)
+    setResetCopied(true)
+    setTimeout(() => setResetCopied(false), 1500)
+  }
+
   function handleSubmit(e) {
     e.preventDefault()
     updateMut.mutate({ id: modal.user.id, ...form, is_active: form.is_active === 'true' || form.is_active === true })
@@ -90,12 +123,17 @@ export default function Usuarios() {
 
   function handleCreate(e) {
     e.preventDefault()
+    const isOp = createForm.user_type === 'operator'
     const body = {
       full_name: createForm.full_name,
       password:  createForm.password,
       user_type: createForm.user_type,
-      ...(createForm.email ? { email: createForm.email } : {}),
-      ...(createForm.phone ? { phone: createForm.phone } : {}),
+      ...(isOp
+        ? { cnpj: createForm.cnpj }
+        : {
+            ...(createForm.email ? { email: createForm.email } : {}),
+            ...(createForm.phone ? { phone: createForm.phone } : {}),
+          }),
     }
     createMut.mutate(body)
   }
@@ -163,7 +201,11 @@ export default function Usuarios() {
                 <tr key={u.id} className="hover:bg-gray-750 transition-colors">
                   <td className="px-5 py-3">
                     <p className="font-medium text-gray-200">{u.full_name || '—'}</p>
-                    <p className="text-xs text-gray-500">{u.email || u.phone || '—'}</p>
+                    <p className="text-xs text-gray-500">
+                      {u.user_type === 'operator' && u.document_number
+                        ? `CNPJ: ${u.document_number}`
+                        : u.email || u.phone || '—'}
+                    </p>
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-1.5">
@@ -219,25 +261,47 @@ export default function Usuarios() {
         size="sm"
       >
         <form onSubmit={handleCreate} className="space-y-4">
+          <Select
+            label="Função na plataforma"
+            value={createForm.user_type}
+            onChange={(e) => setCreateForm({ ...createForm, user_type: e.target.value, email: '', phone: '', cnpj: '' })}
+          >
+            {USER_TYPES.map((t) => (
+              <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
+            ))}
+          </Select>
           <Input
             label="Nome completo"
             value={createForm.full_name}
             onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
             required
           />
-          <Input
-            label="E-mail"
-            type="email"
-            value={createForm.email}
-            onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-            placeholder="Obrigatório se não informar telefone"
-          />
-          <Input
-            label="Telefone / WhatsApp"
-            value={createForm.phone}
-            onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-            placeholder="+55 88 99999-9999"
-          />
+          {createForm.user_type === 'operator' ? (
+            <Input
+              label="CNPJ"
+              value={createForm.cnpj}
+              onChange={(e) => setCreateForm({ ...createForm, cnpj: e.target.value })}
+              placeholder="00.000.000/0001-00"
+              inputMode="numeric"
+              required
+            />
+          ) : (
+            <>
+              <Input
+                label="E-mail"
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                placeholder="Obrigatório se não informar telefone"
+              />
+              <Input
+                label="Telefone / WhatsApp"
+                value={createForm.phone}
+                onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                placeholder="+55 88 99999-9999"
+              />
+            </>
+          )}
           <Input
             label="Senha inicial"
             type="password"
@@ -247,15 +311,6 @@ export default function Usuarios() {
             minLength={6}
             placeholder="Mínimo 6 caracteres"
           />
-          <Select
-            label="Função na plataforma"
-            value={createForm.user_type}
-            onChange={(e) => setCreateForm({ ...createForm, user_type: e.target.value })}
-          >
-            {USER_TYPES.map((t) => (
-              <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
-            ))}
-          </Select>
           {createMut.isError && (
             <p className="text-sm text-red-400">{createMut.error?.message || 'Erro ao criar usuário'}</p>
           )}
@@ -350,6 +405,78 @@ export default function Usuarios() {
             )}
             <Button type="submit" className="w-full" disabled={updateMut.isPending}>
               {updateMut.isPending ? 'Salvando…' : 'Salvar Alterações'}
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => openReset(modal.user)}
+              className="flex items-center justify-center gap-1.5 w-full text-xs text-gray-400 hover:text-amber-400 py-2"
+            >
+              <KeyRound size={13} />
+              Redefinir senha
+            </button>
+          </form>
+        )}
+      </Modal>
+
+      {/* Modal redefinir senha */}
+      <Modal
+        open={modal?.mode === 'reset'}
+        onClose={() => setModal(null)}
+        title="Redefinir Senha"
+        size="sm"
+      >
+        {modal?.mode === 'reset' && (
+          <form onSubmit={handleResetSubmit} className="space-y-4">
+            <div className="bg-gray-900 rounded-lg p-3 text-sm">
+              <p className="font-medium text-gray-200">{modal.user.full_name}</p>
+              <p className="text-gray-500 text-xs">
+                {modal.user.user_type === 'operator' && modal.user.document_number
+                  ? `CNPJ: ${modal.user.document_number}`
+                  : modal.user.email || modal.user.phone}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">Nova senha</label>
+              <div className="flex gap-2">
+                <input
+                  value={resetPwd}
+                  onChange={(e) => setResetPwd(e.target.value)}
+                  className="flex-1 h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 font-mono focus:outline-none focus:border-brand"
+                  minLength={6}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={copyPwd}
+                  title="Copiar"
+                  className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-gray-400 hover:text-brand"
+                >
+                  {resetCopied ? <CheckCircle2 size={14} className="text-green-400" /> : <Copy size={14} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResetPwd(genPassword())}
+                  className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-xs text-gray-400 hover:text-brand"
+                >
+                  Gerar
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">Mínimo 6 caracteres. Copie e envie ao usuário por canal seguro.</p>
+            </div>
+
+            {resetMut.isError && (
+              <p className="text-sm text-red-400">{resetMut.error?.message || 'Erro ao redefinir'}</p>
+            )}
+            {resetMut.isSuccess && (
+              <p className="text-sm text-green-400 bg-green-900/20 px-3 py-2 rounded-lg">
+                Senha atualizada. Envie a nova senha ao usuário.
+              </p>
+            )}
+
+            <Button type="submit" className="w-full" disabled={resetMut.isPending}>
+              {resetMut.isPending ? 'Atualizando…' : 'Confirmar Nova Senha'}
             </Button>
           </form>
         )}

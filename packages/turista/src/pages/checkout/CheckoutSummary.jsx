@@ -27,8 +27,8 @@ function gi(str = '') {
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
 
 /* ── Date picker ────────────────────────────────────────────── */
-function DatePickerSheet({ value, onChange, onClose }) {
-  const today = startOfDay(new Date())
+function DatePickerSheet({ value, onChange, onClose, minDate: minDateProp }) {
+  const today = minDateProp || startOfDay(new Date())
   const [view, setView] = useState(startOfMonth(value))
   const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
   const offset = getDay(startOfMonth(view))
@@ -130,18 +130,40 @@ export default function CheckoutSummary() {
   const isTransfer     = ls?.service_type === 'transfer'
   const hasVehicles    = isPrivateTour || isTransfer
 
+  // ── Cutoff: passeios têm horário limite de solicitação ──
+  const cutoffMins = (() => {
+    if (!ls?.booking_cutoff_time) return null
+    const p = ls.booking_cutoff_time.split(':')
+    return parseInt(p[0]) * 60 + parseInt(p[1])
+  })()
+  const nowMins       = new Date().getHours() * 60 + new Date().getMinutes()
+  const isAfterCutoff = cutoffMins !== null && nowMins >= cutoffMins
+  const minDate       = isAfterCutoff ? addDays(startOfDay(new Date()), 1) : startOfDay(new Date())
+  const cutoffLabel   = ls?.booking_cutoff_time
+    ? `${ls.booking_cutoff_time.slice(0, 2)}h${ls.booking_cutoff_time.slice(3, 5)}`
+    : null
+
   /* ── All hooks unconditionally ──────────────────────────── */
   const [editing,       setEditing]  = useState(ls?.open_editing === true)
   const [showDatePicker, setShowDP]  = useState(false)
   const [people,   setPeople]        = useState(ls?.people_count || 2)
-  const [date,     setDate]          = useState(() =>
-    ls?.service_date_iso
-      ? new Date(ls.service_date_iso + 'T12:00:00')
-      : startOfDay(new Date())
-  )
-  const [time,     setTime]          = useState(
-    ls?.service_time && ls.service_time !== 'A confirmar' ? ls.service_time : ''
-  )
+  const [date,     setDate]          = useState(() => {
+    if (ls?.service_date_iso) {
+      const d = new Date(ls.service_date_iso + 'T12:00:00')
+      return isBefore(d, minDate) ? minDate : d
+    }
+    return minDate
+  })
+  const [time,     setTime]          = useState(() => {
+    if (ls?.service_time && ls.service_time !== 'A confirmar') return ls.service_time
+    // Padrão: 30 min a partir de agora, arredondado para próximo intervalo de 30min
+    const now = new Date()
+    const totalMins = now.getHours() * 60 + now.getMinutes() + 30
+    const rounded   = Math.ceil(totalMins / 30) * 30
+    const h = Math.floor(rounded / 60) % 24
+    const m = rounded % 60
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+  })
   const [cart,     setCart]          = useState(() => {
     const c = {}
     for (const v of ls?.vehicles || []) {
@@ -203,8 +225,9 @@ export default function CheckoutSummary() {
     return ls.total_price
   })()
 
-  const capacityOk = !hasVehicles || (cartHasItems && cartCapacity >= people)
-  const canSave    = capacityOk
+  const capacityOk  = !hasVehicles || (cartHasItems && cartCapacity >= people)
+  const canSave     = capacityOk
+  const canProceed  = hasPricing && !!time
 
   const dateLabel = isToday(date) ? 'Hoje'
     : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
@@ -263,6 +286,19 @@ export default function CheckoutSummary() {
 
       <main className="px-4 pt-4 pb-36 space-y-3">
 
+        {/* Cutoff banner */}
+        {isAfterCutoff && cutoffLabel && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
+            <Clock size={15} className="text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[13px] font-bold text-amber-800">Reservas para hoje encerradas</p>
+              <p className="text-[12px] text-amber-700 mt-0.5 leading-relaxed">
+                Este passeio só aceita solicitações até {cutoffLabel}. A data mínima disponível é amanhã.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Service Hero */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
           <div className="h-[120px] relative">
@@ -302,18 +338,108 @@ export default function CheckoutSummary() {
                 <Pen size={12} /> Editar
               </button>
             </div>
-            <div className="space-y-3">
-              {details.map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
+            <div className="space-y-2">
+
+              {/* Origin */}
+              {ls.origin_text && (
+                <div className="flex items-start gap-3 py-1">
                   <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
-                    <item.icon size={15} className="text-brand" />
+                    <MapPin size={15} className="text-brand" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-gray-400">{item.label}</p>
-                    <p className="text-[13px] font-semibold text-gray-900">{item.value}</p>
+                    <p className="text-[11px] text-gray-400">Saída</p>
+                    <p className="text-[13px] font-semibold text-gray-900">{ls.origin_text}</p>
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Destination */}
+              {ls.destination_text && (
+                <div className="flex items-start gap-3 py-1">
+                  <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
+                    <MapPin size={15} className="text-brand" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400">Destino</p>
+                    <p className="text-[13px] font-semibold text-gray-900">{ls.destination_text}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Date — tappable inline */}
+              <button
+                onClick={() => setShowDP(true)}
+                className="w-full flex items-center gap-3 py-1 active:bg-gray-50 rounded-xl transition-colors text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
+                  <Calendar size={15} className="text-brand" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-gray-400">Data</p>
+                  <p className="text-[13px] font-semibold text-gray-900">{dateLabel}</p>
+                </div>
+                <ChevronRight size={14} className="text-gray-300 shrink-0" />
+              </button>
+
+              {/* Time — tappable inline, required */}
+              <div className="relative">
+                <button
+                  onClick={() => timeRef.current?.showPicker?.() || timeRef.current?.focus()}
+                  className={`w-full flex items-center gap-3 py-1 active:bg-gray-50 rounded-xl transition-colors text-left ${!time ? 'bg-amber-50 rounded-xl' : ''}`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${!time ? 'bg-amber-100' : 'bg-orange-50'}`}>
+                    <Clock size={15} className={!time ? 'text-amber-500' : 'text-brand'} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400">
+                      Horário <span className="text-amber-500 font-bold">*</span>
+                    </p>
+                    <p className={`text-[13px] font-semibold ${time ? 'text-gray-900' : 'text-amber-500'}`}>
+                      {time || 'Selecionar horário'}
+                    </p>
+                  </div>
+                  <ChevronRight size={14} className="text-gray-300 shrink-0" />
+                </button>
+                <input
+                  ref={timeRef}
+                  type="time"
+                  value={time}
+                  onChange={e => setTime(e.target.value)}
+                  className="absolute inset-0 opacity-0 w-full cursor-pointer"
+                />
+              </div>
+
+              {/* People */}
+              <div className="flex items-start gap-3 py-1">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
+                  <Users size={15} className="text-brand" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-gray-400">Pessoas</p>
+                  <p className="text-[13px] font-semibold text-gray-900">{people} {people === 1 ? 'pessoa' : 'pessoas'}</p>
+                </div>
+              </div>
+
+              {/* Vehicle */}
+              {hasVehicles && vehicleLabel && (
+                <div className="flex items-start gap-3 py-1">
+                  <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
+                    <Car size={15} className="text-brand" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400">Veículo</p>
+                    <p className="text-[13px] font-semibold text-gray-900">{vehicleLabel}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Required hint */}
+              {!time && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-1">
+                  <AlertCircle size={12} className="text-amber-500 shrink-0" />
+                  <p className="text-[11px] text-amber-700 font-medium">Selecione o horário para continuar</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -335,26 +461,30 @@ export default function CheckoutSummary() {
               </button>
             </div>
 
-            {/* Time — transfers only */}
-            {isTransfer && (
-              <div>
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Horário</p>
+            {/* Time — todos os tipos */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Horário <span className="text-amber-500">*</span>
+              </p>
+              <div className="relative">
                 <button
                   onClick={() => timeRef.current?.showPicker?.() || timeRef.current?.focus()}
-                  className="w-full flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 active:scale-[0.98] transition-transform relative"
+                  className="w-full flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 active:scale-[0.98] transition-transform"
                 >
                   <Clock size={15} className="text-brand shrink-0" />
-                  <span className="text-[14px] font-semibold text-gray-800">{time || 'Selecionar'}</span>
-                  <input
-                    ref={timeRef}
-                    type="time"
-                    value={time}
-                    onChange={e => setTime(e.target.value)}
-                    className="absolute inset-0 opacity-0 w-full cursor-pointer"
-                  />
+                  <span className={`text-[14px] font-semibold ${time ? 'text-gray-800' : 'text-amber-500'}`}>
+                    {time || 'Selecionar horário'}
+                  </span>
                 </button>
+                <input
+                  ref={timeRef}
+                  type="time"
+                  value={time}
+                  onChange={e => setTime(e.target.value)}
+                  className="absolute inset-0 opacity-0 w-full cursor-pointer"
+                />
               </div>
-            )}
+            </div>
 
             {/* People */}
             <div>
@@ -527,15 +657,15 @@ export default function CheckoutSummary() {
                 Editar
               </button>
               <button
-                onClick={hasPricing ? () => navigate('/checkout/pagamento', { state: paymentState }) : undefined}
-                disabled={!hasPricing}
+                onClick={canProceed ? () => navigate('/checkout/pagamento', { state: paymentState }) : undefined}
+                disabled={!canProceed}
                 className={`flex-1 py-3 rounded-xl font-bold text-[14px] transition-all ${
-                  hasPricing
+                  canProceed
                     ? 'bg-brand text-white shadow-md active:bg-orange-700 active:scale-[0.97]'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {hasPricing ? 'Ir para pagamento' : 'Sem preço configurado'}
+                {!hasPricing ? 'Sem preço configurado' : !time ? 'Selecione o horário' : 'Ir para pagamento'}
               </button>
             </>
           )}
@@ -543,7 +673,7 @@ export default function CheckoutSummary() {
       </div>
 
       {showDatePicker && (
-        <DatePickerSheet value={date} onChange={setDate} onClose={() => setShowDP(false)} />
+        <DatePickerSheet value={date} onChange={setDate} onClose={() => setShowDP(false)} minDate={minDate} />
       )}
     </div>
   )

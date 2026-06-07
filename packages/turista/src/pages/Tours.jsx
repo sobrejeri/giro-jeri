@@ -233,7 +233,7 @@ export default function Tours() {
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
-  const [mode, setMode] = useState('private')
+  const [mode, setMode] = useState(locationState?.mode || 'private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
   const [people, setPeople] = useState(2)
   const [date, setDate] = useState(startOfDay(new Date()))
@@ -628,10 +628,11 @@ export default function Tours() {
                           vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
                           total_price:      cartTotal,
                           breakdown:        { 'Veículos selecionados': cartTotal },
-                          cover_image_url:  selectedTour.cover_image_url || null,
-                          region_id:        selectedTour.regions?.id,
-                          service_id:       selectedTour.id,
-                          vehicles:         cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
+                          cover_image_url:       selectedTour.cover_image_url || null,
+                          region_id:             selectedTour.regions?.id,
+                          service_id:            selectedTour.id,
+                          vehicles:              cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
+                          booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
                         },
                       })
                     : undefined}
@@ -683,10 +684,11 @@ export default function Tours() {
                     origin_text:      'Centro de Jericoacoara',
                     total_price:      sharedTotal,
                     breakdown:        { [`${people}x por pessoa`]: sharedTotal },
-                    cover_image_url:  selectedTour.cover_image_url || null,
-                    region_id:        selectedTour.regions?.id,
-                    service_id:       selectedTour.id,
-                    vehicles:         [],
+                    cover_image_url:       selectedTour.cover_image_url || null,
+                    region_id:             selectedTour.regions?.id,
+                    service_id:            selectedTour.id,
+                    vehicles:              [],
+                    booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
                   },
                 })}
                 className="bg-brand text-white font-bold rounded-xl px-5 py-2.5 text-[13px] active:scale-95 transition-transform shrink-0"

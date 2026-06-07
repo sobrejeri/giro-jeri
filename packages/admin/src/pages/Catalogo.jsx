@@ -23,10 +23,12 @@ const TOUR_EMPTY = {
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
+  booking_cutoff_time: '',
 }
 const TRANSFER_EMPTY = {
   name: '', description: '', pricing_mode: 'fixed_route', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
+  booking_cutoff_time: '',
 }
 const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true }
 const VEHICLE_EMPTY = {
@@ -464,6 +466,22 @@ export default function Catalogo() {
               }}
               onChange={(next) => setForm({ ...form, ...next })}
             />
+            {/* Horário limite */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                Horário limite de solicitação
+              </label>
+              <input
+                type="time"
+                value={form.booking_cutoff_time || ''}
+                onChange={(e) => setForm({ ...form, booking_cutoff_time: e.target.value || null })}
+                className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Após este horário, só aceita reservas a partir do dia seguinte. Deixe em branco para não restringir.
+              </p>
+            </div>
+
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -542,6 +560,22 @@ export default function Catalogo() {
               }}
               onChange={(next) => setForm({ ...form, ...next })}
             />
+
+            {/* Horário limite de solicitação */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                Horário limite de solicitação
+              </label>
+              <input
+                type="time"
+                value={form.booking_cutoff_time || ''}
+                onChange={(e) => setForm({ ...form, booking_cutoff_time: e.target.value || null })}
+                className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Após este horário, o sistema só aceita reservas a partir do dia seguinte. Deixe em branco para não restringir.
+              </p>
+            </div>
 
             <label className="flex items-center gap-2 cursor-pointer">
               <input

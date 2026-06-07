@@ -22,10 +22,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
       origin_text, destination_text,
       total_price, payment_method = 'pix',
       service_name, cover_image_url,
-      coupon_code,
+      coupon_code, existing_booking_id,
     } = req.body
 
-    if (!service_id || !service_date_iso || !total_price) {
+    if (!existing_booking_id && (!service_id || !service_date_iso || !total_price)) {
       return res.status(400).json({ error: 'Dados incompletos para criar reserva' })
     }
 
@@ -33,43 +33,64 @@ router.post('/intent', authenticate, async (req, res, next) => {
     const cfg     = await getPaymentSettings()
     const gateway = cfg.payment_gateway || 'manual'
 
-    // ── 2. Gera código da reserva ──────────────────────
-    const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
+    let booking, bookingCode
 
-    // ── 3. Cria a reserva ──────────────────────────────
-    const { data: booking, error: bErr } = await supabase
-      .from('bookings')
-      .insert({
-        booking_code:        bookingCode,
-        user_id:             req.user.id,
-        region_id:           region_id || null,
-        service_type,
-        service_id,
-        booking_mode:        booking_mode || 'private',
-        service_date:        service_date_iso,
-        service_time:        service_time || null,
-        people_count:        Number(people_count) || 1,
-        origin_text:         origin_text || null,
-        destination_text:    destination_text || null,
-        total_amount:        Number(total_price),
-        status_commercial:   'awaiting_payment',
-        status_operational:  'not_started',
-        payment_status:      'pending',
-      })
-      .select()
-      .single()
+    if (existing_booking_id) {
+      // ── Reutiliza reserva existente ────────────────────
+      const { data: existing, error: eErr } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', existing_booking_id)
+        .eq('user_id', req.user.id)
+        .eq('status_commercial', 'awaiting_payment')
+        .single()
 
-    if (bErr) throw bErr
+      if (eErr || !existing) {
+        return res.status(404).json({ error: 'Reserva não encontrada ou já processada' })
+      }
 
-    // ── 4. Insere veículos da reserva ──────────────────
-    if (vehicles.length > 0) {
-      const vRows = vehicles.map((v) => ({
-        booking_id:  booking.id,
-        vehicle_id:  v.vehicle_id,
-        quantity:    v.qty || 1,
-        unit_price:  v.unit_price || 0,
-      }))
-      await supabase.from('booking_vehicles').insert(vRows)
+      booking     = existing
+      bookingCode = existing.booking_code
+    } else {
+      // ── 2. Gera código da reserva ──────────────────────
+      bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
+
+      // ── 3. Cria a reserva ──────────────────────────────
+      const { data: newBooking, error: bErr } = await supabase
+        .from('bookings')
+        .insert({
+          booking_code:        bookingCode,
+          user_id:             req.user.id,
+          region_id:           region_id || null,
+          service_type,
+          service_id,
+          booking_mode:        booking_mode || 'private',
+          service_date:        service_date_iso,
+          service_time:        service_time || null,
+          people_count:        Number(people_count) || 1,
+          origin_text:         origin_text || null,
+          destination_text:    destination_text || null,
+          total_amount:        Number(total_price),
+          status_commercial:   'awaiting_payment',
+          status_operational:  'new',
+          payment_status:      'pending',
+        })
+        .select()
+        .single()
+
+      if (bErr) throw bErr
+      booking = newBooking
+
+      // ── 4. Insere veículos da reserva ──────────────────
+      if (vehicles.length > 0) {
+        const vRows = vehicles.map((v) => ({
+          booking_id:  booking.id,
+          vehicle_id:  v.vehicle_id,
+          quantity:    v.qty || 1,
+          unit_price:  v.unit_price || 0,
+        }))
+        await supabase.from('booking_vehicles').insert(vRows)
+      }
     }
 
     // ── 5. Processa pagamento conforme gateway ─────────
@@ -234,6 +255,37 @@ router.post('/webhook', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── POST /api/payments/:id/simulate ───────────────────
+// Confirma pagamento automaticamente (somente gateway manual/sem chave PIX)
+router.post('/:id/simulate', authenticate, async (req, res, next) => {
+  try {
+    const { data: payment } = await supabase
+      .from('payments')
+      .select('*, bookings(user_id, booking_code, status_commercial)')
+      .eq('id', req.params.id)
+      .single()
+
+    if (!payment) return res.status(404).json({ error: 'Pagamento não encontrado' })
+
+    // Só funciona quando gateway é manual (sem integração real)
+    if (payment.gateway_name !== 'manual') {
+      return res.status(403).json({ error: 'Simulação disponível apenas no modo manual' })
+    }
+
+    // O pagamento deve pertencer ao usuário logado
+    if (payment.bookings?.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Acesso negado' })
+    }
+
+    if (payment.status === 'approved') {
+      return res.json({ ok: true, already: true })
+    }
+
+    await onPaymentApproved(payment)
+    res.json({ ok: true, booking_code: payment.bookings?.booking_code })
+  } catch (err) { next(err) }
+})
+
 // ── POST /api/payments/manual-confirm ─────────────────
 // Admin confirma pagamento manualmente (dinheiro/transferência)
 router.post('/manual-confirm', authenticate, async (req, res, next) => {
@@ -275,6 +327,15 @@ async function onPaymentApproved(payment) {
   }).eq('id', payment.booking_id)
 
   const booking = payment.bookings || (await supabase.from('bookings').select('*').eq('id', payment.booking_id).single()).data
+
+  // If this booking came from a custom transfer quote, mark the quote as paid
+  if (booking?.service_type === 'transfer' && booking?.service_id) {
+    await supabase.from('transfer_quotes')
+      .update({ status: 'paid' })
+      .eq('id', booking.service_id)
+      .eq('status', 'accepted')
+      .catch(() => {}) // no-op if service_id is a route id (not a quote)
+  }
 
   const gatewayFee    = Math.round(payment.amount_gross * 0.035 * 100) / 100
   const platformFee   = Math.round(payment.amount_gross * 0.07  * 100) / 100

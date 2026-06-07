@@ -1,40 +1,47 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+
+function formatCNPJ(v) {
+  const d = v.replace(/\D/g, '').slice(0, 14)
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+}
 
 export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const [form, setForm]       = useState({ email: '', password: '' })
+  const [form, setForm]       = useState({ cnpj: '', password: '' })
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
+
+  function handleCNPJ(e) {
+    setForm({ ...form, cnpj: formatCNPJ(e.target.value) })
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email:    form.email,
-        password: form.password,
-      })
-      if (authError) throw new Error('Credenciais inválidas')
+      const data = await api.login({ cnpj: form.cnpj, password: form.password })
+      if (!data) throw new Error('Credenciais inválidas')
 
-      const { data: profile, error: profileError } = await supabase
-        .from('users')
-        .select('id, full_name, email, phone, user_type, preferred_region_id, profile_photo_url')
-        .eq('auth_id', data.user.id)
-        .single()
-
-      if (profileError || !profile) throw new Error('Perfil não encontrado. Contate o administrador.')
-      if (!['operator', 'admin'].includes(profile.user_type)) {
-        throw new Error('Acesso restrito a operadores e administradores.')
+      const user = data.user
+      if (!user) {
+        throw new Error('Perfil não encontrado. Contate o administrador.')
+      }
+      if (!['operator', 'admin'].includes(user.user_type)) {
+        throw new Error(`Acesso restrito a operadores. (tipo atual: ${user.user_type})`)
       }
 
-      login(profile, data.session.access_token, data.session.refresh_token)
+      login(user, data.token, data.refresh_token)
       navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err.message || 'Erro ao entrar')
@@ -54,11 +61,11 @@ export default function Login() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="E-mail"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="operador@girojeri.com"
+              label="CNPJ"
+              value={form.cnpj}
+              onChange={handleCNPJ}
+              placeholder="00.000.000/0001-00"
+              inputMode="numeric"
               required
               autoFocus
             />
@@ -76,6 +83,24 @@ export default function Login() {
               {loading ? 'Entrando…' : 'Entrar'}
             </Button>
           </form>
+          <p className="mt-5 text-center text-xs text-gray-400">
+            Acesso com CNPJ cadastrado pelo administrador da plataforma.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              const phone = import.meta.env.VITE_ADMIN_WHATSAPP || '5588999999999'
+              const cnpj  = form.cnpj || '____________'
+              const msg = encodeURIComponent(
+                `Olá! Preciso redefinir a senha da minha cooperativa.\n\nCNPJ: ${cnpj}`
+              )
+              window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
+            }}
+            className="block mx-auto mt-2 text-xs text-brand hover:underline"
+          >
+            Esqueci minha senha → falar com o administrador
+          </button>
         </div>
       </div>
     </div>

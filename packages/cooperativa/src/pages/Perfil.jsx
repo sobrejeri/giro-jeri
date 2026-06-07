@@ -31,6 +31,8 @@ const EMPTY = {
   document_type:       'cpf',
   document_number:     '',
   birth_date:          '',
+  address:             '',
+  cep:                 '',
   pix_key_type:        '',
   pix_key:             '',
   bank_name:           '',
@@ -61,6 +63,8 @@ export default function Perfil() {
       document_type:       profile.document_type       || 'cpf',
       document_number:     profile.document_number     || '',
       birth_date:          profile.birth_date          || '',
+      address:             profile.address             || '',
+      cep:                 profile.cep                 || '',
       pix_key_type:        profile.pix_key_type        || '',
       pix_key:             profile.pix_key             || '',
       bank_name:           profile.bank_name           || '',
@@ -119,6 +123,8 @@ export default function Perfil() {
       document_type:       form.document_number ? form.document_type : null,
       document_number:     form.document_number     || null,
       birth_date:          form.birth_date          || null,
+      address:             form.address             || null,
+      cep:                 form.cep                 || null,
       pix_key_type:        form.pix_key_type        || null,
       pix_key:             form.pix_key             || null,
       bank_name:           form.bank_name           || null,
@@ -232,6 +238,25 @@ export default function Perfil() {
                   maxLength={docMeta.maxLength}
                 />
               </div>
+            </div>
+
+            {/* Endereço */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <Input
+                  label="Endereço (rua, número, bairro)"
+                  placeholder="Ex: Av. Principal S/N, Centro"
+                  value={form.address}
+                  onChange={(e) => set('address', e.target.value)}
+                />
+              </div>
+              <Input
+                label="CEP"
+                placeholder="00000-000"
+                value={form.cep}
+                onChange={(e) => set('cep', e.target.value)}
+                maxLength={9}
+              />
             </div>
 
           </div>

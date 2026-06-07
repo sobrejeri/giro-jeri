@@ -99,10 +99,11 @@ export default function TourDetail() {
         people_count: Number(people),
         vehicles:     vehicleList,
         // dados de exibição
-        service_name:  tour?.name || 'Passeio',
-        vehicle_name:  selectedVehicle?.name || null,
-        total_price:   calcResult?.total_price,
-        breakdown:     calcResult?.breakdown || null,
+        service_name:        tour?.name || 'Passeio',
+        vehicle_name:        selectedVehicle?.name || null,
+        total_price:         calcResult?.total_price,
+        breakdown:           calcResult?.breakdown || null,
+        booking_cutoff_time: tour?.booking_cutoff_time || null,
       },
     })
   }
