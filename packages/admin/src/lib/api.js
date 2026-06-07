@@ -9,14 +9,13 @@ const STORAGE = {
 }
 
 function getToken()   { return localStorage.getItem(STORAGE.token)   }
-function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
 
 async function tryRefresh() {
-  const refreshToken = getRefresh()
-  if (!refreshToken) return false
-
   try {
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken })
+    // Fonte única de verdade: a sessão gerenciada pelo próprio client do Supabase.
+    // Passar o refresh token guardado à mão dessincronizava com a rotação
+    // automática do client (autoRefreshToken) e derrubava o login ("desconectando").
+    const { data, error } = await supabase.auth.refreshSession()
     if (error || !data.session) return false
 
     localStorage.setItem(STORAGE.token,   data.session.access_token)
