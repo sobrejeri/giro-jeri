@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import OriginPicker from '../components/OriginPicker'
+import ToursDesktop from './ToursDesktop'
 import {
   MapPin, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
@@ -332,7 +333,8 @@ export default function Tours() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <>
+    <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
 
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
@@ -731,5 +733,10 @@ export default function Tours() {
         userCoords={userCoords}
       />
     </div>
+
+    <div className="hidden lg:block">
+      <ToursDesktop />
+    </div>
+    </>
   )
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -26,12 +26,13 @@ function fmt(value) {
 export default function TourDetail() {
   const { id }    = useParams()
   const navigate  = useNavigate()
+  const location  = useLocation()
   const { token } = useAuth()
 
   const [mode,      setMode]      = useState('shared')  // 'shared' | 'private'
-  const [people,    setPeople]    = useState(2)
+  const [people,    setPeople]    = useState(location.state?.people || 2)
   const [vehicleId, setVehicleId] = useState('')
-  const [date,      setDate]      = useState('')
+  const [date,      setDate]      = useState(location.state?.date || '')
   const [time,      setTime]      = useState('')
   const [calcResult,  setCalcResult]  = useState(null)
   const [calcLoading, setCalcLoading] = useState(false)
