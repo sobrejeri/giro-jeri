@@ -8,6 +8,7 @@ import {
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
+import HomeDesktop from './HomeDesktop'
 
 function suggestVehicle(vehicles, people) {
   if (!vehicles.length) return null
@@ -172,7 +173,8 @@ export default function Home() {
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <>
+    <div className="lg:hidden min-h-screen bg-gray-50 pb-24">
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-6 lg:rounded-2xl lg:px-6">
@@ -339,5 +341,10 @@ export default function Home() {
 
       </div>
     </div>
+
+    <div className="hidden lg:block">
+      <HomeDesktop tours={tours} featured={featured} isLoading={isLoading} favs={favs} toggleFav={toggleFav} />
+    </div>
+    </>
   )
 }
