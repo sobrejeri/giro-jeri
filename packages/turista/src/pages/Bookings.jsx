@@ -458,7 +458,7 @@ export default function Bookings() {
   return (
     <div className="min-h-full bg-gray-50 pb-24">
       {/* Header */}
-      <header className="bg-white px-4 pt-5 pb-0 sticky top-0 z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
+      <header className="bg-white px-4 pt-5 pb-0 sticky top-0 md:top-14 z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)] md:max-w-2xl md:mx-auto">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-[20px] font-extrabold text-gray-900">{t('bookings.title')}</h1>

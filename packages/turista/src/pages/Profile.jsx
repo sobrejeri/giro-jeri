@@ -150,7 +150,7 @@ export default function Profile() {
   return (
     <div className="min-h-full bg-[#F8F8F8] pb-24">
 
-      <header className="bg-white px-4 pt-6 pb-4 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <header className="bg-white px-4 pt-6 pb-4 sticky top-0 md:top-14 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] md:max-w-lg md:mx-auto">
         <h1 className="text-xl font-bold text-gray-900">{t('profile.title')}</h1>
       </header>
 

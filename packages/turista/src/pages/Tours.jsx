@@ -335,7 +335,7 @@ export default function Tours() {
     <div className="min-h-screen bg-gray-50 pb-28">
 
       {/* ── Header ──────────────────────────────────────────── */}
-      <div className="bg-white px-4 pt-5 pb-3 shadow-sm">
+      <div className="bg-white px-4 pt-5 pb-3 shadow-sm md:max-w-4xl md:mx-auto md:mt-4 md:rounded-2xl">
         <div className="flex items-start justify-between">
           <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
         </div>
