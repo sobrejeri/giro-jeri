@@ -181,14 +181,12 @@ function BookingCard({ booking, onCancel, onDetail, onPay }) {
                 Pagar agora
               </button>
             )}
-            {status === 'completed' && (
-              <button className="flex items-center gap-1 border border-yellow-200 bg-yellow-50 text-yellow-700 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform">
-                <Star size={11} /> Avaliar
-              </button>
-            )}
-            {status === 'cancelled' && (
-              <button className="flex items-center gap-1 border border-orange-200 bg-orange-50 text-brand text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform">
-                <RefreshCw size={11} /> Reagendar
+            {['waiting_payment', 'waiting_acceptance', 'confirmed'].includes(status) && (
+              <button
+                onClick={() => onCancel?.(booking)}
+                className="flex items-center gap-1 border border-red-200 bg-red-50 text-red-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform"
+              >
+                <X size={11} /> Cancelar
               </button>
             )}
             <button

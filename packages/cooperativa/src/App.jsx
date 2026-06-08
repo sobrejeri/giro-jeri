@@ -32,7 +32,6 @@ export default function App() {
         <Route path="passeios"   element={<Passeios />} />
         <Route path="rotas"      element={<Rotas />} />
         <Route path="perfil"     element={<Perfil />} />
-        <Route path="reservas"   element={<Reservas />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

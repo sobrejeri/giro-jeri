@@ -492,7 +492,7 @@ export default function Transfers() {
         total_price:         cartTotal,
         transfer_unit_price: unitPrice,
         breakdown:           { 'Veículos': cartTotal },
-        region_id:           matched?.transfer_id,
+        region_id:           region?.id || null,
         service_id:          matched?.id,
         vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
         booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,

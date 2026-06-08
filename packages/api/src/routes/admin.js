@@ -326,7 +326,8 @@ router.get('/operational', requireOperator, async (req, res, next) => {
         pickup_place_name, destination_place_name, special_notes,
         origin_text, destination_text,
         users!bookings_user_id_fkey ( full_name, phone ),
-        booking_vehicles ( vehicle_name_snapshot, quantity )
+        booking_vehicles ( vehicle_name_snapshot, quantity ),
+        operational_assignments ( real_vehicle_text, dispatch_notes, assigned_driver_user_id, assigned_guide_user_id )
       `)
       .neq('status_commercial', 'draft')
       .neq('status_commercial', 'cancelled')

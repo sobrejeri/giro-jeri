@@ -53,7 +53,7 @@ export default function Veiculos() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-base font-semibold text-gray-200">Minha Frota</h2>
+        <h2 className="text-base font-semibold text-gray-900">Minha Frota</h2>
         <p className="text-xs text-gray-500 mt-0.5">
           Selecione os veículos com que sua cooperativa trabalha.
           Apenas administradores podem cadastrar ou editar veículos.
@@ -63,11 +63,11 @@ export default function Veiculos() {
       {/* Ativos */}
       <Card>
         <CardHeader>
-          <p className="text-sm font-semibold text-gray-300">
+          <p className="text-sm font-semibold text-gray-700">
             Trabalhando ({active.length})
           </p>
         </CardHeader>
-        <div className="divide-y divide-gray-800">
+        <div className="divide-y divide-gray-100">
           {active.map((v) => (
             <VehicleRow
               key={v.id}
@@ -93,7 +93,7 @@ export default function Veiculos() {
               Não trabalho com ({inactive.length})
             </p>
           </CardHeader>
-          <div className="divide-y divide-gray-800">
+          <div className="divide-y divide-gray-100">
             {inactive.map((v) => (
               <VehicleRow
                 key={v.id}
@@ -125,13 +125,13 @@ export default function Veiculos() {
 function VehicleRow({ vehicle: v, enabled, onToggle, pending }) {
   return (
     <div className={`flex items-center gap-3 px-5 py-3 transition-opacity ${enabled ? '' : 'opacity-50'}`}>
-      <div className="w-10 h-10 rounded-xl bg-gray-700 flex items-center justify-center overflow-hidden shrink-0">
+      <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
         {v.image_url
           ? <img src={v.image_url} alt={v.name} className="w-full h-full object-cover" />
           : <Car size={18} className="text-gray-500" />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-200">{v.name}</p>
+        <p className="text-sm font-medium text-gray-900">{v.name}</p>
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <span>{TYPE_LABEL[v.vehicle_type] || v.vehicle_type}</span>
           <span>·</span>

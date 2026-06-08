@@ -9,14 +9,12 @@ import Badge from '../components/ui/Badge'
 import Input from '../components/ui/Input'
 
 const STATUS_LABELS = {
-  draft:             'Rascunho',
-  pending_payment:   'Ag. pagamento',
-  paid:              'Pago',
-  awaiting_dispatch: 'Ag. despacho',
-  confirmed:         'Confirmado',
-  completed:         'Concluído',
-  cancelled:         'Cancelado',
-  refunded:          'Reembolsado',
+  draft:            'Rascunho',
+  awaiting_payment: 'Ag. pagamento',
+  paid:             'Pago',
+  payment_failed:   'Pgto. falhou',
+  cancelled:        'Cancelado',
+  refunded:         'Reembolsado',
 }
 
 const fmt = (v) =>

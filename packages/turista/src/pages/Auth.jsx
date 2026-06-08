@@ -51,6 +51,7 @@ export default function Auth({ defaultTab = 'login' }) {
 
   /* ── Login form ──────────────────────────────────────── */
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
+  const [forgotEmail, setForgotEmail] = useState('')
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -62,6 +63,25 @@ export default function Auth({ defaultTab = 'login' }) {
       navigate(from, { replace: true })
     } catch (err) {
       setError(err.message || t('auth.invalidCredentials'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /* ── Esqueci minha senha ─────────────────────────────── */
+  async function handleForgot(e) {
+    e.preventDefault()
+    setError(''); setSuccess('')
+    setLoading(true)
+    try {
+      await api.forgotPassword({
+        email:        forgotEmail,
+        redirect_url: window.location.origin + (import.meta.env.BASE_URL || '/'),
+      })
+      setSuccess('Se este e-mail estiver cadastrado, enviamos um link para redefinir a senha.')
+      setTab('login')
+    } catch (err) {
+      setError(err.message || 'Não foi possível enviar o e-mail. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -173,10 +193,42 @@ export default function Auth({ defaultTab = 'login' }) {
             >
               {loading ? t('auth.loginLoading') : t('auth.loginBtn')}
             </button>
+            <p className="text-center pt-1">
+              <button type="button" onClick={() => { setTab('forgot'); setError(''); setSuccess('') }} className="text-[12px] text-gray-400 hover:text-brand font-medium">
+                Esqueci minha senha
+              </button>
+            </p>
             <p className="text-center text-[12px] text-gray-400 pt-1">
               {t('auth.noAccount')}{' '}
               <button type="button" onClick={() => { setTab('register'); setError('') }} className="text-brand font-semibold">
                 {t('auth.signupFree')}
+              </button>
+            </p>
+          </form>
+        ) : tab === 'forgot' ? (
+          <form onSubmit={handleForgot} className="space-y-4">
+            <p className="text-[13px] text-gray-500 leading-relaxed">
+              Digite o e-mail da sua conta e enviaremos um link para você redefinir a senha.
+            </p>
+            <TextField
+              label="E-mail"
+              type="email"
+              value={forgotEmail}
+              onChange={(e) => { setError(''); setForgotEmail(e.target.value) }}
+              placeholder="seu@email.com"
+              required
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 bg-brand text-white rounded-xl font-bold text-[15px] active:scale-[0.98] transition-transform disabled:opacity-60 shadow-sm shadow-brand/30 mt-2"
+            >
+              {loading ? 'Enviando…' : 'Enviar link de redefinição'}
+            </button>
+            <p className="text-center text-[12px] text-gray-400 pt-1">
+              <button type="button" onClick={() => { setTab('login'); setError(''); setSuccess('') }} className="text-brand font-semibold">
+                Voltar para o login
               </button>
             </p>
           </form>
