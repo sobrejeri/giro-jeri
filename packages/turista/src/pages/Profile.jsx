@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { setLang, LANGS } from '../i18n/index.js'
+import ProfileDesktop from './ProfileDesktop'
 import {
   User, Mail, LogOut, ChevronRight, CalendarCheck,
   Camera, Pencil, Check, X,
@@ -148,7 +149,8 @@ export default function Profile() {
   const genderLabel = GENDERS.find((g) => g.value === user?.gender)?.label
 
   return (
-    <div className="min-h-full bg-[#F8F8F8] pb-24">
+    <>
+    <div className="lg:hidden min-h-full bg-[#F8F8F8] pb-24">
 
       <header className="bg-white px-4 pt-6 pb-4 sticky top-0 lg:top-14 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
         <h1 className="text-xl font-bold text-gray-900">{t('profile.title')}</h1>
@@ -359,5 +361,10 @@ export default function Profile() {
         <p className="text-center text-[11px] text-gray-300 pb-2">{t('profile.version')}</p>
       </main>
     </div>
+
+    <div className="hidden lg:block">
+      <ProfileDesktop />
+    </div>
+    </>
   )
 }

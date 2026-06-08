@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { api }         from '../lib/api'
+import TransfersDesktop from './TransfersDesktop'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2,
@@ -108,7 +109,7 @@ function PlaceInput({ value, onChange, placeholder, dotClass }) {
 }
 
 /* ── Preset routes ──────────────────────────────────────────── */
-const PRESET_ROUTES = [
+export const PRESET_ROUTES = [
   {
     id: 'aero-jeri',
     label: 'Aeroporto → Jeri',
@@ -501,7 +502,8 @@ export default function Transfers() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <>
+    <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
       {/* Header */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
         <h1 className="text-[20px] font-extrabold text-gray-900">Transfer</h1>
@@ -930,5 +932,10 @@ export default function Transfers() {
         </div>
       )}
     </div>
+
+    <div className="hidden lg:block">
+      <TransfersDesktop />
+    </div>
+    </>
   )
 }
