@@ -20,7 +20,7 @@ export default function TopNav() {
 
   return (
     <header className="hidden lg:block sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100">
-      <div className="max-w-5xl mx-auto h-14 flex items-center px-6">
+      <div className="max-w-6xl mx-auto h-14 flex items-center px-6">
         <Link to="/" className="flex items-center gap-2 mr-8 shrink-0">
           <div className="w-7 h-7 bg-brand rounded-lg flex items-center justify-center">
             <MapPin size={13} className="text-white" />

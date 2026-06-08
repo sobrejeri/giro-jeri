@@ -93,9 +93,9 @@ function TourCard({ tour, isFav, onToggleFav }) {
   return (
     <div
       onClick={handleClick}
-      className={`shrink-0 w-[158px] rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 transition-transform cursor-pointer ${loading ? 'opacity-70 scale-[0.96]' : 'active:scale-[0.96]'}`}
+      className={`shrink-0 w-[158px] lg:w-auto rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 transition-transform cursor-pointer ${loading ? 'opacity-70 scale-[0.96]' : 'active:scale-[0.96]'}`}
     >
-      <div className="h-[108px] relative overflow-hidden">
+      <div className="h-[108px] lg:h-44 relative overflow-hidden">
         {tour.cover_image_url ? (
           <img src={tour.cover_image_url} alt={tour.name} className="w-full h-full object-cover" />
         ) : (
@@ -175,7 +175,7 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50 pb-24">
 
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
+      <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-6 lg:rounded-2xl lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center shrink-0">
@@ -210,48 +210,48 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="px-4 pt-4 space-y-4 lg:max-w-3xl lg:mx-auto">
+      <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto lg:space-y-6 lg:pt-6 lg:px-6">
 
         {/* ── Saudação ──────────────────────────────────────────── */}
         <div>
-          <p className="text-[21px] font-extrabold text-gray-900 leading-tight">Olá, explorador! 👋</p>
-          <p className="text-[13px] text-gray-500 mt-1">O que você quer reservar hoje?</p>
+          <p className="text-[21px] lg:text-3xl font-extrabold text-gray-900 leading-tight">Olá, explorador! 👋</p>
+          <p className="text-[13px] lg:text-base text-gray-500 mt-1">O que você quer reservar hoje?</p>
         </div>
 
         {/* ── Cards principais ──────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={() => navigate('/passeios')}
-            className="relative rounded-2xl overflow-hidden h-[110px] active:scale-[0.97] transition-transform"
+            className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
             style={{ background: 'linear-gradient(135deg,#FF6A00,#FF9040)' }}
           >
             <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
             <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
-            <div className="absolute inset-0 flex flex-col justify-between p-3">
+            <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
               <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
                 <Compass size={15} className="text-white" />
               </div>
               <div>
-                <p className="text-white font-bold text-[14px]">Passeios</p>
-                <p className="text-white/70 text-[10px]">Buggy · UTV · Hilux</p>
+                <p className="text-white font-bold text-[14px] lg:text-2xl">Passeios</p>
+                <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Buggy · UTV · Hilux</p>
               </div>
             </div>
           </button>
 
           <button
             onClick={() => navigate('/transfers')}
-            className="relative rounded-2xl overflow-hidden h-[110px] active:scale-[0.97] transition-transform"
+            className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
             style={{ background: 'linear-gradient(135deg,#1A4D5F,#2E7D9A)' }}
           >
             <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
             <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
-            <div className="absolute inset-0 flex flex-col justify-between p-3">
+            <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
               <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
                 <Car size={15} className="text-white" />
               </div>
               <div>
-                <p className="text-white font-bold text-[14px]">Transfers</p>
-                <p className="text-white/70 text-[10px]">Aeroporto · Hotel</p>
+                <p className="text-white font-bold text-[14px] lg:text-2xl">Transfers</p>
+                <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Aeroporto · Hotel</p>
               </div>
             </div>
           </button>
@@ -260,7 +260,7 @@ export default function Home() {
         {/* ── Banner promo ──────────────────────────────────────── */}
         <button
           onClick={() => navigate('/passeios')}
-          className="w-full relative rounded-2xl overflow-hidden h-[78px] active:scale-[0.98] transition-transform"
+          className="w-full relative rounded-2xl overflow-hidden h-[78px] lg:h-32 active:scale-[0.98] transition-transform"
           style={{ background: 'linear-gradient(135deg,#FF6A00,#FFB347)' }}
         >
           <div className="absolute right-4 top-2 w-14 h-14 rounded-full border-[3px] border-white/20" />
@@ -270,7 +270,7 @@ export default function Home() {
             <span className="inline-flex items-center gap-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-full w-fit mb-1">
               ⚡ OFERTA ESPECIAL
             </span>
-            <p className="text-white font-extrabold text-[14px] leading-snug">
+            <p className="text-white font-extrabold text-[14px] lg:text-2xl leading-snug">
               Garanta sua aventura<br />em Jericoacoara!
             </p>
           </div>
@@ -311,7 +311,7 @@ export default function Home() {
           ) : featured.length === 0 ? (
             <p className="text-sm text-gray-400">Nenhum passeio disponível.</p>
           ) : (
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
+            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide lg:grid lg:grid-cols-4 xl:grid-cols-5 lg:gap-4 lg:mx-0 lg:px-0 lg:overflow-visible">
               {featured.map((tour) => (
                 <TourCard key={tour.id} tour={tour} isFav={favs.has(tour.id)} onToggleFav={toggleFav} />
               ))}
@@ -322,7 +322,7 @@ export default function Home() {
         {/* ── Como funciona ─────────────────────────────────────── */}
         <section className="pb-2">
           <p className="text-[15px] font-bold text-gray-900 mb-3">Como funciona?</p>
-          <div className="space-y-3">
+          <div className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0">
             {STEPS.map(({ n, color, title, desc }) => (
               <div key={n} className="flex items-start gap-3">
                 <div className={`w-7 h-7 rounded-full ${color} flex items-center justify-center shrink-0 mt-0.5`}>

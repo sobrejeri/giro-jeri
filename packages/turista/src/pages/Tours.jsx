@@ -335,13 +335,13 @@ export default function Tours() {
     <div className="min-h-screen bg-gray-50 pb-28">
 
       {/* ── Header ──────────────────────────────────────────── */}
-      <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-4xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
+      <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
         <div className="flex items-start justify-between">
           <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
         </div>
       </div>
 
-      <div className="px-4 pt-4 space-y-4 lg:max-w-4xl lg:mx-auto">
+      <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
 
         {/* ── Toggle Privativo / Compartilhado ──────────────── */}
         <div className="flex bg-gray-100 rounded-full p-1 gap-1">
@@ -499,7 +499,7 @@ export default function Tours() {
               <section className="pb-2">
                 <p className="text-[14px] font-bold text-gray-900">Catálogo de veículos</p>
                 <p className="text-[11px] text-brand mt-0.5 mb-3">Monte sua combinação ideal</p>
-                <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-2.5">
+                <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-3 xl:grid-cols-4 lg:gap-2.5">
                   {sortedVehicles.map((v) => (
                     <VehicleCard
                       key={v.id}
