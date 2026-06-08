@@ -175,7 +175,7 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50 pb-24">
 
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="bg-white px-4 pt-5 pb-3 shadow-sm md:max-w-3xl md:mx-auto md:mt-4 md:rounded-2xl">
+      <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center shrink-0">
@@ -210,7 +210,7 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="px-4 pt-4 space-y-4 md:max-w-3xl md:mx-auto">
+      <div className="px-4 pt-4 space-y-4 lg:max-w-3xl lg:mx-auto">
 
         {/* ── Saudação ──────────────────────────────────────────── */}
         <div>
@@ -277,7 +277,7 @@ export default function Home() {
         </button>
 
         {/* ── Acesso rápido 2×2 ─────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
             <button
               key={title}

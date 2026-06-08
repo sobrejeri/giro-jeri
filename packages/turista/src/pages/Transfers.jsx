@@ -503,7 +503,7 @@ export default function Transfers() {
   return (
     <div className="min-h-screen bg-gray-50 pb-28">
       {/* Header */}
-      <div className="bg-white px-4 pt-5 pb-3 shadow-sm md:max-w-3xl md:mx-auto md:mt-4 md:rounded-2xl">
+      <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
         <h1 className="text-[20px] font-extrabold text-gray-900">Transfer</h1>
         <p className="text-[12px] text-gray-400 mt-0.5">Transporte privativo com motorista</p>
 
@@ -532,7 +532,7 @@ export default function Transfers() {
 
       {/* ── CUSTOM RIDE FORM ─────────────────────────────────── */}
       {mode === 'custom' && (
-        <div className="px-4 pt-4 space-y-3 md:max-w-3xl md:mx-auto">
+        <div className="px-4 pt-4 space-y-3 lg:max-w-3xl lg:mx-auto">
           {customSuccess ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
@@ -680,7 +680,7 @@ export default function Transfers() {
 
       {/* ── FIXED ROUTE FORM ─────────────────────────────────── */}
       {mode === 'rota' && (
-      <><div className="px-4 pt-4 space-y-3 md:max-w-3xl md:mx-auto">
+      <><div className="px-4 pt-4 space-y-3 lg:max-w-3xl lg:mx-auto">
 
         {/* ROTAS POPULARES */}
         <div>
