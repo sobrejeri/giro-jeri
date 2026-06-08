@@ -199,7 +199,7 @@ export default function BookingDetail() {
     <div className="min-h-screen bg-[#F8F8F8]">
       {/* Header */}
       <header className="bg-white px-4 pt-4 md:pt-6 pb-4 sticky top-0 md:top-14 z-40 shadow-sm">
-        <div className="flex items-center gap-3 max-w-2xl mx-auto">
+        <div className="flex items-center gap-3 max-w-2xl lg:max-w-3xl mx-auto">
           <button
             onClick={() => navigate(-1)}
             className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
@@ -217,7 +217,7 @@ export default function BookingDetail() {
         </div>
       </header>
 
-      <main className="px-4 pt-4 pb-10 max-w-2xl mx-auto space-y-3">
+      <main className="px-4 pt-4 pb-10 max-w-2xl lg:max-w-3xl mx-auto space-y-3">
 
         {/* Status Banner */}
         <div className={`${meta.bg} rounded-2xl p-4 border ${meta.border}`}>
@@ -386,6 +386,7 @@ export default function BookingDetail() {
           </div>
         )}
 
+        <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
         {/* WhatsApp Support */}
         <button
           onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank')}
@@ -414,6 +415,7 @@ export default function BookingDetail() {
             <p className="text-xs text-gray-400">{PHONE_NUMBER}</p>
           </div>
         </a>
+        </div>
 
         {/* Cancellation Policy */}
         <div className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100">
