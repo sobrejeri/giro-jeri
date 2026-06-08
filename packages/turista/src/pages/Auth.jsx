@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
-import { MapPin, Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { MapPin, Eye, EyeOff, ArrowLeft, CheckCircle2 } from 'lucide-react'
 
 function TextField({ label, type = 'text', value, onChange, placeholder, required, autoFocus, hint }) {
   const [show, setShow] = useState(false)
@@ -123,7 +123,7 @@ export default function Auth({ defaultTab = 'login' }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8] flex flex-col">
+    <div className="min-h-screen bg-[#F8F8F8] flex flex-col lg:flex-row">
 
       <button
         onClick={() => navigate(-1)}
@@ -132,8 +132,29 @@ export default function Auth({ defaultTab = 'login' }) {
         <ArrowLeft size={18} className="text-gray-600" />
       </button>
 
+      {/* ── Desktop: painel da marca ── */}
+      <div className="hidden lg:flex lg:w-[45%] flex-col justify-center gap-6 px-14 text-white relative overflow-hidden bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]">
+        <div className="absolute -top-20 -right-16 w-72 h-72 rounded-full bg-white/10" />
+        <div className="absolute -bottom-24 -left-12 w-80 h-80 rounded-full bg-white/5" />
+        <div className="relative">
+          <div className="w-14 h-14 bg-white/15 backdrop-blur rounded-2xl flex items-center justify-center mb-6">
+            <MapPin size={28} className="text-white" />
+          </div>
+          <h2 className="text-4xl font-extrabold leading-tight">Sua viagem<br />começa aqui.</h2>
+          <p className="text-white/85 text-lg mt-3 max-w-sm">Passeios, transfers e experiências em Jericoacoara — tudo num só lugar.</p>
+          <ul className="mt-8 space-y-3 text-white/90 text-[15px]">
+            <li className="flex items-center gap-3"><CheckCircle2 size={18} className="text-white/80 shrink-0" /> Reserva rápida e segura</li>
+            <li className="flex items-center gap-3"><CheckCircle2 size={18} className="text-white/80 shrink-0" /> Operadores e guias verificados</li>
+            <li className="flex items-center gap-3"><CheckCircle2 size={18} className="text-white/80 shrink-0" /> Suporte no WhatsApp 24h</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* ── Coluna do formulário (mobile: layout original via display:contents) ── */}
+      <div className="contents lg:flex lg:flex-1 lg:flex-col lg:justify-center lg:bg-white lg:overflow-y-auto">
+
       {/* Hero */}
-      <div className="bg-white pt-14 pb-6 px-6 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <div className="lg:hidden bg-white pt-14 pb-6 px-6 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="w-14 h-14 bg-brand rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md">
           <MapPin size={26} className="text-white" />
         </div>
@@ -142,7 +163,7 @@ export default function Auth({ defaultTab = 'login' }) {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white px-6 pt-2 pb-0">
+      <div className="bg-white px-6 pt-2 pb-0 lg:max-w-md lg:mx-auto lg:w-full">
         <div className="flex border-b border-gray-100">
           {(['login', 'register']).map((tabKey) => (
             <button
@@ -159,7 +180,7 @@ export default function Auth({ defaultTab = 'login' }) {
       </div>
 
       {/* Form */}
-      <div className="flex-1 px-6 pt-6 pb-10 max-w-sm mx-auto w-full">
+      <div className="flex-1 lg:flex-none px-6 pt-6 pb-10 max-w-sm mx-auto w-full lg:max-w-md">
         {success && (
           <p className="text-[13px] text-green-700 bg-green-50 border border-green-200 px-4 py-2.5 rounded-xl mb-4">{success}</p>
         )}
@@ -289,6 +310,7 @@ export default function Auth({ defaultTab = 'login' }) {
             </p>
           </form>
         )}
+      </div>
       </div>
     </div>
   )

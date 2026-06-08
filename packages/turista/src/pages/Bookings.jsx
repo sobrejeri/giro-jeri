@@ -458,7 +458,7 @@ export default function Bookings() {
   return (
     <div className="min-h-full bg-gray-50 pb-24">
       {/* Header */}
-      <header className="bg-white px-4 pt-5 pb-0 sticky top-0 lg:top-14 z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)] lg:max-w-2xl lg:mx-auto">
+      <header className="bg-white px-4 pt-5 pb-0 sticky top-0 lg:top-14 z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)] lg:max-w-5xl lg:mx-auto">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-[20px] font-extrabold text-gray-900">{t('bookings.title')}</h1>
@@ -514,7 +514,7 @@ export default function Bookings() {
       </header>
 
       {/* List */}
-      <main className="px-4 pt-4 space-y-3 lg:max-w-2xl lg:mx-auto">
+      <main className="px-4 pt-4 space-y-3 lg:max-w-5xl lg:mx-auto">
         {tab === 'cotacoes' ? (
           quotesLoading ? (
             <div className="py-16"><PageSpinner /></div>
@@ -527,7 +527,8 @@ export default function Bookings() {
               <p className="text-[12px] text-gray-400">Solicite uma corrida personalizada na tela de Transfers.</p>
             </div>
           ) : (
-            quotes.map(q => (
+            <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 space-y-3">
+            {quotes.map(q => (
               <QuoteCard
                 key={q.id}
                 quote={q}
@@ -536,7 +537,8 @@ export default function Bookings() {
                 acceptLoading={quoteActing === q.id}
                 rejectLoading={quoteActing === q.id}
               />
-            ))
+            ))}
+            </div>
           )
         ) : isLoading ? (
           <div className="py-16"><PageSpinner /></div>
@@ -553,7 +555,8 @@ export default function Bookings() {
             </p>
           </div>
         ) : (
-          filtered.map((b) => (
+          <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 space-y-3">
+          {filtered.map((b) => (
             <BookingCard
               key={b.id}
               booking={b}
@@ -561,7 +564,8 @@ export default function Bookings() {
               onDetail={(id) => navigate(`/minhas-reservas/${id}`)}
               onPay={handlePay}
             />
-          ))
+          ))}
+          </div>
         )}
       </main>
 
