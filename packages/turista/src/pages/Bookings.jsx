@@ -514,7 +514,7 @@ export default function Bookings() {
       </header>
 
       {/* List */}
-      <main className="px-4 pt-4 space-y-3">
+      <main className="px-4 pt-4 space-y-3 md:max-w-2xl md:mx-auto">
         {tab === 'cotacoes' ? (
           quotesLoading ? (
             <div className="py-16"><PageSpinner /></div>

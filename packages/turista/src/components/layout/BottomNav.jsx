@@ -16,7 +16,7 @@ export default function BottomNav() {
   ]
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100 md:hidden">
       <div className="flex items-center justify-around px-2 pt-1.5 pb-2">
         {NAV.map(({ to, icon: Icon, label, exact }) => {
           const active = exact ? pathname === to : pathname.startsWith(to)

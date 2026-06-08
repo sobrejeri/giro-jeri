@@ -341,7 +341,7 @@ export default function Tours() {
         </div>
       </div>
 
-      <div className="px-4 pt-4 space-y-4">
+      <div className="px-4 pt-4 space-y-4 md:max-w-4xl md:mx-auto">
 
         {/* ── Toggle Privativo / Compartilhado ──────────────── */}
         <div className="flex bg-gray-100 rounded-full p-1 gap-1">
@@ -499,7 +499,7 @@ export default function Tours() {
               <section className="pb-2">
                 <p className="text-[14px] font-bold text-gray-900">Catálogo de veículos</p>
                 <p className="text-[11px] text-brand mt-0.5 mb-3">Monte sua combinação ideal</p>
-                <div className="space-y-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   {sortedVehicles.map((v) => (
                     <VehicleCard
                       key={v.id}

@@ -210,7 +210,7 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="px-4 pt-4 space-y-4">
+      <div className="px-4 pt-4 space-y-4 md:max-w-3xl md:mx-auto">
 
         {/* ── Saudação ──────────────────────────────────────────── */}
         <div>
@@ -277,7 +277,7 @@ export default function Home() {
         </button>
 
         {/* ── Acesso rápido 2×2 ─────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
           {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
             <button
               key={title}

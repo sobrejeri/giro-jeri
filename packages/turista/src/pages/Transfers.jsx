@@ -532,7 +532,7 @@ export default function Transfers() {
 
       {/* ── CUSTOM RIDE FORM ─────────────────────────────────── */}
       {mode === 'custom' && (
-        <div className="px-4 pt-4 space-y-3">
+        <div className="px-4 pt-4 space-y-3 md:max-w-3xl md:mx-auto">
           {customSuccess ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
@@ -680,7 +680,7 @@ export default function Transfers() {
 
       {/* ── FIXED ROUTE FORM ─────────────────────────────────── */}
       {mode === 'rota' && (
-      <><div className="px-4 pt-4 space-y-3">
+      <><div className="px-4 pt-4 space-y-3 md:max-w-3xl md:mx-auto">
 
         {/* ROTAS POPULARES */}
         <div>
