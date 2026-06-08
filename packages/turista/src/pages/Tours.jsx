@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import OriginPicker from '../components/OriginPicker'
 import {
-  MapPin, SlidersHorizontal, Calendar, Users,
+  MapPin, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
   ChevronLeft, ChevronRight, X, Info, Bus,
 } from 'lucide-react'
@@ -28,13 +28,32 @@ function gi(id = '') {
 }
 
 /* ── Sugestão de veículo ideal para N pessoas ───────────────── */
-function suggest(vehicles, people) {
+const priceOf = (v) => Number(v?.base_price || 0)
+
+function suggest(vehicles, people, filter = 'recommended') {
   if (!vehicles.length) return null
   const ok = vehicles.filter(v => v.is_private_allowed !== false && v.is_tour_allowed !== false)
-  const single = ok.filter(v => v.seat_capacity >= people)
-                   .sort((a, b) => a.seat_capacity - b.seat_capacity)[0]
+  if (!ok.length) return null
+  const fits = ok.filter(v => v.seat_capacity >= people)
+
+  if (filter === 'economico') {
+    const cheapestFit = fits.slice().sort((a, b) => priceOf(a) - priceOf(b))[0]
+    if (cheapestFit) return { vehicle: cheapestFit, qty: 1 }
+    const cheapest = ok.slice().sort((a, b) => priceOf(a) - priceOf(b))[0]
+    return { vehicle: cheapest, qty: Math.ceil(people / cheapest.seat_capacity) }
+  }
+
+  if (filter === 'conforto') {
+    const roomiestFit = fits.slice().sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
+    if (roomiestFit) return { vehicle: roomiestFit, qty: 1 }
+    const biggest = ok.slice().sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
+    return { vehicle: biggest, qty: Math.ceil(people / biggest.seat_capacity) }
+  }
+
+  // recommended: menor veículo que comporta todos; senão o maior + múltiplas unidades
+  const single = fits.slice().sort((a, b) => a.seat_capacity - b.seat_capacity)[0]
   if (single) return { vehicle: single, qty: 1 }
-  const biggest = ok.sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
+  const biggest = ok.slice().sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
   if (!biggest) return null
   return { vehicle: biggest, qty: Math.ceil(people / biggest.seat_capacity) }
 }
@@ -279,7 +298,14 @@ export default function Tours() {
   )
 
   /* ── Sugestão ─────────────────────────────────────────────── */
-  const suggestion = useMemo(() => suggest(vehicles, people), [vehicles, people])
+  const suggestion = useMemo(() => suggest(vehicles, people, filter), [vehicles, people, filter])
+
+  const sortedVehicles = useMemo(() => {
+    const arr = vehicles.slice()
+    if (filter === 'economico') return arr.sort((a, b) => priceOf(a) - priceOf(b))
+    if (filter === 'conforto')  return arr.sort((a, b) => b.seat_capacity - a.seat_capacity)
+    return arr
+  }, [vehicles, filter])
 
   /* ── Carrinho ─────────────────────────────────────────────── */
   const cartItems = Object.entries(cart)
@@ -312,9 +338,6 @@ export default function Tours() {
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm">
         <div className="flex items-start justify-between">
           <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
-          <button className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center active:scale-95 transition-transform">
-            <SlidersHorizontal size={15} className="text-gray-600" />
-          </button>
         </div>
       </div>
 
@@ -477,7 +500,7 @@ export default function Tours() {
                 <p className="text-[14px] font-bold text-gray-900">Catálogo de veículos</p>
                 <p className="text-[11px] text-brand mt-0.5 mb-3">Monte sua combinação ideal</p>
                 <div className="space-y-2.5">
-                  {vehicles.map((v) => (
+                  {sortedVehicles.map((v) => (
                     <VehicleCard
                       key={v.id}
                       vehicle={v}

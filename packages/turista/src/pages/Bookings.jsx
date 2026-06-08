@@ -333,6 +333,8 @@ export default function Bookings() {
   ]
 
   const [tab,           setTab]           = useState('todos')
+  const [showSearch,    setShowSearch]    = useState(false)
+  const [searchTerm,    setSearchTerm]    = useState('')
   const [cancelTarget,  setCancelTarget]  = useState(null)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError,   setCancelError]   = useState(null)
@@ -354,7 +356,12 @@ export default function Bookings() {
     Array.isArray(data) ? data : []
   ).map(b => ({ ...b, _status: resolveStatus(b) }))
 
+  const q = searchTerm.trim().toLowerCase()
   const filtered = all.filter(b => {
+    if (q) {
+      const hay = `${b.booking_code || ''} ${b.service_name || ''} ${b.origin_text || ''} ${b.destination_text || ''}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
     if (tab === 'ativos')     return ACTIVE_STATUSES.includes(b._status)
     if (tab === 'concluidos') return b._status === 'completed'
     if (tab === 'cancelados') return b._status === 'cancelled'
@@ -461,10 +468,26 @@ export default function Bookings() {
                 : 'Nenhuma reserva ativa'}
             </p>
           </div>
-          <button className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center active:scale-95 transition-transform">
-            <Search size={16} className="text-gray-600" />
+          <button
+            onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+          >
+            <Search size={16} />
           </button>
         </div>
+
+        {showSearch && (
+          <div className="mb-3 relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por código, serviço ou local…"
+              className="w-full h-10 pl-9 pr-3 rounded-xl border border-gray-200 bg-gray-50 text-[13px] text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand focus:bg-white"
+            />
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
