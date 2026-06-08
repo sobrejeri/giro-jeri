@@ -32,7 +32,7 @@ function BookingRow({ b, onDispatch, cooperativa }) {
     real_vehicle_text: assign?.real_vehicle_text || '',
     driver_name:       assign?.driver_name       || '',
     dispatch_notes:    assign?.dispatch_notes    || '',
-    driver_phone:      '',
+    driver_phone:      assign?.driver_phone      || '',
   }
 
   return (
@@ -156,16 +156,15 @@ export default function Despacho() {
     setModal(booking)
     setForm({
       real_vehicle_text: assign?.real_vehicle_text || '',
-      driver_name:       '',
+      driver_name:       assign?.driver_name       || '',
       dispatch_notes:    assign?.dispatch_notes    || '',
-      driver_phone:      '',
+      driver_phone:      assign?.driver_phone      || '',
     })
   }
 
   function handleSubmit(e) {
     e.preventDefault()
-    const { driver_phone, ...rest } = form
-    assignMut.mutate({ id: modal.id, ...rest })
+    assignMut.mutate({ id: modal.id, ...form })
   }
 
   const columns    = data?.columns || {}

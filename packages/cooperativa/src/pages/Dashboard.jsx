@@ -104,10 +104,12 @@ function BookingRow({ b, onAssign, cooperativa }) {
   const timeStr  = b.service_time ? b.service_time.slice(0, 5) : null
   const local    = b.pickup_place_name || b.origin_text
   const dispatched = DISPATCHED_SET.includes(b.status_operational) || b.status_operational === 'completed'
+  const assign     = b.operational_assignments?.[0]
   const formForOS  = {
-    real_vehicle_text: b.booking_vehicles?.[0]?.vehicle_name_snapshot || '',
-    dispatch_notes:    '',
-    driver_phone:      '',
+    real_vehicle_text: assign?.real_vehicle_text || b.booking_vehicles?.[0]?.vehicle_name_snapshot || '',
+    driver_name:       assign?.driver_name    || '',
+    dispatch_notes:    assign?.dispatch_notes || '',
+    driver_phone:      assign?.driver_phone   || '',
   }
 
   return (
@@ -622,8 +624,7 @@ export default function Dashboard() {
             <form
               onSubmit={(e) => {
                 e.preventDefault()
-                const { driver_phone, ...rest } = form
-                assignMut.mutate({ id: assignModal.id, ...rest })
+                assignMut.mutate({ id: assignModal.id, ...form })
               }}
               className="space-y-4"
             >

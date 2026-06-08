@@ -327,7 +327,7 @@ router.get('/operational', requireOperator, async (req, res, next) => {
         origin_text, destination_text,
         users!bookings_user_id_fkey ( full_name, phone ),
         booking_vehicles ( vehicle_name_snapshot, quantity ),
-        operational_assignments ( real_vehicle_text, dispatch_notes, assigned_driver_user_id, assigned_guide_user_id )
+        operational_assignments ( real_vehicle_text, dispatch_notes, driver_name, driver_phone, assigned_driver_user_id, assigned_guide_user_id )
       `)
       .neq('status_commercial', 'draft')
       .neq('status_commercial', 'cancelled')
@@ -360,6 +360,8 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       assigned_guide_user_id,
       real_vehicle_text,
       dispatch_notes,
+      driver_name,
+      driver_phone,
     } = req.body;
 
     const bookingId = req.params.id;
@@ -370,6 +372,8 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       assigned_guide_user_id:    assigned_guide_user_id   || null,
       real_vehicle_text:         real_vehicle_text        || null,
       dispatch_notes:            dispatch_notes           || null,
+      driver_name:               driver_name              || null,
+      driver_phone:              driver_phone             || null,
       assignment_status:         'assigned',
       updated_at:                new Date().toISOString(),
     };
