@@ -146,13 +146,13 @@ function PendingCard({ booking, onAccept, accepting }) {
 }
 
 // ── Card de corrida aceita (minhas) ───────────────────────
-function MyCard({ booking, onConfirm, confirming }) {
+function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
   const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
   const clientPhone = booking.users?.phone
   const clientName  = booking.users?.full_name || 'Cliente'
   const waNumber    = clientPhone ? `55${clientPhone.replace(/\D/g, '')}` : null
-  const isSending   = confirming === booking.id
+  const isSending   = busy
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -221,21 +221,42 @@ function MyCard({ booking, onConfirm, confirming }) {
           <span className="font-bold text-brand">{fmt(booking.total_amount)}</span>
         </div>
 
-        {/* Botão único: confirmar + WhatsApp */}
-        <div className="pt-1 border-t border-gray-100">
-          <button
-            onClick={() => onConfirm(booking)}
-            disabled={isSending}
-            className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-green-500/20"
-          >
-            {isSending
-              ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              : <><MessageCircle size={16} /> Confirmar e enviar WhatsApp</>}
-          </button>
-          {!waNumber && (
-            <p className="text-[11px] text-center text-gray-400 mt-1.5">
-              Cliente sem WhatsApp cadastrado — a reserva será enviada para despacho mesmo assim
-            </p>
+        {/* Ações da corrida */}
+        <div className="pt-1 border-t border-gray-100 space-y-2">
+          {booking.status_operational === 'in_progress' ? (
+            <button
+              onClick={() => onComplete(booking)}
+              disabled={isSending}
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60"
+            >
+              {isSending
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <><CheckCircle2 size={16} /> Concluir corrida</>}
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => onConfirm(booking)}
+                disabled={isSending}
+                className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-green-500/20"
+              >
+                {isSending
+                  ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  : <><MessageCircle size={16} /> Confirmar e enviar WhatsApp</>}
+              </button>
+              <button
+                onClick={() => onStart(booking)}
+                disabled={isSending}
+                className="w-full flex items-center justify-center gap-2 bg-brand/10 hover:bg-brand/20 text-brand font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-all disabled:opacity-60"
+              >
+                <Zap size={15} /> Iniciar corrida
+              </button>
+              {!waNumber && (
+                <p className="text-[11px] text-center text-gray-400">
+                  Cliente sem WhatsApp cadastrado — a reserva será enviada para despacho mesmo assim
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -299,6 +320,34 @@ export default function Reservas() {
       setToast({ message: 'Reserva enviada para despacho! WhatsApp aberto.', type: 'success' })
     } catch (err) {
       setToast({ message: err.message || 'Erro ao confirmar', type: 'error' })
+    } finally {
+      setConfirming(null)
+    }
+  }
+
+  async function handleStart(booking) {
+    if (confirming) return
+    setConfirming(booking.id)
+    try {
+      await api.startBooking(booking.id)
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setToast({ message: 'Corrida iniciada!', type: 'success' })
+    } catch (err) {
+      setToast({ message: err.message || 'Erro ao iniciar corrida', type: 'error' })
+    } finally {
+      setConfirming(null)
+    }
+  }
+
+  async function handleComplete(booking) {
+    if (confirming) return
+    setConfirming(booking.id)
+    try {
+      await api.completeBooking(booking.id)
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setToast({ message: 'Corrida concluída! 🎉', type: 'success' })
+    } catch (err) {
+      setToast({ message: err.message || 'Erro ao concluir corrida', type: 'error' })
     } finally {
       setConfirming(null)
     }
@@ -392,7 +441,9 @@ export default function Reservas() {
                 key={b.id}
                 booking={b}
                 onConfirm={handleConfirm}
-                confirming={confirming}
+                onStart={handleStart}
+                onComplete={handleComplete}
+                busy={confirming === b.id}
               />
             ))}
           </div>
