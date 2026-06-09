@@ -69,11 +69,15 @@ function TourCard({ tour, isFav, onToggleFav }) {
   )
 }
 
-export default function HomeDesktop({ tours = [], featured = [], isLoading, favs, toggleFav }) {
+export default function HomeDesktop({
+  tours = [], featured = [], isLoading, favs, toggleFav,
+  bannerImg = null, bannerTitle = null, bannerSubtitle = null,
+}) {
   const navigate = useNavigate()
   const { region, openPicker } = useRegion()
   const list    = (featured.length ? featured : tours).slice(0, 8)
-  const heroImg = list.find((t) => t.cover_image_url)?.cover_image_url || null
+  // Prioridade: banner configurado pelo admin → imagem de um passeio → gradiente
+  const heroImg = bannerImg || list.find((t) => t.cover_image_url)?.cover_image_url || null
 
   const SEARCH = [
     { icon: Compass,  title: 'Passeios',  desc: 'Encontre experiências', onClick: () => navigate('/passeios') },
@@ -91,9 +95,11 @@ export default function HomeDesktop({ tours = [], featured = [], isLoading, favs
           : <div className="absolute inset-0 bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]" />}
         <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/35 to-transparent" />
         <div className="relative z-10 p-12 flex flex-col justify-center max-w-xl">
-          <h1 className="text-white font-display font-extrabold text-[44px] leading-[1.05]">Descubra<br />Jericoacoara</h1>
+          <h1 className="text-white font-display font-extrabold text-[44px] leading-[1.05]">
+            {bannerTitle || <>Descubra<br />Jericoacoara</>}
+          </h1>
           <p className="text-white/85 mt-4 text-[17px] leading-relaxed">
-            Passeios, transfers e experiências únicas você encontra aqui.
+            {bannerSubtitle || 'Passeios, transfers e experiências únicas você encontra aqui.'}
           </p>
           <button
             onClick={() => navigate('/passeios')}

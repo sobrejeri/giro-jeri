@@ -182,6 +182,13 @@ router.get('/me', authenticate, async (req, res, next) => {
       .eq('id', req.user.id)
       .single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // cover_photo_url é opcional — pode não existir se a migration 015 ainda
+    // não tiver rodado. Busca em separado para o /me nunca quebrar nesse caso.
+    const { data: cover } = await supabase
+      .from('users').select('cover_photo_url').eq('id', req.user.id).maybeSingle();
+    if (cover && 'cover_photo_url' in cover) profile.cover_photo_url = cover.cover_photo_url;
+
     res.json({ user: profile });
   } catch (err) { next(err); }
 });
@@ -320,6 +327,56 @@ router.post('/me/photo', authenticate, async (req, res, next) => {
       .eq('id', req.user.id);
 
     res.json({ url: publicUrl });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/auth/me/cover ───────────────────────────
+// Imagem de fundo (capa) do perfil do turista
+router.post('/me/cover', authenticate, async (req, res, next) => {
+  try {
+    const { photo_data } = req.body;
+    if (!photo_data || typeof photo_data !== 'string') {
+      return res.status(400).json({ error: 'Dados de imagem ausentes' });
+    }
+
+    const match = photo_data.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+    if (!match) {
+      return res.status(400).json({ error: 'Formato inválido. Use JPEG, PNG ou WebP.' });
+    }
+
+    const [, mimeType, b64] = match;
+    const buffer = Buffer.from(b64, 'base64');
+
+    // Limite de 2 MB (mesmo limite do bucket "avatars")
+    if (buffer.byteLength > 2 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Imagem muito grande. Máximo 2 MB.' });
+    }
+
+    const ext  = mimeType.split('/')[1];
+    const path = `cover-${req.user.id}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, buffer, { contentType: mimeType, upsert: true });
+
+    if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+    // Versão na query para furar o cache do navegador (path é fixo por usuário)
+    const versionedUrl = `${publicUrl}?v=${Date.now()}`;
+
+    const { error: updError } = await supabase
+      .from('users')
+      .update({ cover_photo_url: versionedUrl, updated_at: new Date().toISOString() })
+      .eq('id', req.user.id);
+
+    if (updError) {
+      return res.status(500).json({
+        error: 'Não foi possível salvar a capa. Verifique se a migration 015 (coluna cover_photo_url) foi aplicada no banco.',
+      });
+    }
+
+    res.json({ url: versionedUrl });
   } catch (err) { next(err); }
 });
 

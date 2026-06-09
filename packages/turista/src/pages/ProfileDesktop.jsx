@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
@@ -26,12 +26,21 @@ export default function ProfileDesktop() {
   const { user, token, logout, updateUser } = useAuth()
   const navigate = useNavigate()
   const fileRef  = useRef(null)
+  const coverRef = useRef(null)
 
   const [avatarUrl, setAvatarUrl]         = useState(user?.profile_photo_url || null)
   const [uploading, setUploading]         = useState(false)
+  const [coverUrl, setCoverUrl]           = useState(user?.cover_photo_url || null)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [coverError, setCoverError]       = useState('')
   const [editing, setEditing]             = useState(false)
   const [saving, setSaving]               = useState(false)
   const [form, setForm]                   = useState({})
+
+  // Mantém o preview em sincronia quando o usuário do contexto muda
+  // (a hidratação via /me é feita no componente pai Profile, sempre montado).
+  useEffect(() => { setAvatarUrl(user?.profile_photo_url || null) }, [user?.profile_photo_url])
+  useEffect(() => { setCoverUrl(user?.cover_photo_url || null) },   [user?.cover_photo_url])
 
   const { data: bookingsData } = useQuery({
     queryKey: ['my-bookings'],
@@ -115,6 +124,42 @@ export default function ProfileDesktop() {
     reader.readAsDataURL(file)
   }
 
+  function handleCoverChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setCoverError('Use uma imagem JPEG, PNG ou WebP.'); return
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setCoverError('Imagem muito grande. Máximo 8 MB.'); return
+    }
+    setCoverError('')
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onload = async () => {
+        const MAX = 1600
+        const scale = Math.min(1, MAX / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+        setCoverUrl(dataUrl)          // preview otimista
+        setUploadingCover(true)
+        try {
+          const data = await api.uploadCover(dataUrl)
+          if (data?.url) { updateUser({ cover_photo_url: data.url }); setCoverUrl(data.url) }
+        } catch (err) {
+          setCoverError(err?.message || 'Erro ao salvar a capa.')
+          setCoverUrl(user?.cover_photo_url || null)
+        } finally { setUploadingCover(false) }
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+
   // Visitante não logado
   if (!token) {
     return (
@@ -129,10 +174,24 @@ export default function ProfileDesktop() {
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">
-      {/* ── Banner ───────────────────────────────────────── */}
-      <div className="relative rounded-3xl overflow-hidden h-44 bg-gradient-to-r from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]">
+      {/* ── Banner / capa editável ───────────────────────── */}
+      <div className="relative rounded-3xl overflow-hidden h-44">
+        {coverUrl
+          ? <img src={coverUrl} alt="Capa do perfil" className="absolute inset-0 w-full h-full object-cover" />
+          : <div className="absolute inset-0 bg-gradient-to-r from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]" />}
         <div className="absolute inset-0 bg-black/10" />
+        <button
+          onClick={() => !uploadingCover && coverRef.current?.click()}
+          className="absolute top-3 right-3 inline-flex items-center gap-1.5 bg-black/40 hover:bg-black/55 text-white text-[12px] font-semibold px-3 py-1.5 rounded-lg backdrop-blur-sm transition-colors"
+        >
+          {uploadingCover ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+          {uploadingCover ? 'Enviando…' : 'Alterar capa'}
+        </button>
+        <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleCoverChange} />
       </div>
+      {coverError && (
+        <p className="mt-2 text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">{coverError}</p>
+      )}
       <div className="px-6 -mt-12 relative flex items-end gap-5">
         <div className="relative">
           <div className="w-24 h-24 rounded-2xl border-4 border-white bg-brand/10 overflow-hidden flex items-center justify-center text-brand text-2xl font-extrabold shadow-md">

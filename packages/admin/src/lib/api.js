@@ -164,4 +164,7 @@ export const api = {
   // Configurações
   getSettings:   ()          => request('/api/admin/settings'),
   updateSetting: (key, body) => request(`/api/admin/settings/${key}`, { method: 'PUT', body }),
+
+  // Upload de imagens do site (banner da home etc.) → devolve { url }
+  uploadSiteImage: (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
 }

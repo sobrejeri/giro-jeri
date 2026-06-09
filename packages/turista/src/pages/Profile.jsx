@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
@@ -29,12 +29,25 @@ export default function Profile() {
   const navigate = useNavigate()
   const { t, i18n } = useTranslation()
   const fileRef  = useRef(null)
+  const coverRef = useRef(null)
 
   const avatarKey = `giro_avatar_${user?.id || 'guest'}`
   // Prioridade: URL do banco → fallback localStorage (offline/cache)
   const [avatarUrl,      setAvatarUrl]      = useState(() => user?.profile_photo_url || localStorage.getItem(avatarKey) || null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoError,     setPhotoError]     = useState('')
+
+  const [coverUrl,       setCoverUrl]       = useState(() => user?.cover_photo_url || null)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [coverError,     setCoverError]     = useState('')
+
+  // Hidrata foto e capa a partir do servidor (ex.: primeiro acesso em outro device)
+  useEffect(() => {
+    if (!token) return
+    api.me().then((d) => { if (d?.user) updateUser(d.user) }).catch(() => {})
+  }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { setCoverUrl(user?.cover_photo_url || null) }, [user?.cover_photo_url])
 
   const [editing,   setEditing]   = useState(false)
   const [saving,    setSaving]    = useState(false)
@@ -136,6 +149,42 @@ export default function Profile() {
     reader.readAsDataURL(file)
   }
 
+  function handleCoverChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setCoverError('Use uma imagem JPEG, PNG ou WebP.'); return
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setCoverError('Imagem muito grande. Máximo 8 MB.'); return
+    }
+    setCoverError('')
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onload = async () => {
+        const MAX = 1600
+        const scale = Math.min(1, MAX / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+        setCoverUrl(dataUrl)
+        setUploadingCover(true)
+        try {
+          const data = await api.uploadCover(dataUrl)
+          if (data?.url) { updateUser({ cover_photo_url: data.url }); setCoverUrl(data.url) }
+        } catch (err) {
+          setCoverError(err?.message || 'Erro ao salvar a capa.')
+          setCoverUrl(user?.cover_photo_url || null)
+        } finally { setUploadingCover(false) }
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+
   async function handleLogout() {
     await api.logout().catch(() => {})
     logout()
@@ -161,39 +210,57 @@ export default function Profile() {
         {token && user ? (
           <>
             {/* Identity card */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm flex flex-col items-center text-center">
-              <div className="relative mb-4">
-                <div className="w-[88px] h-[88px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-4 ring-white shadow-md">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="Foto de perfil" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-brand font-bold text-[28px] leading-none select-none">{initials}</span>
-                  )}
-                </div>
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              {/* Capa editável */}
+              <div className="relative h-24">
+                {coverUrl
+                  ? <img src={coverUrl} alt="Capa do perfil" className="absolute inset-0 w-full h-full object-cover" />
+                  : <div className="absolute inset-0 bg-gradient-to-r from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]" />}
+                <div className="absolute inset-0 bg-black/10" />
                 <button
-                  onClick={() => !uploadingPhoto && fileRef.current?.click()}
-                  className="absolute bottom-0 right-0 w-8 h-8 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"
+                  onClick={() => !uploadingCover && coverRef.current?.click()}
+                  className="absolute top-2 right-2 inline-flex items-center gap-1 bg-black/40 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg backdrop-blur-sm active:scale-95 transition-transform"
                 >
-                  {uploadingPhoto
-                    ? <Loader2 size={14} className="text-white animate-spin" />
-                    : <Camera size={14} className="text-white" />
-                  }
+                  {uploadingCover ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                  {uploadingCover ? 'Enviando…' : 'Capa'}
                 </button>
-                <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
+                <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleCoverChange} />
               </div>
-              {photoError && (
-                <p className="text-[11px] text-red-500 bg-red-50 rounded-lg px-3 py-1.5 mb-2 w-full text-center">{photoError}</p>
-              )}
-              <p className="font-extrabold text-gray-900 text-[18px] leading-tight break-words w-full">{user.full_name}</p>
-              <div className="flex items-center gap-1.5 mt-1.5 text-gray-400">
-                <Mail size={12} />
-                <span className="text-[13px] break-all">{user.email}</span>
+
+              <div className="px-6 pb-6 -mt-10 flex flex-col items-center text-center">
+                <div className="relative mb-4">
+                  <div className="w-[88px] h-[88px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-4 ring-white shadow-md">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="Foto de perfil" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-brand font-bold text-[28px] leading-none select-none">{initials}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => !uploadingPhoto && fileRef.current?.click()}
+                    className="absolute bottom-0 right-0 w-8 h-8 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"
+                  >
+                    {uploadingPhoto
+                      ? <Loader2 size={14} className="text-white animate-spin" />
+                      : <Camera size={14} className="text-white" />
+                    }
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
+                </div>
+                {(photoError || coverError) && (
+                  <p className="text-[11px] text-red-500 bg-red-50 rounded-lg px-3 py-1.5 mb-2 w-full text-center">{photoError || coverError}</p>
+                )}
+                <p className="font-extrabold text-gray-900 text-[18px] leading-tight break-words w-full">{user.full_name}</p>
+                <div className="flex items-center gap-1.5 mt-1.5 text-gray-400">
+                  <Mail size={12} />
+                  <span className="text-[13px] break-all">{user.email}</span>
+                </div>
+                {user.role && (
+                  <span className="mt-3 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-orange-50 text-brand">
+                    {user.role === 'admin' ? t('profile.roleAdmin') : user.role === 'driver' ? t('profile.roleDriver') : t('profile.roleClient')}
+                  </span>
+                )}
               </div>
-              {user.role && (
-                <span className="mt-3 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-orange-50 text-brand">
-                  {user.role === 'admin' ? t('profile.roleAdmin') : user.role === 'driver' ? t('profile.roleDriver') : t('profile.roleClient')}
-                </span>
-              )}
             </div>
 
             {/* Personal data card */}

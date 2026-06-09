@@ -445,17 +445,71 @@ router.get('/settings', requireAdmin, async (req, res, next) => {
 });
 
 // ── PUT /api/admin/settings/:key ───────────────────────
+// Upsert: atualiza se existir, cria se a chave ainda não estiver no banco
+// (necessário para chaves novas como home_banner_image_url sem depender de seed).
 router.put('/settings/:key', requireAdmin, async (req, res, next) => {
   try {
-    const { setting_value } = req.body;
+    const { setting_value, value_type, description } = req.body;
+    const row = {
+      setting_key:        req.params.key,
+      setting_value,
+      updated_by_user_id: req.user.id,
+    };
+    if (value_type)  row.value_type  = value_type;
+    if (description)  row.description = description;
+
     const { data, error } = await supabase
       .from('system_settings')
-      .update({ setting_value, updated_by_user_id: req.user.id })
-      .eq('setting_key', req.params.key)
+      .upsert(row, { onConflict: 'setting_key' })
       .select()
       .single();
-    if (error || !data) return res.status(404).json({ error: 'Configuração não encontrada' });
+    if (error) return res.status(400).json({ error: error.message });
     res.json(data);
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/site-image ─────────────────────────
+// Faz upload de uma imagem do site (ex: banner da home) e devolve a URL pública.
+// Reaproveita o bucket público "avatars" sob o prefixo "site/".
+router.post('/site-image', requireAdmin, async (req, res, next) => {
+  try {
+    const { photo_data, name } = req.body;
+    if (!photo_data || typeof photo_data !== 'string') {
+      return res.status(400).json({ error: 'Dados de imagem ausentes' });
+    }
+
+    const match = photo_data.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+    if (!match) {
+      return res.status(400).json({ error: 'Formato inválido. Use JPEG, PNG ou WebP.' });
+    }
+
+    const [, mimeType, b64] = match;
+    const buffer = Buffer.from(b64, 'base64');
+    if (buffer.byteLength > 2 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Imagem muito grande. Máximo 2 MB.' });
+    }
+
+    const ext  = mimeType.split('/')[1];
+    const slug = String(name || 'asset')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'asset';
+    const path = `site/${slug}-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, buffer, { contentType: mimeType, upsert: true });
+
+    if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'system_settings',
+      action_type:     'upload_site_image',
+      new_values_json: { path },
+    });
+
+    res.json({ url: publicUrl });
   } catch (err) { next(err); }
 });
 

@@ -68,7 +68,11 @@ export const api = {
   me:            ()     => request('/api/auth/me'),
   updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),
   uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),
+  uploadCover:   (photoData) => request('/api/auth/me/cover', { method: 'POST',  body: { photo_data: photoData } }),
   logout:        ()     => request('/api/auth/logout', { method: 'POST' }),
+
+  // Configurações públicas (banner da home etc.)
+  getPublicSettings: () => request('/api/settings/public'),
 
   // Regiões
   getRegions: () => request('/api/regions'),

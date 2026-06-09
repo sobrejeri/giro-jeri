@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Settings, RotateCcw, CreditCard, Landmark, SplitSquareHorizontal,
-  Eye, EyeOff, CheckCircle, Pencil,
+  Eye, EyeOff, CheckCircle, Pencil, Image as ImageIcon, Upload, Trash2,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -94,6 +94,28 @@ const PAYMENT_DEFAULTS = {
 
 function settingsToMap(list) {
   return Object.fromEntries(list.map((s) => [s.setting_key, s.setting_value ?? '']))
+}
+
+// Redimensiona/comprime uma imagem no cliente e devolve um data URL JPEG.
+function fileToResizedDataUrl(file, max = 1600, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        const scale  = Math.min(1, max / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width  * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 function MaskedInput({ label, value, onChange, placeholder }) {
@@ -605,9 +627,139 @@ function SaveRow({ onSave, pending, saved }) {
   )
 }
 
+// ── Aparência tab (banner da home) ────────────────────────
+function TabAparencia({ settings, qc }) {
+  const fileRef = useRef(null)
+  const [bannerUrl, setBannerUrl] = useState('')
+  const [title, setTitle]         = useState('')
+  const [subtitle, setSubtitle]   = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [error, setError]         = useState('')
+  const [savedText, setSavedText] = useState(false)
+
+  useEffect(() => {
+    const m = settingsToMap(settings)
+    setBannerUrl(m.home_banner_image_url || '')
+    setTitle(m.home_banner_title || '')
+    setSubtitle(m.home_banner_subtitle || '')
+  }, [settings])
+
+  function persist(key, value, description) {
+    return api.updateSetting(key, { setting_value: value, value_type: 'string', description })
+  }
+
+  async function onPickFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Use uma imagem JPEG, PNG ou WebP.'); return
+    }
+    setError('')
+    setUploading(true)
+    try {
+      const dataUrl  = await fileToResizedDataUrl(file)
+      const { url }  = await api.uploadSiteImage(dataUrl, 'home-banner')
+      await persist('home_banner_image_url', url, 'Imagem de fundo do banner da home (turista)')
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      setBannerUrl(url)
+    } catch (err) {
+      setError(err?.message || 'Falha ao enviar a imagem.')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function removeImage() {
+    setUploading(true)
+    try {
+      await persist('home_banner_image_url', '', 'Imagem de fundo do banner da home (turista)')
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      setBannerUrl('')
+    } finally { setUploading(false) }
+  }
+
+  function saveTexts() {
+    Promise.all([
+      persist('home_banner_title',    title,    'Título do banner da home'),
+      persist('home_banner_subtitle', subtitle, 'Subtítulo do banner da home'),
+    ]).then(() => {
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      setSavedText(true)
+      setTimeout(() => setSavedText(false), 2500)
+    })
+  }
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="bg-blue-900/20 border border-blue-800/30 rounded-xl p-4 text-sm">
+        <p className="font-semibold text-blue-400 mb-1">Banner da Home</p>
+        <p className="text-gray-500 text-xs">
+          Imagem de fundo e textos do banner principal exibido na tela inicial do app do turista.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <ImageIcon size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">Imagem de fundo</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-4">
+            {/* Preview no mesmo estilo do app */}
+            <div className="relative rounded-xl overflow-hidden border border-gray-700 bg-gray-900 aspect-[16/6] flex items-center">
+              {bannerUrl
+                ? <img src={bannerUrl} alt="Banner da home" className="absolute inset-0 w-full h-full object-cover" />
+                : <div className="absolute inset-0 bg-gradient-to-r from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]" />}
+              <div className="absolute inset-0 bg-gradient-to-r from-black/55 to-transparent" />
+              <div className="relative px-6">
+                <p className="text-white font-extrabold text-xl drop-shadow">{title || 'Descubra Jericoacoara'}</p>
+                <p className="text-white/85 text-xs mt-1 drop-shadow max-w-xs">{subtitle || 'Passeios, transfers e experiências únicas você encontra aqui.'}</p>
+              </div>
+            </div>
+
+            {error && <p className="text-xs text-red-400">{error}</p>}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onPickFile} />
+              <Button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                <Upload size={14} /> {uploading ? 'Enviando…' : (bannerUrl ? 'Trocar imagem' : 'Enviar imagem')}
+              </Button>
+              {bannerUrl && (
+                <Button type="button" variant="ghost" onClick={removeImage} disabled={uploading}>
+                  <Trash2 size={14} /> Remover
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-gray-600">
+              Recomendado: imagem ampla (paisagem), mín. 1600px de largura. A imagem é comprimida automaticamente.
+            </p>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <h2 className="text-sm font-semibold text-gray-200">Textos do banner</h2>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-4">
+            <Input label="Título" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Descubra Jericoacoara" />
+            <Input label="Subtítulo" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Passeios, transfers e experiências únicas…" />
+            <SaveRow onSave={saveTexts} pending={false} saved={savedText} />
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────
 const TABS = [
   { id: 'sistema',    label: 'Sistema',    icon: Settings },
+  { id: 'aparencia',  label: 'Aparência',  icon: ImageIcon },
   { id: 'pagamentos', label: 'Pagamentos', icon: CreditCard },
 ]
 
@@ -646,6 +798,7 @@ export default function Configuracoes() {
       </div>
 
       {tab === 'sistema'    && <TabSistema    settings={settings} qc={qc} />}
+      {tab === 'aparencia'  && <TabAparencia  settings={settings} qc={qc} />}
       {tab === 'pagamentos' && <TabPagamentos settings={settings} qc={qc} />}
     </div>
   )
