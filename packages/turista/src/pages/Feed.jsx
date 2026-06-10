@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { useRegion } from '../contexts/RegionContext'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
-  Star, Instagram, Navigation,
+  Star, Instagram, Navigation, Globe,
 } from 'lucide-react'
+
+// Centro de Jericoacoara — fallback quando não há GPS/região
+const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
 
 /* ── helpers ───────────────────────────────────────────── */
 function fmtDate(d) {
@@ -126,8 +130,10 @@ function PostCard({ post }) {
 /* ── estabelecimento ───────────────────────────────────── */
 function PlaceCard({ place, compact = false }) {
   const cat = CATS[place.category] || CATS.gastronomia
-  const wa = waLink(place.whatsapp)
-  const ig = igLink(place.instagram)
+  const wa  = waLink(place.whatsapp)
+  const ig  = igLink(place.instagram)
+  const web = place.website || null
+  const km  = place.distance != null ? (place.distance / 1000) : null
 
   return (
     <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col ${compact ? 'w-64 shrink-0' : ''}`}>
@@ -141,7 +147,7 @@ function PlaceCard({ place, compact = false }) {
           </span>
         )}
         <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 bg-black/55 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full backdrop-blur-sm">
-          <cat.Icon size={11} /> {cat.label}
+          <cat.Icon size={11} /> {cat.label}{km != null ? ` · ${km.toFixed(1)} km` : ''}
         </span>
       </div>
 
@@ -169,6 +175,12 @@ function PlaceCard({ place, compact = false }) {
               <Instagram size={15} />
             </a>
           )}
+          {web && (
+            <a href={web} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+               className="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-gray-100 text-blue-500 active:scale-95 transition-transform" aria-label="Site">
+              <Globe size={15} />
+            </a>
+          )}
         </div>
       </div>
     </div>
@@ -192,37 +204,59 @@ function SectionTitle({ children }) {
 /* ── página ────────────────────────────────────────────── */
 export default function Feed() {
   const [filter, setFilter] = useState('tudo')
+  const { userCoords, region } = useRegion()
 
-  const { data: feedData,  isLoading: loadingFeed }  = useQuery({ queryKey: ['feed'],           queryFn: () => api.getFeed() })
-  const { data: placeData, isLoading: loadingPlaces } = useQuery({ queryKey: ['establishments'], queryFn: () => api.getEstablishments() })
+  const center = (userCoords?.lat != null && userCoords?.lon != null)
+    ? userCoords
+    : (region?.center_latitude != null
+        ? { lat: region.center_latitude, lon: region.center_longitude }
+        : JERI_CENTER)
 
-  const posts  = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
-  const places = Array.isArray(placeData) ? placeData : (placeData?.data || [])
-  const isLoading = loadingFeed || loadingPlaces
+  const { data: feedData,   isLoading: loadingFeed }   = useQuery({ queryKey: ['feed'],           queryFn: () => api.getFeed() })
+  const { data: placeData,  isLoading: loadingPlaces } = useQuery({ queryKey: ['establishments'], queryFn: () => api.getEstablishments() })
+  const { data: nearbyData, isLoading: loadingNearby } = useQuery({
+    queryKey:  ['nearby', center.lat?.toFixed?.(3), center.lon?.toFixed?.(3)],
+    queryFn:   () => api.getNearbyPlaces({ lat: center.lat, lon: center.lon }),
+    staleTime: 30 * 60 * 1000,
+  })
+
+  const posts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
+  const manual  = Array.isArray(placeData) ? placeData : (placeData?.data || [])
+  const organic = nearbyData?.results || []
+  const usingNearby = !!nearbyData?.enabled && organic.length > 0
+
+  // Une manuais + orgânicos (OpenStreetMap), sem duplicar pelo nome
+  const places = useMemo(() => {
+    const names = new Set(manual.map((p) => (p.name || '').toLowerCase().trim()))
+    const extra = organic.filter((o) => !names.has((o.name || '').toLowerCase().trim()))
+    return [...manual, ...extra]
+  }, [manual, organic])
+
+  const loadingPlacesAll = loadingPlaces || loadingNearby
 
   const events   = posts.filter((p) => p.kind !== 'promo')
   const promos   = posts.filter((p) => p.kind === 'promo')
   const featured = places.filter((p) => p.is_featured)
 
+  const Loader = (
+    <div className="h-40 flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
   let content
-  if (isLoading) {
-    content = (
-      <div className="h-40 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  } else if (filter === 'eventos') {
-    content = events.length
-      ? events.map((p) => <PostCard key={p.id} post={p} />)
+  if (filter === 'eventos') {
+    content = loadingFeed ? Loader
+      : events.length ? events.map((p) => <PostCard key={p.id} post={p} />)
       : <EmptyState icon={CalendarDays} title="Nenhum evento ainda" sub="Volte em breve para conferir!" />
   } else if (filter === 'promocoes') {
-    content = promos.length
-      ? promos.map((p) => <PostCard key={p.id} post={p} />)
+    content = loadingFeed ? Loader
+      : promos.length ? promos.map((p) => <PostCard key={p.id} post={p} />)
       : <EmptyState icon={BadgePercent} title="Nenhuma promoção ativa" sub="Fique de olho — logo aparecem ofertas!" />
   } else if (filter === 'hospedagem' || filter === 'gastronomia' || filter === 'compras') {
     const list = places.filter((p) => p.category === filter)
-    content = list.length
-      ? <div className="grid grid-cols-2 gap-3">{list.map((p) => <PlaceCard key={p.id} place={p} />)}</div>
+    content = (loadingPlacesAll && !list.length) ? Loader
+      : list.length ? <div className="grid grid-cols-2 gap-3">{list.map((p) => <PlaceCard key={p.id} place={p} />)}</div>
       : <EmptyState icon={CATS[filter].Icon} title="Nada por aqui ainda" sub="Em breve novas recomendações na vila." />
   } else {
     // Tudo
@@ -253,8 +287,8 @@ export default function Feed() {
         </section>
       )
     }
-    content = blocks.length
-      ? blocks
+    content = blocks.length ? blocks
+      : (loadingFeed || loadingPlacesAll) ? Loader
       : <EmptyState icon={Sparkles} title="Descubra a Vila em breve" sub="Eventos, promoções e recomendações da vila vão aparecer aqui." />
   }
 
@@ -294,6 +328,11 @@ export default function Feed() {
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-6">
         {content}
+        {usingNearby && (
+          <p className="text-center text-[10px] text-gray-300 pt-2 pb-1">
+            Locais por OpenStreetMap · Geoapify
+          </p>
+        )}
       </main>
     </div>
   )

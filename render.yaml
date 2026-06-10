@@ -17,3 +17,7 @@ services:
         value: https://sobrejeri.github.io
       - key: ADMIN_URL
         value: https://sobrejeri.github.io
+      # Geoapify Places (OpenStreetMap) — diretório automático em "Descubra a Vila".
+      # Gere a chave grátis em https://myprojects.geoapify.com e cole aqui no Render.
+      - key: GEOAPIFY_API_KEY
+        sync: false

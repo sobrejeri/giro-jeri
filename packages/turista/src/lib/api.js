@@ -79,6 +79,8 @@ export const api = {
 
   // Diretório de estabelecimentos (Descubra a Vila)
   getEstablishments: (params = {}) => request(`/api/establishments?${new URLSearchParams(params)}`),
+  // Estabelecimentos reais por geolocalização (Geoapify / OpenStreetMap)
+  getNearbyPlaces:   (params = {}) => request(`/api/establishments/nearby?${new URLSearchParams(params)}`),
 
   // Regiões
   getRegions: () => request('/api/regions'),

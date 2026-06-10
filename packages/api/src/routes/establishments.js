@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { fetchNearby } from '../services/geoapify.js';
 
 const router = Router();
 
@@ -43,6 +44,27 @@ router.get('/', async (req, res, next) => {
     if (error) throw error;
     res.json(data || []);
   } catch (err) { next(err); }
+});
+
+// ── GET /api/establishments/nearby ─────────────────────
+// Público: estabelecimentos reais por geolocalização (Geoapify/OpenStreetMap).
+// Sem chave configurada, devolve enabled:false (o app só mostra os manuais).
+router.get('/nearby', async (req, res, next) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({ error: 'Parâmetros lat e lon são obrigatórios' });
+    }
+    const radius   = Math.min(Math.max(Number(req.query.radius) || 8000, 500), 50000);
+    const category = req.query.category;
+    const data = await fetchNearby({ lat, lon, radius, category });
+    res.json(data);
+  } catch (err) {
+    // Nunca derruba a aba: em erro do provedor, devolve lista vazia
+    console.error('[establishments/nearby]', err.message);
+    res.json({ enabled: true, results: [], error: 'provider_error' });
+  }
 });
 
 // ── Rotas administrativas ──────────────────────────────
