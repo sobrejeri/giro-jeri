@@ -147,7 +147,7 @@ function PlaceCard({ place, compact = false }) {
           </span>
         )}
         <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 bg-black/55 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full backdrop-blur-sm">
-          <cat.Icon size={11} /> {cat.label}{km != null ? ` · ${km.toFixed(1)} km` : ''}
+          <cat.Icon size={11} /> {cat.label}{place.locality ? ` · ${place.locality}` : ''}{km != null ? ` · ${km.toFixed(1)} km` : ''}
         </span>
       </div>
 
@@ -156,7 +156,9 @@ function PlaceCard({ place, compact = false }) {
           <p className="font-bold text-gray-900 text-[14px] leading-tight flex-1">{place.name}</p>
           {place.price_range && <span className="text-[12px] font-bold text-emerald-600 shrink-0">{place.price_range}</span>}
         </div>
-        {place.description && <p className="text-[12px] text-gray-500 mt-1 line-clamp-2 flex-1">{place.description}</p>}
+        {place.description && <p className="text-[12px] text-gray-500 mt-1 line-clamp-2">{place.description}</p>}
+        {place.price_note && <p className="text-[11px] font-semibold text-emerald-600 mt-1">{place.price_note}</p>}
+        <div className="flex-1" />
 
         <div className="flex items-center gap-2 mt-3">
           {wa && (

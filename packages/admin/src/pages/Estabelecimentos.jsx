@@ -22,7 +22,8 @@ const PRICE_RANGES = ['', '$', '$$', '$$$']
 
 const EMPTY = {
   name: '', category: 'gastronomia', description: '', image_url: '',
-  whatsapp: '', instagram: '', maps_url: '', address: '', price_range: '',
+  whatsapp: '', instagram: '', maps_url: '', address: '',
+  locality: '', price_range: '', price_note: '',
   is_featured: false, is_active: true,
 }
 
@@ -81,7 +82,9 @@ export default function Estabelecimentos() {
       instagram:   p.instagram || '',
       maps_url:    p.maps_url || '',
       address:     p.address || '',
+      locality:    p.locality || '',
       price_range: p.price_range || '',
+      price_note:  p.price_note || '',
       is_featured: p.is_featured ?? false,
       is_active:   p.is_active ?? true,
     })
@@ -120,7 +123,9 @@ export default function Estabelecimentos() {
       instagram:   form.instagram || null,
       maps_url:    form.maps_url || null,
       address:     form.address || null,
+      locality:    form.locality || null,
       price_range: form.price_range || null,
+      price_note:  form.price_note || null,
       is_featured: !!form.is_featured,
       is_active:   !!form.is_active,
     })
@@ -170,7 +175,7 @@ export default function Estabelecimentos() {
                 </div>
                 <CardBody>
                   <div className="flex items-center gap-1.5 text-[11px] text-gray-500 mb-1">
-                    <cat.Icon size={12} /> {cat.label}{p.price_range ? ` · ${p.price_range}` : ''}
+                    <cat.Icon size={12} /> {cat.label}{p.locality ? ` · ${p.locality}` : ''}
                   </div>
                   <p className="font-semibold text-gray-100 truncate">{p.name}</p>
                   {p.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{p.description}</p>}
@@ -230,6 +235,11 @@ export default function Estabelecimentos() {
           <div className="grid grid-cols-2 gap-3">
             <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} placeholder="(88) 99999-9999" />
             <Input label="Instagram" value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} placeholder="@usuario" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Localidade" value={form.locality} onChange={(e) => setForm({ ...form, locality: e.target.value })} placeholder="Ex: Jericoacoara, Preá, Jijoca…" />
+            <Input label="Preço (texto livre)" value={form.price_note} onChange={(e) => setForm({ ...form, price_note: e.target.value })} placeholder="Ex: R$ 90-150/pessoa" />
           </div>
 
           <Input label="Endereço" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Rua / referência na vila" />
