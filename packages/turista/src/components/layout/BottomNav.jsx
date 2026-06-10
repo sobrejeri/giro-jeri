@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Home, Compass, Car, CalendarCheck, User } from 'lucide-react'
+import { Home, Compass, Car, CalendarCheck, User, CalendarDays } from 'lucide-react'
 
 export default function BottomNav() {
   const navigate     = useNavigate()
@@ -9,6 +9,7 @@ export default function BottomNav() {
 
   const NAV = [
     { to: '/',                icon: Home,          label: t('nav.home'),      exact: true },
+    { to: '/eventos',         icon: CalendarDays,  label: t('nav.events') },
     { to: '/passeios',        icon: Compass,       label: t('nav.tours') },
     { to: '/transfers',       icon: Car,           label: t('nav.transfers') },
     { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings') },
@@ -24,7 +25,7 @@ export default function BottomNav() {
             <button
               key={to}
               onClick={() => navigate(to)}
-              className="flex flex-col items-center gap-[2px] py-1.5 px-3 rounded-xl min-w-[52px] active:scale-95 transition-transform"
+              className="flex-1 min-w-0 flex flex-col items-center gap-[2px] py-1.5 px-0.5 rounded-xl active:scale-95 transition-transform"
             >
               <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${active ? 'bg-brand/10' : ''}`}>
                 <Icon
@@ -33,7 +34,7 @@ export default function BottomNav() {
                   strokeWidth={active ? 2.5 : 1.75}
                 />
               </div>
-              <span className={`text-[10px] transition-colors ${active ? 'text-brand font-semibold' : 'text-gray-400 font-medium'}`}>
+              <span className={`text-[10px] leading-tight max-w-full truncate transition-colors ${active ? 'text-brand font-semibold' : 'text-gray-400 font-medium'}`}>
                 {label}
               </span>
             </button>

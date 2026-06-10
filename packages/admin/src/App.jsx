@@ -13,6 +13,7 @@ import Financeiro from './pages/Financeiro'
 import Auditoria from './pages/Auditoria'
 import Configuracoes from './pages/Configuracoes'
 import Reservas from './pages/Reservas'
+import Feed from './pages/Feed'
 import Perfil from './pages/Perfil'
 
 function PrivateRoute({ children }) {
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="regioes"      element={<Regioes />} />
         <Route path="cupons"       element={<Cupons />} />
         <Route path="temporada"    element={<Temporada />} />
+        <Route path="feed"         element={<Feed />} />
         <Route path="financeiro"   element={<Financeiro />} />
         <Route path="auditoria"    element={<Auditoria />} />
         <Route path="configuracoes" element={<Configuracoes />} />

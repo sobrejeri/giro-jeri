@@ -74,6 +74,9 @@ export const api = {
   // Configurações públicas (banner da home etc.)
   getPublicSettings: () => request('/api/settings/public'),
 
+  // Feed de eventos da vila
+  getFeed: () => request('/api/feed'),
+
   // Regiões
   getRegions: () => request('/api/regions'),
 
