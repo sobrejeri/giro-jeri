@@ -174,6 +174,21 @@ export default function TourDetail() {
                 </ul>
               </Card>
             )}
+            {tour.excludes_text && (
+              <Card className="p-5">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <XCircle size={16} className="text-gray-400" /> Não incluído
+                </h4>
+                <ul className="space-y-1.5">
+                  {tour.excludes_text.split(',').map((item, i) => (
+                    <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                      <XCircle size={13} className="text-gray-300 mt-0.5 shrink-0" />
+                      {item.trim()}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
             {tour.cancellation_policy_text && (
               <Card className="p-5">
                 <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">

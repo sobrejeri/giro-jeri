@@ -16,6 +16,7 @@ Abra o **SQL Editor** do Supabase e execute o **conteúdo** de cada arquivo abai
 | 2 | `supabase/migrations/017_establishments_and_promos.sql` | Tabela de estabelecimentos + promoções |
 | 3 | `supabase/migrations/018_establishments_seed.sql` | Os 90 estabelecimentos do guia |
 | 4 | `supabase/migrations/019_engagement.sql` | Curtidas, comentários e avaliações |
+| 5 | `supabase/migrations/020_catalogo_real_jericoacoara.sql` | Catálogo real: passeios, transfers e preços (requer a 005 já aplicada) |
 
 > ⚠️ Cole o **conteúdo do arquivo** (o SQL), não o nome do arquivo.
 
