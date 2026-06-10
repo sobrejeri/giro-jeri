@@ -31,7 +31,7 @@ export default function TopNav() {
         <nav className="flex items-center gap-6 flex-1">
           <NavLink to="/passeios"          className={navLinkClass}>Passeios</NavLink>
           <NavLink to="/transfers"         className={navLinkClass}>Transfers</NavLink>
-          <NavLink to="/eventos"           className={navLinkClass}>Eventos</NavLink>
+          <NavLink to="/eventos"           className={navLinkClass}>Descubra a Vila</NavLink>
           {token && <NavLink to="/minhas-reservas" className={navLinkClass}>Reservas</NavLink>}
           {token && <NavLink to="/perfil"          className={navLinkClass}>Perfil</NavLink>}
         </nav>

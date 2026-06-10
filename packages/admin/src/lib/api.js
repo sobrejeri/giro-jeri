@@ -168,9 +168,15 @@ export const api = {
   // Upload de imagens do site (banner da home etc.) → devolve { url }
   uploadSiteImage: (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
 
-  // Feed de eventos da vila
+  // Feed de eventos / promoções da vila
   getFeedPosts:   ()         => request('/api/feed/admin'),
   createFeedPost: (body)     => request('/api/feed', { method: 'POST', body }),
   updateFeedPost: (id, body) => request(`/api/feed/${id}`, { method: 'PUT', body }),
   deleteFeedPost: (id)       => request(`/api/feed/${id}`, { method: 'DELETE' }),
+
+  // Estabelecimentos (Descubra a Vila)
+  getEstablishments:   ()         => request('/api/establishments/admin'),
+  createEstablishment: (body)     => request('/api/establishments', { method: 'POST', body }),
+  updateEstablishment: (id, body) => request(`/api/establishments/${id}`, { method: 'PUT', body }),
+  deleteEstablishment: (id)       => request(`/api/establishments/${id}`, { method: 'DELETE' }),
 }

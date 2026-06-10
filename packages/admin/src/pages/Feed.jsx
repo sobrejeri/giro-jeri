@@ -2,19 +2,22 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Newspaper, Upload, Loader2,
-  Calendar, MapPin, Eye, EyeOff,
+  Calendar, MapPin, Eye, EyeOff, BadgePercent,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
-import Input, { Textarea } from '../components/ui/Input'
+import Input, { Textarea, Select } from '../components/ui/Input'
 import Card, { CardBody } from '../components/ui/Card'
 
 const EMPTY = {
+  kind: 'event',
   title: '', body: '', image_url: '',
-  event_date: '', event_time: '', location: '', is_published: true,
+  event_date: '', event_time: '', location: '',
+  discount_label: '', valid_until: '',
+  is_published: true,
 }
 
 // Redimensiona/comprime imagem no cliente → data URL JPEG
@@ -69,13 +72,16 @@ export default function Feed() {
   function openNew() { setForm(EMPTY); setImgError(''); setModal({ isNew: true }) }
   function openEdit(p) {
     setForm({
-      title:        p.title || '',
-      body:         p.body || '',
-      image_url:    p.image_url || '',
-      event_date:   p.event_date?.slice(0, 10) || '',
-      event_time:   p.event_time || '',
-      location:     p.location || '',
-      is_published: p.is_published ?? true,
+      kind:           p.kind || 'event',
+      title:          p.title || '',
+      body:           p.body || '',
+      image_url:      p.image_url || '',
+      event_date:     p.event_date?.slice(0, 10) || '',
+      event_time:     p.event_time || '',
+      location:       p.location || '',
+      discount_label: p.discount_label || '',
+      valid_until:    p.valid_until?.slice(0, 10) || '',
+      is_published:   p.is_published ?? true,
     })
     setImgError('')
     setModal(p)
@@ -103,14 +109,18 @@ export default function Feed() {
 
   function handleSubmit(e) {
     e.preventDefault()
+    const isPromo = form.kind === 'promo'
     saveMut.mutate({
-      title:        form.title,
-      body:         form.body || null,
-      image_url:    form.image_url || null,
-      event_date:   form.event_date || null,
-      event_time:   form.event_time || null,
-      location:     form.location || null,
-      is_published: !!form.is_published,
+      kind:           form.kind,
+      title:          form.title,
+      body:           form.body || null,
+      image_url:      form.image_url || null,
+      event_date:     isPromo ? null : (form.event_date || null),
+      event_time:     form.event_time || null,
+      location:       form.location || null,
+      discount_label: isPromo ? (form.discount_label || null) : null,
+      valid_until:    isPromo ? (form.valid_until || null) : null,
+      is_published:   !!form.is_published,
     })
   }
 
@@ -122,10 +132,10 @@ export default function Feed() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-gray-100">Feed de Eventos</h1>
-          <p className="text-sm text-gray-500">Posts exibidos na aba “Eventos” do app do turista.</p>
+          <h1 className="text-lg font-semibold text-gray-100">Eventos & Promoções</h1>
+          <p className="text-sm text-gray-500">Aparecem na aba “Descubra a Vila” do app do turista.</p>
         </div>
-        <Button onClick={openNew} className="ml-auto"><Plus size={16} /> Novo Post</Button>
+        <Button onClick={openNew} className="ml-auto"><Plus size={16} /> Novo</Button>
       </div>
 
       {posts.length === 0 ? (
@@ -151,9 +161,15 @@ export default function Feed() {
                 </span>
               </div>
               <CardBody>
+                <div className="mb-1">
+                  {p.kind === 'promo'
+                    ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full"><BadgePercent size={11} /> Promoção{p.discount_label ? ` · ${p.discount_label}` : ''}</span>
+                    : <span className="inline-flex items-center gap-1 text-[10px] font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-full"><Calendar size={11} /> Evento</span>}
+                </div>
                 <p className="font-semibold text-gray-100 truncate">{p.title}</p>
                 <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-gray-500">
-                  {p.event_date && <span className="flex items-center gap-1"><Calendar size={12} />{fmtDate(p.event_date)}{p.event_time ? ` · ${p.event_time}` : ''}</span>}
+                  {p.kind !== 'promo' && p.event_date && <span className="flex items-center gap-1"><Calendar size={12} />{fmtDate(p.event_date)}{p.event_time ? ` · ${p.event_time}` : ''}</span>}
+                  {p.kind === 'promo' && p.valid_until && <span className="flex items-center gap-1"><Calendar size={12} />até {fmtDate(p.valid_until)}</span>}
                   {p.location && <span className="flex items-center gap-1"><MapPin size={12} />{p.location}</span>}
                 </div>
                 {p.body && <p className="text-xs text-gray-500 mt-2 line-clamp-2">{p.body}</p>}
@@ -176,6 +192,11 @@ export default function Feed() {
 
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.isNew ? 'Novo Post' : 'Editar Post'} size="lg">
         <form onSubmit={handleSubmit} className="space-y-4">
+          <Select label="Tipo" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+            <option value="event">Evento</option>
+            <option value="promo">Promoção</option>
+          </Select>
+
           {/* Imagem */}
           <div>
             <label className="text-sm font-medium text-gray-300 mb-1.5 block">Imagem</label>
@@ -219,10 +240,17 @@ export default function Feed() {
             placeholder="Conte os detalhes do evento…"
           />
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Data do evento" type="date" value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })} />
-            <Input label="Horário" value={form.event_time} onChange={(e) => setForm({ ...form, event_time: e.target.value })} placeholder="Ex: 20h" />
-          </div>
+          {form.kind === 'promo' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Desconto / oferta" value={form.discount_label} onChange={(e) => setForm({ ...form, discount_label: e.target.value })} placeholder="Ex: 20% OFF, 2x1" />
+              <Input label="Válido até" type="date" value={form.valid_until} onChange={(e) => setForm({ ...form, valid_until: e.target.value })} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Data do evento" type="date" value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })} />
+              <Input label="Horário" value={form.event_time} onChange={(e) => setForm({ ...form, event_time: e.target.value })} placeholder="Ex: 20h" />
+            </div>
+          )}
 
           <Input label="Local" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Ex: Praça da Matriz, Jericoacoara" />
 

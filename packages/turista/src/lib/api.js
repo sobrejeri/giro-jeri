@@ -74,8 +74,11 @@ export const api = {
   // Configurações públicas (banner da home etc.)
   getPublicSettings: () => request('/api/settings/public'),
 
-  // Feed de eventos da vila
+  // Feed de eventos / promoções da vila
   getFeed: () => request('/api/feed'),
+
+  // Diretório de estabelecimentos (Descubra a Vila)
+  getEstablishments: (params = {}) => request(`/api/establishments?${new URLSearchParams(params)}`),
 
   // Regiões
   getRegions: () => request('/api/regions'),

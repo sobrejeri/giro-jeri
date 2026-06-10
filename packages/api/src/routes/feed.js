@@ -8,13 +8,16 @@ import { authenticate, requireAdmin } from '../middleware/auth.js';
 const router = Router();
 
 const postSchema = z.object({
-  title:        z.string().min(1).max(200),
-  body:         z.string().max(5000).optional().nullable(),
-  image_url:    z.string().max(3000).optional().nullable(),
-  event_date:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-  event_time:   z.string().max(30).optional().nullable(),
-  location:     z.string().max(200).optional().nullable(),
-  is_published: z.boolean().optional(),
+  title:          z.string().min(1).max(200),
+  body:           z.string().max(5000).optional().nullable(),
+  image_url:      z.string().max(3000).optional().nullable(),
+  event_date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  event_time:     z.string().max(30).optional().nullable(),
+  location:       z.string().max(200).optional().nullable(),
+  is_published:   z.boolean().optional(),
+  kind:           z.enum(['event', 'promo']).optional(),
+  discount_label: z.string().max(60).optional().nullable(),
+  valid_until:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
 });
 
 function clean(payload) {
