@@ -15,6 +15,7 @@ import Bookings        from './pages/Bookings'
 import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
 import Auth            from './pages/Auth'
+import Legal           from './pages/Legal'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -46,6 +47,8 @@ export default function App() {
         <Route path="minhas-reservas"     element={<PrivateRoute><Bookings /></PrivateRoute>} />
         <Route path="minhas-reservas/:id" element={<PrivateRoute><BookingDetail /></PrivateRoute>} />
         <Route path="perfil"              element={<Profile />} />
+        <Route path="termos"              element={<Legal />} />
+        <Route path="privacidade"         element={<Legal />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

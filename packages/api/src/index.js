@@ -53,8 +53,9 @@ const authLimiter = rateLimit({
   max:      50,
   message:  { error: 'Muitas tentativas de login. Aguarde 15 minutos.' },
 });
-app.use('/api/auth/login',    authLimiter);
-app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/login',           authLimiter);
+app.use('/api/auth/register',        authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
 
 // ── Health check ───────────────────────────────────────
 app.get('/health', (_req, res) => {

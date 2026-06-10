@@ -302,6 +302,12 @@ export default function Auth({ defaultTab = 'login' }) {
             >
               {loading ? t('auth.registerLoading') : t('auth.registerBtn')}
             </button>
+            <p className="text-center text-[11px] text-gray-400 leading-relaxed">
+              Ao criar sua conta, você concorda com os{' '}
+              <a href={`${import.meta.env.BASE_URL || '/'}termos`} target="_blank" rel="noreferrer" className="text-brand font-semibold underline">Termos de Uso</a>
+              {' '}e a{' '}
+              <a href={`${import.meta.env.BASE_URL || '/'}privacidade`} target="_blank" rel="noreferrer" className="text-brand font-semibold underline">Política de Privacidade</a>.
+            </p>
             <p className="text-center text-[12px] text-gray-400 pt-1">
               {t('auth.hasAccount')}{' '}
               <button type="button" onClick={() => { setTab('login'); setError('') }} className="text-brand font-semibold">

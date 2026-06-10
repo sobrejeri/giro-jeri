@@ -21,3 +21,15 @@ services:
       # Gere a chave grátis em https://myprojects.geoapify.com e cole aqui no Render.
       - key: GEOAPIFY_API_KEY
         sync: false
+      # Mercado Pago — produção. Token em mercadopago.com.br > Suas integrações.
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false
+      # Assinatura secreta do webhook (Suas integrações > Webhooks > Assinatura secreta)
+      - key: MERCADO_PAGO_WEBHOOK_SECRET
+        sync: false
+      # Resend — e-mails transacionais (confirmação de reserva). Chave em resend.com.
+      - key: RESEND_API_KEY
+        sync: false
+      # Remetente dos e-mails. Sem domínio verificado no Resend, use onboarding@resend.dev
+      - key: EMAIL_FROM
+        value: Giro Jeri <onboarding@resend.dev>

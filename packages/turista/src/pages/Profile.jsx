@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
@@ -425,6 +425,11 @@ export default function Profile() {
           </button>
         )}
 
+        <p className="text-center text-[11px] text-gray-400 pb-1">
+          <Link to="/termos" className="hover:text-brand">Termos de Uso</Link>
+          {' · '}
+          <Link to="/privacidade" className="hover:text-brand">Privacidade</Link>
+        </p>
         <p className="text-center text-[11px] text-gray-300 pb-2">{t('profile.version')}</p>
       </main>
     </div>

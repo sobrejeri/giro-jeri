@@ -1,6 +1,8 @@
 import { Router }    from 'express'
+import crypto        from 'node:crypto'
 import { supabase }  from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
+import { sendBookingConfirmation } from '../services/email.js'
 
 const router = Router()
 
@@ -218,13 +220,56 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── Verificação de assinatura do Mercado Pago ─────────
+// Header x-signature: "ts=...,v1=<hmac>". Manifest:
+//   id:[data.id];request-id:[x-request-id];ts:[ts];
+// Sem MERCADO_PAGO_WEBHOOK_SECRET configurado, apenas loga aviso
+// (não bloqueia) para não quebrar ambientes ainda sem a chave.
+function verifyMpSignature(req, dataId) {
+  const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET
+  if (!secret) {
+    console.warn('[webhook] MERCADO_PAGO_WEBHOOK_SECRET ausente — assinatura NÃO verificada')
+    return true
+  }
+  const sig = req.headers['x-signature']
+  if (!sig) return false
+
+  const parts = Object.fromEntries(
+    sig.split(',').map((p) => p.trim().split('=').map((s) => s.trim()))
+  )
+  if (!parts.ts || !parts.v1) return false
+
+  const requestId = req.headers['x-request-id'] || ''
+  const manifest  = `id:${String(dataId || '').toLowerCase()};request-id:${requestId};ts:${parts.ts};`
+  const expected  = crypto.createHmac('sha256', secret).update(manifest).digest('hex')
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1))
+  } catch {
+    return false
+  }
+}
+
 // ── POST /api/payments/webhook ─────────────────────────
-// Recebe eventos do Mercado Pago
+// Recebe eventos do Mercado Pago.
+// O body chega como Buffer bruto (express.raw no index.js) para
+// permitir a verificação de assinatura — parseia aqui.
 router.post('/webhook', async (req, res, next) => {
   try {
-    const event      = req.body
-    const eventType  = event.type || event.action || 'unknown'
-    const gatewayId  = event.data?.id?.toString()
+    let event = req.body
+    if (Buffer.isBuffer(event)) {
+      try { event = JSON.parse(event.toString('utf8')) }
+      catch { return res.status(400).json({ error: 'JSON inválido' }) }
+    }
+
+    const eventType = event.type || event.action || 'unknown'
+    // MP manda data.id no body e também na query string da URL
+    const gatewayId = (req.query['data.id'] || event.data?.id)?.toString()
+
+    if (!verifyMpSignature(req, gatewayId)) {
+      console.warn('[webhook] assinatura inválida — evento descartado')
+      return res.status(401).json({ error: 'Assinatura inválida' })
+    }
 
     // Registra evento bruto
     await supabase.from('payment_events').insert({
@@ -345,6 +390,42 @@ async function onPaymentApproved(payment) {
     { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${booking?.booking_code}`,   amount: gatewayFee,           direction: 'outflow', financial_status: 'pending' },
     { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${booking?.booking_code}`, amount: payment.amount_gross - gatewayFee, direction: 'inflow', financial_status: 'pending' },
   ])
+
+  // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
+  sendConfirmationEmail(booking).catch((err) =>
+    console.error('[email] confirmação de reserva falhou:', err.message))
+}
+
+async function sendConfirmationEmail(booking) {
+  if (!booking?.user_id) return
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('full_name, email')
+    .eq('id', booking.user_id)
+    .single()
+  if (!user?.email) return
+
+  let serviceName = null
+  if (booking.service_type === 'tour' && booking.service_id) {
+    const { data: tour } = await supabase
+      .from('tours').select('name').eq('id', booking.service_id).maybeSingle()
+    serviceName = tour?.name || 'Passeio'
+  } else if (booking.service_type === 'transfer') {
+    serviceName = [booking.origin_text, booking.destination_text]
+      .filter(Boolean).join(' → ') || 'Transfer'
+  }
+
+  await sendBookingConfirmation({
+    to:          user.email,
+    name:        user.full_name?.split(' ')[0],
+    bookingCode: booking.booking_code,
+    serviceName,
+    serviceDate: booking.service_date,
+    serviceTime: booking.service_time,
+    peopleCount: booking.people_count,
+    totalAmount: booking.total_amount,
+  })
 }
 
 export default router
