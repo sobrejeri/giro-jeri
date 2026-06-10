@@ -3,9 +3,30 @@
 -- Fonte: levantamento de passeios e translados — referência jun/2026.
 -- Preços em FAIXA: piso → base_price (preço normal), teto → high_season_price
 -- (a alta temporada soma o % automaticamente via high_season_rules).
+-- Remove os passeios de TESTE e substitui pelo catálogo real.
 -- Requer a migration 005 (cria a região 'jericoacoara' e veículos base).
 -- Execute no Supabase SQL Editor.
 -- =============================================================
+
+-- ─── 0. Remove passeios de teste ─────────────────────────────
+-- (Buggy Completo, Lagoas combinado e Barco eram apenas demonstração.
+--  O Pôr do Sol é real e será atualizado mais abaixo.)
+DELETE FROM vehicle_pricing_rules
+WHERE service_type = 'tour'
+  AND service_id IN (
+    SELECT id FROM tours WHERE slug IN (
+      'buggy-completo-jericoacoara',
+      'lagoas-azul-paraiso-jericoacoara',
+      'passeio-barco-lagoa-grande-jericoacoara'
+    )
+  );
+
+DELETE FROM tours WHERE slug IN (
+  'buggy-completo-jericoacoara',
+  'lagoas-azul-paraiso-jericoacoara',
+  'passeio-barco-lagoa-grande-jericoacoara'
+);
+-- (os horários caem junto via ON DELETE CASCADE)
 
 -- ─── 1. Veículos novos / ajustes ─────────────────────────────
 -- Habilita a jardineira também em modo privativo (passa a ter os dois)
