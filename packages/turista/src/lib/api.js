@@ -79,8 +79,17 @@ export const api = {
 
   // Diretório de estabelecimentos (Descubra a Vila)
   getEstablishments: (params = {}) => request(`/api/establishments?${new URLSearchParams(params)}`),
-  // Estabelecimentos reais por geolocalização (Geoapify / OpenStreetMap)
   getNearbyPlaces:   (params = {}) => request(`/api/establishments/nearby?${new URLSearchParams(params)}`),
+  getReviews:        (estId)       => request(`/api/establishments/${estId}/reviews`),
+  addReview:         (estId, body) => request(`/api/establishments/${estId}/reviews`, { method: 'POST', body }),
+  deleteReview:      (id)          => request(`/api/establishments/reviews/${id}`, { method: 'DELETE' }),
+
+  // Engajamento no feed (likes + comentários)
+  getMyLikes:     ()           => request('/api/feed/my-likes'),
+  likePost:       (id)         => request(`/api/feed/${id}/like`, { method: 'POST' }),
+  getComments:    (postId)     => request(`/api/feed/${postId}/comments`),
+  addComment:     (postId, body) => request(`/api/feed/${postId}/comments`, { method: 'POST', body: { body } }),
+  deleteComment:  (id)         => request(`/api/feed/comments/${id}`, { method: 'DELETE' }),
 
   // Regiões
   getRegions: () => request('/api/regions'),

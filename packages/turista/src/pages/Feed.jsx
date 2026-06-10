@@ -1,14 +1,14 @@
-import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useMemo, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
-  Star, Instagram, Navigation, Globe,
+  Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
 } from 'lucide-react'
 
-// Centro de Jericoacoara — fallback quando não há GPS/região
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
 
 /* ── helpers ───────────────────────────────────────────── */
@@ -16,6 +16,17 @@ function fmtDate(d) {
   if (!d) return null
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
+}
+function timeAgo(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return 'agora'
+  if (min < 60) return `${min}min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  return `${d}d`
 }
 
 function WhatsAppIcon({ size = 16 }) {
@@ -57,9 +68,229 @@ function mapLink(place) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.name} Jericoacoara`)}`
 }
 
+/* ── StarRating ────────────────────────────────────────── */
+function StarRating({ value, onChange, size = 18 }) {
+  const stars = [1, 2, 3, 4, 5]
+  if (onChange) {
+    return (
+      <div className="flex gap-0.5">
+        {stars.map((s) => (
+          <button key={s} type="button" onClick={() => onChange(s)} className="p-0.5 active:scale-110 transition-transform">
+            <Star size={size} className={s <= value ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
+          </button>
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className="flex gap-0.5 items-center">
+      {stars.map((s) => (
+        <Star key={s} size={size} className={s <= Math.round(value) ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
+      ))}
+    </div>
+  )
+}
+
+/* ── Comments Section ──────────────────────────────────── */
+function CommentsSection({ postId, commentCount, user }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const qc = useQueryClient()
+
+  const { data: comments, isLoading } = useQuery({
+    queryKey: ['comments', postId],
+    queryFn:  () => api.getComments(postId),
+    enabled:  open,
+  })
+
+  const addMut = useMutation({
+    mutationFn: (body) => api.addComment(postId, body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['comments', postId] }); qc.invalidateQueries({ queryKey: ['feed'] }); setText('') },
+  })
+
+  const delMut = useMutation({
+    mutationFn: (id) => api.deleteComment(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['comments', postId] }); qc.invalidateQueries({ queryKey: ['feed'] }) },
+  })
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    const body = text.trim()
+    if (!body) return
+    addMut.mutate(body)
+  }
+
+  return (
+    <div>
+      <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-gray-700">
+        <MessageCircle size={15} />
+        {commentCount > 0 ? `${commentCount} comentário${commentCount > 1 ? 's' : ''}` : 'Comentar'}
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          {isLoading ? (
+            <div className="flex justify-center py-4">
+              <div className="w-5 h-5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-60 overflow-y-auto">
+              {(comments || []).map((c) => (
+                <div key={c.id} className="flex gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0 overflow-hidden">
+                    {c.users?.photo_url
+                      ? <img src={c.users.photo_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-500">{(c.users?.full_name || '?')[0]}</div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px]">
+                      <span className="font-bold text-gray-900">{c.users?.full_name || 'Usuário'}</span>{' '}
+                      <span className="text-gray-600">{c.body}</span>
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] text-gray-400">{timeAgo(c.created_at)}</span>
+                      {user && c.user_id === user.id && (
+                        <button onClick={() => delMut.mutate(c.id)} className="text-[10px] text-gray-400 hover:text-red-400">Excluir</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {(comments || []).length === 0 && (
+                <p className="text-[12px] text-gray-400 text-center py-2">Nenhum comentário ainda. Seja o primeiro!</p>
+              )}
+            </div>
+          )}
+
+          {user ? (
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Escreva um comentário…"
+                maxLength={500}
+                className="flex-1 h-9 px-3 rounded-full bg-gray-100 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30"
+              />
+              <button
+                type="submit"
+                disabled={!text.trim() || addMut.isPending}
+                className="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center shrink-0 disabled:opacity-40 active:scale-90 transition-transform"
+              >
+                <Send size={14} />
+              </button>
+            </form>
+          ) : (
+            <p className="text-[12px] text-gray-400 text-center">Faça login para comentar</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Review Modal ──────────────────────────────────────── */
+function ReviewModal({ place, onClose, user }) {
+  const [rating, setRating]   = useState(0)
+  const [comment, setComment] = useState('')
+  const qc = useQueryClient()
+
+  const { data: reviews, isLoading } = useQuery({
+    queryKey: ['reviews', place.id],
+    queryFn:  () => api.getReviews(place.id),
+  })
+
+  const addMut = useMutation({
+    mutationFn: (body) => api.addReview(place.id, body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reviews', place.id] }); qc.invalidateQueries({ queryKey: ['establishments'] }); setRating(0); setComment('') },
+  })
+
+  const delMut = useMutation({
+    mutationFn: (id) => api.deleteReview(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reviews', place.id] }); qc.invalidateQueries({ queryKey: ['establishments'] }) },
+  })
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (rating < 1) return
+    addMut.mutate({ rating, comment: comment.trim() || null })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white px-4 pt-4 pb-3 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-bold text-gray-900 text-[15px]">{place.name}</h3>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {user && (
+            <form onSubmit={handleSubmit} className="space-y-3 pb-3 border-b border-gray-100">
+              <p className="text-[13px] font-semibold text-gray-700">Sua avaliação</p>
+              <StarRating value={rating} onChange={setRating} size={28} />
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Comentário (opcional)"
+                maxLength={500}
+                rows={2}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30 resize-none"
+              />
+              <button
+                type="submit"
+                disabled={rating < 1 || addMut.isPending}
+                className="w-full h-10 rounded-xl bg-brand text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.98] transition-transform"
+              >
+                {addMut.isPending ? 'Enviando…' : 'Enviar avaliação'}
+              </button>
+            </form>
+          )}
+          {!user && (
+            <p className="text-[13px] text-gray-400 text-center py-2">Faça login para avaliar</p>
+          )}
+
+          {isLoading ? (
+            <div className="flex justify-center py-6">
+              <div className="w-5 h-5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (reviews || []).length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-[13px] font-semibold text-gray-700">{reviews.length} avaliação{reviews.length > 1 ? 'ões' : ''}</p>
+              {reviews.map((r) => (
+                <div key={r.id} className="flex gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-gray-200 shrink-0 overflow-hidden">
+                    {r.users?.photo_url
+                      ? <img src={r.users.photo_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-gray-500">{(r.users?.full_name || '?')[0]}</div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-bold text-gray-900">{r.users?.full_name || 'Usuário'}</span>
+                      <StarRating value={r.rating} size={11} />
+                    </div>
+                    {r.comment && <p className="text-[12px] text-gray-600 mt-0.5">{r.comment}</p>}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] text-gray-400">{timeAgo(r.created_at)}</span>
+                      {user && r.user_id === user.id && (
+                        <button onClick={() => delMut.mutate(r.id)} className="text-[10px] text-gray-400 hover:text-red-400">Excluir</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-gray-400 text-center py-4">Nenhuma avaliação ainda</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── feed card (evento / promoção) ─────────────────────── */
-function PostCard({ post }) {
-  const [liked, setLiked] = useState(false)
+function PostCard({ post, liked, onLike, user }) {
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
@@ -106,13 +337,19 @@ function PostCard({ post }) {
       )}
 
       <div className="flex items-center gap-4 px-4 pt-3">
-        <button onClick={() => setLiked((v) => !v)} className="active:scale-90 transition-transform" aria-label="Curtir">
+        <button onClick={onLike} className="active:scale-90 transition-transform" aria-label="Curtir">
           <Heart size={22} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-700'} />
         </button>
         <button onClick={share} className="active:scale-90 transition-transform" aria-label="Compartilhar">
           <Share2 size={21} className="text-gray-700" />
         </button>
       </div>
+
+      {post.like_count > 0 && (
+        <p className="px-4 mt-1.5 text-[13px] font-bold text-gray-900">
+          {post.like_count} curtida{post.like_count > 1 ? 's' : ''}
+        </p>
+      )}
 
       <div className="px-4 py-3 space-y-1.5">
         <p className="text-[15px] font-bold text-gray-900">{post.title}</p>
@@ -122,13 +359,16 @@ function PostCard({ post }) {
           {validLabel && isPromo && <span className="flex items-center gap-1"><Calendar size={12} className="text-emerald-500" />Válido até {validLabel}</span>}
           {post.location && <span className="flex items-center gap-1"><MapPin size={12} className="text-brand" />{post.location}</span>}
         </div>
+        <div className="pt-1">
+          <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user} />
+        </div>
       </div>
     </article>
   )
 }
 
 /* ── estabelecimento ───────────────────────────────────── */
-function PlaceCard({ place, compact = false }) {
+function PlaceCard({ place, compact = false, onReview }) {
   const cat = CATS[place.category] || CATS.gastronomia
   const wa  = waLink(place.whatsapp)
   const ig  = igLink(place.instagram)
@@ -137,7 +377,7 @@ function PlaceCard({ place, compact = false }) {
 
   return (
     <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col ${compact ? 'w-64 shrink-0' : ''}`}>
-      <div className="relative h-36">
+      <div className="relative h-36" onClick={onReview} role="button" tabIndex={0}>
         {place.image_url
           ? <img src={place.image_url} alt={place.name} className="w-full h-full object-cover" />
           : <div className="w-full h-full bg-gradient-to-br from-orange-300 to-amber-200 flex items-center justify-center"><cat.Icon size={30} className="text-white/60" /></div>}
@@ -156,6 +396,25 @@ function PlaceCard({ place, compact = false }) {
           <p className="font-bold text-gray-900 text-[14px] leading-tight flex-1">{place.name}</p>
           {place.price_range && <span className="text-[12px] font-bold text-emerald-600 shrink-0">{place.price_range}</span>}
         </div>
+
+        {(place.avg_rating != null || place.review_count > 0) && (
+          <button onClick={onReview} className="flex items-center gap-1.5 mt-1.5 group">
+            <div className="flex gap-0.5">
+              {[1,2,3,4,5].map((s) => (
+                <Star key={s} size={11} className={s <= Math.round(place.avg_rating || 0) ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
+              ))}
+            </div>
+            <span className="text-[11px] font-semibold text-gray-500 group-hover:text-brand">
+              {place.avg_rating} ({place.review_count})
+            </span>
+          </button>
+        )}
+        {!place.avg_rating && !place.review_count && place.id && (
+          <button onClick={onReview} className="flex items-center gap-1 mt-1.5 text-[11px] text-gray-400 hover:text-brand">
+            <Star size={11} /> Avaliar
+          </button>
+        )}
+
         {place.description && <p className="text-[12px] text-gray-500 mt-1 line-clamp-2">{place.description}</p>}
         {place.price_note && <p className="text-[11px] font-semibold text-emerald-600 mt-1">{place.price_note}</p>}
         <div className="flex-1" />
@@ -206,7 +465,10 @@ function SectionTitle({ children }) {
 /* ── página ────────────────────────────────────────────── */
 export default function Feed() {
   const [filter, setFilter] = useState('tudo')
+  const [reviewPlace, setReviewPlace] = useState(null)
+  const { user } = useAuth()
   const { userCoords, region } = useRegion()
+  const qc = useQueryClient()
 
   const center = (userCoords?.lat != null && userCoords?.lon != null)
     ? userCoords
@@ -222,12 +484,42 @@ export default function Feed() {
     staleTime: 30 * 60 * 1000,
   })
 
+  const { data: myLikes } = useQuery({
+    queryKey: ['my-likes'],
+    queryFn:  () => api.getMyLikes(),
+    enabled:  !!user,
+  })
+  const likedSet = useMemo(() => new Set(myLikes || []), [myLikes])
+
+  const likeMut = useMutation({
+    mutationFn: (postId) => api.likePost(postId),
+    onMutate: async (postId) => {
+      await qc.cancelQueries({ queryKey: ['feed'] })
+      await qc.cancelQueries({ queryKey: ['my-likes'] })
+      const prevFeed = qc.getQueryData(['feed'])
+      const prevLikes = qc.getQueryData(['my-likes'])
+      const wasLiked = likedSet.has(postId)
+      qc.setQueryData(['my-likes'], (old) => wasLiked ? (old || []).filter((id) => id !== postId) : [...(old || []), postId])
+      qc.setQueryData(['feed'], (old) => (old || []).map((p) => p.id === postId ? { ...p, like_count: (p.like_count || 0) + (wasLiked ? -1 : 1) } : p))
+      return { prevFeed, prevLikes }
+    },
+    onError: (_err, _postId, ctx) => {
+      if (ctx?.prevFeed) qc.setQueryData(['feed'], ctx.prevFeed)
+      if (ctx?.prevLikes) qc.setQueryData(['my-likes'], ctx.prevLikes)
+    },
+    onSettled: () => { qc.invalidateQueries({ queryKey: ['feed'] }); qc.invalidateQueries({ queryKey: ['my-likes'] }) },
+  })
+
+  const handleLike = useCallback((postId) => {
+    if (!user) return
+    likeMut.mutate(postId)
+  }, [user, likeMut])
+
   const posts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
   const manual  = Array.isArray(placeData) ? placeData : (placeData?.data || [])
   const organic = nearbyData?.results || []
   const usingNearby = !!nearbyData?.enabled && organic.length > 0
 
-  // Une manuais + orgânicos (OpenStreetMap), sem duplicar pelo nome
   const places = useMemo(() => {
     const names = new Set(manual.map((p) => (p.name || '').toLowerCase().trim()))
     const extra = organic.filter((o) => !names.has((o.name || '').toLowerCase().trim()))
@@ -246,29 +538,38 @@ export default function Feed() {
     </div>
   )
 
+  const renderPost = (p) => (
+    <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user} />
+  )
+  const renderPlace = (p) => (
+    <PlaceCard key={p.id} place={p} onReview={p.id ? () => setReviewPlace(p) : undefined} />
+  )
+  const renderPlaceCompact = (p) => (
+    <PlaceCard key={p.id} place={p} compact onReview={p.id ? () => setReviewPlace(p) : undefined} />
+  )
+
   let content
   if (filter === 'eventos') {
     content = loadingFeed ? Loader
-      : events.length ? events.map((p) => <PostCard key={p.id} post={p} />)
+      : events.length ? events.map(renderPost)
       : <EmptyState icon={CalendarDays} title="Nenhum evento ainda" sub="Volte em breve para conferir!" />
   } else if (filter === 'promocoes') {
     content = loadingFeed ? Loader
-      : promos.length ? promos.map((p) => <PostCard key={p.id} post={p} />)
+      : promos.length ? promos.map(renderPost)
       : <EmptyState icon={BadgePercent} title="Nenhuma promoção ativa" sub="Fique de olho — logo aparecem ofertas!" />
   } else if (filter === 'hospedagem' || filter === 'gastronomia' || filter === 'compras') {
     const list = places.filter((p) => p.category === filter)
     content = (loadingPlacesAll && !list.length) ? Loader
-      : list.length ? <div className="grid grid-cols-2 gap-3">{list.map((p) => <PlaceCard key={p.id} place={p} />)}</div>
+      : list.length ? <div className="grid grid-cols-2 gap-3">{list.map(renderPlace)}</div>
       : <EmptyState icon={CATS[filter].Icon} title="Nada por aqui ainda" sub="Em breve novas recomendações na vila." />
   } else {
-    // Tudo
     const blocks = []
     if (featured.length) {
       blocks.push(
         <section key="destaques" className="space-y-3">
           <SectionTitle>⭐ Destaques</SectionTitle>
           <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
-            {featured.map((p) => <PlaceCard key={p.id} place={p} compact />)}
+            {featured.map(renderPlaceCompact)}
           </div>
         </section>
       )
@@ -277,7 +578,7 @@ export default function Feed() {
       blocks.push(
         <section key="feed" className="space-y-4">
           <SectionTitle>🎉 Acontecendo na vila</SectionTitle>
-          {posts.map((p) => <PostCard key={p.id} post={p} />)}
+          {posts.map(renderPost)}
         </section>
       )
     }
@@ -285,7 +586,7 @@ export default function Feed() {
       blocks.push(
         <section key="places" className="space-y-3">
           <SectionTitle>📍 Estabelecimentos</SectionTitle>
-          <div className="grid grid-cols-2 gap-3">{places.map((p) => <PlaceCard key={p.id} place={p} />)}</div>
+          <div className="grid grid-cols-2 gap-3">{places.map(renderPlace)}</div>
         </section>
       )
     }
@@ -308,7 +609,6 @@ export default function Feed() {
             </div>
           </div>
 
-          {/* Filtros */}
           <div className="flex gap-2 overflow-x-auto -mx-4 px-4 mt-3 pb-1 scrollbar-hide">
             {FILTERS.map(({ id, label, Icon }) => {
               const active = filter === id
@@ -336,6 +636,10 @@ export default function Feed() {
           </p>
         )}
       </main>
+
+      {reviewPlace && (
+        <ReviewModal place={reviewPlace} onClose={() => setReviewPlace(null)} user={user} />
+      )}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 // ── feed.js ────────────────────────────────────────────
 // Feed de eventos da vila. Leitura pública; escrita só admin.
+// Likes e comentários para usuários autenticados.
 import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
@@ -26,21 +27,64 @@ function clean(payload) {
 }
 
 // ── GET /api/feed ──────────────────────────────────────
-// Público: apenas posts publicados, mais recentes primeiro.
+// Público: posts publicados + like_count + comment_count.
 router.get('/', async (_req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data: posts, error } = await supabase
       .from('feed_posts')
       .select('*')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
     if (error) throw error;
+    if (!posts?.length) return res.json([]);
+
+    const ids = posts.map((p) => p.id);
+    const [{ data: likes }, { data: comments }] = await Promise.all([
+      supabase.from('post_likes').select('post_id').in('post_id', ids),
+      supabase.from('post_comments').select('post_id').in('post_id', ids),
+    ]);
+
+    const likeMap = {};
+    (likes || []).forEach((l) => { likeMap[l.post_id] = (likeMap[l.post_id] || 0) + 1; });
+    const commentMap = {};
+    (comments || []).forEach((c) => { commentMap[c.post_id] = (commentMap[c.post_id] || 0) + 1; });
+
+    res.json(posts.map((p) => ({
+      ...p,
+      like_count:    likeMap[p.id] || 0,
+      comment_count: commentMap[p.id] || 0,
+    })));
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/feed/:id/comments ────────────────────────
+// Público: comentários de um post.
+router.get('/:id/comments', async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('post_comments')
+      .select('id, body, created_at, user_id, users(full_name, photo_url)')
+      .eq('post_id', req.params.id)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
     res.json(data || []);
   } catch (err) { next(err); }
 });
 
-// ── Rotas administrativas ──────────────────────────────
+// ── Rotas autenticadas ────────────────────────────────
 router.use(authenticate);
+
+// GET /api/feed/my-likes — IDs dos posts curtidos pelo usuário
+router.get('/my-likes', async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('post_likes')
+      .select('post_id')
+      .eq('user_id', req.user.id);
+    if (error) throw error;
+    res.json((data || []).map((l) => l.post_id));
+  } catch (err) { next(err); }
+});
 
 // GET /api/feed/admin — todos os posts (inclui rascunhos)
 router.get('/admin', requireAdmin, async (_req, res, next) => {
@@ -69,6 +113,42 @@ router.post('/', requireAdmin, async (req, res, next) => {
   }
 });
 
+// POST /api/feed/:id/like — curtir / descurtir
+router.post('/:id/like', async (req, res, next) => {
+  try {
+    const { data: existing } = await supabase
+      .from('post_likes')
+      .select('id')
+      .eq('post_id', req.params.id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase.from('post_likes').delete().eq('id', existing.id);
+      return res.json({ liked: false });
+    }
+    await supabase.from('post_likes').insert({ post_id: req.params.id, user_id: req.user.id });
+    res.json({ liked: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/feed/:id/comments — adicionar comentário
+router.post('/:id/comments', async (req, res, next) => {
+  try {
+    const body = req.body.body?.trim();
+    if (!body || body.length > 500) {
+      return res.status(400).json({ error: 'Comentário deve ter entre 1 e 500 caracteres' });
+    }
+    const { data, error } = await supabase
+      .from('post_comments')
+      .insert({ post_id: req.params.id, user_id: req.user.id, body })
+      .select('id, body, created_at, user_id, users(full_name, photo_url)')
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
 // PUT /api/feed/:id — atualiza post
 router.put('/:id', requireAdmin, async (req, res, next) => {
   try {
@@ -82,6 +162,23 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
     next(err);
   }
+});
+
+// DELETE /api/feed/comments/:commentId — remover comentário (dono ou admin)
+router.delete('/comments/:commentId', async (req, res, next) => {
+  try {
+    const { data: comment } = await supabase
+      .from('post_comments')
+      .select('user_id')
+      .eq('id', req.params.commentId)
+      .maybeSingle();
+    if (!comment) return res.status(404).json({ error: 'Comentário não encontrado' });
+    if (comment.user_id !== req.user.id && req.user.user_type !== 'admin') {
+      return res.status(403).json({ error: 'Sem permissão' });
+    }
+    await supabase.from('post_comments').delete().eq('id', req.params.commentId);
+    res.status(204).end();
+  } catch (err) { next(err); }
 });
 
 // DELETE /api/feed/:id — remove post

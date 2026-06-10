@@ -1,5 +1,6 @@
 // ── establishments.js ──────────────────────────────────
 // Diretório de estabelecimentos da vila. Leitura pública; escrita só admin.
+// Avaliações com estrelas para usuários autenticados.
 import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
@@ -31,7 +32,7 @@ function clean(payload) {
 }
 
 // ── GET /api/establishments ────────────────────────────
-// Público: ativos, destaques primeiro. Filtro opcional ?category=
+// Público: ativos, destaques primeiro + avg_rating / review_count.
 router.get('/', async (req, res, next) => {
   try {
     let q = supabase
@@ -44,13 +45,33 @@ router.get('/', async (req, res, next) => {
     if (req.query.category) q = q.eq('category', req.query.category);
     const { data, error } = await q;
     if (error) throw error;
-    res.json(data || []);
+    if (!data?.length) return res.json([]);
+
+    const ids = data.map((e) => e.id);
+    const { data: reviews } = await supabase
+      .from('establishment_reviews')
+      .select('establishment_id, rating')
+      .in('establishment_id', ids);
+
+    const statsMap = {};
+    (reviews || []).forEach((r) => {
+      if (!statsMap[r.establishment_id]) statsMap[r.establishment_id] = { sum: 0, count: 0 };
+      statsMap[r.establishment_id].sum += r.rating;
+      statsMap[r.establishment_id].count += 1;
+    });
+
+    res.json(data.map((e) => {
+      const s = statsMap[e.id];
+      return {
+        ...e,
+        avg_rating:   s ? +(s.sum / s.count).toFixed(1) : null,
+        review_count: s?.count || 0,
+      };
+    }));
   } catch (err) { next(err); }
 });
 
 // ── GET /api/establishments/nearby ─────────────────────
-// Público: estabelecimentos reais por geolocalização (Geoapify/OpenStreetMap).
-// Sem chave configurada, devolve enabled:false (o app só mostra os manuais).
 router.get('/nearby', async (req, res, next) => {
   try {
     const lat = Number(req.query.lat);
@@ -63,13 +84,26 @@ router.get('/nearby', async (req, res, next) => {
     const data = await fetchNearby({ lat, lon, radius, category });
     res.json(data);
   } catch (err) {
-    // Nunca derruba a aba: em erro do provedor, devolve lista vazia
     console.error('[establishments/nearby]', err.message);
     res.json({ enabled: true, results: [], error: 'provider_error' });
   }
 });
 
-// ── Rotas administrativas ──────────────────────────────
+// ── GET /api/establishments/:id/reviews ────────────────
+// Público: avaliações de um estabelecimento.
+router.get('/:id/reviews', async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('establishment_reviews')
+      .select('id, rating, comment, created_at, user_id, users(full_name, photo_url)')
+      .eq('establishment_id', req.params.id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) { next(err); }
+});
+
+// ── Rotas autenticadas ────────────────────────────────
 router.use(authenticate);
 
 router.get('/admin', requireAdmin, async (_req, res, next) => {
@@ -98,6 +132,30 @@ router.post('/', requireAdmin, async (req, res, next) => {
   }
 });
 
+// POST /api/establishments/:id/reviews — adicionar ou atualizar avaliação
+router.post('/:id/reviews', async (req, res, next) => {
+  try {
+    const rating = Number(req.body.rating);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: 'Nota deve ser de 1 a 5' });
+    }
+    const comment = req.body.comment?.trim() || null;
+    if (comment && comment.length > 500) {
+      return res.status(400).json({ error: 'Comentário máximo de 500 caracteres' });
+    }
+    const { data, error } = await supabase
+      .from('establishment_reviews')
+      .upsert(
+        { establishment_id: req.params.id, user_id: req.user.id, rating, comment },
+        { onConflict: 'establishment_id,user_id' }
+      )
+      .select('id, rating, comment, created_at, user_id, users(full_name, photo_url)')
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
 router.put('/:id', requireAdmin, async (req, res, next) => {
   try {
     const body = schema.partial().parse(req.body);
@@ -110,6 +168,23 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
     next(err);
   }
+});
+
+// DELETE /api/establishments/reviews/:reviewId — remover avaliação (dono ou admin)
+router.delete('/reviews/:reviewId', async (req, res, next) => {
+  try {
+    const { data: review } = await supabase
+      .from('establishment_reviews')
+      .select('user_id')
+      .eq('id', req.params.reviewId)
+      .maybeSingle();
+    if (!review) return res.status(404).json({ error: 'Avaliação não encontrada' });
+    if (review.user_id !== req.user.id && req.user.user_type !== 'admin') {
+      return res.status(403).json({ error: 'Sem permissão' });
+    }
+    await supabase.from('establishment_reviews').delete().eq('id', req.params.reviewId);
+    res.status(204).end();
+  } catch (err) { next(err); }
 });
 
 router.delete('/:id', requireAdmin, async (req, res, next) => {
