@@ -277,29 +277,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* ── Banner promo → leva à aba Descubra a Vila ─────────── */}
-        <button
-          onClick={() => navigate('/eventos')}
-          className="w-full relative rounded-2xl overflow-hidden h-[78px] lg:h-32 active:scale-[0.98] transition-transform bg-cover bg-center"
-          style={bannerImg
-            ? { backgroundImage: `linear-gradient(135deg, rgba(255,106,0,0.82), rgba(255,179,71,0.55)), url(${bannerImg})` }
-            : { background: 'linear-gradient(135deg,#FF6A00,#FFB347)' }}
-        >
-          {!bannerImg && <>
-            <div className="absolute right-4 top-2 w-14 h-14 rounded-full border-[3px] border-white/20" />
-            <div className="absolute right-10 bottom-1 w-9 h-9 rounded-full border-2 border-white/15" />
-            <div className="absolute right-2 top-6 w-7 h-7 rounded-full border border-white/20" />
-          </>}
-          <div className="absolute inset-0 flex flex-col justify-center px-4">
-            <span className="inline-flex items-center gap-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-full w-fit mb-1">
-              ⚡ OFERTA ESPECIAL
-            </span>
-            <p className="text-white font-extrabold text-[14px] lg:text-2xl leading-snug drop-shadow">
-              {bannerTitle || <>Garanta sua aventura<br />em Jericoacoara!</>}
-            </p>
-          </div>
-        </button>
-
         {/* ── Acesso rápido 2×2 ─────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
