@@ -399,12 +399,12 @@ export default function Dashboard() {
 
         {/* Abas + busca */}
         <div className="px-5 pb-3 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5 max-w-full overflow-x-auto scrollbar-hide">
             {TABS.map((t) => (
               <button
                 key={t.key}
                 onClick={() => { setTab(t.key); setPage(1) }}
-                className={`px-3 py-1.5 rounded-md text-[13px] font-semibold transition-colors flex items-center gap-1.5 ${
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-semibold transition-colors flex items-center gap-1.5 ${
                   tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -415,7 +415,7 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          <div className="ml-auto flex items-center gap-2 border border-gray-200 rounded-lg px-3 h-9 bg-white focus-within:border-brand min-w-[200px]">
+          <div className="w-full sm:w-auto sm:ml-auto flex items-center gap-2 border border-gray-200 rounded-lg px-3 h-9 bg-white focus-within:border-brand sm:min-w-[200px]">
             <Search size={15} className="text-gray-400 shrink-0" />
             <input
               value={search}

@@ -84,18 +84,18 @@ export default function Reservas() {
             <option value="transfer">Transfers</option>
           </select>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <CalendarDays size={15} className="text-gray-500 flex-shrink-0" />
             <input
               type="date" value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand flex-1 min-w-0 sm:flex-none"
             />
             <span className="text-gray-600 text-sm">até</span>
             <input
               type="date" value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand flex-1 min-w-0 sm:flex-none"
             />
           </div>
 

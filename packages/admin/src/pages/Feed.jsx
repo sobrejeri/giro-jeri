@@ -241,12 +241,12 @@ export default function Feed() {
           />
 
           {form.kind === 'promo' ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Desconto / oferta" value={form.discount_label} onChange={(e) => setForm({ ...form, discount_label: e.target.value })} placeholder="Ex: 20% OFF, 2x1" />
               <Input label="Válido até" type="date" value={form.valid_until} onChange={(e) => setForm({ ...form, valid_until: e.target.value })} />
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Data do evento" type="date" value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })} />
               <Input label="Horário" value={form.event_time} onChange={(e) => setForm({ ...form, event_time: e.target.value })} placeholder="Ex: 20h" />
             </div>

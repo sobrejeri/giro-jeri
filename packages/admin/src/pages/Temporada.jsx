@@ -146,7 +146,7 @@ export default function Temporada() {
             <option value="">Todas as regiões</option>
             {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </Select>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select label="Mês início" value={form.start_month} onChange={(e) => setForm({ ...form, start_month: e.target.value })}>
               {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
             </Select>

@@ -213,7 +213,7 @@ export default function Perfil() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Select
                 label="Tipo de documento"
                 value={form.document_type}
@@ -247,7 +247,7 @@ export default function Perfil() {
           </div>
         </CardHeader>
         <CardBody>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Select
               label="Tipo de chave"
               value={form.pix_key_type}
