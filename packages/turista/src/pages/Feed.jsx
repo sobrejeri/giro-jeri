@@ -138,8 +138,8 @@ function CommentsSection({ postId, commentCount, user }) {
               {(comments || []).map((c) => (
                 <div key={c.id} className="flex gap-2.5">
                   <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0 overflow-hidden">
-                    {c.users?.photo_url
-                      ? <img src={c.users.photo_url} alt="" className="w-full h-full object-cover" />
+                    {c.users?.profile_photo_url
+                      ? <img src={c.users.profile_photo_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-500">{(c.users?.full_name || '?')[0]}</div>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -272,8 +272,8 @@ function ReviewModal({ place, onClose, user }) {
               {reviews.map((r) => (
                 <div key={r.id} className="flex gap-2.5">
                   <div className="w-8 h-8 rounded-full bg-gray-200 shrink-0 overflow-hidden">
-                    {r.users?.photo_url
-                      ? <img src={r.users.photo_url} alt="" className="w-full h-full object-cover" />
+                    {r.users?.profile_photo_url
+                      ? <img src={r.users.profile_photo_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-gray-500">{(r.users?.full_name || '?')[0]}</div>}
                   </div>
                   <div className="flex-1 min-w-0">

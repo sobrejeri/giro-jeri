@@ -95,7 +95,7 @@ router.get('/:id/reviews', async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('establishment_reviews')
-      .select('id, rating, comment, created_at, user_id, users(full_name, photo_url)')
+      .select('id, rating, comment, created_at, user_id, users(full_name, profile_photo_url)')
       .eq('establishment_id', req.params.id)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -149,7 +149,7 @@ router.post('/:id/reviews', async (req, res, next) => {
         { establishment_id: req.params.id, user_id: req.user.id, rating, comment },
         { onConflict: 'establishment_id,user_id' }
       )
-      .select('id, rating, comment, created_at, user_id, users(full_name, photo_url)')
+      .select('id, rating, comment, created_at, user_id, users(full_name, profile_photo_url)')
       .single();
     if (error) throw error;
     res.status(201).json(data);

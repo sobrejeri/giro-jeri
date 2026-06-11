@@ -63,7 +63,7 @@ router.get('/:id/comments', async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('post_comments')
-      .select('id, body, created_at, user_id, users(full_name, photo_url)')
+      .select('id, body, created_at, user_id, users(full_name, profile_photo_url)')
       .eq('post_id', req.params.id)
       .order('created_at', { ascending: true });
     if (error) throw error;
@@ -142,7 +142,7 @@ router.post('/:id/comments', async (req, res, next) => {
     const { data, error } = await supabase
       .from('post_comments')
       .insert({ post_id: req.params.id, user_id: req.user.id, body })
-      .select('id, body, created_at, user_id, users(full_name, photo_url)')
+      .select('id, body, created_at, user_id, users(full_name, profile_photo_url)')
       .single();
     if (error) throw error;
     res.status(201).json(data);
