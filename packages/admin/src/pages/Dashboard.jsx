@@ -39,14 +39,14 @@ const BOOKING_EMPTY = {
 
 function KpiCard({ icon: Icon, label, value, sub, color = 'text-brand' }) {
   return (
-    <Card className="p-5 flex items-start gap-4">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-gray-900 ${color} flex-shrink-0`}>
-        <Icon size={20} />
+    <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center bg-gray-900 ${color} flex-shrink-0`}>
+        <Icon size={18} />
       </div>
-      <div>
-        <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
-        <p className={`text-2xl font-bold mt-0.5 ${color}`}>{value}</p>
-        {sub && <p className="text-xs text-gray-600 mt-0.5">{sub}</p>}
+      <div className="min-w-0">
+        <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wide leading-tight">{label}</p>
+        <p className={`text-xl sm:text-2xl font-bold mt-0.5 ${color} truncate`}>{value}</p>
+        {sub && <p className="text-[11px] sm:text-xs text-gray-600 mt-0.5 truncate">{sub}</p>}
       </div>
     </Card>
   )
