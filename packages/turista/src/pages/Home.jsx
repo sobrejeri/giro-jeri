@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -172,6 +172,14 @@ export default function Home() {
   const featured = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
 
+  // Cold start do Render free: avisa que o servidor está acordando
+  const [slowLoad, setSlowLoad] = useState(false)
+  useEffect(() => {
+    if (!isLoading) { setSlowLoad(false); return }
+    const t = setTimeout(() => setSlowLoad(true), 5000)
+    return () => clearTimeout(t)
+  }, [isLoading])
+
   // Banner da home configurável pelo admin
   const { data: settings } = useQuery({
     queryKey: ['public-settings'],
@@ -321,8 +329,9 @@ export default function Home() {
           </div>
 
           {isLoading ? (
-            <div className="h-[160px] flex items-center justify-center">
+            <div className="h-[160px] flex flex-col items-center justify-center gap-2.5">
               <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+              {slowLoad && <p className="text-[11px] text-gray-400 text-center px-6">Acordando o servidor… só um instante 🌅</p>}
             </div>
           ) : featured.length === 0 ? (
             <p className="text-sm text-gray-400">Nenhum passeio disponível.</p>
