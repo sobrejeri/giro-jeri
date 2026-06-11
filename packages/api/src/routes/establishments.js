@@ -60,14 +60,27 @@ router.get('/', async (req, res, next) => {
       statsMap[r.establishment_id].count += 1;
     });
 
-    res.json(data.map((e) => {
+    const enriched = data.map((e) => {
       const s = statsMap[e.id];
       return {
         ...e,
         avg_rating:   s ? +(s.sum / s.count).toFixed(1) : null,
         review_count: s?.count || 0,
       };
-    }));
+    });
+
+    // Ordena por reputação: Destaques (patrocinados) primeiro, depois maior
+    // nota, depois mais avaliações. O sort do V8 é estável, então empates
+    // mantêm a ordem do SQL (sort_order / created_at).
+    enriched.sort((a, b) => {
+      if (!!b.is_featured !== !!a.is_featured) return b.is_featured ? 1 : -1;
+      const ar = a.avg_rating ?? -1;
+      const br = b.avg_rating ?? -1;
+      if (br !== ar) return br - ar;
+      return (b.review_count || 0) - (a.review_count || 0);
+    });
+
+    res.json(enriched);
   } catch (err) { next(err); }
 });
 
