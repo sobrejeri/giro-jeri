@@ -277,9 +277,9 @@ export default function Home() {
           </button>
         </div>
 
-        {/* ── Banner promo ──────────────────────────────────────── */}
+        {/* ── Banner promo → leva à aba Descubra a Vila ─────────── */}
         <button
-          onClick={() => navigate('/passeios')}
+          onClick={() => navigate('/eventos')}
           className="w-full relative rounded-2xl overflow-hidden h-[78px] lg:h-32 active:scale-[0.98] transition-transform bg-cover bg-center"
           style={bannerImg
             ? { backgroundImage: `linear-gradient(135deg, rgba(255,106,0,0.82), rgba(255,179,71,0.55)), url(${bannerImg})` }
