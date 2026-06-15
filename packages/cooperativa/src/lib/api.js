@@ -1,5 +1,3 @@
-import { supabase } from './supabase'
-
 const BASE = import.meta.env.VITE_API_URL || ''
 
 const STORAGE = {
@@ -9,17 +7,27 @@ const STORAGE = {
 }
 
 function getToken()   { return localStorage.getItem(STORAGE.token)   }
+function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
 
+// Renova o token via API. A cooperativa autentica pela API (não pelo client
+// do Supabase no browser), então NÃO existe sessão de client para
+// refreshSession() usar — tentar isso fazia todo refresh falhar e derrubava o
+// login. O refresh token guardado é a fonte de verdade, igual ao app turista.
 async function tryRefresh() {
+  const refreshToken = getRefresh()
+  if (!refreshToken) return false
   try {
-    // Fonte única de verdade: a sessão gerenciada pelo próprio client do Supabase.
-    // Passar o refresh token guardado à mão dessincronizava com a rotação
-    // automática do client (autoRefreshToken) e derrubava o login ("desconectando").
-    const { data, error } = await supabase.auth.refreshSession()
-    if (error || !data.session) return false
+    const res = await fetch(`${BASE}/api/auth/refresh`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (!res.ok) return false
+    const data = await res.json().catch(() => null)
+    if (!data?.token) return false
 
-    localStorage.setItem(STORAGE.token,   data.session.access_token)
-    localStorage.setItem(STORAGE.refresh, data.session.refresh_token)
+    localStorage.setItem(STORAGE.token, data.token)
+    if (data.refresh_token) localStorage.setItem(STORAGE.refresh, data.refresh_token)
     return true
   } catch {
     return false
@@ -43,7 +51,12 @@ async function request(path, options = {}, isRetry = false) {
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   })
 
-  if (res.status === 401) {
+  // Endpoints de autenticação: um 401 significa "credenciais inválidas" —
+  // não tentar refresh nem deslogar. Deixa o erro do servidor (ex.: "CNPJ não
+  // encontrado") chegar a quem chamou, em vez de redirecionar pro login.
+  const isAuthEndpoint = path.startsWith('/api/auth/login') || path.startsWith('/api/auth/refresh')
+
+  if (res.status === 401 && !isAuthEndpoint) {
     if (!isRetry) {
       const refreshed = await tryRefresh()
       if (refreshed) return request(path, options, true)
