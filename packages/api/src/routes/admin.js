@@ -313,19 +313,20 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
 // Painel kanban da operação
 router.get('/operational', requireOperator, async (req, res, next) => {
   try {
-    const { date, service_type } = req.query;
+    const { date, service_type, operator_id } = req.query;
     const showAll    = !date || date === 'all';
     const targetDate = showAll ? null : date;
 
     let query = supabase
       .from('bookings')
       .select(`
-        id, booking_code, service_type, booking_mode,
+        id, booking_code, service_type, service_id, booking_mode,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
         pickup_place_name, destination_place_name, special_notes,
         origin_text, destination_text,
         users!bookings_user_id_fkey ( full_name, phone ),
+        operator:users!bookings_operator_id_fkey ( id, full_name ),
         booking_vehicles ( vehicle_name_snapshot, quantity ),
         operational_assignments ( real_vehicle_text, dispatch_notes, driver_name, driver_phone, assigned_driver_user_id, assigned_guide_user_id )
       `)
@@ -335,6 +336,7 @@ router.get('/operational', requireOperator, async (req, res, next) => {
 
     if (targetDate)    query = query.eq('service_date', targetDate);
     if (service_type)  query = query.eq('service_type', service_type);
+    if (operator_id)   query = query.eq('operator_id', operator_id);
 
     const { data, error } = await query;
     if (error) throw error;

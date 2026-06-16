@@ -67,6 +67,7 @@ export const api = {
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),
+  getOperational:    (params = {}) => request(`/api/admin/operational?${new URLSearchParams(params)}`),
 
   // Usuários
   getUsers:          (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),

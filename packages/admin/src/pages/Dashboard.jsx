@@ -8,6 +8,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   CalendarCheck, Clock, XCircle, TrendingUp, DollarSign,
   Plus, User, Phone, Mail, Calendar, Users, Banknote, Check,
+  Filter, Car, MapPin, Briefcase,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -18,6 +19,24 @@ import Input from '../components/ui/Input'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+const fmtDateShort = (iso) => {
+  if (!iso) return '—'
+  try { return format(parseISO(iso), 'd MMM', { locale: ptBR }) } catch { return iso }
+}
+
+// Andamento operacional (status_operational) — rótulos e cores
+const OP_STATUS = {
+  new:               { label: 'Nova',                   dot: 'bg-gray-400',   text: 'text-gray-300',   chip: 'bg-gray-700/60' },
+  awaiting_dispatch: { label: 'Aguardando cooperativa', dot: 'bg-amber-400',  text: 'text-amber-300',  chip: 'bg-amber-900/40' },
+  confirmed:         { label: 'Confirmada',             dot: 'bg-blue-400',   text: 'text-blue-300',   chip: 'bg-blue-900/40' },
+  assigned:          { label: 'Atribuída',              dot: 'bg-indigo-400', text: 'text-indigo-300', chip: 'bg-indigo-900/40' },
+  en_route:          { label: 'A caminho',              dot: 'bg-cyan-400',   text: 'text-cyan-300',   chip: 'bg-cyan-900/40' },
+  in_progress:       { label: 'Em andamento',           dot: 'bg-purple-400', text: 'text-purple-300', chip: 'bg-purple-900/40' },
+  completed:         { label: 'Concluída',              dot: 'bg-green-400',  text: 'text-green-300',  chip: 'bg-green-900/40' },
+  occurrence:        { label: 'Ocorrência',             dot: 'bg-red-400',    text: 'text-red-300',    chip: 'bg-red-900/40' },
+}
+const OP_ORDER = ['new','awaiting_dispatch','confirmed','assigned','en_route','in_progress','completed','occurrence']
 
 const PAYMENT_METHODS = [
   { id: 'cash',     label: 'Dinheiro' },
@@ -311,6 +330,161 @@ function NovaReservaModal({ open, onClose, onSuccess }) {
   )
 }
 
+// ── Acompanhamento operacional (filtro por cooperativa / passeio / transfer) ──
+function AcompanhamentoOperacional() {
+  const [operatorId,  setOperatorId]  = useState('')
+  const [serviceType, setServiceType] = useState('')   // '' | 'tour' | 'transfer'
+  const [tourId,      setTourId]      = useState('')
+  const [status,      setStatus]      = useState('')    // '' = todos
+  const [date,        setDate]        = useState('')    // '' = todas as datas
+
+  const { data: operatorsData } = useQuery({
+    queryKey: ['admin-operators'],
+    queryFn:  () => api.getUsers({ user_type: 'operator', limit: 200 }),
+  })
+  const operators = (operatorsData?.data || []).filter((u) => u.user_type === 'operator')
+
+  const { data: tours = [] } = useQuery({
+    queryKey: ['catalog-tours'],
+    queryFn:  () => api.getTours(),
+  })
+  const tourName = (id) => tours.find((t) => t.id === id)?.name
+
+  const params = { date: date || 'all' }
+  if (operatorId)  params.operator_id  = operatorId
+  if (serviceType) params.service_type = serviceType
+
+  const { data: op, isLoading, isFetching } = useQuery({
+    queryKey: ['admin-operational', params],
+    queryFn:  () => api.getOperational(params),
+    refetchInterval: 30_000,
+  })
+
+  // Base respeitando todos os filtros menos o status (para contar por status)
+  let base = Object.values(op?.columns || {}).flat()
+  if (tourId) base = base.filter((b) => b.service_id === tourId)
+
+  const counts = OP_ORDER.reduce((acc, s) => {
+    acc[s] = base.filter((b) => (b.status_operational || 'new') === s).length
+    return acc
+  }, {})
+
+  let list = status ? base.filter((b) => (b.status_operational || 'new') === status) : base
+  list = [...list].sort((a, b) =>
+    `${a.service_date || ''}${a.service_time || ''}`.localeCompare(`${b.service_date || ''}${b.service_time || ''}`))
+
+  const serviceLabel = (b) => {
+    if (b.service_type === 'transfer') {
+      return [b.origin_text || b.pickup_place_name, b.destination_text || b.destination_place_name]
+        .filter(Boolean).join(' → ') || 'Transfer'
+    }
+    return tourName(b.service_id) || 'Passeio'
+  }
+
+  const selectCls = 'bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-brand/60'
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Filter size={15} className="text-brand" /> Acompanhamento operacional
+          </h2>
+          {isFetching && <span className="text-[11px] text-gray-600">atualizando…</span>}
+        </div>
+      </CardHeader>
+      <CardBody>
+        <div className="space-y-4">
+          {/* Filtros */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <select value={operatorId} onChange={(e) => setOperatorId(e.target.value)} className={selectCls}>
+              <option value="">Todas as cooperativas</option>
+              {operators.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+            </select>
+            <select
+              value={serviceType}
+              onChange={(e) => { setServiceType(e.target.value); if (e.target.value === 'transfer') setTourId('') }}
+              className={selectCls}
+            >
+              <option value="">Passeios e transfers</option>
+              <option value="tour">Só passeios</option>
+              <option value="transfer">Só transfers</option>
+            </select>
+            <select
+              value={tourId}
+              onChange={(e) => setTourId(e.target.value)}
+              disabled={serviceType === 'transfer'}
+              className={`${selectCls} ${serviceType === 'transfer' ? 'opacity-40' : ''}`}
+            >
+              <option value="">Todos os passeios</option>
+              {tours.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={selectCls} title="Filtrar por data (vazio = todas)" />
+          </div>
+
+          {/* Chips de status (andamento) */}
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setStatus('')}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${status === '' ? 'bg-brand text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              Todos ({base.length})
+            </button>
+            {OP_ORDER.filter((s) => counts[s] > 0).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatus(status === s ? '' : s)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1.5 transition-colors ${status === s ? 'bg-brand text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${OP_STATUS[s].dot}`} /> {OP_STATUS[s].label} ({counts[s]})
+              </button>
+            ))}
+          </div>
+
+          {/* Lista */}
+          {isLoading ? (
+            <div className="py-10 text-center text-gray-600 text-sm">Carregando…</div>
+          ) : list.length === 0 ? (
+            <div className="py-10 text-center text-gray-600 text-sm">Nenhuma atividade para os filtros selecionados.</div>
+          ) : (
+            <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
+              {list.map((b) => {
+                const st = OP_STATUS[b.status_operational || 'new'] || OP_STATUS.new
+                return (
+                  <div key={b.id} className="flex items-center gap-3 bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-2.5">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${b.service_type === 'transfer' ? 'bg-teal-900/40 text-teal-300' : 'bg-orange-900/40 text-brand'}`}>
+                      {b.service_type === 'transfer' ? <Car size={16} /> : <MapPin size={16} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-200 truncate">{serviceLabel(b)}</p>
+                        <span className="text-[10px] font-mono text-gray-500 shrink-0">{b.booking_code}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 truncate">
+                        {b.users?.full_name || 'Cliente'} · {fmtDateShort(b.service_date)}{b.service_time ? ` ${String(b.service_time).slice(0, 5)}` : ''} · {b.people_count || 1}p
+                      </p>
+                      <p className="text-[11px] text-gray-500 truncate flex items-center gap-1">
+                        <Briefcase size={10} />
+                        {b.operator?.full_name || <span className="text-gray-600 italic">sem cooperativa</span>}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold ${st.chip} ${st.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} /> {st.label}
+                      </span>
+                      <p className="text-[11px] text-gray-400 mt-1">{fmt(b.total_amount)}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const qc = useQueryClient()
   const [showModal, setShowModal] = useState(false)
@@ -355,6 +529,9 @@ export default function Dashboard() {
         <KpiCard icon={XCircle}       label="Cancelamentos hoje"  value={stats?.cancelamentos ?? '—'}   color="text-red-400" />
         <KpiCard icon={DollarSign}    label="Receita hoje"        value={fmt(stats?.valor_bruto_hoje)}  sub={`Mês: ${fmt(stats?.valor_bruto_mes)}`} color="text-brand" />
       </div>
+
+      {/* Acompanhamento operacional — filtro por cooperativa / passeio / transfer */}
+      <AcompanhamentoOperacional />
 
       {/* Gráfico de faturamento — 30 dias */}
       <Card>
