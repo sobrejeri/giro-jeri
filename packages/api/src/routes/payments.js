@@ -3,6 +3,7 @@ import crypto        from 'node:crypto'
 import { supabase }  from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
+import { notifyOperatorsNewBooking } from '../services/whatsapp.js'
 
 const router = Router()
 
@@ -394,6 +395,10 @@ async function onPaymentApproved(payment) {
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
   sendConfirmationEmail(booking).catch((err) =>
     console.error('[email] confirmação de reserva falhou:', err.message))
+
+  // Notifica as cooperativas sobre a nova reserva disponível (fire-and-forget)
+  notifyOperatorsNewBooking(supabase, booking).catch((err) =>
+    console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
 }
 
 async function sendConfirmationEmail(booking) {
