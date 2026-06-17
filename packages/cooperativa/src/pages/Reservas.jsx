@@ -511,9 +511,9 @@ export default function Reservas() {
       {/* Tabs */}
       <div className="flex bg-gray-100 rounded-xl p-1 mb-5">
         {[
-          { key: 'pending',  label: 'Disponíveis',     count: pending.length },
-          { key: 'cotacoes', label: 'Cotações',        count: pendingQuotes.length },
-          { key: 'mine',     label: 'Minhas corridas', count: mine.length },
+          { key: 'pending',  label: 'Disponíveis',     short: 'Disponíveis', count: pending.length },
+          { key: 'cotacoes', label: 'Cotações',        short: 'Cotações',    count: pendingQuotes.length },
+          { key: 'mine',     label: 'Minhas corridas', short: 'Minhas',      count: mine.length },
         ].map((t) => (
           <button
             key={t.key}
@@ -524,7 +524,8 @@ export default function Reservas() {
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t.label}
+            <span className="sm:hidden">{t.short}</span>
+            <span className="hidden sm:inline">{t.label}</span>
             {t.count > 0 && (
               <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
                 tab === t.key
