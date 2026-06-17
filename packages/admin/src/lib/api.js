@@ -68,6 +68,7 @@ export const api = {
   getStats:          () => request('/api/admin/stats'),
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),
   getOperational:    (params = {}) => request(`/api/admin/operational?${new URLSearchParams(params)}`),
+  getOperatorPerformance: (params = {}) => request(`/api/admin/operator-performance?${new URLSearchParams(params)}`),
 
   // Usuários
   getUsers:          (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),

@@ -8,7 +8,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   CalendarCheck, Clock, XCircle, TrendingUp, DollarSign,
   Plus, User, Phone, Mail, Calendar, Users, Banknote, Check,
-  Filter, Car, MapPin, Briefcase,
+  Filter, Car, MapPin, Briefcase, Trophy, ArrowDown,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -485,6 +485,124 @@ function AcompanhamentoOperacional() {
   )
 }
 
+// ── Ranking comparativo de cooperativas ──────────────────────
+function RankingCooperativas() {
+  const [period, setPeriod] = useState('month') // 'month' | '30d' | 'all'
+  const [sortBy, setSortBy] = useState('revenue')
+
+  const params = {}
+  const now = new Date()
+  if (period === 'month') params.date_from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  else if (period === '30d') params.date_from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['operator-performance', params],
+    queryFn:  () => api.getOperatorPerformance(params),
+    refetchInterval: 60_000,
+  })
+
+  const operators = data?.operators || []
+  const totals    = data?.totals
+  const sorted    = [...operators].sort((a, b) => (Number(b[sortBy]) || 0) - (Number(a[sortBy]) || 0))
+  const maxVal    = Math.max(1, ...sorted.map((o) => Number(o[sortBy]) || 0))
+
+  const COLS = [
+    { key: 'revenue',    label: 'Receita',      money: true },
+    { key: 'tours',      label: 'Passeios'      },
+    { key: 'transfers',  label: 'Transfers'     },
+    { key: 'total',      label: 'Total'         },
+    { key: 'completed',  label: 'Concluídas'    },
+    { key: 'ticket_avg', label: 'Ticket médio', money: true },
+  ]
+  const RANK = ['bg-amber-400 text-amber-950', 'bg-gray-300 text-gray-800', 'bg-orange-700 text-orange-100']
+  const PERIODS = [
+    { id: 'month', label: 'Este mês' },
+    { id: '30d',   label: '30 dias'  },
+    { id: 'all',   label: 'Tudo'     },
+  ]
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Trophy size={15} className="text-amber-400" /> Ranking de cooperativas
+            {isFetching && <span className="text-[11px] text-gray-600 font-normal">atualizando…</span>}
+          </h2>
+          <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5">
+            {PERIODS.map((p) => (
+              <button key={p.id} onClick={() => setPeriod(p.id)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${period === p.id ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardBody>
+        {isLoading ? (
+          <div className="py-10 text-center text-gray-600 text-sm">Carregando…</div>
+        ) : sorted.length === 0 ? (
+          <div className="py-10 text-center text-gray-600 text-sm">Nenhuma reserva atribuída a cooperativas neste período.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <p className="text-[11px] text-gray-600 mb-2">Toque numa coluna para ordenar. A barra compara <span className="text-gray-400 font-medium">{COLS.find((c) => c.key === sortBy)?.label}</span>.</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-gray-500 text-[11px] uppercase tracking-wide border-b border-gray-800">
+                  <th className="text-left font-medium py-2 pl-1 w-7">#</th>
+                  <th className="text-left font-medium py-2">Cooperativa</th>
+                  {COLS.map((c) => (
+                    <th key={c.key} onClick={() => setSortBy(c.key)}
+                        className={`font-medium py-2 px-2 whitespace-nowrap cursor-pointer select-none hover:text-gray-300 ${c.money ? 'text-right' : 'text-center'} ${sortBy === c.key ? 'text-brand' : ''}`}>
+                      <span className="inline-flex items-center gap-1">{c.label}{sortBy === c.key && <ArrowDown size={11} />}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {sorted.map((o, i) => (
+                  <tr key={o.operator_id} className="hover:bg-gray-800/40">
+                    <td className="py-2.5 pl-1">
+                      <span className={`w-5 h-5 inline-flex items-center justify-center rounded-full text-[11px] font-bold ${RANK[i] || 'bg-gray-800 text-gray-500'}`}>{i + 1}</span>
+                    </td>
+                    <td className="py-2.5 pr-2 min-w-[140px]">
+                      <p className="font-semibold text-gray-200 truncate max-w-[170px]">{o.name}</p>
+                      <div className="mt-1 h-1 rounded-full bg-gray-800 overflow-hidden w-28">
+                        <div className="h-full bg-gradient-to-r from-brand to-amber-400" style={{ width: `${Math.max(3, ((Number(o[sortBy]) || 0) / maxVal) * 100)}%` }} />
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-2 text-right font-bold text-brand whitespace-nowrap">{fmt(o.revenue)}</td>
+                    <td className="py-2.5 px-2 text-center text-gray-300">{o.tours}</td>
+                    <td className="py-2.5 px-2 text-center text-gray-300">{o.transfers}</td>
+                    <td className="py-2.5 px-2 text-center text-gray-300">{o.total}</td>
+                    <td className="py-2.5 px-2 text-center text-gray-400">{o.completed}</td>
+                    <td className="py-2.5 px-2 text-right text-gray-300 whitespace-nowrap">{fmt(o.ticket_avg)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {totals && (
+                <tfoot>
+                  <tr className="border-t border-gray-700 font-semibold text-gray-300">
+                    <td></td>
+                    <td className="py-2.5 text-[12px] text-gray-500">Total · {sorted.length} coop.</td>
+                    <td className="py-2.5 px-2 text-right text-brand whitespace-nowrap">{fmt(totals.revenue)}</td>
+                    <td className="py-2.5 px-2 text-center">{totals.tours}</td>
+                    <td className="py-2.5 px-2 text-center">{totals.transfers}</td>
+                    <td className="py-2.5 px-2 text-center">{totals.total}</td>
+                    <td className="py-2.5 px-2 text-center">—</td>
+                    <td className="py-2.5 px-2 text-right">—</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const qc = useQueryClient()
   const [showModal, setShowModal] = useState(false)
@@ -532,6 +650,9 @@ export default function Dashboard() {
 
       {/* Acompanhamento operacional — filtro por cooperativa / passeio / transfer */}
       <AcompanhamentoOperacional />
+
+      {/* Ranking comparativo de cooperativas */}
+      <RankingCooperativas />
 
       {/* Gráfico de faturamento — 30 dias */}
       <Card>
