@@ -385,7 +385,12 @@ export default function Reservas() {
 
   const pending = data?.pending || []
   const mine    = data?.mine    || []
-  const pendingQuotes = Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || [])
+  // A view /quotes/pending traz TODAS as cotações não-pagas (pending, quoted,
+  // accepted...). Aqui mantemos só as que a cooperativa ainda precisa cotar —
+  // senão as já respondidas/aceitas reaparecem com o botão (duplicando e dando
+  // erro "já respondida"). As 'quoted' vêm da seção de histórico abaixo.
+  const pendingQuotes = (Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || []))
+    .filter((q) => q.status === 'pending_quote')
   const quotedQuotes  = (Array.isArray(quotesHistoryRaw) ? quotesHistoryRaw : (quotesHistoryRaw?.data || []))
     .filter((q) => q.status === 'quoted')
 
