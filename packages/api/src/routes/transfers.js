@@ -178,7 +178,7 @@ router.get('/quotes/history', authenticate, requireOperator, async (req, res, ne
   try {
     const { data, error } = await supabase
       .from('transfer_quotes')
-      .select('*, users(full_name, phone, email)')
+      .select('*, users!transfer_quotes_user_id_fkey ( full_name, phone, email )')
       .in('status', ['quoted', 'accepted', 'expired', 'rejected'])
       .order('created_at', { ascending: false })
       .limit(200);
@@ -190,10 +190,24 @@ router.get('/quotes/history', authenticate, requireOperator, async (req, res, ne
 // ── PATCH /api/transfers/quotes/:id/quote — cooperativa define preço
 router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res, next) => {
   try {
-    const { quoted_price, quote_notes } = req.body;
+    const quoted_price = Number(req.body.quoted_price);
+    // Aceita quote_notes ou operator_notes (nome enviado pelo painel da coop.)
+    const quote_notes  = req.body.quote_notes ?? req.body.operator_notes ?? null;
 
     if (!quoted_price || quoted_price <= 0) {
       return res.status(400).json({ error: 'Informe um preço válido' });
+    }
+
+    // Confirma existência e estado da cotação — erros claros em vez de genérico
+    const { data: existing, error: findErr } = await supabase
+      .from('transfer_quotes')
+      .select('id, status')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (findErr) { console.error('[quote] busca falhou:', findErr); return res.status(500).json({ error: findErr.message }); }
+    if (!existing) return res.status(404).json({ error: 'Cotação não encontrada' });
+    if (existing.status !== 'pending_quote') {
+      return res.status(409).json({ error: 'Esta cotação já foi respondida. Atualize a lista.' });
     }
 
     // Prazo para o cliente responder (configurável — padrão 2h)
@@ -201,11 +215,13 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
       .from('system_settings')
       .select('setting_value')
       .eq('setting_key', 'quote_expiry_hours')
-      .single();
+      .maybeSingle();
 
     const expiryHours = parseInt(setting?.setting_value || '2');
     const expiresAt   = dayjs().add(expiryHours, 'hour').toISOString();
 
+    // transfer_quotes tem 2 FKs para users (user_id e quoted_by_user_id);
+    // o embed precisa do nome do vínculo, senão o PostgREST falha por ambiguidade.
     const { data, error } = await supabase
       .from('transfer_quotes')
       .update({
@@ -218,22 +234,25 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
       })
       .eq('id', req.params.id)
       .eq('status', 'pending_quote')
-      .select('*, users(full_name, phone)')
+      .select('*, users!transfer_quotes_user_id_fkey ( full_name, phone )')
       .single();
 
-    if (error || !data) {
-      return res.status(404).json({ error: 'Cotação não encontrada ou já respondida' });
-    }
+    if (error) { console.error('[quote] update falhou:', error); return res.status(500).json({ error: error.message }); }
+    if (!data)  return res.status(409).json({ error: 'Cotação já respondida por outra cooperativa.' });
 
-    // Notifica o cliente
-    await supabase.from('notifications').insert({
-      user_id:      data.user_id,
-      channel:      'whatsapp',
-      template_key: 'quote_ready',
-      title:        'Sua cotação está pronta',
-      message_body: `Olá! Sua cotação de transfer ${data.origin_place_name} → ${data.destination_place_name} está pronta: R$ ${quoted_price.toFixed(2)}. Acesse o app para confirmar. Válido por ${expiryHours}h.`,
-      destination:  data.users?.phone,
-    });
+    // Notifica o cliente (best-effort — nunca derruba a resposta da cotação)
+    try {
+      await supabase.from('notifications').insert({
+        user_id:      data.user_id,
+        channel:      'whatsapp',
+        template_key: 'quote_ready',
+        title:        'Sua cotação está pronta',
+        message_body: `Olá! Sua cotação de transfer ${data.origin_place_name} → ${data.destination_place_name} está pronta: R$ ${quoted_price.toFixed(2)}. Acesse o app para confirmar. Válido por ${expiryHours}h.`,
+        destination:  data.users?.phone,
+      });
+    } catch (notifErr) {
+      console.error('[quote] notificação falhou (ignorado):', notifErr.message);
+    }
 
     res.json(data);
   } catch (err) { next(err); }
