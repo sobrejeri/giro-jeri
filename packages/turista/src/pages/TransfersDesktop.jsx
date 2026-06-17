@@ -153,7 +153,7 @@ export default function TransfersDesktop() {
   const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime
 
   function handleConfirm() {
-    if (!token) { navigate('/login'); return }
+    if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canBook) return
     navigate('/checkout/resumo', {
       state: {
@@ -179,7 +179,7 @@ export default function TransfersDesktop() {
   }
 
   async function handleRequestQuote() {
-    if (!token) { navigate('/login'); return }
+    if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canCustomBook) return
     setCustomLoading(true)
     setCustomError('')

@@ -336,7 +336,7 @@ export default function Transfers() {
   const [customError,    setCustomError]    = useState('')
 
   async function handleRequestQuote() {
-    if (!token) { navigate('/login'); return }
+    if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!customOrigin.trim() || !customDest.trim() || !customTime) return
     setCustomLoading(true)
     setCustomError('')
@@ -402,7 +402,7 @@ export default function Transfers() {
     : format(date, 'd MMM', { locale: ptBR })
 
   async function handleConfirm() {
-    if (!token) { navigate('/login'); return }
+    if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canBook) return
     navigate('/checkout/resumo', {
       state: {
