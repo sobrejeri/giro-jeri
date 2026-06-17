@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell,
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   CalendarCheck, Clock, XCircle, TrendingUp, DollarSign,
   Plus, User, Phone, Mail, Calendar, Users, Banknote, Check,
+  Filter, Car, MapPin, Briefcase, Trophy, ArrowDown,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -18,6 +20,24 @@ import Input from '../components/ui/Input'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+const fmtDateShort = (iso) => {
+  if (!iso) return '—'
+  try { return format(parseISO(iso), 'd MMM', { locale: ptBR }) } catch { return iso }
+}
+
+// Andamento operacional (status_operational) — rótulos e cores
+const OP_STATUS = {
+  new:               { label: 'Nova',                   dot: 'bg-gray-400',   text: 'text-gray-300',   chip: 'bg-gray-700/60' },
+  awaiting_dispatch: { label: 'Aguardando cooperativa', dot: 'bg-amber-400',  text: 'text-amber-300',  chip: 'bg-amber-900/40' },
+  confirmed:         { label: 'Confirmada',             dot: 'bg-blue-400',   text: 'text-blue-300',   chip: 'bg-blue-900/40' },
+  assigned:          { label: 'Atribuída',              dot: 'bg-indigo-400', text: 'text-indigo-300', chip: 'bg-indigo-900/40' },
+  en_route:          { label: 'A caminho',              dot: 'bg-cyan-400',   text: 'text-cyan-300',   chip: 'bg-cyan-900/40' },
+  in_progress:       { label: 'Em andamento',           dot: 'bg-purple-400', text: 'text-purple-300', chip: 'bg-purple-900/40' },
+  completed:         { label: 'Concluída',              dot: 'bg-green-400',  text: 'text-green-300',  chip: 'bg-green-900/40' },
+  occurrence:        { label: 'Ocorrência',             dot: 'bg-red-400',    text: 'text-red-300',    chip: 'bg-red-900/40' },
+}
+const OP_ORDER = ['new','awaiting_dispatch','confirmed','assigned','en_route','in_progress','completed','occurrence']
 
 const PAYMENT_METHODS = [
   { id: 'cash',     label: 'Dinheiro' },
@@ -311,6 +331,305 @@ function NovaReservaModal({ open, onClose, onSuccess }) {
   )
 }
 
+// ── Acompanhamento operacional (filtro por cooperativa / passeio / transfer) ──
+function AcompanhamentoOperacional() {
+  const [operatorId,  setOperatorId]  = useState('')
+  const [serviceType, setServiceType] = useState('')   // '' | 'tour' | 'transfer'
+  const [tourId,      setTourId]      = useState('')
+  const [status,      setStatus]      = useState('')    // '' = todos
+  const [date,        setDate]        = useState('')    // '' = todas as datas
+
+  const { data: operatorsData } = useQuery({
+    queryKey: ['admin-operators'],
+    queryFn:  () => api.getUsers({ user_type: 'operator', limit: 200 }),
+  })
+  const operators = (operatorsData?.data || []).filter((u) => u.user_type === 'operator')
+
+  const { data: tours = [] } = useQuery({
+    queryKey: ['catalog-tours'],
+    queryFn:  () => api.getTours(),
+  })
+  const tourName = (id) => tours.find((t) => t.id === id)?.name
+
+  const params = { date: date || 'all' }
+  if (operatorId)  params.operator_id  = operatorId
+  if (serviceType) params.service_type = serviceType
+
+  const { data: op, isLoading, isFetching } = useQuery({
+    queryKey: ['admin-operational', params],
+    queryFn:  () => api.getOperational(params),
+    refetchInterval: 30_000,
+  })
+
+  // Base respeitando todos os filtros menos o status (para contar por status)
+  let base = Object.values(op?.columns || {}).flat()
+  if (tourId) base = base.filter((b) => b.service_id === tourId)
+
+  const counts = OP_ORDER.reduce((acc, s) => {
+    acc[s] = base.filter((b) => (b.status_operational || 'new') === s).length
+    return acc
+  }, {})
+
+  let list = status ? base.filter((b) => (b.status_operational || 'new') === status) : base
+  list = [...list].sort((a, b) =>
+    `${a.service_date || ''}${a.service_time || ''}`.localeCompare(`${b.service_date || ''}${b.service_time || ''}`))
+
+  const serviceLabel = (b) => {
+    if (b.service_type === 'transfer') {
+      return [b.origin_text || b.pickup_place_name, b.destination_text || b.destination_place_name]
+        .filter(Boolean).join(' → ') || 'Transfer'
+    }
+    return tourName(b.service_id) || 'Passeio'
+  }
+
+  const selectCls = 'bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-brand/60'
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Filter size={15} className="text-brand" /> Acompanhamento operacional
+          </h2>
+          {isFetching && <span className="text-[11px] text-gray-600">atualizando…</span>}
+        </div>
+      </CardHeader>
+      <CardBody>
+        <div className="space-y-4">
+          {/* Filtros */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <select value={operatorId} onChange={(e) => setOperatorId(e.target.value)} className={selectCls}>
+              <option value="">Todas as cooperativas</option>
+              {operators.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+            </select>
+            <select
+              value={serviceType}
+              onChange={(e) => { setServiceType(e.target.value); if (e.target.value === 'transfer') setTourId('') }}
+              className={selectCls}
+            >
+              <option value="">Passeios e transfers</option>
+              <option value="tour">Só passeios</option>
+              <option value="transfer">Só transfers</option>
+            </select>
+            <select
+              value={tourId}
+              onChange={(e) => setTourId(e.target.value)}
+              disabled={serviceType === 'transfer'}
+              className={`${selectCls} ${serviceType === 'transfer' ? 'opacity-40' : ''}`}
+            >
+              <option value="">Todos os passeios</option>
+              {tours.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={selectCls} title="Filtrar por data (vazio = todas)" />
+          </div>
+
+          {/* Chips de status (andamento) */}
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setStatus('')}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${status === '' ? 'bg-brand text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              Todos ({base.length})
+            </button>
+            {OP_ORDER.filter((s) => counts[s] > 0).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatus(status === s ? '' : s)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1.5 transition-colors ${status === s ? 'bg-brand text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${OP_STATUS[s].dot}`} /> {OP_STATUS[s].label} ({counts[s]})
+              </button>
+            ))}
+          </div>
+
+          {/* Lista */}
+          {isLoading ? (
+            <div className="py-10 text-center text-gray-600 text-sm">Carregando…</div>
+          ) : list.length === 0 ? (
+            <div className="py-10 text-center text-gray-600 text-sm">Nenhuma atividade para os filtros selecionados.</div>
+          ) : (
+            <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
+              {list.map((b) => {
+                const st = OP_STATUS[b.status_operational || 'new'] || OP_STATUS.new
+                return (
+                  <div key={b.id} className="flex items-center gap-3 bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-2.5">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${b.service_type === 'transfer' ? 'bg-teal-900/40 text-teal-300' : 'bg-orange-900/40 text-brand'}`}>
+                      {b.service_type === 'transfer' ? <Car size={16} /> : <MapPin size={16} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-200 truncate">{serviceLabel(b)}</p>
+                        <span className="text-[10px] font-mono text-gray-500 shrink-0">{b.booking_code}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 truncate">
+                        {b.users?.full_name || 'Cliente'} · {fmtDateShort(b.service_date)}{b.service_time ? ` ${String(b.service_time).slice(0, 5)}` : ''} · {b.people_count || 1}p
+                      </p>
+                      <p className="text-[11px] text-gray-500 truncate flex items-center gap-1">
+                        <Briefcase size={10} />
+                        {b.operator?.full_name || <span className="text-gray-600 italic">sem cooperativa</span>}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold ${st.chip} ${st.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} /> {st.label}
+                      </span>
+                      <p className="text-[11px] text-gray-400 mt-1">{fmt(b.total_amount)}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── Ranking comparativo de cooperativas ──────────────────────
+function RankingCooperativas() {
+  const [period, setPeriod] = useState('month') // 'month' | '30d' | 'all'
+  const [sortBy, setSortBy] = useState('revenue')
+
+  const params = {}
+  const now = new Date()
+  if (period === 'month') params.date_from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  else if (period === '30d') params.date_from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['operator-performance', params],
+    queryFn:  () => api.getOperatorPerformance(params),
+    refetchInterval: 60_000,
+  })
+
+  const operators = data?.operators || []
+  const totals    = data?.totals
+  const sorted    = [...operators].sort((a, b) => (Number(b[sortBy]) || 0) - (Number(a[sortBy]) || 0))
+  const maxVal    = Math.max(1, ...sorted.map((o) => Number(o[sortBy]) || 0))
+
+  const COLS = [
+    { key: 'revenue',    label: 'Receita',      money: true },
+    { key: 'net',        label: 'Repasse',      money: true },
+    { key: 'tours',      label: 'Passeios'      },
+    { key: 'transfers',  label: 'Transfers'     },
+    { key: 'total',      label: 'Total'         },
+    { key: 'completed',  label: 'Concluídas'    },
+    { key: 'ticket_avg', label: 'Ticket médio', money: true },
+  ]
+  const activeMoney = COLS.find((c) => c.key === sortBy)?.money
+  const chartData   = sorted.slice(0, 6).map((o) => ({ name: o.name, value: Number(o[sortBy]) || 0 }))
+  const BAR_COLORS  = ['#fbbf24', '#d1d5db', '#c2613a']
+  const RANK = ['bg-amber-400 text-amber-950', 'bg-gray-300 text-gray-800', 'bg-orange-700 text-orange-100']
+  const PERIODS = [
+    { id: 'month', label: 'Este mês' },
+    { id: '30d',   label: '30 dias'  },
+    { id: 'all',   label: 'Tudo'     },
+  ]
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Trophy size={15} className="text-amber-400" /> Ranking de cooperativas
+            {isFetching && <span className="text-[11px] text-gray-600 font-normal">atualizando…</span>}
+          </h2>
+          <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5">
+            {PERIODS.map((p) => (
+              <button key={p.id} onClick={() => setPeriod(p.id)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${period === p.id ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardBody>
+        {isLoading ? (
+          <div className="py-10 text-center text-gray-600 text-sm">Carregando…</div>
+        ) : sorted.length === 0 ? (
+          <div className="py-10 text-center text-gray-600 text-sm">Nenhuma reserva atribuída a cooperativas neste período.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            {chartData.length > 0 && (
+              <div className="mb-4">
+                <ResponsiveContainer width="100%" height={Math.max(110, chartData.length * 32)}>
+                  <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        return <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200">{activeMoney ? fmt(payload[0].value) : payload[0].value}</div>
+                      }}
+                    />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
+                      {chartData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i] || '#FF6A00'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <p className="text-[11px] text-gray-600 mb-2">Toque numa coluna para ordenar. A barra compara <span className="text-gray-400 font-medium">{COLS.find((c) => c.key === sortBy)?.label}</span>.</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-gray-500 text-[11px] uppercase tracking-wide border-b border-gray-800">
+                  <th className="text-left font-medium py-2 pl-1 w-7">#</th>
+                  <th className="text-left font-medium py-2">Cooperativa</th>
+                  {COLS.map((c) => (
+                    <th key={c.key} onClick={() => setSortBy(c.key)}
+                        className={`font-medium py-2 px-2 whitespace-nowrap cursor-pointer select-none hover:text-gray-300 ${c.money ? 'text-right' : 'text-center'} ${sortBy === c.key ? 'text-brand' : ''}`}>
+                      <span className="inline-flex items-center gap-1">{c.label}{sortBy === c.key && <ArrowDown size={11} />}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {sorted.map((o, i) => (
+                  <tr key={o.operator_id} className="hover:bg-gray-800/40">
+                    <td className="py-2.5 pl-1">
+                      <span className={`w-5 h-5 inline-flex items-center justify-center rounded-full text-[11px] font-bold ${RANK[i] || 'bg-gray-800 text-gray-500'}`}>{i + 1}</span>
+                    </td>
+                    <td className="py-2.5 pr-2 min-w-[140px]">
+                      <p className="font-semibold text-gray-200 truncate max-w-[170px]">{o.name}</p>
+                      <div className="mt-1 h-1 rounded-full bg-gray-800 overflow-hidden w-28">
+                        <div className="h-full bg-gradient-to-r from-brand to-amber-400" style={{ width: `${Math.max(3, ((Number(o[sortBy]) || 0) / maxVal) * 100)}%` }} />
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-2 text-right font-bold text-brand whitespace-nowrap">{fmt(o.revenue)}</td>
+                    <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">{fmt(o.net)}</td>
+                    <td className="py-2.5 px-2 text-center text-gray-300">{o.tours}</td>
+                    <td className="py-2.5 px-2 text-center text-gray-300">{o.transfers}</td>
+                    <td className="py-2.5 px-2 text-center text-gray-300">{o.total}</td>
+                    <td className="py-2.5 px-2 text-center text-gray-400">{o.completed}</td>
+                    <td className="py-2.5 px-2 text-right text-gray-300 whitespace-nowrap">{fmt(o.ticket_avg)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {totals && (
+                <tfoot>
+                  <tr className="border-t border-gray-700 font-semibold text-gray-300">
+                    <td></td>
+                    <td className="py-2.5 text-[12px] text-gray-500">Total · {sorted.length} coop.</td>
+                    <td className="py-2.5 px-2 text-right text-brand whitespace-nowrap">{fmt(totals.revenue)}</td>
+                    <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">{fmt(totals.net)}</td>
+                    <td className="py-2.5 px-2 text-center">{totals.tours}</td>
+                    <td className="py-2.5 px-2 text-center">{totals.transfers}</td>
+                    <td className="py-2.5 px-2 text-center">{totals.total}</td>
+                    <td className="py-2.5 px-2 text-center">—</td>
+                    <td className="py-2.5 px-2 text-right">—</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const qc = useQueryClient()
   const [showModal, setShowModal] = useState(false)
@@ -355,6 +674,12 @@ export default function Dashboard() {
         <KpiCard icon={XCircle}       label="Cancelamentos hoje"  value={stats?.cancelamentos ?? '—'}   color="text-red-400" />
         <KpiCard icon={DollarSign}    label="Receita hoje"        value={fmt(stats?.valor_bruto_hoje)}  sub={`Mês: ${fmt(stats?.valor_bruto_mes)}`} color="text-brand" />
       </div>
+
+      {/* Acompanhamento operacional — filtro por cooperativa / passeio / transfer */}
+      <AcompanhamentoOperacional />
+
+      {/* Ranking comparativo de cooperativas */}
+      <RankingCooperativas />
 
       {/* Gráfico de faturamento — 30 dias */}
       <Card>

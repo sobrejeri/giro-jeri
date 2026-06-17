@@ -38,6 +38,37 @@ export async function getSeasonAddition(regionId, serviceDate, subtotal) {
   return rule.additional_value;
 }
 
+// ── Acréscimo de feriado / data comemorativa (data EXATA) ──
+export async function getHolidayAddition(regionId, serviceDate, subtotal) {
+  let q = supabase
+    .from('holidays')
+    .select('additional_type, additional_value, region_id')
+    .eq('holiday_date', serviceDate)
+    .eq('is_active', true)
+    .eq('affects_pricing', true);
+  // Região específica + feriados nacionais (region_id nulo)
+  q = regionId ? q.or(`region_id.eq.${regionId},region_id.is.null`) : q.is('region_id', null);
+
+  const { data: rows } = await q
+    .order('region_id', { ascending: false, nullsFirst: false }) // específico antes do nacional
+    .limit(1);
+
+  const h = rows?.[0];
+  if (!h || h.additional_value == null) return 0;
+  if (h.additional_type === 'fixed') return Number(h.additional_value);
+  return Math.round(subtotal * (Number(h.additional_value) / 100) * 100) / 100;
+}
+
+// ── Acréscimo aplicável à data: o MAIOR entre alta temporada e feriado ──
+// (evita empilhar os dois sem querer quando um feriado cai dentro da temporada)
+export async function getDateSurcharge(regionId, serviceDate, subtotal) {
+  const [season, holiday] = await Promise.all([
+    getSeasonAddition(regionId, serviceDate, subtotal),
+    getHolidayAddition(regionId, serviceDate, subtotal),
+  ]);
+  return Math.max(season || 0, holiday || 0);
+}
+
 // ── Valida e calcula desconto de cupom ─────────────────
 export async function applyCoupon(code, userId, regionId, serviceType, subtotal) {
   if (!code) return { discount: 0, couponId: null };
@@ -184,7 +215,7 @@ export async function calculatePrivateTour({
   subtotal = Math.round(subtotal * 100) / 100;
 
   // Alta temporada
-  const seasonAddition = await getSeasonAddition(regionId, serviceDate, subtotal);
+  const seasonAddition = await getDateSurcharge(regionId, serviceDate, subtotal);
 
   const subtotalWithSeason = subtotal + seasonAddition;
 
@@ -241,7 +272,7 @@ export async function calculateSharedTour({
 
   const subtotal = Math.round(tour.shared_price_per_person * peopleCount * 100) / 100;
 
-  const seasonAddition = await getSeasonAddition(regionId, serviceDate, subtotal);
+  const seasonAddition = await getDateSurcharge(regionId, serviceDate, subtotal);
   const subtotalWithSeason = subtotal + seasonAddition;
 
   const { discount, couponId } = await applyCoupon(
@@ -295,7 +326,7 @@ export async function calculateTabbedTransfer({
   if (!route) throw { status: 404, message: 'Rota não encontrada ou indisponível' };
 
   const subtotal = route.default_price;
-  const seasonAddition = await getSeasonAddition(regionId, serviceDate, subtotal);
+  const seasonAddition = await getDateSurcharge(regionId, serviceDate, subtotal);
   const subtotalWithSeason = subtotal + seasonAddition;
 
   const { discount, couponId } = await applyCoupon(

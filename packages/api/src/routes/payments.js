@@ -3,6 +3,8 @@ import crypto        from 'node:crypto'
 import { supabase }  from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
+import { notifyOperatorsNewBooking } from '../services/whatsapp.js'
+import { calculatePrivateTour, calculateSharedTour, getDateSurcharge } from '../services/priceEngine.js'
 
 const router = Router()
 
@@ -29,6 +31,43 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     if (!existing_booking_id && (!service_id || !service_date_iso || !total_price)) {
       return res.status(400).json({ error: 'Dados incompletos para criar reserva' })
+    }
+
+    // ── Total autoritativo: o SERVIDOR recalcula o preço (alta temporada /
+    //    feriado). O cliente nunca define o valor cobrado. ─────────────────
+    let chargedTotal = Number(total_price)
+    if (!existing_booking_id) {
+      try {
+        if (service_type === 'tour' && service_id && region_id && service_date_iso) {
+          let r = null
+          if (booking_mode === 'shared') {
+            r = await calculateSharedTour({
+              regionId: region_id, tourId: service_id, serviceDate: service_date_iso,
+              peopleCount: Number(people_count) || 1, couponCode: coupon_code, userId: req.user.id,
+            })
+          } else {
+            const vlist = (vehicles || []).map((v) => ({ vehicleId: v.vehicle_id, quantity: v.qty || 1 }))
+            if (vlist.length) {
+              r = await calculatePrivateTour({
+                regionId: region_id, tourId: service_id, serviceDate: service_date_iso,
+                vehicles: vlist, couponCode: coupon_code, userId: req.user.id,
+              })
+            }
+          }
+          if (r && typeof r.totalAmount === 'number') chargedTotal = r.totalAmount
+        } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
+          // Só rota tabelada recebe acréscimo de data; cotações já têm preço fechado.
+          const { data: route } = await supabase
+            .from('transfer_routes').select('id').eq('id', service_id).maybeSingle()
+          if (route) {
+            const surcharge = await getDateSurcharge(region_id, service_date_iso, Number(total_price))
+            chargedTotal = Math.round((Number(total_price) + surcharge) * 100) / 100
+          }
+        }
+      } catch (e) {
+        console.error('[intent] recálculo de preço falhou, usando total do cliente:', e.message)
+        chargedTotal = Number(total_price)
+      }
     }
 
     // ── 1. Lê configurações do gateway ─────────────────
@@ -72,7 +111,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
           people_count:        Number(people_count) || 1,
           origin_text:         origin_text || null,
           destination_text:    destination_text || null,
-          total_amount:        Number(total_price),
+          total_amount:        chargedTotal,
           status_commercial:   'awaiting_payment',
           status_operational:  'new',
           payment_status:      'pending',
@@ -103,7 +142,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     if (gateway === 'test') {
       const { createPaymentIntent: testIntent } = await import('../payments/test.js')
-      const d = await testIntent({ amount: Number(total_price), description: service_name || `Reserva ${bookingCode}` })
+      const d = await testIntent({ amount: chargedTotal, description: service_name || `Reserva ${bookingCode}` })
       gatewayTransactionId = d.transaction_id
       expiresAt            = d.expires_at
       pixCode              = d.pix_code
@@ -114,7 +153,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         const { createPixPayment } = await import('../services/mercadoPago.js')
         const userInfo = await supabase.from('users').select('full_name, email').eq('id', req.user.id).single()
         const pixData  = await createPixPayment({
-          amount:      Number(total_price),
+          amount:      chargedTotal,
           description: service_name || `Reserva ${bookingCode}`,
           payerEmail:  userInfo.data?.email,
           payerName:   userInfo.data?.full_name,
@@ -139,7 +178,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         gateway_transaction_id: gatewayTransactionId,
         payment_method,
         payment_type:           'full',
-        amount_gross:           Number(total_price),
+        amount_gross:           chargedTotal,
         gateway_fee_amount:     0,
         currency:               'BRL',
         status:                 'pending',
@@ -157,7 +196,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       booking_id:   booking.id,
       booking_code: bookingCode,
       payment_id:   payment.id,
-      amount:       Number(total_price),
+      amount:       chargedTotal,
       expires_at:   payment.expires_at,
       // gateway-generated PIX (null when manual)
       pix_code:     pixCode,
@@ -394,6 +433,10 @@ async function onPaymentApproved(payment) {
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
   sendConfirmationEmail(booking).catch((err) =>
     console.error('[email] confirmação de reserva falhou:', err.message))
+
+  // Notifica as cooperativas sobre a nova reserva disponível (fire-and-forget)
+  notifyOperatorsNewBooking(supabase, booking).catch((err) =>
+    console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
 }
 
 async function sendConfirmationEmail(booking) {

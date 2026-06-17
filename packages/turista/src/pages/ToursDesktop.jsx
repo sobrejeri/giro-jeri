@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import {
   Star, Clock, Users, Heart, ChevronDown, Calendar, Minus, Plus,
-  MessageCircle, Zap,
+  Zap,
 } from 'lucide-react'
 
 const fmtPrice = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -154,23 +154,6 @@ export default function ToursDesktop() {
           ))}
         </div>
       )}
-
-      {/* ── CTA personalizado ────────────────────────────── */}
-      <div className="mt-8 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-xl bg-brand flex items-center justify-center shrink-0"><Zap size={20} className="text-white" /></div>
-          <div className="min-w-0">
-            <p className="font-bold text-gray-900">Monte seu passeio personalizado</p>
-            <p className="text-[13px] text-gray-500">Fale com nossos especialistas e crie sua experiência ideal.</p>
-          </div>
-        </div>
-        <button
-          onClick={() => window.open('https://wa.me/5588999999999', '_blank')}
-          className="flex items-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold px-5 py-2.5 rounded-xl transition-colors shrink-0"
-        >
-          <MessageCircle size={17} /> Falar no WhatsApp
-        </button>
-      </div>
     </div>
   )
 }

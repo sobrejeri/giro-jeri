@@ -67,6 +67,8 @@ export const api = {
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),
+  getOperational:    (params = {}) => request(`/api/admin/operational?${new URLSearchParams(params)}`),
+  getOperatorPerformance: (params = {}) => request(`/api/admin/operator-performance?${new URLSearchParams(params)}`),
 
   // Usuários
   getUsers:          (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),
@@ -157,6 +159,12 @@ export const api = {
   createSeason: (body)     => request('/api/admin/seasons', { method: 'POST', body }),
   updateSeason: (id, body) => request(`/api/admin/seasons/${id}`, { method: 'PUT', body }),
   deleteSeason: (id)       => request(`/api/admin/seasons/${id}`, { method: 'DELETE' }),
+
+  // Feriados / datas especiais
+  getHolidays:   ()         => request('/api/admin/holidays'),
+  createHoliday: (body)     => request('/api/admin/holidays', { method: 'POST', body }),
+  updateHoliday: (id, body) => request(`/api/admin/holidays/${id}`, { method: 'PUT', body }),
+  deleteHoliday: (id)       => request(`/api/admin/holidays/${id}`, { method: 'DELETE' }),
 
   // Auditoria
   getAuditLogs: (params = {}) => request(`/api/admin/audit-logs?${new URLSearchParams(params)}`),
