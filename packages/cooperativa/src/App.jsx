@@ -3,7 +3,6 @@ import { useAuth } from './contexts/AuthContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Cotacoes from './pages/Cotacoes'
 import Despacho from './pages/Despacho'
 import Veiculos from './pages/Veiculos'
 import Financeiro from './pages/Financeiro'
@@ -25,7 +24,7 @@ export default function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard"  element={<Dashboard />} />
         <Route path="reservas"   element={<Reservas />} />
-        <Route path="cotacoes"   element={<Cotacoes />} />
+        <Route path="cotacoes"   element={<Navigate to="/reservas" replace />} />
         <Route path="despacho"   element={<Despacho />} />
         <Route path="veiculos"   element={<Veiculos />} />
         <Route path="financeiro" element={<Financeiro />} />

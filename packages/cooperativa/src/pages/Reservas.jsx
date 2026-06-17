@@ -3,10 +3,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarCheck, Users, MapPin, Car, CheckCircle2,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
+  DollarSign, Send,
 } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
+import Modal from '../components/ui/Modal'
+import Input, { Textarea } from '../components/ui/Input'
 
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }
+
+function fmtQuoteDate(s) {
+  try { return format(parseISO(s), "dd/MM 'às' HH:mm", { locale: ptBR }) } catch { return s }
+}
 
 function timeAgo(isoDate) {
   const diff = Math.floor((Date.now() - new Date(isoDate)) / 1000)
@@ -264,12 +273,96 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   )
 }
 
+// ── Card de cotação (rota personalizada) ──────────────────
+function QuoteRequestCard({ quote, onQuote }) {
+  const name   = quote.users?.full_name || quote.user_name || 'Cliente'
+  const origin = quote.origin_place_name || quote.origin_description || '—'
+  const dest   = quote.destination_place_name || quote.destination_description || '—'
+  const notes  = quote.special_notes || quote.client_notes
+  const ppl    = quote.people_count || quote.passengers
+  const isQuoted = quote.status === 'quoted'
+
+  return (
+    <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${isQuoted ? 'border-blue-100' : 'border-brand/20'}`}>
+      <div className={`px-4 py-2 flex items-center justify-between border-b ${isQuoted ? 'bg-blue-50 border-blue-100' : 'bg-brand/5 border-brand/10'}`}>
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${isQuoted ? 'bg-blue-400' : 'bg-brand animate-pulse'}`} />
+          <span className={`text-[11px] font-bold uppercase tracking-wide ${isQuoted ? 'text-blue-600' : 'text-brand'}`}>
+            {isQuoted ? 'Aguardando cliente' : 'Nova cotação'}
+          </span>
+        </div>
+        <span className="text-[11px] text-gray-400">{timeAgo(quote.created_at)}</span>
+      </div>
+
+      <div className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">Transfer</span>
+          <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Rota personalizada</span>
+        </div>
+
+        <div className="bg-gray-50 rounded-xl px-3 py-2">
+          <p className="text-[11px] text-gray-400">Cliente</p>
+          <p className="text-[14px] font-bold text-gray-900">{name}</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-start gap-2 text-[13px] text-gray-700">
+            <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
+            <span>{origin} → {dest}</span>
+          </div>
+          <div className="flex items-center gap-4 text-[13px] text-gray-700">
+            <span className="flex items-center gap-1.5">
+              <CalendarCheck size={13} className="text-gray-400" />
+              {quote.service_date}{quote.service_time ? ` ${quote.service_time.slice(0, 5)}` : ''}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Users size={13} className="text-gray-400" />
+              {ppl} pax
+            </span>
+          </div>
+        </div>
+
+        {notes && (
+          <p className="text-[12px] text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">“{notes}”</p>
+        )}
+
+        <div className="pt-1 border-t border-gray-100">
+          {isQuoted ? (
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] text-gray-400">Valor enviado</p>
+                <p className="text-[18px] font-extrabold text-blue-600">{fmt(quote.quoted_price)}</p>
+              </div>
+              {quote.expires_at && (
+                <div className="text-right text-[11px] text-gray-400">
+                  <p>Expira</p>
+                  <p>{fmtQuoteDate(quote.expires_at)}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => onQuote(quote)}
+              className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all shadow-md shadow-brand/30"
+            >
+              <DollarSign size={16} /> Enviar valor da corrida
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Página principal ──────────────────────────────────────
 export default function Reservas() {
   const [tab,        setTab]       = useState('pending')
   const [toast,      setToast]     = useState(null)
   const [accepting,  setAccepting] = useState(null)
   const [confirming, setConfirming]= useState(null)
+  const [quoteModal, setQuoteModal]= useState(null)
+  const [price,      setPrice]     = useState('')
+  const [notes,      setNotes]     = useState('')
   const queryClient = useQueryClient()
 
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -279,8 +372,42 @@ export default function Reservas() {
     staleTime:       3000,
   })
 
+  // Cotações de rota personalizada (mesma tela das corridas)
+  const { data: pendingQuotesRaw } = useQuery({
+    queryKey:        ['quotes-pending'],
+    queryFn:         () => api.getPendingQuotes(),
+    refetchInterval: 20000,
+  })
+  const { data: quotesHistoryRaw } = useQuery({
+    queryKey: ['quotes-history'],
+    queryFn:  () => api.getQuotesHistory(),
+  })
+
   const pending = data?.pending || []
   const mine    = data?.mine    || []
+  const pendingQuotes = Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || [])
+  const quotedQuotes  = (Array.isArray(quotesHistoryRaw) ? quotesHistoryRaw : (quotesHistoryRaw?.data || []))
+    .filter((q) => q.status === 'quoted')
+
+  const setQuoteMut = useMutation({
+    mutationFn: ({ id, quoted_price, quote_notes }) =>
+      api.setQuotePrice(id, { quoted_price: Number(quoted_price), quote_notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
+      queryClient.invalidateQueries({ queryKey: ['quotes-history'] })
+      setQuoteModal(null); setPrice(''); setNotes('')
+      setToast({ message: 'Cotação enviada ao cliente!', type: 'success' })
+    },
+    onError: (err) => setToast({ message: err.message || 'Erro ao enviar cotação', type: 'error' }),
+  })
+
+  function openQuoteModal(quote) { setQuoteModal(quote); setPrice(''); setNotes('') }
+
+  function submitQuote(e) {
+    e.preventDefault()
+    if (!price || isNaN(Number(price)) || Number(price) <= 0) return
+    setQuoteMut.mutate({ id: quoteModal.id, quoted_price: price, quote_notes: notes })
+  }
 
   async function handleAccept(bookingId) {
     if (accepting) return
@@ -360,13 +487,20 @@ export default function Reservas() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Corridas</h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            {pending.length > 0
-              ? `${pending.length} nova${pending.length > 1 ? 's' : ''} solicitaç${pending.length > 1 ? 'ões' : 'ão'} disponível${pending.length > 1 ? 'is' : ''}`
-              : 'Nenhuma solicitação no momento'}
+            {pending.length === 0 && pendingQuotes.length === 0
+              ? 'Nenhuma solicitação no momento'
+              : [
+                  pending.length > 0 ? `${pending.length} corrida${pending.length > 1 ? 's' : ''} disponível${pending.length > 1 ? 'is' : ''}` : null,
+                  pendingQuotes.length > 0 ? `${pendingQuotes.length} cotaç${pendingQuotes.length > 1 ? 'ões' : 'ão'} a responder` : null,
+                ].filter(Boolean).join(' · ')}
           </p>
         </div>
         <button
-          onClick={() => refetch()}
+          onClick={() => {
+            refetch()
+            queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
+            queryClient.invalidateQueries({ queryKey: ['quotes-history'] })
+          }}
           disabled={isFetching}
           className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors active:scale-95"
         >
@@ -377,13 +511,14 @@ export default function Reservas() {
       {/* Tabs */}
       <div className="flex bg-gray-100 rounded-xl p-1 mb-5">
         {[
-          { key: 'pending', label: 'Disponíveis', count: pending.length },
-          { key: 'mine',    label: 'Minhas corridas', count: mine.length },
+          { key: 'pending',  label: 'Disponíveis',     count: pending.length },
+          { key: 'cotacoes', label: 'Cotações',        count: pendingQuotes.length },
+          { key: 'mine',     label: 'Minhas corridas', count: mine.length },
         ].map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[13px] font-semibold whitespace-nowrap transition-all ${
               tab === t.key
                 ? 'bg-white shadow-sm text-gray-900'
                 : 'text-gray-500 hover:text-gray-700'
@@ -393,7 +528,7 @@ export default function Reservas() {
             {t.count > 0 && (
               <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
                 tab === t.key
-                  ? t.key === 'pending' ? 'bg-brand text-white' : 'bg-emerald-500 text-white'
+                  ? t.key === 'mine' ? 'bg-emerald-500 text-white' : 'bg-brand text-white'
                   : 'bg-gray-300 text-gray-600'
               }`}>
                 {t.count}
@@ -427,6 +562,30 @@ export default function Reservas() {
             ))}
           </div>
         )
+      ) : tab === 'cotacoes' ? (
+        pendingQuotes.length === 0 && quotedQuotes.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <DollarSign size={40} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">Nenhuma cotação no momento</p>
+            <p className="text-xs mt-1">Pedidos de corrida com rota personalizada aparecerão aqui</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {pendingQuotes.map((q) => (
+              <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
+            ))}
+            {quotedQuotes.length > 0 && (
+              <>
+                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide pt-2">
+                  Aguardando resposta do cliente
+                </p>
+                {quotedQuotes.map((q) => (
+                  <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
+                ))}
+              </>
+            )}
+          </div>
+        )
       ) : (
         mine.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
@@ -458,6 +617,53 @@ export default function Reservas() {
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Modal: definir valor da cotação */}
+      <Modal open={!!quoteModal} onClose={() => setQuoteModal(null)} title="Definir valor da corrida" size="sm">
+        {quoteModal && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+              <p className="font-medium text-gray-900">
+                {quoteModal.users?.full_name || quoteModal.user_name || 'Cliente'}
+              </p>
+              <p className="text-gray-500">
+                {(quoteModal.origin_place_name || quoteModal.origin_description)} → {(quoteModal.destination_place_name || quoteModal.destination_description)}
+              </p>
+              <p className="text-gray-500">
+                {quoteModal.service_date}{quoteModal.service_time ? ` ${quoteModal.service_time.slice(0, 5)}` : ''} · {quoteModal.people_count || quoteModal.passengers} pax
+              </p>
+            </div>
+
+            <form onSubmit={submitQuote} className="space-y-3">
+              <Input
+                label="Valor da corrida (R$)"
+                type="number"
+                min="1"
+                step="0.01"
+                placeholder="0,00"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                required
+                autoFocus
+              />
+              <Textarea
+                label="Observações para o cliente"
+                rows={2}
+                placeholder="Inclui bagagem, ar-condicionado…"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+              <button
+                type="submit"
+                disabled={setQuoteMut.isPending}
+                className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60"
+              >
+                <Send size={16} /> {setQuoteMut.isPending ? 'Enviando…' : 'Enviar cotação ao cliente'}
+              </button>
+            </form>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
