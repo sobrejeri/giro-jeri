@@ -234,7 +234,9 @@ export default function Precos() {
               <tr className="border-b border-gray-800">
                 <th className={`sticky left-0 top-0 z-30 ${thBase} min-w-[200px]`}>Veículo</th>
                 {visibleTours.map((t) => (
-                  <th key={t.id} className={`sticky top-0 z-20 ${thBase} min-w-[140px]`}>{t.name}</th>
+                  <th key={t.id} className={`sticky top-0 z-20 ${thBase} w-[150px] min-w-[150px] max-w-[150px] align-bottom`}>
+                    <span className="block line-clamp-2 leading-snug" title={t.name}>{t.name}</span>
+                  </th>
                 ))}
                 {visibleTours.length === 0 && (
                   <th className={`sticky top-0 z-20 ${thBase} text-gray-600 normal-case`}>Nenhum passeio para “{search}”.</th>
