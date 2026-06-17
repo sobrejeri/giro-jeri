@@ -44,8 +44,8 @@ export default function Cotacoes() {
   })
 
   const setQuoteMut = useMutation({
-    mutationFn: ({ id, quoted_price, operator_notes }) =>
-      api.setQuotePrice(id, { quoted_price: Number(quoted_price), operator_notes }),
+    mutationFn: ({ id, quoted_price, quote_notes }) =>
+      api.setQuotePrice(id, { quoted_price: Number(quoted_price), quote_notes }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['quotes-pending'] })
       qc.invalidateQueries({ queryKey: ['quotes-history'] })
@@ -67,7 +67,7 @@ export default function Cotacoes() {
   function handleSetPrice(e) {
     e.preventDefault()
     if (!price || isNaN(Number(price))) return
-    setQuoteMut.mutate({ id: modal.id, quoted_price: price, operator_notes: notes })
+    setQuoteMut.mutate({ id: modal.id, quoted_price: price, quote_notes: notes })
   }
 
   if (loading) return <PageSpinner />

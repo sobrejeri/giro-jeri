@@ -57,7 +57,7 @@ function usePlaceSuggestions(query) {
   return { results, loading }
 }
 
-function PlaceInput({ value, onChange, placeholder, dotClass }) {
+export function PlaceInput({ value, onChange, placeholder, dotClass }) {
   const [open, setOpen]  = useState(false)
   const wrapRef          = useRef(null)
   const { results, loading } = usePlaceSuggestions(open ? value : '')
@@ -324,7 +324,7 @@ function RouteSheet({ title, options, selected, onSelect, onClose }) {
 }
 
 /* ── Vehicle suggestion ─────────────────────────────────────── */
-function suggestVehicles(vehicles, people) {
+export function suggestVehicles(vehicles, people) {
   if (!vehicles.length) return null
   const single = vehicles.filter(v => v.seat_capacity >= people)
                          .sort((a, b) => a.seat_capacity - b.seat_capacity)[0]
@@ -335,7 +335,7 @@ function suggestVehicles(vehicles, people) {
 }
 
 /* ── Vehicle row with qty controls ──────────────────────────── */
-function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
+export function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
   return (
     <div className={`flex items-center gap-3 px-4 py-3 transition-all border-l-4 ${qty > 0 ? 'border-brand bg-brand/5' : 'border-transparent'}`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${qty > 0 ? 'bg-brand' : 'bg-gray-100'}`}>
