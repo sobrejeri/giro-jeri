@@ -679,22 +679,28 @@ router.get('/operator-performance', requireAdmin, async (req, res, next) => {
       if (b.status_operational === 'completed') row.completed += 1;
     }
 
+    // Repasse líquido = bruto − comissão da plataforma (7%), mesma convenção
+    // do resto do admin (líquido = bruto × 0,93).
+    const PLATFORM_COMMISSION = 0.07;
+
     const operators = [...map.values()]
       .map((r) => ({
         ...r,
         revenue:    Math.round(r.revenue * 100) / 100,
+        net:        Math.round(r.revenue * (1 - PLATFORM_COMMISSION) * 100) / 100,
         ticket_avg: r.total ? Math.round((r.revenue / r.total) * 100) / 100 : 0,
       }))
       .sort((a, b) => b.revenue - a.revenue);
 
     const totals = operators.reduce(
       (t, o) => ({
-        revenue:   t.revenue + o.revenue,
+        revenue:   Math.round((t.revenue + o.revenue) * 100) / 100,
+        net:       Math.round((t.net + o.net) * 100) / 100,
         tours:     t.tours + o.tours,
         transfers: t.transfers + o.transfers,
         total:     t.total + o.total,
       }),
-      { revenue: 0, tours: 0, transfers: 0, total: 0 },
+      { revenue: 0, net: 0, tours: 0, transfers: 0, total: 0 },
     );
 
     res.json({ operators, totals });

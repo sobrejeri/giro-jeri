@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell,
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -508,12 +509,16 @@ function RankingCooperativas() {
 
   const COLS = [
     { key: 'revenue',    label: 'Receita',      money: true },
+    { key: 'net',        label: 'Repasse',      money: true },
     { key: 'tours',      label: 'Passeios'      },
     { key: 'transfers',  label: 'Transfers'     },
     { key: 'total',      label: 'Total'         },
     { key: 'completed',  label: 'Concluídas'    },
     { key: 'ticket_avg', label: 'Ticket médio', money: true },
   ]
+  const activeMoney = COLS.find((c) => c.key === sortBy)?.money
+  const chartData   = sorted.slice(0, 6).map((o) => ({ name: o.name, value: Number(o[sortBy]) || 0 }))
+  const BAR_COLORS  = ['#fbbf24', '#d1d5db', '#c2613a']
   const RANK = ['bg-amber-400 text-amber-950', 'bg-gray-300 text-gray-800', 'bg-orange-700 text-orange-100']
   const PERIODS = [
     { id: 'month', label: 'Este mês' },
@@ -546,6 +551,26 @@ function RankingCooperativas() {
           <div className="py-10 text-center text-gray-600 text-sm">Nenhuma reserva atribuída a cooperativas neste período.</div>
         ) : (
           <div className="overflow-x-auto">
+            {chartData.length > 0 && (
+              <div className="mb-4">
+                <ResponsiveContainer width="100%" height={Math.max(110, chartData.length * 32)}>
+                  <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        return <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200">{activeMoney ? fmt(payload[0].value) : payload[0].value}</div>
+                      }}
+                    />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
+                      {chartData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i] || '#FF6A00'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
             <p className="text-[11px] text-gray-600 mb-2">Toque numa coluna para ordenar. A barra compara <span className="text-gray-400 font-medium">{COLS.find((c) => c.key === sortBy)?.label}</span>.</p>
             <table className="w-full text-sm">
               <thead>
@@ -573,6 +598,7 @@ function RankingCooperativas() {
                       </div>
                     </td>
                     <td className="py-2.5 px-2 text-right font-bold text-brand whitespace-nowrap">{fmt(o.revenue)}</td>
+                    <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">{fmt(o.net)}</td>
                     <td className="py-2.5 px-2 text-center text-gray-300">{o.tours}</td>
                     <td className="py-2.5 px-2 text-center text-gray-300">{o.transfers}</td>
                     <td className="py-2.5 px-2 text-center text-gray-300">{o.total}</td>
@@ -587,6 +613,7 @@ function RankingCooperativas() {
                     <td></td>
                     <td className="py-2.5 text-[12px] text-gray-500">Total · {sorted.length} coop.</td>
                     <td className="py-2.5 px-2 text-right text-brand whitespace-nowrap">{fmt(totals.revenue)}</td>
+                    <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">{fmt(totals.net)}</td>
                     <td className="py-2.5 px-2 text-center">{totals.tours}</td>
                     <td className="py-2.5 px-2 text-center">{totals.transfers}</td>
                     <td className="py-2.5 px-2 text-center">{totals.total}</td>
