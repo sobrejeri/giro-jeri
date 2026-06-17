@@ -3,7 +3,6 @@ import { Menu } from 'lucide-react'
 
 const TITLES = {
   '/dashboard':  'Painel Operacional',
-  '/cotacoes':   'Cotações de Transfer',
   '/despacho':   'Despacho',
   '/veiculos':   'Gestão de Veículos',
   '/financeiro': 'Relatório Financeiro',
