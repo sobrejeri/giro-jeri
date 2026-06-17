@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { CheckCircle, Clock, ArrowRight, Home, Calendar, Users } from 'lucide-react'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
@@ -6,6 +7,7 @@ function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigi
 export default function CheckoutSucesso() {
   const navigate  = useNavigate()
   const { state } = useLocation()
+  const { t }     = useTranslation()
 
   if (!state) { navigate('/'); return null }
 
@@ -29,10 +31,10 @@ export default function CheckoutSucesso() {
         </div>
 
         <h1 className="text-[22px] font-extrabold text-gray-900 text-center leading-tight mb-1">
-          Pagamento confirmado!
+          {t('payment.success.title')}
         </h1>
         <p className="text-[13px] text-gray-500 text-center mb-5">
-          Seu pagamento foi aprovado com sucesso.
+          {t('payment.success.subtitle')}
         </p>
 
         {/* Status aguardando cooperativa */}
@@ -44,9 +46,9 @@ export default function CheckoutSucesso() {
             </div>
           </div>
           <div>
-            <p className="text-[14px] font-bold text-amber-900">Aguardando cooperativa aceitar</p>
+            <p className="text-[14px] font-bold text-amber-900">{t('payment.success.awaitingCoop')}</p>
             <p className="text-[12px] text-amber-700 mt-0.5 leading-relaxed">
-              Sua solicitação foi enviada. Uma cooperativa irá aceitar em breve e você receberá a confirmação.
+              {t('payment.success.awaitingCoopSub')}
             </p>
           </div>
         </div>
@@ -62,13 +64,13 @@ export default function CheckoutSucesso() {
             <div className="flex items-start justify-between gap-2">
               <p className="text-[15px] font-bold text-gray-900 flex-1">{service_name}</p>
               <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-full shrink-0 whitespace-nowrap">
-                Ag. cooperativa
+                {t('payment.success.statusTag')}
               </span>
             </div>
 
             {booking_code && (
               <div className="text-[12px] font-mono font-bold text-brand bg-brand/5 rounded-lg px-3 py-2">
-                Código: {booking_code}
+                {t('payment.success.code')}: {booking_code}
               </div>
             )}
 
@@ -82,21 +84,20 @@ export default function CheckoutSucesso() {
               {people_count && (
                 <div className="flex items-center gap-2">
                   <Users size={13} className="text-gray-400 shrink-0" />
-                  <span>{people_count} {people_count === 1 ? 'pessoa' : 'pessoas'}</span>
+                  <span>{people_count} {people_count === 1 ? t('payment.success.person') : t('payment.success.people')}</span>
                 </div>
               )}
             </div>
 
             <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
-              <span className="text-[13px] text-gray-500">Total pago</span>
+              <span className="text-[13px] text-gray-500">{t('payment.success.totalPaid')}</span>
               <span className="text-[18px] font-bold text-gray-900">R$ {fmt(value)}</span>
             </div>
           </div>
         </div>
 
         <p className="text-[11px] text-gray-400 text-center mb-6 leading-relaxed">
-          Acompanhe o status da sua reserva em "Minhas Reservas".<br />
-          Você será avisado assim que a cooperativa confirmar.
+          {t('payment.success.followHint')}
         </p>
 
         <div className="w-full space-y-2.5">
@@ -104,14 +105,14 @@ export default function CheckoutSucesso() {
             onClick={() => navigate(booking_id ? `/minhas-reservas/${booking_id}` : '/minhas-reservas')}
             className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform"
           >
-            Acompanhar reserva <ArrowRight size={16} />
+            {t('payment.success.trackBtn')} <ArrowRight size={16} />
           </button>
           <button
             onClick={() => navigate('/')}
             className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-semibold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
           >
             <Home size={15} />
-            Voltar ao início
+            {t('payment.success.homeBtn')}
           </button>
         </div>
       </main>

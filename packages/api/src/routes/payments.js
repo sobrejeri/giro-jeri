@@ -1,8 +1,36 @@
 import { Router }    from 'express'
 import crypto        from 'node:crypto'
+import { z }         from 'zod'
 import { supabase }  from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
+
+const intentSchema = z.object({
+  service_type:        z.enum(['tour', 'transfer']),
+  service_id:          z.string().uuid(),
+  service_date_iso:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (YYYY-MM-DD)'),
+  total_price:         z.number({ coerce: true }).positive().min(5, 'Valor mínimo R$ 5,00'),
+  payment_method:      z.enum(['pix', 'credit_card', 'debit_card']).default('pix'),
+  existing_booking_id: z.string().uuid().optional(),
+  booking_mode:        z.enum(['private', 'shared']).optional(),
+  service_date:        z.string().optional(),
+  service_time:        z.string().optional(),
+  people_count:        z.number({ coerce: true }).int().min(1).max(200).optional(),
+  region_id:           z.string().uuid().optional(),
+  vehicles:            z.array(z.object({
+    vehicle_id: z.string().uuid(),
+    qty:        z.number({ coerce: true }).int().min(1),
+    unit_price: z.number({ coerce: true }).nonnegative(),
+  })).optional(),
+  origin_text:      z.string().max(500).optional(),
+  destination_text: z.string().max(500).optional(),
+  service_name:     z.string().max(300).optional(),
+  cover_image_url:  z.string().url().optional().or(z.literal('')),
+  coupon_code:      z.string().max(50).optional(),
+}).refine(
+  (d) => d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
+  { message: 'Dados incompletos para criar reserva' },
+)
 
 const router = Router()
 
@@ -17,6 +45,11 @@ async function getPaymentSettings() {
 // ── POST /api/payments/intent ───────────────────────────
 router.post('/intent', authenticate, async (req, res, next) => {
   try {
+    const parsed = intentSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
+    }
+
     const {
       service_type, service_id, booking_mode,
       service_date, service_date_iso, service_time,
@@ -25,11 +58,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       total_price, payment_method = 'pix',
       service_name, cover_image_url,
       coupon_code, existing_booking_id,
-    } = req.body
-
-    if (!existing_booking_id && (!service_id || !service_date_iso || !total_price)) {
-      return res.status(400).json({ error: 'Dados incompletos para criar reserva' })
-    }
+    } = parsed.data
 
     // ── 1. Lê configurações do gateway ─────────────────
     const cfg     = await getPaymentSettings()
@@ -271,28 +300,32 @@ router.post('/webhook', async (req, res, next) => {
       return res.status(401).json({ error: 'Assinatura inválida' })
     }
 
-    // Registra evento bruto
-    await supabase.from('payment_events').insert({
-      event_name:         eventType,
-      event_payload_json: event,
-      processing_status:  'pending',
-    }).select().single().catch(() => {})
-
-    if ((eventType === 'payment' || eventType === 'payment.updated') && gatewayId) {
-      const { data: payment } = await supabase
+    // Busca o pagamento pelo gatewayId para associar o evento
+    let paymentForEvent = null
+    if (gatewayId) {
+      const { data: p } = await supabase
         .from('payments')
         .select('*, bookings(*)')
         .eq('gateway_transaction_id', gatewayId)
         .single()
+      paymentForEvent = p
+    }
 
-      if (payment) {
-        const mpStatus = event.data?.status || event.status
-        if (mpStatus === 'approved' && payment.status !== 'approved') {
-          await onPaymentApproved(payment)
-        } else if (['rejected', 'cancelled'].includes(mpStatus)) {
-          await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id)
-          await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', payment.booking_id)
-        }
+    // Registra evento bruto com payment_id para idempotência via UNIQUE constraint
+    await supabase.from('payment_events').insert({
+      payment_id:         paymentForEvent?.id || null,
+      event_name:         eventType,
+      event_payload_json: event,
+      processing_status:  'pending',
+    }).catch(() => {}) // UNIQUE(payment_id, event_name, received_at) impede duplicatas
+
+    if ((eventType === 'payment' || eventType === 'payment.updated') && paymentForEvent) {
+      const mpStatus = event.data?.status || event.status
+      if (mpStatus === 'approved' && paymentForEvent.status !== 'approved') {
+        await onPaymentApproved(paymentForEvent)
+      } else if (['rejected', 'cancelled'].includes(mpStatus)) {
+        await supabase.from('payments').update({ status: 'failed' }).eq('id', paymentForEvent.id)
+        await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', paymentForEvent.booking_id)
       }
     }
 
@@ -382,14 +415,26 @@ async function onPaymentApproved(payment) {
       .catch(() => {}) // no-op if service_id is a route id (not a quote)
   }
 
-  const gatewayFee    = Math.round(payment.amount_gross * 0.035 * 100) / 100
-  const platformFee   = Math.round(payment.amount_gross * 0.07  * 100) / 100
+  // Cria lançamentos no ledger apenas uma vez — ledger_created evita duplicação
+  // quando webhook e polling aprovam o mesmo pagamento quase simultaneamente.
+  const { data: freshPayment } = await supabase
+    .from('payments')
+    .select('ledger_created, amount_gross')
+    .eq('id', payment.id)
+    .single()
 
-  await supabase.from('financial_ledger').insert([
-    { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${booking?.booking_code}`, amount: payment.amount_gross, direction: 'inflow', financial_status: 'pending' },
-    { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${booking?.booking_code}`,   amount: gatewayFee,           direction: 'outflow', financial_status: 'pending' },
-    { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${booking?.booking_code}`, amount: payment.amount_gross - gatewayFee, direction: 'inflow', financial_status: 'pending' },
-  ])
+  if (!freshPayment?.ledger_created) {
+    const amount     = freshPayment?.amount_gross ?? payment.amount_gross
+    const gatewayFee = Math.round(amount * 0.035 * 100) / 100
+
+    await supabase.from('financial_ledger').insert([
+      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${booking?.booking_code}`,  amount,                direction: 'inflow',  financial_status: 'pending' },
+      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${booking?.booking_code}`,    amount: gatewayFee,    direction: 'outflow', financial_status: 'pending' },
+      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${booking?.booking_code}`, amount: amount - gatewayFee, direction: 'inflow',  financial_status: 'pending' },
+    ])
+
+    await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
+  }
 
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
   sendConfirmationEmail(booking).catch((err) =>

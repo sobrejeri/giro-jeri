@@ -1,22 +1,24 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ChevronLeft, QrCode, CreditCard, Smartphone, ShieldCheck, Lock, Check, AlertCircle } from 'lucide-react'
 import { api } from '../../lib/api'
-
-const METHODS = [
-  { id: 'pix',    label: 'Pix',              sub: 'Aprovação instantânea',     icon: QrCode,       badge: 'Recomendado', iconBg: 'bg-orange-100', iconColor: 'text-brand' },
-  { id: 'credit', label: 'Cartão de crédito', sub: 'Em breve',                  icon: CreditCard,   badge: null,          iconBg: 'bg-gray-100',   iconColor: 'text-gray-400', disabled: true },
-  { id: 'debit',  label: 'Cartão de débito',  sub: 'Em breve',                  icon: Smartphone,   badge: null,          iconBg: 'bg-gray-100',   iconColor: 'text-gray-400', disabled: true },
-]
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
 
 export default function CheckoutPayment() {
   const navigate  = useNavigate()
   const { state } = useLocation()
+  const { t }     = useTranslation()
   const [method, setMethod] = useState('pix')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+
+  const METHODS = [
+    { id: 'pix',    label: t('payment.method.pix'),    sub: t('payment.method.pixSub'),    icon: QrCode,     badge: t('payment.method.pixBadge'), iconBg: 'bg-orange-100', iconColor: 'text-brand' },
+    { id: 'credit', label: t('payment.method.credit'), sub: t('payment.method.creditSub'), icon: CreditCard, badge: null, iconBg: 'bg-gray-100', iconColor: 'text-gray-400', disabled: true },
+    { id: 'debit',  label: t('payment.method.debit'),  sub: t('payment.method.debitSub'),  icon: Smartphone, badge: null, iconBg: 'bg-gray-100', iconColor: 'text-gray-400', disabled: true },
+  ]
 
   if (!state) { navigate(-1); return null }
 
@@ -71,7 +73,7 @@ export default function CheckoutPayment() {
         },
       })
     } catch (err) {
-      setError(err.message || 'Erro ao processar. Tente novamente.')
+      setError(err.message || t('payment.errorGeneric'))
     } finally {
       setLoading(false)
     }
@@ -84,7 +86,7 @@ export default function CheckoutPayment() {
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform">
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
-          <h1 className="text-lg font-bold text-gray-900">Pagamento</h1>
+          <h1 className="text-lg font-bold text-gray-900">{t('payment.title')}</h1>
         </div>
       </header>
 
@@ -93,21 +95,21 @@ export default function CheckoutPayment() {
         <div className="bg-white rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)] flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-[11px] text-gray-400 mb-0.5">
-              {service_type === 'tour' ? 'Passeio' : 'Transfer'}
-              {isPrivate ? ' · Privativo' : ' · Compartilhado'}
+              {service_type === 'tour' ? t('payment.summary.tour') : t('payment.summary.transfer')}
+              {isPrivate ? ` · ${t('payment.summary.private')}` : ` · ${t('payment.summary.shared')}`}
             </p>
             <p className="text-[15px] font-bold text-gray-900 truncate">{service_name}</p>
             <p className="text-[12px] text-gray-400 mt-0.5">{subtitleParts.join(' · ')}</p>
           </div>
           <div className="text-right shrink-0">
-            <p className="text-[10px] text-gray-400">Total</p>
+            <p className="text-[10px] text-gray-400">{t('payment.summary.total')}</p>
             <p className="text-[18px] font-bold text-brand">R$ {fmt(total_price)}</p>
           </div>
         </div>
 
         {/* Métodos */}
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-          <p className="text-[14px] font-bold text-gray-900 px-4 pt-4 pb-3">Escolha como pagar</p>
+          <p className="text-[14px] font-bold text-gray-900 px-4 pt-4 pb-3">{t('payment.choose')}</p>
           <div className="divide-y divide-gray-50">
             {METHODS.map((m) => {
               const selected = method === m.id
@@ -147,7 +149,7 @@ export default function CheckoutPayment() {
         <div className="bg-green-50 rounded-2xl p-3.5 border border-green-100">
           <div className="flex items-start gap-2.5">
             <ShieldCheck size={16} className="text-green-500 shrink-0 mt-0.5" />
-            <p className="text-[11px] text-green-700 leading-relaxed">Pagamento seguro. Você receberá a confirmação da reserva após o pagamento.</p>
+            <p className="text-[11px] text-green-700 leading-relaxed">{t('payment.secureNote')}</p>
           </div>
         </div>
       </main>
@@ -160,9 +162,9 @@ export default function CheckoutPayment() {
         >
           {loading
             ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            : <><Lock size={15} className="text-white/80" /> Gerar PIX · R$ {fmt(total_price)}</>}
+            : <><Lock size={15} className="text-white/80" /> {t('payment.confirmBtn', { amount: fmt(total_price) })}</>}
         </button>
-        <p className="text-[10px] text-gray-400 text-center mt-2">Ao confirmar, você concorda com os termos de uso do Giro Jeri</p>
+        <p className="text-[10px] text-gray-400 text-center mt-2">{t('payment.terms')}</p>
       </div>
     </div>
   )

@@ -1,17 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark, FlaskConical, Zap } from 'lucide-react'
 import { api } from '../../lib/api'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
-
-const PIX_TYPE_LABELS = {
-  cpf:        'CPF',
-  cnpj:       'CNPJ',
-  email:      'E-mail',
-  phone:      'Telefone',
-  random_key: 'Chave aleatória',
-}
 
 function useCountdown(expiresAt) {
   const [secs, setSecs] = useState(0)
@@ -30,6 +23,7 @@ function useCountdown(expiresAt) {
 // ── Manual payment (no gateway) ───────────────────────────
 function ManualPayment({ state }) {
   const navigate = useNavigate()
+  const { t }    = useTranslation()
   const [copied,        setCopied]        = useState(false)
   const [simLoading,    setSimLoading]    = useState(false)
   const [simError,      setSimError]      = useState('')
@@ -61,9 +55,9 @@ function ManualPayment({ state }) {
   return (
     <div className="min-h-screen bg-[#F8F8F8]">
       <header className="bg-white px-4 pt-12 pb-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <h1 className="text-lg font-bold text-gray-900">Realizar pagamento</h1>
+        <h1 className="text-lg font-bold text-gray-900">{t('payment.manual.title')}</h1>
         <p className="text-[12px] text-gray-400 mt-1">
-          Reserva <span className="font-mono font-bold text-gray-600">{booking_code}</span>
+          {t('payment.manual.booking', { defaultValue: 'Reserva' })} <span className="font-mono font-bold text-gray-600">{booking_code}</span>
           {value ? ` · R$ ${fmt(value)}` : ''}
         </p>
       </header>
@@ -72,17 +66,14 @@ function ManualPayment({ state }) {
 
         {/* Instrução principal */}
         <div className="bg-brand/5 border border-brand/20 rounded-2xl p-4">
-          <p className="text-[14px] font-bold text-gray-900 mb-1">Faça o PIX para confirmar sua reserva</p>
-          <p className="text-[12px] text-gray-500 leading-relaxed">
-            Transfira o valor abaixo para a chave PIX informada. Após o pagamento,
-            envie o comprovante e aguarde a confirmação da equipe.
-          </p>
+          <p className="text-[14px] font-bold text-gray-900 mb-1">{t('payment.manual.instruction')}</p>
+          <p className="text-[12px] text-gray-500 leading-relaxed">{t('payment.manual.instructionSub')}</p>
         </div>
 
         {/* Valor */}
         {value > 0 && (
           <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4 flex items-center justify-between">
-            <p className="text-[13px] text-gray-500">Valor a transferir</p>
+            <p className="text-[13px] text-gray-500">{t('payment.manual.transferAmount')}</p>
             <p className="text-[22px] font-bold text-brand">R$ {fmt(value)}</p>
           </div>
         )}
@@ -92,10 +83,10 @@ function ManualPayment({ state }) {
           <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4 space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <QrCode size={16} className="text-brand" />
-              <p className="text-[13px] font-bold text-gray-900">Chave PIX</p>
+              <p className="text-[13px] font-bold text-gray-900">{t('payment.manual.pixKey')}</p>
             </div>
             <div>
-              <p className="text-[11px] text-gray-400 mb-1">{PIX_TYPE_LABELS[pix_key_type] || 'Chave'}</p>
+              <p className="text-[11px] text-gray-400 mb-1">{t(`payment.pixKeyTypes.${pix_key_type}`, { defaultValue: 'Chave' })}</p>
               <div className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center gap-2 border border-gray-100">
                 <p className="text-[13px] font-mono font-semibold text-gray-800 flex-1 break-all">{pix_key}</p>
               </div>
@@ -106,14 +97,12 @@ function ManualPayment({ state }) {
                 copied ? 'bg-green-500 text-white' : 'bg-brand text-white'
               }`}
             >
-              {copied ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar chave PIX</>}
+              {copied ? <><Check size={15} /> {t('payment.manual.copiedBtn')}</> : <><Copy size={15} /> {t('payment.manual.copyBtn')}</>}
             </button>
           </div>
         ) : (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-            <p className="text-[12px] text-amber-700 font-medium">
-              Chave PIX ainda não configurada. Entre em contato pelo WhatsApp para receber os dados de pagamento.
-            </p>
+            <p className="text-[12px] text-amber-700 font-medium">{t('payment.manual.noPix')}</p>
           </div>
         )}
 
@@ -122,12 +111,12 @@ function ManualPayment({ state }) {
           <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4 space-y-2">
             <div className="flex items-center gap-2 mb-2">
               <Landmark size={15} className="text-gray-400" />
-              <p className="text-[13px] font-bold text-gray-900">Dados bancários</p>
+              <p className="text-[13px] font-bold text-gray-900">{t('payment.manual.bankDetails')}</p>
             </div>
             {[
-              { label: 'Banco',   value: bank_name },
-              { label: 'Agência', value: bank_agency },
-              { label: 'Conta',   value: bank_account ? `${bank_account} (${bank_account_type === 'poupanca' ? 'Poupança' : 'Corrente'})` : null },
+              { label: t('payment.manual.bankName'),   value: bank_name },
+              { label: t('payment.manual.bankAgency'), value: bank_agency },
+              { label: t('payment.manual.bankAccount'), value: bank_account ? `${bank_account} (${bank_account_type === 'poupanca' ? t('payment.manual.bankPoupanca') : t('payment.manual.bankCorrente')})` : null },
             ].filter((r) => r.value).map((row) => (
               <div key={row.label} className="flex items-center justify-between text-[13px]">
                 <span className="text-gray-400">{row.label}</span>
@@ -142,9 +131,7 @@ function ManualPayment({ state }) {
           <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-3">
             <div className="flex items-start gap-2">
               <FlaskConical size={14} className="text-yellow-600 shrink-0 mt-0.5" />
-              <p className="text-[12px] text-yellow-700 font-medium">
-                Modo de teste ativo. Clique abaixo para simular a confirmação do pagamento.
-              </p>
+              <p className="text-[12px] text-yellow-700 font-medium">{t('payment.manual.testMode')}</p>
             </div>
             {simError && <p className="text-[11px] text-red-500">{simError}</p>}
             <button
@@ -153,20 +140,20 @@ function ManualPayment({ state }) {
               className="w-full flex items-center justify-center gap-2 bg-yellow-500 text-white font-bold rounded-xl py-3 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-60"
             >
               <Zap size={15} />
-              {simLoading ? 'Processando…' : 'Simular pagamento aprovado'}
+              {simLoading ? t('payment.manual.simulating') : t('payment.manual.simulateBtn')}
             </button>
           </div>
         )}
 
         {/* Passos */}
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4 space-y-3">
-          <p className="text-[13px] font-bold text-gray-900">Como finalizar:</p>
+          <p className="text-[13px] font-bold text-gray-900">{t('payment.manual.howToFinish')}</p>
           {[
-            'Copie a chave PIX acima e abra o app do seu banco',
-            `Faça a transferência PIX no valor de R$ ${value ? fmt(value) : '—'}`,
-            'Salve o comprovante de pagamento',
-            'Envie o comprovante pelo WhatsApp para nossa equipe',
-            'Aguarde a confirmação — geralmente em poucos minutos',
+            t('payment.manual.step1'),
+            t('payment.manual.step2', { amount: value ? fmt(value) : '—' }),
+            t('payment.manual.step3'),
+            t('payment.manual.step4'),
+            t('payment.manual.step5'),
           ].map((step, i) => (
             <div key={i} className="flex items-start gap-3">
               <div className="w-5 h-5 rounded-full bg-brand/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -181,10 +168,7 @@ function ManualPayment({ state }) {
         <div className="bg-blue-50 rounded-2xl p-3.5 border border-blue-100">
           <div className="flex items-start gap-2.5">
             <Clock size={15} className="text-blue-500 shrink-0 mt-0.5" />
-            <p className="text-[12px] text-blue-700 leading-relaxed">
-              Sua reserva está criada e aguardando confirmação do pagamento.
-              Você pode acompanhá-la em "Minhas Reservas".
-            </p>
+            <p className="text-[12px] text-blue-700 leading-relaxed">{t('payment.manual.statusNote')}</p>
           </div>
         </div>
       </main>
@@ -194,7 +178,7 @@ function ManualPayment({ state }) {
           to="/minhas-reservas"
           className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform"
         >
-          Ver minhas reservas <ArrowRight size={16} />
+          {t('payment.manual.viewBookings')} <ArrowRight size={16} />
         </Link>
       </div>
     </div>
@@ -205,6 +189,7 @@ function ManualPayment({ state }) {
 export default function CheckoutProcessando() {
   const navigate  = useNavigate()
   const { state } = useLocation()
+  const { t }     = useTranslation()
   const [copied, setCopied]   = useState(false)
   const [status, setStatus]   = useState('pending')
   const pollRef = useRef(null)
@@ -273,8 +258,8 @@ export default function CheckoutProcessando() {
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
             <Check size={36} className="text-green-500" strokeWidth={2.5} />
           </div>
-          <p className="text-[20px] font-bold text-gray-900">Pagamento confirmado!</p>
-          <p className="text-[14px] text-gray-500 mt-1">Redirecionando…</p>
+          <p className="text-[20px] font-bold text-gray-900">{t('payment.gateway.approved')}</p>
+          <p className="text-[14px] text-gray-500 mt-1">{t('payment.gateway.approvedSub')}</p>
         </div>
       </div>
     )
@@ -287,16 +272,16 @@ export default function CheckoutProcessando() {
           <Clock size={32} className="text-red-400" />
         </div>
         <p className="text-[20px] font-bold text-gray-900 mb-1">
-          {status === 'expired' ? 'PIX expirado' : 'Pagamento não aprovado'}
+          {status === 'expired' ? t('payment.gateway.expired') : t('payment.gateway.failed')}
         </p>
         <p className="text-[13px] text-gray-500 mb-6 text-center">
-          O código PIX expirou ou o pagamento foi recusado. Tente novamente.
+          {status === 'expired' ? t('payment.gateway.expiredSub') : t('payment.gateway.failedSub')}
         </p>
         <button
           onClick={() => navigate(-2)}
           className="bg-brand text-white font-bold rounded-2xl px-8 py-3.5 text-[14px] active:scale-[0.98] transition-transform"
         >
-          Tentar novamente
+          {t('payment.gateway.retryBtn')}
         </button>
       </div>
     )
@@ -306,7 +291,7 @@ export default function CheckoutProcessando() {
     <div className="min-h-screen bg-[#F8F8F8]">
       <header className="bg-white px-4 pt-12 pb-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-bold text-gray-900">Pagar com PIX</h1>
+          <h1 className="text-lg font-bold text-gray-900">{t('payment.gateway.title')}</h1>
           <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold ${secs < 120 ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-brand'}`}>
             <Clock size={12} />
             {countdown}
@@ -325,33 +310,33 @@ export default function CheckoutProcessando() {
           <div className="bg-yellow-50 border border-yellow-300 rounded-2xl px-4 py-3 flex items-start gap-3">
             <FlaskConical size={16} className="text-yellow-600 shrink-0 mt-0.5" />
             <div>
-              <p className="text-[13px] font-bold text-yellow-800">Modo de teste ativo</p>
-              <p className="text-[12px] text-yellow-700 mt-0.5">Aprovação automática em andamento…</p>
+              <p className="text-[13px] font-bold text-yellow-800">{t('payment.gateway.testMode')}</p>
+              <p className="text-[12px] text-yellow-700 mt-0.5">{t('payment.gateway.testModeSub')}</p>
             </div>
           </div>
         )}
 
         {/* QR Code */}
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 flex flex-col items-center">
-          <p className="text-[13px] font-semibold text-gray-700 mb-4">Escaneie o QR Code no app do seu banco</p>
+          <p className="text-[13px] font-semibold text-gray-700 mb-4">{t('payment.gateway.scanQR')}</p>
           {qr_base64 ? (
             <img src={`data:image/png;base64,${qr_base64}`} alt="QR PIX" className="w-52 h-52 rounded-xl" />
           ) : (
             <div className="w-52 h-52 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2">
               <QrCode size={48} className="text-gray-300" />
-              <p className="text-[11px] text-gray-400 text-center">{test_mode ? 'Teste — sem QR real' : 'QR disponível após\nconfigurar o gateway'}</p>
+              <p className="text-[11px] text-gray-400 text-center">{test_mode ? t('payment.gateway.testQR') : t('payment.gateway.testQRSub')}</p>
             </div>
           )}
           <div className="flex items-center gap-2 mt-4 text-[11px] text-gray-400">
             <RefreshCw size={11} className="animate-spin" />
-            Verificando pagamento automaticamente…
+            {t('payment.gateway.checking')}
           </div>
         </div>
 
         {/* PIX Copia e Cola */}
         {pix_code && (
           <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4">
-            <p className="text-[13px] font-semibold text-gray-700 mb-2">Ou use o código PIX Copia e Cola</p>
+            <p className="text-[13px] font-semibold text-gray-700 mb-2">{t('payment.gateway.copyPaste')}</p>
             <div className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center gap-2 border border-gray-100">
               <p className="text-[11px] text-gray-500 font-mono flex-1 break-all line-clamp-2">{pix_code}</p>
             </div>
@@ -361,19 +346,19 @@ export default function CheckoutProcessando() {
                 copied ? 'bg-green-500 text-white' : 'bg-brand text-white'
               }`}
             >
-              {copied ? <><Check size={16} /> Copiado!</> : <><Copy size={16} /> Copiar código PIX</>}
+              {copied ? <><Check size={16} /> {t('payment.gateway.copiedBtn')}</> : <><Copy size={16} /> {t('payment.gateway.copyBtn')}</>}
             </button>
           </div>
         )}
 
         {/* Instruções */}
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4 space-y-3">
-          <p className="text-[13px] font-bold text-gray-900">Como pagar:</p>
+          <p className="text-[13px] font-bold text-gray-900">{t('payment.gateway.howToPay')}</p>
           {[
-            'Abra o app do seu banco ou carteira digital',
-            'Escolha a opção "Pix" → "Pagar com QR Code" ou "Copia e Cola"',
-            'Confirme o valor e conclua o pagamento',
-            'Sua reserva será confirmada automaticamente',
+            t('payment.gateway.step1'),
+            t('payment.gateway.step2'),
+            t('payment.gateway.step3'),
+            t('payment.gateway.step4'),
           ].map((step, i) => (
             <div key={i} className="flex items-start gap-3">
               <div className="w-5 h-5 rounded-full bg-brand/10 flex items-center justify-center shrink-0 mt-0.5">
