@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Sun } from 'lucide-react'
+import { Plus, Pencil, Trash2, Sun, CalendarDays } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
@@ -30,6 +30,13 @@ function dateToMonth(dateStr) {
 }
 
 const EMPTY = { region_id: '', start_month: 7, end_month: 1, pct: 10, is_active: true }
+const EMPTY_HOLIDAY = { region_id: '', name: '', holiday_date: '', pct: 20, is_active: true }
+
+const fmtDateBR = (iso) => {
+  if (!iso) return ''
+  const [y, m, d] = String(iso).slice(0, 10).split('-')
+  return `${d}/${m}/${y}`
+}
 
 export default function Temporada() {
   const [modal, setModal] = useState(null)
@@ -77,6 +84,47 @@ export default function Temporada() {
       additional_value: Number(form.pct),
       applies_to:       'all',
       is_active:        form.is_active,
+    })
+  }
+
+  // ── Feriados / datas especiais ──────────────────────────
+  const [hmodal, setHmodal] = useState(null)
+  const [hform, setHform]   = useState(EMPTY_HOLIDAY)
+
+  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: () => api.getHolidays() })
+
+  const saveHoliday = useMutation({
+    mutationFn: (body) => hmodal?.isNew ? api.createHoliday(body) : api.updateHoliday(hmodal.id, body),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['holidays'] }); setHmodal(null) },
+  })
+  const deleteHoliday = useMutation({
+    mutationFn: (id) => api.deleteHoliday(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['holidays'] }),
+  })
+
+  function openNewHoliday()    { setHform(EMPTY_HOLIDAY); setHmodal({ isNew: true }) }
+  function openEditHoliday(h)  {
+    setHform({
+      region_id:    h.region_id || '',
+      name:         h.name || '',
+      holiday_date: h.holiday_date || '',
+      pct:          Number(h.additional_value) || 0,
+      is_active:    h.is_active,
+    })
+    setHmodal(h)
+  }
+  function handleHolidaySubmit(e) {
+    e.preventDefault()
+    if (!hform.name || !hform.holiday_date) return
+    saveHoliday.mutate({
+      region_id:            hform.region_id || null,
+      name:                 hform.name,
+      holiday_date:         hform.holiday_date,
+      affects_pricing:      true,
+      additional_type:      'percentage',
+      additional_value:     Number(hform.pct),
+      affects_availability: false,
+      is_active:            hform.is_active,
     })
   }
 
@@ -163,6 +211,64 @@ export default function Temporada() {
           />
           <Button type="submit" className="w-full" disabled={saveMut.isPending}>
             {saveMut.isPending ? 'Salvando…' : 'Salvar'}
+          </Button>
+        </form>
+      </Modal>
+
+      {/* ── Feriados e datas especiais ── */}
+      <div className="flex items-center justify-between pt-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-200">Feriados e datas especiais</h2>
+          <p className="text-xs text-gray-500">Dias específicos (feriados, datas comemorativas) com acréscimo próprio.</p>
+        </div>
+        <Button onClick={openNewHoliday}><Plus size={16} /> Nova Data</Button>
+      </div>
+
+      {holidays.length === 0 ? (
+        <Card><CardBody>
+          <div className="py-10 text-center">
+            <CalendarDays size={32} className="mx-auto text-gray-700 mb-3" />
+            <p className="text-gray-500 text-sm">Nenhum feriado ou data especial cadastrada.</p>
+          </div>
+        </CardBody></Card>
+      ) : (
+        <Card>
+          <div className="divide-y divide-gray-800">
+            {holidays.map((h) => (
+              <div key={h.id} className="flex items-center gap-4 px-5 py-4">
+                <div className="w-9 h-9 rounded-lg bg-rose-900/30 flex items-center justify-center text-rose-400 flex-shrink-0">
+                  <CalendarDays size={18} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-200">{h.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {fmtDateBR(h.holiday_date)} · {h.regions?.name || 'Todas as regiões'} · +{h.additional_value}%
+                  </p>
+                </div>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${h.is_active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
+                  {h.is_active ? 'Ativo' : 'Inativo'}
+                </span>
+                <div className="flex gap-1">
+                  <button onClick={() => openEditHoliday(h)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg"><Pencil size={13} /></button>
+                  <button onClick={() => confirm('Remover esta data?') && deleteHoliday.mutate(h.id)} className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"><Trash2 size={13} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Modal open={!!hmodal} onClose={() => setHmodal(null)} title={hmodal?.isNew ? 'Nova Data Especial' : 'Editar Data'} size="sm">
+        <form onSubmit={handleHolidaySubmit} className="space-y-4">
+          <Input label="Nome (ex: Réveillon, Carnaval)" value={hform.name} onChange={(e) => setHform({ ...hform, name: e.target.value })} required />
+          <Input label="Data" type="date" value={hform.holiday_date} onChange={(e) => setHform({ ...hform, holiday_date: e.target.value })} required />
+          <Select label="Região (vazio = todas)" value={hform.region_id} onChange={(e) => setHform({ ...hform, region_id: e.target.value })}>
+            <option value="">Todas as regiões</option>
+            {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </Select>
+          <Input label="Acréscimo (%)" type="number" min={0} max={300} step={1} value={hform.pct} onChange={(e) => setHform({ ...hform, pct: e.target.value })} required />
+          <Button type="submit" className="w-full" disabled={saveHoliday.isPending}>
+            {saveHoliday.isPending ? 'Salvando…' : 'Salvar'}
           </Button>
         </form>
       </Modal>

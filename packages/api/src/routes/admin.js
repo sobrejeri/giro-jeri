@@ -601,6 +601,42 @@ router.delete('/seasons/:id', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Feriados / datas especiais (dias específicos) ──────
+router.get('/holidays', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').select('*, regions(name)').order('holiday_date');
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.post('/holidays', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').insert(req.body).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+router.put('/holidays/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').update(req.body).eq('id', req.params.id).select().single();
+    if (error || !data) return res.status(404).json({ error: 'Feriado não encontrado' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.delete('/holidays/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { error } = await supabase.from('holidays').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/admin/pricing-rules ───────────────────────
 router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
   try {

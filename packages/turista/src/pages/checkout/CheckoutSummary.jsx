@@ -184,6 +184,24 @@ export default function CheckoutSummary() {
     enabled:  isTransfer && editing,
   })
 
+  // Recálculo autoritativo no servidor (alta temporada / feriado) — só para
+  // EXIBIR exatamente o que será cobrado. Veículos vêm do estado `cart`.
+  const calcVehicles = Object.entries(cart).filter(([, q]) => q > 0).map(([id, q]) => ({ vehicleId: id, quantity: q }))
+  const dateISO = format(date, 'yyyy-MM-dd')
+  const { data: serverCalc } = useQuery({
+    queryKey: ['checkout-calc', ls?.service_id, isPrivateTour ? 'private' : 'shared', dateISO, people, JSON.stringify(calcVehicles)],
+    queryFn:  () => api.calculateTour(ls.service_id, {
+      region_id:    ls.region_id,
+      mode:         isPrivateTour ? 'private' : 'shared',
+      service_date: dateISO,
+      people_count: people,
+      vehicles:     calcVehicles,
+    }),
+    enabled:   (isPrivateTour || isSharedTour) && !!ls?.service_id && !!ls?.region_id && (isSharedTour || calcVehicles.length > 0),
+    staleTime: 30_000,
+    retry:     false,
+  })
+
   /* ── Early return after hooks ────────────────────────────── */
   if (!ls) { navigate(-1); return null }
 
@@ -225,6 +243,10 @@ export default function CheckoutSummary() {
     return ls.total_price
   })()
 
+  // Acréscimo de data (do recálculo do servidor) e total a exibir/cobrar
+  const dateSurcharge = Number(serverCalc?.seasonAdditional) || 0
+  const displayTotal  = (serverCalc && typeof serverCalc.totalAmount === 'number') ? serverCalc.totalAmount : activeTotal
+
   const capacityOk  = !hasVehicles || (cartHasItems && cartCapacity >= people)
   const canSave     = capacityOk
   const canProceed  = hasPricing && !!time
@@ -258,7 +280,7 @@ export default function CheckoutSummary() {
     vehicles:        cartHasItems
       ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty }))
       : ls.vehicles,
-    total_price:     activeTotal,
+    total_price:     displayTotal,
     service_name:    ls.service_name,
     cover_image_url: ls.cover_image_url || null,
   }
@@ -590,10 +612,16 @@ export default function CheckoutSummary() {
                 <span className="text-[13px] font-semibold text-gray-900">R$ {fmt(activeTotal)}</span>
               </div>
             )}
+            {dateSurcharge > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-amber-600">Alta temporada / feriado</span>
+                <span className="text-[13px] font-semibold text-amber-600">+ R$ {fmt(dateSurcharge)}</span>
+              </div>
+            )}
             <div className="border-t border-gray-100 pt-2 mt-1 flex items-center justify-between">
               <span className="text-[15px] font-bold text-gray-900">Total</span>
               {hasPricing
-                ? <span className="text-[22px] font-bold text-brand">R$ {fmt(activeTotal)}</span>
+                ? <span className="text-[22px] font-bold text-brand">R$ {fmt(displayTotal)}</span>
                 : <span className="text-[14px] font-semibold text-amber-600">A confirmar</span>
               }
             </div>
@@ -624,7 +652,7 @@ export default function CheckoutSummary() {
         <div className="mb-3">
           <p className="text-[11px] text-gray-400">Total a pagar</p>
           {hasPricing
-            ? <p className="text-[20px] font-bold text-brand">R$ {fmt(activeTotal)}</p>
+            ? <p className="text-[20px] font-bold text-brand">R$ {fmt(displayTotal)}</p>
             : <p className="text-[14px] font-semibold text-amber-600">Preço a confirmar</p>
           }
         </div>
