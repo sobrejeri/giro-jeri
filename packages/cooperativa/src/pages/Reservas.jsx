@@ -275,7 +275,7 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
 
 // ── Card de cotação (rota personalizada) ──────────────────
 function QuoteRequestCard({ quote, onQuote }) {
-  const name   = quote.users?.full_name || quote.user_name || 'Cliente'
+  const name   = quote.client_name || quote.users?.full_name || quote.user_name || 'Cliente'
   const origin = quote.origin_place_name || quote.origin_description || '—'
   const dest   = quote.destination_place_name || quote.destination_description || '—'
   const notes  = quote.special_notes || quote.client_notes
@@ -372,29 +372,25 @@ export default function Reservas() {
     staleTime:       3000,
   })
 
-  // Cotações de rota personalizada (mesma tela das corridas)
+  // Cotações de rota personalizada (mesma tela das corridas) —
+  // a view v_quotes_dashboard já traz todas as cotações ativas (não pagas/canceladas)
   const { data: pendingQuotesRaw } = useQuery({
     queryKey:        ['quotes-pending'],
     queryFn:         () => api.getPendingQuotes(),
     refetchInterval: 20000,
   })
-  const { data: quotesHistoryRaw } = useQuery({
-    queryKey: ['quotes-history'],
-    queryFn:  () => api.getQuotesHistory(),
-  })
 
   const pending = data?.pending || []
   const mine    = data?.mine    || []
-  const pendingQuotes = Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || [])
-  const quotedQuotes  = (Array.isArray(quotesHistoryRaw) ? quotesHistoryRaw : (quotesHistoryRaw?.data || []))
-    .filter((q) => q.status === 'quoted')
+  const allQuotes     = Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || [])
+  const pendingQuotes = allQuotes.filter((q) => q.status === 'pending_quote')
+  const quotedQuotes  = allQuotes.filter((q) => q.status === 'quoted')
 
   const setQuoteMut = useMutation({
     mutationFn: ({ id, quoted_price, quote_notes }) =>
       api.setQuotePrice(id, { quoted_price: Number(quoted_price), quote_notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
-      queryClient.invalidateQueries({ queryKey: ['quotes-history'] })
       setQuoteModal(null); setPrice(''); setNotes('')
       setToast({ message: 'Cotação enviada ao cliente!', type: 'success' })
     },
@@ -499,7 +495,6 @@ export default function Reservas() {
           onClick={() => {
             refetch()
             queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
-            queryClient.invalidateQueries({ queryKey: ['quotes-history'] })
           }}
           disabled={isFetching}
           className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors active:scale-95"
@@ -625,7 +620,7 @@ export default function Reservas() {
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
               <p className="font-medium text-gray-900">
-                {quoteModal.users?.full_name || quoteModal.user_name || 'Cliente'}
+                {quoteModal.client_name || quoteModal.users?.full_name || quoteModal.user_name || 'Cliente'}
               </p>
               <p className="text-gray-500">
                 {(quoteModal.origin_place_name || quoteModal.origin_description)} → {(quoteModal.destination_place_name || quoteModal.destination_description)}
