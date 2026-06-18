@@ -357,7 +357,6 @@ export default function Bookings() {
     { id: 'ativos',     label: t('bookings.active')    },
     { id: 'concluidos', label: t('bookings.completed') },
     { id: 'cancelados', label: t('bookings.cancelled') },
-    { id: 'cotacoes',   label: 'Cotações'              },
   ]
 
   const [tab,           setTab]           = useState('todos')
@@ -376,7 +375,12 @@ export default function Bookings() {
   const { data: quotesData, isLoading: quotesLoading } = useQuery({
     queryKey: ['my-quotes'],
     queryFn:  () => api.getMyQuotes(),
-    refetchInterval: tab === 'cotacoes' ? 10000 : false,
+    // Atualiza enquanto houver cotação aguardando preço/proposta, para o cliente
+    // ver a oferta da cooperativa sem precisar atualizar a tela.
+    refetchInterval: (query) => {
+      const list = Array.isArray(query.state.data) ? query.state.data : []
+      return list.some(qq => qq.status === 'pending_quote' || qq.status === 'quoted') ? 12000 : false
+    },
   })
 
   const quotes = Array.isArray(quotesData) ? quotesData : []
@@ -460,8 +464,6 @@ export default function Bookings() {
     }
   }
 
-  const pendingQuotesCount = quotes.filter(q => q.status === 'quoted').length
-
   function handlePay(booking) {
     let dateStr = '—'
     if (booking.service_date) {
@@ -512,9 +514,7 @@ export default function Bookings() {
   // Cotações que entram nas abas Todas/Ativas (a paga já vira reserva)
   const quotesForTab = (() => {
     if (tab === 'concluidos' || tab === 'cancelados') return []
-    let list = (tab === 'cotacoes')
-      ? quotes
-      : quotes.filter(qq => qq.status !== 'paid' && !bookedServiceIds.has(qq.id))
+    let list = quotes.filter(qq => qq.status !== 'paid' && !bookedServiceIds.has(qq.id))
     if (tab === 'ativos') list = list.filter(qq => QUOTE_ACTIVE.includes(qq.status))
     if (q) list = list.filter(qq => `${qq.origin_place_name || ''} ${qq.destination_place_name || ''}`.toLowerCase().includes(q))
     return list
@@ -522,7 +522,7 @@ export default function Bookings() {
 
   // Lista unificada: reservas + cotações (cada uma com seu card/rótulo)
   const listItems = [
-    ...(tab === 'cotacoes' ? [] : filtered).map(b => ({ kind: 'booking', id: b.id, data: b, ts: b.created_at || b.service_date || '' })),
+    ...filtered.map(b => ({ kind: 'booking', id: b.id, data: b, ts: b.created_at || b.service_date || '' })),
     ...quotesForTab.map(qq => ({ kind: 'quote', id: `q-${qq.id}`, data: qq, ts: qq.created_at || qq.service_date || '' })),
   ].sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
 
@@ -563,7 +563,7 @@ export default function Bookings() {
         {/* Tabs */}
         <div className="flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {TABS.map((t) => {
-            const count  = t.id === 'cotacoes' ? pendingQuotesCount : (t.id !== 'todos' ? counts[t.id] : null)
+            const count  = t.id !== 'todos' ? counts[t.id] : null
             const active = tab === t.id
             return (
               <button
@@ -586,22 +586,18 @@ export default function Bookings() {
 
       {/* List */}
       <main className="px-4 pt-4 space-y-3 lg:max-w-5xl lg:mx-auto">
-        {(isLoading || (tab === 'cotacoes' && quotesLoading)) ? (
+        {(isLoading || quotesLoading) ? (
           <div className="py-16"><PageSpinner /></div>
         ) : listItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-              {tab === 'cotacoes'
-                ? <Car size={28} className="text-gray-300" />
-                : <CalendarCheck size={28} className="text-gray-300" />}
+              <CalendarCheck size={28} className="text-gray-300" />
             </div>
             <p className="text-[14px] font-semibold text-gray-500 mb-1">
-              {tab === 'cotacoes' ? 'Nenhuma cotação ainda.' : (all.length === 0 ? 'Nenhuma reserva ainda.' : 'Nenhuma reserva aqui.')}
+              {all.length === 0 ? 'Nenhuma reserva ainda.' : 'Nenhuma reserva aqui.'}
             </p>
             <p className="text-[12px] text-gray-400">
-              {tab === 'cotacoes'
-                ? 'Solicite uma corrida personalizada na tela de Transfers.'
-                : (all.length === 0 ? 'Faça sua primeira reserva de passeio ou transfer!' : 'Suas reservas aparecerão aqui.')}
+              {all.length === 0 ? 'Faça sua primeira reserva de passeio ou transfer!' : 'Suas reservas aparecerão aqui.'}
             </p>
           </div>
         ) : (
