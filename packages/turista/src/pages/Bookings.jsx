@@ -36,6 +36,8 @@ function getStatusCfg(t) {
 }
 
 const ACTIVE_STATUSES = ['waiting_payment', 'waiting_acceptance', 'confirmed', 'in_progress']
+// Cotações "ativas" (entram nas abas Todas/Ativas junto das reservas)
+const QUOTE_ACTIVE = ['pending_quote', 'quoted', 'accepted']
 
 const GRADIENTS = [
   ['from-orange-400', 'to-amber-300'],
@@ -218,7 +220,7 @@ function fmtDate(d) {
 }
 
 /* ── Quote Card ─────────────────────────────────────────────── */
-function QuoteCard({ quote, onAccept, onReject, acceptLoading, rejectLoading }) {
+function QuoteCard({ quote, onAccept, onReject, onPay, acceptLoading, rejectLoading }) {
   const cfg = QUOTE_STATUS[quote.status] || QUOTE_STATUS.pending_quote
 
   return (
@@ -297,9 +299,23 @@ function QuoteCard({ quote, onAccept, onReject, acceptLoading, rejectLoading }) 
         )}
 
         {quote.status === 'accepted' && (
-          <p className="text-[12px] text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
-            Cotação aceita! Aguardando confirmação do pagamento.
-          </p>
+          <div className="space-y-2.5">
+            {quote.quoted_price != null && (
+              <div className="bg-emerald-50 rounded-xl px-4 py-3">
+                <p className="text-[10px] text-emerald-500">Valor combinado</p>
+                <p className="text-[20px] font-extrabold text-gray-900">R$ {Number(quote.quoted_price).toLocaleString('pt-BR')}</p>
+              </div>
+            )}
+            <p className="text-[12px] text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
+              Cotação aceita! Finalize o pagamento para confirmar a corrida.
+            </p>
+            <button
+              onClick={() => onPay?.(quote)}
+              className="w-full h-11 bg-brand text-white rounded-xl text-[13px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform shadow-sm shadow-brand/20"
+            >
+              Pagar agora{quote.quoted_price != null ? ` · R$ ${Number(quote.quoted_price).toLocaleString('pt-BR')}` : ''}
+            </button>
+          </div>
         )}
 
         {quote.status === 'paid' && (
@@ -351,6 +367,8 @@ export default function Bookings() {
     refetchInterval: tab === 'cotacoes' ? 10000 : false,
   })
 
+  const quotes = Array.isArray(quotesData) ? quotesData : []
+
   const all = (
     Array.isArray(data?.data) ? data.data :
     Array.isArray(data) ? data : []
@@ -369,7 +387,8 @@ export default function Bookings() {
   })
 
   const counts = {
-    ativos:     all.filter(b => ACTIVE_STATUSES.includes(b._status)).length,
+    ativos:     all.filter(b => ACTIVE_STATUSES.includes(b._status)).length
+                + quotes.filter(qq => QUOTE_ACTIVE.includes(qq.status)).length,
     concluidos: all.filter(b => b._status === 'completed').length,
     cancelados: all.filter(b => b._status === 'cancelled').length,
   }
@@ -429,7 +448,6 @@ export default function Bookings() {
     }
   }
 
-  const quotes = Array.isArray(quotesData) ? quotesData : []
   const pendingQuotesCount = quotes.filter(q => q.status === 'quoted').length
 
   function handlePay(booking) {
@@ -454,6 +472,41 @@ export default function Bookings() {
       },
     })
   }
+
+  // Retoma o pagamento de uma cotação já aceita (sem reaceitar)
+  function handlePayQuote(quote) {
+    navigate('/checkout/pagamento', {
+      state: {
+        service_name:     `Corrida personalizada: ${quote.origin_place_name} → ${quote.destination_place_name}`,
+        service_type:     'transfer',
+        booking_mode:     'private',
+        service_date:     fmtDate(quote.service_date),
+        service_date_iso: quote.service_date,
+        service_time:     quote.service_time,
+        people_count:     quote.people_count,
+        total_price:      quote.quoted_price,
+        origin_text:      quote.origin_place_name,
+        destination_text: quote.destination_place_name,
+        service_id:       quote.id,
+        quote_id:         quote.id,
+      },
+    })
+  }
+
+  // Cotações que entram nas abas Todas/Ativas (a paga já vira reserva)
+  const quotesForTab = (() => {
+    if (tab === 'concluidos' || tab === 'cancelados') return []
+    let list = (tab === 'cotacoes') ? quotes : quotes.filter(qq => qq.status !== 'paid')
+    if (tab === 'ativos') list = list.filter(qq => QUOTE_ACTIVE.includes(qq.status))
+    if (q) list = list.filter(qq => `${qq.origin_place_name || ''} ${qq.destination_place_name || ''}`.toLowerCase().includes(q))
+    return list
+  })()
+
+  // Lista unificada: reservas + cotações (cada uma com seu card/rótulo)
+  const listItems = [
+    ...(tab === 'cotacoes' ? [] : filtered).map(b => ({ kind: 'booking', id: b.id, data: b, ts: b.created_at || b.service_date || '' })),
+    ...quotesForTab.map(qq => ({ kind: 'quote', id: `q-${qq.id}`, data: qq, ts: qq.created_at || qq.service_date || '' })),
+  ].sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
 
   return (
     <div className="min-h-full bg-gray-50 pb-24">
@@ -515,56 +568,45 @@ export default function Bookings() {
 
       {/* List */}
       <main className="px-4 pt-4 space-y-3 lg:max-w-5xl lg:mx-auto">
-        {tab === 'cotacoes' ? (
-          quotesLoading ? (
-            <div className="py-16"><PageSpinner /></div>
-          ) : quotes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-                <Car size={28} className="text-gray-300" />
-              </div>
-              <p className="text-[14px] font-semibold text-gray-500 mb-1">Nenhuma cotação ainda.</p>
-              <p className="text-[12px] text-gray-400">Solicite uma corrida personalizada na tela de Transfers.</p>
-            </div>
-          ) : (
-            <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 space-y-3">
-            {quotes.map(q => (
-              <QuoteCard
-                key={q.id}
-                quote={q}
-                onAccept={handleAcceptQuote}
-                onReject={handleRejectQuote}
-                acceptLoading={quoteActing === q.id}
-                rejectLoading={quoteActing === q.id}
-              />
-            ))}
-            </div>
-          )
-        ) : isLoading ? (
+        {(isLoading || (tab === 'cotacoes' && quotesLoading)) ? (
           <div className="py-16"><PageSpinner /></div>
-        ) : filtered.length === 0 ? (
+        ) : listItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-              <CalendarCheck size={28} className="text-gray-300" />
+              {tab === 'cotacoes'
+                ? <Car size={28} className="text-gray-300" />
+                : <CalendarCheck size={28} className="text-gray-300" />}
             </div>
             <p className="text-[14px] font-semibold text-gray-500 mb-1">
-              {all.length === 0 ? 'Nenhuma reserva ainda.' : 'Nenhuma reserva aqui.'}
+              {tab === 'cotacoes' ? 'Nenhuma cotação ainda.' : (all.length === 0 ? 'Nenhuma reserva ainda.' : 'Nenhuma reserva aqui.')}
             </p>
             <p className="text-[12px] text-gray-400">
-              {all.length === 0 ? 'Faça sua primeira reserva de passeio ou transfer!' : 'Suas reservas aparecerão aqui.'}
+              {tab === 'cotacoes'
+                ? 'Solicite uma corrida personalizada na tela de Transfers.'
+                : (all.length === 0 ? 'Faça sua primeira reserva de passeio ou transfer!' : 'Suas reservas aparecerão aqui.')}
             </p>
           </div>
         ) : (
           <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 space-y-3">
-          {filtered.map((b) => (
-            <BookingCard
-              key={b.id}
-              booking={b}
-              onCancel={setCancelTarget}
-              onDetail={(id) => navigate(`/minhas-reservas/${id}`)}
-              onPay={handlePay}
-            />
-          ))}
+            {listItems.map((it) => it.kind === 'quote' ? (
+              <QuoteCard
+                key={it.id}
+                quote={it.data}
+                onAccept={handleAcceptQuote}
+                onReject={handleRejectQuote}
+                onPay={handlePayQuote}
+                acceptLoading={quoteActing === it.data.id}
+                rejectLoading={quoteActing === it.data.id}
+              />
+            ) : (
+              <BookingCard
+                key={it.id}
+                booking={it.data}
+                onCancel={setCancelTarget}
+                onDetail={(id) => navigate(`/minhas-reservas/${id}`)}
+                onPay={handlePay}
+              />
+            ))}
           </div>
         )}
       </main>
