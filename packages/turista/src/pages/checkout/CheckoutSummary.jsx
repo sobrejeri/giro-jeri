@@ -188,7 +188,7 @@ export default function CheckoutSummary() {
   // EXIBIR exatamente o que será cobrado. Veículos vêm do estado `cart`.
   const calcVehicles = Object.entries(cart).filter(([, q]) => q > 0).map(([id, q]) => ({ vehicleId: id, quantity: q }))
   const dateISO = format(date, 'yyyy-MM-dd')
-  const { data: serverCalc } = useQuery({
+  const { data: tourCalc } = useQuery({
     queryKey: ['checkout-calc', ls?.service_id, isPrivateTour ? 'private' : 'shared', dateISO, people, JSON.stringify(calcVehicles)],
     queryFn:  () => api.calculateTour(ls.service_id, {
       region_id:    ls.region_id,
@@ -201,6 +201,23 @@ export default function CheckoutSummary() {
     staleTime: 30_000,
     retry:     false,
   })
+
+  // Translado tabelado: aplica alta temporada/feriado pela rota.
+  // Translado personalizado (vem com quote_id) já tem preço fechado pela cooperativa.
+  const { data: transferCalc } = useQuery({
+    queryKey: ['checkout-calc-transfer', ls?.service_id, ls?.region_id, dateISO, time],
+    queryFn:  () => api.calculateTransfer({
+      region_id:    ls.region_id,
+      route_id:     ls.service_id,
+      service_date: dateISO,
+      service_time: time,
+    }),
+    enabled:   isTransfer && !ls?.quote_id && !!ls?.service_id && !!ls?.region_id && !!time,
+    staleTime: 30_000,
+    retry:     false,
+  })
+
+  const serverCalc = tourCalc || transferCalc
 
   /* ── Early return after hooks ────────────────────────────── */
   if (!ls) { navigate(-1); return null }
