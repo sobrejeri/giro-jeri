@@ -206,6 +206,7 @@ const QUOTE_BADGE = {
   accepted:      { label: 'Aguardando pagamento', bg: 'bg-amber-500', text: 'text-white', pulse: false },
   paid:          { label: 'Paga',                 bg: 'bg-gray-500',  text: 'text-white', pulse: false },
   rejected:      { label: 'Recusada',             bg: 'bg-red-500',   text: 'text-white', pulse: false },
+  cancelled:     { label: 'Cancelada',            bg: 'bg-red-500',   text: 'text-white', pulse: false },
   expired:       { label: 'Expirada',             bg: 'bg-gray-400',  text: 'text-white', pulse: false },
 }
 
@@ -333,10 +334,12 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
           </div>
         )}
 
-        {/* Recusada / expirada */}
-        {(quote.status === 'rejected' || quote.status === 'expired') && (
+        {/* Cancelada / recusada / expirada */}
+        {(quote.status === 'rejected' || quote.status === 'expired' || quote.status === 'cancelled') && (
           <p className="text-[12px] text-gray-400 bg-gray-50 rounded-xl px-3 py-2">
-            {quote.status === 'rejected' ? 'Você recusou esta proposta.' : 'Esta cotação expirou.'}
+            {quote.status === 'cancelled' ? 'Você cancelou esta solicitação.'
+              : quote.status === 'rejected' ? 'Você recusou esta proposta.'
+              : 'Esta cotação expirou.'}
           </p>
         )}
 
@@ -447,7 +450,8 @@ export default function Bookings() {
     ativos:     all.filter(b => ACTIVE_STATUSES.includes(b._status)).length
                 + quotes.filter(qq => QUOTE_ACTIVE.includes(qq.status)).length,
     concluidos: all.filter(b => b._status === 'completed').length,
-    cancelados: all.filter(b => b._status === 'cancelled').length,
+    cancelados: all.filter(b => b._status === 'cancelled').length
+                + quotes.filter(qq => ['cancelled', 'rejected', 'expired'].includes(qq.status)).length,
   }
 
   async function handleCancelConfirm() {
@@ -505,9 +509,17 @@ export default function Bookings() {
     }
   }
 
-  function handleCancelQuote(quote) {
+  async function handleCancelQuote(quote) {
     if (!confirm('Cancelar esta solicitação de translado personalizado?')) return
-    handleRejectQuote(quote.id)
+    setQuoteActing(quote.id)
+    try {
+      await api.cancelQuote(quote.id)
+      queryClient.invalidateQueries({ queryKey: ['my-quotes'] })
+    } catch (err) {
+      alert(err.message || 'Erro ao cancelar a solicitação')
+    } finally {
+      setQuoteActing(null)
+    }
   }
 
   function handlePay(booking) {
@@ -559,9 +571,10 @@ export default function Bookings() {
 
   // Cotações que entram nas abas Todas/Ativas (a paga já vira reserva)
   const quotesForTab = (() => {
-    if (tab === 'concluidos' || tab === 'cancelados') return []
+    if (tab === 'concluidos') return []
     let list = quotes.filter(qq => qq.status !== 'paid' && !bookedServiceIds.has(qq.id))
-    if (tab === 'ativos') list = list.filter(qq => QUOTE_ACTIVE.includes(qq.status))
+    if (tab === 'ativos')     list = list.filter(qq => QUOTE_ACTIVE.includes(qq.status))
+    if (tab === 'cancelados') list = list.filter(qq => ['cancelled', 'rejected', 'expired'].includes(qq.status))
     if (q) list = list.filter(qq => `${qq.origin_place_name || ''} ${qq.destination_place_name || ''}`.toLowerCase().includes(q))
     return list
   })()

@@ -111,6 +111,7 @@ export const api = {
   getMyQuotes:        ()            => request('/api/transfers/quotes'),
   acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote:        (id, body)    => request(`/api/transfers/quotes/${id}/reject`, { method: 'POST', body }),
+  cancelQuote:        (id)          => request(`/api/transfers/quotes/${id}/cancel`, { method: 'POST' }),
 
   // Pagamentos
   createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),

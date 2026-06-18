@@ -321,4 +321,25 @@ router.post('/quotes/:id/reject', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/transfers/quotes/:id/cancel — cliente cancela a solicitação
+// Funciona em qualquer estado ativo (aguardando preço, cotada ou aceita).
+router.post('/quotes/:id/cancel', authenticate, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('transfer_quotes')
+      .update({ status: 'cancelled', client_responded_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .eq('user_id', req.user.id)
+      .in('status', ['pending_quote', 'quoted', 'accepted'])
+      .select('id')
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ error: 'Cotação não encontrada ou já finalizada' });
+    }
+
+    res.json({ message: 'Solicitação cancelada.' });
+  } catch (err) { next(err); }
+});
+
 export default router;
