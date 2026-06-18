@@ -219,8 +219,52 @@ function fmtDate(d) {
   try { return format(new Date(d + 'T12:00:00'), "d MMM", { locale: ptBR }) } catch { return d }
 }
 
+/* ── Quote Detail Dialog ────────────────────────────────────── */
+function QuoteDetailDialog({ quote, onClose }) {
+  const badge = QUOTE_BADGE[quote.status] || QUOTE_BADGE.pending_quote
+  const rows = [
+    ['Origem',      quote.origin_place_name],
+    ['Destino',     quote.destination_place_name],
+    ['Data',        fmtDate(quote.service_date)],
+    ['Horário',     quote.service_time ? quote.service_time.slice(0, 5) : '—'],
+    ['Passageiros', String(quote.people_count || 1)],
+    ...(quote.quoted_price != null ? [['Valor', fmt(quote.quoted_price)]] : []),
+  ]
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Car size={16} className="text-brand shrink-0" />
+            <h3 className="font-bold text-gray-900 truncate">Translado personalizado</h3>
+          </div>
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${badge.bg} ${badge.text}`}>{badge.label}</span>
+        </div>
+        <div className="space-y-2.5">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex items-start justify-between gap-3">
+              <span className="text-[12px] text-gray-400">{k}</span>
+              <span className="text-[13px] font-semibold text-gray-800 text-right">{v || '—'}</span>
+            </div>
+          ))}
+          {quote.quote_notes && (
+            <div className="bg-gray-50 rounded-xl px-3 py-2 mt-1">
+              <p className="text-[11px] text-gray-400 mb-0.5">Observação da cooperativa</p>
+              <p className="text-[12px] text-gray-700">{quote.quote_notes}</p>
+            </div>
+          )}
+        </div>
+        <button onClick={onClose} className="w-full mt-5 h-11 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold active:scale-95 transition-transform">
+          Fechar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Quote Card — mesmo formato das reservas (categoria "Translado") ── */
-function QuoteCard({ quote, onAccept, onReject, onPay, acceptLoading, rejectLoading }) {
+function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, rejectLoading }) {
   const badge = QUOTE_BADGE[quote.status] || QUOTE_BADGE.pending_quote
   const idx   = gi(quote.id)
   const [from, to] = GRADIENTS[idx]
@@ -312,24 +356,15 @@ function QuoteCard({ quote, onAccept, onReject, onPay, acceptLoading, rejectLoad
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {quote.status === 'quoted' && (
-              <>
-                <button
-                  onClick={() => onReject?.(quote.id)}
-                  disabled={rejectLoading}
-                  className="flex items-center gap-1 border border-red-200 bg-red-50 text-red-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-60"
-                >
-                  <X size={11} /> Recusar
-                </button>
-                <button
-                  onClick={() => onAccept?.(quote)}
-                  disabled={acceptLoading}
-                  className="flex items-center gap-1 bg-emerald-500 text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-60 shadow-sm"
-                >
-                  {acceptLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Aceitar
-                </button>
-              </>
+              <button
+                onClick={() => onAccept?.(quote)}
+                disabled={acceptLoading}
+                className="flex items-center gap-1 bg-emerald-500 text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-60 shadow-sm"
+              >
+                {acceptLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Aceitar
+              </button>
             )}
             {quote.status === 'accepted' && (
               <button
@@ -339,6 +374,21 @@ function QuoteCard({ quote, onAccept, onReject, onPay, acceptLoading, rejectLoad
                 Pagar agora
               </button>
             )}
+            {['pending_quote', 'quoted', 'accepted'].includes(quote.status) && (
+              <button
+                onClick={() => onCancel?.(quote)}
+                disabled={rejectLoading}
+                className="flex items-center gap-1 border border-red-200 bg-red-50 text-red-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-60"
+              >
+                <X size={11} /> Cancelar
+              </button>
+            )}
+            <button
+              onClick={() => onDetail?.(quote)}
+              className="flex items-center gap-1 bg-gray-100 text-gray-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform"
+            >
+              <ChevronRight size={13} /> Detalhes
+            </button>
           </div>
         </div>
       </div>
@@ -366,6 +416,7 @@ export default function Bookings() {
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError,   setCancelError]   = useState(null)
   const [quoteActing,   setQuoteActing]   = useState(null) // quote id being accepted/rejected
+  const [quoteDetail,   setQuoteDetail]   = useState(null) // cotação aberta em "Detalhes"
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-bookings'],
@@ -462,6 +513,11 @@ export default function Bookings() {
     } finally {
       setQuoteActing(null)
     }
+  }
+
+  function handleCancelQuote(quote) {
+    if (!confirm('Cancelar esta solicitação de translado personalizado?')) return
+    handleRejectQuote(quote.id)
   }
 
   function handlePay(booking) {
@@ -607,8 +663,9 @@ export default function Bookings() {
                 key={it.id}
                 quote={it.data}
                 onAccept={handleAcceptQuote}
-                onReject={handleRejectQuote}
+                onCancel={handleCancelQuote}
                 onPay={handlePayQuote}
+                onDetail={(qq) => setQuoteDetail(qq)}
                 acceptLoading={quoteActing === it.data.id}
                 rejectLoading={quoteActing === it.data.id}
               />
@@ -633,6 +690,10 @@ export default function Bookings() {
           loading={cancelLoading}
           error={cancelError}
         />
+      )}
+
+      {quoteDetail && (
+        <QuoteDetailDialog quote={quoteDetail} onClose={() => setQuoteDetail(null)} />
       )}
     </div>
   )
