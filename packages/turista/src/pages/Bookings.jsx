@@ -107,7 +107,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay }) {
     || (isTour ? 'Passeio' : 'Transfer') + ' · ' + booking.booking_code
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform">
+    <div onClick={() => onDetail?.(booking.id)} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer">
       {/* ── Hero ── */}
       <div className="relative h-[120px]">
         {booking.cover_image_url ? (
@@ -177,7 +177,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay }) {
           <div className="flex items-center gap-2">
             {status === 'waiting_payment' && (
               <button
-                onClick={() => onPay?.(booking)}
+                onClick={(e) => { e.stopPropagation(); onPay?.(booking) }}
                 className="bg-brand text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform shadow-sm shadow-brand/20"
               >
                 Pagar agora
@@ -185,18 +185,13 @@ function BookingCard({ booking, onCancel, onDetail, onPay }) {
             )}
             {['waiting_payment', 'waiting_acceptance', 'confirmed'].includes(status) && (
               <button
-                onClick={() => onCancel?.(booking)}
+                onClick={(e) => { e.stopPropagation(); onCancel?.(booking) }}
                 className="flex items-center gap-1 border border-red-200 bg-red-50 text-red-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform"
               >
                 <X size={11} /> Cancelar
               </button>
             )}
-            <button
-              onClick={() => onDetail(booking.id)}
-              className="flex items-center gap-1 bg-gray-100 text-gray-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform"
-            >
-              <ChevronRight size={13} /> Detalhes
-            </button>
+            <ChevronRight size={18} className="text-gray-300" />
           </div>
         </div>
       </div>
@@ -275,7 +270,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
   const hasPrice = quote.quoted_price != null
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform">
+    <div onClick={() => onDetail?.(quote)} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer">
       {/* ── Hero ── */}
       <div className="relative h-[120px]">
         <div className={`w-full h-full bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
@@ -359,7 +354,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
           <div className="flex flex-wrap items-center justify-end gap-2">
             {quote.status === 'quoted' && (
               <button
-                onClick={() => onAccept?.(quote)}
+                onClick={(e) => { e.stopPropagation(); onAccept?.(quote) }}
                 disabled={acceptLoading}
                 className="flex items-center gap-1 bg-emerald-500 text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-60 shadow-sm"
               >
@@ -368,7 +363,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
             )}
             {quote.status === 'accepted' && (
               <button
-                onClick={() => onPay?.(quote)}
+                onClick={(e) => { e.stopPropagation(); onPay?.(quote) }}
                 className="bg-brand text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform shadow-sm shadow-brand/20"
               >
                 Pagar agora
@@ -376,19 +371,14 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
             )}
             {['pending_quote', 'quoted', 'accepted'].includes(quote.status) && (
               <button
-                onClick={() => onCancel?.(quote)}
+                onClick={(e) => { e.stopPropagation(); onCancel?.(quote) }}
                 disabled={rejectLoading}
                 className="flex items-center gap-1 border border-red-200 bg-red-50 text-red-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-60"
               >
                 <X size={11} /> Cancelar
               </button>
             )}
-            <button
-              onClick={() => onDetail?.(quote)}
-              className="flex items-center gap-1 bg-gray-100 text-gray-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform"
-            >
-              <ChevronRight size={13} /> Detalhes
-            </button>
+            <ChevronRight size={18} className="text-gray-300" />
           </div>
         </div>
       </div>
