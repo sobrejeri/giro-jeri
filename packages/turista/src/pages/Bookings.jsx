@@ -204,14 +204,14 @@ function BookingCard({ booking, onCancel, onDetail, onPay }) {
   )
 }
 
-/* ── Quote status helpers ───────────────────────────────────── */
-const QUOTE_STATUS = {
-  pending_quote: { label: 'Aguardando cotação', bg: 'bg-amber-400',  text: 'text-white', pulse: true  },
-  quoted:        { label: 'Proposta recebida',  bg: 'bg-blue-500',   text: 'text-white', pulse: false },
-  accepted:      { label: 'Aceita',             bg: 'bg-emerald-500',text: 'text-white', pulse: false },
-  paid:          { label: 'Paga',               bg: 'bg-gray-500',   text: 'text-white', pulse: false },
-  rejected:      { label: 'Recusada',           bg: 'bg-red-400',    text: 'text-white', pulse: false },
-  expired:       { label: 'Expirada',           bg: 'bg-gray-300',   text: 'text-gray-600', pulse: false },
+/* ── Quote status → badge (mesmo visual das reservas) ──────────── */
+const QUOTE_BADGE = {
+  pending_quote: { label: 'Aguardando preço',     bg: 'bg-amber-500', text: 'text-white', pulse: true  },
+  quoted:        { label: 'Proposta recebida',    bg: 'bg-blue-500',  text: 'text-white', pulse: false },
+  accepted:      { label: 'Aguardando pagamento', bg: 'bg-amber-500', text: 'text-white', pulse: false },
+  paid:          { label: 'Paga',                 bg: 'bg-gray-500',  text: 'text-white', pulse: false },
+  rejected:      { label: 'Recusada',             bg: 'bg-red-500',   text: 'text-white', pulse: false },
+  expired:       { label: 'Expirada',             bg: 'bg-gray-400',  text: 'text-white', pulse: false },
 }
 
 function fmtDate(d) {
@@ -219,116 +219,128 @@ function fmtDate(d) {
   try { return format(new Date(d + 'T12:00:00'), "d MMM", { locale: ptBR }) } catch { return d }
 }
 
-/* ── Quote Card ─────────────────────────────────────────────── */
+/* ── Quote Card — mesmo formato das reservas (categoria "Translado") ── */
 function QuoteCard({ quote, onAccept, onReject, onPay, acceptLoading, rejectLoading }) {
-  const cfg = QUOTE_STATUS[quote.status] || QUOTE_STATUS.pending_quote
+  const badge = QUOTE_BADGE[quote.status] || QUOTE_BADGE.pending_quote
+  const idx   = gi(quote.id)
+  const [from, to] = GRADIENTS[idx]
+
+  const dateStr  = fmtDate(quote.service_date)
+  const timeStr  = quote.service_time ? quote.service_time.slice(0, 5) : '—'
+  const route    = `${quote.origin_place_name} → ${quote.destination_place_name}`
+  const hasPrice = quote.quoted_price != null
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-violet-400 to-purple-300 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Car size={14} className="text-white/90" />
-            <span className="text-white font-bold text-[12px]">Corrida personalizada</span>
-          </div>
-          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.text} ${cfg.pulse ? 'animate-pulse' : ''}`}>
-            {cfg.label}
+    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform">
+      {/* ── Hero ── */}
+      <div className="relative h-[120px]">
+        <div className={`w-full h-full bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
+          <Car size={44} className="text-white/20" />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+
+        {/* categoria */}
+        <div className="absolute top-3 left-3">
+          <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+            <Car size={10} /> Translado personalizado
           </span>
         </div>
-        <p className="text-white font-bold text-[15px] mt-1 leading-tight truncate">
-          {quote.origin_place_name} → {quote.destination_place_name}
+
+        {/* status */}
+        <div className="absolute top-3 right-3">
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${badge.bg} ${badge.text} ${badge.pulse ? 'animate-pulse' : ''}`}>
+            {badge.label}
+          </span>
+        </div>
+
+        {/* rota */}
+        <p className="absolute bottom-3 left-3 right-3 text-white font-bold text-[16px] leading-tight drop-shadow truncate">
+          {route}
         </p>
       </div>
 
-      {/* Body */}
+      {/* ── Body ── */}
       <div className="px-4 pt-3 pb-4 space-y-3">
+        {/* Data / Horário / Pessoas */}
         <div className="flex items-center gap-4">
           {[
-            { Icon: Calendar, val: fmtDate(quote.service_date) },
-            { Icon: Clock,    val: quote.service_time ? quote.service_time.slice(0,5) : '—' },
-            { Icon: Users,    val: `${quote.people_count || 1}` },
-          ].map(({ Icon, val }) => (
-            <div key={val} className="flex items-center gap-1.5">
-              <Icon size={13} className="text-brand shrink-0" />
-              <p className="text-[12px] font-semibold text-gray-800">{val}</p>
+            { Icon: Calendar, label: 'Data',    val: dateStr },
+            { Icon: Clock,    label: 'Horário', val: timeStr },
+            { Icon: Users,    label: 'Pessoas', val: String(quote.people_count || '—') },
+          ].map(({ Icon: I, label, val }) => (
+            <div key={label} className="flex items-center gap-1.5">
+              <I size={13} className="text-brand shrink-0" />
+              <div>
+                <p className="text-[10px] text-gray-400 leading-none">{label}</p>
+                <p className="text-[12px] font-semibold text-gray-900 leading-none mt-0.5">{val}</p>
+              </div>
             </div>
           ))}
         </div>
 
+        {/* Observação da cooperativa */}
+        {quote.status === 'quoted' && quote.quote_notes && (
+          <div className="flex items-start gap-2 bg-blue-50 rounded-xl px-3 py-2">
+            <MessageSquare size={12} className="text-blue-400 shrink-0 mt-0.5" />
+            <p className="text-[12px] text-gray-600">{quote.quote_notes}</p>
+          </div>
+        )}
+
+        {/* Aguardando preço */}
         {quote.status === 'pending_quote' && (
-          <p className="text-[12px] text-amber-600 bg-amber-50 rounded-xl px-3 py-2">
-            Aguardando a cooperativa enviar o valor da corrida...
-          </p>
-        )}
-
-        {quote.status === 'quoted' && (
-          <div className="space-y-3">
-            <div className="bg-blue-50 rounded-xl px-4 py-3 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-blue-400">Proposta recebida</p>
-                <p className="text-[20px] font-extrabold text-gray-900">
-                  R$ {Number(quote.quoted_price).toLocaleString('pt-BR')}
-                </p>
-              </div>
-              {quote.quote_notes && (
-                <div className="flex items-start gap-1.5 max-w-[160px]">
-                  <MessageSquare size={12} className="text-blue-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-gray-500 leading-snug">{quote.quote_notes}</p>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => onReject(quote.id)}
-                disabled={rejectLoading}
-                className="flex-1 h-11 border-2 border-red-200 text-red-500 rounded-xl text-[13px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-60"
-              >
-                <X size={14} /> Recusar
-              </button>
-              <button
-                onClick={() => onAccept(quote)}
-                disabled={acceptLoading}
-                className="flex-[2] h-11 bg-emerald-500 text-white rounded-xl text-[13px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-60 shadow-sm"
-              >
-                {acceptLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                Aceitar e pagar
-              </button>
-            </div>
+          <div className="flex items-center gap-2 bg-amber-50 rounded-xl px-3 py-2">
+            <Loader2 size={13} className="text-amber-500 shrink-0 animate-spin" />
+            <p className="text-[12px] text-amber-700">Aguardando a cooperativa enviar o valor.</p>
           </div>
         )}
 
-        {quote.status === 'accepted' && (
-          <div className="space-y-2.5">
-            {quote.quoted_price != null && (
-              <div className="bg-emerald-50 rounded-xl px-4 py-3">
-                <p className="text-[10px] text-emerald-500">Valor combinado</p>
-                <p className="text-[20px] font-extrabold text-gray-900">R$ {Number(quote.quoted_price).toLocaleString('pt-BR')}</p>
-              </div>
-            )}
-            <p className="text-[12px] text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
-              Cotação aceita! Finalize o pagamento para confirmar a corrida.
-            </p>
-            <button
-              onClick={() => onPay?.(quote)}
-              className="w-full h-11 bg-brand text-white rounded-xl text-[13px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform shadow-sm shadow-brand/20"
-            >
-              Pagar agora{quote.quoted_price != null ? ` · R$ ${Number(quote.quoted_price).toLocaleString('pt-BR')}` : ''}
-            </button>
-          </div>
-        )}
-
-        {quote.status === 'paid' && (
-          <p className="text-[12px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
-            Corrida confirmada e paga. Motorista a caminho!
-          </p>
-        )}
-
+        {/* Recusada / expirada */}
         {(quote.status === 'rejected' || quote.status === 'expired') && (
           <p className="text-[12px] text-gray-400 bg-gray-50 rounded-xl px-3 py-2">
             {quote.status === 'rejected' ? 'Você recusou esta proposta.' : 'Esta cotação expirou.'}
           </p>
         )}
+
+        {/* Total + ações (mesmo layout das reservas) */}
+        <div className="flex items-center justify-between pt-0.5">
+          <div>
+            <p className="text-[10px] text-gray-400 leading-none">
+              {quote.status === 'accepted' ? 'Total a pagar' : 'Valor da corrida'}
+            </p>
+            <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">
+              {hasPrice ? fmt(quote.quoted_price) : 'A definir'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {quote.status === 'quoted' && (
+              <>
+                <button
+                  onClick={() => onReject?.(quote.id)}
+                  disabled={rejectLoading}
+                  className="flex items-center gap-1 border border-red-200 bg-red-50 text-red-600 text-[12px] font-semibold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-60"
+                >
+                  <X size={11} /> Recusar
+                </button>
+                <button
+                  onClick={() => onAccept?.(quote)}
+                  disabled={acceptLoading}
+                  className="flex items-center gap-1 bg-emerald-500 text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform disabled:opacity-60 shadow-sm"
+                >
+                  {acceptLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Aceitar
+                </button>
+              </>
+            )}
+            {quote.status === 'accepted' && (
+              <button
+                onClick={() => onPay?.(quote)}
+                className="bg-brand text-white text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform shadow-sm shadow-brand/20"
+              >
+                Pagar agora
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
