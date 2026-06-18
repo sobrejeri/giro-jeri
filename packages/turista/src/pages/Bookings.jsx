@@ -493,10 +493,16 @@ export default function Bookings() {
     })
   }
 
+  // Cotação que já virou reserva (booking com service_id = quote.id) não deve
+  // duplicar nas abas de reservas.
+  const bookedServiceIds = new Set(all.map(b => b.service_id).filter(Boolean))
+
   // Cotações que entram nas abas Todas/Ativas (a paga já vira reserva)
   const quotesForTab = (() => {
     if (tab === 'concluidos' || tab === 'cancelados') return []
-    let list = (tab === 'cotacoes') ? quotes : quotes.filter(qq => qq.status !== 'paid')
+    let list = (tab === 'cotacoes')
+      ? quotes
+      : quotes.filter(qq => qq.status !== 'paid' && !bookedServiceIds.has(qq.id))
     if (tab === 'ativos') list = list.filter(qq => QUOTE_ACTIVE.includes(qq.status))
     if (q) list = list.filter(qq => `${qq.origin_place_name || ''} ${qq.destination_place_name || ''}`.toLowerCase().includes(q))
     return list

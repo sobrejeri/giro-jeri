@@ -233,10 +233,11 @@ router.get('/', authenticate, async (req, res, next) => {
     let query = supabase
       .from('bookings')
       .select(`
-        id, booking_code, service_type, booking_mode,
+        id, booking_code, service_type, service_id, booking_mode,
         service_date, service_time, people_count,
         total_amount, status_commercial, status_operational,
         pickup_place_name, destination_place_name,
+        origin_text, destination_text,
         created_at,
         booking_vehicles ( vehicle_name_snapshot, quantity, unit_price ),
         payments ( status, paid_at )
