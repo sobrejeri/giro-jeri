@@ -302,13 +302,13 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
   try {
     const { cancel_reason } = req.body;
 
-    const { data: booking } = await supabase
+    const { data: booking, error: findErr } = await supabase
       .from('bookings')
-      .select('*, users(full_name)')
+      .select('*')
       .eq('id', req.params.id)
       .single();
 
-    if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' });
+    if (findErr || !booking) return res.status(404).json({ error: 'Reserva não encontrada' });
 
     // Turista só cancela a própria reserva
     if (req.user.user_type === 'tourist' && booking.user_id !== req.user.id) {
