@@ -219,7 +219,7 @@ export default function TransfersDesktop() {
           onClick={() => { setMode('custom'); setCustomSuccess(false); setCustomError('') }}
           className={`flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-bold transition-all ${mode === 'custom' ? 'bg-brand text-white shadow-sm shadow-brand/30' : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'}`}
         >
-          <Zap size={16} /> Corrida personalizada
+          <Zap size={16} /> Translado personalizado
         </button>
       </div>
 
@@ -461,7 +461,7 @@ export default function TransfersDesktop() {
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center shrink-0"><Zap size={22} className="text-brand" /></div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Corrida personalizada</h3>
+                  <h3 className="text-lg font-bold text-gray-900">Translado personalizado</h3>
                   <p className="text-[13px] text-gray-500">Informe a rota e a cooperativa envia o valor para você aprovar.</p>
                 </div>
               </div>

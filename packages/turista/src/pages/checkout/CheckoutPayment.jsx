@@ -25,7 +25,7 @@ export default function CheckoutPayment() {
     service_date, service_date_iso, service_time,
     people_count, total_price: rawPrice, region_id, service_id,
     vehicles = [], origin_text, destination_text, cover_image_url,
-    existing_booking_id,
+    existing_booking_id, quote_id,
   } = state
 
   const total_price = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
@@ -93,8 +93,9 @@ export default function CheckoutPayment() {
         <div className="bg-white rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)] flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-[11px] text-gray-400 mb-0.5">
-              {service_type === 'tour' ? 'Passeio' : 'Transfer'}
-              {isPrivate ? ' · Privativo' : ' · Compartilhado'}
+              {quote_id
+                ? 'Translado personalizado'
+                : <>{service_type === 'tour' ? 'Passeio' : 'Transfer'}{isPrivate ? ' · Privativo' : ' · Compartilhado'}</>}
             </p>
             <p className="text-[15px] font-bold text-gray-900 truncate">{service_name}</p>
             <p className="text-[12px] text-gray-400 mt-0.5">{subtitleParts.join(' · ')}</p>

@@ -453,7 +453,7 @@ export default function Transfers() {
             }`}
           >
             <Zap size={13} />
-            Corrida personalizada
+            Translado personalizado
           </button>
         </div>
       </div>

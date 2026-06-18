@@ -431,7 +431,7 @@ export default function Bookings() {
       // Navigate to payment with quote_id as service_id
       navigate('/checkout/pagamento', {
         state: {
-          service_name:     `Corrida personalizada: ${quote.origin_place_name} → ${quote.destination_place_name}`,
+          service_name:     `${quote.origin_place_name} → ${quote.destination_place_name}`,
           service_type:     'transfer',
           booking_mode:     'private',
           service_date:     fmtDate(quote.service_date),
@@ -491,7 +491,7 @@ export default function Bookings() {
   function handlePayQuote(quote) {
     navigate('/checkout/pagamento', {
       state: {
-        service_name:     `Corrida personalizada: ${quote.origin_place_name} → ${quote.destination_place_name}`,
+        service_name:     `${quote.origin_place_name} → ${quote.destination_place_name}`,
         service_type:     'transfer',
         booking_mode:     'private',
         service_date:     fmtDate(quote.service_date),
