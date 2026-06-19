@@ -6,24 +6,34 @@ const router = Router()
 
 // ── GET /api/notifications — minhas notificações + total não lidas ──
 router.get('/', authenticate, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('id, title, message_body, template_key, booking_id, read_at, created_at')
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false })
-      .limit(30)
-    if (error) throw error
+  // Caminho normal (após a migração 021, com a coluna read_at)
+  const withRead = await supabase
+    .from('notifications')
+    .select('id, title, message_body, template_key, booking_id, read_at, created_at')
+    .eq('user_id', req.user.id)
+    .order('created_at', { ascending: false })
+    .limit(30)
 
-    const items  = data || []
-    const unread = items.filter((n) => !n.read_at).length
-    res.json({ items, unread })
-  } catch (err) {
-    // Antes da migração 021 (coluna read_at ausente), degrada para vazio
-    // em vez de quebrar a central.
-    console.error('[notifications] list falhou:', err.message)
-    res.json({ items: [], unread: 0 })
+  if (!withRead.error) {
+    const items = withRead.data || []
+    return res.json({ items, unread: items.filter((n) => !n.read_at).length })
   }
+
+  // Fallback antes da migração (sem read_at): mostra a lista mesmo assim,
+  // tratando tudo como já lido (sem badge preso) até a migração ser aplicada.
+  const basic = await supabase
+    .from('notifications')
+    .select('id, title, message_body, template_key, booking_id, created_at')
+    .eq('user_id', req.user.id)
+    .order('created_at', { ascending: false })
+    .limit(30)
+
+  if (basic.error) {
+    console.error('[notifications] list falhou:', basic.error.message)
+    return res.json({ items: [], unread: 0 })
+  }
+  const items = (basic.data || []).map((n) => ({ ...n, read_at: '1970-01-01T00:00:00Z' }))
+  res.json({ items, unread: 0 })
 })
 
 // ── POST /api/notifications/read-all — marca todas como lidas ──
