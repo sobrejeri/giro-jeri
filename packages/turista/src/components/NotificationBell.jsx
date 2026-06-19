@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Bell } from 'lucide-react'
+import { Bell, BellRing } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
+import { enablePush, pushSupported, pushPermission } from '../lib/push'
 import { useAuth } from '../contexts/AuthContext'
 
 function timeAgo(iso) {
@@ -37,6 +38,18 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
     mutationFn: () => api.markNotificationsRead(),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })
+
+  const [perm, setPerm] = useState(pushPermission())
+  const [busy, setBusy] = useState(false)
+  async function handleEnablePush() {
+    setBusy(true)
+    const r = await enablePush()
+    setBusy(false)
+    setPerm(pushPermission())
+    if (!r.ok && r.reason === 'unsupported') {
+      alert('Seu navegador não suporta notificações push. No iPhone, adicione o app à tela de início (Compartilhar → Adicionar à Tela de Início) e tente de novo.')
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -101,6 +114,20 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
               </button>
             ))}
           </div>
+          {pushSupported() && perm !== 'granted' && (
+            <div className="px-3 py-2.5 border-t border-gray-50 bg-gray-50/40">
+              <button
+                onClick={handleEnablePush}
+                disabled={busy}
+                className="w-full text-[12px] font-semibold text-brand flex items-center justify-center gap-1.5 py-1.5 disabled:opacity-60"
+              >
+                <BellRing size={13} /> {busy ? 'Ativando…' : 'Ativar notificações no aparelho'}
+              </button>
+              {perm === 'denied' && (
+                <p className="text-[10px] text-gray-400 text-center mt-1">Permissão negada — ative nas configurações do navegador.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
