@@ -21,6 +21,8 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number';
+
 // ── POST /api/auth/register ────────────────────────────
 router.post('/register', async (req, res, next) => {
   try {
@@ -110,9 +112,6 @@ router.post('/login', async (req, res, next) => {
     });
 
     if (error) return res.status(401).json({ error: 'Credenciais incorretas' });
-
-    // Conjunto mínimo de colunas — garantidamente presentes em qualquer instância
-    const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number';
 
     // Primeiro tenta pelo auth_id (caminho normal)
     let { data: profile, error: pErr1 } = await supabase
@@ -231,7 +230,7 @@ router.post('/refresh', async (req, res, next) => {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('id, full_name, email, phone, user_type, profile_photo_url, document_number')
+      .select(PROFILE_COLS)
       .eq('auth_id', data.user.id)
       .maybeSingle();
 
