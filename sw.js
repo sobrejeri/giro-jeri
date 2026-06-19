@@ -6,10 +6,11 @@ self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch (_) {}
   const title = data.title || 'Giro Jeri'
+  const path  = data.bookingId ? ('minhas-reservas/' + data.bookingId) : 'minhas-reservas'
   const options = {
     body:    data.body || '',
     tag:     data.templateKey || 'giro-jeri',
-    data:    { url: self.registration.scope + 'minhas-reservas' },
+    data:    { url: self.registration.scope + path },
     vibrate: [80, 40, 80],
   }
   event.waitUntil(self.registration.showNotification(title, options))
@@ -21,7 +22,10 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
-        if (c.url.startsWith(self.registration.scope) && 'focus' in c) return c.focus()
+        if (c.url.startsWith(self.registration.scope)) {
+          if ('navigate' in c) { try { c.navigate(url) } catch (_) {} }
+          if ('focus' in c) return c.focus()
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url)
     }),
