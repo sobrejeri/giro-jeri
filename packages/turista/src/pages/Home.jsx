@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
+import NotificationBell from '../components/NotificationBell'
 
 function suggestVehicle(vehicles, people) {
   if (!vehicles.length) return null
@@ -213,10 +214,7 @@ export default function Home() {
             >
               <WhatsAppIcon />
             </button>
-            <button className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center relative active:scale-95 transition-transform">
-              <Bell size={15} className="text-gray-600" />
-              <span className="absolute top-1.5 right-1.5 w-[7px] h-[7px] bg-brand rounded-full" />
-            </button>
+            <NotificationBell />
           </div>
         </div>
 

@@ -4,6 +4,7 @@ import { supabase }  from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking } from '../services/whatsapp.js'
+import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge } from '../services/priceEngine.js'
 
 const router = Router()
@@ -442,6 +443,34 @@ async function onPaymentApproved(payment) {
   // Notifica as cooperativas sobre a nova reserva disponível (fire-and-forget)
   notifyOperatorsNewBooking(supabase, booking).catch((err) =>
     console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+
+  // Central no app: confirma para o turista e avisa cooperativas + admin
+  if (booking) {
+    const isTransfer = booking.service_type === 'transfer'
+    const tipo  = isTransfer ? 'translado' : 'passeio'
+    const rota  = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
+
+    notifyUser({
+      userId:      booking.user_id,
+      bookingId:   booking.id,
+      templateKey: 'payment_confirmed',
+      title:       'Pagamento confirmado ✅',
+      body:        `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar uma cooperativa aceitar.`,
+    })
+
+    notifyOperatorsAndAdmin({
+      bookingId:   booking.id,
+      templateKey: 'new_booking',
+      title:       'Nova solicitação disponível',
+      body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
+    })
+  }
+}
+
+function fmtDateBR(iso) {
+  if (!iso) return 'a definir'
+  const [y, m, d] = String(iso).slice(0, 10).split('-')
+  return `${d}/${m}/${y}`
 }
 
 async function sendConfirmationEmail(booking) {

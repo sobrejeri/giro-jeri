@@ -187,4 +187,10 @@ export const api = {
   createEstablishment: (body)     => request('/api/establishments', { method: 'POST', body }),
   updateEstablishment: (id, body) => request(`/api/establishments/${id}`, { method: 'PUT', body }),
   deleteEstablishment: (id)       => request(`/api/establishments/${id}`, { method: 'DELETE' }),
+
+  // Notificações
+  getNotifications:      ()    => request('/api/notifications'),
+  markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
+  pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
+  getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
 }

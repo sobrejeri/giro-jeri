@@ -131,4 +131,10 @@ export const api = {
   startBooking:        (id) => request(`/api/operator/bookings/${id}/start`,    { method: 'POST', body: {} }),
   confirmBooking:      (id) => request(`/api/operator/bookings/${id}/confirm`,  { method: 'POST', body: {} }),
   completeBooking:     (id) => request(`/api/operator/bookings/${id}/complete`, { method: 'POST', body: {} }),
+
+  // Notificações
+  getNotifications:      ()    => request('/api/notifications'),
+  markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
+  pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
+  getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
 }

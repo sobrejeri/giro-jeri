@@ -124,4 +124,10 @@ export const api = {
   getMyBookings: ()     => request('/api/bookings'),
   getBooking:    (id)   => request(`/api/bookings/${id}`),
   cancelBooking: (id, body) => request(`/api/bookings/${id}/cancel`, { method: 'POST', body }),
+
+  // Notificações
+  getNotifications:      ()   => request('/api/notifications'),
+  markNotificationsRead: ()   => request('/api/notifications/read-all', { method: 'POST' }),
+  pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
+  getVapidKey:           ()   => request('/api/notifications/vapid-public-key'),
 }

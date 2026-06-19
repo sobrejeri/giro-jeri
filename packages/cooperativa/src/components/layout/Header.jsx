@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
+import NotificationBell from '../NotificationBell'
 
 const TITLES = {
   '/dashboard':  'Painel Operacional',
@@ -26,6 +27,9 @@ export default function Header({ onMenu = () => {} }) {
         <Menu size={22} />
       </button>
       <h1 className="text-lg font-semibold text-gray-900 truncate">{title}</h1>
+      <div className="ml-auto">
+        <NotificationBell bookingsPath="/reservas" />
+      </div>
     </header>
   )
 }

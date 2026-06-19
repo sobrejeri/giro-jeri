@@ -9,6 +9,10 @@ import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireOperator } from '../middleware/auth.js';
+import { notifyUser } from '../services/notify.js';
+
+// Rótulo amigável do serviço para o texto da notificação
+const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
 const PROFILE_FIELDS = `
   id, full_name, email, phone, document_type, document_number, birth_date,
@@ -167,7 +171,7 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
       .eq('id', req.params.id)
       .is('operator_id', null)
       .eq('status_commercial', 'paid')
-      .select('id, booking_code, users!bookings_user_id_fkey ( full_name, phone )')
+      .select('id, booking_code, user_id, service_type, users!bookings_user_id_fkey ( full_name, phone )')
 
     if (error) throw error
 
@@ -176,20 +180,38 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
       return res.status(409).json({ error: 'Reserva já foi aceita por outra cooperativa' })
     }
 
-    res.json({ ok: true, booking: data[0] })
+    const b = data[0]
+    notifyUser({
+      userId:      b.user_id,
+      bookingId:   b.id,
+      templateKey: 'booking_accepted',
+      title:       'Reserva confirmada 🎉',
+      body:        `Uma cooperativa aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Tudo certo para a data marcada!`,
+    })
+
+    res.json({ ok: true, booking: b })
   } catch (err) { next(err) }
 })
 
 // ── POST /api/operator/bookings/:id/start ──────────────
 router.post('/bookings/:id/start', async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('bookings')
       .update({ status_operational: 'in_progress' })
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
+      .select('id, user_id, service_type, booking_code')
 
     if (error) throw error
+    const b = data?.[0]
+    if (b) notifyUser({
+      userId:      b.user_id,
+      bookingId:   b.id,
+      templateKey: 'booking_in_progress',
+      title:       'Seu serviço começou 🚀',
+      body:        `Seu ${serviceLabel(b.service_type)} (${b.booking_code}) está em andamento. Bom passeio!`,
+    })
     res.json({ ok: true })
   } catch (err) { next(err) }
 })
@@ -212,7 +234,7 @@ router.post('/bookings/:id/confirm', async (req, res, next) => {
 // ── POST /api/operator/bookings/:id/complete ──────────
 router.post('/bookings/:id/complete', async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('bookings')
       .update({
         status_operational: 'completed',
@@ -220,8 +242,17 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
       })
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
+      .select('id, user_id, service_type, booking_code')
 
     if (error) throw error
+    const b = data?.[0]
+    if (b) notifyUser({
+      userId:      b.user_id,
+      bookingId:   b.id,
+      templateKey: 'booking_completed',
+      title:       'Serviço finalizado ✅',
+      body:        `Seu ${serviceLabel(b.service_type)} (${b.booking_code}) foi concluído. Conte como foi: avalie sua experiência!`,
+    })
     res.json({ ok: true })
   } catch (err) { next(err) }
 })

@@ -16,6 +16,7 @@ import operatorRoutes from './routes/operator.js';
 import settingsRoutes from './routes/settings.js';
 import feedRoutes     from './routes/feed.js';
 import establishmentsRoutes from './routes/establishments.js';
+import notificationsRoutes from './routes/notifications.js';
 import { regionsRouter } from './routes/regions.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
@@ -80,6 +81,7 @@ app.use('/api/operator',  operatorRoutes);
 app.use('/api/settings',  settingsRoutes);
 app.use('/api/feed',      feedRoutes);
 app.use('/api/establishments', establishmentsRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // ── Erros ──────────────────────────────────────────────
 app.use(notFound);

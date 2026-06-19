@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
+import NotificationBell from '../components/NotificationBell'
 import {
   Calendar, Clock, Users, Car, Search, Compass, MapPin,
   Star, RefreshCw, AlertTriangle, Loader2, Zap, Sun, Waves, Anchor,
@@ -598,12 +599,15 @@ export default function Bookings() {
                 : 'Nenhuma reserva ativa'}
             </p>
           </div>
-          <button
-            onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
-            className={`w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
-          >
-            <Search size={16} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <button
+              onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+            >
+              <Search size={16} />
+            </button>
+          </div>
         </div>
 
         {showSearch && (

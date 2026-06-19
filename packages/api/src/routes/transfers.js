@@ -8,6 +8,7 @@ import {
   getDateSurcharge,
 } from '../services/priceEngine.js';
 import { filterByRadius } from '../services/geo.js';
+import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
 import dayjs from 'dayjs';
 
 const router = Router();
@@ -151,12 +152,11 @@ router.post('/quotes', authenticate, async (req, res, next) => {
 
     if (error) throw error;
 
-    // Cria notificação interna para a cooperativa
-    await supabase.from('notifications').insert({
-      channel:      'internal',
-      template_key: 'new_transfer_quote',
-      title:        'Nova cotação de transfer',
-      message_body: `${req.user.full_name} solicitou transfer: ${body.origin_place_name} → ${body.destination_place_name} em ${body.service_date} às ${body.service_time}`,
+    // Avisa cooperativas + admin sobre a nova solicitação de translado personalizado
+    await notifyOperatorsAndAdmin({
+      templateKey: 'new_transfer_quote',
+      title:       'Nova cotação de translado',
+      body:        `${req.user.full_name} pediu um translado personalizado: ${body.origin_place_name} → ${body.destination_place_name} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
     });
 
     res.status(201).json(data);
@@ -263,19 +263,13 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
     if (error) { console.error('[quote] update falhou:', error); return res.status(500).json({ error: error.message }); }
     if (!data)  return res.status(409).json({ error: 'Cotação já respondida por outra cooperativa.' });
 
-    // Notifica o cliente (best-effort — nunca derruba a resposta da cotação)
-    try {
-      await supabase.from('notifications').insert({
-        user_id:      data.user_id,
-        channel:      'whatsapp',
-        template_key: 'quote_ready',
-        title:        'Sua cotação está pronta',
-        message_body: `Olá! Sua cotação de transfer ${data.origin_place_name} → ${data.destination_place_name} está pronta: R$ ${quoted_price.toFixed(2)}. Acesse o app para confirmar. Válido por ${expiryHours}h.`,
-        destination:  data.users?.phone,
-      });
-    } catch (notifErr) {
-      console.error('[quote] notificação falhou (ignorado):', notifErr.message);
-    }
+    // Notifica o cliente na central do app (best-effort)
+    notifyUser({
+      userId:      data.user_id,
+      templateKey: 'quote_ready',
+      title:       'Sua cotação está pronta 💸',
+      body:        `Seu translado ${data.origin_place_name} → ${data.destination_place_name} saiu por R$ ${quoted_price.toFixed(2)}. Abra o app para aceitar (válido por ${expiryHours}h).`,
+    });
 
     res.json(data);
   } catch (err) { next(err); }
