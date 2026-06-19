@@ -67,7 +67,8 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
   }
   function openItem(n) {
     setOpen(false)
-    if (n.booking_id) navigate(bookingsPath)
+    // Reserva → abre o detalhe; cotação (sem booking) → lista de reservas
+    navigate(n.booking_id ? `/minhas-reservas/${n.booking_id}` : '/minhas-reservas')
   }
 
   return (
