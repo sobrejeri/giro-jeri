@@ -202,17 +202,21 @@ export default function CheckoutSummary() {
     retry:     false,
   })
 
-  // Translado tabelado: aplica alta temporada/feriado pela rota.
-  // Translado personalizado (vem com quote_id) já tem preço fechado pela cooperativa.
+  // Translado tabelado: alta temporada/feriado calculado sobre o subtotal real
+  // (preço da rota × veículos). Translado personalizado (vem com quote_id) já
+  // tem preço fechado pela cooperativa, então não recebe acréscimo automático.
+  const transferQty      = calcVehicles.reduce((s, v) => s + v.quantity, 0)
+  const transferSubtotal = isTransfer
+    ? Math.round(Number(ls?.transfer_unit_price || 0) * transferQty * 100) / 100
+    : 0
   const { data: transferCalc } = useQuery({
-    queryKey: ['checkout-calc-transfer', ls?.service_id, ls?.region_id, dateISO, time],
-    queryFn:  () => api.calculateTransfer({
+    queryKey: ['checkout-surcharge-transfer', ls?.region_id, dateISO, transferSubtotal],
+    queryFn:  () => api.transferSurcharge({
       region_id:    ls.region_id,
-      route_id:     ls.service_id,
       service_date: dateISO,
-      service_time: time,
+      subtotal:     transferSubtotal,
     }),
-    enabled:   isTransfer && !ls?.quote_id && !!ls?.service_id && !!ls?.region_id && !!time,
+    enabled:   isTransfer && !ls?.quote_id && !!ls?.region_id && transferSubtotal > 0,
     staleTime: 30_000,
     retry:     false,
   })
@@ -260,9 +264,13 @@ export default function CheckoutSummary() {
     return ls.total_price
   })()
 
-  // Acréscimo de data (do recálculo do servidor) e total a exibir/cobrar
+  // Acréscimo de data (do recálculo do servidor) e total a exibir/cobrar.
+  // Passeios trazem `totalAmount` já fechado; translado tabelado soma o
+  // acréscimo ao subtotal exibido.
   const dateSurcharge = Number(serverCalc?.seasonAdditional) || 0
-  const displayTotal  = (serverCalc && typeof serverCalc.totalAmount === 'number') ? serverCalc.totalAmount : activeTotal
+  const displayTotal  = (serverCalc && typeof serverCalc.totalAmount === 'number')
+    ? serverCalc.totalAmount
+    : activeTotal + dateSurcharge
 
   const capacityOk  = !hasVehicles || (cartHasItems && cartCapacity >= people)
   const canSave     = capacityOk
@@ -297,7 +305,11 @@ export default function CheckoutSummary() {
     vehicles:        cartHasItems
       ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty }))
       : ls.vehicles,
-    total_price:     displayTotal,
+    // `total_price` é a BASE que o servidor usa para cobrar. Em translado é o
+    // subtotal CRU (sem acréscimo) — o servidor soma a alta temporada uma única
+    // vez. `display_total` é só para exibição (já com o acréscimo).
+    total_price:     isTransfer ? activeTotal : displayTotal,
+    display_total:   displayTotal,
     service_name:    ls.service_name,
     cover_image_url: ls.cover_image_url || null,
   }

@@ -150,6 +150,21 @@ export default function TransfersDesktop() {
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const canBook      = !!matched && cartItems.length > 0 && cartCapacity >= people && !!time
 
+  // Acréscimo de alta temporada / feriado já no resumo (antes de confirmar)
+  const { data: surchargeData } = useQuery({
+    queryKey: ['transfer-surcharge', region?.id, date, cartTotal],
+    queryFn:  () => api.transferSurcharge({
+      region_id:    region.id,
+      service_date: date,
+      subtotal:     cartTotal,
+    }),
+    enabled:   !!matched && cartItems.length > 0 && cartTotal > 0 && !!region?.id,
+    staleTime: 30_000,
+    retry:     false,
+  })
+  const seasonAddition = Number(surchargeData?.seasonAdditional) || 0
+  const grandTotal     = Math.round((cartTotal + seasonAddition) * 100) / 100
+
   const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime
 
   function handleConfirm() {
@@ -403,10 +418,22 @@ export default function TransfersDesktop() {
                   ))}
                 </div>
 
-                <div className="border-t border-gray-100 mt-4 pt-3 flex items-center justify-between">
+                {seasonAddition > 0 && (
+                  <div className="border-t border-gray-100 mt-4 pt-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12px] text-gray-400">Subtotal</p>
+                      <p className="text-[13px] font-semibold text-gray-800">R$ {cartTotal.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12px] text-amber-600">Alta temporada / feriado</p>
+                      <p className="text-[13px] font-semibold text-amber-600">+ R$ {seasonAddition.toLocaleString('pt-BR')}</p>
+                    </div>
+                  </div>
+                )}
+                <div className={`flex items-center justify-between ${seasonAddition > 0 ? 'mt-2' : 'border-t border-gray-100 mt-4 pt-3'}`}>
                   <p className="text-[13px] font-bold text-gray-900">Total</p>
                   <p className={`text-[20px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-                    {cartTotal ? `R$ ${cartTotal.toLocaleString('pt-BR')}` : '—'}
+                    {grandTotal ? `R$ ${grandTotal.toLocaleString('pt-BR')}` : '—'}
                   </p>
                 </div>
 

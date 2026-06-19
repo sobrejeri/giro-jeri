@@ -397,6 +397,21 @@ export default function Transfers() {
   const cartHasItems = cartItems.length > 0
   const canBook      = !!matched && cartHasItems && cartCapacity >= people && !!time
 
+  // Acréscimo de alta temporada / feriado já no resumo (antes de confirmar)
+  const { data: surchargeData } = useQuery({
+    queryKey: ['transfer-surcharge', region?.id, format(date, 'yyyy-MM-dd'), cartTotal],
+    queryFn:  () => api.transferSurcharge({
+      region_id:    region.id,
+      service_date: format(date, 'yyyy-MM-dd'),
+      subtotal:     cartTotal,
+    }),
+    enabled:   !!matched && cartHasItems && cartTotal > 0 && !!region?.id,
+    staleTime: 30_000,
+    retry:     false,
+  })
+  const seasonAddition = Number(surchargeData?.seasonAdditional) || 0
+  const grandTotal     = Math.round((cartTotal + seasonAddition) * 100) / 100
+
   const dateLabel = isToday(date) ? 'Hoje'
     : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
     : format(date, 'd MMM', { locale: ptBR })
@@ -801,9 +816,21 @@ export default function Transfers() {
                   </div>
                 </div>
               ))}
-              <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+              {seasonAddition > 0 && (
+                <>
+                  <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+                    <p className="text-[12px] text-gray-400">Subtotal</p>
+                    <p className="text-[13px] font-semibold text-gray-800">R$ {cartTotal.toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[12px] text-amber-600">Alta temporada / feriado</p>
+                    <p className="text-[13px] font-semibold text-amber-600">+ R$ {seasonAddition.toLocaleString('pt-BR')}</p>
+                  </div>
+                </>
+              )}
+              <div className={`flex items-center justify-between ${seasonAddition > 0 ? 'pt-0.5' : 'border-t border-gray-100 pt-2'}`}>
                 <p className="text-[13px] font-bold text-gray-900">Total</p>
-                <p className="text-[16px] font-extrabold text-brand">R$ {cartTotal ? cartTotal.toLocaleString('pt-BR') : '—'}</p>
+                <p className="text-[16px] font-extrabold text-brand">R$ {grandTotal ? grandTotal.toLocaleString('pt-BR') : '—'}</p>
               </div>
             </div>
           </section>
@@ -823,9 +850,9 @@ export default function Transfers() {
       <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
           <div>
-            <p className="text-[10px] text-gray-400">Total estimado</p>
+            <p className="text-[10px] text-gray-400">Total estimado{seasonAddition > 0 ? ' · com alta temporada' : ''}</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-              {cartTotal ? `R$ ${cartTotal.toLocaleString('pt-BR')}` : 'Selecione a rota'}
+              {grandTotal ? `R$ ${grandTotal.toLocaleString('pt-BR')}` : 'Selecione a rota'}
             </p>
           </div>
           <button

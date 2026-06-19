@@ -56,12 +56,17 @@ router.post('/intent', authenticate, async (req, res, next) => {
           }
           if (r && typeof r.totalAmount === 'number') chargedTotal = r.totalAmount
         } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
-          // Só rota tabelada recebe acréscimo de data; cotações já têm preço fechado.
+          // Rota tabelada: o SERVIDOR é a fonte de verdade — recalcula a partir
+          // do preço da rota × veículos + acréscimo de data. Cotações (translado
+          // personalizado) têm preço fechado pela cooperativa e não entram aqui
+          // (service_id não casa com nenhuma rota → mantém o total da cotação).
           const { data: route } = await supabase
-            .from('transfer_routes').select('id').eq('id', service_id).maybeSingle()
+            .from('transfer_routes').select('id, default_price').eq('id', service_id).maybeSingle()
           if (route) {
-            const surcharge = await getDateSurcharge(region_id, service_date_iso, Number(total_price))
-            chargedTotal = Math.round((Number(total_price) + surcharge) * 100) / 100
+            const vehicleCount = (vehicles || []).reduce((s, v) => s + (Number(v.qty) || 1), 0) || 1
+            const baseSubtotal = Math.round(Number(route.default_price) * vehicleCount * 100) / 100
+            const surcharge    = await getDateSurcharge(region_id, service_date_iso, baseSubtotal)
+            chargedTotal       = Math.round((baseSubtotal + surcharge) * 100) / 100
           }
         }
       } catch (e) {

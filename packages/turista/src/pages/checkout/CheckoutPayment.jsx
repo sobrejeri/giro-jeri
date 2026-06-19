@@ -23,12 +23,17 @@ export default function CheckoutPayment() {
   const {
     service_name, service_type, booking_mode,
     service_date, service_date_iso, service_time,
-    people_count, total_price: rawPrice, region_id, service_id,
+    people_count, total_price: rawPrice, display_total, region_id, service_id,
     vehicles = [], origin_text, destination_text, cover_image_url,
     existing_booking_id, quote_id,
   } = state
 
-  const total_price = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
+  // `total_price` é a base enviada ao servidor (subtotal cru em translado).
+  // `display_total` (quando vem) já inclui o acréscimo e é o que mostramos.
+  const total_price  = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
+  const shownTotal   = display_total != null && !isNaN(Number(display_total))
+    ? Number(display_total)
+    : total_price
   const isPrivate    = booking_mode === 'private'
   const subtitleParts = [service_date, service_time, `${people_count} ${people_count === 1 ? 'pessoa' : 'pessoas'}`].filter(Boolean)
 
@@ -102,7 +107,7 @@ export default function CheckoutPayment() {
           </div>
           <div className="text-right shrink-0">
             <p className="text-[10px] text-gray-400">Total</p>
-            <p className="text-[18px] font-bold text-brand">R$ {fmt(total_price)}</p>
+            <p className="text-[18px] font-bold text-brand">R$ {fmt(shownTotal)}</p>
           </div>
         </div>
 
@@ -161,7 +166,7 @@ export default function CheckoutPayment() {
         >
           {loading
             ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            : <><Lock size={15} className="text-white/80" /> Gerar PIX · R$ {fmt(total_price)}</>}
+            : <><Lock size={15} className="text-white/80" /> Gerar PIX · R$ {fmt(shownTotal)}</>}
         </button>
         <p className="text-[10px] text-gray-400 text-center mt-2">Ao confirmar, você concorda com os termos de uso do Giro Jeri</p>
       </div>

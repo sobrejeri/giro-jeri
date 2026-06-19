@@ -107,6 +107,7 @@ export const api = {
   getTransfers:       (params = {}) => request(`/api/transfers?${new URLSearchParams(params)}`),
   getTransferRoutes:  (params = {}) => request(`/api/transfers/routes?${new URLSearchParams(params)}`),
   calculateTransfer:  (body)        => request('/api/transfers/calculate', { method: 'POST', body }),
+  transferSurcharge:  (body)        => request('/api/transfers/surcharge', { method: 'POST', body }),
   requestQuote:       (body)        => request('/api/transfers/quotes',    { method: 'POST', body }),
   getMyQuotes:        ()            => request('/api/transfers/quotes'),
   acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),

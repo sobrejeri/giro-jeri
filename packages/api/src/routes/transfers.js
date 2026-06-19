@@ -5,6 +5,7 @@ import { authenticate, requireOperator } from '../middleware/auth.js';
 import {
   calculateTabbedTransfer,
   validateTransferAdvance,
+  getDateSurcharge,
 } from '../services/priceEngine.js';
 import { filterByRadius } from '../services/geo.js';
 import dayjs from 'dayjs';
@@ -81,6 +82,28 @@ router.post('/calculate', async (req, res, next) => {
     });
 
     res.json(result);
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/transfers/surcharge ─────────────────────
+// Acréscimo de data (alta temporada / feriado) sobre um subtotal já conhecido.
+// Usado para PREVIEW nas telas (translado e checkout) assim que o cliente
+// escolhe a data — sem validação de antecedência e calculado sobre o subtotal
+// real (preço da rota × veículos), igual ao que o pagamento cobra.
+router.post('/surcharge', async (req, res, next) => {
+  try {
+    const { region_id, service_date } = req.body;
+    const subtotal = Number(req.body.subtotal) || 0;
+
+    if (!region_id || !service_date || subtotal <= 0) {
+      return res.json({ seasonAdditional: 0, total: subtotal });
+    }
+
+    const seasonAdditional = await getDateSurcharge(region_id, service_date, subtotal);
+    res.json({
+      seasonAdditional,
+      total: Math.round((subtotal + seasonAdditional) * 100) / 100,
+    });
   } catch (err) { next(err); }
 });
 
