@@ -5,6 +5,7 @@ import helmet         from 'helmet';
 import rateLimit      from 'express-rate-limit';
 
 import authRoutes     from './routes/auth.js';
+import otpRoutes      from './routes/otp.js';
 import toursRoutes    from './routes/tours.js';
 import transfersRoutes from './routes/transfers.js';
 import bookingsRoutes from './routes/bookings.js';
@@ -57,6 +58,14 @@ app.use('/api/auth/login',           authLimiter);
 app.use('/api/auth/register',        authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
 
+// Rate limiting específico para OTP (mais restrito que authLimiter)
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:      20,
+  message:  { error: 'Muitas tentativas de verificação. Aguarde 15 minutos.' },
+});
+app.use('/api/auth/otp', otpLimiter);
+
 // ── Health check ───────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({
@@ -68,6 +77,7 @@ app.get('/health', (_req, res) => {
 
 // ── Rotas ──────────────────────────────────────────────
 app.use('/api/auth',      authRoutes);
+app.use('/api/auth/otp',  otpRoutes);
 app.use('/api/tours',     toursRoutes);
 app.use('/api/transfers', transfersRoutes);
 app.use('/api/bookings',  bookingsRoutes);

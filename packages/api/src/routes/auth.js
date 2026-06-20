@@ -1,17 +1,21 @@
 import { Router } from 'express';
 import { z }      from 'zod';
-import { supabase } from '../supabase.js';
-import { authenticate } from '../middleware/auth.js';
+import { supabase }                          from '../supabase.js';
+import { authenticate }                      from '../middleware/auth.js';
+import { normalizeToE164 }                   from '../lib/phone.js';
+import { signSignupToken }                   from '../lib/signupToken.js';
+import { requestOtp, maskDestination }       from '../services/otp.js';
+import { buildChannels }                     from './otp.js';
 
 const router = Router();
 
+// ── Schemas ───────────────────────────────────────────────
 const registerSchema = z.object({
   full_name: z.string().min(2).max(200),
-  email:     z.string().email().optional(),
-  phone:     z.string().min(10).max(30).optional(),
-  password:  z.string().min(6),
-}).refine(d => d.email || d.phone, {
-  message: 'Informe email ou telefone',
+  email:     z.string().email(),                          // obrigatório
+  phone:     z.string().min(7).max(30).optional(),        // opcional, normalizado → E.164
+  password:  z.string().min(6),                          // front valida min 8
+  lang:      z.enum(['pt', 'en', 'es']).optional().default('pt'),
 });
 
 const loginSchema = z.object({
@@ -21,53 +25,123 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-// ── POST /api/auth/register ────────────────────────────
+// Conjunto mínimo de colunas do perfil — usado em login e register
+const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number';
+
+// ── POST /api/auth/register ────────────────────────────────
 router.post('/register', async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body);
 
+    // Normaliza phone → E.164 se fornecido
+    let phoneE164 = null;
+    if (body.phone) {
+      phoneE164 = normalizeToE164(body.phone, 'BR');
+      if (!phoneE164) {
+        return res.status(400).json({ error: 'Número de telefone inválido.' });
+      }
+    }
+
+    // Checar duplicidade de e-mail e phone_e164 ANTES de criar o Auth user.
+    // Mensagem genérica anti-enumeração.
+    const GENERIC_ERROR = 'Não foi possível concluir o cadastro. Tente fazer login.';
+
+    if (phoneE164) {
+      const { data: dupPhone } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone_e164', phoneE164)
+        .maybeSingle();
+      if (dupPhone) {
+        return res.status(409).json({ error: GENERIC_ERROR });
+      }
+    }
+
+    const { data: dupEmail } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', body.email)
+      .maybeSingle();
+    if (dupEmail) {
+      return res.status(409).json({ error: GENERIC_ERROR });
+    }
+
+    // Cria usuário no Supabase Auth — SEM email_confirm (verificação via OTP)
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email:          body.email,
-      phone:          body.phone,
-      password:       body.password,
-      email_confirm:  true,
+      email:         body.email,
+      password:      body.password,
+      email_confirm: false,
     });
 
-    if (authError) return res.status(400).json({ error: authError.message });
+    if (authError) {
+      // Erros do Auth (e-mail já cadastrado no Auth, etc.) → genérico
+      console.error('[register] authError:', authError.message);
+      return res.status(409).json({ error: GENERIC_ERROR });
+    }
 
+    // Insere perfil na tabela users
     const { data: profile, error: profileError } = await supabase
       .from('users')
       .insert({
-        auth_id:   authData.user.id,
-        full_name: body.full_name,
-        email:     body.email,
-        phone:     body.phone,
-        user_type: 'tourist',
+        auth_id:        authData.user.id,
+        full_name:      body.full_name,
+        email:          body.email,
+        phone:          body.phone || null,
+        phone_e164:     phoneE164,
+        user_type:      'tourist',
+        email_verified: false,
+        phone_verified: false,
+        lang:           body.lang,
       })
-      .select('id, full_name, email, phone, user_type')
+      .select('id, full_name, email, phone, phone_e164, user_type, email_verified, phone_verified, lang')
       .single();
 
     if (profileError) {
+      // Rollback: apaga o Auth user criado
       await supabase.auth.admin.deleteUser(authData.user.id);
+      console.error('[register] profileError:', profileError.message);
       return res.status(400).json({ error: profileError.message });
     }
 
-    // Auto sign-in para retornar token imediatamente após o cadastro
-    const { data: session, error: signInError } = await supabase.auth.signInWithPassword({
-      email:    body.email,
-      password: body.password,
-    });
-
-    if (signInError || !session?.session) {
-      // Conta criada mas login automático falhou — pede login manual
-      return res.status(201).json({ message: 'Conta criada com sucesso. Faça login para continuar.' });
+    // Dispara OTP de e-mail imediatamente
+    try {
+      await requestOtp({
+        userId:      profile.id,
+        channel:     'email',
+        destination: body.email,
+        lang:        body.lang,
+      });
+    } catch (otpErr) {
+      // OTP falhou mas conta foi criada — não é fatal; o usuário pode re-solicitar
+      console.error('[register] OTP email falhou:', otpErr.message);
     }
 
-    res.status(201).json({
-      message:       'Conta criada com sucesso',
-      token:         session.session.access_token,
-      refresh_token: session.session.refresh_token,
-      user:          profile,
+    // Monta signup_token
+    const phone_required = !!phoneE164;
+    const signup_token   = signSignupToken({ user_id: profile.id, phone_required });
+
+    // Monta channels
+    const channels = {
+      email: {
+        required:    true,
+        verified:    false,
+        destination: maskDestination('email', body.email),
+      },
+    };
+    if (phone_required) {
+      channels.whatsapp = {
+        required:    false,
+        verified:    false,
+        destination: maskDestination('whatsapp', phoneE164),
+      };
+    }
+
+    // Retorna sem token de sessão — front usa signup_token para o wizard de verificação
+    return res.status(201).json({
+      status:       'verification_required',
+      signup_token,
+      channels,
+      next:         'verify_email',
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -77,14 +151,14 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-// ── POST /api/auth/login ───────────────────────────────
+// ── POST /api/auth/login ───────────────────────────────────
 router.post('/login', async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
 
     // Login por CNPJ: busca o e-mail sintético gerado pelo admin
-    let authEmail  = body.email;
-    let authPhone  = body.phone;
+    let authEmail = body.email;
+    let authPhone = body.phone;
 
     if (body.cnpj) {
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
@@ -103,6 +177,7 @@ router.post('/login', async (req, res, next) => {
       authPhone = undefined;
     }
 
+    // Autentica primeiro (valida senha antes de qualquer gate)
     const { data, error } = await supabase.auth.signInWithPassword({
       email:    authEmail,
       phone:    authPhone,
@@ -111,19 +186,21 @@ router.post('/login', async (req, res, next) => {
 
     if (error) return res.status(401).json({ error: 'Credenciais incorretas' });
 
-    // Conjunto mínimo de colunas — garantidamente presentes em qualquer instância
-    const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number';
-
-    // Primeiro tenta pelo auth_id (caminho normal)
+    // Carrega perfil
     let { data: profile, error: pErr1 } = await supabase
-      .from('users').select(PROFILE_COLS).eq('auth_id', data.user.id).maybeSingle();
+      .from('users')
+      .select(`${PROFILE_COLS}, email_verified, phone_verified, phone_e164, lang`)
+      .eq('auth_id', data.user.id)
+      .maybeSingle();
     if (pErr1) console.error('[login] auth_id lookup error', pErr1);
 
-    // Fallback: lookup por email (caso o auth_id na tabela esteja dessincronizado/NULL)
     const fallbackEmail = authEmail || data.user.email;
     if (!profile && fallbackEmail) {
       const { data: byEmail, error: pErr2 } = await supabase
-        .from('users').select(PROFILE_COLS).eq('email', fallbackEmail).maybeSingle();
+        .from('users')
+        .select(`${PROFILE_COLS}, email_verified, phone_verified, phone_e164, lang`)
+        .eq('email', fallbackEmail)
+        .maybeSingle();
       if (pErr2) console.error('[login] email lookup error', pErr2);
       if (byEmail) {
         profile = byEmail;
@@ -131,11 +208,11 @@ router.post('/login', async (req, res, next) => {
       }
     }
 
-    // Último fallback: lookup por document_number quando vier de CNPJ
     if (!profile && body.cnpj) {
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
       const { data: byCnpj, error: pErr3 } = await supabase
-        .from('users').select(PROFILE_COLS)
+        .from('users')
+        .select(`${PROFILE_COLS}, email_verified, phone_verified, phone_e164, lang`)
         .eq('document_number', cnpjDigits)
         .maybeSingle();
       if (pErr3) console.error('[login] cnpj lookup error', pErr3);
@@ -157,6 +234,28 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
+    // ── Gate de verificação (apenas tourists) ──────────────
+    if (profile.user_type === 'tourist') {
+      const emailPending = !profile.email_verified;
+      const phonePending = profile.phone_e164 && !profile.phone_verified;
+
+      if (emailPending || phonePending) {
+        // Senha já validada acima — pode emitir signup_token sem risco
+        const phone_required = !!(profile.phone_e164);
+        const signup_token   = signSignupToken({ user_id: profile.id, phone_required });
+        const channels       = buildChannels(profile, phone_required);
+        const next           = emailPending ? 'verify_email' : 'verify_whatsapp';
+
+        return res.status(403).json({
+          status:       'verification_required',
+          signup_token,
+          channels,
+          next,
+        });
+      }
+    }
+
+    // Retorna sessão normal
     res.json({
       token:         data.session.access_token,
       refresh_token: data.session.refresh_token,
@@ -170,7 +269,7 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-// ── GET /api/auth/me ───────────────────────────────────
+// ── GET /api/auth/me ───────────────────────────────────────
 router.get('/me', authenticate, async (req, res, next) => {
   try {
     const { data: profile, error } = await supabase
@@ -183,8 +282,6 @@ router.get('/me', authenticate, async (req, res, next) => {
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
-    // cover_photo_url é opcional — pode não existir se a migration 015 ainda
-    // não tiver rodado. Busca em separado para o /me nunca quebrar nesse caso.
     const { data: cover } = await supabase
       .from('users').select('cover_photo_url').eq('id', req.user.id).maybeSingle();
     if (cover && 'cover_photo_url' in cover) profile.cover_photo_url = cover.cover_photo_url;
@@ -193,7 +290,7 @@ router.get('/me', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── POST /api/auth/forgot-password ────────────────────
+// ── POST /api/auth/forgot-password ────────────────────────
 const forgotSchema = z.object({
   email:        z.string().email(),
   redirect_url: z.string().url().optional(),
@@ -203,7 +300,6 @@ router.post('/forgot-password', async (req, res, next) => {
   try {
     const { email, redirect_url } = forgotSchema.parse(req.body);
 
-    // Não revela se o e-mail existe (boa prática de segurança)
     await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: redirect_url,
     });
@@ -216,7 +312,7 @@ router.post('/forgot-password', async (req, res, next) => {
   }
 });
 
-// ── POST /api/auth/refresh ────────────────────────────
+// ── POST /api/auth/refresh ─────────────────────────────────
 router.post('/refresh', async (req, res, next) => {
   try {
     const { refresh_token } = req.body;
@@ -243,7 +339,7 @@ router.post('/refresh', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── PATCH /api/auth/me ────────────────────────────────
+// ── PATCH /api/auth/me ─────────────────────────────────────
 const updateProfileSchema = z.object({
   full_name:               z.string().min(2).max(200).optional(),
   phone:                   z.string().min(10).max(30).optional(),
@@ -289,7 +385,7 @@ router.patch('/me', authenticate, async (req, res, next) => {
   }
 });
 
-// ── POST /api/auth/me/photo ───────────────────────────
+// ── POST /api/auth/me/photo ───────────────────────────────
 router.post('/me/photo', authenticate, async (req, res, next) => {
   try {
     const { photo_data } = req.body;
@@ -305,7 +401,6 @@ router.post('/me/photo', authenticate, async (req, res, next) => {
     const [, mimeType, b64] = match;
     const buffer = Buffer.from(b64, 'base64');
 
-    // Limite de 2 MB
     if (buffer.byteLength > 2 * 1024 * 1024) {
       return res.status(413).json({ error: 'Imagem muito grande. Máximo 2 MB.' });
     }
@@ -330,8 +425,7 @@ router.post('/me/photo', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── POST /api/auth/me/cover ───────────────────────────
-// Imagem de fundo (capa) do perfil do turista
+// ── POST /api/auth/me/cover ───────────────────────────────
 router.post('/me/cover', authenticate, async (req, res, next) => {
   try {
     const { photo_data } = req.body;
@@ -347,7 +441,6 @@ router.post('/me/cover', authenticate, async (req, res, next) => {
     const [, mimeType, b64] = match;
     const buffer = Buffer.from(b64, 'base64');
 
-    // Limite de 2 MB (mesmo limite do bucket "avatars")
     if (buffer.byteLength > 2 * 1024 * 1024) {
       return res.status(413).json({ error: 'Imagem muito grande. Máximo 2 MB.' });
     }
@@ -362,7 +455,6 @@ router.post('/me/cover', authenticate, async (req, res, next) => {
     if (uploadError) return res.status(500).json({ error: uploadError.message });
 
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-    // Versão na query para furar o cache do navegador (path é fixo por usuário)
     const versionedUrl = `${publicUrl}?v=${Date.now()}`;
 
     const { error: updError } = await supabase
@@ -380,7 +472,7 @@ router.post('/me/cover', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── POST /api/auth/logout ──────────────────────────────
+// ── POST /api/auth/logout ──────────────────────────────────
 router.post('/logout', authenticate, async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];

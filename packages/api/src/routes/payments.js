@@ -6,10 +6,10 @@ import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 
 const intentSchema = z.object({
-  service_type:        z.enum(['tour', 'transfer']),
-  service_id:          z.string().uuid(),
-  service_date_iso:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (YYYY-MM-DD)'),
-  total_price:         z.number({ coerce: true }).positive().min(5, 'Valor mínimo R$ 5,00'),
+  service_type:        z.enum(['tour', 'transfer']).optional(),
+  service_id:          z.string().uuid().optional(),
+  service_date_iso:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (YYYY-MM-DD)').optional(),
+  total_price:         z.number({ coerce: true }).positive().min(5, 'Valor mínimo R$ 5,00').optional(),
   payment_method:      z.enum(['pix', 'credit_card', 'debit_card']).default('pix'),
   existing_booking_id: z.string().uuid().optional(),
   booking_mode:        z.enum(['private', 'shared']).optional(),
@@ -25,7 +25,7 @@ const intentSchema = z.object({
   origin_text:      z.string().max(500).optional(),
   destination_text: z.string().max(500).optional(),
   service_name:     z.string().max(300).optional(),
-  cover_image_url:  z.string().url().optional().or(z.literal('')),
+  cover_image_url:  z.string().url().optional().nullable().or(z.literal('')),
   coupon_code:      z.string().max(50).optional(),
 }).refine(
   (d) => d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),

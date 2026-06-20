@@ -256,11 +256,11 @@ export default function CheckoutSummary() {
     service_time:    time || 'A confirmar',
     people_count:    people,
     vehicles:        cartHasItems
-      ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty }))
+      ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(unitPriceFor(vehicle)) || 0 }))
       : ls.vehicles,
     total_price:     activeTotal,
     service_name:    ls.service_name,
-    cover_image_url: ls.cover_image_url || null,
+    cover_image_url: ls.cover_image_url || undefined,
   }
 
   const idx   = gi(ls.service_id || ls.service_name)

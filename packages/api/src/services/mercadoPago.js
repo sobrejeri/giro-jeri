@@ -1,6 +1,6 @@
 import { MercadoPagoConfig, Payment } from 'mercadopago'
 
-const accessToken = process.env.MP_ACCESS_TOKEN || ''
+const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN || ''
 const testMode    = !accessToken || accessToken.startsWith('TEST-')
 
 const mp = accessToken
