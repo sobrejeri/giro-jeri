@@ -1,11 +1,13 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useRegion } from '../../contexts/RegionContext'
 import { api } from '../../lib/api'
-import { MapPin, LogOut, User } from 'lucide-react'
+import { MapPin, LogOut, User, ChevronDown } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 
 export default function TopNav() {
   const { user, token, logout } = useAuth()
+  const { region, openPicker } = useRegion()
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -36,6 +38,18 @@ export default function TopNav() {
           {token && <NavLink to="/minhas-reservas" className={navLinkClass}>Reservas</NavLink>}
           {token && <NavLink to="/perfil"          className={navLinkClass}>Perfil</NavLink>}
         </nav>
+
+        {/* Chip de localização — desktop */}
+        <button
+          onClick={openPicker}
+          className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full px-3 py-1.5 transition-colors mr-3"
+        >
+          <MapPin size={13} className="text-brand shrink-0" />
+          <span className="text-[13px] font-semibold text-gray-700 max-w-[140px] truncate">
+            {region?.name ?? 'Selecionar região'}
+          </span>
+          <ChevronDown size={12} className="text-gray-400" />
+        </button>
 
         <div className="flex items-center gap-3">
           {token ? (

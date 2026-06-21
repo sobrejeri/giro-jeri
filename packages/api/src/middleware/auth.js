@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../supabase.js';
 
 // ── Autentica o JWT do Supabase ────────────────────────
@@ -15,7 +16,15 @@ export async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Token inválido ou expirado' });
     }
 
-    const { data: profile, error: profileError } = await supabase
+    // Usa o token do próprio usuário para que RLS passe corretamente,
+    // independente de a chave do cliente ser anon ou service_role.
+    const userClient = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    const { data: profile, error: profileError } = await userClient
       .from('users')
       .select('id, full_name, email, phone, user_type, is_active, preferred_region_id')
       .eq('auth_id', user.id)

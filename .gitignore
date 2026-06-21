@@ -56,4 +56,8 @@ temp/
 supabase/.temp/
 
 # ── Claude Code internal ───────────────────────────────
-.claude/
+# Ignora config local (ex.: launch.json), mas versiona o time de agentes.
+.claude/*
+!.claude/TEAM.md
+!.claude/agents/
+!.claude/commands/
