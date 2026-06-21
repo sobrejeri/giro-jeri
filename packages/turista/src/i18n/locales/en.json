@@ -214,9 +214,9 @@
       "pixSub": "Instant approval",
       "pixBadge": "Recommended",
       "credit": "Credit card",
-      "creditSub": "Coming soon",
+      "creditSub": "Up to 12x · instant approval",
       "debit": "Debit card",
-      "debitSub": "Coming soon"
+      "debitSub": "Instant approval"
     },
     "summary": {
       "tour": "Tour",
@@ -283,6 +283,37 @@
       "email": "Email",
       "phone": "Phone",
       "random_key": "Random key"
+    },
+    "card": {
+      "numberLabel": "Card number",
+      "nameLabel": "Name on card",
+      "namePlaceholder": "As shown on the card",
+      "expiryLabel": "Expiry",
+      "expiryPlaceholder": "MM/YY",
+      "cvvLabel": "CVV",
+      "cvvHint": "3 digits on the back",
+      "cpfLabel": "Cardholder's CPF",
+      "installmentsLabel": "Installments",
+      "installmentNoInterest": "{{count}}x of R$ {{value}} interest-free",
+      "installmentWithInterest": "{{count}}x of R$ {{value}} (total R$ {{total}})",
+      "loadingInstallments": "Calculating installments…",
+      "payNow": "Pay R$ {{amount}}",
+      "payInstallments": "Pay {{count}}x of R$ {{value}}",
+      "processing": "Processing payment…",
+      "declined": "Payment declined",
+      "inReview": "Payment under review",
+      "inReviewSub": "Your booking was created and payment is under review."
+    },
+    "rejected": {
+      "insufficient_amount": "Insufficient balance or limit. Try another card.",
+      "bad_cvv": "Incorrect CVV. Check the security code.",
+      "bad_date": "Invalid expiry date.",
+      "bad_number": "Invalid card number.",
+      "high_risk": "Payment declined for security reasons. Try another card.",
+      "call_authorize": "Please authorize the payment with your bank before trying again.",
+      "card_disabled": "Card disabled. Please contact your bank.",
+      "duplicated": "Duplicate payment detected.",
+      "generic": "Payment could not be processed. Please try again."
     },
     "success": {
       "title": "Payment confirmed!",

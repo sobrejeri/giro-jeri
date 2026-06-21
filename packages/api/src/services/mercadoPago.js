@@ -30,6 +30,81 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
   }
 }
 
+// ── Mapa de recusas → chave i18n ──────────────────────
+const REJECTION_MAP = {
+  cc_rejected_insufficient_amount:    'payment.rejected.insufficient_amount',
+  cc_rejected_bad_filled_security_code: 'payment.rejected.bad_cvv',
+  cc_rejected_bad_filled_date:        'payment.rejected.bad_date',
+  cc_rejected_bad_filled_card_number: 'payment.rejected.bad_number',
+  cc_rejected_high_risk:              'payment.rejected.high_risk',
+  cc_rejected_call_for_authorize:     'payment.rejected.call_authorize',
+  cc_rejected_card_disabled:          'payment.rejected.card_disabled',
+  cc_rejected_duplicated_payment:     'payment.rejected.duplicated',
+}
+
+export function mapRejectionKey(statusDetail) {
+  return REJECTION_MAP[statusDetail] || 'payment.rejected.generic'
+}
+
+// ── Pagamento com cartão de crédito ou débito ─────────
+export async function createCardPayment({
+  amount,
+  description,
+  installments = 1,
+  paymentMethodId,
+  cardToken,
+  issuerId,
+  payerEmail,
+  payerDoc,
+  externalRef,
+}) {
+  // Sem fallback fake para cartão — erro propaga para o caller
+  if (!mp) throw new Error('Mercado Pago não configurado (access token ausente)')
+
+  const client = new Payment(mp)
+
+  const body = {
+    transaction_amount: amount,
+    description,
+    installments:       Number(installments) || 1,
+    payment_method_id:  paymentMethodId,
+    token:              cardToken,
+    statement_descriptor: 'GIROJERI',
+    external_reference: externalRef,
+    payer: {
+      email:          payerEmail || 'comprador@girojeri.com',
+      identification: { type: 'CPF', number: payerDoc },
+    },
+  }
+
+  // issuer_id é opcional — não enviar quando undefined para evitar rejeição MP
+  if (issuerId) body.issuer_id = String(issuerId)
+
+  const response = await client.create({
+    body,
+    // X-Idempotency-Key: booking.id garante que retentativas não geram duplicatas
+    requestOptions: { idempotencyKey: externalRef },
+  })
+
+  // Extrai juro de parcelamento da lista de fees retornada pelo MP
+  const financingFee = (response.fees || [])
+    .filter((f) => f.fee_id === 'FINANCING_FEE' || (f.type && /juros|interest|financing/i.test(f.type)))
+    .reduce((acc, f) => acc + (Number(f.value) || 0), 0)
+
+  return {
+    mp_id:                  String(response.id),
+    status:                 response.status,
+    status_detail:          response.status_detail || null,
+    installments:           response.installments || installments,
+    installment_amount:     response.transaction_details?.installment_amount ?? null,
+    installment_fee_amount: financingFee > 0 ? financingFee : null,
+    card_last_four:         response.card?.last_four_digits ?? null,
+    card_brand:             response.payment_method_id ?? null,
+    card_holder_name:       response.card?.cardholder?.name ?? null,
+    raw:                    response,
+  }
+}
+
 export async function getMpPaymentStatus(mpId) {
   if (!mp) return null
   const client = new Payment(mp)

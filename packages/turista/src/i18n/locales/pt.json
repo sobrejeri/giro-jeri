@@ -214,9 +214,9 @@
       "pixSub": "Aprovação instantânea",
       "pixBadge": "Recomendado",
       "credit": "Cartão de crédito",
-      "creditSub": "Em breve",
+      "creditSub": "Até 12x · aprovação na hora",
       "debit": "Cartão de débito",
-      "debitSub": "Em breve"
+      "debitSub": "Aprovação na hora"
     },
     "summary": {
       "tour": "Passeio",
@@ -283,6 +283,37 @@
       "email": "E-mail",
       "phone": "Telefone",
       "random_key": "Chave aleatória"
+    },
+    "card": {
+      "numberLabel": "Número do cartão",
+      "nameLabel": "Nome impresso no cartão",
+      "namePlaceholder": "Como está no cartão",
+      "expiryLabel": "Validade",
+      "expiryPlaceholder": "MM/AA",
+      "cvvLabel": "CVV",
+      "cvvHint": "3 dígitos no verso",
+      "cpfLabel": "CPF do titular",
+      "installmentsLabel": "Parcelas",
+      "installmentNoInterest": "{{count}}x de R$ {{value}} sem juros",
+      "installmentWithInterest": "{{count}}x de R$ {{value}} (total R$ {{total}})",
+      "loadingInstallments": "Calculando parcelas…",
+      "payNow": "Pagar R$ {{amount}}",
+      "payInstallments": "Pagar {{count}}x de R$ {{value}}",
+      "processing": "Processando pagamento…",
+      "declined": "Pagamento recusado",
+      "inReview": "Pagamento em análise",
+      "inReviewSub": "Sua reserva foi criada e o pagamento está em análise."
+    },
+    "rejected": {
+      "insufficient_amount": "Saldo ou limite insuficiente. Tente outro cartão.",
+      "bad_cvv": "CVV incorreto. Verifique o código de segurança.",
+      "bad_date": "Data de validade inválida.",
+      "bad_number": "Número do cartão inválido.",
+      "high_risk": "Pagamento recusado por segurança. Tente outro cartão.",
+      "call_authorize": "Autorize a compra com seu banco antes de tentar novamente.",
+      "card_disabled": "Cartão desabilitado. Entre em contato com seu banco.",
+      "duplicated": "Pagamento duplicado detectado.",
+      "generic": "Não foi possível processar o pagamento. Tente novamente."
     },
     "success": {
       "title": "Pagamento confirmado!",

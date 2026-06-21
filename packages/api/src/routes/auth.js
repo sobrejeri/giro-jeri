@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z }      from 'zod';
+import { createClient } from '@supabase/supabase-js';
 import { supabase }                          from '../supabase.js';
 import { authenticate }                      from '../middleware/auth.js';
 import { normalizeToE164 }                   from '../lib/phone.js';
@@ -8,6 +9,15 @@ import { requestOtp, maskDestination }       from '../services/otp.js';
 import { buildChannels }                     from './otp.js';
 
 const router = Router();
+
+// Cria client scoped ao token do usuário (necessário quando SUPABASE_SERVICE_ROLE_KEY é anon key)
+function userScopedClient(token) {
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 // ── Schemas ───────────────────────────────────────────────
 const registerSchema = z.object({
@@ -186,25 +196,28 @@ router.post('/login', async (req, res, next) => {
 
     if (error) return res.status(401).json({ error: 'Credenciais incorretas' });
 
+    // Usa client scoped ao token do usuário para que RLS passe corretamente
+    const sc = userScopedClient(data.session.access_token);
+
     // Carrega perfil
-    let { data: profile, error: pErr1 } = await supabase
+    let { data: profile, error: pErr1 } = await sc
       .from('users')
-      .select(`${PROFILE_COLS}, email_verified, phone_verified, phone_e164, lang`)
+      .select(`${PROFILE_COLS}, email_verified, phone_verified`)
       .eq('auth_id', data.user.id)
       .maybeSingle();
     if (pErr1) console.error('[login] auth_id lookup error', pErr1);
 
     const fallbackEmail = authEmail || data.user.email;
     if (!profile && fallbackEmail) {
-      const { data: byEmail, error: pErr2 } = await supabase
+      const { data: byEmail, error: pErr2 } = await sc
         .from('users')
-        .select(`${PROFILE_COLS}, email_verified, phone_verified, phone_e164, lang`)
+        .select(`${PROFILE_COLS}, email_verified, phone_verified`)
         .eq('email', fallbackEmail)
         .maybeSingle();
       if (pErr2) console.error('[login] email lookup error', pErr2);
       if (byEmail) {
         profile = byEmail;
-        await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byEmail.id);
+        await sc.from('users').update({ auth_id: data.user.id }).eq('id', byEmail.id);
       }
     }
 
@@ -212,7 +225,7 @@ router.post('/login', async (req, res, next) => {
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
       const { data: byCnpj, error: pErr3 } = await supabase
         .from('users')
-        .select(`${PROFILE_COLS}, email_verified, phone_verified, phone_e164, lang`)
+        .select(`${PROFILE_COLS}, email_verified, phone_verified`)
         .eq('document_number', cnpjDigits)
         .maybeSingle();
       if (pErr3) console.error('[login] cnpj lookup error', pErr3);
