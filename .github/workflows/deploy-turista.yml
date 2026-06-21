@@ -29,6 +29,7 @@ jobs:
           NODE_ENV: production
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_MP_PUBLIC_KEY: ${{ secrets.VITE_MP_PUBLIC_KEY }}
+          VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
 
       - name: Build cooperativa
         run: npm run build --workspace=packages/cooperativa

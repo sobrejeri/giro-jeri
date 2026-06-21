@@ -21,6 +21,8 @@ const schema = z.object({
   locality:    z.string().max(80).optional().nullable(),
   price_range: z.string().max(10).optional().nullable(),
   price_note:  z.string().max(60).optional().nullable(),
+  latitude:    z.number().optional().nullable(),
+  longitude:   z.number().optional().nullable(),
   is_featured: z.boolean().optional(),
   is_active:   z.boolean().optional(),
   sort_order:  z.number().int().optional(),

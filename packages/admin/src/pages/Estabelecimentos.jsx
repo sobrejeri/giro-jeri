@@ -24,7 +24,18 @@ const EMPTY = {
   name: '', category: 'gastronomia', description: '', image_url: '',
   whatsapp: '', instagram: '', maps_url: '', address: '',
   locality: '', price_range: '', price_note: '',
+  latitude: '', longitude: '',
   is_featured: false, is_active: true,
+}
+
+// Extrai lat/lng do URL do Google Maps automaticamente
+function extractCoords(url) {
+  if (!url) return null
+  const at = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
+  if (at) return { lat: at[1], lng: at[2] }
+  const q = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/)
+  if (q) return { lat: q[1], lng: q[2] }
+  return null
 }
 
 function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
@@ -85,6 +96,8 @@ export default function Estabelecimentos() {
       locality:    p.locality || '',
       price_range: p.price_range || '',
       price_note:  p.price_note || '',
+      latitude:    p.latitude != null ? String(p.latitude) : '',
+      longitude:   p.longitude != null ? String(p.longitude) : '',
       is_featured: p.is_featured ?? false,
       is_active:   p.is_active ?? true,
     })
@@ -126,6 +139,8 @@ export default function Estabelecimentos() {
       locality:    form.locality || null,
       price_range: form.price_range || null,
       price_note:  form.price_note || null,
+      latitude:    form.latitude  ? parseFloat(form.latitude)  : null,
+      longitude:   form.longitude ? parseFloat(form.longitude) : null,
       is_featured: !!form.is_featured,
       is_active:   !!form.is_active,
     })
@@ -243,7 +258,41 @@ export default function Estabelecimentos() {
           </div>
 
           <Input label="Endereço" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Rua / referência na vila" />
-          <Input label="Link do mapa (opcional)" value={form.maps_url} onChange={(e) => setForm({ ...form, maps_url: e.target.value })} placeholder="https://maps.google.com/…" />
+
+          <div className="space-y-1">
+            <Input
+              label="Link do Google Maps"
+              value={form.maps_url}
+              onChange={(e) => {
+                const url = e.target.value
+                const coords = extractCoords(url)
+                setForm((f) => ({
+                  ...f,
+                  maps_url:  url,
+                  ...(coords ? { latitude: coords.lat, longitude: coords.lng } : {}),
+                }))
+              }}
+              placeholder="https://maps.google.com/…"
+            />
+            {extractCoords(form.maps_url) && (
+              <p className="text-[11px] text-green-400">✓ Coordenadas extraídas automaticamente do link</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Latitude"
+              value={form.latitude}
+              onChange={(e) => setForm({ ...form, latitude: e.target.value })}
+              placeholder="-2.7976"
+            />
+            <Input
+              label="Longitude"
+              value={form.longitude}
+              onChange={(e) => setForm({ ...form, longitude: e.target.value })}
+              placeholder="-40.5147"
+            />
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
             <Select label="Faixa de preço" value={form.price_range} onChange={(e) => setForm({ ...form, price_range: e.target.value })}>
