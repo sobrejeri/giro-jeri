@@ -523,7 +523,7 @@ export default function Catalogo() {
 
             <Input label="Nome" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <Textarea label="Descrição" rows={2} value={form.short_description || ''} onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Duração (horas)" type="number" min={0.5} step={0.5}
                 value={form.duration_hours || ''} onChange={(e) => setForm({ ...form, duration_hours: e.target.value })} />
               <Input label="Capacidade máx." type="number" min={1}
@@ -662,7 +662,7 @@ export default function Catalogo() {
             onChange={(e) => setVehicleForm({ ...vehicleForm, description: e.target.value })}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Capacidade (pax)"
               type="number" min={1}

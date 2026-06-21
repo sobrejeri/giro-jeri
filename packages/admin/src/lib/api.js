@@ -67,13 +67,15 @@ export const api = {
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),
+  getOperational:    (params = {}) => request(`/api/admin/operational?${new URLSearchParams(params)}`),
+  getOperatorPerformance: (params = {}) => request(`/api/admin/operator-performance?${new URLSearchParams(params)}`),
 
   // Usuários
   getUsers:          (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),
   createUser:        (body)        => request('/api/admin/users', { method: 'POST', body }),
   updateUser:        (id, body)    => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
-  registerRecipient: (id)          => request(`/api/admin/users/${id}/register-recipient`, { method: 'POST', body: {} }),
   resetUserPassword: (id, new_password) => request(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: { new_password } }),
+  registerRecipient: (id)          => request(`/api/admin/users/${id}/register-recipient`, { method: 'POST', body: {} }),
 
   // Financeiro
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),
@@ -158,6 +160,12 @@ export const api = {
   updateSeason: (id, body) => request(`/api/admin/seasons/${id}`, { method: 'PUT', body }),
   deleteSeason: (id)       => request(`/api/admin/seasons/${id}`, { method: 'DELETE' }),
 
+  // Feriados / datas especiais
+  getHolidays:   ()         => request('/api/admin/holidays'),
+  createHoliday: (body)     => request('/api/admin/holidays', { method: 'POST', body }),
+  updateHoliday: (id, body) => request(`/api/admin/holidays/${id}`, { method: 'PUT', body }),
+  deleteHoliday: (id)       => request(`/api/admin/holidays/${id}`, { method: 'DELETE' }),
+
   // Auditoria
   getAuditLogs: (params = {}) => request(`/api/admin/audit-logs?${new URLSearchParams(params)}`),
 
@@ -179,4 +187,10 @@ export const api = {
   createEstablishment: (body)     => request('/api/establishments', { method: 'POST', body }),
   updateEstablishment: (id, body) => request(`/api/establishments/${id}`, { method: 'PUT', body }),
   deleteEstablishment: (id)       => request(`/api/establishments/${id}`, { method: 'DELETE' }),
+
+  // Notificações
+  getNotifications:      ()    => request('/api/notifications'),
+  markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
+  pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
+  getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
 }

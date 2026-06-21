@@ -184,6 +184,45 @@ export default function CheckoutSummary() {
     enabled:  isTransfer && editing,
   })
 
+  // Recálculo autoritativo no servidor (alta temporada / feriado) — só para
+  // EXIBIR exatamente o que será cobrado. Veículos vêm do estado `cart`.
+  const calcVehicles = Object.entries(cart).filter(([, q]) => q > 0).map(([id, q]) => ({ vehicleId: id, quantity: q }))
+  const dateISO = format(date, 'yyyy-MM-dd')
+  const { data: tourCalc } = useQuery({
+    queryKey: ['checkout-calc', ls?.service_id, isPrivateTour ? 'private' : 'shared', dateISO, people, JSON.stringify(calcVehicles)],
+    queryFn:  () => api.calculateTour(ls.service_id, {
+      region_id:    ls.region_id,
+      mode:         isPrivateTour ? 'private' : 'shared',
+      service_date: dateISO,
+      people_count: people,
+      vehicles:     calcVehicles,
+    }),
+    enabled:   (isPrivateTour || isSharedTour) && !!ls?.service_id && !!ls?.region_id && (isSharedTour || calcVehicles.length > 0),
+    staleTime: 30_000,
+    retry:     false,
+  })
+
+  // Translado tabelado: alta temporada/feriado calculado sobre o subtotal real
+  // (preço da rota × veículos). Translado personalizado (vem com quote_id) já
+  // tem preço fechado pela cooperativa, então não recebe acréscimo automático.
+  const transferQty      = calcVehicles.reduce((s, v) => s + v.quantity, 0)
+  const transferSubtotal = isTransfer
+    ? Math.round(Number(ls?.transfer_unit_price || 0) * transferQty * 100) / 100
+    : 0
+  const { data: transferCalc } = useQuery({
+    queryKey: ['checkout-surcharge-transfer', ls?.region_id, dateISO, transferSubtotal],
+    queryFn:  () => api.transferSurcharge({
+      region_id:    ls.region_id,
+      service_date: dateISO,
+      subtotal:     transferSubtotal,
+    }),
+    enabled:   isTransfer && !ls?.quote_id && !!ls?.region_id && transferSubtotal > 0,
+    staleTime: 30_000,
+    retry:     false,
+  })
+
+  const serverCalc = tourCalc || transferCalc
+
   /* ── Early return after hooks ────────────────────────────── */
   if (!ls) { navigate(-1); return null }
 
@@ -225,6 +264,14 @@ export default function CheckoutSummary() {
     return ls.total_price
   })()
 
+  // Acréscimo de data (do recálculo do servidor) e total a exibir/cobrar.
+  // Passeios trazem `totalAmount` já fechado; translado tabelado soma o
+  // acréscimo ao subtotal exibido.
+  const dateSurcharge = Number(serverCalc?.seasonAdditional) || 0
+  const displayTotal  = (serverCalc && typeof serverCalc.totalAmount === 'number')
+    ? serverCalc.totalAmount
+    : activeTotal + dateSurcharge
+
   const capacityOk  = !hasVehicles || (cartHasItems && cartCapacity >= people)
   const canSave     = capacityOk
   const canProceed  = hasPricing && !!time
@@ -258,7 +305,11 @@ export default function CheckoutSummary() {
     vehicles:        cartHasItems
       ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(unitPriceFor(vehicle)) || 0 }))
       : ls.vehicles,
-    total_price:     activeTotal,
+    // `total_price` é a BASE que o servidor usa para cobrar. Em translado é o
+    // subtotal CRU (sem acréscimo) — o servidor soma a alta temporada uma única
+    // vez. `display_total` é só para exibição (já com o acréscimo).
+    total_price:     isTransfer ? activeTotal : displayTotal,
+    display_total:   displayTotal,
     service_name:    ls.service_name,
     cover_image_url: ls.cover_image_url || undefined,
   }
@@ -590,10 +641,16 @@ export default function CheckoutSummary() {
                 <span className="text-[13px] font-semibold text-gray-900">R$ {fmt(activeTotal)}</span>
               </div>
             )}
+            {dateSurcharge > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-amber-600">Alta temporada / feriado</span>
+                <span className="text-[13px] font-semibold text-amber-600">+ R$ {fmt(dateSurcharge)}</span>
+              </div>
+            )}
             <div className="border-t border-gray-100 pt-2 mt-1 flex items-center justify-between">
               <span className="text-[15px] font-bold text-gray-900">Total</span>
               {hasPricing
-                ? <span className="text-[22px] font-bold text-brand">R$ {fmt(activeTotal)}</span>
+                ? <span className="text-[22px] font-bold text-brand">R$ {fmt(displayTotal)}</span>
                 : <span className="text-[14px] font-semibold text-amber-600">A confirmar</span>
               }
             </div>
@@ -624,7 +681,7 @@ export default function CheckoutSummary() {
         <div className="mb-3">
           <p className="text-[11px] text-gray-400">Total a pagar</p>
           {hasPricing
-            ? <p className="text-[20px] font-bold text-brand">R$ {fmt(activeTotal)}</p>
+            ? <p className="text-[20px] font-bold text-brand">R$ {fmt(displayTotal)}</p>
             : <p className="text-[14px] font-semibold text-amber-600">Preço a confirmar</p>
           }
         </div>

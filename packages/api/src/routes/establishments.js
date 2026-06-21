@@ -60,14 +60,27 @@ router.get('/', async (req, res, next) => {
       statsMap[r.establishment_id].count += 1;
     });
 
-    res.json(data.map((e) => {
+    const enriched = data.map((e) => {
       const s = statsMap[e.id];
       return {
         ...e,
         avg_rating:   s ? +(s.sum / s.count).toFixed(1) : null,
         review_count: s?.count || 0,
       };
-    }));
+    });
+
+    // Ordena por reputação: Destaques (patrocinados) primeiro, depois maior
+    // nota, depois mais avaliações. O sort do V8 é estável, então empates
+    // mantêm a ordem do SQL (sort_order / created_at).
+    enriched.sort((a, b) => {
+      if (!!b.is_featured !== !!a.is_featured) return b.is_featured ? 1 : -1;
+      const ar = a.avg_rating ?? -1;
+      const br = b.avg_rating ?? -1;
+      if (br !== ar) return br - ar;
+      return (b.review_count || 0) - (a.review_count || 0);
+    });
+
+    res.json(enriched);
   } catch (err) { next(err); }
 });
 
@@ -95,7 +108,7 @@ router.get('/:id/reviews', async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('establishment_reviews')
-      .select('id, rating, comment, created_at, user_id, users(full_name, photo_url)')
+      .select('id, rating, comment, created_at, user_id, users(full_name, profile_photo_url)')
       .eq('establishment_id', req.params.id)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -149,7 +162,7 @@ router.post('/:id/reviews', async (req, res, next) => {
         { establishment_id: req.params.id, user_id: req.user.id, rating, comment },
         { onConflict: 'establishment_id,user_id' }
       )
-      .select('id, rating, comment, created_at, user_id, users(full_name, photo_url)')
+      .select('id, rating, comment, created_at, user_id, users(full_name, profile_photo_url)')
       .single();
     if (error) throw error;
     res.status(201).json(data);

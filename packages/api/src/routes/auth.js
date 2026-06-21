@@ -340,7 +340,7 @@ router.post('/refresh', async (req, res, next) => {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('id, full_name, email, phone, user_type, profile_photo_url, document_number')
+      .select(PROFILE_COLS)
       .eq('auth_id', data.user.id)
       .maybeSingle();
 

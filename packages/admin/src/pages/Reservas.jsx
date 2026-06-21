@@ -84,18 +84,18 @@ export default function Reservas() {
             <option value="transfer">Transfers</option>
           </select>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <CalendarDays size={15} className="text-gray-500 flex-shrink-0" />
             <input
               type="date" value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand flex-1 min-w-0 sm:flex-none"
             />
             <span className="text-gray-600 text-sm">até</span>
             <input
               type="date" value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand flex-1 min-w-0 sm:flex-none"
             />
           </div>
 
@@ -103,9 +103,42 @@ export default function Reservas() {
         </div>
       </Card>
 
-      {/* Tabela */}
+      {/* Lista (cards no mobile) */}
       <Card>
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y divide-gray-800">
+          {bookings.map((b) => (
+            <div key={b.id} className="p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs font-bold text-brand">{b.booking_code}</span>
+                <Badge value={b.status_commercial} />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-200 text-sm truncate">{b.users?.full_name || '—'}</p>
+                  <p className="text-xs text-gray-500 truncate">{b.users?.phone || b.users?.email || '—'}</p>
+                </div>
+                <p className="font-semibold text-gray-200 text-sm shrink-0">{fmt(b.total_amount)}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${b.service_type === 'tour' ? 'bg-blue-900/40 text-blue-400' : 'bg-purple-900/40 text-purple-400'}`}>
+                  {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
+                </span>
+                <span>{b.people_count} pax</span>
+                <span>· {b.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'}</span>
+                <span className="ml-auto">
+                  {b.service_date ? format(parseISO(b.service_date), 'dd/MM/yyyy') : '—'}
+                  {b.service_time ? ` ${b.service_time.slice(0, 5)}` : ''}
+                </span>
+              </div>
+            </div>
+          ))}
+          {bookings.length === 0 && (
+            <p className="px-5 py-12 text-center text-gray-600 text-sm">Nenhuma reserva encontrada.</p>
+          )}
+        </div>
+
+        {/* Tabela (desktop) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-700">

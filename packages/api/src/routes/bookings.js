@@ -8,7 +8,10 @@ import {
   calculateTabbedTransfer,
   validateTransferAdvance,
 } from '../services/priceEngine.js';
+import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
 import dayjs from 'dayjs';
+
+const serviceLabelBk = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
 const router = Router();
 
@@ -233,10 +236,11 @@ router.get('/', authenticate, async (req, res, next) => {
     let query = supabase
       .from('bookings')
       .select(`
-        id, booking_code, service_type, booking_mode,
+        id, booking_code, service_type, service_id, booking_mode,
         service_date, service_time, people_count,
         total_amount, status_commercial, status_operational,
         pickup_place_name, destination_place_name,
+        origin_text, destination_text,
         created_at,
         booking_vehicles ( vehicle_name_snapshot, quantity, unit_price ),
         payments ( status, paid_at )
@@ -301,13 +305,13 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
   try {
     const { cancel_reason } = req.body;
 
-    const { data: booking } = await supabase
+    const { data: booking, error: findErr } = await supabase
       .from('bookings')
-      .select('*, users(full_name)')
+      .select('*')
       .eq('id', req.params.id)
       .single();
 
-    if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' });
+    if (findErr || !booking) return res.status(404).json({ error: 'Reserva não encontrada' });
 
     // Turista só cancela a própria reserva
     if (req.user.user_type === 'tourist' && booking.user_id !== req.user.id) {
@@ -334,6 +338,30 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
       .single();
 
     if (error) throw error;
+
+    // Notifica a contraparte sobre o cancelamento
+    const canceledByTourist = req.user.user_type === 'tourist';
+    const tipo = serviceLabelBk(booking.service_type);
+    if (canceledByTourist) {
+      // Cliente cancelou → avisa cooperativas + admin (relevante se já estava paga)
+      if (booking.status_commercial === 'paid' || booking.operator_id) {
+        notifyOperatorsAndAdmin({
+          bookingId:   booking.id,
+          templateKey: 'booking_cancelled',
+          title:       'Reserva cancelada',
+          body:        `O cliente cancelou o ${tipo} ${booking.booking_code}.`,
+        });
+      }
+    } else {
+      // Operação cancelou → avisa o turista
+      notifyUser({
+        userId:      booking.user_id,
+        bookingId:   booking.id,
+        templateKey: 'booking_cancelled',
+        title:       'Reserva cancelada',
+        body:        `Seu ${tipo} (${booking.booking_code}) foi cancelado. Em caso de dúvida, fale com o suporte.`,
+      });
+    }
 
     res.json({
       booking: data,

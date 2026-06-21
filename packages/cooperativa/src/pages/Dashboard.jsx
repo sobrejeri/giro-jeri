@@ -204,6 +204,78 @@ function BookingRow({ b, onAssign, cooperativa }) {
   )
 }
 
+// ── Card mobile (mesma info da linha da tabela) ────────
+function BookingCardMobile({ b, onAssign, cooperativa }) {
+  const st       = STATUS[b.status_operational] || STATUS.new
+  const name     = b.users?.full_name || '—'
+  const dateStr  = b.service_date
+    ? format(new Date(b.service_date + 'T12:00:00'), 'dd MMM', { locale: ptBR }) : '—'
+  const timeStr  = b.service_time ? b.service_time.slice(0, 5) : null
+  const local    = b.pickup_place_name || b.origin_text
+  const dispatched = DISPATCHED_SET.includes(b.status_operational) || b.status_operational === 'completed'
+  const assign     = b.operational_assignments?.[0]
+  const formForOS  = {
+    real_vehicle_text: assign?.real_vehicle_text || b.booking_vehicles?.[0]?.vehicle_name_snapshot || '',
+    driver_name:       assign?.driver_name    || '',
+    dispatch_notes:    assign?.dispatch_notes || '',
+    driver_phone:      assign?.driver_phone   || '',
+  }
+
+  return (
+    <div className="p-4 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-gray-900 truncate">{name}</p>
+          <p className="text-[11px] text-gray-400 font-mono">{b.booking_code}</p>
+        </div>
+        <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${st.chip}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+          {st.label}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
+        <span className={`px-2 py-0.5 rounded-md font-semibold ${
+          b.service_type === 'tour' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'
+        }`}>
+          {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
+        </span>
+        <span className="flex items-center gap-1"><Clock size={11} className="text-gray-400" />{dateStr}{timeStr ? ` · ${timeStr}` : ''}</span>
+        {b.people_count && <span className="flex items-center gap-1"><Users size={11} />{b.people_count} pax</span>}
+        {local && (
+          <span className="flex items-center gap-1 max-w-full"><MapPin size={10} className="shrink-0" /><span className="truncate">{local}</span></span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        <span className="text-[13px] font-extrabold text-gray-800">{fmt(b.total_amount)}</span>
+        <div className="flex items-center gap-1.5">
+          {dispatched && (
+            <button
+              onClick={() => downloadOrderPDF(b, formForOS, cooperativa)}
+              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Baixar OS em PDF"
+            >
+              <FileText size={15} />
+            </button>
+          )}
+          <button
+            onClick={() => onAssign(b)}
+            className={`flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors ${
+              dispatched
+                ? 'text-gray-500 hover:bg-gray-100 border border-gray-200'
+                : 'text-white bg-brand hover:bg-brand/90'
+            }`}
+          >
+            {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
+            {dispatched ? 'Editar' : 'Despachar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const PER_PAGE = 8
 
 // ── Página principal ───────────────────────────────────
@@ -399,12 +471,12 @@ export default function Dashboard() {
 
         {/* Abas + busca */}
         <div className="px-5 pb-3 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5 max-w-full overflow-x-auto scrollbar-hide">
             {TABS.map((t) => (
               <button
                 key={t.key}
                 onClick={() => { setTab(t.key); setPage(1) }}
-                className={`px-3 py-1.5 rounded-md text-[13px] font-semibold transition-colors flex items-center gap-1.5 ${
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-semibold transition-colors flex items-center gap-1.5 ${
                   tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -415,7 +487,7 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          <div className="ml-auto flex items-center gap-2 border border-gray-200 rounded-lg px-3 h-9 bg-white focus-within:border-brand min-w-[200px]">
+          <div className="w-full sm:w-auto sm:ml-auto flex items-center gap-2 border border-gray-200 rounded-lg px-3 h-9 bg-white focus-within:border-brand sm:min-w-[200px]">
             <Search size={15} className="text-gray-400 shrink-0" />
             <input
               value={search}
@@ -426,8 +498,21 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Tabela */}
-        <div className="overflow-x-auto">
+        {/* Cards (mobile) */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {pageItems.map((b) => (
+            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} cooperativa={cooperativa} />
+          ))}
+          {pageItems.length === 0 && (
+            <div className="py-16 text-center">
+              <CheckCircle2 size={36} className="mx-auto text-gray-200 mb-2" />
+              <p className="text-gray-400 text-sm">Nenhuma reserva nesta visão.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Tabela (desktop) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">

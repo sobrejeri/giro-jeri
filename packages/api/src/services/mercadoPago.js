@@ -10,14 +10,23 @@ const mp = accessToken
 export async function createPixPayment({ amount, description, payerEmail, payerName, externalRef }) {
   if (!mp) return createFakePix({ amount, description, externalRef })
 
+  // Render expõe RENDER_EXTERNAL_URL automaticamente; API_BASE_URL como fallback manual
+  const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
+  const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
+
   const client = new Payment(mp)
   const response = await client.create({
     body: {
       transaction_amount: amount,
       description,
       payment_method_id:  'pix',
-      external_reference: externalRef,
-      payer: { email: payerEmail || 'comprador@girojeri.com', first_name: payerName || 'Comprador' },
+      external_reference: String(externalRef),
+      ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+      payer: {
+        email:      payerEmail || 'comprador@girojeri.com',
+        first_name: (payerName || 'Comprador').split(' ')[0],
+        last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'GiroJeri',
+      },
     },
   })
 

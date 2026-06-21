@@ -313,19 +313,20 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
 // Painel kanban da operação
 router.get('/operational', requireOperator, async (req, res, next) => {
   try {
-    const { date, service_type } = req.query;
+    const { date, service_type, operator_id } = req.query;
     const showAll    = !date || date === 'all';
     const targetDate = showAll ? null : date;
 
     let query = supabase
       .from('bookings')
       .select(`
-        id, booking_code, service_type, booking_mode,
+        id, booking_code, service_type, service_id, booking_mode,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
         pickup_place_name, destination_place_name, special_notes,
         origin_text, destination_text,
         users!bookings_user_id_fkey ( full_name, phone ),
+        operator:users!bookings_operator_id_fkey ( id, full_name ),
         booking_vehicles ( vehicle_name_snapshot, quantity ),
         operational_assignments ( real_vehicle_text, dispatch_notes, driver_name, driver_phone, assigned_driver_user_id, assigned_guide_user_id )
       `)
@@ -335,6 +336,7 @@ router.get('/operational', requireOperator, async (req, res, next) => {
 
     if (targetDate)    query = query.eq('service_date', targetDate);
     if (service_type)  query = query.eq('service_type', service_type);
+    if (operator_id)   query = query.eq('operator_id', operator_id);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -596,6 +598,112 @@ router.delete('/seasons/:id', requireAdmin, async (req, res, next) => {
       .from('high_season_rules').delete().eq('id', req.params.id);
     if (error) throw error;
     res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ── Feriados / datas especiais (dias específicos) ──────
+router.get('/holidays', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').select('*, regions(name)').order('holiday_date');
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.post('/holidays', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').insert(req.body).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+router.put('/holidays/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').update(req.body).eq('id', req.params.id).select().single();
+    if (error || !data) return res.status(404).json({ error: 'Feriado não encontrado' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.delete('/holidays/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { error } = await supabase.from('holidays').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/operator-performance ────────────────
+// Compara o desempenho de TODAS as cooperativas: receita gerada, nº de
+// passeios e transfers aceitos, total e concluídas. Filtro opcional por data.
+router.get('/operator-performance', requireAdmin, async (req, res, next) => {
+  try {
+    const { date_from, date_to } = req.query;
+
+    let query = supabase
+      .from('bookings')
+      .select(`
+        operator_id, service_type, total_amount,
+        status_commercial, status_operational,
+        operator:users!bookings_operator_id_fkey ( id, full_name )
+      `)
+      .not('operator_id', 'is', null)
+      .neq('status_commercial', 'cancelled')
+      .limit(10000);
+
+    if (date_from) query = query.gte('service_date', date_from);
+    if (date_to)   query = query.lte('service_date', date_to);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const map = new Map();
+    for (const b of data || []) {
+      const id = b.operator_id;
+      if (!map.has(id)) {
+        map.set(id, {
+          operator_id: id,
+          name:        b.operator?.full_name || '—',
+          revenue:     0, tours: 0, transfers: 0, total: 0, completed: 0,
+        });
+      }
+      const row    = map.get(id);
+      const amount = Number(b.total_amount) || 0;
+      row.total += 1;
+      if (b.service_type === 'transfer') row.transfers += 1; else row.tours += 1;
+      if (b.status_commercial === 'paid') row.revenue += amount;
+      if (b.status_operational === 'completed') row.completed += 1;
+    }
+
+    // Repasse líquido = bruto − comissão da plataforma (7%), mesma convenção
+    // do resto do admin (líquido = bruto × 0,93).
+    const PLATFORM_COMMISSION = 0.07;
+
+    const operators = [...map.values()]
+      .map((r) => ({
+        ...r,
+        revenue:    Math.round(r.revenue * 100) / 100,
+        net:        Math.round(r.revenue * (1 - PLATFORM_COMMISSION) * 100) / 100,
+        ticket_avg: r.total ? Math.round((r.revenue / r.total) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const totals = operators.reduce(
+      (t, o) => ({
+        revenue:   Math.round((t.revenue + o.revenue) * 100) / 100,
+        net:       Math.round((t.net + o.net) * 100) / 100,
+        tours:     t.tours + o.tours,
+        transfers: t.transfers + o.transfers,
+        total:     t.total + o.total,
+      }),
+      { revenue: 0, net: 0, tours: 0, transfers: 0, total: 0 },
+    );
+
+    res.json({ operators, totals });
   } catch (err) { next(err); }
 });
 

@@ -57,7 +57,7 @@ function usePlaceSuggestions(query) {
   return { results, loading }
 }
 
-function PlaceInput({ value, onChange, placeholder, dotClass }) {
+export function PlaceInput({ value, onChange, placeholder, dotClass }) {
   const [open, setOpen]  = useState(false)
   const wrapRef          = useRef(null)
   const { results, loading } = usePlaceSuggestions(open ? value : '')
@@ -108,133 +108,58 @@ function PlaceInput({ value, onChange, placeholder, dotClass }) {
   )
 }
 
-/* ── Preset routes ──────────────────────────────────────────── */
-export const PRESET_ROUTES = [
-  {
-    id: 'aero-jeri',
-    label: 'Aeroporto → Jeri',
-    origin: 'Aeroporto de Jericoacoara (JJD)',
-    dest: 'Vila de Jericoacoara',
-    duration: '~1h',
-    priceFrom: 250,
-    badge: 'Mais vendido',
-    bg: 'from-orange-400 to-amber-300',
-  },
-  {
-    id: 'fortaleza-jeri',
-    label: 'Fortaleza → Jeri',
-    origin: 'Fortaleza',
-    dest: 'Vila de Jericoacoara',
-    duration: '5–6h',
-    priceFrom: 800,
-    badge: 'Premium',
-    bg: 'from-purple-400 to-violet-300',
-  },
-  {
-    id: 'jeri-fortaleza',
-    label: 'Jeri → Fortaleza',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Fortaleza',
-    duration: '~6h',
-    priceFrom: 900,
-    badge: null,
-    bg: 'from-blue-400 to-sky-300',
-  },
-  {
-    id: 'jijoca-jeri',
-    label: 'Jijoca → Jeri',
-    origin: 'Jijoca',
-    dest: 'Vila de Jericoacoara',
-    duration: '~1h',
-    priceFrom: 250,
-    badge: '4x4',
-    bg: 'from-teal-400 to-emerald-300',
-  },
-  {
-    id: 'jeri-jijoca',
-    label: 'Jeri → Jijoca',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Jijoca',
-    duration: '~1h',
-    priceFrom: 250,
-    badge: null,
-    bg: 'from-teal-400 to-emerald-300',
-  },
-  {
-    id: 'jeri-prea',
-    label: 'Jeri → Preá',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Preá',
-    duration: '~25min',
-    priceFrom: 80,
-    badge: 'Kitesurf',
-    bg: 'from-sky-400 to-cyan-300',
-  },
-  {
-    id: 'jeri-camocim',
-    label: 'Jeri → Camocim',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Camocim',
-    duration: '1h30',
-    priceFrom: 250,
-    badge: null,
-    bg: 'from-indigo-400 to-blue-300',
-  },
-  {
-    id: 'jeri-barra',
-    label: 'Jeri → Barra Grande',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Barra Grande (PI)',
-    duration: '~6h',
-    priceFrom: 800,
-    badge: 'Rota Emoções',
-    bg: 'from-rose-400 to-pink-300',
-  },
-  {
-    id: 'jeri-lencois',
-    label: 'Jeri → Lençóis',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Barreirinhas (MA)',
-    duration: '7–8h',
-    priceFrom: 1200,
-    badge: 'Multi-destino',
-    bg: 'from-emerald-400 to-green-300',
-  },
-  {
-    id: 'jeri-hotel',
-    label: 'Hotel → Passeio',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Pontos de embarque',
-    duration: '10–30min',
-    priceFrom: 50,
-    badge: null,
-    bg: 'from-amber-400 to-yellow-300',
-  },
+/* ── Rotas populares (derivadas do catálogo real) ───────────── */
+const GRADIENTS = [
+  'from-orange-400 to-amber-300',
+  'from-purple-400 to-violet-300',
+  'from-blue-400 to-sky-300',
+  'from-teal-400 to-emerald-300',
+  'from-sky-400 to-cyan-300',
+  'from-indigo-400 to-blue-300',
+  'from-rose-400 to-pink-300',
+  'from-emerald-400 to-green-300',
 ]
 
-function PresetCard({ route, onSelect }) {
+const shortPlace = (s = '') =>
+  s.replace('Aeroporto de Jericoacoara (Cruz)', 'Aeroporto JJD')
+   .replace('Jericoacoara', 'Jeri')
+
+// Aeroporto e Fortaleza primeiro; depois por menor preço
+function pickPopularRoutes(routes) {
+  if (!routes.length) return []
+  const score = (r) => {
+    const s = `${r.origin_name} ${r.destination_name}`.toLowerCase()
+    if (s.includes('aeroporto')) return 0
+    if (s.includes('fortaleza')) return 1
+    return 2
+  }
+  return [...routes]
+    .sort((a, b) => score(a) - score(b) || Number(a.default_price) - Number(b.default_price))
+    .slice(0, 8)
+}
+
+function PresetCard({ route, bg, active, onSelect }) {
   return (
     <button
       onClick={onSelect}
-      className="flex-none w-[150px] rounded-2xl overflow-hidden shadow-sm border border-black/5 active:scale-95 transition-transform text-left"
+      className={`flex-none w-[150px] rounded-2xl overflow-hidden shadow-sm border active:scale-95 transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
     >
-      <div className={`bg-gradient-to-br ${route.bg} px-3 pt-2.5 pb-2`}>
-        {route.badge && (
-          <span className="inline-block text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-1.5">
-            {route.badge}
-          </span>
-        )}
-        {!route.badge && <div className="mb-2.5" />}
-        <p className="text-white font-bold text-[13px] leading-tight">{route.label}</p>
+      <div className={`bg-gradient-to-br ${bg} px-3 pt-2.5 pb-2`}>
+        <span className="inline-block text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-1.5">
+          Privativo
+        </span>
+        <p className="text-white font-bold text-[12px] leading-tight">
+          {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
+        </p>
         <div className="flex items-center gap-1 mt-1">
-          <Clock size={9} className="text-white/70" />
-          <span className="text-[10px] text-white/80">{route.duration}</span>
+          <Users size={9} className="text-white/70" />
+          <span className="text-[10px] text-white/80">Até 4</span>
         </div>
       </div>
       <div className="bg-white px-3 py-2">
         <p className="text-[9px] text-gray-400">Privativo a partir de</p>
         <p className="text-[13px] font-extrabold text-gray-900">
-          R$ {route.priceFrom.toLocaleString('pt-BR')}
+          R$ {Number(route.default_price).toLocaleString('pt-BR')}
         </p>
       </div>
     </button>
@@ -324,7 +249,7 @@ function RouteSheet({ title, options, selected, onSelect, onClose }) {
 }
 
 /* ── Vehicle suggestion ─────────────────────────────────────── */
-function suggestVehicles(vehicles, people) {
+export function suggestVehicles(vehicles, people) {
   if (!vehicles.length) return null
   const single = vehicles.filter(v => v.seat_capacity >= people)
                          .sort((a, b) => a.seat_capacity - b.seat_capacity)[0]
@@ -335,7 +260,7 @@ function suggestVehicles(vehicles, people) {
 }
 
 /* ── Vehicle row with qty controls ──────────────────────────── */
-function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
+export function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
   return (
     <div className={`flex items-center gap-3 px-4 py-3 transition-all border-l-4 ${qty > 0 ? 'border-brand bg-brand/5' : 'border-transparent'}`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${qty > 0 ? 'bg-brand' : 'bg-gray-100'}`}>
@@ -382,6 +307,8 @@ export default function Transfers() {
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
   const customTimeRef = useRef(null)
+  // Tracks the last suggestion we auto-applied so we know when to follow updates
+  const autoAppliedRef = useRef(null) // "vehicleId:qty"
 
   // mode: 'rota' | 'custom'
   const [mode, setMode] = useState('rota')
@@ -411,7 +338,7 @@ export default function Transfers() {
   const [customError,    setCustomError]    = useState('')
 
   async function handleRequestQuote() {
-    if (!token) { navigate('/login'); return }
+    if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!customOrigin.trim() || !customDest.trim() || !customTime) return
     setCustomLoading(true)
     setCustomError('')
@@ -459,8 +386,29 @@ export default function Transfers() {
   const dests      = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
   const matched    = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
   const unitPrice  = matched ? Number(matched.default_price) : null
+  const popularRoutes = useMemo(() => pickPopularRoutes(routes), [routes])
 
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
+
+  // Auto-apply the suggestion when it first appears or changes (people/vehicle list update).
+  // Only overrides the cart if it's empty or still matches what we previously auto-applied
+  // — user's manual choices are preserved.
+  useEffect(() => {
+    if (!suggestion) return
+    const key = `${suggestion.vehicle.id}:${suggestion.qty}`
+    if (key === autoAppliedRef.current) return
+    const cartEntries = Object.entries(cart).filter(([, q]) => q > 0)
+    const isEmpty = cartEntries.length === 0
+    const matchesPrevAuto = autoAppliedRef.current &&
+      cartEntries.length === 1 &&
+      cartEntries[0][0] === autoAppliedRef.current.split(':')[0] &&
+      Number(cartEntries[0][1]) === Number(autoAppliedRef.current.split(':')[1])
+    if (isEmpty || matchesPrevAuto) {
+      setCart({ [suggestion.vehicle.id]: suggestion.qty })
+      autoAppliedRef.current = key
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestion?.vehicle?.id, suggestion?.qty])
 
   const cartItems    = Object.entries(cart)
     .filter(([, q]) => q > 0)
@@ -471,12 +419,33 @@ export default function Transfers() {
   const cartHasItems = cartItems.length > 0
   const canBook      = !!matched && cartHasItems && cartCapacity >= people && !!time
 
+  // True when suggestion is already the only item in cart at the right qty
+  const suggestionIsApplied = !!(suggestion &&
+    cartItems.length === 1 &&
+    cartItems[0].vehicle.id === suggestion.vehicle.id &&
+    cartItems[0].qty === suggestion.qty)
+
+  // Acréscimo de alta temporada / feriado já no resumo (antes de confirmar)
+  const { data: surchargeData } = useQuery({
+    queryKey: ['transfer-surcharge', region?.id, format(date, 'yyyy-MM-dd'), cartTotal],
+    queryFn:  () => api.transferSurcharge({
+      region_id:    region.id,
+      service_date: format(date, 'yyyy-MM-dd'),
+      subtotal:     cartTotal,
+    }),
+    enabled:   !!matched && cartHasItems && cartTotal > 0 && !!region?.id,
+    staleTime: 30_000,
+    retry:     false,
+  })
+  const seasonAddition = Number(surchargeData?.seasonAdditional) || 0
+  const grandTotal     = Math.round((cartTotal + seasonAddition) * 100) / 100
+
   const dateLabel = isToday(date) ? 'Hoje'
     : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
     : format(date, 'd MMM', { locale: ptBR })
 
   async function handleConfirm() {
-    if (!token) { navigate('/login'); return }
+    if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canBook) return
     navigate('/checkout/resumo', {
       state: {
@@ -527,7 +496,7 @@ export default function Transfers() {
             }`}
           >
             <Zap size={13} />
-            Corrida personalizada
+            Translado personalizado
           </button>
         </div>
       </div>
@@ -685,18 +654,22 @@ export default function Transfers() {
       <><div className="px-4 pt-4 space-y-3 lg:max-w-3xl lg:mx-auto">
 
         {/* ROTAS POPULARES */}
+        {popularRoutes.length > 0 && (
         <div>
           <p className="text-[13px] font-bold text-gray-700 mb-2.5">Rotas populares</p>
           <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
-            {PRESET_ROUTES.map(r => (
+            {popularRoutes.map((r, i) => (
               <PresetCard
                 key={r.id}
                 route={r}
-                onSelect={() => { setOrigin(r.origin); setDest(r.dest); setCart({}) }}
+                bg={GRADIENTS[i % GRADIENTS.length]}
+                active={origin === r.origin_name && dest === r.destination_name}
+                onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
               />
             ))}
           </div>
         </div>
+        )}
 
         {/* ROTA */}
         <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
@@ -810,12 +783,21 @@ export default function Transfers() {
                       R$ {(unitPrice * suggestion.qty).toLocaleString('pt-BR')}
                     </span>
                   )}
-                  <button
-                    onClick={() => setCart({ [suggestion.vehicle.id]: suggestion.qty })}
-                    className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
-                  >
-                    Aplicar
-                  </button>
+                  {suggestionIsApplied ? (
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
+                      <Check size={11} /> Selecionado
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setCart({ [suggestion.vehicle.id]: suggestion.qty })
+                        autoAppliedRef.current = `${suggestion.vehicle.id}:${suggestion.qty}`
+                      }}
+                      className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
+                    >
+                      Aplicar
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -871,9 +853,21 @@ export default function Transfers() {
                   </div>
                 </div>
               ))}
-              <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+              {seasonAddition > 0 && (
+                <>
+                  <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+                    <p className="text-[12px] text-gray-400">Subtotal</p>
+                    <p className="text-[13px] font-semibold text-gray-800">R$ {cartTotal.toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[12px] text-amber-600">Alta temporada / feriado</p>
+                    <p className="text-[13px] font-semibold text-amber-600">+ R$ {seasonAddition.toLocaleString('pt-BR')}</p>
+                  </div>
+                </>
+              )}
+              <div className={`flex items-center justify-between ${seasonAddition > 0 ? 'pt-0.5' : 'border-t border-gray-100 pt-2'}`}>
                 <p className="text-[13px] font-bold text-gray-900">Total</p>
-                <p className="text-[16px] font-extrabold text-brand">R$ {cartTotal ? cartTotal.toLocaleString('pt-BR') : '—'}</p>
+                <p className="text-[16px] font-extrabold text-brand">R$ {grandTotal ? grandTotal.toLocaleString('pt-BR') : '—'}</p>
               </div>
             </div>
           </section>
@@ -893,9 +887,11 @@ export default function Transfers() {
       <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
           <div>
-            <p className="text-[10px] text-gray-400">Total estimado</p>
+            <p className="text-[10px] text-gray-400">Total estimado{seasonAddition > 0 ? ' · com alta temporada' : ''}</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-              {cartTotal ? `R$ ${cartTotal.toLocaleString('pt-BR')}` : 'Selecione a rota'}
+              {grandTotal
+                ? `R$ ${grandTotal.toLocaleString('pt-BR')}`
+                : matched ? 'Selecione um veículo' : 'Selecione a rota'}
             </p>
           </div>
           <button

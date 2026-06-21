@@ -263,7 +263,7 @@ export default function Regioes() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Jericoacoara" required />
             <Input label="Slug" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="jericoacoara" required />
           </div>
@@ -286,7 +286,7 @@ export default function Regioes() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Timezone" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="America/Fortaleza" />
             <Input label="Moeda" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="BRL" />
           </div>

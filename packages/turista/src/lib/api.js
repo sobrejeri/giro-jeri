@@ -107,10 +107,12 @@ export const api = {
   getTransfers:       (params = {}) => request(`/api/transfers?${new URLSearchParams(params)}`),
   getTransferRoutes:  (params = {}) => request(`/api/transfers/routes?${new URLSearchParams(params)}`),
   calculateTransfer:  (body)        => request('/api/transfers/calculate', { method: 'POST', body }),
+  transferSurcharge:  (body)        => request('/api/transfers/surcharge', { method: 'POST', body }),
   requestQuote:       (body)        => request('/api/transfers/quotes',    { method: 'POST', body }),
   getMyQuotes:        ()            => request('/api/transfers/quotes'),
   acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote:        (id, body)    => request(`/api/transfers/quotes/${id}/reject`, { method: 'POST', body }),
+  cancelQuote:        (id)          => request(`/api/transfers/quotes/${id}/cancel`, { method: 'POST' }),
 
   // Pagamentos
   createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
@@ -122,4 +124,10 @@ export const api = {
   getMyBookings: ()     => request('/api/bookings'),
   getBooking:    (id)   => request(`/api/bookings/${id}`),
   cancelBooking: (id, body) => request(`/api/bookings/${id}/cancel`, { method: 'POST', body }),
+
+  // Notificações
+  getNotifications:      ()   => request('/api/notifications'),
+  markNotificationsRead: ()   => request('/api/notifications/read-all', { method: 'POST' }),
+  pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
+  getVapidKey:           ()   => request('/api/notifications/vapid-public-key'),
 }

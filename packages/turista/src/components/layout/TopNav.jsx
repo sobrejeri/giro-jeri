@@ -2,6 +2,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { api } from '../../lib/api'
 import { MapPin, LogOut, User } from 'lucide-react'
+import NotificationBell from '../NotificationBell'
 
 export default function TopNav() {
   const { user, token, logout } = useAuth()
@@ -39,6 +40,7 @@ export default function TopNav() {
         <div className="flex items-center gap-3">
           {token ? (
             <>
+              <NotificationBell />
               <span className="text-sm text-gray-600">{user?.full_name?.split(' ')[0]}</span>
               <button
                 onClick={handleLogout}

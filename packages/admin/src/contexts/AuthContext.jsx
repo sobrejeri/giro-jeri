@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
@@ -40,6 +41,21 @@ export function AuthProvider({ children }) {
     setToken(null)
     setRefresh(null)
     Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
+  }, [])
+
+  // Keep our tokens in sync with Supabase's internal session.
+  // Supabase rotates the refresh token on every auto-refresh cycle; if we don't
+  // follow along, tryRefresh() in api.js will use a stale token and disconnect.
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        localStorage.setItem(STORAGE.token,   session.access_token)
+        localStorage.setItem(STORAGE.refresh, session.refresh_token)
+        setToken(session.access_token)
+        setRefresh(session.refresh_token)
+      }
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   return (

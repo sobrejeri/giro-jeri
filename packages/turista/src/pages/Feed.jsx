@@ -138,8 +138,8 @@ function CommentsSection({ postId, commentCount, user }) {
               {(comments || []).map((c) => (
                 <div key={c.id} className="flex gap-2.5">
                   <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0 overflow-hidden">
-                    {c.users?.photo_url
-                      ? <img src={c.users.photo_url} alt="" className="w-full h-full object-cover" />
+                    {c.users?.profile_photo_url
+                      ? <img src={c.users.profile_photo_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-500">{(c.users?.full_name || '?')[0]}</div>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -163,21 +163,28 @@ function CommentsSection({ postId, commentCount, user }) {
           )}
 
           {user ? (
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <input
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Escreva um comentário…"
-                maxLength={500}
-                className="flex-1 h-9 px-3 rounded-full bg-gray-100 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30"
-              />
-              <button
-                type="submit"
-                disabled={!text.trim() || addMut.isPending}
-                className="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center shrink-0 disabled:opacity-40 active:scale-90 transition-transform"
-              >
-                <Send size={14} />
-              </button>
+            <form onSubmit={handleSubmit} className="space-y-1.5">
+              <div className="flex gap-2">
+                <input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Escreva um comentário…"
+                  maxLength={500}
+                  className="flex-1 h-9 px-3 rounded-full bg-gray-100 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30"
+                />
+                <button
+                  type="submit"
+                  disabled={!text.trim() || addMut.isPending}
+                  className="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center shrink-0 disabled:opacity-40 active:scale-90 transition-transform"
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+              {addMut.isError && (
+                <p className="text-[11px] text-red-500 px-1">
+                  {addMut.error?.message || 'Não foi possível enviar. Tente novamente.'}
+                </p>
+              )}
             </form>
           ) : (
             <p className="text-[12px] text-gray-400 text-center">Faça login para comentar</p>
@@ -244,6 +251,11 @@ function ReviewModal({ place, onClose, user }) {
               >
                 {addMut.isPending ? 'Enviando…' : 'Enviar avaliação'}
               </button>
+              {addMut.isError && (
+                <p className="text-[11px] text-red-500">
+                  {addMut.error?.message || 'Não foi possível enviar. Tente novamente.'}
+                </p>
+              )}
             </form>
           )}
           {!user && (
@@ -260,8 +272,8 @@ function ReviewModal({ place, onClose, user }) {
               {reviews.map((r) => (
                 <div key={r.id} className="flex gap-2.5">
                   <div className="w-8 h-8 rounded-full bg-gray-200 shrink-0 overflow-hidden">
-                    {r.users?.photo_url
-                      ? <img src={r.users.photo_url} alt="" className="w-full h-full object-cover" />
+                    {r.users?.profile_photo_url
+                      ? <img src={r.users.profile_photo_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-gray-500">{(r.users?.full_name || '?')[0]}</div>}
                   </div>
                   <div className="flex-1 min-w-0">

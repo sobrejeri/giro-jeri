@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
+import NotificationBell from '../components/NotificationBell'
 
 function suggestVehicle(vehicles, people) {
   if (!vehicles.length) return null
@@ -172,6 +173,14 @@ export default function Home() {
   const featured = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
 
+  // Cold start do Render free: avisa que o servidor está acordando
+  const [slowLoad, setSlowLoad] = useState(false)
+  useEffect(() => {
+    if (!isLoading) { setSlowLoad(false); return }
+    const t = setTimeout(() => setSlowLoad(true), 5000)
+    return () => clearTimeout(t)
+  }, [isLoading])
+
   // Banner da home configurável pelo admin
   const { data: settings } = useQuery({
     queryKey: ['public-settings'],
@@ -205,10 +214,7 @@ export default function Home() {
             >
               <WhatsAppIcon />
             </button>
-            <button className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center relative active:scale-95 transition-transform">
-              <Bell size={15} className="text-gray-600" />
-              <span className="absolute top-1.5 right-1.5 w-[7px] h-[7px] bg-brand rounded-full" />
-            </button>
+            <NotificationBell />
           </div>
         </div>
 
@@ -269,29 +275,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* ── Banner promo ──────────────────────────────────────── */}
-        <button
-          onClick={() => navigate('/passeios')}
-          className="w-full relative rounded-2xl overflow-hidden h-[78px] lg:h-32 active:scale-[0.98] transition-transform bg-cover bg-center"
-          style={bannerImg
-            ? { backgroundImage: `linear-gradient(135deg, rgba(255,106,0,0.82), rgba(255,179,71,0.55)), url(${bannerImg})` }
-            : { background: 'linear-gradient(135deg,#FF6A00,#FFB347)' }}
-        >
-          {!bannerImg && <>
-            <div className="absolute right-4 top-2 w-14 h-14 rounded-full border-[3px] border-white/20" />
-            <div className="absolute right-10 bottom-1 w-9 h-9 rounded-full border-2 border-white/15" />
-            <div className="absolute right-2 top-6 w-7 h-7 rounded-full border border-white/20" />
-          </>}
-          <div className="absolute inset-0 flex flex-col justify-center px-4">
-            <span className="inline-flex items-center gap-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-full w-fit mb-1">
-              ⚡ OFERTA ESPECIAL
-            </span>
-            <p className="text-white font-extrabold text-[14px] lg:text-2xl leading-snug drop-shadow">
-              {bannerTitle || <>Garanta sua aventura<br />em Jericoacoara!</>}
-            </p>
-          </div>
-        </button>
-
         {/* ── Acesso rápido 2×2 ─────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
@@ -321,8 +304,9 @@ export default function Home() {
           </div>
 
           {isLoading ? (
-            <div className="h-[160px] flex items-center justify-center">
+            <div className="h-[160px] flex flex-col items-center justify-center gap-2.5">
               <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+              {slowLoad && <p className="text-[11px] text-gray-400 text-center px-6">Acordando o servidor… só um instante 🌅</p>}
             </div>
           ) : featured.length === 0 ? (
             <p className="text-sm text-gray-400">Nenhum passeio disponível.</p>

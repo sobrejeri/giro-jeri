@@ -223,7 +223,7 @@ export default function Estabelecimentos() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Nome *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Pousada do Sol" required />
             <Select label="Categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -232,12 +232,12 @@ export default function Estabelecimentos() {
 
           <Textarea label="Descrição" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Breve descrição / diferenciais" />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="WhatsApp" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} placeholder="(88) 99999-9999" />
             <Input label="Instagram" value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} placeholder="@usuario" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Localidade" value={form.locality} onChange={(e) => setForm({ ...form, locality: e.target.value })} placeholder="Ex: Jericoacoara, Preá, Jijoca…" />
             <Input label="Preço (texto livre)" value={form.price_note} onChange={(e) => setForm({ ...form, price_note: e.target.value })} placeholder="Ex: R$ 90-150/pessoa" />
           </div>
@@ -245,7 +245,7 @@ export default function Estabelecimentos() {
           <Input label="Endereço" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Rua / referência na vila" />
           <Input label="Link do mapa (opcional)" value={form.maps_url} onChange={(e) => setForm({ ...form, maps_url: e.target.value })} placeholder="https://maps.google.com/…" />
 
-          <div className="grid grid-cols-2 gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
             <Select label="Faixa de preço" value={form.price_range} onChange={(e) => setForm({ ...form, price_range: e.target.value })}>
               {PRICE_RANGES.map((p) => <option key={p} value={p}>{p === '' ? '—' : p}</option>)}
             </Select>

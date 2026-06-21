@@ -156,7 +156,7 @@ export default function Cupons() {
 
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.isNew ? 'Novo Cupom' : 'Editar Cupom'}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Código"
               value={form.code}
@@ -173,7 +173,7 @@ export default function Cupons() {
               <option value="fixed">Valor fixo (R$)</option>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Desconto (%)"
               type="number" min={0} step={form.discount_type === 'percentage' ? 1 : 0.01}
@@ -189,11 +189,11 @@ export default function Cupons() {
               onChange={(e) => setForm({ ...form, usage_limit_total: e.target.value })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Válido de" type="date" value={form.valid_from}  onChange={(e) => setForm({ ...form, valid_from: e.target.value })} required />
             <Input label="Válido até" type="date" value={form.valid_until} onChange={(e) => setForm({ ...form, valid_until: e.target.value })} required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Tipo de serviço"
               value={form.applicable_service_type}
