@@ -330,11 +330,21 @@ router.post('/webhook', async (req, res, next) => {
         .eq('gateway_transaction_id', gatewayId)
         .single()
 
-      if (payment) {
-        const mpStatus = event.data?.status || event.status
-        if (mpStatus === 'approved' && payment.status !== 'approved') {
+      if (payment && payment.status !== 'approved') {
+        // O body do webhook do MP só carrega o ID — precisa consultar o status real na API.
+        let mpStatus = event.data?.status  // presente em alguns event types, mas geralmente ausente
+        if (!mpStatus) {
+          try {
+            const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
+            mpStatus = await getMpPaymentStatus(gatewayId)
+          } catch (e) {
+            console.error('[webhook] falha ao consultar status MP:', e.message)
+          }
+        }
+
+        if (mpStatus === 'approved') {
           await onPaymentApproved(payment)
-        } else if (['rejected', 'cancelled'].includes(mpStatus)) {
+        } else if (['rejected', 'cancelled', 'refunded', 'charged_back'].includes(mpStatus)) {
           await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id)
           await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', payment.booking_id)
         }
