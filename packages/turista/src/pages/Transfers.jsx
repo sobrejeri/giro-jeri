@@ -307,6 +307,8 @@ export default function Transfers() {
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
   const customTimeRef = useRef(null)
+  // Tracks the last suggestion we auto-applied so we know when to follow updates
+  const autoAppliedRef = useRef(null) // "vehicleId:qty"
 
   // mode: 'rota' | 'custom'
   const [mode, setMode] = useState('rota')
@@ -388,6 +390,26 @@ export default function Transfers() {
 
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
 
+  // Auto-apply the suggestion when it first appears or changes (people/vehicle list update).
+  // Only overrides the cart if it's empty or still matches what we previously auto-applied
+  // — user's manual choices are preserved.
+  useEffect(() => {
+    if (!suggestion) return
+    const key = `${suggestion.vehicle.id}:${suggestion.qty}`
+    if (key === autoAppliedRef.current) return
+    const cartEntries = Object.entries(cart).filter(([, q]) => q > 0)
+    const isEmpty = cartEntries.length === 0
+    const matchesPrevAuto = autoAppliedRef.current &&
+      cartEntries.length === 1 &&
+      cartEntries[0][0] === autoAppliedRef.current.split(':')[0] &&
+      Number(cartEntries[0][1]) === Number(autoAppliedRef.current.split(':')[1])
+    if (isEmpty || matchesPrevAuto) {
+      setCart({ [suggestion.vehicle.id]: suggestion.qty })
+      autoAppliedRef.current = key
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestion?.vehicle?.id, suggestion?.qty])
+
   const cartItems    = Object.entries(cart)
     .filter(([, q]) => q > 0)
     .map(([id, qty]) => ({ vehicle: vehicles.find(v => v.id === id), qty }))
@@ -396,6 +418,12 @@ export default function Transfers() {
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const cartHasItems = cartItems.length > 0
   const canBook      = !!matched && cartHasItems && cartCapacity >= people && !!time
+
+  // True when suggestion is already the only item in cart at the right qty
+  const suggestionIsApplied = !!(suggestion &&
+    cartItems.length === 1 &&
+    cartItems[0].vehicle.id === suggestion.vehicle.id &&
+    cartItems[0].qty === suggestion.qty)
 
   // Acréscimo de alta temporada / feriado já no resumo (antes de confirmar)
   const { data: surchargeData } = useQuery({
@@ -755,12 +783,21 @@ export default function Transfers() {
                       R$ {(unitPrice * suggestion.qty).toLocaleString('pt-BR')}
                     </span>
                   )}
-                  <button
-                    onClick={() => setCart({ [suggestion.vehicle.id]: suggestion.qty })}
-                    className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
-                  >
-                    Aplicar
-                  </button>
+                  {suggestionIsApplied ? (
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
+                      <Check size={11} /> Selecionado
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setCart({ [suggestion.vehicle.id]: suggestion.qty })
+                        autoAppliedRef.current = `${suggestion.vehicle.id}:${suggestion.qty}`
+                      }}
+                      className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
+                    >
+                      Aplicar
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -852,7 +889,9 @@ export default function Transfers() {
           <div>
             <p className="text-[10px] text-gray-400">Total estimado{seasonAddition > 0 ? ' · com alta temporada' : ''}</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-              {grandTotal ? `R$ ${grandTotal.toLocaleString('pt-BR')}` : 'Selecione a rota'}
+              {grandTotal
+                ? `R$ ${grandTotal.toLocaleString('pt-BR')}`
+                : matched ? 'Selecione um veículo' : 'Selecione a rota'}
             </p>
           </div>
           <button
