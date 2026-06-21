@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -150,6 +150,66 @@ const QUICK = [
   { icon: Plane,    bg: 'bg-blue-50',   ic: 'text-blue-600',   title: 'Transfer',           desc: 'Aeroporto & hotel',          route: '/transfers' },
   { icon: Calendar, bg: 'bg-purple-50', ic: 'text-purple-600', title: 'Minhas Reservas',    desc: 'Acompanhe seus passeios',    route: '/minhas-reservas'  },
 ]
+
+function FeaturedCarousel({ items, favs, onToggleFav }) {
+  const scrollRef = useRef(null)
+  const idxRef    = useRef(0)
+  const [dotIdx, setDotIdx]   = useState(0)
+  const n = items.length
+
+  // Duplicar slides para loop seamless
+  const slides = useMemo(() => (n > 1 ? [...items, ...items] : items), [items, n])
+
+  useEffect(() => {
+    if (n <= 1) return
+    const tick = () => {
+      const el = scrollRef.current
+      if (!el) return
+      const next = idxRef.current + 1
+      const child = el.children[next]
+      if (!child) return
+      el.scrollTo({ left: child.offsetLeft - 16, behavior: 'smooth' })
+      idxRef.current = next
+      setDotIdx(next % n)
+      // Chegou no clone → volta instantâneo para o original (sem animação visível)
+      if (next >= n) {
+        setTimeout(() => {
+          const orig = el.children[next - n]
+          if (orig) el.scrollTo({ left: orig.offsetLeft - 16, behavior: 'instant' })
+          idxRef.current = next - n
+        }, 420)
+      }
+    }
+    const t = setInterval(tick, 4000)
+    return () => clearInterval(t)
+  }, [n])
+
+  if (n === 0) return null
+
+  return (
+    <div className="-mx-4">
+      <div ref={scrollRef} className="flex gap-3 overflow-x-hidden px-4">
+        {slides.map((tour, i) => (
+          <div key={`${tour.id}-${i}`} className="shrink-0 w-[78%]">
+            <TourCard tour={tour} isFav={favs.has(tour.id)} onToggleFav={onToggleFav} />
+          </div>
+        ))}
+      </div>
+      {n > 1 && (
+        <div className="flex justify-center gap-1.5 mt-3">
+          {items.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === dotIdx ? 'w-5 bg-brand' : 'w-1.5 bg-gray-200'
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const STEPS = [
   { n: 1, color: 'bg-brand',        title: 'Escolha seu passeio',   desc: 'Selecione o destino e tipo de reserva'     },
@@ -311,11 +371,18 @@ export default function Home() {
           ) : featured.length === 0 ? (
             <p className="text-sm text-gray-400">Nenhum passeio disponível.</p>
           ) : (
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide lg:grid lg:grid-cols-4 xl:grid-cols-5 lg:gap-4 lg:mx-0 lg:px-0 lg:overflow-visible">
-              {featured.map((tour) => (
-                <TourCard key={tour.id} tour={tour} isFav={favs.has(tour.id)} onToggleFav={toggleFav} />
-              ))}
-            </div>
+            <>
+              {/* Mobile: carousel com loop automático */}
+              <div className="lg:hidden">
+                <FeaturedCarousel items={featured} favs={favs} onToggleFav={toggleFav} />
+              </div>
+              {/* Desktop: grid estático */}
+              <div className="hidden lg:grid lg:grid-cols-4 xl:grid-cols-5 lg:gap-4">
+                {featured.map((tour) => (
+                  <TourCard key={tour.id} tour={tour} isFav={favs.has(tour.id)} onToggleFav={toggleFav} />
+                ))}
+              </div>
+            </>
           )}
         </section>
 
