@@ -35,6 +35,49 @@ const MESSAGES = {
  * @param {{ phone: string, code: string, lang?: string }} opts
  *   phone deve estar em E.164 ('+55...')
  */
+/**
+ * Envia WhatsApp para todos os operadores ativos sobre nova reserva.
+ * Fire-and-forget: erros são logados mas nunca derrubam o fluxo.
+ */
+export async function notifyOperatorsNewBooking(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+
+  const { data: operators } = await supabase
+    .from('users')
+    .select('whatsapp_number')
+    .in('user_type', ['operator', 'admin'])
+    .eq('is_active', true)
+
+  if (!operators?.length) return { skipped: true }
+
+  const tipo = booking.service_type === 'transfer' ? 'Translado' : 'Passeio'
+  const rota = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
+  const data = booking.service_date
+    ? new Date(booking.service_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : 'a definir'
+
+  const message =
+    `🚗 *Giro Jeri — Nova solicitação*\n` +
+    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
+    `📅 ${data} · Cód: ${booking.booking_code || '-'}\n` +
+    `Acesse o app para aceitar.`
+
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
+  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-text`
+
+  await Promise.allSettled(
+    operators
+      .filter((op) => op.whatsapp_number)
+      .map((op) =>
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
+          body: JSON.stringify({ phone: toZapiPhone(op.whatsapp_number), message }),
+        }).catch((err) => console.error('[whatsapp] operador falhou:', err.message))
+      )
+  )
+}
+
 export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {
   if (!isWhatsappEnabled()) return { skipped: true };
 
