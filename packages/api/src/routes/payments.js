@@ -328,7 +328,7 @@ router.post('/webhook', async (req, res, next) => {
         .from('payments')
         .select('*, bookings(*)')
         .eq('gateway_transaction_id', gatewayId)
-        .single()
+        .maybeSingle()
 
       if (payment && payment.status !== 'approved') {
         // O body do webhook do MP só carrega o ID — precisa consultar o status real na API.
