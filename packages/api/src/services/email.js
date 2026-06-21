@@ -75,6 +75,72 @@ function fmtDateBR(iso) {
   return `${d}/${m}/${y}`;
 }
 
+// ── OTP de verificação de e-mail ──────────────────────
+const OTP_SUBJECTS = {
+  pt: (code) => `Seu código Giro Jeri: ${code}`,
+  en: (code) => `Your Giro Jeri code: ${code}`,
+  es: (code) => `Tu código Giro Jeri: ${code}`,
+};
+
+const OTP_BODIES = {
+  pt: (code) => `
+    <p style="margin:0 0 6px;color:#111827;font-size:18px;font-weight:bold;">Confirme seu e-mail</p>
+    <p style="margin:0 0 24px;color:#4b5563;font-size:14px;line-height:1.6;">
+      Use o código abaixo para confirmar seu e-mail no Giro Jeri.
+    </p>
+    <div style="background:#f9fafb;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
+      <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#FF6A00;">${code}</span>
+    </div>
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;line-height:1.6;">
+      O código expira em 10 minutos.
+    </p>
+    <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;">
+      Se não foi você, ignore este e-mail.
+    </p>
+  `,
+  en: (code) => `
+    <p style="margin:0 0 6px;color:#111827;font-size:18px;font-weight:bold;">Confirm your email</p>
+    <p style="margin:0 0 24px;color:#4b5563;font-size:14px;line-height:1.6;">
+      Use the code below to confirm your email on Giro Jeri.
+    </p>
+    <div style="background:#f9fafb;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
+      <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#FF6A00;">${code}</span>
+    </div>
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;line-height:1.6;">
+      This code expires in 10 minutes.
+    </p>
+    <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;">
+      If this wasn't you, please ignore this email.
+    </p>
+  `,
+  es: (code) => `
+    <p style="margin:0 0 6px;color:#111827;font-size:18px;font-weight:bold;">Confirma tu correo</p>
+    <p style="margin:0 0 24px;color:#4b5563;font-size:14px;line-height:1.6;">
+      Usa el código de abajo para confirmar tu correo en Giro Jeri.
+    </p>
+    <div style="background:#f9fafb;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
+      <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#FF6A00;">${code}</span>
+    </div>
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;line-height:1.6;">
+      El código vence en 10 minutos.
+    </p>
+    <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;">
+      Si no fuiste tú, ignora este correo.
+    </p>
+  `,
+};
+
+export async function sendEmailOtp({ to, code, lang = 'pt' }) {
+  if (!to) return { skipped: true };
+  const subjectFn = OTP_SUBJECTS[lang] || OTP_SUBJECTS['pt'];
+  const bodyFn    = OTP_BODIES[lang]   || OTP_BODIES['pt'];
+  return send({
+    to,
+    subject: subjectFn(code),
+    html:    layout(bodyFn(code)),
+  });
+}
+
 // ── Confirmação de reserva (pagamento aprovado) ────────
 export async function sendBookingConfirmation({
   to, name, bookingCode, serviceName,

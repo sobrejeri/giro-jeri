@@ -1,109 +1,71 @@
-// ── whatsapp.js ────────────────────────────────────────
-// Notificações via WhatsApp Business API.
-// SEM credenciais configuradas, vira no-op silencioso — nunca derruba o
-// fluxo de pagamento/reserva (mesma filosofia do email.js).
-//
-// Provedor genérico via env (compatível com Z-API, Evolution e a maioria dos
-// BSPs que aceitam texto puro):
-//   WHATSAPP_API_URL          — endpoint que recebe o POST
-//   WHATSAPP_API_KEY          — token de autenticação
-//   WHATSAPP_AUTH_HEADER      — nome do header de auth (default: 'Authorization')
-//                               se for 'Authorization', envia 'Bearer <key>'
-//   WHATSAPP_FIELD_PHONE      — nome do campo do telefone no corpo (default: 'phone')
-//   WHATSAPP_FIELD_MESSAGE    — nome do campo do texto no corpo  (default: 'message')
-//   COOPERATIVA_URL           — link do painel da cooperativa (no texto da msg)
-//
-// Para a Cloud API oficial da Meta (templates), basta trocar a função send()
-// por um adapter de template — o resto (gatilho, busca de operadores) não muda.
+// ── whatsapp.js ─────────────────────────────────────────
+// Envio de mensagens via Z-API (https://z-api.io).
+// Sem credenciais configuradas, vira no-op silencioso — nunca
+// derruba o fluxo de cadastro/verificação.
 
-export function isWhatsAppEnabled() {
-  return !!(process.env.WHATSAPP_API_URL && process.env.WHATSAPP_API_KEY)
+const ZAPI_BASE = process.env.ZAPI_BASE_URL || 'https://api.z-api.io';
+
+export function isWhatsappEnabled() {
+  return !!(
+    process.env.ZAPI_INSTANCE_ID &&
+    process.env.ZAPI_INSTANCE_TOKEN &&
+    process.env.ZAPI_CLIENT_TOKEN
+  );
 }
 
-function onlyDigits(s = '') { return String(s).replace(/\D/g, '') }
-
-// Normaliza para o formato BR com DDI: 55 + DDD + número.
-function toBrazilPhone(raw) {
-  let d = onlyDigits(raw)
-  if (!d) return null
-  if (!d.startsWith('55')) d = '55' + d
-  return d
+/**
+ * Remove tudo que não for dígito do número E.164.
+ * '+5588999999999' → '5588999999999'
+ */
+export function toZapiPhone(e164) {
+  return String(e164 || '').replace(/\D/g, '');
 }
 
-export async function sendWhatsApp({ to, message }) {
-  if (!isWhatsAppEnabled()) return { skipped: true }
-  const phone = toBrazilPhone(to)
-  if (!phone) return { skipped: true }
+const MESSAGES = {
+  pt: (code) =>
+    `Giro Jeri: seu código de verificação é ${code}. Válido por 10 minutos. Não compartilhe.`,
+  en: (code) =>
+    `Giro Jeri: your verification code is ${code}. Valid for 10 minutes. Do not share.`,
+  es: (code) =>
+    `Giro Jeri: tu código de verificación es ${code}. Válido por 10 minutos. No lo compartas.`,
+};
 
-  const headerName  = process.env.WHATSAPP_AUTH_HEADER || 'Authorization'
-  const headerValue = headerName === 'Authorization'
-    ? `Bearer ${process.env.WHATSAPP_API_KEY}`
-    : process.env.WHATSAPP_API_KEY
-  const phoneField   = process.env.WHATSAPP_FIELD_PHONE   || 'phone'
-  const messageField = process.env.WHATSAPP_FIELD_MESSAGE || 'message'
+/**
+ * Envia OTP via WhatsApp (Z-API).
+ * @param {{ phone: string, code: string, lang?: string }} opts
+ *   phone deve estar em E.164 ('+55...')
+ */
+export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {
+  if (!isWhatsappEnabled()) return { skipped: true };
+
+  const msgFn = MESSAGES[lang] || MESSAGES['pt'];
+  const message = msgFn(code);
+
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env;
+  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-text`;
 
   try {
-    const res = await fetch(process.env.WHATSAPP_API_URL, {
+    const res = await fetch(url, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', [headerName]: headerValue },
-      body:    JSON.stringify({ [phoneField]: phone, [messageField]: message }),
-    })
+      headers: {
+        'Content-Type': 'application/json',
+        'Client-Token':  ZAPI_CLIENT_TOKEN,
+      },
+      body: JSON.stringify({
+        phone:   toZapiPhone(phone),
+        message,
+      }),
+    });
+
     if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      console.error('[whatsapp] provider respondeu', res.status, body.slice(0, 300))
-      return { error: true }
+      const body = await res.text().catch(() => '');
+      console.error('[whatsapp] Z-API respondeu', res.status, body.slice(0, 300));
+      return { error: true };
     }
-    return await res.json().catch(() => ({ ok: true }))
+
+    return await res.json();
   } catch (err) {
-    console.error('[whatsapp] falha ao enviar:', err.message)
-    return { error: true }
-  }
-}
-
-const fmtBRL = (v) =>
-  Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-
-function fmtDateBR(iso) {
-  if (!iso) return 'a definir'
-  const [y, m, d] = String(iso).slice(0, 10).split('-')
-  return `${d}/${m}/${y}`
-}
-
-// Notifica TODAS as cooperativas ativas (com telefone) sobre uma nova reserva
-// disponível para aceite. Fire-and-forget — erros nunca sobem.
-export async function notifyOperatorsNewBooking(supabase, booking) {
-  if (!isWhatsAppEnabled() || !booking) return
-  try {
-    const { data: operators } = await supabase
-      .from('users')
-      .select('phone, full_name')
-      .eq('user_type', 'operator')
-      .eq('is_active', true)
-      .not('phone', 'is', null)
-
-    if (!operators?.length) return
-
-    const tipo  = booking.service_type === 'transfer' ? 'Transfer' : 'Passeio'
-    const rota  = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
-    const data  = fmtDateBR(booking.service_date)
-    const time  = booking.service_time ? String(booking.service_time).slice(0, 5) : ''
-    const valor = fmtBRL(booking.total_amount)
-    const painel = process.env.COOPERATIVA_URL || 'o painel da cooperativa'
-
-    const message =
-      `🚨 *Nova reserva disponível!*\n\n` +
-      `${tipo}${rota ? ` · ${rota}` : ''}\n` +
-      `📅 ${data}${time ? ` às ${time}` : ''}\n` +
-      `👥 ${booking.people_count || 1} pessoa(s)\n` +
-      `💰 ${valor}\n\n` +
-      `Quem aceitar primeiro fica com a corrida. Abra o painel para aceitar:\n${painel}`
-
-    const results = await Promise.allSettled(
-      operators.map((op) => sendWhatsApp({ to: op.phone, message })),
-    )
-    const sent = results.filter((r) => r.status === 'fulfilled' && !r.value?.error && !r.value?.skipped).length
-    console.log(`[whatsapp] nova reserva ${booking.booking_code || ''}: notificadas ${sent}/${operators.length} cooperativas`)
-  } catch (err) {
-    console.error('[whatsapp] notifyOperatorsNewBooking falhou:', err.message)
+    console.error('[whatsapp] falha ao enviar:', err.message);
+    return { error: true };
   }
 }

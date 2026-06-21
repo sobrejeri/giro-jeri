@@ -303,7 +303,7 @@ export default function CheckoutSummary() {
     service_time:    time || 'A confirmar',
     people_count:    people,
     vehicles:        cartHasItems
-      ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty }))
+      ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(unitPriceFor(vehicle)) || 0 }))
       : ls.vehicles,
     // `total_price` é a BASE que o servidor usa para cobrar. Em translado é o
     // subtotal CRU (sem acréscimo) — o servidor soma a alta temporada uma única
@@ -311,7 +311,7 @@ export default function CheckoutSummary() {
     total_price:     isTransfer ? activeTotal : displayTotal,
     display_total:   displayTotal,
     service_name:    ls.service_name,
-    cover_image_url: ls.cover_image_url || null,
+    cover_image_url: ls.cover_image_url || undefined,
   }
 
   const idx   = gi(ls.service_id || ls.service_name)
