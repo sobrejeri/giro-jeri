@@ -22,7 +22,8 @@ services:
       - key: GEOAPIFY_API_KEY
         sync: false
       # Mercado Pago — produção. Token em mercadopago.com.br > Suas integrações.
-      - key: MERCADO_PAGO_ACCESS_TOKEN
+      # O código lê MP_ACCESS_TOKEN (services/mercadoPago.js).
+      - key: MP_ACCESS_TOKEN
         sync: false
       # Assinatura secreta do webhook (Suas integrações > Webhooks > Assinatura secreta)
       - key: MERCADO_PAGO_WEBHOOK_SECRET
