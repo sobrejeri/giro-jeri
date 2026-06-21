@@ -479,7 +479,7 @@ export default function Feed() {
   const [filter, setFilter] = useState('tudo')
   const [reviewPlace, setReviewPlace] = useState(null)
   const { user } = useAuth()
-  const { userCoords, region } = useRegion()
+  const { userCoords, region, getServiceQuery } = useRegion()
   const qc = useQueryClient()
 
   const center = (userCoords?.lat != null && userCoords?.lon != null)
@@ -489,7 +489,7 @@ export default function Feed() {
         : JERI_CENTER)
 
   const { data: feedData,   isLoading: loadingFeed }   = useQuery({ queryKey: ['feed'],           queryFn: () => api.getFeed() })
-  const { data: placeData,  isLoading: loadingPlaces } = useQuery({ queryKey: ['establishments'], queryFn: () => api.getEstablishments() })
+  const { data: placeData,  isLoading: loadingPlaces } = useQuery({ queryKey: ['establishments', region?.id], queryFn: () => api.getEstablishments(getServiceQuery()) })
   const { data: nearbyData, isLoading: loadingNearby } = useQuery({
     queryKey:  ['nearby', center.lat?.toFixed?.(3), center.lon?.toFixed?.(3)],
     queryFn:   () => api.getNearbyPlaces({ lat: center.lat, lon: center.lon }),
