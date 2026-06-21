@@ -179,12 +179,17 @@ router.post('/intent', authenticate, async (req, res, next) => {
     }
     // asaas / pagarme: adapters a implementar quando credentials disponíveis
 
+    // Gateway efetivo: se o MP (ou outro) não devolveu transação, o pagamento
+    // é apresentado como manual — então grava 'manual' para o botão de
+    // simulação/confirmação funcionar coerentemente.
+    const effectiveGateway = gatewayTransactionId ? gateway : 'manual'
+
     // ── 6. Registra pagamento ──────────────────────────
     const { data: payment, error: pErr } = await supabase
       .from('payments')
       .insert({
         booking_id:             booking.id,
-        gateway_name:           gateway,
+        gateway_name:           effectiveGateway,
         gateway_transaction_id: gatewayTransactionId,
         payment_method,
         payment_type:           'full',
@@ -199,8 +204,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     if (pErr) throw pErr
 
-    const manual    = gateway === 'manual' || !gatewayTransactionId
-    const test_mode = gateway === 'test'
+    const manual    = effectiveGateway === 'manual'
+    const test_mode = effectiveGateway === 'test'
 
     res.json({
       booking_id:   booking.id,
