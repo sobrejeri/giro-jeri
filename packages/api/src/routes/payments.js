@@ -79,6 +79,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
     // ── 1. Lê configurações do gateway ─────────────────
     const cfg     = await getPaymentSettings()
     const gateway = cfg.payment_gateway || 'manual'
+    console.log('[intent] gateway=%s env=%s', gateway, cfg.payment_gateway_env)
 
     let booking, bookingCode
 
@@ -169,8 +170,11 @@ router.post('/intent', authenticate, async (req, res, next) => {
         expiresAt            = pixData.expires_at || expiresAt
         pixCode              = pixData.pix_code
         qrBase64             = pixData.qr_base64
+        console.log('[intent] Mercado Pago OK — mp_id=%s status=%s', pixData.mp_id, pixData.status)
       } catch (mpErr) {
-        console.error('Mercado Pago error — falling back to manual:', mpErr.message)
+        // Loga o máximo de detalhe — a API do MP devolve a causa em mpErr.cause / .message
+        console.error('Mercado Pago error — falling back to manual:', mpErr.message,
+          mpErr.cause ? JSON.stringify(mpErr.cause) : '', mpErr.status || '')
       }
     }
     // asaas / pagarme: adapters a implementar quando credentials disponíveis
@@ -270,29 +274,41 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
 //   id:[data.id];request-id:[x-request-id];ts:[ts];
 // Sem MERCADO_PAGO_WEBHOOK_SECRET configurado, apenas loga aviso
 // (não bloqueia) para não quebrar ambientes ainda sem a chave.
-function verifyMpSignature(req, dataId) {
+function verifyMpSignature(req, event) {
   const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET
   if (!secret) {
     console.warn('[webhook] MERCADO_PAGO_WEBHOOK_SECRET ausente — assinatura NÃO verificada')
     return true
   }
   const sig = req.headers['x-signature']
-  if (!sig) return false
+  if (!sig) { console.warn('[webhook] sem header x-signature'); return false }
 
   const parts = Object.fromEntries(
     sig.split(',').map((p) => p.trim().split('=').map((s) => s.trim()))
   )
-  if (!parts.ts || !parts.v1) return false
+  if (!parts.ts || !parts.v1) { console.warn('[webhook] x-signature malformado:', sig); return false }
 
   const requestId = req.headers['x-request-id'] || ''
-  const manifest  = `id:${String(dataId || '').toLowerCase()};request-id:${requestId};ts:${parts.ts};`
-  const expected  = crypto.createHmac('sha256', secret).update(manifest).digest('hex')
 
-  try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1))
-  } catch {
-    return false
+  // O data.id usado no manifesto pode vir da query (?data.id=...) ou do corpo,
+  // e o simulador às vezes difere do id do topo. Testa todos os candidatos.
+  const candidates = [...new Set(
+    [req.query['data.id'], event?.data?.id, event?.id]
+      .filter((v) => v !== undefined && v !== null)
+      .map((v) => String(v).toLowerCase())
+  )]
+
+  for (const id of candidates) {
+    const manifest = `id:${id};request-id:${requestId};ts:${parts.ts};`
+    const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex')
+    try {
+      if (crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1))) return true
+    } catch { /* tamanhos diferentes — tenta próximo candidato */ }
   }
+
+  console.warn('[webhook] assinatura não confere — ts=%s req-id=%s candidatos=%j v1=%s',
+    parts.ts, requestId, candidates, parts.v1)
+  return false
 }
 
 // ── POST /api/payments/webhook ─────────────────────────
@@ -311,7 +327,7 @@ router.post('/webhook', async (req, res, next) => {
     // MP manda data.id no body e também na query string da URL
     const gatewayId = (req.query['data.id'] || event.data?.id)?.toString()
 
-    if (!verifyMpSignature(req, gatewayId)) {
+    if (!verifyMpSignature(req, event)) {
       console.warn('[webhook] assinatura inválida — evento descartado')
       return res.status(401).json({ error: 'Assinatura inválida' })
     }
