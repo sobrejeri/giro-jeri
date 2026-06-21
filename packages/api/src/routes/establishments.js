@@ -42,7 +42,8 @@ router.get('/', async (req, res, next) => {
       .order('is_featured', { ascending: false })
       .order('sort_order',  { ascending: true })
       .order('created_at',  { ascending: false });
-    if (req.query.category) q = q.eq('category', req.query.category);
+    if (req.query.category)  q = q.eq('category',  req.query.category);
+    if (req.query.region_id) q = q.eq('region_id', req.query.region_id);
     const { data, error } = await q;
     if (error) throw error;
     if (!data?.length) return res.json([]);

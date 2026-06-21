@@ -130,11 +130,13 @@ export function RegionProvider({ children }) {
   // Quando há GPS real do usuário, prioriza lat/lon (raio cai pra cada
   // serviço); caso contrário, cai no filtro categórico por região.
   const getServiceQuery = useCallback(() => {
+    const params = {}
     if (userCoords?.lat != null && userCoords?.lon != null) {
-      return { lat: userCoords.lat, lon: userCoords.lon }
+      params.lat = userCoords.lat
+      params.lon = userCoords.lon
     }
-    if (region?.id) return { region_id: region.id }
-    return {}
+    if (region?.id) params.region_id = region.id
+    return params
   }, [userCoords, region])
 
   return (
