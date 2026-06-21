@@ -201,7 +201,7 @@ router.get('/quotes/history', authenticate, requireOperator, async (req, res, ne
   try {
     const { data, error } = await supabase
       .from('transfer_quotes')
-      .select('*, users!transfer_quotes_user_id_fkey ( full_name, phone, email )')
+      .select('*, users!transfer_quotes_user_id_fkey(full_name, phone, email)')
       .in('status', ['quoted', 'accepted', 'expired', 'rejected'])
       .order('created_at', { ascending: false })
       .limit(200);
@@ -257,7 +257,7 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
       })
       .eq('id', req.params.id)
       .eq('status', 'pending_quote')
-      .select('*, users!transfer_quotes_user_id_fkey ( full_name, phone )')
+      .select('*, users!transfer_quotes_user_id_fkey(full_name, phone)')
       .single();
 
     if (error) { console.error('[quote] update falhou:', error); return res.status(500).json({ error: error.message }); }
