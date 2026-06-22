@@ -21,7 +21,7 @@ const TOUR_EMPTY = {
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '', region_ids: [],
+  booking_cutoff_time: '', region_ids: [], is_featured: false, display_order: 0,
 }
 const TRANSFER_EMPTY = {
   name: '', description: '', pricing_mode: 'fixed_route', is_active: true,
@@ -212,6 +212,8 @@ export default function Catalogo() {
       ...form,
       duration_hours: Number(form.duration_hours),
       max_people:     Number(form.max_people),
+      display_order:  Number(form.display_order) || 0,
+      is_featured:    !!form.is_featured,
     }
     if (modal?.isNew) {
       body.slug      = slugify(form.name)
@@ -670,6 +672,23 @@ export default function Catalogo() {
               />
               <span className="text-sm text-gray-300">Ativo (visível para turistas)</span>
             </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand"
+                checked={!!form.is_featured}
+                onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
+              />
+              <span className="text-sm text-gray-300">Destaque na home (carrossel "Passeios em destaque")</span>
+            </label>
+
+            <Input
+              label="Ordem de exibição (menor aparece primeiro)"
+              type="number" min={0}
+              value={form.display_order ?? 0}
+              onChange={(e) => setForm({ ...form, display_order: e.target.value })}
+            />
 
             <Button type="submit" className="w-full" disabled={tourMut.isPending || uploading}>
               {uploading ? 'Enviando imagem…' : tourMut.isPending ? 'Salvando…' : 'Salvar'}

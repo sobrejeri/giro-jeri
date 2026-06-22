@@ -50,7 +50,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
     const {
       name, short_description, duration_hours, max_people,
       is_private_enabled, is_shared_enabled, shared_price_per_person,
-      cover_image_url, category_id, region_ids,
+      cover_image_url, category_id, region_ids, is_featured, display_order,
     } = req.body;
 
     const slug = `${slugify(name)}-${Date.now().toString(36)}`;
@@ -68,6 +68,8 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       cover_image_url:         cover_image_url  || null,
       category_id:             category_id      || null,
       region_ids:              Array.isArray(region_ids) ? region_ids : [],
+      is_featured:             !!is_featured,
+      display_order:           display_order ? Number(display_order) : 0,
     }).select().single();
 
     if (error) throw error;
@@ -80,7 +82,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     const {
       name, short_description, duration_hours, max_people,
       is_private_enabled, is_shared_enabled, shared_price_per_person,
-      cover_image_url, category_id, is_active, display_order,
+      cover_image_url, category_id, is_active, display_order, is_featured,
       latitude, longitude, service_radius_km, region_ids,
     } = req.body;
 
@@ -95,7 +97,8 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (cover_image_url    !== undefined) update.cover_image_url         = cover_image_url;
     if (category_id        !== undefined) update.category_id             = category_id || null;
     if (is_active          !== undefined) update.is_active               = is_active;
-    if (display_order      !== undefined) update.display_order           = display_order;
+    if (is_featured        !== undefined) update.is_featured             = is_featured;
+    if (display_order      !== undefined) update.display_order           = Number(display_order) || 0;
     if (latitude           !== undefined) update.latitude                = latitude === '' || latitude === null ? null : Number(latitude);
     if (longitude          !== undefined) update.longitude               = longitude === '' || longitude === null ? null : Number(longitude);
     if (service_radius_km  !== undefined) update.service_radius_km       = service_radius_km === '' || service_radius_km === null ? null : Number(service_radius_km);
