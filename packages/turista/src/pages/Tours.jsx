@@ -8,8 +8,9 @@ import ToursDesktop from './ToursDesktop'
 import {
   MapPin, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
-  ChevronLeft, ChevronRight, X, Info, Bus,
+  ChevronLeft, ChevronRight, X, Info, Bus, Search,
 } from 'lucide-react'
+import NotificationBell from '../components/NotificationBell'
 import {
   format, startOfDay, startOfMonth, endOfMonth,
   eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths,
@@ -263,6 +264,8 @@ export default function Tours() {
   const [favs, setFavs] = useState(new Set())
   const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
   const [showOriginPicker, setShowOriginPicker] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const toggleFav = (id) =>
     setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
@@ -274,7 +277,10 @@ export default function Tours() {
     staleTime: 5 * 60 * 1000,
     retry: 2,
   })
-  const tours = toursData?.tours || toursData || []
+  const allTours = toursData?.tours || toursData || []
+  const tours = searchTerm.trim()
+    ? allTours.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    : allTours
   const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
 
   const { data: vehiclesData, isFetched: vehiclesFetched } = useQuery({
@@ -346,7 +352,29 @@ export default function Tours() {
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
           <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Passeios</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <NotificationBell />
+            <button
+              onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+              aria-label="Buscar"
+            >
+              <Search size={15} />
+            </button>
+          </div>
         </div>
+        {showSearch && (
+          <div className="mt-2 relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar passeio…"
+              className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
+            />
+          </div>
+        )}
       </div>
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">

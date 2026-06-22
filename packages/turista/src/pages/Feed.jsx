@@ -9,8 +9,9 @@ import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
-  Map, List, ChevronLeft,
+  Map, List, ChevronLeft, Search,
 } from 'lucide-react'
+import NotificationBell from '../components/NotificationBell'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
 
@@ -625,6 +626,12 @@ export default function Feed() {
               <ChevronLeft size={20} className="text-gray-700" />
             </button>
             <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Descubra a Vila</h1>
+            <div className="absolute right-0 flex items-center gap-1.5">
+              <NotificationBell />
+              <button className="w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform" aria-label="Buscar">
+                <Search size={15} />
+              </button>
+            </div>
           </div>
           <p className="text-[12px] text-gray-400 text-center mt-1">Eventos, promoções e recomendações em Jericoacoara</p>
 

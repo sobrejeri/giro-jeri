@@ -5,9 +5,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { setLang, LANGS } from '../i18n/index.js'
 import ProfileDesktop from './ProfileDesktop'
+import NotificationBell from '../components/NotificationBell'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck,
-  Camera, Pencil, Check, X,
+  Camera, Pencil, Check, X, Search,
   Phone, Flag, AlertCircle, Globe, Loader2,
 } from 'lucide-react'
 
@@ -211,6 +212,12 @@ export default function Profile() {
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
           <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('profile.title')}</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <NotificationBell />
+            <button className="w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform" aria-label="Buscar">
+              <Search size={15} />
+            </button>
+          </div>
         </div>
       </header>
 

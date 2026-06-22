@@ -8,8 +8,9 @@ import TransfersDesktop from './TransfersDesktop'
 import { loadGoogleMaps } from '../components/GoogleMap'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
-  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2,
+  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
 } from 'lucide-react'
+import NotificationBell from '../components/NotificationBell'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
   isSameDay, isBefore, addMonths, subMonths, getDay, isToday, addDays,
@@ -511,6 +512,12 @@ export default function Transfers() {
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
           <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Transfer</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <NotificationBell />
+            <button className="w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform" aria-label="Buscar">
+              <Search size={15} />
+            </button>
+          </div>
         </div>
         <p className="text-[12px] text-gray-400 text-center mt-1">Transporte privativo com motorista</p>
 
