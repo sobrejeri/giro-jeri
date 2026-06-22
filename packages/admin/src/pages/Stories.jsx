@@ -248,6 +248,42 @@ export default function Stories() {
     onSuccess:  () => qc.invalidateQueries(['stories-admin']),
   })
 
+  // ── Publicar story (fluxo estilo Instagram: mídia → escolher destaque) ───────
+  const [pubOpen, setPubOpen] = useState(false)
+  const [pub, setPub] = useState({
+    media_url: '', media_type: 'image', display_name: '',
+    duration_sec: 15, target: 'existing', hl_id: '', new_title: '',
+  })
+  function setP(k, v) { setPub((p) => ({ ...p, [k]: v })) }
+  function openPublish() {
+    setPub({
+      media_url: '', media_type: 'image', display_name: '',
+      duration_sec: 15,
+      target: highlights.length ? 'existing' : 'new',
+      hl_id: highlights[0]?.id || '', new_title: '',
+    })
+    setPubOpen(true)
+  }
+  const publishMut = useMutation({
+    mutationFn: async () => {
+      let targetId = pub.hl_id
+      if (pub.target === 'new') {
+        const hl = await api.createHighlight({
+          title:           pub.new_title.trim(),
+          cover_image_url: pub.media_type === 'image' ? pub.media_url : null,
+        })
+        targetId = hl.id
+      }
+      return api.addStoryItem(targetId, {
+        media_url:    pub.media_url,
+        media_type:   pub.media_type,
+        duration_sec: Number(pub.duration_sec) || (pub.media_type === 'video' ? 30 : 15),
+        display_name: pub.display_name.trim() || null,
+      })
+    },
+    onSuccess: () => { qc.invalidateQueries(['stories-admin']); setPubOpen(false) },
+  })
+
   function openNewItem()   { setItemForm(ITEM_EMPTY); setItemModal('new') }
   function openEditItem(it) {
     setItemForm({
@@ -289,9 +325,14 @@ export default function Stories() {
             Tópicos exibidos na home do turista, estilo Destaques do Instagram.
           </p>
         </div>
-        <Button onClick={openNewHl} className="ml-auto flex items-center gap-1.5">
-          <Plus size={15} /> Novo Destaque
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="secondary" onClick={openPublish} className="flex items-center gap-1.5">
+            <Upload size={15} /> Publicar story
+          </Button>
+          <Button onClick={openNewHl} className="flex items-center gap-1.5">
+            <Plus size={15} /> Novo Destaque
+          </Button>
+        </div>
       </div>
 
       {/* ── Empty state ───────────────────────────────────────────────── */}
@@ -531,6 +572,86 @@ export default function Stories() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* ── Publicar story (mídia → escolher destaque) ─────────────────── */}
+      <Modal open={pubOpen} onClose={() => setPubOpen(false)} title="Publicar story">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Envie uma foto ou vídeo e escolha em qual destaque ele será publicado.
+          </p>
+
+          <Select label="Tipo de mídia" value={pub.media_type}
+            onChange={(e) => {
+              const t = e.target.value
+              setPub((p) => ({ ...p, media_type: t, media_url: '', duration_sec: TYPE_DURATION[t] ?? p.duration_sec }))
+            }}>
+            <option value="image">Imagem</option>
+            <option value="video">Vídeo</option>
+          </Select>
+
+          <div>
+            <label className="text-sm font-medium text-gray-300 mb-1 block">
+              {pub.media_type === 'video' ? 'Vídeo' : 'Imagem'}
+            </label>
+            <Input value={pub.media_url} onChange={(e) => setP('media_url', e.target.value)}
+              placeholder={pub.media_type === 'video' ? 'https://…/video.mp4' : 'https://…'} />
+            <div className="mt-1.5">
+              {pub.media_type === 'image'
+                ? <UploadBtn onUrl={(url) => setP('media_url', url)} label="Enviar imagem" />
+                : <VideoUploadBtn onUrl={(url) => setP('media_url', url)} />}
+            </div>
+            {pub.media_type === 'image' && pub.media_url && (
+              <img src={pub.media_url} alt=""
+                className="mt-2 h-28 w-full object-contain rounded-lg bg-gray-900"
+                onError={(e) => { e.target.style.display = 'none' }} />
+            )}
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-300 mb-1.5 block">Adicionar ao destaque</label>
+            <div className="flex gap-2 mb-2">
+              {highlights.length > 0 && (
+                <button type="button" onClick={() => setP('target', 'existing')}
+                  className={`flex-1 text-xs font-medium py-2 rounded-lg border transition-colors ${
+                    pub.target === 'existing' ? 'border-brand bg-brand/10 text-brand' : 'border-gray-700 text-gray-400'
+                  }`}>
+                  Existente
+                </button>
+              )}
+              <button type="button" onClick={() => setP('target', 'new')}
+                className={`flex-1 text-xs font-medium py-2 rounded-lg border transition-colors ${
+                  pub.target === 'new' ? 'border-brand bg-brand/10 text-brand' : 'border-gray-700 text-gray-400'
+                }`}>
+                + Novo destaque
+              </button>
+            </div>
+            {pub.target === 'existing' ? (
+              <Select value={pub.hl_id} onChange={(e) => setP('hl_id', e.target.value)}>
+                {highlights.map((h) => <option key={h.id} value={h.id}>{h.title}</option>)}
+              </Select>
+            ) : (
+              <Input value={pub.new_title} onChange={(e) => setP('new_title', e.target.value)}
+                placeholder="Nome do novo destaque (ex: Passeios, Praias)" />
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Legenda (opcional)" value={pub.display_name}
+              onChange={(e) => setP('display_name', e.target.value)} />
+            <Input label="Duração (s)" type="number" min={3} max={60}
+              value={pub.duration_sec} onChange={(e) => setP('duration_sec', e.target.value)} />
+          </div>
+
+          {publishMut.isError && (
+            <p className="text-sm text-red-400">{publishMut.error?.message || 'Erro ao publicar'}</p>
+          )}
+          <Button onClick={() => publishMut.mutate()} className="w-full"
+            disabled={publishMut.isPending || !pub.media_url ||
+              (pub.target === 'existing' ? !pub.hl_id : !pub.new_title.trim())}>
+            {publishMut.isPending ? 'Publicando…' : 'Publicar'}
+          </Button>
+        </div>
       </Modal>
 
     </div>

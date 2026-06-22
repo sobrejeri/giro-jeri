@@ -133,4 +133,11 @@ export const api = {
 
   // Stories (Instagram-style)
   getStories: () => request('/api/stories'),
+
+  // Publicação de stories/destaques — exige token de admin (requireAdmin na API).
+  // Disponível no app do turista apenas quando o usuário logado é admin.
+  createHighlight:    (body)      => request('/api/stories/highlights', { method: 'POST', body }),
+  addStoryItem:       (hid, body) => request('/api/stories/highlights/' + hid + '/items', { method: 'POST', body }),
+  uploadSiteImage:    (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
+  getStorageSignedUrl: (body)     => request('/api/admin/storage-sign', { method: 'POST', body }),
 }

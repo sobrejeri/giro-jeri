@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import { useAuth } from '../contexts/AuthContext'
 import StoriesRow from '../components/StoriesRow'
 import StoryViewer from '../components/StoryViewer'
+import StoryPublisher from '../components/StoryPublisher'
 import {
   Bell, Star, Clock, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
@@ -222,6 +224,10 @@ const STEPS = [
 export default function Home() {
   const navigate = useNavigate()
   const { region, openPicker, userCoords, getServiceQuery } = useRegion()
+  const { user } = useAuth()
+  const isAdmin = user?.user_type === 'admin'
+  const qc = useQueryClient()
+  const [showPublisher, setShowPublisher] = useState(false)
   const [favs, setFavs] = useState(new Set())
   const toggleFav = (id) =>
     setFavs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -297,11 +303,13 @@ export default function Home() {
       </div>
 
       {/* ── Destaques (highlights) ───────────────────────────────── */}
-      {stories.length > 0 && (
+      {(stories.length > 0 || isAdmin) && (
         <div className="bg-white border-b border-gray-100 lg:max-w-6xl lg:mx-auto">
           <StoriesRow
             highlights={stories}
             onSelect={(i) => setActiveHighlight(stories[i])}
+            isAdmin={isAdmin}
+            onPublish={() => setShowPublisher(true)}
           />
         </div>
       )}
@@ -313,6 +321,14 @@ export default function Home() {
           cover={activeHighlight.cover_image_url}
           startIndex={0}
           onClose={() => setActiveHighlight(null)}
+        />
+      )}
+
+      {showPublisher && (
+        <StoryPublisher
+          highlights={stories}
+          onClose={() => setShowPublisher(false)}
+          onPublished={() => qc.invalidateQueries({ queryKey: ['stories'] })}
         />
       )}
 
