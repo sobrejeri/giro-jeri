@@ -111,8 +111,9 @@ function trimVideoTo30s(file, maxSec = 30) {
   })
 }
 
-// Upload de vídeo: corta para 30 s se necessário, depois envia via URL assinada
-// usando POST + FormData (formato exigido pelo Supabase Storage).
+// Upload de vídeo: corta para 30 s se necessário, depois envia via URL assinada.
+// O endpoint de signed upload do Supabase exige PUT + FormData com o arquivo
+// sob a chave vazia '' e um campo cacheControl (mesmo formato do supabase-js).
 function VideoUploadBtn({ onUrl }) {
   const [busy,   setBusy]   = useState(false)
   const [pct,    setPct]    = useState(0)
@@ -138,17 +139,22 @@ function VideoUploadBtn({ onUrl }) {
       })
       if (!signed_url) throw new Error('Não foi possível gerar URL de upload')
 
-      // 3. Envia como POST + FormData (requisito da API Supabase Storage)
+      // 3. Envia via PUT + FormData (formato do Supabase Storage signed upload).
+      //    A signed_url já contém o token; o arquivo vai sob a chave vazia ''.
       setStatus('Enviando…')
       await new Promise((resolve, reject) => {
         const fd = new FormData()
-        fd.append('file', blob, `video.${ext}`)
+        fd.append('cacheControl', '3600')
+        fd.append('', blob, `video.${ext}`)
         const xhr = new XMLHttpRequest()
-        xhr.open('POST', signed_url)
+        xhr.open('PUT', signed_url)
+        xhr.setRequestHeader('x-upsert', 'true')
         xhr.upload.onprogress = (ev) => {
           if (ev.lengthComputable) setPct(Math.round((ev.loaded / ev.total) * 100))
         }
-        xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)))
+        xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300
+          ? resolve()
+          : reject(new Error(`Erro ${xhr.status} ao enviar`)))
         xhr.onerror = () => reject(new Error('Falha de rede'))
         xhr.send(fd)
       })

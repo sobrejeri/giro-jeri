@@ -537,7 +537,7 @@ router.post('/storage-sign', requireAdmin, async (req, res, next) => {
 
     const { data, error } = await supabase.storage
       .from('avatars')
-      .createSignedUploadUrl(path);
+      .createSignedUploadUrl(path, { upsert: true });
 
     if (error) throw error;
 
