@@ -51,9 +51,9 @@ router.get('/', async (_req, res, next) => {
 });
 
 // ── GET /api/stories/admin — todos os highlights (admin) ─
-router.get('/admin', authenticate, requireAdmin, async (_req, res, next) => {
+router.get('/admin', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('story_highlights')
       .select(`
         id, title, cover_image_url, sort_order, is_active, created_at,
@@ -82,7 +82,7 @@ router.use(authenticate, requireAdmin);
 router.post('/highlights', async (req, res, next) => {
   try {
     const body = highlightSchema.parse(req.body);
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('story_highlights')
       .insert({ ...body, created_by_user_id: req.user.id })
       .select()
@@ -99,7 +99,7 @@ router.post('/highlights', async (req, res, next) => {
 router.put('/highlights/:id', async (req, res, next) => {
   try {
     const body = highlightSchema.partial().parse(req.body);
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('story_highlights')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
@@ -117,7 +117,7 @@ router.put('/highlights/:id', async (req, res, next) => {
 // ── DELETE /api/stories/highlights/:id ──────────────────
 router.delete('/highlights/:id', async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('story_highlights')
       .delete()
       .eq('id', req.params.id);
@@ -130,7 +130,7 @@ router.delete('/highlights/:id', async (req, res, next) => {
 router.post('/highlights/:id/items', async (req, res, next) => {
   try {
     const body = itemSchema.parse(req.body);
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('stories')
       .insert({ ...body, highlight_id: req.params.id })
       .select()
@@ -147,7 +147,7 @@ router.post('/highlights/:id/items', async (req, res, next) => {
 router.put('/items/:id', async (req, res, next) => {
   try {
     const body = itemSchema.partial().parse(req.body);
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('stories')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
@@ -165,7 +165,7 @@ router.put('/items/:id', async (req, res, next) => {
 // ── DELETE /api/stories/items/:id ───────────────────────
 router.delete('/items/:id', async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('stories')
       .delete()
       .eq('id', req.params.id);
