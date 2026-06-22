@@ -1,0 +1,195 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
+import { X, Camera } from 'lucide-react'
+
+/**
+ * StoryViewer — full-screen Instagram-style story viewer.
+ *
+ * Props:
+ *   stories     — array of story objects
+ *   startIndex  — index of the first story to display
+ *   onClose     — called when all stories are done or the X is tapped
+ */
+export default function StoryViewer({ stories = [], startIndex = 0, onClose }) {
+  const { t } = useTranslation()
+  const [currentIndex, setCurrentIndex] = useState(startIndex)
+  const [progress, setProgress] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const intervalRef = useRef(null)
+  const videoRef = useRef(null)
+
+  const story = stories[currentIndex]
+  const isVideo = story?.media_type === 'video'
+  const duration = story?.duration_sec || 20
+
+  // ── Navigation helpers ─────────────────────────────────────────────────────
+  const goNext = useCallback(() => {
+    setCurrentIndex((idx) => {
+      const next = idx + 1
+      if (next >= stories.length) {
+        onClose()
+        return idx
+      }
+      return next
+    })
+  }, [stories.length, onClose])
+
+  const goPrev = useCallback(() => {
+    setCurrentIndex((idx) => Math.max(0, idx - 1))
+  }, [])
+
+  // ── Reset progress whenever the story index changes ────────────────────────
+  useEffect(() => {
+    setProgress(0)
+    setPaused(false)
+    // Replay video when story changes
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0
+      videoRef.current.play().catch(() => {})
+    }
+  }, [currentIndex])
+
+  // ── Progress timer (images only) ───────────────────────────────────────────
+  useEffect(() => {
+    if (isVideo || paused) return
+
+    clearInterval(intervalRef.current)
+    intervalRef.current = setInterval(() => {
+      setProgress((p) => {
+        const next = p + 100 / (duration * 10)
+        return next >= 100 ? 100 : next
+      })
+    }, 100)
+
+    return () => clearInterval(intervalRef.current)
+  }, [currentIndex, isVideo, paused, duration])
+
+  // ── Auto-advance when progress hits 100 (images) ──────────────────────────
+  useEffect(() => {
+    if (!isVideo && progress >= 100) {
+      goNext()
+    }
+  }, [progress, isVideo, goNext])
+
+  // ── Tap zones ──────────────────────────────────────────────────────────────
+  function handleTap(e) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    if (x < rect.width * 0.3) {
+      goPrev()
+    } else {
+      goNext()
+    }
+  }
+
+  // ── Long-press pause ───────────────────────────────────────────────────────
+  function handleTouchStart() {
+    setPaused(true)
+    if (videoRef.current) videoRef.current.pause()
+  }
+  function handleTouchEnd() {
+    setPaused(false)
+    if (videoRef.current) videoRef.current.play().catch(() => {})
+  }
+
+  // ── Keyboard support ───────────────────────────────────────────────────────
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'ArrowRight') goNext()
+      if (e.key === 'ArrowLeft') goPrev()
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [goNext, goPrev, onClose])
+
+  if (!story) return null
+
+  const avatarSrc = story.avatar_url || (story.media_type !== 'video' ? story.media_url : null)
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black flex flex-col select-none">
+      {/* ── Progress bars ────────────────────────────────────────────────── */}
+      <div className="absolute top-0 inset-x-0 z-10 flex gap-1 px-2 pt-2">
+        {stories.map((_, i) => (
+          <div key={i} className="flex-1 h-[3px] rounded-full bg-white/30 overflow-hidden">
+            <div
+              className="h-full bg-white rounded-full"
+              style={{
+                width:
+                  i < currentIndex
+                    ? '100%'
+                    : i === currentIndex
+                    ? `${progress}%`
+                    : '0%',
+                transition: i === currentIndex && !paused ? 'none' : undefined,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* ── Top bar: avatar + name + close ───────────────────────────────── */}
+      <div className="absolute top-6 inset-x-0 z-10 flex items-center gap-3 px-4 pt-1">
+        {/* Avatar */}
+        <div className="w-10 h-10 rounded-full bg-white/20 overflow-hidden flex items-center justify-center shrink-0 border-2 border-white/50">
+          {avatarSrc ? (
+            <img src={avatarSrc} alt={story.display_name} className="w-full h-full object-cover" />
+          ) : (
+            <Camera size={18} className="text-white/70" />
+          )}
+        </div>
+
+        <p className="flex-1 text-white text-sm font-semibold drop-shadow">
+          {story.display_name}
+        </p>
+
+        {/* Close */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onClose() }}
+          className="p-1.5 text-white active:scale-90 transition-transform"
+          aria-label={t('common.close')}
+        >
+          <X size={22} />
+        </button>
+      </div>
+
+      {/* ── Media area (tap zones handled here) ──────────────────────────── */}
+      <div
+        className="flex-1 w-full relative cursor-pointer"
+        onClick={handleTap}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {isVideo ? (
+          <video
+            ref={videoRef}
+            key={story.id}
+            src={story.media_url}
+            autoPlay
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+            onEnded={goNext}
+          />
+        ) : story.media_url ? (
+          <img
+            key={story.id}
+            src={story.media_url}
+            alt={story.display_name}
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-900 flex items-center justify-center">
+            <Camera size={48} className="text-white/20" />
+          </div>
+        )}
+
+        {/* Invisible left / right tap targets for clarity on desktop */}
+        <div className="absolute inset-y-0 left-0 w-[30%]" />
+        <div className="absolute inset-y-0 right-0 w-[70%]" />
+      </div>
+    </div>
+  )
+}

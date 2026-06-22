@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import StoriesRow from '../components/StoriesRow'
+import StoryViewer from '../components/StoryViewer'
 import {
   Bell, Star, Clock, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
@@ -229,6 +231,14 @@ export default function Home() {
     queryKey: ['tours', 'home', region?.id, userCoords?.lat, userCoords?.lon],
     queryFn:  () => api.getTours({ limit: 12, ...geo }),
   })
+
+  // Stories
+  const { data: stories = [] } = useQuery({
+    queryKey: ['stories'],
+    queryFn:  () => api.getStories(),
+    staleTime: 60_000,
+  })
+  const [storyIndex, setStoryIndex] = useState(null)
   const tours    = toursData?.tours || toursData || []
   const featured = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
@@ -287,6 +297,21 @@ export default function Home() {
           <ChevronRight size={11} className="text-gray-400 ml-0.5" />
         </button>
       </div>
+
+      {/* ── Stories strip ────────────────────────────────────────── */}
+      {stories.length > 0 && (
+        <div className="bg-white border-b border-gray-100 lg:max-w-6xl lg:mx-auto">
+          <StoriesRow stories={stories} onSelect={(i) => setStoryIndex(i)} />
+        </div>
+      )}
+
+      {storyIndex !== null && (
+        <StoryViewer
+          stories={stories}
+          startIndex={storyIndex}
+          onClose={() => setStoryIndex(null)}
+        />
+      )}
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto lg:space-y-6 lg:pt-6 lg:px-6">
 

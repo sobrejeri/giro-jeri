@@ -130,4 +130,7 @@ export const api = {
   markNotificationsRead: ()   => request('/api/notifications/read-all', { method: 'POST' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   getVapidKey:           ()   => request('/api/notifications/vapid-public-key'),
+
+  // Stories (Instagram-style)
+  getStories: () => request('/api/stories'),
 }

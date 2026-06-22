@@ -193,4 +193,10 @@ export const api = {
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
+
+  // Stories (Instagram-style)
+  getStories:  ()         => request('/api/stories/admin'),
+  createStory: (body)     => request('/api/stories',       { method: 'POST',   body }),
+  updateStory: (id, body) => request('/api/stories/' + id, { method: 'PUT',    body }),
+  deleteStory: (id)       => request('/api/stories/' + id, { method: 'DELETE' }),
 }
