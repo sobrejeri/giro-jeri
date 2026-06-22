@@ -1,62 +1,26 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, X, Loader, MapPin, Navigation } from 'lucide-react'
+import {
+  getPlaceSuggestions,
+  getPlaceDetails,
+  getNearbyLodging,
+  reverseGeocode,
+} from '../lib/geoServices'
 
-const RADIUS_KM = 10
+const RADIUS_KM  = 10
+const JERI_CENTER = { lat: -2.7976, lng: -40.5147 }
 
-async function overpassNearby(lat, lon, radiusKm) {
-  const radiusM = Math.round(radiusKm * 1000)
-  const q = `[out:json][timeout:15];(node["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${radiusM},${lat},${lon});way["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${radiusM},${lat},${lon}););out center;`
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body: q,
-  })
-  if (!res.ok) return []
-  const data = await res.json()
-  return (data.elements ?? [])
-    .filter((e) => e.tags?.name)
-    .map((e) => ({
-      place_id: e.id,
-      display_name: e.tags.name,
-      lat: String(e.lat ?? e.center?.lat),
-      lon: String(e.lon ?? e.center?.lon),
-      _nearby: true,
-    }))
-}
-
-async function nominatimSearch(q, viewbox) {
-  const params = new URLSearchParams({
-    q,
-    format: 'json',
-    limit: '8',
-    countrycodes: 'br',
-    'accept-language': 'pt-BR',
-  })
-  if (viewbox) params.set('viewbox', viewbox)
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-    headers: { 'User-Agent': 'GiroJeri/1.0' },
-  })
-  if (!res.ok) return []
-  return res.json()
-}
-
-async function reverseGeocode(lat, lon) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&accept-language=pt-BR`
-  const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
-  if (!res.ok) return null
-  return res.json()
-}
-
-function shortName(displayName) {
-  return displayName.split(',').slice(0, 2).join(', ').trim()
+function shortName(r) {
+  return r.main_text || r.display_name.split(',')[0]
 }
 
 export default function OriginPicker({ open, onClose, onSelect, region, userCoords }) {
-  const [query, setQuery]           = useState('')
-  const [results, setResults]       = useState([])
-  const [nearby, setNearby]         = useState([])
+  const [query, setQuery]               = useState('')
+  const [results, setResults]           = useState([])
+  const [nearby, setNearby]             = useState([])
   const [loadingNearby, setLoadingNearby] = useState(false)
-  const [loading, setLoading]       = useState(false)
-  const [gpsLoading, setGpsLoading] = useState(false)
+  const [loading, setLoading]           = useState(false)
+  const [gpsLoading, setGpsLoading]     = useState(false)
   const debounceRef = useRef(null)
 
   useEffect(() => {
@@ -64,7 +28,6 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
   }, [open])
 
   // Centra no GPS do usuário quando disponível; fallback é o centro da região.
-  // Raio fixo de 10 km para todas as regiões — filtro mais preciso.
   const center = userCoords?.lat != null && userCoords?.lon != null
     ? { lat: userCoords.lat, lon: userCoords.lon }
     : region?.center_latitude != null && region?.center_longitude != null
@@ -74,17 +37,12 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
   useEffect(() => {
     if (!open || !center) return
     setLoadingNearby(true)
-    overpassNearby(center.lat, center.lon, RADIUS_KM)
+    getNearbyLodging(center.lat, center.lon, RADIUS_KM)
       .then(setNearby)
       .catch(() => setNearby([]))
       .finally(() => setLoadingNearby(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, center?.lat, center?.lon])
-
-  // Viewbox ~150 km around region to bias Nominatim results
-  const viewbox = region?.center_latitude != null && region?.center_longitude != null
-    ? `${Number(region.center_longitude) - 1.5},${Number(region.center_latitude) + 1.5},${Number(region.center_longitude) + 1.5},${Number(region.center_latitude) - 1.5}`
-    : null
 
   function handleChange(val) {
     setQuery(val)
@@ -92,17 +50,31 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
     if (val.trim().length < 3) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
-      try { setResults(await nominatimSearch(val, viewbox)) }
-      catch { setResults([]) }
+      try {
+        const geoCenter = center
+          ? { lat: center.lat, lng: center.lon }
+          : JERI_CENTER
+        setResults(await getPlaceSuggestions(val, geoCenter))
+      } catch { setResults([]) }
       setLoading(false)
     }, 400)
   }
 
-  function pick(r) {
+  async function pick(r) {
+    let lat, lon
+    if (r._source === 'google' && !r.lat) {
+      const detail = await getPlaceDetails(r.place_id).catch(() => null)
+      if (!detail) return
+      lat = parseFloat(detail.lat)
+      lon = parseFloat(detail.lon)
+    } else {
+      lat = parseFloat(r.lat)
+      lon = parseFloat(r.lon)
+    }
     onSelect({
-      name:      r._nearby ? r.display_name : shortName(r.display_name),
-      latitude:  parseFloat(r.lat),
-      longitude: parseFloat(r.lon),
+      name:      r._nearby ? r.display_name : shortName(r),
+      latitude:  lat,
+      longitude: lon,
     })
     onClose()
   }
@@ -115,9 +87,9 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
     setGpsLoading(true)
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
-        const data = await reverseGeocode(coords.latitude, coords.longitude).catch(() => null)
+        const label = await reverseGeocode(coords.latitude, coords.longitude).catch(() => null)
         onSelect({
-          name:      data?.display_name ? shortName(data.display_name) : 'Minha localização',
+          name:      label || 'Minha localização',
           latitude:  coords.latitude,
           longitude: coords.longitude,
         })

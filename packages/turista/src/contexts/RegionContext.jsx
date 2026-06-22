@@ -1,24 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
+import { reverseGeocode } from '../lib/geoServices'
 
 const RegionContext = createContext(null)
 const STORAGE_KEY        = 'giro_region'
 const STORAGE_KEY_COORDS = 'giro_user_coords'
 const STORAGE_KEY_PLACE  = 'giro_user_place'
 const DEFAULT_RADIUS_KM  = 100
-
-async function reverseGeocode(lat, lon) {
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=pt-BR`
-    const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
-    if (!res.ok) return null
-    const data = await res.json()
-    const a = data.address ?? {}
-    const locality = a.village || a.town || a.suburb || a.neighbourhood || a.city || a.municipality
-    const state    = a.state_code || a.state
-    return [locality, state].filter(Boolean).join(', ') || null
-  } catch { return null }
-}
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371
