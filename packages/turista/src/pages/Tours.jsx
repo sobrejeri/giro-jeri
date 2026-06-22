@@ -111,9 +111,9 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
 function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
   return (
     <div className={`bg-white rounded-2xl p-3 border flex items-center gap-3 transition-all ${qty > 0 ? 'border-brand shadow-sm shadow-brand/10' : 'border-gray-100'}`}>
-      <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+      <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
         {vehicle.image_url ? (
-          <img src={vehicle.image_url} alt={vehicle.name} className="w-full h-full object-cover" />
+          <img src={vehicle.image_url} alt={vehicle.name} className="w-full h-full object-contain p-0.5" />
         ) : (
           <Zap size={20} className="text-gray-400" />
         )}
@@ -501,9 +501,9 @@ export default function Tours() {
 
                 {/* Suggestion card */}
                 <div className="bg-white rounded-2xl p-3 border border-gray-100 flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+                  <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${suggestion.vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
                     {suggestion.vehicle.image_url ? (
-                      <img src={suggestion.vehicle.image_url} alt={suggestion.vehicle.name} className="w-full h-full object-cover" />
+                      <img src={suggestion.vehicle.image_url} alt={suggestion.vehicle.name} className="w-full h-full object-contain p-0.5" />
                     ) : (
                       <Zap size={20} className="text-gray-400" />
                     )}
