@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Camera } from 'lucide-react'
+import { X, Camera, Volume2, VolumeX } from 'lucide-react'
 
 /**
  * StoryViewer — full-screen Instagram-style story viewer.
@@ -17,8 +17,11 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
   const [currentIndex, setCurrentIndex] = useState(startIndex)
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [muted, setMuted] = useState(false)
   const intervalRef = useRef(null)
   const videoRef = useRef(null)
+  const touchStartRef = useRef(null)
+  const swipedRef = useRef(false)
 
   const story = stories[currentIndex]
   const isVideo = story?.media_type === 'video'
@@ -40,15 +43,21 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
     setCurrentIndex((idx) => Math.max(0, idx - 1))
   }, [])
 
-  // ── Reset progress whenever the story index changes ────────────────────────
+  // ── Reset progress + (re)play video whenever the story index changes ───────
   useEffect(() => {
     setProgress(0)
     setPaused(false)
-    // Replay video when story changes
-    if (videoRef.current) {
-      videoRef.current.currentTime = 0
-      videoRef.current.play().catch(() => {})
+    const v = videoRef.current
+    if (v) {
+      v.currentTime = 0
+      v.muted = muted
+      v.play().catch(() => {
+        // Navegador bloqueou autoplay com som → toca mudo (usuário reativa no ícone)
+        if (!v.muted) { v.muted = true; setMuted(true) }
+        v.play().catch(() => {})
+      })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex])
 
   // ── Progress timer (images only) ───────────────────────────────────────────
@@ -75,6 +84,8 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
 
   // ── Tap zones ──────────────────────────────────────────────────────────────
   function handleTap(e) {
+    // Ignora o clique sintético que segue um arrastar (swipe) já tratado
+    if (swipedRef.current) { swipedRef.current = false; return }
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
     if (x < rect.width * 0.3) {
@@ -84,14 +95,42 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
     }
   }
 
-  // ── Long-press pause ───────────────────────────────────────────────────────
-  function handleTouchStart() {
+  // ── Touch: long-press pausa, arrastar vertical fecha ───────────────────────
+  function handleTouchStart(e) {
+    const t = e.touches[0]
+    touchStartRef.current = { x: t.clientX, y: t.clientY }
+    swipedRef.current = false
     setPaused(true)
     if (videoRef.current) videoRef.current.pause()
   }
-  function handleTouchEnd() {
+  function handleTouchEnd(e) {
     setPaused(false)
+    const start = touchStartRef.current
+    touchStartRef.current = null
+    if (start) {
+      const t = e.changedTouches[0]
+      const dx = t.clientX - start.x
+      const dy = t.clientY - start.y
+      // Arrastar pra cima ou pra baixo fecha os destaques
+      if (Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx)) {
+        swipedRef.current = true
+        onClose()
+        return
+      }
+    }
     if (videoRef.current) videoRef.current.play().catch(() => {})
+  }
+
+  // ── Mute toggle (vídeo) ────────────────────────────────────────────────────
+  function toggleMute(e) {
+    e.stopPropagation()
+    const next = !muted
+    setMuted(next)
+    const v = videoRef.current
+    if (v) {
+      v.muted = next
+      if (v.paused) v.play().catch(() => {})
+    }
   }
 
   // ── Keyboard support ───────────────────────────────────────────────────────
@@ -149,6 +188,17 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
           {headerTitle}
         </p>
 
+        {/* Som (apenas vídeo) */}
+        {isVideo && (
+          <button
+            onClick={toggleMute}
+            className="p-1.5 text-white active:scale-90 transition-transform"
+            aria-label={muted ? 'Ativar som' : 'Silenciar'}
+          >
+            {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          </button>
+        )}
+
         {/* Close */}
         <button
           onClick={(e) => { e.stopPropagation(); onClose() }}
@@ -161,7 +211,7 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
 
       {/* ── Media area (tap zones handled here) ──────────────────────────── */}
       <div
-        className="flex-1 w-full relative cursor-pointer"
+        className="flex-1 w-full relative cursor-pointer touch-none"
         onClick={handleTap}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -171,8 +221,6 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
             ref={videoRef}
             key={story.id}
             src={story.media_url}
-            autoPlay
-            muted
             playsInline
             className="w-full h-full object-cover"
             onEnded={goNext}
