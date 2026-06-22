@@ -23,7 +23,7 @@ export default function Header() {
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logo */}
         <Link to="/" className="flex items-center shrink-0">
-          <img src="/logo.jpeg" alt="Giro Jeri" className="h-10 w-auto" />
+          <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-10 w-auto" />
         </Link>
 
         {/* Nav — desktop */}

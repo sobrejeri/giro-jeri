@@ -43,7 +43,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
       >
         {/* Logo */}
         <div className="h-16 flex items-center px-4 border-b border-gray-800 gap-2">
-          <img src="/logo.jpeg" alt="Giro Jeri" className="h-9 w-auto rounded" />
+          <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-9 w-auto rounded" />
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Admin</span>
           <button
             onClick={onClose}

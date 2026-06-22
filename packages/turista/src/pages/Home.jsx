@@ -269,7 +269,7 @@ export default function Home() {
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-6 lg:rounded-2xl lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <img src="/logo.jpeg" alt="Giro Jeri" className="h-10 w-auto" />
+            <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-10 w-auto" />
           </div>
           <div className="flex items-center gap-2">
             <button

@@ -25,7 +25,7 @@ export default function TopNav() {
     <header className="hidden lg:block sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100">
       <div className="max-w-6xl mx-auto h-14 flex items-center px-6">
         <Link to="/" className="flex items-center mr-8 shrink-0">
-          <img src="/logo.jpeg" alt="Giro Jeri" className="h-9 w-auto" />
+          <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-9 w-auto" />
         </Link>
 
         <nav className="flex items-center gap-6 flex-1">
