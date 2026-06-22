@@ -2,7 +2,6 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Route, ImagePlus, X, Car, Users } from 'lucide-react'
 import { api } from '../lib/api'
-import { supabase } from '../lib/supabase'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -193,11 +192,17 @@ export default function Catalogo() {
   }
 
   async function uploadImage(file, folder = 'tours') {
-    const ext  = file.name.split('.').pop()
-    const path = `${folder}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
-    if (error) throw error
-    return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl
+    const ext          = file.name.split('.').pop()
+    const path         = `${folder}/${Date.now()}.${ext}`
+    const content_type = file.type || 'image/jpeg'
+    const { signed_url, public_url } = await api.getStorageSignedUrl({ path, content_type })
+    const res = await fetch(signed_url, {
+      method:  'PUT',
+      headers: { 'Content-Type': content_type },
+      body:    file,
+    })
+    if (!res.ok) throw new Error(`Upload falhou: ${res.status}`)
+    return public_url
   }
 
   /* ── Submit handlers ─────────────────────────────────────── */
