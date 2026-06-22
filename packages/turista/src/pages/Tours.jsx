@@ -338,7 +338,7 @@ export default function Tours() {
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
         <div className="flex items-start justify-between">
-          <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Passeios</h1>
         </div>
       </div>
 

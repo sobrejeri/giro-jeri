@@ -9,6 +9,7 @@ export default function Layout() {
   const { region, openPicker } = useRegion()
   const { pathname } = useLocation()
   const isHome = pathname === '/'
+  const hideLocationBar = isHome || pathname === '/passeios' || pathname.startsWith('/transfers')
 
   return (
     <div className="min-h-screen bg-[#EBEBEB] lg:bg-gray-50">
@@ -16,8 +17,8 @@ export default function Layout() {
 
       <div className="relative w-full max-w-[430px] lg:max-w-6xl mx-auto min-h-screen lg:min-h-0 bg-[#F8F8F8] lg:bg-transparent overflow-x-hidden shadow-2xl lg:shadow-none">
 
-        {/* Barra de localização — mobile, todas as páginas exceto Home (Home tem a própria) */}
-        {!isHome && (
+        {/* Barra de localização — mobile, exceto Home/Passeios/Transfers (têm a própria) */}
+        {!hideLocationBar && (
           <div className="lg:hidden sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-gray-100 px-4 py-2 flex items-center">
             <button
               onClick={openPicker}

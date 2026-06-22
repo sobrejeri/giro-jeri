@@ -502,7 +502,7 @@ export default function Transfers() {
     <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
       {/* Header */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
-        <h1 className="text-[20px] font-extrabold text-gray-900">Transfer</h1>
+        <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Transfer</h1>
         <p className="text-[12px] text-gray-400 mt-0.5">Transporte privativo com motorista</p>
 
         {/* Mode toggle */}
