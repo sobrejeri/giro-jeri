@@ -321,6 +321,13 @@ export default function Home() {
           cover={activeHighlight.cover_image_url}
           startIndex={0}
           onClose={() => setActiveHighlight(null)}
+          isAdmin={isAdmin}
+          onDelete={async (id) => {
+            try { await api.deleteStoryItem(id) }
+            catch (err) { alert(err?.message || 'Erro ao excluir'); return }
+            qc.invalidateQueries({ queryKey: ['stories'] })
+            setActiveHighlight(null)
+          }}
         />
       )}
 

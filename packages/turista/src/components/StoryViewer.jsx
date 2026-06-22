@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Camera, Volume2, VolumeX } from 'lucide-react'
+import { X, Camera, Volume2, VolumeX, MoreVertical, Trash2 } from 'lucide-react'
 
 /**
  * StoryViewer — full-screen Instagram-style story viewer.
@@ -11,13 +11,16 @@ import { X, Camera, Volume2, VolumeX } from 'lucide-react'
  *   cover       — highlight cover image shown in the top circle
  *   startIndex  — index of the first story to display
  *   onClose     — called when all stories are done or the X is tapped
+ *   isAdmin     — quando true, mostra o menu (3 pontos) com opção de excluir
+ *   onDelete    — (storyId) => void   exclui o item atual (somente admin)
  */
-export default function StoryViewer({ stories = [], title, cover, startIndex = 0, onClose }) {
+export default function StoryViewer({ stories = [], title, cover, startIndex = 0, onClose, isAdmin = false, onDelete }) {
   const { t } = useTranslation()
   const [currentIndex, setCurrentIndex] = useState(startIndex)
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const intervalRef = useRef(null)
   const videoRef = useRef(null)
   const touchStartRef = useRef(null)
@@ -133,6 +136,25 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
     }
   }
 
+  // ── Menu admin (3 pontos): excluir item ────────────────────────────────────
+  function openMenu(e) {
+    e.stopPropagation()
+    setMenuOpen(true)
+    setPaused(true)
+    videoRef.current?.pause()
+  }
+  function closeMenu() {
+    setMenuOpen(false)
+    setPaused(false)
+    videoRef.current?.play().catch(() => {})
+  }
+  function handleDelete(e) {
+    e.stopPropagation()
+    if (!story || !confirm('Excluir esta foto/vídeo?')) return
+    setMenuOpen(false)
+    onDelete?.(story.id)
+  }
+
   // ── Keyboard support ───────────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e) {
@@ -199,6 +221,17 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
           </button>
         )}
 
+        {/* Menu (3 pontos) — somente admin */}
+        {isAdmin && onDelete && (
+          <button
+            onClick={openMenu}
+            className="p-1.5 text-white active:scale-90 transition-transform"
+            aria-label="Mais opções"
+          >
+            <MoreVertical size={22} />
+          </button>
+        )}
+
         {/* Close */}
         <button
           onClick={(e) => { e.stopPropagation(); onClose() }}
@@ -208,6 +241,21 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
           <X size={22} />
         </button>
       </div>
+
+      {/* ── Menu admin: backdrop + dropdown ──────────────────────────────── */}
+      {menuOpen && (
+        <>
+          <div className="absolute inset-0 z-[105]" onClick={closeMenu} />
+          <div className="absolute top-16 right-3 z-[110] bg-white rounded-xl shadow-xl overflow-hidden min-w-[190px]">
+            <button
+              onClick={handleDelete}
+              className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm font-medium text-red-600 active:bg-gray-100"
+            >
+              <Trash2 size={16} /> Excluir {isVideo ? 'vídeo' : 'foto'}
+            </button>
+          </div>
+        </>
+      )}
 
       {/* ── Media area (tap zones handled here) ──────────────────────────── */}
       <div
