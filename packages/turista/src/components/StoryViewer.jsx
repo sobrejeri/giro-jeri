@@ -224,6 +224,10 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
             playsInline
             className="w-full h-full object-cover"
             onEnded={goNext}
+            onTimeUpdate={() => {
+              const v = videoRef.current
+              if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
+            }}
           />
         ) : story.media_url ? (
           <img
