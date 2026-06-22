@@ -35,7 +35,8 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
 }
 
 const HL_EMPTY   = { title: '', cover_image_url: '', sort_order: 0, is_active: true }
-const ITEM_EMPTY = { media_url: '', media_type: 'image', duration_sec: 20, sort_order: 0, display_name: '' }
+const ITEM_EMPTY = { media_url: '', media_type: 'image', duration_sec: 15, sort_order: 0, display_name: '' }
+const TYPE_DURATION = { image: 15, video: 30 }
 
 // Upload de imagem (resize no cliente → base64 → API)
 function UploadBtn({ onUrl, label = 'Upload', size = 1280 }) {
@@ -60,11 +61,63 @@ function UploadBtn({ onUrl, label = 'Upload', size = 1280 }) {
   )
 }
 
-// Upload de vídeo (direto ao Supabase Storage via URL assinada)
-function VideoUploadBtn({ onUrl, onProgress }) {
-  const [busy,  setBusy]  = useState(false)
-  const [pct,   setPct]   = useState(0)
-  const [error, setError] = useState('')
+// Corta vídeo para no máximo maxSec segundos usando MediaRecorder + captureStream.
+// Devolve { blob, content_type, ext }. Se o vídeo já for curto ou captureStream não
+// estiver disponível, devolve o arquivo original sem modificação.
+function trimVideoTo30s(file, maxSec = 30) {
+  return new Promise((resolve) => {
+    const fallback = () => {
+      URL.revokeObjectURL(url)
+      const ext = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
+      resolve({ blob: file, content_type: file.type || 'video/mp4', ext })
+    }
+    const url = URL.createObjectURL(file)
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.muted = true
+    video.playsInline = true
+    video.src = url
+
+    video.onerror = fallback
+
+    video.onloadedmetadata = () => {
+      if (video.duration <= maxSec) { fallback(); return }
+
+      const captureStream = video.captureStream?.bind(video) || video.mozCaptureStream?.bind(video)
+      if (!captureStream) { fallback(); return }
+
+      video.oncanplay = () => {
+        video.oncanplay = null
+        const mimeType = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4'
+        const stream = captureStream()
+        const chunks = []
+        const rec = new MediaRecorder(stream, { mimeType })
+        rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data) }
+        rec.onstop = () => {
+          URL.revokeObjectURL(url)
+          const blob = new Blob(chunks, { type: mimeType })
+          resolve({ blob, content_type: mimeType, ext: mimeType.includes('webm') ? 'webm' : 'mp4' })
+        }
+        rec.start()
+        video.play()
+
+        const timer = setTimeout(() => {
+          if (rec.state === 'recording') { rec.stop(); video.pause() }
+        }, maxSec * 1000)
+
+        video.onended = () => { clearTimeout(timer); if (rec.state === 'recording') rec.stop() }
+      }
+    }
+  })
+}
+
+// Upload de vídeo: corta para 30 s se necessário, depois envia via URL assinada
+// usando POST + FormData (formato exigido pelo Supabase Storage).
+function VideoUploadBtn({ onUrl }) {
+  const [busy,   setBusy]   = useState(false)
+  const [pct,    setPct]    = useState(0)
+  const [status, setStatus] = useState('')
+  const [error,  setError]  = useState('')
 
   async function pick(e) {
     const file = e.target.files?.[0]
@@ -73,24 +126,31 @@ function VideoUploadBtn({ onUrl, onProgress }) {
     setBusy(true)
     setPct(0)
     try {
-      // 1. Pede URL assinada ao servidor
+      // 1. Corta vídeo se > 30 s
+      setStatus('Verificando duração…')
+      const { blob, content_type, ext } = await trimVideoTo30s(file)
+
+      // 2. Solicita URL assinada ao servidor
+      setStatus('Preparando upload…')
       const { signed_url, public_url } = await api.getStorageSignedUrl({
-        filename:     file.name,
-        content_type: file.type,
+        filename:     `video.${ext}`,
+        content_type: content_type.split(';')[0].trim(),
       })
       if (!signed_url) throw new Error('Não foi possível gerar URL de upload')
 
-      // 2. Envia o arquivo diretamente ao Supabase Storage com progress
+      // 3. Envia como POST + FormData (requisito da API Supabase Storage)
+      setStatus('Enviando…')
       await new Promise((resolve, reject) => {
+        const fd = new FormData()
+        fd.append('file', blob, `video.${ext}`)
         const xhr = new XMLHttpRequest()
-        xhr.open('PUT', signed_url)
-        xhr.setRequestHeader('Content-Type', file.type)
+        xhr.open('POST', signed_url)
         xhr.upload.onprogress = (ev) => {
           if (ev.lengthComputable) setPct(Math.round((ev.loaded / ev.total) * 100))
         }
         xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)))
         xhr.onerror = () => reject(new Error('Falha de rede'))
-        xhr.send(file)
+        xhr.send(fd)
       })
 
       onUrl(public_url)
@@ -99,6 +159,7 @@ function VideoUploadBtn({ onUrl, onProgress }) {
     } finally {
       setBusy(false)
       setPct(0)
+      setStatus('')
       e.target.value = ''
     }
   }
@@ -109,14 +170,14 @@ function VideoUploadBtn({ onUrl, onProgress }) {
         busy ? 'bg-brand/20 text-brand/60 cursor-not-allowed' : 'bg-brand/10 text-brand hover:bg-brand/20'
       }`}>
         {busy
-          ? <><Loader2 size={14} className="animate-spin" /> Enviando {pct}%</>
+          ? <><Loader2 size={14} className="animate-spin" /> {status || `Enviando ${pct}%`}</>
           : <><Upload size={14} /> Enviar vídeo</>}
-        <input type="file" accept="video/mp4,video/webm,video/quicktime"
+        <input type="file" accept="video/mp4,video/webm,video/quicktime,video/*"
           className="hidden" onChange={pick} disabled={busy} />
       </label>
-      {busy && (
+      {busy && pct > 0 && (
         <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
-          <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${pct}%` }} />
+          <div className="h-full bg-brand rounded-full transition-all duration-200" style={{ width: `${pct}%` }} />
         </div>
       )}
       {error && <p className="text-xs text-red-400">{error}</p>}
@@ -397,7 +458,10 @@ export default function Stories() {
                 </div>
 
                 <Select label="Tipo" value={itemForm.media_type}
-                  onChange={(e) => setItem('media_type', e.target.value)}>
+                  onChange={(e) => {
+                    const t = e.target.value
+                    setItemForm((f) => ({ ...f, media_type: t, duration_sec: TYPE_DURATION[t] ?? f.duration_sec }))
+                  }}>
                   <option value="image">Imagem</option>
                   <option value="video">Vídeo</option>
                 </Select>

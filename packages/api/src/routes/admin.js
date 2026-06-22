@@ -525,11 +525,9 @@ router.post('/storage-sign', requireAdmin, async (req, res, next) => {
       return res.status(400).json({ error: 'filename e content_type são obrigatórios' });
     }
 
-    const ALLOWED = [
-      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
-      'image/jpeg', 'image/png', 'image/webp',
-    ];
-    if (!ALLOWED.includes(content_type)) {
+    // Strip codec suffix (e.g. "video/webm;codecs=vp9" → "video/webm")
+    const base_type = content_type.split(';')[0].trim().toLowerCase();
+    if (!base_type.startsWith('video/') && !base_type.startsWith('image/')) {
       return res.status(400).json({ error: 'Tipo de arquivo não suportado' });
     }
 
