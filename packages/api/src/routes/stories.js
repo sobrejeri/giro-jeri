@@ -1,110 +1,174 @@
 // ── stories.js ──────────────────────────────────────────
-// Stories estilo Instagram. Leitura pública; escrita apenas admin.
+// Destaques (highlights) estilo Instagram + itens de mídia.
+// Leitura pública; escrita apenas admin.
 import { Router } from 'express';
 import { z }      from 'zod';
-import { supabase }                    from '../supabase.js';
-import { authenticate, requireAdmin }  from '../middleware/auth.js';
+import { supabase }                   from '../supabase.js';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
-// ── Schemas de validação ──────────────────────────────────
-const storyCreateSchema = z.object({
-  display_name:  z.string().min(1).max(80),
-  avatar_url:    z.string().url().max(3000).optional().nullable(),
-  media_url:     z.string().url().max(3000),
-  media_type:    z.enum(['image', 'video']).optional(),
-  duration_sec:  z.number().int().min(1).max(60).optional(),
-  is_active:     z.boolean().optional(),
-  sort_order:    z.number().int().min(0).optional(),
-  expires_at:    z.string().datetime({ offset: true }).optional().nullable(),
+// ── Schemas ─────────────────────────────────────────────
+const highlightSchema = z.object({
+  title:           z.string().min(1).max(80),
+  cover_image_url: z.string().url().max(3000).optional().nullable(),
+  sort_order:      z.number().int().min(0).optional(),
+  is_active:       z.boolean().optional(),
 });
 
-const storyUpdateSchema = storyCreateSchema.partial();
+const itemSchema = z.object({
+  media_url:    z.string().url().max(3000),
+  media_type:   z.enum(['image', 'video']).optional(),
+  duration_sec: z.number().int().min(1).max(60).optional(),
+  sort_order:   z.number().int().min(0).optional(),
+  display_name: z.string().max(80).optional().nullable(),
+});
 
-// ── GET /api/stories ──────────────────────────────────────
-// Público: stories ativos e não expirados, ordenados por sort_order.
+// ── GET /api/stories — público ───────────────────────────
+// Retorna highlights ativos com seus itens aninhados, ordenados.
 router.get('/', async (_req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from('stories')
-      .select('*')
+      .from('story_highlights')
+      .select(`
+        id, title, cover_image_url, sort_order,
+        stories!stories_highlight_id_fkey (
+          id, display_name, media_url, media_type, duration_sec, sort_order
+        )
+      `)
       .eq('is_active', true)
-      .or('expires_at.is.null,expires_at.gt.' + new Date().toISOString())
       .order('sort_order', { ascending: true });
 
     if (error) throw error;
-    res.json(data || []);
+
+    const result = (data || []).map((h) => ({
+      ...h,
+      stories: (h.stories || []).sort((a, b) => a.sort_order - b.sort_order),
+    }));
+
+    res.json(result);
   } catch (err) { next(err); }
 });
 
-// ── GET /api/stories/admin — todas as stories (admin) ────
-// Retorna todas as stories (ativas, inativas, expiradas) para o painel admin.
+// ── GET /api/stories/admin — todos os highlights (admin) ─
 router.get('/admin', authenticate, requireAdmin, async (_req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from('stories')
-      .select('*')
+      .from('story_highlights')
+      .select(`
+        id, title, cover_image_url, sort_order, is_active, created_at,
+        stories!stories_highlight_id_fkey (
+          id, display_name, media_url, media_type, duration_sec, sort_order
+        )
+      `)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.json(data || []);
+
+    const result = (data || []).map((h) => ({
+      ...h,
+      stories: (h.stories || []).sort((a, b) => a.sort_order - b.sort_order),
+    }));
+
+    res.json(result);
   } catch (err) { next(err); }
 });
 
-// ── Rotas de administração (authenticate + requireAdmin) ──
+// ── Middleware admin para rotas abaixo ───────────────────
 router.use(authenticate, requireAdmin);
 
-// POST /api/stories — cria um novo story
-router.post('/', async (req, res, next) => {
+// ── POST /api/stories/highlights — criar highlight ───────
+router.post('/highlights', async (req, res, next) => {
   try {
-    const body = storyCreateSchema.parse(req.body);
+    const body = highlightSchema.parse(req.body);
     const { data, error } = await supabase
-      .from('stories')
+      .from('story_highlights')
       .insert({ ...body, created_by_user_id: req.user.id })
       .select()
       .single();
-
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
-    }
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
     next(err);
   }
 });
 
-// PUT /api/stories/:id — atualiza um story existente
-router.put('/:id', async (req, res, next) => {
+// ── PUT /api/stories/highlights/:id — atualizar highlight ─
+router.put('/highlights/:id', async (req, res, next) => {
   try {
-    const body = storyUpdateSchema.parse(req.body);
+    const body = highlightSchema.partial().parse(req.body);
+    const { data, error } = await supabase
+      .from('story_highlights')
+      .update({ ...body, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Highlight não encontrado' });
+    res.json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    next(err);
+  }
+});
+
+// ── DELETE /api/stories/highlights/:id ──────────────────
+router.delete('/highlights/:id', async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('story_highlights')
+      .delete()
+      .eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/stories/highlights/:id/items — add item ───
+router.post('/highlights/:id/items', async (req, res, next) => {
+  try {
+    const body = itemSchema.parse(req.body);
+    const { data, error } = await supabase
+      .from('stories')
+      .insert({ ...body, highlight_id: req.params.id })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    next(err);
+  }
+});
+
+// ── PUT /api/stories/items/:id — atualizar item ──────────
+router.put('/items/:id', async (req, res, next) => {
+  try {
+    const body = itemSchema.partial().parse(req.body);
     const { data, error } = await supabase
       .from('stories')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
       .select()
       .single();
-
     if (error) throw error;
-    if (!data) return res.status(404).json({ error: 'Story não encontrado' });
+    if (!data) return res.status(404).json({ error: 'Item não encontrado' });
     res.json(data);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
-    }
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
     next(err);
   }
 });
 
-// DELETE /api/stories/:id — remove um story
-router.delete('/:id', async (req, res, next) => {
+// ── DELETE /api/stories/items/:id ───────────────────────
+router.delete('/items/:id', async (req, res, next) => {
   try {
     const { error } = await supabase
       .from('stories')
       .delete()
       .eq('id', req.params.id);
-
     if (error) throw error;
     res.status(204).end();
   } catch (err) { next(err); }

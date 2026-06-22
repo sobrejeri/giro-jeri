@@ -238,7 +238,7 @@ export default function Home() {
     queryFn:  () => api.getStories(),
     staleTime: 60_000,
   })
-  const [storyIndex, setStoryIndex] = useState(null)
+  const [activeHighlight, setActiveHighlight] = useState(null)
   const tours    = toursData?.tours || toursData || []
   const featured = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
@@ -298,18 +298,21 @@ export default function Home() {
         </button>
       </div>
 
-      {/* ── Stories strip ────────────────────────────────────────── */}
+      {/* ── Destaques (highlights) ───────────────────────────────── */}
       {stories.length > 0 && (
         <div className="bg-white border-b border-gray-100 lg:max-w-6xl lg:mx-auto">
-          <StoriesRow stories={stories} onSelect={(i) => setStoryIndex(i)} />
+          <StoriesRow
+            highlights={stories}
+            onSelect={(i) => setActiveHighlight(stories[i])}
+          />
         </div>
       )}
 
-      {storyIndex !== null && (
+      {activeHighlight && (activeHighlight.stories || []).length > 0 && (
         <StoryViewer
-          stories={stories}
-          startIndex={storyIndex}
-          onClose={() => setStoryIndex(null)}
+          stories={activeHighlight.stories}
+          startIndex={0}
+          onClose={() => setActiveHighlight(null)}
         />
       )}
 

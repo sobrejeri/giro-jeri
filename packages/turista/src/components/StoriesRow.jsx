@@ -2,32 +2,35 @@ import { useTranslation } from 'react-i18next'
 import { Camera } from 'lucide-react'
 
 /**
- * StoriesRow — horizontal scrolling strip of Instagram-style story circles.
+ * StoriesRow — horizontal scrolling strip of Instagram Highlights-style circles.
+ *
+ * Each circle represents a topic group (highlight). Clicking one opens the
+ * viewer for all items in that group.
  *
  * Props:
- *   stories   — array of story objects from /api/stories
- *   onSelect  — (index: number) => void
+ *   highlights  — array of highlight objects from /api/stories
+ *                 { id, title, cover_image_url, sort_order, stories: [] }
+ *   onSelect    — (index: number) => void   called with the highlight's index
  */
-export default function StoriesRow({ stories = [], onSelect }) {
+export default function StoriesRow({ highlights = [], onSelect }) {
   const { t } = useTranslation()
 
-  if (!stories.length) return null
+  if (!highlights.length) return null
 
   return (
     <div
       className="overflow-x-auto scrollbar-hide flex gap-4 px-4 py-2"
       aria-label={t('stories.strip')}
     >
-      {stories.map((story, i) => {
-        const hasImage = !!story.avatar_url || (story.media_type !== 'video' && !!story.media_url)
-        const src = story.avatar_url || (story.media_type !== 'video' ? story.media_url : null)
+      {highlights.map((highlight, i) => {
+        const hasCover = !!highlight.cover_image_url
 
         return (
           <button
-            key={story.id}
+            key={highlight.id}
             onClick={() => onSelect(i)}
             className="flex flex-col items-center shrink-0 active:scale-95 transition-transform"
-            aria-label={story.display_name}
+            aria-label={highlight.title}
           >
             {/* Gradient ring (Instagram palette) */}
             <div
@@ -41,15 +44,15 @@ export default function StoriesRow({ stories = [], onSelect }) {
               <div className="w-[70px] h-[70px] rounded-full bg-white flex items-center justify-center overflow-hidden">
                 {/* Inner image circle */}
                 <div className="w-[66px] h-[66px] rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
-                  {hasImage ? (
+                  {hasCover ? (
                     <img
-                      src={src}
-                      alt={story.display_name}
+                      src={highlight.cover_image_url}
+                      alt={highlight.title}
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
                   ) : (
-                    /* Video or no image: dark circle + camera icon */
+                    /* No cover image: dark circle + camera icon */
                     <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                       <Camera size={22} className="text-white/60" />
                     </div>
@@ -58,9 +61,9 @@ export default function StoriesRow({ stories = [], onSelect }) {
               </div>
             </div>
 
-            {/* Display name */}
+            {/* Highlight title */}
             <p className="text-[11px] font-medium text-gray-700 truncate w-[72px] text-center mt-1">
-              {story.display_name}
+              {highlight.title}
             </p>
           </button>
         )

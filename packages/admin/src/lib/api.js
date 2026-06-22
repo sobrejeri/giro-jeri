@@ -194,9 +194,12 @@ export const api = {
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
 
-  // Stories (Instagram-style)
-  getStories:  ()         => request('/api/stories/admin'),
-  createStory: (body)     => request('/api/stories',       { method: 'POST',   body }),
-  updateStory: (id, body) => request('/api/stories/' + id, { method: 'PUT',    body }),
-  deleteStory: (id)       => request('/api/stories/' + id, { method: 'DELETE' }),
+  // Destaques (Instagram Highlights) — admin
+  getStories:      ()          => request('/api/stories/admin'),
+  createHighlight: (body)      => request('/api/stories/highlights',                   { method: 'POST',   body }),
+  updateHighlight: (id, body)  => request('/api/stories/highlights/' + id,             { method: 'PUT',    body }),
+  deleteHighlight: (id)        => request('/api/stories/highlights/' + id,             { method: 'DELETE' }),
+  addStoryItem:    (hid, body) => request('/api/stories/highlights/' + hid + '/items', { method: 'POST',   body }),
+  updateStoryItem: (id, body)  => request('/api/stories/items/' + id,                  { method: 'PUT',    body }),
+  deleteStoryItem: (id)        => request('/api/stories/items/' + id,                  { method: 'DELETE' }),
 }
