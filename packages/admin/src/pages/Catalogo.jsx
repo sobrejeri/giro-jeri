@@ -245,8 +245,10 @@ export default function Catalogo() {
       return
     }
 
+    // Remove campos que não são colunas da tabela (joins, metadados auto)
+    const { regions: _r, id: _id, created_at: _ca, updated_at: _ua, ...cleanForm } = vehicleForm
     let body = {
-      ...vehicleForm,
+      ...cleanForm,
       seat_capacity:    Number(vehicleForm.seat_capacity),
       luggage_capacity: Number(vehicleForm.luggage_capacity) || 0,
       region_id:        regionId,
