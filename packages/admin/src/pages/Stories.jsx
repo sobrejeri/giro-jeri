@@ -37,6 +37,7 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
 const HL_EMPTY   = { title: '', cover_image_url: '', sort_order: 0, is_active: true }
 const ITEM_EMPTY = { media_url: '', media_type: 'image', duration_sec: 20, sort_order: 0, display_name: '' }
 
+// Upload de imagem (resize no cliente → base64 → API)
 function UploadBtn({ onUrl, label = 'Upload', size = 1280 }) {
   const [busy, setBusy] = useState(false)
   async function pick(e) {
@@ -56,6 +57,70 @@ function UploadBtn({ onUrl, label = 'Upload', size = 1280 }) {
       {label}
       <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={pick} disabled={busy} />
     </label>
+  )
+}
+
+// Upload de vídeo (direto ao Supabase Storage via URL assinada)
+function VideoUploadBtn({ onUrl, onProgress }) {
+  const [busy,  setBusy]  = useState(false)
+  const [pct,   setPct]   = useState(0)
+  const [error, setError] = useState('')
+
+  async function pick(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError('')
+    setBusy(true)
+    setPct(0)
+    try {
+      // 1. Pede URL assinada ao servidor
+      const { signed_url, public_url } = await api.getStorageSignedUrl({
+        filename:     file.name,
+        content_type: file.type,
+      })
+      if (!signed_url) throw new Error('Não foi possível gerar URL de upload')
+
+      // 2. Envia o arquivo diretamente ao Supabase Storage com progress
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', signed_url)
+        xhr.setRequestHeader('Content-Type', file.type)
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) setPct(Math.round((ev.loaded / ev.total) * 100))
+        }
+        xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)))
+        xhr.onerror = () => reject(new Error('Falha de rede'))
+        xhr.send(file)
+      })
+
+      onUrl(public_url)
+    } catch (err) {
+      setError(err?.message || 'Erro ao fazer upload do vídeo')
+    } finally {
+      setBusy(false)
+      setPct(0)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label className={`inline-flex items-center gap-1.5 cursor-pointer text-sm font-medium px-3 py-2 rounded-lg transition-colors ${
+        busy ? 'bg-brand/20 text-brand/60 cursor-not-allowed' : 'bg-brand/10 text-brand hover:bg-brand/20'
+      }`}>
+        {busy
+          ? <><Loader2 size={14} className="animate-spin" /> Enviando {pct}%</>
+          : <><Upload size={14} /> Enviar vídeo</>}
+        <input type="file" accept="video/mp4,video/webm,video/quicktime"
+          className="hidden" onChange={pick} disabled={busy} />
+      </label>
+      {busy && (
+        <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+          <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </div>
   )
 }
 
@@ -353,6 +418,11 @@ export default function Stories() {
                           className="h-10 w-16 object-cover rounded-lg"
                           onError={(e) => { e.target.style.display = 'none' }} />
                       )}
+                    </div>
+                  )}
+                  {itemForm.media_type === 'video' && (
+                    <div className="mt-1.5">
+                      <VideoUploadBtn onUrl={(url) => setItem('media_url', url)} />
                     </div>
                   )}
                 </div>

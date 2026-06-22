@@ -515,6 +515,40 @@ router.post('/site-image', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/admin/storage-sign ───────────────────────
+// Gera uma URL assinada para upload direto do browser ao Supabase Storage.
+// Usado para vídeos (evita rotear arquivos grandes pelo servidor).
+router.post('/storage-sign', requireAdmin, async (req, res, next) => {
+  try {
+    const { filename, content_type } = req.body;
+    if (!filename || !content_type) {
+      return res.status(400).json({ error: 'filename e content_type são obrigatórios' });
+    }
+
+    const ALLOWED = [
+      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+      'image/jpeg', 'image/png', 'image/webp',
+    ];
+    if (!ALLOWED.includes(content_type)) {
+      return res.status(400).json({ error: 'Tipo de arquivo não suportado' });
+    }
+
+    const ext  = filename.split('.').pop().toLowerCase().slice(0, 5) || 'bin';
+    const slug = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const path = `site/videos/${slug}.${ext}`;
+
+    const { data, error } = await supabase.storage
+      .from('avatars')
+      .createSignedUploadUrl(path);
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+
+    res.json({ signed_url: data.signedUrl, path, public_url: publicUrl });
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/admin/coupons ─────────────────────────────
 router.get('/coupons', requireAdmin, async (req, res, next) => {
   try {

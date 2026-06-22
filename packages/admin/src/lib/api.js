@@ -176,6 +176,9 @@ export const api = {
   // Upload de imagens do site (banner da home etc.) → devolve { url }
   uploadSiteImage: (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
 
+  // URL assinada para upload direto de vídeo/imagem ao Supabase Storage → devolve { signed_url, public_url }
+  getStorageSignedUrl: (body) => request('/api/admin/storage-sign', { method: 'POST', body }),
+
   // Feed de eventos / promoções da vila
   getFeedPosts:   ()         => request('/api/feed/admin'),
   createFeedPost: (body)     => request('/api/feed', { method: 'POST', body }),
