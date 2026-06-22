@@ -82,18 +82,6 @@ export default function Catalogo() {
   const regionId = regionData?.[0]?.id
   const allRegions = Array.isArray(regionData) ? regionData.filter((r) => r.is_active) : []
 
-  const byRegion = (item) => !filterRegion || (item.region_ids || []).includes(filterRegion)
-  const filteredTours     = tours.filter(byRegion)
-  const filteredTransfers = transfers.filter(byRegion)
-  const filteredVehicles  = vehicles.filter(byRegion)
-
-  function RegionTags({ ids }) {
-    if (!ids?.length) return null
-    const names = ids.map((id) => allRegions.find((r) => r.id === id)?.name).filter(Boolean)
-    if (!names.length) return null
-    return <span className="text-[10px] text-brand/60 ml-1">{names.join(' · ')}</span>
-  }
-
   const { data: tours = [], isLoading: l1 } = useQuery({
     queryKey: ['admin-tours'],
     queryFn:  () => api.getTours(),
@@ -110,6 +98,18 @@ export default function Catalogo() {
     queryKey: ['vehicles'],
     queryFn:  () => api.getVehicles(),
   })
+
+  const byRegion = (item) => !filterRegion || (item.region_ids || []).includes(filterRegion)
+  const filteredTours     = tours.filter(byRegion)
+  const filteredTransfers = transfers.filter(byRegion)
+  const filteredVehicles  = vehicles.filter(byRegion)
+
+  function RegionTags({ ids }) {
+    if (!ids?.length) return null
+    const names = ids.map((id) => allRegions.find((r) => r.id === id)?.name).filter(Boolean)
+    if (!names.length) return null
+    return <span className="text-[10px] text-brand/60 ml-1">{names.join(' · ')}</span>
+  }
 
   /* ── Tour mutations ──────────────────────────────────────── */
   const tourMut = useMutation({
