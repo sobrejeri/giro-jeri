@@ -91,16 +91,14 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
       </div>
       <div className="p-2">
         <p className="text-[11px] font-bold text-gray-900 leading-tight line-clamp-1 mb-0.5">{tour.name}</p>
-        <div className="flex items-center gap-1">
-          {tour.rating_average > 0 && <>
+        {tour.short_description ? (
+          <p className="text-[10px] text-gray-400 leading-snug line-clamp-2">{tour.short_description}</p>
+        ) : tour.rating_average > 0 ? (
+          <div className="flex items-center gap-1">
             <Star size={9} className="text-amber-400 fill-amber-400" />
             <span className="text-[10px] text-gray-500">{tour.rating_average}</span>
-          </>}
-          {tour.duration_hours && <>
-            <Clock size={9} className="text-gray-400 ml-0.5" />
-            <span className="text-[10px] text-gray-400">{tour.duration_hours}h</span>
-          </>}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -677,6 +675,7 @@ export default function Tours() {
                     ? () => navigate('/checkout/resumo', {
                         state: {
                           service_name:     selectedTour.name,
+                          short_description: selectedTour.short_description || null,
                           service_type:     'tour',
                           booking_mode:     'private',
                           service_date:     isToday(date) ? 'Hoje'
@@ -737,6 +736,7 @@ export default function Tours() {
                   navigate('/checkout/resumo', {
                     state: {
                       service_name:     selectedTour.name,
+                      short_description: selectedTour.short_description || null,
                       service_type:     'tour',
                       booking_mode:     'shared',
                       service_date:     isToday(date) ? 'Hoje'
