@@ -9,7 +9,6 @@ import Modal from '../components/ui/Modal'
 import Input, { Select, Textarea } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
-import LocationPicker from '../components/LocationPicker'
 
 function slugify(text) {
   return text.toString().toLowerCase()
@@ -252,31 +251,44 @@ export default function Catalogo() {
   }
 
   function CidadesSelector({ value, onChange }) {
-    if (allRegions.length === 0) return null
+    const selected  = value || []
+    const available = allRegions.filter((r) => !selected.includes(r.id))
     return (
       <div>
         <p className="text-xs font-medium text-gray-400 mb-2">
-          Cidades de atuação
-          <span className="ml-1 font-normal text-gray-600">(onde aparece no app)</span>
+          Municípios de atuação
+          <span className="ml-1 font-normal text-gray-600">(onde o serviço aparece no app)</span>
         </p>
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
-          {allRegions.map((r) => (
-            <label key={r.id} className="inline-flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input
-                type="checkbox"
-                className="w-4 h-4 rounded border-gray-600 bg-gray-900 accent-brand"
-                checked={(value || []).includes(r.id)}
-                onChange={(e) => {
-                  const next = e.target.checked
-                    ? [...(value || []), r.id]
-                    : (value || []).filter((id) => id !== r.id)
-                  onChange(next)
-                }}
-              />
-              {r.city || r.name}
-            </label>
-          ))}
-        </div>
+        {selected.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {selected.map((id) => {
+              const r = allRegions.find((r) => r.id === id)
+              if (!r) return null
+              return (
+                <span key={id} className="inline-flex items-center gap-1 bg-brand/20 text-brand text-xs font-medium px-2.5 py-1 rounded-full">
+                  {r.name}
+                  <button type="button" onClick={() => onChange(selected.filter((x) => x !== id))} className="ml-0.5 text-brand/60 hover:text-brand">
+                    <X size={11} />
+                  </button>
+                </span>
+              )
+            })}
+          </div>
+        )}
+        {available.length > 0 ? (
+          <select
+            className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-400 focus:outline-none focus:border-brand"
+            value=""
+            onChange={(e) => { if (e.target.value) onChange([...selected, e.target.value]) }}
+          >
+            <option value="">+ Adicionar município…</option>
+            {available.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        ) : selected.length > 0 ? (
+          <p className="text-xs text-gray-600">Todos os municípios adicionados</p>
+        ) : (
+          <p className="text-xs text-gray-600">Nenhum município disponível</p>
+        )}
       </div>
     )
   }
@@ -492,14 +504,6 @@ export default function Catalogo() {
               <option value="by_vehicle">Por veículo</option>
               <option value="manual_quote">Cotação manual</option>
             </Select>
-            <LocationPicker
-              value={{
-                latitude:          form.latitude,
-                longitude:         form.longitude,
-                service_radius_km: form.service_radius_km,
-              }}
-              onChange={(next) => setForm({ ...form, ...next })}
-            />
             {/* Horário limite */}
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">
@@ -589,15 +593,6 @@ export default function Catalogo() {
                 value={form.shared_price_per_person || ''}
                 onChange={(e) => setForm({ ...form, shared_price_per_person: e.target.value })} />
             )}
-
-            <LocationPicker
-              value={{
-                latitude:          form.latitude,
-                longitude:         form.longitude,
-                service_radius_km: form.service_radius_km,
-              }}
-              onChange={(next) => setForm({ ...form, ...next })}
-            />
 
             {/* Horário limite de solicitação */}
             <div>
@@ -739,15 +734,6 @@ export default function Catalogo() {
               </label>
             ))}
           </div>
-
-          <LocationPicker
-            value={{
-              latitude:          vehicleForm.latitude,
-              longitude:         vehicleForm.longitude,
-              service_radius_km: vehicleForm.service_radius_km,
-            }}
-            onChange={(next) => setVehicleForm({ ...vehicleForm, ...next })}
-          />
 
           <CidadesSelector
             value={vehicleForm.region_ids}
