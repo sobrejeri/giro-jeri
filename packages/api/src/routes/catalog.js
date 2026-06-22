@@ -50,7 +50,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
     const {
       name, short_description, duration_hours, max_people,
       is_private_enabled, is_shared_enabled, shared_price_per_person,
-      cover_image_url, category_id,
+      cover_image_url, category_id, region_ids,
     } = req.body;
 
     const slug = `${slugify(name)}-${Date.now().toString(36)}`;
@@ -67,6 +67,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       shared_price_per_person: shared_price_per_person ? Number(shared_price_per_person) : null,
       cover_image_url:         cover_image_url  || null,
       category_id:             category_id      || null,
+      region_ids:              Array.isArray(region_ids) ? region_ids : [],
     }).select().single();
 
     if (error) throw error;
@@ -80,7 +81,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
       name, short_description, duration_hours, max_people,
       is_private_enabled, is_shared_enabled, shared_price_per_person,
       cover_image_url, category_id, is_active, display_order,
-      latitude, longitude, service_radius_km,
+      latitude, longitude, service_radius_km, region_ids,
     } = req.body;
 
     const update = {};
@@ -98,6 +99,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (latitude           !== undefined) update.latitude                = latitude === '' || latitude === null ? null : Number(latitude);
     if (longitude          !== undefined) update.longitude               = longitude === '' || longitude === null ? null : Number(longitude);
     if (service_radius_km  !== undefined) update.service_radius_km       = service_radius_km === '' || service_radius_km === null ? null : Number(service_radius_km);
+    if (region_ids         !== undefined) update.region_ids              = Array.isArray(region_ids) ? region_ids : [];
 
     const { data, error } = await supabase
       .from('tours').update(update).eq('id', req.params.id).select().single();

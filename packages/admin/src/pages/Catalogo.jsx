@@ -23,12 +23,12 @@ const TOUR_EMPTY = {
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '',
+  booking_cutoff_time: '', region_ids: [],
 }
 const TRANSFER_EMPTY = {
   name: '', description: '', pricing_mode: 'fixed_route', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '',
+  booking_cutoff_time: '', region_ids: [],
 }
 const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true }
 const VEHICLE_EMPTY = {
@@ -38,6 +38,7 @@ const VEHICLE_EMPTY = {
   is_transfer_allowed: false, is_tour_allowed: true,
   is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
+  region_ids: [],
 }
 
 const VEHICLE_TYPES = [
@@ -79,6 +80,7 @@ export default function Catalogo() {
     queryFn:  () => api.getRegions(),
   })
   const regionId = regionData?.[0]?.id
+  const allRegions = Array.isArray(regionData) ? regionData.filter((r) => r.is_active) : []
 
   const { data: tours = [], isLoading: l1 } = useQuery({
     queryKey: ['admin-tours'],
@@ -144,11 +146,11 @@ export default function Catalogo() {
     setModal({ isNew: true })
   }
   function openEditTour(t) {
-    setForm({ ...t }); setImageFile(null); setImagePreview(t.cover_image_url || null)
+    setForm({ ...t, region_ids: t.region_ids || [] }); setImageFile(null); setImagePreview(t.cover_image_url || null)
     setModal(t)
   }
   function openNewTransfer()   { setForm(TRANSFER_EMPTY); setModal({ isNew: true, _type: 'transfer' }) }
-  function openEditTransfer(t) { setForm({ ...t });        setModal({ ...t, _type: 'transfer' }) }
+  function openEditTransfer(t) { setForm({ ...t, region_ids: t.region_ids || [] }); setModal({ ...t, _type: 'transfer' }) }
   function openNewRoute()      { setRouteForm(ROUTE_EMPTY); setRouteModal({ isNew: true }) }
   function openEditRoute(r)    { setRouteForm({ ...r });    setRouteModal(r) }
 
@@ -158,7 +160,7 @@ export default function Catalogo() {
     setVehicleModal({ isNew: true })
   }
   function openEditVehicle(v) {
-    setVehicleForm({ ...v })
+    setVehicleForm({ ...v, region_ids: v.region_ids || [] })
     setVehicleImageFile(null); setVehicleImagePreview(v.image_url || null)
     setVehicleModal(v)
   }
@@ -198,6 +200,7 @@ export default function Catalogo() {
       body.slug      = slugify(form.name)
       body.region_id = regionId
     }
+    body.region_ids = form.region_ids || []
     if (imageFile) {
       setUploading(true)
       try { body.cover_image_url = await uploadImage(imageFile, 'tours') }
@@ -230,6 +233,7 @@ export default function Catalogo() {
       seat_capacity:    Number(vehicleForm.seat_capacity),
       luggage_capacity: Number(vehicleForm.luggage_capacity) || 0,
       region_id:        regionId,
+      region_ids:       vehicleForm.region_ids || [],
     }
     if (vehicleModal?.isNew) {
       body.slug = slugify(vehicleForm.name)
@@ -245,6 +249,36 @@ export default function Catalogo() {
       setUploading(false)
     }
     vehicleMut.mutate(body)
+  }
+
+  function CidadesSelector({ value, onChange }) {
+    if (allRegions.length === 0) return null
+    return (
+      <div>
+        <p className="text-xs font-medium text-gray-400 mb-2">
+          Cidades de atuação
+          <span className="ml-1 font-normal text-gray-600">(onde aparece no app)</span>
+        </p>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {allRegions.map((r) => (
+            <label key={r.id} className="inline-flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded border-gray-600 bg-gray-900 accent-brand"
+                checked={(value || []).includes(r.id)}
+                onChange={(e) => {
+                  const next = e.target.checked
+                    ? [...(value || []), r.id]
+                    : (value || []).filter((id) => id !== r.id)
+                  onChange(next)
+                }}
+              />
+              {r.city || r.name}
+            </label>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   const isTransferModal = modal?._type === 'transfer'
@@ -482,6 +516,10 @@ export default function Catalogo() {
               </p>
             </div>
 
+            <CidadesSelector
+              value={form.region_ids}
+              onChange={(next) => setForm((f) => ({ ...f, region_ids: next }))}
+            />
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -577,6 +615,10 @@ export default function Catalogo() {
               </p>
             </div>
 
+            <CidadesSelector
+              value={form.region_ids}
+              onChange={(next) => setForm((f) => ({ ...f, region_ids: next }))}
+            />
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -707,6 +749,10 @@ export default function Catalogo() {
             onChange={(next) => setVehicleForm({ ...vehicleForm, ...next })}
           />
 
+          <CidadesSelector
+            value={vehicleForm.region_ids}
+            onChange={(next) => setVehicleForm((f) => ({ ...f, region_ids: next }))}
+          />
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
