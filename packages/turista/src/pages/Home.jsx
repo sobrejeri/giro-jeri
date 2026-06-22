@@ -190,7 +190,7 @@ function FeaturedCarousel({ items, favs, onToggleFav }) {
 
   return (
     <div className="-mx-4">
-      <div ref={scrollRef} className="flex gap-3 overflow-x-hidden px-4">
+      <div ref={scrollRef} className="flex gap-2 overflow-x-hidden px-4">
         {slides.map((tour, i) => (
           <div key={`${tour.id}-${i}`} className="shrink-0 w-[78%]">
             <TourCard tour={tour} isFav={favs.has(tour.id)} onToggleFav={onToggleFav} />
