@@ -517,12 +517,14 @@ router.post('/site-image', requireAdmin, async (req, res, next) => {
 
 // ── POST /api/admin/storage-sign ───────────────────────
 // Gera uma URL assinada para upload direto do browser ao Supabase Storage.
-// Usado para vídeos (evita rotear arquivos grandes pelo servidor).
+// Usado para vídeos (Stories) e imagens (catálogo) grandes, evitando rotear
+// os arquivos pelo servidor. Aceita `filename` (Stories) ou `path` (catálogo).
 router.post('/storage-sign', requireAdmin, async (req, res, next) => {
   try {
-    const { filename, content_type } = req.body;
-    if (!filename || !content_type) {
-      return res.status(400).json({ error: 'filename e content_type são obrigatórios' });
+    const { filename, path: clientPath, content_type } = req.body;
+    const ref = filename || clientPath;
+    if (!ref || !content_type) {
+      return res.status(400).json({ error: 'filename (ou path) e content_type são obrigatórios' });
     }
 
     // Strip codec suffix (e.g. "video/webm;codecs=vp9" → "video/webm")
@@ -531,9 +533,10 @@ router.post('/storage-sign', requireAdmin, async (req, res, next) => {
       return res.status(400).json({ error: 'Tipo de arquivo não suportado' });
     }
 
-    const ext  = filename.split('.').pop().toLowerCase().slice(0, 5) || 'bin';
-    const slug = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const path = `site/videos/${slug}.${ext}`;
+    const ext    = ref.split('.').pop().toLowerCase().slice(0, 5) || 'bin';
+    const slug   = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const folder = base_type.startsWith('video/') ? 'site/videos' : 'site/images';
+    const path   = `${folder}/${slug}.${ext}`;
 
     const { data, error } = await supabase.storage
       .from('avatars')
