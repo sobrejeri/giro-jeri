@@ -36,7 +36,8 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
 
 const HL_EMPTY   = { title: '', cover_image_url: '', sort_order: 0, is_active: true }
 const ITEM_EMPTY = { media_url: '', media_type: 'image', duration_sec: 15, sort_order: 0, display_name: '' }
-const TYPE_DURATION = { image: 15, video: 30 }
+const TYPE_DURATION  = { image: 15, video: 30 }
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024  // 50 MB — teto do bucket avatars (migration 032)
 
 // Upload de imagem (resize no cliente → base64 → API)
 function UploadBtn({ onUrl, label = 'Upload', size = 1280 }) {
@@ -111,9 +112,9 @@ function trimVideoTo30s(file, maxSec = 30) {
   })
 }
 
-// Upload de vídeo: corta para 30 s se necessário, depois envia via URL assinada.
-// O endpoint de signed upload do Supabase exige PUT + FormData com o arquivo
-// sob a chave vazia '' e um campo cacheControl (mesmo formato do supabase-js).
+// Upload de vídeo: corta para 30 s se necessário e envia em binário puro
+// (PUT) para a URL assinada do Supabase Storage. O bucket precisa aceitar
+// mime types de vídeo e tamanho > 2 MB (ver migration 032).
 function VideoUploadBtn({ onUrl }) {
   const [busy,   setBusy]   = useState(false)
   const [pct,    setPct]    = useState(0)
@@ -131,24 +132,27 @@ function VideoUploadBtn({ onUrl }) {
       setStatus('Verificando duração…')
       const { blob, content_type, ext } = await trimVideoTo30s(file)
 
+      // Guarda de tamanho: o bucket aceita até 50 MB
+      if (blob.size > MAX_VIDEO_BYTES) {
+        throw new Error('Vídeo muito grande (máx. 50 MB). Use um vídeo mais curto ou de menor resolução.')
+      }
+
       // 2. Solicita URL assinada ao servidor
       setStatus('Preparando upload…')
+      const ct = content_type.split(';')[0].trim()
       const { signed_url, public_url } = await api.getStorageSignedUrl({
         filename:     `video.${ext}`,
-        content_type: content_type.split(';')[0].trim(),
+        content_type: ct,
       })
       if (!signed_url) throw new Error('Não foi possível gerar URL de upload')
 
-      // 3. Envia via PUT + FormData (formato do Supabase Storage signed upload).
-      //    A signed_url já contém o token; o arquivo vai sob a chave vazia ''.
+      // 3. Envia o vídeo em binário puro via PUT (a signed_url já contém o token).
+      //    O Content-Type define o tipo do objeto armazenado, para tocar no app.
       setStatus('Enviando…')
       await new Promise((resolve, reject) => {
-        const fd = new FormData()
-        fd.append('cacheControl', '3600')
-        fd.append('', blob, `video.${ext}`)
         const xhr = new XMLHttpRequest()
         xhr.open('PUT', signed_url)
-        xhr.setRequestHeader('x-upsert', 'true')
+        xhr.setRequestHeader('Content-Type', ct)
         xhr.upload.onprogress = (ev) => {
           if (ev.lengthComputable) setPct(Math.round((ev.loaded / ev.total) * 100))
         }
@@ -156,7 +160,7 @@ function VideoUploadBtn({ onUrl }) {
           ? resolve()
           : reject(new Error(`Erro ${xhr.status} ao enviar`)))
         xhr.onerror = () => reject(new Error('Falha de rede'))
-        xhr.send(fd)
+        xhr.send(blob)
       })
 
       onUrl(public_url)
