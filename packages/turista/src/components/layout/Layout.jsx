@@ -9,12 +9,7 @@ export default function Layout() {
   const { region, openPicker } = useRegion()
   const { pathname } = useLocation()
   const isHome = pathname === '/'
-  const hideLocationBar = isHome
-    || pathname === '/passeios'
-    || pathname.startsWith('/transfers')
-    || pathname === '/eventos'
-    || pathname.startsWith('/minhas-reservas')
-    || pathname === '/perfil'
+  const hideLocationBar = !isHome
 
   return (
     <div className="min-h-screen bg-[#EBEBEB] lg:bg-gray-50">
