@@ -70,6 +70,7 @@ export default function Catalogo() {
   const [vehicleImageFile, setVehicleImageFile]   = useState(null)
   const [vehicleImagePreview, setVehicleImagePreview] = useState(null)
   const [uploading, setUploading]   = useState(false)
+  const [filterRegion, setFilterRegion] = useState(null)
   const fileRef        = useRef(null)
   const vehicleFileRef = useRef(null)
   const qc = useQueryClient()
@@ -80,6 +81,18 @@ export default function Catalogo() {
   })
   const regionId = regionData?.[0]?.id
   const allRegions = Array.isArray(regionData) ? regionData.filter((r) => r.is_active) : []
+
+  const byRegion = (item) => !filterRegion || (item.region_ids || []).includes(filterRegion)
+  const filteredTours     = tours.filter(byRegion)
+  const filteredTransfers = transfers.filter(byRegion)
+  const filteredVehicles  = vehicles.filter(byRegion)
+
+  function RegionTags({ ids }) {
+    if (!ids?.length) return null
+    const names = ids.map((id) => allRegions.find((r) => r.id === id)?.name).filter(Boolean)
+    if (!names.length) return null
+    return <span className="text-[10px] text-brand/60 ml-1">{names.join(' · ')}</span>
+  }
 
   const { data: tours = [], isLoading: l1 } = useQuery({
     queryKey: ['admin-tours'],
@@ -312,17 +325,42 @@ export default function Catalogo() {
         ))}
       </div>
 
+      {/* Filtro por município */}
+      {allRegions.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilterRegion(null)}
+            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              !filterRegion ? 'bg-brand text-white border-brand' : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
+            }`}
+          >
+            Todos
+          </button>
+          {allRegions.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => setFilterRegion(filterRegion === r.id ? null : r.id)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                filterRegion === r.id ? 'bg-brand text-white border-brand' : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
+              }`}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Tours ──────────────────────────────────────────────── */}
       {tab === 'tours' && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-300">Passeios ({tours.length})</h2>
+              <h2 className="text-sm font-semibold text-gray-300">Passeios ({filteredTours.length}{filterRegion ? `/${tours.length}` : ''})</h2>
               <Button size="sm" onClick={openNewTour}><Plus size={14} /> Novo Passeio</Button>
             </div>
           </CardHeader>
           <div className="divide-y divide-gray-800">
-            {tours.map((t) => (
+            {filteredTours.map((t) => (
               <div key={t.id} className="flex items-center gap-3 px-5 py-3">
                 {t.cover_image_url ? (
                   <img src={t.cover_image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
@@ -335,6 +373,7 @@ export default function Catalogo() {
                     {t.duration_hours}h · cap. {t.max_people}
                     {t.is_private_enabled && ' · Privativo'}
                     {t.is_shared_enabled && ' · Compartilhado'}
+                    <RegionTags ids={t.region_ids} />
                   </p>
                 </div>
                 <Badge value={String(t.is_active)} />
@@ -351,7 +390,7 @@ export default function Catalogo() {
                 </div>
               </div>
             ))}
-            {tours.length === 0 && <CardBody><p className="text-sm text-gray-600">Nenhum passeio</p></CardBody>}
+            {filteredTours.length === 0 && <CardBody><p className="text-sm text-gray-600">{filterRegion ? 'Nenhum passeio neste município' : 'Nenhum passeio'}</p></CardBody>}
           </div>
         </Card>
       )}
@@ -362,16 +401,16 @@ export default function Catalogo() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-300">Transfers ({transfers.length})</h2>
+                <h2 className="text-sm font-semibold text-gray-300">Transfers ({filteredTransfers.length}{filterRegion ? `/${transfers.length}` : ''})</h2>
                 <Button size="sm" onClick={openNewTransfer}><Plus size={14} /> Novo Transfer</Button>
               </div>
             </CardHeader>
             <div className="divide-y divide-gray-800">
-              {transfers.map((t) => (
+              {filteredTransfers.map((t) => (
                 <div key={t.id} className="flex items-center gap-4 px-5 py-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{t.name}</p>
-                    <p className="text-xs text-gray-500">{t.pricing_mode}</p>
+                    <p className="text-xs text-gray-500">{t.pricing_mode}<RegionTags ids={t.region_ids} /></p>
                   </div>
                   <Badge value={String(t.is_active)} />
                   <button onClick={() => openEditTransfer(t)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
@@ -379,7 +418,7 @@ export default function Catalogo() {
                   </button>
                 </div>
               ))}
-              {transfers.length === 0 && <CardBody><p className="text-sm text-gray-600">Nenhum transfer</p></CardBody>}
+              {filteredTransfers.length === 0 && <CardBody><p className="text-sm text-gray-600">{filterRegion ? 'Nenhum transfer neste município' : 'Nenhum transfer'}</p></CardBody>}
             </div>
           </Card>
 
@@ -429,7 +468,7 @@ export default function Catalogo() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Car size={16} className="text-gray-500" />
-                <h2 className="text-sm font-semibold text-gray-300">Veículos ({vehicles.length})</h2>
+                <h2 className="text-sm font-semibold text-gray-300">Veículos ({filteredVehicles.length}{filterRegion ? `/${vehicles.length}` : ''})</h2>
               </div>
               <Button size="sm" onClick={openNewVehicle}><Plus size={14} /> Novo Veículo</Button>
             </div>
@@ -438,7 +477,7 @@ export default function Catalogo() {
             <CardBody><p className="text-sm text-gray-500">Carregando…</p></CardBody>
           ) : (
             <div className="divide-y divide-gray-800">
-              {vehicles.map((v) => (
+              {filteredVehicles.map((v) => (
                 <div key={v.id} className="flex items-center gap-3 px-5 py-3">
                   {v.image_url ? (
                     <img src={v.image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
@@ -449,7 +488,7 @@ export default function Catalogo() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{v.name}</p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
                       <span>{VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type}</span>
                       <span>·</span>
                       <Users size={10} className="text-gray-500" />
@@ -457,6 +496,7 @@ export default function Catalogo() {
                       {v.is_tour_allowed && <span className="text-brand/70">· Passeios</span>}
                       {v.is_transfer_allowed && <span className="text-purple-400/70">· Transfer</span>}
                       {v.is_shared_allowed && <span className="text-amber-400/70">· Compartilhado</span>}
+                      <RegionTags ids={v.region_ids} />
                     </div>
                   </div>
                   <Badge value={String(v.is_active)} />
