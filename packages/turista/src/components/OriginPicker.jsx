@@ -85,20 +85,38 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
       return
     }
     setGpsLoading(true)
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        const label = await reverseGeocode(coords.latitude, coords.longitude).catch(() => null)
-        onSelect({
-          name:      label || 'Minha localização',
-          latitude:  coords.latitude,
-          longitude: coords.longitude,
+
+    function onSuccess({ coords }) {
+      reverseGeocode(coords.latitude, coords.longitude)
+        .catch(() => null)
+        .then((label) => {
+          onSelect({
+            name:      label || 'Minha localização',
+            latitude:  coords.latitude,
+            longitude: coords.longitude,
+          })
+          setGpsLoading(false)
+          onClose()
         })
-        setGpsLoading(false)
-        onClose()
-      },
-      () => { setGpsLoading(false); alert('Não foi possível obter sua localização.') },
-      { timeout: 8000, enableHighAccuracy: true },
-    )
+    }
+
+    function onError(err) {
+      setGpsLoading(false)
+      if (err.code === 1) {
+        alert('Permissão de localização negada. Ative nas configurações do navegador.')
+      } else {
+        // Timeout ou posição indisponível — tenta sem alta precisão
+        navigator.geolocation.getCurrentPosition(onSuccess, () => {
+          alert('Não foi possível obter sua localização. Verifique o GPS e tente novamente.')
+        }, { timeout: 20000 })
+      }
+    }
+
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+      timeout: 15000,
+      enableHighAccuracy: true,
+      maximumAge: 30000,
+    })
   }
 
   if (!open) return null

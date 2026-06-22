@@ -89,15 +89,33 @@ export function RegionProvider({ children }) {
     if (!navigator.geolocation) return
     setDetecting(true)
     setOutsideError(false)
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
+
+    async function onSuccess({ coords }) {
+      setDetecting(false)
+      const found = await applyCoords(coords.latitude, coords.longitude)
+      if (!found) setOutsideError(true)
+    }
+
+    function onError(err) {
+      if (err.code === 1) {
+        // Permissão negada — para imediatamente
         setDetecting(false)
-        const found = await applyCoords(coords.latitude, coords.longitude)
-        if (!found) setOutsideError(true)
-      },
-      () => { setDetecting(false) },
-      { timeout: 8000 }
-    )
+        setOutsideError(true)
+        return
+      }
+      // Timeout/indisponível — tenta sem alta precisão
+      navigator.geolocation.getCurrentPosition(
+        onSuccess,
+        () => { setDetecting(false); setOutsideError(true) },
+        { timeout: 20000 }
+      )
+    }
+
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+      timeout:            15000,
+      enableHighAccuracy: true,
+      maximumAge:         30000,
+    })
   }, [applyCoords])
 
   // Acompanha mudanças de localização em segundo plano, para manter

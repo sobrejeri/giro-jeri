@@ -4,82 +4,92 @@ const JERI = { lat: -2.7976, lng: -40.5147 }
 const HAS_KEY = !!import.meta.env.VITE_GOOGLE_MAPS_KEY
 
 // ---------------------------------------------------------------------------
+// Internal helpers — Google (throws on failure) + Nominatim/Overpass fallbacks
+// ---------------------------------------------------------------------------
+
+async function googleSuggestions(input, center) {
+  const maps = await loadGoogleMaps()
+  const svc  = new maps.places.AutocompleteService()
+  const lat  = center.lat
+  const lng  = center.lng ?? center.lon ?? JERI.lng
+  return new Promise((resolve, reject) => {
+    svc.getPlacePredictions(
+      {
+        input,
+        componentRestrictions: { country: 'br' },
+        location: new maps.LatLng(lat, lng),
+        radius:   150000,
+      },
+      (predictions, status) => {
+        if (status === maps.places.PlacesServiceStatus.OK && predictions?.length) {
+          resolve(
+            predictions.map((p) => ({
+              place_id:       p.place_id,
+              display_name:   p.description,
+              main_text:      p.structured_formatting?.main_text ?? p.description.split(',')[0],
+              secondary_text: p.structured_formatting?.secondary_text ?? '',
+              lat:            null,
+              lon:            null,
+              _source:        'google',
+            }))
+          )
+        } else {
+          reject(new Error(status))
+        }
+      }
+    )
+  })
+}
+
+async function nominatimSearch(input, center) {
+  const lng = center?.lng ?? center?.lon ?? JERI.lng
+  const lat = center?.lat ?? JERI.lat
+  const viewbox = `${lng - 1.5},${lat + 1.5},${lng + 1.5},${lat - 1.5}`
+  const params = new URLSearchParams({
+    q:                 input,
+    format:            'json',
+    limit:             '6',
+    countrycodes:      'br',
+    viewbox,
+    bounded:           '0',
+    'accept-language': 'pt-BR',
+  })
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?${params}`,
+    { headers: { 'User-Agent': 'GiroJeri/1.0' } }
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.map((item) => ({
+    place_id:       item.place_id,
+    display_name:   item.display_name,
+    main_text:      item.display_name.split(',')[0],
+    secondary_text: item.display_name.split(',').slice(1).join(',').trim(),
+    lat:            item.lat,
+    lon:            item.lon,
+    _source:        'nominatim',
+  }))
+}
+
+// ---------------------------------------------------------------------------
 // getPlaceSuggestions
 // ---------------------------------------------------------------------------
 
 /**
  * Sugestões de autocomplete para endereços.
- * @param {string} input
- * @param {{ lat: number, lng?: number, lon?: number }} [center]
- * @returns {Promise<Array>}
+ * Tenta Google Maps primeiro; se falhar ou retornar vazio, usa Nominatim.
  */
 export async function getPlaceSuggestions(input, center = JERI) {
   if (HAS_KEY) {
     try {
-      const maps = await loadGoogleMaps()
-      const svc = new maps.places.AutocompleteService()
-      const centerLat = center.lat
-      const centerLng = center.lng ?? center.lon ?? JERI.lng
-      return await new Promise((resolve) => {
-        svc.getPlacePredictions(
-          {
-            input,
-            componentRestrictions: { country: 'br' },
-            location: new maps.LatLng(centerLat, centerLng),
-            radius: 150000,
-          },
-          (predictions, status) => {
-            if (status !== maps.places.PlacesServiceStatus.OK || !predictions) {
-              resolve([])
-              return
-            }
-            resolve(
-              predictions.map((p) => ({
-                place_id:       p.place_id,
-                display_name:   p.description,
-                main_text:      p.structured_formatting?.main_text ?? p.description.split(',')[0],
-                secondary_text: p.structured_formatting?.secondary_text ?? '',
-                lat:            null,
-                lon:            null,
-                _source:        'google',
-              }))
-            )
-          }
-        )
-      })
+      const results = await googleSuggestions(input, center)
+      if (results.length > 0) return results
     } catch {
       // fall through to Nominatim
     }
   }
-
-  // Fallback: Nominatim
   try {
-    const viewbox = center
-      ? `${(center.lng ?? center.lon ?? JERI.lng) - 1.5},${center.lat + 1.5},${(center.lng ?? center.lon ?? JERI.lng) + 1.5},${center.lat - 1.5}`
-      : undefined
-    const params = new URLSearchParams({
-      q:               input,
-      format:          'json',
-      limit:           '6',
-      countrycodes:    'br',
-      'accept-language': 'pt-BR',
-    })
-    if (viewbox) params.set('viewbox', viewbox)
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?${params}`,
-      { headers: { 'User-Agent': 'GiroJeri/1.0' } }
-    )
-    if (!res.ok) return []
-    const data = await res.json()
-    return data.map((item) => ({
-      place_id:       item.place_id,
-      display_name:   item.display_name,
-      main_text:      item.display_name.split(',')[0],
-      secondary_text: item.display_name.split(',').slice(1).join(',').trim(),
-      lat:            item.lat,
-      lon:            item.lon,
-      _source:        'nominatim',
-    }))
+    return await nominatimSearch(input, center)
   } catch {
     return []
   }
@@ -91,8 +101,6 @@ export async function getPlaceSuggestions(input, center = JERI) {
 
 /**
  * Detalhes (lat/lon/name) de um place_id Google.
- * @param {string} placeId
- * @returns {Promise<{ name: string, address: string, lat: string, lon: string }|null>}
  */
 export async function getPlaceDetails(placeId) {
   if (!HAS_KEY) return null
@@ -100,20 +108,20 @@ export async function getPlaceDetails(placeId) {
     const maps = await loadGoogleMaps()
     const div  = document.createElement('div')
     const svc  = new maps.places.PlacesService(div)
-    return await new Promise((resolve) => {
+    return await new Promise((resolve, reject) => {
       svc.getDetails(
         { placeId, fields: ['geometry', 'name', 'formatted_address'] },
         (place, status) => {
-          if (status !== maps.places.PlacesServiceStatus.OK || !place) {
-            resolve(null)
-            return
+          if (status === maps.places.PlacesServiceStatus.OK && place?.geometry) {
+            resolve({
+              name:    place.name ?? '',
+              address: place.formatted_address ?? '',
+              lat:     String(place.geometry.location.lat()),
+              lon:     String(place.geometry.location.lng()),
+            })
+          } else {
+            reject(new Error(status))
           }
-          resolve({
-            name:    place.name ?? '',
-            address: place.formatted_address ?? '',
-            lat:     String(place.geometry.location.lat()),
-            lon:     String(place.geometry.location.lng()),
-          })
         }
       )
     })
@@ -128,10 +136,7 @@ export async function getPlaceDetails(placeId) {
 
 /**
  * Lugares de hospedagem próximos.
- * @param {number} lat
- * @param {number} lon
- * @param {number} [radiusKm]
- * @returns {Promise<Array>}
+ * Tenta Google Places; se falhar, usa Overpass.
  */
 export async function getNearbyLodging(lat, lon, radiusKm = 10) {
   if (HAS_KEY) {
@@ -140,35 +145,32 @@ export async function getNearbyLodging(lat, lon, radiusKm = 10) {
       const div    = document.createElement('div')
       const svc    = new maps.places.PlacesService(div)
       const radius = radiusKm * 1000
-      return await new Promise((resolve) => {
+      const results = await new Promise((resolve, reject) => {
         svc.nearbySearch(
-          {
-            location: new maps.LatLng(lat, lon),
-            radius,
-            type:     'lodging',
-          },
-          (results, status) => {
+          { location: new maps.LatLng(lat, lon), radius, type: 'lodging' },
+          (places, status) => {
             if (
-              (status !== maps.places.PlacesServiceStatus.OK &&
-                status !== maps.places.PlacesServiceStatus.ZERO_RESULTS) ||
-              !results
+              status === maps.places.PlacesServiceStatus.OK && places?.length
             ) {
+              resolve(
+                places.map((place) => ({
+                  place_id:     place.place_id,
+                  display_name: place.name + (place.vicinity ? ', ' + place.vicinity : ''),
+                  lat:          String(place.geometry.location.lat()),
+                  lon:          String(place.geometry.location.lng()),
+                  _nearby:      true,
+                  _source:      'google',
+                }))
+              )
+            } else if (status === maps.places.PlacesServiceStatus.ZERO_RESULTS) {
               resolve([])
-              return
+            } else {
+              reject(new Error(status))
             }
-            resolve(
-              results.map((place) => ({
-                place_id:     place.place_id,
-                display_name: place.name + (place.vicinity ? ', ' + place.vicinity : ''),
-                lat:          String(place.geometry.location.lat()),
-                lon:          String(place.geometry.location.lng()),
-                _nearby:      true,
-                _source:      'google',
-              }))
-            )
           }
         )
       })
+      if (results.length > 0) return results
     } catch {
       // fall through to Overpass
     }
@@ -205,22 +207,19 @@ export async function getNearbyLodging(lat, lon, radiusKm = 10) {
 
 /**
  * Geocodificação reversa — retorna "Cidade, UF" ou null.
- * @param {number} lat
- * @param {number} lon
- * @returns {Promise<string|null>}
+ * Tenta Google Geocoder; se falhar, usa Nominatim.
  */
 export async function reverseGeocode(lat, lon) {
   if (HAS_KEY) {
     try {
-      const maps = await loadGoogleMaps()
+      const maps    = await loadGoogleMaps()
       const geocoder = new maps.Geocoder()
-      return await new Promise((resolve) => {
+      const label = await new Promise((resolve, reject) => {
         geocoder.geocode({ location: { lat, lng: lon } }, (results, status) => {
           if (status !== maps.GeocoderStatus.OK || !results?.length) {
-            resolve(null)
+            reject(new Error(status))
             return
           }
-          // Procura o componente de cidade no primeiro resultado
           let locality = null
           let state    = null
           for (const result of results) {
@@ -233,19 +232,18 @@ export async function reverseGeocode(lat, lon) {
               ) {
                 locality = comp.long_name
               }
-              if (
-                !state &&
-                comp.types.includes('administrative_area_level_1')
-              ) {
+              if (!state && comp.types.includes('administrative_area_level_1')) {
                 state = comp.short_name
               }
             }
             if (locality && state) break
           }
-          const label = [locality, state].filter(Boolean).join(', ') || null
-          resolve(label)
+          const l = [locality, state].filter(Boolean).join(', ') || null
+          if (l) resolve(l)
+          else reject(new Error('no_locality'))
         })
       })
+      return label
     } catch {
       // fall through to Nominatim
     }
