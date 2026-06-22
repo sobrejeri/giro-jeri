@@ -27,9 +27,9 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         }`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-5 border-b border-gray-100">
-          <span className="font-display font-bold text-xl text-brand">Giro Jeri</span>
-          <span className="ml-2 text-xs font-semibold text-gray-400 uppercase tracking-widest">Coop</span>
+        <div className="h-16 flex items-center px-4 border-b border-gray-100 gap-2">
+          <img src="/logo.jpeg" alt="Giro Jeri" className="h-9 w-auto rounded" />
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Coop</span>
           <button
             onClick={onClose}
             className="ml-auto p-1 text-gray-400 hover:text-gray-600 lg:hidden"

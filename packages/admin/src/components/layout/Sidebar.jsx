@@ -42,9 +42,9 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         }`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-5 border-b border-gray-800">
-          <span className="font-display font-bold text-xl text-brand">Giro Jeri</span>
-          <span className="ml-2 text-xs font-semibold text-gray-500 uppercase tracking-widest">Admin</span>
+        <div className="h-16 flex items-center px-4 border-b border-gray-800 gap-2">
+          <img src="/logo.jpeg" alt="Giro Jeri" className="h-9 w-auto rounded" />
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Admin</span>
           <button
             onClick={onClose}
             className="ml-auto p-1 text-gray-500 hover:text-gray-200 lg:hidden"

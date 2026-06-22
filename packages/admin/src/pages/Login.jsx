@@ -47,7 +47,7 @@ export default function Login() {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="font-display font-bold text-3xl text-brand">Giro Jeri</h1>
+          <img src="/logo.jpeg" alt="Giro Jeri" className="h-20 w-auto mx-auto rounded-xl mb-2" />
           <p className="text-gray-500 mt-1">Painel Administrativo</p>
         </div>
 
