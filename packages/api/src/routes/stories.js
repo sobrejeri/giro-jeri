@@ -25,26 +25,35 @@ const itemSchema = z.object({
 });
 
 // ── GET /api/stories — público ───────────────────────────
-// Retorna highlights ativos com seus itens aninhados, ordenados.
+// Retorna highlights ativos com seus itens aninhados.
+// Ordenação estilo Instagram: o destaque com publicação MAIS RECENTE vem
+// primeiro. "Última atividade" = created_at do item mais novo (ou do próprio
+// highlight, se ainda não tiver itens). sort_order entra só como desempate.
 router.get('/', async (_req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('story_highlights')
       .select(`
-        id, title, cover_image_url, sort_order,
+        id, title, cover_image_url, sort_order, created_at,
         stories!stories_highlight_id_fkey (
-          id, display_name, media_url, media_type, duration_sec, sort_order
+          id, display_name, media_url, media_type, duration_sec, sort_order, created_at
         )
       `)
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+      .eq('is_active', true);
 
     if (error) throw error;
 
-    const result = (data || []).map((h) => ({
-      ...h,
-      stories: (h.stories || []).sort((a, b) => a.sort_order - b.sort_order),
-    }));
+    const lastActivity = (h) => Math.max(
+      new Date(h.created_at).getTime(),
+      ...(h.stories || []).map((s) => new Date(s.created_at).getTime())
+    );
+
+    const result = (data || [])
+      .map((h) => ({
+        ...h,
+        stories: (h.stories || []).sort((a, b) => a.sort_order - b.sort_order),
+      }))
+      .sort((a, b) => (lastActivity(b) - lastActivity(a)) || (a.sort_order - b.sort_order));
 
     res.json(result);
   } catch (err) { next(err); }
