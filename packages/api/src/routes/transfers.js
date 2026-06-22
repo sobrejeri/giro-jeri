@@ -32,7 +32,7 @@ router.get('/', async (req, res, next) => {
       .eq('is_active', true)
       .order('display_order');
 
-    if (region_id) query = query.eq('region_id', region_id);
+    if (region_id) query = query.or(`region_ids.cs.{${region_id}},region_id.eq.${region_id}`);
 
     const { data, error } = await query;
     if (error) throw error;

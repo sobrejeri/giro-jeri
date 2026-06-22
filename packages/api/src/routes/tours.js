@@ -29,7 +29,7 @@ router.get('/', async (req, res, next) => {
       .eq('is_active', true)
       .order('display_order');
 
-    if (region_id)   query = query.eq('region_id', region_id);
+    if (region_id)   query = query.or(`region_ids.cs.{${region_id}},region_id.eq.${region_id}`);
     if (category_id) query = query.eq('category_id', category_id);
     if (featured)    query = query.eq('is_featured', true);
     if (mode === 'private')  query = query.eq('is_private_enabled', true);
