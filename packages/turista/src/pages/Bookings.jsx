@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
-import NotificationBell from '../components/NotificationBell'
 import {
   Calendar, Clock, Users, Car, Search, Compass, MapPin,
   Star, RefreshCw, AlertTriangle, Loader2, Zap, Sun, Waves, Anchor,
@@ -403,9 +402,10 @@ export default function Bookings() {
     { id: 'cancelados', label: t('bookings.cancelled') },
   ]
 
+  const location = useLocation()
   const [tab,           setTab]           = useState('todos')
-  const [showSearch,    setShowSearch]    = useState(false)
-  const [searchTerm,    setSearchTerm]    = useState('')
+  const [showSearch,    setShowSearch]    = useState(!!location.state?.q)
+  const [searchTerm,    setSearchTerm]    = useState(location.state?.q || '')
   const [cancelTarget,  setCancelTarget]  = useState(null)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError,   setCancelError]   = useState(null)
@@ -600,7 +600,6 @@ export default function Bookings() {
           </button>
           <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('bookings.title')}</h1>
           <div className="absolute right-0 flex items-center gap-1.5">
-            <NotificationBell />
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
               className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}

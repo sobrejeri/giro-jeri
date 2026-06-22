@@ -10,7 +10,6 @@ import {
   Star, Clock, Heart, Zap, Plus, Minus, Check,
   ChevronLeft, ChevronRight, X, Info, Bus, Search,
 } from 'lucide-react'
-import NotificationBell from '../components/NotificationBell'
 import {
   format, startOfDay, startOfMonth, endOfMonth,
   eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths,
@@ -353,7 +352,6 @@ export default function Tours() {
           </button>
           <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Passeios</h1>
           <div className="absolute right-0 flex items-center gap-1.5">
-            <NotificationBell />
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
               className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}

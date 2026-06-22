@@ -10,7 +10,6 @@ import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
 } from 'lucide-react'
-import NotificationBell from '../components/NotificationBell'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
   isSameDay, isBefore, addMonths, subMonths, getDay, isToday, addDays,
@@ -340,6 +339,8 @@ export default function Transfers() {
 
   // mode: 'rota' | 'custom'
   const [mode, setMode] = useState('rota')
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const [origin,     setOrigin]     = useState('Jericoacoara')
   const [dest,       setDest]       = useState('')
@@ -513,13 +514,32 @@ export default function Transfers() {
           </button>
           <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Transfer</h1>
           <div className="absolute right-0 flex items-center gap-1.5">
-            <NotificationBell />
-            <button className="w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform" aria-label="Buscar">
+            <button
+              onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+              aria-label="Buscar reserva"
+            >
               <Search size={15} />
             </button>
           </div>
         </div>
         <p className="text-[12px] text-gray-400 text-center mt-1">Transporte privativo com motorista</p>
+
+        {showSearch && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); const q = searchTerm.trim(); if (q) navigate('/minhas-reservas', { state: { q } }) }}
+            className="mt-2 relative"
+          >
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar reserva por código…"
+              className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
+            />
+          </form>
+        )}
 
         {/* Mode toggle */}
         <div className="flex gap-2 mt-3">
