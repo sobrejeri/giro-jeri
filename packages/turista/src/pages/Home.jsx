@@ -268,14 +268,8 @@ export default function Home() {
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-6 lg:rounded-2xl lg:px-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center shrink-0">
-              <Compass size={18} className="text-white" />
-            </div>
-            <div>
-              <p className="text-[15px] font-extrabold text-gray-900 leading-tight">Giro Jeri</p>
-              <p className="text-[10px] text-gray-400 leading-none mt-0.5">Passeios & Transfers</p>
-            </div>
+          <div className="flex items-center">
+            <img src="/logo.jpeg" alt="Giro Jeri" className="h-10 w-auto" />
           </div>
           <div className="flex items-center gap-2">
             <button
