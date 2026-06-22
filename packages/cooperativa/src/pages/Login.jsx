@@ -53,9 +53,12 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-20 w-auto mx-auto rounded-xl mb-2" />
-          <p className="text-gray-500 mt-1">Painel da Cooperativa</p>
+        <div className="flex flex-col items-center mb-8 gap-2">
+          <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-16 h-16 rounded-2xl" />
+          <div className="text-center">
+            <p className="font-giro font-semibold text-[24px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+            <p className="text-gray-500 text-sm mt-0.5">Painel da Cooperativa</p>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">

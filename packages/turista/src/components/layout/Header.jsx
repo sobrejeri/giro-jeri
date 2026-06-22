@@ -22,8 +22,12 @@ export default function Header() {
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logo */}
-        <Link to="/" className="flex items-center shrink-0">
-          <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-10 w-auto" />
+        <Link to="/" className="flex items-center gap-2 shrink-0">
+          <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
+          <div>
+            <p className="font-giro font-semibold text-[14px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+            <p className="text-[9px] text-gray-400 leading-none">Passeios & Transfers</p>
+          </div>
         </Link>
 
         {/* Nav — desktop */}

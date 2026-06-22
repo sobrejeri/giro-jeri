@@ -268,8 +268,12 @@ export default function Home() {
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-6 lg:rounded-2xl lg:px-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-10 w-auto" />
+          <div className="flex items-center gap-2.5">
+            <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
+            <div>
+              <p className="font-giro font-semibold text-[17px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+              <p className="text-[10px] text-gray-400 leading-none mt-0.5">Passeios & Transfers</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button

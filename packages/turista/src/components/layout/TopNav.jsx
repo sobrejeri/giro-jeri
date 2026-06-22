@@ -24,8 +24,12 @@ export default function TopNav() {
   return (
     <header className="hidden lg:block sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100">
       <div className="max-w-6xl mx-auto h-14 flex items-center px-6">
-        <Link to="/" className="flex items-center mr-8 shrink-0">
-          <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-9 w-auto" />
+        <Link to="/" className="flex items-center gap-2 mr-8 shrink-0">
+          <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-7 h-7 rounded-lg shrink-0" />
+          <div>
+            <p className="font-giro font-semibold text-[13px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+            <p className="text-[9px] text-gray-400 leading-none">Passeios & Transfers</p>
+          </div>
         </Link>
 
         <nav className="flex items-center gap-6 flex-1">

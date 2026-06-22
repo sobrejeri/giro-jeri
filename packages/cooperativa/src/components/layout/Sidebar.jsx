@@ -27,9 +27,12 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         }`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-4 border-b border-gray-100 gap-2">
-          <img src={import.meta.env.BASE_URL + 'logo.jpeg'} alt="Giro Jeri" className="h-9 w-auto rounded" />
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Coop</span>
+        <div className="h-16 flex items-center px-4 border-b border-gray-100 gap-2.5">
+          <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
+          <div>
+            <p className="font-giro font-semibold text-[14px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+            <p className="text-[9px] text-gray-400 leading-none">Cooperativa</p>
+          </div>
           <button
             onClick={onClose}
             className="ml-auto p-1 text-gray-400 hover:text-gray-600 lg:hidden"
