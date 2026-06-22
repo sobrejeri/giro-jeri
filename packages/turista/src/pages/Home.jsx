@@ -311,6 +311,8 @@ export default function Home() {
       {activeHighlight && (activeHighlight.stories || []).length > 0 && (
         <StoryViewer
           stories={activeHighlight.stories}
+          title={activeHighlight.title}
+          cover={activeHighlight.cover_image_url}
           startIndex={0}
           onClose={() => setActiveHighlight(null)}
         />

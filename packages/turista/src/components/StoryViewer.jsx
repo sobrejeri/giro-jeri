@@ -7,10 +7,12 @@ import { X, Camera } from 'lucide-react'
  *
  * Props:
  *   stories     — array of story objects
+ *   title       — highlight title shown at the top (Instagram-style)
+ *   cover       — highlight cover image shown in the top circle
  *   startIndex  — index of the first story to display
  *   onClose     — called when all stories are done or the X is tapped
  */
-export default function StoryViewer({ stories = [], startIndex = 0, onClose }) {
+export default function StoryViewer({ stories = [], title, cover, startIndex = 0, onClose }) {
   const { t } = useTranslation()
   const [currentIndex, setCurrentIndex] = useState(startIndex)
   const [progress, setProgress] = useState(0)
@@ -105,7 +107,10 @@ export default function StoryViewer({ stories = [], startIndex = 0, onClose }) {
 
   if (!story) return null
 
-  const avatarSrc = story.avatar_url || (story.media_type !== 'video' ? story.media_url : null)
+  // Topo estilo Destaques do Instagram: capa + título do destaque.
+  // Cai para o avatar/legenda do item se o destaque não tiver capa/título.
+  const headerTitle  = title || story.display_name
+  const headerAvatar = cover || story.avatar_url || (story.media_type !== 'video' ? story.media_url : null)
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col select-none">
@@ -131,17 +136,17 @@ export default function StoryViewer({ stories = [], startIndex = 0, onClose }) {
 
       {/* ── Top bar: avatar + name + close ───────────────────────────────── */}
       <div className="absolute top-6 inset-x-0 z-10 flex items-center gap-3 px-4 pt-1">
-        {/* Avatar */}
+        {/* Avatar (capa do destaque) */}
         <div className="w-10 h-10 rounded-full bg-white/20 overflow-hidden flex items-center justify-center shrink-0 border-2 border-white/50">
-          {avatarSrc ? (
-            <img src={avatarSrc} alt={story.display_name} className="w-full h-full object-cover" />
+          {headerAvatar ? (
+            <img src={headerAvatar} alt={headerTitle || ''} className="w-full h-full object-cover" />
           ) : (
             <Camera size={18} className="text-white/70" />
           )}
         </div>
 
-        <p className="flex-1 text-white text-sm font-semibold drop-shadow">
-          {story.display_name}
+        <p className="flex-1 text-white text-sm font-semibold drop-shadow truncate">
+          {headerTitle}
         </p>
 
         {/* Close */}
