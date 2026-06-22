@@ -8,7 +8,7 @@ import NotificationBell from '../components/NotificationBell'
 import {
   Calendar, Clock, Users, Car, Search, Compass, MapPin,
   Star, RefreshCw, AlertTriangle, Loader2, Zap, Sun, Waves, Anchor,
-  ChevronRight, CalendarCheck, Check, X, MessageSquare,
+  ChevronLeft, ChevronRight, CalendarCheck, Check, X, MessageSquare,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -590,25 +590,30 @@ export default function Bookings() {
     <div className="min-h-full bg-gray-50 pb-24">
       {/* Header */}
       <header className="bg-white px-4 pt-5 pb-0 sticky top-0 lg:top-14 z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)] lg:max-w-5xl lg:mx-auto">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="text-[20px] font-extrabold text-gray-900">{t('bookings.title')}</h1>
-            <p className="text-[12px] text-gray-400 mt-0.5">
-              {counts.ativos > 0
-                ? <><span className="font-semibold text-brand">{counts.ativos}</span> reserva{counts.ativos !== 1 ? 's' : ''} ativa{counts.ativos !== 1 ? 's' : ''}</>
-                : 'Nenhuma reserva ativa'}
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
+        <div className="relative flex items-center justify-center min-h-[32px] mb-1">
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="Voltar"
+          >
+            <ChevronLeft size={20} className="text-gray-700" />
+          </button>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('bookings.title')}</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
             <NotificationBell />
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
             >
-              <Search size={16} />
+              <Search size={15} />
             </button>
           </div>
         </div>
+        <p className="text-[12px] text-gray-400 text-center pb-2">
+          {counts.ativos > 0
+            ? <><span className="font-semibold text-brand">{counts.ativos}</span> reserva{counts.ativos !== 1 ? 's' : ''} ativa{counts.ativos !== 1 ? 's' : ''}</>
+            : 'Nenhuma reserva ativa'}
+        </p>
 
         {showSearch && (
           <div className="mb-3 relative">

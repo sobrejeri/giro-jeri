@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
@@ -8,7 +9,7 @@ import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
-  Map, List,
+  Map, List, ChevronLeft,
 } from 'lucide-react'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
@@ -478,6 +479,7 @@ function SectionTitle({ children }) {
 
 /* ── página ────────────────────────────────────────────── */
 export default function Feed() {
+  const navigate = useNavigate()
   const [filter, setFilter]       = useState('tudo')
   const [viewMode, setViewMode]   = useState('lista') // 'lista' | 'mapa'
   const [reviewPlace, setReviewPlace] = useState(null)
@@ -612,17 +614,19 @@ export default function Feed() {
 
   return (
     <div className="min-h-full bg-[#F8F8F8] lg:bg-transparent pb-24 lg:pb-10">
-      <header className="bg-white px-4 pt-6 pb-3 sticky top-0 lg:top-14 z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-14 z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="max-w-2xl mx-auto">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-              <PartyPopper size={18} className="text-brand" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 leading-tight">Descubra a Vila</h1>
-              <p className="text-[12px] text-gray-400">Eventos, promoções e recomendações em Jericoacoara</p>
-            </div>
+          <div className="relative flex items-center justify-center min-h-[32px]">
+            <button
+              onClick={() => navigate(-1)}
+              className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+              aria-label="Voltar"
+            >
+              <ChevronLeft size={20} className="text-gray-700" />
+            </button>
+            <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Descubra a Vila</h1>
           </div>
+          <p className="text-[12px] text-gray-400 text-center mt-1">Eventos, promoções e recomendações em Jericoacoara</p>
 
           <div className="flex items-center gap-2 mt-3">
             {/* Filtros — scroll horizontal */}
