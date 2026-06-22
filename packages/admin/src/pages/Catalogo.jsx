@@ -195,9 +195,9 @@ export default function Catalogo() {
   async function uploadImage(file, folder = 'tours') {
     const ext  = file.name.split('.').pop()
     const path = `${folder}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('tour-images').upload(path, file, { upsert: true })
+    const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
     if (error) throw error
-    return supabase.storage.from('tour-images').getPublicUrl(path).data.publicUrl
+    return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl
   }
 
   /* ── Submit handlers ─────────────────────────────────────── */
