@@ -263,7 +263,6 @@ export default function Tours() {
   const [favs, setFavs] = useState(new Set())
   const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
   const [showOriginPicker, setShowOriginPicker] = useState(false)
-  const originLabel = origin?.name || 'Centro de Jericoacoara'
   const toggleFav = (id) =>
     setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
@@ -364,12 +363,18 @@ export default function Tours() {
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setShowOriginPicker(true)}
-            className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px]"
+            className={`shrink-0 flex items-center gap-2 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px] border ${
+              origin ? 'bg-white border-gray-200' : 'bg-brand/5 border-brand border-dashed'
+            }`}
           >
             <MapPin size={11} className="text-brand shrink-0" />
             <div className="text-left min-w-0">
-              <p className="text-[9px] text-gray-400 leading-none">Saída</p>
-              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight truncate">{originLabel}</p>
+              <p className="text-[9px] text-gray-400 leading-none">Saída *</p>
+              <p className={`text-[11px] font-semibold mt-0.5 leading-tight truncate ${
+                origin ? 'text-gray-700' : 'text-brand'
+              }`}>
+                {origin?.name || 'Selecionar local'}
+              </p>
             </div>
           </button>
           <button
@@ -611,7 +616,7 @@ export default function Tours() {
 
       {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
       {mode === 'private' && cartHasItems && (() => {
-        const canContinue = cartCapacity >= people
+        const canContinue = cartCapacity >= people && !!origin
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
             <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
@@ -647,7 +652,7 @@ export default function Tours() {
                           service_date_iso: format(date, 'yyyy-MM-dd'),
                           service_time:     'A confirmar',
                           people_count:     people,
-                          origin_text:      originLabel,
+                          origin_text:      origin?.name ?? '',
                           origin_latitude:  origin?.latitude  ?? null,
                           origin_longitude: origin?.longitude ?? null,
                           vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
@@ -694,29 +699,36 @@ export default function Tours() {
                 </p>
               </div>
               <button
-                onClick={() => navigate('/checkout/resumo', {
-                  state: {
-                    service_name:     selectedTour.name,
-                    service_type:     'tour',
-                    booking_mode:     'shared',
-                    service_date:     isToday(date) ? 'Hoje'
-                                        : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
-                                        : format(date, "d 'de' MMMM", { locale: ptBR }),
-                    service_date_iso: format(date, 'yyyy-MM-dd'),
-                    service_time:     'A confirmar',
-                    people_count:     people,
-                    price_per_person: pricePerPerson,
-                    origin_text:      'Centro de Jericoacoara',
-                    total_price:      sharedTotal,
-                    breakdown:        { [`${people}x por pessoa`]: sharedTotal },
-                    cover_image_url:       selectedTour.cover_image_url || null,
-                    region_id:             selectedTour.regions?.id,
-                    service_id:            selectedTour.id,
-                    vehicles:              [],
-                    booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
-                  },
-                })}
-                className="bg-brand text-white font-bold rounded-xl px-5 py-2.5 text-[13px] active:scale-95 transition-transform shrink-0"
+                onClick={() => {
+                  if (!origin) { setShowOriginPicker(true); return }
+                  navigate('/checkout/resumo', {
+                    state: {
+                      service_name:     selectedTour.name,
+                      service_type:     'tour',
+                      booking_mode:     'shared',
+                      service_date:     isToday(date) ? 'Hoje'
+                                          : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                                          : format(date, "d 'de' MMMM", { locale: ptBR }),
+                      service_date_iso: format(date, 'yyyy-MM-dd'),
+                      service_time:     'A confirmar',
+                      people_count:     people,
+                      price_per_person: pricePerPerson,
+                      origin_text:      origin.name,
+                      origin_latitude:  origin.latitude,
+                      origin_longitude: origin.longitude,
+                      total_price:      sharedTotal,
+                      breakdown:        { [`${people}x por pessoa`]: sharedTotal },
+                      cover_image_url:       selectedTour.cover_image_url || null,
+                      region_id:             selectedTour.regions?.id,
+                      service_id:            selectedTour.id,
+                      vehicles:              [],
+                      booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
+                    },
+                  })
+                }}
+                className={`font-bold rounded-xl px-5 py-2.5 text-[13px] transition-transform shrink-0 ${
+                  origin ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400'
+                }`}
               >
                 Continuar
               </button>
