@@ -33,3 +33,9 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => {})
   })
 }
+
+// PWA: captura o evento de instalação (Android) cedo, para o botão usar depois
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  window.deferredInstallPrompt = e
+})

@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import StoriesRow from '../components/StoriesRow'
 import StoryViewer from '../components/StoryViewer'
 import StoryPublisher from '../components/StoryPublisher'
+import InstallPrompt from '../components/InstallPrompt'
 import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
@@ -434,6 +435,8 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        <InstallPrompt />
 
       </div>
     </div>
