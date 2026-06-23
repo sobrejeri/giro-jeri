@@ -16,6 +16,29 @@ function slugify(text) {
     + '-' + Date.now().toString(36)
 }
 
+// Converte um arquivo de imagem (qualquer formato que o navegador decodifica,
+// incluindo HEIC do iPhone no Safari) para um JPEG redimensionado em base64.
+function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        const scale  = Math.min(1, max / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width  * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 const TOUR_EMPTY = {
   name: '', short_description: '', duration_hours: 2, max_people: 10,
   is_private_enabled: true, is_shared_enabled: false,
@@ -192,17 +215,11 @@ export default function Catalogo() {
   }
 
   async function uploadImage(file, folder = 'tours') {
-    const ext          = file.name.split('.').pop()
-    const path         = `${folder}/${Date.now()}.${ext}`
-    const content_type = file.type || 'image/jpeg'
-    const { signed_url, public_url } = await api.getStorageSignedUrl({ path, content_type })
-    const res = await fetch(signed_url, {
-      method:  'PUT',
-      headers: { 'Content-Type': content_type },
-      body:    file,
-    })
-    if (!res.ok) throw new Error(`Upload falhou: ${res.status}`)
-    return public_url
+    // Converte qualquer formato (inclui HEIC do iPhone) para JPEG redimensionado
+    // e envia em base64. Evita o bucket rejeitar formatos não suportados.
+    const dataUrl = await fileToResizedDataUrl(file, 1280)
+    const result  = await api.uploadSiteImage(dataUrl, folder)
+    return result?.url || (typeof result === 'string' ? result : null)
   }
 
   /* ── Submit handlers ─────────────────────────────────────── */
