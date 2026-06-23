@@ -120,12 +120,20 @@ export function RegionProvider({ children }) {
 
   // Acompanha mudanças de localização em segundo plano, para manter
   // o header e o filtro sempre alinhados à posição real do turista.
+  // Ignora micro-variações do GPS (jitter, ~<165m) — sem isso o setUserCoords
+  // dispararia a cada leitura e recarregava as listas (tours) em loop.
   useEffect(() => {
     if (!navigator.geolocation || regions.length === 0) return
+    let last = null
     const id = navigator.geolocation.watchPosition(
-      ({ coords }) => { applyCoords(coords.latitude, coords.longitude) },
+      ({ coords }) => {
+        const lat = coords.latitude, lon = coords.longitude
+        if (last && Math.abs(last.lat - lat) < 0.0015 && Math.abs(last.lon - lon) < 0.0015) return
+        last = { lat, lon }
+        applyCoords(lat, lon)
+      },
       () => {},
-      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 },
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
     )
     return () => navigator.geolocation.clearWatch(id)
   }, [applyCoords, regions.length])

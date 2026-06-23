@@ -220,8 +220,12 @@ export default function Home() {
     setFavs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const geo = getServiceQuery()
+  // Arredonda as coordenadas (~1 km) na chave para o GPS não recarregar a lista
+  // a cada micro-variação.
+  const coarseLat = userCoords?.lat != null ? Math.round(userCoords.lat * 100) / 100 : null
+  const coarseLon = userCoords?.lon != null ? Math.round(userCoords.lon * 100) / 100 : null
   const { data: toursData, isLoading } = useQuery({
-    queryKey: ['tours', 'home', region?.id, userCoords?.lat, userCoords?.lon],
+    queryKey: ['tours', 'home', region?.id, coarseLat, coarseLon],
     queryFn:  () => api.getTours({ limit: 12, ...geo }),
   })
 
