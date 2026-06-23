@@ -402,14 +402,15 @@ export default function Transfers() {
     queryFn:  () => api.getTransferRoutes(),
   })
   const { data: vehiclesData } = useQuery({
-    queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
-    queryFn:  () => api.getVehicles ? api.getVehicles(getServiceQuery()) : Promise.resolve([]),
+    queryKey: ['vehicles', 'transfer', region?.id],
+    queryFn:  () => region?.id ? api.getVehicles({ region_id: region.id }) : Promise.resolve([]),
+    enabled:  !!region?.id,
   })
 
   const routes   = Array.isArray(routesData?.routes) ? routesData.routes
                  : Array.isArray(routesData) ? routesData : []
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
-                    .filter(v => v.is_transfer_allowed)
+                    .filter(v => v.is_transfer_allowed && v.is_active !== false)
 
   const origins    = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
   const dests      = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
