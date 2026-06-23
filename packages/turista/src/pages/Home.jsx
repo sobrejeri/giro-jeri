@@ -62,6 +62,7 @@ function TourCard({ tour, isFav, onToggleFav }) {
       navigate('/checkout/resumo', {
         state: {
           service_name:     tour.name,
+          short_description: tour.short_description || null,
           service_type:     'tour',
           booking_mode:     'private',
           service_date:     'Hoje',
