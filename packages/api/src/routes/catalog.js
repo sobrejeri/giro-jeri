@@ -4,7 +4,6 @@
  * POST/PUT/DELETE: somente admin
  */
 import { Router } from 'express';
-import { supabase } from '../supabase.js';
 import { authenticate, requireOperator, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
@@ -21,7 +20,7 @@ function slugify(text) {
 
 router.get('/categories', async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('categories').select('*').order('name');
     if (error) throw error;
     res.json(data);
@@ -32,7 +31,7 @@ router.get('/categories', async (req, res, next) => {
 
 router.get('/tours', async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('tours')
       .select('*, categories(id, name, slug)')
       .order('display_order', { ascending: true })
@@ -44,7 +43,7 @@ router.get('/tours', async (req, res, next) => {
 
 router.post('/tours', requireAdmin, async (req, res, next) => {
   try {
-    const { data: region } = await supabase
+    const { data: region } = await req.supabase
       .from('regions').select('id').limit(1).single();
 
     const {
@@ -55,7 +54,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
 
     const slug = `${slugify(name)}-${Date.now().toString(36)}`;
 
-    const { data, error } = await supabase.from('tours').insert({
+    const { data, error } = await req.supabase.from('tours').insert({
       region_id:               region.id,
       name,
       slug,
@@ -104,7 +103,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (service_radius_km  !== undefined) update.service_radius_km       = service_radius_km === '' || service_radius_km === null ? null : Number(service_radius_km);
     if (region_ids         !== undefined) update.region_ids              = Array.isArray(region_ids) ? region_ids : [];
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('tours').update(update).eq('id', req.params.id).select().single();
     if (error || !data) return res.status(404).json({ error: 'Passeio não encontrado' });
     res.json(data);
@@ -113,7 +112,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
 
 router.delete('/tours/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('tours').update({ is_active: false }).eq('id', req.params.id);
     if (error) throw error;
     res.status(204).end();
@@ -124,7 +123,7 @@ router.delete('/tours/:id', requireAdmin, async (req, res, next) => {
 
 router.get('/transfers', async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('transfers').select('id, name, is_active').order('name');
     if (error) throw error;
     res.json(data);
@@ -133,7 +132,7 @@ router.get('/transfers', async (req, res, next) => {
 
 router.post('/transfers', requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('transfers').insert(req.body).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -142,7 +141,7 @@ router.post('/transfers', requireAdmin, async (req, res, next) => {
 
 router.put('/transfers/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('transfers').update(req.body).eq('id', req.params.id).select().single();
     if (error || !data) return res.status(404).json({ error: 'Transfer não encontrado' });
     res.json(data);
@@ -151,7 +150,7 @@ router.put('/transfers/:id', requireAdmin, async (req, res, next) => {
 
 router.delete('/transfers/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('transfers').update({ is_active: false }).eq('id', req.params.id);
     if (error) throw error;
     res.status(204).end();
@@ -163,7 +162,7 @@ router.delete('/transfers/:id', requireAdmin, async (req, res, next) => {
 router.get('/transfer-routes', async (req, res, next) => {
   try {
     const { transfer_id } = req.query;
-    let query = supabase
+    let query = req.supabase
       .from('transfer_routes').select('*, transfers(id, name, booking_cutoff_time)').order('origin_name');
     if (transfer_id) query = query.eq('transfer_id', transfer_id);
     const { data, error } = await query;
@@ -174,7 +173,7 @@ router.get('/transfer-routes', async (req, res, next) => {
 
 router.post('/transfer-routes', requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('transfer_routes').insert(req.body).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -183,7 +182,7 @@ router.post('/transfer-routes', requireAdmin, async (req, res, next) => {
 
 router.put('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('transfer_routes').update(req.body).eq('id', req.params.id).select().single();
     if (error || !data) return res.status(404).json({ error: 'Rota não encontrada' });
     res.json(data);
@@ -192,7 +191,7 @@ router.put('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
 
 router.delete('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('transfer_routes').update({ is_active: false }).eq('id', req.params.id);
     if (error) throw error;
     res.status(204).end();

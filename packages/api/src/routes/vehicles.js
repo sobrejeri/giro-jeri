@@ -51,7 +51,7 @@ router.get('/', async (req, res, next) => {
 // POST /api/vehicles — cria veículo (operador/admin)
 router.post('/', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('vehicles').insert(buildVehiclePayload(req.body)).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -61,7 +61,7 @@ router.post('/', authenticate, requireAdmin, async (req, res, next) => {
 // PUT /api/vehicles/:id — atualiza veículo (operador/admin)
 router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('vehicles').update(buildVehiclePayload(req.body))
       .eq('id', req.params.id).select().maybeSingle();
     if (error) throw error; // erro real do banco → mensagem clara via errorHandler
@@ -73,7 +73,7 @@ router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
 // DELETE /api/vehicles/:id — desativa veículo (operador/admin)
 router.delete('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('vehicles').update({ is_active: false }).eq('id', req.params.id);
     if (error) throw error;
     res.status(204).end();
