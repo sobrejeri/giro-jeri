@@ -24,6 +24,10 @@ import { notFound, errorHandler } from './middleware/errorHandler.js';
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+// Render (e qualquer reverse proxy) envia X-Forwarded-For; sem isso o
+// express-rate-limit não consegue identificar o IP real do cliente.
+app.set('trust proxy', 1);
+
 // ── Segurança ──────────────────────────────────────────
 app.use(helmet());
 app.use(cors({
