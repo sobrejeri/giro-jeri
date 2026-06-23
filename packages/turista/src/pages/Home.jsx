@@ -8,7 +8,7 @@ import StoriesRow from '../components/StoriesRow'
 import StoryViewer from '../components/StoryViewer'
 import StoryPublisher from '../components/StoryPublisher'
 import {
-  Bell, Star, Clock, Heart, ChevronRight, ArrowRight,
+  Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
@@ -120,20 +120,14 @@ function TourCard({ tour, isFav, onToggleFav }) {
 
       <div className="p-2.5">
         <p className="text-[12px] font-bold text-gray-900 leading-tight line-clamp-1 mb-1">{tour.name}</p>
-        <div className="flex items-center gap-1.5">
-          {tour.rating_average > 0 && (
-            <div className="flex items-center gap-0.5">
-              <Star size={10} className="text-amber-400 fill-amber-400" />
-              <span className="text-[10px] font-semibold text-gray-600">{tour.rating_average}</span>
-            </div>
-          )}
-          {tour.duration_hours && (
-            <div className="flex items-center gap-0.5 text-[10px] text-gray-400">
-              <Clock size={9} />
-              <span>{tour.duration_hours}h</span>
-            </div>
-          )}
-        </div>
+        {tour.short_description ? (
+          <p className="text-[11px] text-gray-400 leading-snug line-clamp-2">{tour.short_description}</p>
+        ) : tour.rating_average > 0 ? (
+          <div className="flex items-center gap-0.5">
+            <Star size={10} className="text-amber-400 fill-amber-400" />
+            <span className="text-[10px] font-semibold text-gray-600">{tour.rating_average}</span>
+          </div>
+        ) : null}
       </div>
     </div>
   )
