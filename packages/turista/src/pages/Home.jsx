@@ -11,19 +11,8 @@ import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
 } from 'lucide-react'
-import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
 import NotificationBell from '../components/NotificationBell'
-
-function suggestVehicle(vehicles, people) {
-  if (!vehicles.length) return null
-  const single = vehicles.filter(v => v.seat_capacity >= people)
-                         .sort((a, b) => a.seat_capacity - b.seat_capacity)[0]
-  if (single) return { vehicle: single, qty: 1 }
-  const biggest = [...vehicles].sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
-  if (!biggest) return null
-  return { vehicle: biggest, qty: Math.ceil(people / biggest.seat_capacity) }
-}
 
 const GRADIENTS = [
   ['from-orange-400', 'to-amber-300'],
@@ -45,52 +34,17 @@ const BADGE_COLORS = {
 
 function TourCard({ tour, isFav, onToggleFav }) {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
   const [from, to] = GRADIENTS[gi(tour.id)]
   const badgeColor = BADGE_COLORS[tour.highlight_badge] || 'bg-gray-500'
 
-  async function handleClick() {
-    if (loading) return
-    setLoading(true)
-    try {
-      const vehicles = await api.getTourVehicles(tour.id)
-      const vList    = Array.isArray(vehicles) ? vehicles : []
-      const suggested = suggestVehicle(vList, 2)
-      const today     = startOfDay(new Date())
-      const totalPrice = suggested ? Number(suggested.vehicle.base_price) * suggested.qty : 0
-
-      navigate('/checkout/resumo', {
-        state: {
-          service_name:     tour.name,
-          service_type:     'tour',
-          booking_mode:     'private',
-          service_date:     'Hoje',
-          service_date_iso: format(today, 'yyyy-MM-dd'),
-          service_time:     'A confirmar',
-          people_count:     2,
-          origin_text:      'Centro de Jericoacoara',
-          vehicle_name:     suggested ? `${suggested.qty}x ${suggested.vehicle.name}` : '',
-          total_price:      totalPrice,
-          breakdown:        suggested ? { [`${suggested.qty}x ${suggested.vehicle.name}`]: totalPrice } : {},
-          cover_image_url:       tour.cover_image_url || null,
-          region_id:             tour.regions?.id,
-          service_id:            tour.id,
-          vehicles:              suggested ? [{ vehicle_id: suggested.vehicle.id, qty: suggested.qty }] : [],
-          booking_cutoff_time:   tour.booking_cutoff_time || null,
-          open_editing:          true,
-        },
-      })
-    } catch {
-      navigate('/passeios', { state: { selectedId: tour.id } })
-    } finally {
-      setLoading(false)
-    }
+  function handleClick() {
+    navigate(`/passeios/${tour.id}`)
   }
 
   return (
     <div
       onClick={handleClick}
-      className={`shrink-0 w-[158px] lg:w-auto rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 transition-transform cursor-pointer ${loading ? 'opacity-70 scale-[0.96]' : 'active:scale-[0.96]'}`}
+      className="shrink-0 w-[158px] lg:w-auto rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 transition-transform cursor-pointer active:scale-[0.96]"
     >
       <div className="h-[108px] lg:h-44 relative overflow-hidden">
         {tour.cover_image_url ? (
@@ -98,11 +52,6 @@ function TourCard({ tour, isFav, onToggleFav }) {
         ) : (
           <div className={`h-full bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
             <Zap size={36} className="text-white/20" />
-          </div>
-        )}
-        {loading && (
-          <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
           </div>
         )}
         {tour.highlight_badge && !loading && (
