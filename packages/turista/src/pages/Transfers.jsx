@@ -480,6 +480,7 @@ export default function Transfers() {
     navigate('/checkout/resumo', {
       state: {
         service_name:        `Transfer ${origin} → ${dest}`,
+        short_description:   matched?.transfers?.short_description || null,
         service_type:        'transfer',
         booking_mode:        'private',
         service_date:        dateLabel,

@@ -24,7 +24,7 @@ const TOUR_EMPTY = {
   booking_cutoff_time: '', region_ids: [], is_featured: false, display_order: 0,
 }
 const TRANSFER_EMPTY = {
-  name: '', description: '', pricing_mode: 'fixed_route', is_active: true,
+  name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', region_ids: [],
 }
@@ -231,7 +231,9 @@ export default function Catalogo() {
 
   function handleTransferSubmit(e) {
     e.preventDefault()
-    transferMut.mutate(form)
+    // Remove objetos de relação (joins) e campos read-only antes de salvar
+    const { transfer_routes: _tr, regions: _rg, id: _id, created_at: _ca, updated_at: _ua, ...clean } = form
+    transferMut.mutate(clean)
   }
 
   function handleRouteSubmit(e) {
@@ -547,7 +549,7 @@ export default function Catalogo() {
         {isTransferModal ? (
           <form onSubmit={handleTransferSubmit} className="space-y-4">
             <Input label="Nome" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            <Textarea label="Descrição" rows={2} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <Textarea label="Descrição" rows={2} value={form.short_description || ''} onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
             <Select label="Modo de precificação" value={form.pricing_mode || 'fixed_route'} onChange={(e) => setForm({ ...form, pricing_mode: e.target.value })}>
               <option value="fixed_route">Rota tabelada</option>
               <option value="by_vehicle">Por veículo</option>

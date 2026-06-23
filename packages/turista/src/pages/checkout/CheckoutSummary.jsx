@@ -377,8 +377,8 @@ export default function CheckoutSummary() {
           </div>
         </div>
 
-        {/* Descrição do passeio */}
-        {!isTransfer && ls.short_description && (
+        {/* Descrição do passeio / transfer */}
+        {ls.short_description && (
           <div className="bg-white rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
             <p className="text-[13px] text-gray-600 leading-relaxed">{ls.short_description}</p>
           </div>

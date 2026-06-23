@@ -49,7 +49,7 @@ router.get('/routes', async (req, res, next) => {
 
     let query = supabase
       .from('transfer_routes')
-      .select('*')
+      .select('*, transfers ( short_description, full_description, booking_cutoff_time )')
       .eq('is_active', true)
       .order('default_price');
 
