@@ -5,6 +5,30 @@ import { filterByRadius } from '../services/geo.js';
 
 const router = Router();
 
+// Monta o payload apenas com colunas reais da tabela `vehicles`.
+// O frontend reaproveita o objeto vindo do GET (que traz o join `regions` e
+// campos read-only); enviar esses campos no UPDATE faz o PostgREST rejeitar a
+// operação — e a rota mascarava isso como 404 "não encontrado".
+function buildVehiclePayload(body = {}) {
+  const out = {};
+  const str  = (k) => { if (body[k] !== undefined) out[k] = body[k]; };
+  const num  = (k) => {
+    if (body[k] === undefined) return;
+    out[k] = body[k] === '' || body[k] === null ? null : Number(body[k]);
+  };
+  const bool = (k) => { if (body[k] !== undefined) out[k] = !!body[k]; };
+
+  str('region_id'); str('name'); str('slug'); str('vehicle_type');
+  str('category'); str('description'); str('image_url');
+  num('seat_capacity'); num('luggage_capacity'); num('display_order');
+  num('latitude'); num('longitude'); num('service_radius_km');
+  bool('is_private_allowed'); bool('is_shared_allowed');
+  bool('is_transfer_allowed'); bool('is_tour_allowed'); bool('is_active');
+  if (Array.isArray(body.region_ids)) out.region_ids = body.region_ids;
+
+  return out;
+}
+
 // GET /api/vehicles — lista veículos (público)
 router.get('/', async (req, res, next) => {
   try {
@@ -28,7 +52,7 @@ router.get('/', async (req, res, next) => {
 router.post('/', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from('vehicles').insert(req.body).select().single();
+      .from('vehicles').insert(buildVehiclePayload(req.body)).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -38,8 +62,10 @@ router.post('/', authenticate, requireAdmin, async (req, res, next) => {
 router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from('vehicles').update(req.body).eq('id', req.params.id).select().single();
-    if (error || !data) return res.status(404).json({ error: 'Veículo não encontrado' });
+      .from('vehicles').update(buildVehiclePayload(req.body))
+      .eq('id', req.params.id).select().maybeSingle();
+    if (error) throw error; // erro real do banco → mensagem clara via errorHandler
+    if (!data) return res.status(404).json({ error: 'Veículo não encontrado' });
     res.json(data);
   } catch (err) { next(err); }
 });
