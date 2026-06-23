@@ -16,9 +16,11 @@ function slugify(text) {
     + '-' + Date.now().toString(36)
 }
 
-// Converte um arquivo de imagem (qualquer formato que o navegador decodifica,
-// incluindo HEIC do iPhone no Safari) para um JPEG redimensionado em base64.
+// Redimensiona uma imagem no navegador. Mantém transparência para PNG/WEBP/GIF
+// (saída PNG); os demais formatos (JPEG, HEIC do iPhone…) viram JPEG.
 function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
+  const keepAlpha = /png|webp|gif/i.test(file.type || '')
+  const outType   = keepAlpha ? 'image/png' : 'image/jpeg'
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onerror = reject
@@ -31,7 +33,7 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
         canvas.width  = Math.round(img.width  * scale)
         canvas.height = Math.round(img.height * scale)
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', quality))
+        resolve(canvas.toDataURL(outType, quality))
       }
       img.src = ev.target.result
     }
