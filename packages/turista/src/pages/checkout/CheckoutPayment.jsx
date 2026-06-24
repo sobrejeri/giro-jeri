@@ -1,50 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  ChevronLeft, QrCode, CreditCard, Smartphone,
-  ShieldCheck, Lock, Check, AlertCircle, ChevronDown,
+  ChevronLeft, QrCode, CreditCard,
+  ShieldCheck, Lock, Check, AlertCircle,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 
 // ─── helpers ────────────────────────────────────────────────
 function fmt(v) {
   return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
-}
-
-function fmtCPF(v) {
-  const d = v.replace(/\D/g, '').slice(0, 11)
-  return d
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
-}
-
-function fmtCardNumber(v) {
-  return v.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 ')
-}
-
-function fmtExpiry(v) {
-  const d = v.replace(/\D/g, '').slice(0, 4)
-  if (d.length >= 3) return d.slice(0, 2) + '/' + d.slice(2)
-  return d
-}
-
-// Detecta a bandeira pelo BIN (6 primeiros dígitos)
-const BRAND_PATTERNS = {
-  visa:      /^4/,
-  master:    /^(5[1-5]|2[2-7])/,
-  amex:      /^3[47]/,
-  elo:       /^(4011|4312|4389|4514|4573|4576|5041|5066|5067|509|6277|6362|6363|650|6516|6550)/,
-  hipercard: /^(606282|3841)/,
-}
-
-function detectBrand(cardNumber) {
-  const raw = cardNumber.replace(/\s/g, '')
-  for (const [brand, pattern] of Object.entries(BRAND_PATTERNS)) {
-    if (pattern.test(raw)) return brand
-  }
-  return null
 }
 
 // ─── getMercadoPago ──────────────────────────────────────────
@@ -60,422 +25,117 @@ function getMercadoPago() {
   }
 }
 
-// ─── CardForm ────────────────────────────────────────────────
-function CardForm({ method, totalPrice, onSuccess, onError }) {
-  const { t } = useTranslation()
+// E-mail do usuário logado (para pré-preencher o pagador no Brick).
+function getUserEmail() {
+  try { return JSON.parse(localStorage.getItem('giro_user') || 'null')?.email || undefined }
+  catch { return undefined }
+}
 
-  const [cardNumber,   setCardNumber]   = useState('')
-  const [cardName,     setCardName]     = useState('')
-  const [expiry,       setExpiry]       = useState('')
-  const [cvv,          setCvv]          = useState('')
-  const [cpf,          setCpf]          = useState('')
-  const [installments, setInstallments] = useState(1)
-  const [brand,        setBrand]        = useState(null)
-  const [installmentOptions, setInstallmentOptions] = useState([])
-  const [loadingInst,  setLoadingInst]  = useState(false)
-  const [errors,       setErrors]       = useState({})
-  const [loading,      setLoading]      = useState(false)
-  const [rejectedMsg,  setRejectedMsg]  = useState('')
+// ─── CardBrick ───────────────────────────────────────────────
+// Brick oficial de cartão do Mercado Pago (crédito e débito). Tokeniza o cartão
+// com segurança (PCI) e devolve os dados no onSubmit; nós criamos o pagamento na
+// API. O Brick detecta crédito/débito pela bandeira; o método é inferido do
+// payment_method_id (deb* = débito).
+function CardBrick({ amount, onPay }) {
+  const { t }    = useTranslation()
+  const brickRef = useRef(null)
+  const [phase,       setPhase]       = useState('loading') // loading | ready | error
+  const [rejectedMsg, setRejectedMsg] = useState('')
 
-  const isCredit = method === 'credit_card'
-  const mpRef    = useRef(null)
-
-  // Inicializa instância MP quando o componente monta
   useEffect(() => {
-    mpRef.current = getMercadoPago()
-  }, [])
+    let cancelled = false
+    const containerId = 'cardPaymentBrick_container'
 
-  // Detecta bandeira e busca parcelas quando BIN muda (crédito)
-  const fetchInstallments = useCallback(async (bin) => {
-    const mp = mpRef.current
-    if (!mp || !isCredit || !bin || bin.length < 6) {
-      setInstallmentOptions([])
-      return
-    }
-    setLoadingInst(true)
-    try {
-      const result = await mp.getInstallments({
-        amount: String(totalPrice),
-        bin,
-        paymentTypeId: 'credit_card',
-      })
-      const payer = result?.[0]?.payer_costs ?? []
-      setInstallmentOptions(payer)
-      if (payer.length > 0) setInstallments(payer[0].installments)
-    } catch {
-      setInstallmentOptions([])
-    } finally {
-      setLoadingInst(false)
-    }
-  }, [isCredit, totalPrice])
+    async function mount() {
+      const mp = getMercadoPago()
+      if (!mp) { setPhase('error'); return }
+      let bricks
+      try { bricks = mp.bricks() } catch { setPhase('error'); return }
 
-  function handleCardNumberChange(e) {
-    const formatted = fmtCardNumber(e.target.value)
-    setCardNumber(formatted)
-    const raw = formatted.replace(/\s/g, '')
-    const detected = detectBrand(formatted)
-    setBrand(detected)
-    if (raw.length >= 6) {
-      fetchInstallments(raw.slice(0, 6))
-    } else {
-      setInstallmentOptions([])
-    }
-  }
+      const email = getUserEmail()
 
-  function validateField(field, value) {
-    const errs = { ...errors }
-    const raw = value.replace(/\D/g, '')
-    if (field === 'cardNumber') {
-      if (raw.length < 13) errs.cardNumber = t('payment.rejected.bad_number')
-      else delete errs.cardNumber
-    }
-    if (field === 'cardName') {
-      if (value.trim().length < 3) errs.cardName = t('payment.card.nameLabel')
-      else delete errs.cardName
-    }
-    if (field === 'expiry') {
-      const parts = value.split('/')
-      const month = parseInt(parts[0], 10)
-      const year  = parseInt('20' + parts[1], 10)
-      const now   = new Date()
-      const valid = parts.length === 2
-        && month >= 1 && month <= 12
-        && year >= now.getFullYear()
-        && !(year === now.getFullYear() && month < now.getMonth() + 1)
-      if (!valid) errs.expiry = t('payment.rejected.bad_date')
-      else delete errs.expiry
-    }
-    if (field === 'cvv') {
-      if (value.replace(/\D/g, '').length < 3) errs.cvv = t('payment.rejected.bad_cvv')
-      else delete errs.cvv
-    }
-    if (field === 'cpf') {
-      if (raw.length !== 11) errs.cpf = t('payment.card.cpfLabel')
-      else delete errs.cpf
-    }
-    setErrors(errs)
-  }
-
-  async function handleSubmit() {
-    // Validação final completa
-    const allErrors = {}
-    if (cardNumber.replace(/\s/g, '').length < 13) allErrors.cardNumber = t('payment.rejected.bad_number')
-    if (cardName.trim().length < 3)                allErrors.cardName   = t('payment.card.nameLabel')
-    const parts = expiry.split('/')
-    const month = parseInt(parts[0], 10)
-    const year  = parseInt('20' + (parts[1] || ''), 10)
-    const now   = new Date()
-    const expiryValid = parts.length === 2
-      && month >= 1 && month <= 12
-      && year >= now.getFullYear()
-      && !(year === now.getFullYear() && month < now.getMonth() + 1)
-    if (!expiryValid) allErrors.expiry = t('payment.rejected.bad_date')
-    if (cvv.replace(/\D/g, '').length < 3)         allErrors.cvv        = t('payment.rejected.bad_cvv')
-    if (cpf.replace(/\D/g, '').length !== 11)      allErrors.cpf        = t('payment.card.cpfLabel')
-
-    if (Object.keys(allErrors).length > 0) {
-      setErrors(allErrors)
-      return
-    }
-
-    const mp = mpRef.current
-    if (!mp) {
-      setRejectedMsg(t('payment.rejected.generic'))
-      return
-    }
-
-    setLoading(true)
-    setRejectedMsg('')
-
-    try {
-      // Tokeniza o cartão via MP
-      const tokenResult = await mp.createCardToken({
-        cardNumber:          cardNumber.replace(/\s/g, ''),
-        cardholderName:      cardName,
-        cardExpirationMonth: expiry.split('/')[0],
-        cardExpirationYear:  '20' + expiry.split('/')[1],
-        securityCode:        cvv.replace(/\D/g, ''),
-        identificationType:  'CPF',
-        identificationNumber: cpf.replace(/\D/g, ''),
-      })
-
-      const card_token = tokenResult?.id
-      if (!card_token) throw new Error(t('payment.rejected.generic'))
-
-      // Identifica bandeira via MP (mais confiável que regex local)
-      let payment_method_id = brand || 'visa'
-      let issuer_id
       try {
-        const binInfo = await mp.getPaymentMethods({
-          bin: cardNumber.replace(/\s/g, '').slice(0, 6),
+        brickRef.current = await bricks.create('cardPayment', containerId, {
+          initialization: {
+            amount: Number(amount) || 0,
+            ...(email ? { payer: { email } } : {}),
+          },
+          customization: {
+            visual:         { style: { theme: 'default' } },
+            paymentMethods: { minInstallments: 1, maxInstallments: 12 },
+          },
+          callbacks: {
+            onReady: () => { if (!cancelled) setPhase('ready') },
+            onError: (err) => {
+              console.error('[brick] erro', err)
+              if (!cancelled) setPhase((p) => (p === 'loading' ? 'error' : p))
+            },
+            onSubmit: async (formData) => {
+              setRejectedMsg('')
+              try {
+                const pmId   = formData?.payment_method_id || ''
+                const method = /^deb/i.test(pmId) ? 'debit_card' : 'credit_card'
+                const result = await onPay({
+                  payment_method:    method,
+                  card_token:        formData?.token,
+                  payment_method_id: pmId,
+                  issuer_id:         formData?.issuer_id ? String(formData.issuer_id) : undefined,
+                  installments:      Number(formData?.installments) || 1,
+                  payer_doc:         formData?.payer?.identification?.number,
+                })
+                if (result?.status === 'rejected') {
+                  const msg = result.message_key ? t(result.message_key) : t('payment.rejected.generic')
+                  setRejectedMsg(msg)
+                  return Promise.reject(new Error(msg))
+                }
+                // approved / in_process → o componente pai navega de tela.
+                return Promise.resolve()
+              } catch (err) {
+                setRejectedMsg(err?.message || t('payment.rejected.generic'))
+                return Promise.reject(err)
+              }
+            },
+          },
         })
-        if (binInfo?.results?.[0]) {
-          payment_method_id = binInfo.results[0].id
-          issuer_id = binInfo.results[0].issuer?.id?.toString()
-        }
-      } catch { /* usa brand local como fallback */ }
-
-      const selectedInstallment = isCredit
-        ? (installmentOptions.find((o) => o.installments === installments) || null)
-        : null
-
-      // Chama a API
-      const result = await onSuccess({
-        payment_method:    method,
-        card_token,
-        payment_method_id,
-        payer_doc:         cpf.replace(/\D/g, ''),
-        installments:      isCredit ? installments : 1,
-        ...(issuer_id ? { issuer_id } : {}),
-      })
-
-      if (result?.status === 'rejected') {
-        setCvv('')
-        const msgKey = result.message_key || 'payment.rejected.generic'
-        setRejectedMsg(t(msgKey))
+      } catch (e) {
+        console.error('[brick] create falhou', e)
+        if (!cancelled) setPhase('error')
       }
-      // approved / in_process → tratados pelo pai
-    } catch (err) {
-      setCvv('')
-      setRejectedMsg(err.message || t('payment.rejected.generic'))
-    } finally {
-      setLoading(false)
     }
-  }
 
-  // Parcela selecionada para exibição no CTA
-  const selectedInstallmentOption = isCredit
-    ? installmentOptions.find((o) => o.installments === installments)
-    : null
-
-  function ctaLabel() {
-    if (loading) return t('payment.card.processing')
-    if (isCredit && selectedInstallmentOption && selectedInstallmentOption.installments > 1) {
-      const perInstallment = fmt(selectedInstallmentOption.installment_amount)
-      return t('payment.card.payInstallments', {
-        count: selectedInstallmentOption.installments,
-        value: perInstallment,
-      })
+    mount()
+    return () => {
+      cancelled = true
+      try { brickRef.current?.unmount?.() } catch { /* ignore */ }
     }
-    return t('payment.card.payNow', { amount: fmt(totalPrice) })
-  }
+  }, [amount]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const brandSrc = brand ? `/cards/${brand}.svg` : '/cards/card.svg'
+  if (phase === 'error') {
+    return (
+      <div className="px-4 py-4 text-[13px] text-red-600 bg-red-50 rounded-2xl border border-red-100">
+        Não foi possível carregar o pagamento por cartão. Atualize a página ou pague com PIX.
+      </div>
+    )
+  }
 
   return (
-    <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-      <div className="px-4 pt-4 pb-5 space-y-4">
-
-        {/* Banner de recusa */}
-        {rejectedMsg && (
-          <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-3">
-            <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-[13px] font-semibold text-red-700">{t('payment.card.declined')}</p>
-              <p className="text-[12px] text-red-600 mt-0.5">{rejectedMsg}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Número do cartão */}
-        <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-            {t('payment.card.numberLabel')}
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="cc-number"
-              value={cardNumber}
-              onChange={handleCardNumberChange}
-              onBlur={() => validateField('cardNumber', cardNumber)}
-              disabled={loading}
-              placeholder="0000 0000 0000 0000"
-              style={{ fontSize: '16px' }}
-              className={`w-full rounded-xl border px-3 py-3 pr-14 text-gray-900 placeholder-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition disabled:opacity-60 ${
-                errors.cardNumber ? 'border-red-300 bg-red-50' : 'border-gray-200'
-              }`}
-            />
-            <img
-              src={brandSrc}
-              alt={brand || 'card'}
-              className="absolute right-3 top-1/2 -translate-y-1/2 h-6 w-10 object-contain"
-            />
-          </div>
-          {errors.cardNumber && (
-            <p className="text-[11px] text-red-500 mt-1">{errors.cardNumber}</p>
-          )}
-        </div>
-
-        {/* Nome no cartão */}
-        <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-            {t('payment.card.nameLabel')}
-          </label>
-          <input
-            type="text"
-            autoComplete="cc-name"
-            value={cardName}
-            onChange={(e) => setCardName(e.target.value.toUpperCase())}
-            onBlur={() => validateField('cardName', cardName)}
-            disabled={loading}
-            placeholder={t('payment.card.namePlaceholder')}
-            style={{ fontSize: '16px' }}
-            className={`w-full rounded-xl border px-3 py-3 text-gray-900 placeholder-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition disabled:opacity-60 uppercase ${
-              errors.cardName ? 'border-red-300 bg-red-50' : 'border-gray-200'
-            }`}
-          />
-          {errors.cardName && (
-            <p className="text-[11px] text-red-500 mt-1">{t('payment.card.nameLabel')} obrigatório</p>
-          )}
-        </div>
-
-        {/* Validade + CVV */}
-        <div className="grid grid-cols-2 gap-3">
+    <div className="pb-1">
+      {rejectedMsg && (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-3 mb-3">
+          <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
           <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              {t('payment.card.expiryLabel')}
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="cc-exp"
-              value={expiry}
-              onChange={(e) => setExpiry(fmtExpiry(e.target.value))}
-              onBlur={() => validateField('expiry', expiry)}
-              disabled={loading}
-              placeholder={t('payment.card.expiryPlaceholder')}
-              style={{ fontSize: '16px' }}
-              className={`w-full rounded-xl border px-3 py-3 text-gray-900 placeholder-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition disabled:opacity-60 ${
-                errors.expiry ? 'border-red-300 bg-red-50' : 'border-gray-200'
-              }`}
-            />
-            {errors.expiry && (
-              <p className="text-[11px] text-red-500 mt-1">{errors.expiry}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              {t('payment.card.cvvLabel')}
-              <span className="font-normal text-gray-400 ml-1">— {t('payment.card.cvvHint')}</span>
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="cc-csc"
-              value={cvv}
-              onChange={(e) => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              onBlur={() => validateField('cvv', cvv)}
-              disabled={loading}
-              placeholder="•••"
-              style={{ fontSize: '16px' }}
-              className={`w-full rounded-xl border px-3 py-3 text-gray-900 placeholder-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition disabled:opacity-60 ${
-                errors.cvv ? 'border-red-300 bg-red-50' : 'border-gray-200'
-              }`}
-            />
-            {errors.cvv && (
-              <p className="text-[11px] text-red-500 mt-1">{errors.cvv}</p>
-            )}
+            <p className="text-[13px] font-semibold text-red-700">{t('payment.card.declined')}</p>
+            <p className="text-[12px] text-red-600 mt-0.5">{rejectedMsg}</p>
           </div>
         </div>
-
-        {/* CPF */}
-        <div>
-          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-            {t('payment.card.cpfLabel')}
-          </label>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={cpf}
-            onChange={(e) => setCpf(fmtCPF(e.target.value))}
-            onBlur={() => validateField('cpf', cpf)}
-            disabled={loading}
-            placeholder="000.000.000-00"
-            style={{ fontSize: '16px' }}
-            className={`w-full rounded-xl border px-3 py-3 text-gray-900 placeholder-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition disabled:opacity-60 ${
-              errors.cpf ? 'border-red-300 bg-red-50' : 'border-gray-200'
-            }`}
-          />
-          {errors.cpf && (
-            <p className="text-[11px] text-red-500 mt-1">{t('payment.card.cpfLabel')} obrigatório</p>
-          )}
+      )}
+      <div id="cardPaymentBrick_container" />
+      {phase === 'loading' && (
+        <div className="flex items-center justify-center py-6 gap-2 text-gray-400">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-brand rounded-full animate-spin" />
+          <span className="text-[13px]">Carregando pagamento seguro…</span>
         </div>
-
-        {/* Parcelas — só para crédito, após detectar bandeira */}
-        {isCredit && brand && (
-          <div>
-            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-              {t('payment.card.installmentsLabel')}
-            </label>
-            {loadingInst ? (
-              <div className="flex items-center gap-2 text-[12px] text-gray-400 py-2">
-                <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-brand rounded-full animate-spin" />
-                {t('payment.card.loadingInstallments')}
-              </div>
-            ) : installmentOptions.length > 0 ? (
-              <div className="relative">
-                <select
-                  value={installments}
-                  onChange={(e) => setInstallments(Number(e.target.value))}
-                  disabled={loading}
-                  style={{ fontSize: '16px' }}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 pr-10 text-gray-900 appearance-none focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition disabled:opacity-60"
-                >
-                  {installmentOptions.map((opt) => {
-                    const hasInterest  = opt.installment_rate > 0
-                    const perValue     = fmt(opt.installment_amount)
-                    const totalValue   = fmt(opt.total_amount)
-                    const label = hasInterest
-                      ? t('payment.card.installmentWithInterest', {
-                          count: opt.installments,
-                          value: perValue,
-                          total: totalValue,
-                        })
-                      : t('payment.card.installmentNoInterest', {
-                          count: opt.installments,
-                          value: perValue,
-                        })
-                    return (
-                      <option key={opt.installments} value={opt.installments}>
-                        {label}
-                      </option>
-                    )
-                  })}
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                />
-              </div>
-            ) : (
-              /* Fallback: sem parcelas da API — exibe apenas 1x */
-              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                <span className="text-[14px] text-gray-700">
-                  {t('payment.card.installmentNoInterest', {
-                    count: 1,
-                    value: fmt(totalPrice),
-                  })}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* CTA do formulário */}
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="w-full bg-brand text-white font-bold rounded-2xl py-4 text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-70 mt-1"
-        >
-          {loading ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <><Lock size={15} className="text-white/80" /> {ctaLabel()}</>
-          )}
-        </button>
-      </div>
+      )}
     </div>
   )
 }
@@ -492,7 +152,6 @@ export default function CheckoutPayment() {
   const METHODS = [
     {
       id:        'pix',
-      apiMethod: 'pix',
       label:     t('payment.method.pix'),
       sub:       t('payment.method.pixSub'),
       icon:      QrCode,
@@ -501,24 +160,13 @@ export default function CheckoutPayment() {
       iconColor: 'text-brand',
     },
     {
-      id:        'credit_card',
-      apiMethod: 'credit_card',
-      label:     t('payment.method.credit'),
-      sub:       t('payment.method.creditSub'),
+      id:        'card',
+      label:     t('payment.method.card', { defaultValue: 'Cartão de crédito ou débito' }),
+      sub:       t('payment.method.cardSub', { defaultValue: 'Crédito em até 12x ou débito' }),
       icon:      CreditCard,
       badge:     null,
       iconBg:    'bg-blue-50',
       iconColor: 'text-blue-400',
-    },
-    {
-      id:        'debit_card',
-      apiMethod: 'debit_card',
-      label:     t('payment.method.debit'),
-      sub:       t('payment.method.debitSub'),
-      icon:      Smartphone,
-      badge:     null,
-      iconBg:    'bg-purple-50',
-      iconColor: 'text-purple-400',
     },
   ]
 
@@ -527,9 +175,9 @@ export default function CheckoutPayment() {
   const {
     service_name, service_type, booking_mode,
     service_date, service_date_iso, service_time,
-    people_count, total_price: rawPrice, display_total, region_id, service_id,
+    people_count, total_price: rawPrice, region_id, service_id,
     vehicles = [], origin_text, destination_text, cover_image_url,
-    existing_booking_id, quote_id,
+    existing_booking_id,
   } = state
 
   const total_price = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
@@ -540,7 +188,7 @@ export default function CheckoutPayment() {
     `${people_count} ${people_count === 1 ? 'pessoa' : 'pessoas'}`,
   ].filter(Boolean)
 
-  // Confirma pagamento PIX (fluxo original)
+  // Confirma pagamento PIX (fluxo original — QR + polling)
   async function handlePixConfirm() {
     if (loading) return
     setLoading(true)
@@ -585,7 +233,7 @@ export default function CheckoutPayment() {
     }
   }
 
-  // Callback do CardForm: chama a API e roteia pelo status
+  // Callback do CardBrick: chama a API e roteia pelo status
   async function handleCardPayment(cardFields) {
     const result = await api.createPaymentIntent({
       service_type, service_id, booking_mode,
@@ -629,11 +277,11 @@ export default function CheckoutPayment() {
       return result
     }
 
-    // rejected → retorna para o CardForm exibir a mensagem
+    // rejected → retorna para o CardBrick exibir a mensagem
     return result
   }
 
-  const isCard = method === 'credit_card' || method === 'debit_card'
+  const isCard = method === 'card'
 
   return (
     <div className="min-h-screen bg-[#F8F8F8]">
@@ -666,13 +314,13 @@ export default function CheckoutPayment() {
           </div>
         </div>
 
-        {/* Métodos + painéis de cartão em accordion */}
+        {/* Métodos + painel do cartão (Brick) em accordion */}
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
           <p className="text-[14px] font-bold text-gray-900 px-4 pt-4 pb-3">{t('payment.choose')}</p>
           <div className="divide-y divide-gray-50">
             {METHODS.map((m) => {
-              const selected = method === m.id
-              const showPanel = selected && (m.id === 'credit_card' || m.id === 'debit_card')
+              const selected  = method === m.id
+              const showPanel = selected && m.id === 'card'
 
               return (
                 <div key={m.id}>
@@ -705,16 +353,10 @@ export default function CheckoutPayment() {
                     </div>
                   </button>
 
-                  {/* Painel accordion de cartão */}
+                  {/* Painel accordion do cartão (Brick do Mercado Pago) */}
                   {showPanel && (
                     <div className="px-4 pb-4 pt-2 border-t border-gray-50 bg-gray-50/40">
-                      <CardForm
-                        key={m.id}
-                        method={m.id}
-                        totalPrice={total_price}
-                        onSuccess={handleCardPayment}
-                        onError={setError}
-                      />
+                      <CardBrick amount={total_price} onPay={handleCardPayment} />
                     </div>
                   )}
                 </div>
@@ -739,7 +381,7 @@ export default function CheckoutPayment() {
         </div>
       </main>
 
-      {/* CTA fixo — só aparece para PIX */}
+      {/* CTA fixo — só aparece para PIX (o cartão tem botão próprio no Brick) */}
       {!isCard && (
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 z-30 px-4 pt-3 pb-6 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
           <button
