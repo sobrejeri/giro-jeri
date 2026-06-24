@@ -26,7 +26,7 @@ function paymentClientFor(sellerAccessToken) {
   return mp ? new Payment(mp) : null
 }
 
-export async function createPixPayment({ amount, description, payerEmail, payerName, externalRef, sellerAccessToken, applicationFee }) {
+export async function createPixPayment({ amount, description, payerEmail, payerName, payerDoc, externalRef, sellerAccessToken, applicationFee }) {
   const client = paymentClientFor(sellerAccessToken)
   if (!client) return createFakePix({ amount, description, externalRef })
 
@@ -44,6 +44,8 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
       email:      payerEmail || 'comprador@girojeri.com',
       first_name: (payerName || 'Comprador').split(' ')[0],
       last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'GiroJeri',
+      // Identificação do pagador (o Payment Brick envia o CPF/CNPJ no PIX)
+      ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
     },
   }
   // Split: comissão da plataforma quando o pagamento cai na conta da cooperativa

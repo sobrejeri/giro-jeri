@@ -35,7 +35,7 @@ const intentSchema = z.object({
   installments:       z.number({ coerce: true }).int().min(1).max(12).default(1),
   payment_method_id:  z.string().min(1).optional(),
   issuer_id:          z.string().optional(),
-  payer_doc:          z.string().regex(/^\d{11}$/).optional(),
+  payer_doc:          z.string().regex(/^\d{11,14}$/).optional(),
 }).refine(
   (d) => d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
   { message: 'Dados incompletos para criar reserva' },
@@ -338,6 +338,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
             description: service_name || `Reserva ${bookingCode}`,
             payerEmail:  userInfo.data?.email,
             payerName:   userInfo.data?.full_name,
+            payerDoc:    payer_doc,
             externalRef: booking.id,
             sellerAccessToken: split?.sellerAccessToken,
             applicationFee:    split?.applicationFee,
