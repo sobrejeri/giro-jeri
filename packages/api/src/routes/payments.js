@@ -70,6 +70,16 @@ const requestSchema = z.object({
 
 const router = Router()
 
+// O app envia null em campos vazios vindos do banco (ex.: origin_text de um
+// passeio). Os campos .optional() do Zod aceitam undefined, mas não null —
+// então convertemos null → undefined no corpo antes de validar.
+function nullToUndefined(obj) {
+  if (!obj || typeof obj !== 'object') return obj
+  const out = {}
+  for (const [k, v] of Object.entries(obj)) out[k] = v === null ? undefined : v
+  return out
+}
+
 async function getPaymentSettings() {
   const { data = [] } = await supabase
     .from('system_settings')
@@ -172,7 +182,7 @@ async function getSplitContext(booking, chargedTotal, cfg) {
 // ── POST /api/payments/intent ───────────────────────────
 router.post('/intent', authenticate, async (req, res, next) => {
   try {
-    const parsed = intentSchema.safeParse(req.body)
+    const parsed = intentSchema.safeParse(nullToUndefined(req.body))
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
     }
@@ -463,7 +473,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
 // O pagamento acontece depois, via POST /intent com existing_booking_id.
 router.post('/request', authenticate, async (req, res, next) => {
   try {
-    const parsed = requestSchema.safeParse(req.body)
+    const parsed = requestSchema.safeParse(nullToUndefined(req.body))
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
     }
