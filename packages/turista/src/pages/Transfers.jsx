@@ -5,9 +5,10 @@ import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { api }         from '../lib/api'
 import TransfersDesktop from './TransfersDesktop'
+import { loadGoogleMaps } from '../components/GoogleMap'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
-  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2,
+  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -15,7 +16,9 @@ import {
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-/* ── Place Autocomplete (Nominatim / OpenStreetMap) ─────────── */
+/* ── Place Autocomplete (Google Maps / Nominatim fallback) ───── */
+const JERI_LL = { lat: -2.7976, lng: -40.5147 }
+
 function usePlaceSuggestions(query) {
   const [results,  setResults]  = useState([])
   const [loading,  setLoading]  = useState(false)
@@ -27,29 +30,52 @@ function usePlaceSuggestions(query) {
     timerRef.current = setTimeout(async () => {
       setLoading(true)
       try {
+        if (import.meta.env.VITE_GOOGLE_MAPS_KEY) {
+          const maps = await loadGoogleMaps()
+          const svc = new maps.places.AutocompleteService()
+          svc.getPlacePredictions({
+            input: query,
+            componentRestrictions: { country: 'br' },
+            location: new maps.LatLng(JERI_LL.lat, JERI_LL.lng),
+            radius: 150000,
+          }, (predictions, status) => {
+            setLoading(false)
+            if (status !== 'OK' || !predictions) { setResults([]); return }
+            setResults(predictions.map(p => ({
+              id:          p.place_id,
+              label:       p.structured_formatting.main_text,
+              sublabel:    p.structured_formatting.secondary_text || '',
+              full:        p.description,
+              lat:         null,
+              lon:         null,
+              _source:     'google',
+            })))
+          })
+          return
+        }
+      } catch { /* fallback below */ }
+      // Fallback: Nominatim
+      try {
         const params = new URLSearchParams({
-          q:               query,
-          format:          'json',
-          limit:           '6',
-          addressdetails:  '1',
-          countrycodes:    'br',
-          'accept-language': 'pt-BR',
-          viewbox:         '-41.5,-3.8,-39.5,-2.0', // bias around Jericoacoara
-          bounded:         '0',
+          q: query, format: 'json', limit: '6', addressdetails: '1',
+          countrycodes: 'br', 'accept-language': 'pt-BR',
+          viewbox: '-41.5,-3.8,-39.5,-2.0', bounded: '0',
         })
         const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-          headers: { 'User-Agent': 'GiroJeri/1.0 (sobrejeri@gmail.com)' },
+          headers: { 'User-Agent': 'GiroJeri/1.0' },
         })
         const data = await res.json()
         setResults(data.map(p => ({
-          id:    p.place_id,
-          label: p.display_name.split(',').slice(0, 3).join(', '),
-          full:  p.display_name,
-          lat:   parseFloat(p.lat),
-          lon:   parseFloat(p.lon),
+          id:      p.place_id,
+          label:   p.display_name.split(',').slice(0, 2).join(', '),
+          sublabel: p.display_name.split(',').slice(2, 4).join(',').trim(),
+          full:    p.display_name,
+          lat:     parseFloat(p.lat),
+          lon:     parseFloat(p.lon),
+          _source: 'nominatim',
         })))
       } catch { setResults([]) }
-      finally  { setLoading(false) }
+      setLoading(false)
     }, 350)
     return () => clearTimeout(timerRef.current)
   }, [query])
@@ -93,13 +119,14 @@ export function PlaceInput({ value, onChange, placeholder, dotClass }) {
       {open && results.length > 0 && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
           {results.map(r => (
-            <button
-              key={r.id}
-              onClick={() => { onChange(r.label); setOpen(false) }}
+            <button key={r.id} onClick={() => { onChange(r.label); setOpen(false) }}
               className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0"
             >
               <MapPin size={13} className="text-brand shrink-0 mt-0.5" />
-              <span className="text-[12px] text-gray-700 leading-snug">{r.label}</span>
+              <div className="min-w-0">
+                <p className="text-[12px] text-gray-700 leading-snug truncate">{r.label}</p>
+                {r.sublabel && <p className="text-[10px] text-gray-400 leading-snug truncate">{r.sublabel}</p>}
+              </div>
             </button>
           ))}
         </div>
@@ -312,6 +339,8 @@ export default function Transfers() {
 
   // mode: 'rota' | 'custom'
   const [mode, setMode] = useState('rota')
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const [origin,     setOrigin]     = useState('Jericoacoara')
   const [dest,       setDest]       = useState('')
@@ -373,14 +402,15 @@ export default function Transfers() {
     queryFn:  () => api.getTransferRoutes(),
   })
   const { data: vehiclesData } = useQuery({
-    queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
-    queryFn:  () => api.getVehicles ? api.getVehicles(getServiceQuery()) : Promise.resolve([]),
+    queryKey: ['vehicles', 'transfer', region?.id],
+    queryFn:  () => region?.id ? api.getVehicles({ region_id: region.id }) : Promise.resolve([]),
+    enabled:  !!region?.id,
   })
 
   const routes   = Array.isArray(routesData?.routes) ? routesData.routes
                  : Array.isArray(routesData) ? routesData : []
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
-                    .filter(v => v.is_transfer_allowed)
+                    .filter(v => v.is_transfer_allowed && v.is_active !== false)
 
   const origins    = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
   const dests      = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
@@ -450,6 +480,7 @@ export default function Transfers() {
     navigate('/checkout/resumo', {
       state: {
         service_name:        `Transfer ${origin} → ${dest}`,
+        short_description:   matched?.transfers?.short_description || null,
         service_type:        'transfer',
         booking_mode:        'private',
         service_date:        dateLabel,
@@ -475,8 +506,42 @@ export default function Transfers() {
     <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
       {/* Header */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
-        <h1 className="text-[20px] font-extrabold text-gray-900">Transfer</h1>
-        <p className="text-[12px] text-gray-400 mt-0.5">Transporte privativo com motorista</p>
+        <div className="relative flex items-center justify-center min-h-[32px]">
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="Voltar"
+          >
+            <ChevronLeft size={20} className="text-gray-700" />
+          </button>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Transfer</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <button
+              onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+              aria-label="Buscar reserva"
+            >
+              <Search size={15} />
+            </button>
+          </div>
+        </div>
+        <p className="text-[12px] text-gray-400 text-center mt-1">Transporte privativo com motorista</p>
+
+        {showSearch && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); const q = searchTerm.trim(); if (q) navigate('/minhas-reservas', { state: { q } }) }}
+            className="mt-2 relative"
+          >
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar reserva por código…"
+              className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
+            />
+          </form>
+        )}
 
         {/* Mode toggle */}
         <div className="flex gap-2 mt-3">

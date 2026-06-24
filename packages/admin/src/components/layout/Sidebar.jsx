@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, BookOpen, Tag, Globe, Ticket,
   Sun, BarChart3, ScrollText, Settings, LogOut, CalendarCheck, UserCircle, X,
-  Newspaper, Store,
+  Newspaper, Store, PlayCircle,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -16,6 +16,7 @@ const NAV = [
   { to: '/regioes',      icon: Globe,           label: 'Regiões'       },
   { separator: true, label: 'Conteúdo' },
   { to: '/feed',            icon: Newspaper,    label: 'Eventos & Promoções' },
+  { to: '/stories',         icon: PlayCircle,   label: 'Stories'              },
   { to: '/estabelecimentos', icon: Store,       label: 'Estabelecimentos' },
   { separator: true, label: 'Promoções' },
   { to: '/cupons',       icon: Ticket,          label: 'Cupons'        },
@@ -41,9 +42,12 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         }`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-5 border-b border-gray-800">
-          <span className="font-display font-bold text-xl text-brand">Giro Jeri</span>
-          <span className="ml-2 text-xs font-semibold text-gray-500 uppercase tracking-widest">Admin</span>
+        <div className="h-16 flex items-center px-4 border-b border-gray-800 gap-2.5">
+          <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
+          <div>
+            <p className="font-giro font-semibold text-[14px] text-white leading-tight tracking-wide">GIRO JERI</p>
+            <p className="text-[9px] text-gray-500 leading-none">Admin</p>
+          </div>
           <button
             onClick={onClose}
             className="ml-auto p-1 text-gray-500 hover:text-gray-200 lg:hidden"

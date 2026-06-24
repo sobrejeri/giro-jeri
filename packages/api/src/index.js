@@ -16,6 +16,7 @@ import catalogRoutes  from './routes/catalog.js';
 import operatorRoutes from './routes/operator.js';
 import settingsRoutes from './routes/settings.js';
 import feedRoutes     from './routes/feed.js';
+import storiesRoutes  from './routes/stories.js';
 import establishmentsRoutes from './routes/establishments.js';
 import notificationsRoutes from './routes/notifications.js';
 import { regionsRouter } from './routes/regions.js';
@@ -94,6 +95,7 @@ app.use('/api/catalog',   catalogRoutes);
 app.use('/api/operator',  operatorRoutes);
 app.use('/api/settings',  settingsRoutes);
 app.use('/api/feed',      feedRoutes);
+app.use('/api/stories',   storiesRoutes);
 app.use('/api/establishments', establishmentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 

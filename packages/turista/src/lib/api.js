@@ -130,4 +130,15 @@ export const api = {
   markNotificationsRead: ()   => request('/api/notifications/read-all', { method: 'POST' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   getVapidKey:           ()   => request('/api/notifications/vapid-public-key'),
+
+  // Stories (Instagram-style)
+  getStories: () => request('/api/stories'),
+
+  // Publicação de stories/destaques — exige token de admin (requireAdmin na API).
+  // Disponível no app do turista apenas quando o usuário logado é admin.
+  createHighlight:    (body)      => request('/api/stories/highlights', { method: 'POST', body }),
+  addStoryItem:       (hid, body) => request('/api/stories/highlights/' + hid + '/items', { method: 'POST', body }),
+  deleteStoryItem:    (id)        => request('/api/stories/items/' + id, { method: 'DELETE' }),
+  uploadSiteImage:    (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
+  getStorageSignedUrl: (body)     => request('/api/admin/storage-sign', { method: 'POST', body }),
 }

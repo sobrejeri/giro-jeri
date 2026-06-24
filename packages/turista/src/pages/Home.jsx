@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import { useAuth } from '../contexts/AuthContext'
+import StoriesRow from '../components/StoriesRow'
+import StoryViewer from '../components/StoryViewer'
+import StoryPublisher from '../components/StoryPublisher'
+import InstallPrompt from '../components/InstallPrompt'
 import {
-  Bell, Star, Clock, Heart, ChevronRight, ArrowRight,
+  Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
@@ -19,15 +24,6 @@ function suggestVehicle(vehicles, people) {
   const biggest = [...vehicles].sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
   if (!biggest) return null
   return { vehicle: biggest, qty: Math.ceil(people / biggest.seat_capacity) }
-}
-
-function WhatsAppIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2.546 20.2A1 1 0 0 0 3.8 21.454l3.032-.892A9.957 9.957 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.966 7.966 0 0 1-4.229-1.206l-.294-.18-2.456.722.722-2.456-.18-.294A7.966 7.966 0 0 1 4.357 12c0-4.271 3.372-7.643 7.643-7.643S19.643 7.729 19.643 12 16.271 19.643 12 19.643z" />
-    </svg>
-  )
 }
 
 const GRADIENTS = [
@@ -67,6 +63,7 @@ function TourCard({ tour, isFav, onToggleFav }) {
       navigate('/checkout/resumo', {
         state: {
           service_name:     tour.name,
+          short_description: tour.short_description || null,
           service_type:     'tour',
           booking_mode:     'private',
           service_date:     'Hoje',
@@ -125,20 +122,14 @@ function TourCard({ tour, isFav, onToggleFav }) {
 
       <div className="p-2.5">
         <p className="text-[12px] font-bold text-gray-900 leading-tight line-clamp-1 mb-1">{tour.name}</p>
-        <div className="flex items-center gap-1.5">
-          {tour.rating_average > 0 && (
-            <div className="flex items-center gap-0.5">
-              <Star size={10} className="text-amber-400 fill-amber-400" />
-              <span className="text-[10px] font-semibold text-gray-600">{tour.rating_average}</span>
-            </div>
-          )}
-          {tour.duration_hours && (
-            <div className="flex items-center gap-0.5 text-[10px] text-gray-400">
-              <Clock size={9} />
-              <span>{tour.duration_hours}h</span>
-            </div>
-          )}
-        </div>
+        {tour.short_description ? (
+          <p className="text-[11px] text-gray-400 leading-snug line-clamp-2">{tour.short_description}</p>
+        ) : tour.rating_average > 0 ? (
+          <div className="flex items-center gap-0.5">
+            <Star size={10} className="text-amber-400 fill-amber-400" />
+            <span className="text-[10px] font-semibold text-gray-600">{tour.rating_average}</span>
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -188,9 +179,9 @@ function FeaturedCarousel({ items, favs, onToggleFav }) {
 
   return (
     <div className="-mx-4">
-      <div ref={scrollRef} className="flex gap-3 overflow-x-hidden px-4">
+      <div ref={scrollRef} className="flex gap-2 overflow-x-hidden px-4">
         {slides.map((tour, i) => (
-          <div key={`${tour.id}-${i}`} className="shrink-0 w-[78%]">
+          <div key={`${tour.id}-${i}`} className="shrink-0">
             <TourCard tour={tour} isFav={favs.has(tour.id)} onToggleFav={onToggleFav} />
           </div>
         ))}
@@ -220,15 +211,31 @@ const STEPS = [
 export default function Home() {
   const navigate = useNavigate()
   const { region, openPicker, userCoords, getServiceQuery } = useRegion()
+  const { user } = useAuth()
+  const isAdmin = user?.user_type === 'admin'
+  const qc = useQueryClient()
+  const [showPublisher, setShowPublisher] = useState(false)
   const [favs, setFavs] = useState(new Set())
   const toggleFav = (id) =>
     setFavs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const geo = getServiceQuery()
+  // Arredonda as coordenadas (~1 km) na chave para o GPS não recarregar a lista
+  // a cada micro-variação.
+  const coarseLat = userCoords?.lat != null ? Math.round(userCoords.lat * 100) / 100 : null
+  const coarseLon = userCoords?.lon != null ? Math.round(userCoords.lon * 100) / 100 : null
   const { data: toursData, isLoading } = useQuery({
-    queryKey: ['tours', 'home', region?.id, userCoords?.lat, userCoords?.lon],
+    queryKey: ['tours', 'home', region?.id, coarseLat, coarseLon],
     queryFn:  () => api.getTours({ limit: 12, ...geo }),
   })
+
+  // Stories
+  const { data: stories = [] } = useQuery({
+    queryKey: ['stories'],
+    queryFn:  () => api.getStories(),
+    staleTime: 60_000,
+  })
+  const [activeHighlight, setActiveHighlight] = useState(null)
   const tours    = toursData?.tours || toursData || []
   const featured = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
@@ -259,21 +266,13 @@ export default function Home() {
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-6 lg:rounded-2xl lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center shrink-0">
-              <Compass size={18} className="text-white" />
-            </div>
+            <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
             <div>
-              <p className="text-[15px] font-extrabold text-gray-900 leading-tight">Giro Jeri</p>
+              <p className="font-giro font-semibold text-[17px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
               <p className="text-[10px] text-gray-400 leading-none mt-0.5">Passeios & Transfers</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => window.open('https://wa.me/5588999999999', '_blank')}
-              className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white active:scale-95 transition-transform"
-            >
-              <WhatsAppIcon />
-            </button>
             <NotificationBell />
           </div>
         </div>
@@ -287,6 +286,43 @@ export default function Home() {
           <ChevronRight size={11} className="text-gray-400 ml-0.5" />
         </button>
       </div>
+
+      {/* ── Destaques (highlights) ───────────────────────────────── */}
+      {(stories.length > 0 || isAdmin) && (
+        <div className="bg-white border-b border-gray-100 lg:max-w-6xl lg:mx-auto">
+          <StoriesRow
+            highlights={stories}
+            onSelect={(i) => setActiveHighlight(stories[i])}
+            isAdmin={isAdmin}
+            onPublish={() => setShowPublisher(true)}
+          />
+        </div>
+      )}
+
+      {activeHighlight && (activeHighlight.stories || []).length > 0 && (
+        <StoryViewer
+          stories={activeHighlight.stories}
+          title={activeHighlight.title}
+          cover={activeHighlight.cover_image_url}
+          startIndex={0}
+          onClose={() => setActiveHighlight(null)}
+          isAdmin={isAdmin}
+          onDelete={async (id) => {
+            try { await api.deleteStoryItem(id) }
+            catch (err) { alert(err?.message || 'Erro ao excluir'); return }
+            qc.invalidateQueries({ queryKey: ['stories'] })
+            setActiveHighlight(null)
+          }}
+        />
+      )}
+
+      {showPublisher && (
+        <StoryPublisher
+          highlights={stories}
+          onClose={() => setShowPublisher(false)}
+          onPublished={() => qc.invalidateQueries({ queryKey: ['stories'] })}
+        />
+      )}
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto lg:space-y-6 lg:pt-6 lg:px-6">
 
@@ -403,6 +439,8 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        <InstallPrompt />
 
       </div>
     </div>

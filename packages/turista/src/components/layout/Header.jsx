@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { api } from '../../lib/api'
-import { MapPin, User, LogOut, Menu, X } from 'lucide-react'
+import { User, LogOut, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 
 export default function Header() {
@@ -23,10 +23,11 @@ export default function Header() {
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center">
-            <MapPin size={16} className="text-white" />
+          <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
+          <div>
+            <p className="font-giro font-semibold text-[14px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+            <p className="text-[9px] text-gray-400 leading-none">Passeios & Transfers</p>
           </div>
-          <span className="font-display font-bold text-xl text-gray-900">Giro Jeri</span>
         </Link>
 
         {/* Nav — desktop */}

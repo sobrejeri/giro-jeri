@@ -206,7 +206,7 @@ export default function BookingDetail() {
           >
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
-          <h1 className="flex-1 text-base font-bold text-gray-900">Detalhes da reserva</h1>
+          <h1 className="flex-1 font-giro font-semibold text-[20px] text-gray-900 tracking-wide text-center">Detalhes da reserva</h1>
           <button
             onClick={handleCopy}
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors active:scale-95"

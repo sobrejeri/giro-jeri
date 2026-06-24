@@ -1,15 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { MapPin, Navigation, X, Check, Search, AlertCircle, Loader } from 'lucide-react'
 import { useRegion, findRegionForCoords } from '../contexts/RegionContext'
-
-async function geocode(query) {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&countrycodes=br&accept-language=pt-BR`
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'GiroJeri/1.0' },
-  })
-  if (!res.ok) return []
-  return res.json()
-}
+import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 
 export default function RegionPicker() {
   const { regions, region, selectRegion, detectGPS, detecting, showPicker, setShowPicker, outsideError, setOutsideError } = useRegion()
@@ -40,16 +32,24 @@ export default function RegionPicker() {
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const data = await geocode(value)
+        const data = await getPlaceSuggestions(value)
         setResults(data)
       } catch { setResults([]) }
       setSearching(false)
     }, 500)
   }, [])
 
-  function handleResult(r) {
-    const lat = parseFloat(r.lat)
-    const lon = parseFloat(r.lon)
+  async function handleResult(r) {
+    let lat, lon
+    if (r._source === 'google' && !r.lat) {
+      const detail = await getPlaceDetails(r.place_id).catch(() => null)
+      if (!detail) { setNoMatch(true); setResults([]); return }
+      lat = parseFloat(detail.lat)
+      lon = parseFloat(detail.lon)
+    } else {
+      lat = parseFloat(r.lat)
+      lon = parseFloat(r.lon)
+    }
     const found = findRegionForCoords(lat, lon, regions)
     if (found) {
       selectRegion(found)

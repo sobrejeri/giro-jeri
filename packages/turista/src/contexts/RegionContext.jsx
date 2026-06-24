@@ -1,24 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
+import { reverseGeocode } from '../lib/geoServices'
 
 const RegionContext = createContext(null)
 const STORAGE_KEY        = 'giro_region'
 const STORAGE_KEY_COORDS = 'giro_user_coords'
 const STORAGE_KEY_PLACE  = 'giro_user_place'
 const DEFAULT_RADIUS_KM  = 100
-
-async function reverseGeocode(lat, lon) {
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=pt-BR`
-    const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
-    if (!res.ok) return null
-    const data = await res.json()
-    const a = data.address ?? {}
-    const locality = a.village || a.town || a.suburb || a.neighbourhood || a.city || a.municipality
-    const state    = a.state_code || a.state
-    return [locality, state].filter(Boolean).join(', ') || null
-  } catch { return null }
-}
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371
@@ -101,25 +89,51 @@ export function RegionProvider({ children }) {
     if (!navigator.geolocation) return
     setDetecting(true)
     setOutsideError(false)
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
+
+    async function onSuccess({ coords }) {
+      setDetecting(false)
+      const found = await applyCoords(coords.latitude, coords.longitude)
+      if (!found) setOutsideError(true)
+    }
+
+    function onError(err) {
+      if (err.code === 1) {
+        // Permissão negada — para imediatamente
         setDetecting(false)
-        const found = await applyCoords(coords.latitude, coords.longitude)
-        if (!found) setOutsideError(true)
-      },
-      () => { setDetecting(false) },
-      { timeout: 8000 }
-    )
+        setOutsideError(true)
+        return
+      }
+      // Timeout/indisponível — tenta sem alta precisão
+      navigator.geolocation.getCurrentPosition(
+        onSuccess,
+        () => { setDetecting(false); setOutsideError(true) },
+        { timeout: 20000 }
+      )
+    }
+
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+      timeout:            15000,
+      enableHighAccuracy: true,
+      maximumAge:         30000,
+    })
   }, [applyCoords])
 
   // Acompanha mudanças de localização em segundo plano, para manter
   // o header e o filtro sempre alinhados à posição real do turista.
+  // Ignora micro-variações do GPS (jitter, ~<165m) — sem isso o setUserCoords
+  // dispararia a cada leitura e recarregava as listas (tours) em loop.
   useEffect(() => {
     if (!navigator.geolocation || regions.length === 0) return
+    let last = null
     const id = navigator.geolocation.watchPosition(
-      ({ coords }) => { applyCoords(coords.latitude, coords.longitude) },
+      ({ coords }) => {
+        const lat = coords.latitude, lon = coords.longitude
+        if (last && Math.abs(last.lat - lat) < 0.0015 && Math.abs(last.lon - lon) < 0.0015) return
+        last = { lat, lon }
+        applyCoords(lat, lon)
+      },
       () => {},
-      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 },
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
     )
     return () => navigator.geolocation.clearWatch(id)
   }, [applyCoords, regions.length])

@@ -176,6 +176,9 @@ export const api = {
   // Upload de imagens do site (banner da home etc.) → devolve { url }
   uploadSiteImage: (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
 
+  // URL assinada para upload direto de vídeo/imagem ao Supabase Storage → devolve { signed_url, public_url }
+  getStorageSignedUrl: (body) => request('/api/admin/storage-sign', { method: 'POST', body }),
+
   // Feed de eventos / promoções da vila
   getFeedPosts:   ()         => request('/api/feed/admin'),
   createFeedPost: (body)     => request('/api/feed', { method: 'POST', body }),
@@ -193,4 +196,13 @@ export const api = {
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
+
+  // Destaques (Instagram Highlights) — admin
+  getStories:      ()          => request('/api/stories/admin'),
+  createHighlight: (body)      => request('/api/stories/highlights',                   { method: 'POST',   body }),
+  updateHighlight: (id, body)  => request('/api/stories/highlights/' + id,             { method: 'PUT',    body }),
+  deleteHighlight: (id)        => request('/api/stories/highlights/' + id,             { method: 'DELETE' }),
+  addStoryItem:    (hid, body) => request('/api/stories/highlights/' + hid + '/items', { method: 'POST',   body }),
+  updateStoryItem: (id, body)  => request('/api/stories/items/' + id,                  { method: 'PUT',    body }),
+  deleteStoryItem: (id)        => request('/api/stories/items/' + id,                  { method: 'DELETE' }),
 }

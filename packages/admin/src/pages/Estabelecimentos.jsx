@@ -26,6 +26,7 @@ const EMPTY = {
   locality: '', price_range: '', price_note: '',
   latitude: '', longitude: '',
   is_featured: false, is_active: true,
+  region_ids: [],
 }
 
 // Extrai lat/lng do URL do Google Maps automaticamente
@@ -71,6 +72,12 @@ export default function Estabelecimentos() {
     queryFn:  () => api.getEstablishments(),
   })
 
+  const { data: regionsData } = useQuery({
+    queryKey: ['regions'],
+    queryFn:  () => api.getRegions(),
+  })
+  const allRegions = Array.isArray(regionsData) ? regionsData : []
+
   const saveMut = useMutation({
     mutationFn: (body) =>
       modal?.isNew ? api.createEstablishment(body) : api.updateEstablishment(modal.id, body),
@@ -100,6 +107,7 @@ export default function Estabelecimentos() {
       longitude:   p.longitude != null ? String(p.longitude) : '',
       is_featured: p.is_featured ?? false,
       is_active:   p.is_active ?? true,
+      region_ids:  p.region_ids || [],
     })
     setImgError('')
     setModal(p)
@@ -143,6 +151,7 @@ export default function Estabelecimentos() {
       longitude:   form.longitude ? parseFloat(form.longitude) : null,
       is_featured: !!form.is_featured,
       is_active:   !!form.is_active,
+      region_ids:  form.region_ids,
     })
   }
 
@@ -258,6 +267,38 @@ export default function Estabelecimentos() {
           </div>
 
           <Input label="Endereço" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Rua / referência na vila" />
+
+          {/* Cidades de atuação */}
+          <div>
+            <label className="text-sm font-medium text-gray-300 mb-2 block">
+              Cidades de atuação
+              <span className="ml-1 text-gray-500 font-normal text-xs">(onde o serviço aparece no app)</span>
+            </label>
+            {allRegions.length === 0 ? (
+              <p className="text-xs text-gray-500">Carregando municípios…</p>
+            ) : (
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {allRegions.filter(r => r.is_active).map((r) => (
+                  <label key={r.id} className="inline-flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded border-gray-600 bg-gray-900 text-brand focus:ring-brand/30"
+                      checked={form.region_ids.includes(r.id)}
+                      onChange={(e) => {
+                        setForm((f) => ({
+                          ...f,
+                          region_ids: e.target.checked
+                            ? [...f.region_ids, r.id]
+                            : f.region_ids.filter((id) => id !== r.id),
+                        }))
+                      }}
+                    />
+                    {r.city || r.name}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="space-y-1">
             <Input

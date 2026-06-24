@@ -39,6 +39,9 @@ export async function authenticate(req, res, next) {
     }
 
     req.user = profile;
+    // Cliente com o JWT do usuário: as queries rodam no contexto dele
+    // (auth.uid() resolve), então as policies RLS por auth_id funcionam.
+    req.supabase = userClient;
     next();
   } catch {
     return res.status(401).json({ error: 'Erro ao validar autenticação' });

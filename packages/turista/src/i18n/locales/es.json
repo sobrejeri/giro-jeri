@@ -192,6 +192,10 @@
     "perPerson": "/persona",
     "perVehicle": "/vehículo"
   },
+  "stories": {
+    "strip": "Stories",
+    "close": "Cerrar story"
+  },
   "common": {
     "back": "Volver",
     "close": "Cerrar",

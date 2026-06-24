@@ -8,7 +8,7 @@ import ToursDesktop from './ToursDesktop'
 import {
   MapPin, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
-  ChevronLeft, ChevronRight, X, Info, Bus,
+  ChevronLeft, ChevronRight, X, Info, Bus, Search,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth,
@@ -91,16 +91,14 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
       </div>
       <div className="p-2">
         <p className="text-[11px] font-bold text-gray-900 leading-tight line-clamp-1 mb-0.5">{tour.name}</p>
-        <div className="flex items-center gap-1">
-          {tour.rating_average > 0 && <>
+        {tour.short_description ? (
+          <p className="text-[10px] text-gray-400 leading-snug line-clamp-2">{tour.short_description}</p>
+        ) : tour.rating_average > 0 ? (
+          <div className="flex items-center gap-1">
             <Star size={9} className="text-amber-400 fill-amber-400" />
             <span className="text-[10px] text-gray-500">{tour.rating_average}</span>
-          </>}
-          {tour.duration_hours && <>
-            <Clock size={9} className="text-gray-400 ml-0.5" />
-            <span className="text-[10px] text-gray-400">{tour.duration_hours}h</span>
-          </>}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -110,9 +108,9 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
 function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
   return (
     <div className={`bg-white rounded-2xl p-3 border flex items-center gap-3 transition-all ${qty > 0 ? 'border-brand shadow-sm shadow-brand/10' : 'border-gray-100'}`}>
-      <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+      <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
         {vehicle.image_url ? (
-          <img src={vehicle.image_url} alt={vehicle.name} className="w-full h-full object-cover" />
+          <img src={vehicle.image_url} alt={vehicle.name} className="w-full h-full object-contain p-0.5" />
         ) : (
           <Zap size={20} className="text-gray-400" />
         )}
@@ -263,7 +261,8 @@ export default function Tours() {
   const [favs, setFavs] = useState(new Set())
   const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
   const [showOriginPicker, setShowOriginPicker] = useState(false)
-  const originLabel = origin?.name || 'Centro de Jericoacoara'
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const toggleFav = (id) =>
     setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
@@ -275,7 +274,10 @@ export default function Tours() {
     staleTime: 5 * 60 * 1000,
     retry: 2,
   })
-  const tours = toursData?.tours || toursData || []
+  const allTours = toursData?.tours || toursData || []
+  const tours = searchTerm.trim()
+    ? allTours.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    : allTours
   const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
 
   const { data: vehiclesData, isFetched: vehiclesFetched } = useQuery({
@@ -338,9 +340,37 @@ export default function Tours() {
 
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
-        <div className="flex items-start justify-between">
-          <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
+        <div className="relative flex items-center justify-center min-h-[32px]">
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="Voltar"
+          >
+            <ChevronLeft size={20} className="text-gray-700" />
+          </button>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Passeios</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <button
+              onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+              aria-label="Buscar"
+            >
+              <Search size={15} />
+            </button>
+          </div>
         </div>
+        {showSearch && (
+          <div className="mt-2 relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar passeio…"
+              className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
+            />
+          </div>
+        )}
       </div>
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
@@ -364,12 +394,18 @@ export default function Tours() {
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setShowOriginPicker(true)}
-            className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px]"
+            className={`shrink-0 flex items-center gap-2 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px] border ${
+              origin ? 'bg-white border-gray-200' : 'bg-brand/5 border-brand border-dashed'
+            }`}
           >
             <MapPin size={11} className="text-brand shrink-0" />
             <div className="text-left min-w-0">
-              <p className="text-[9px] text-gray-400 leading-none">Saída</p>
-              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight truncate">{originLabel}</p>
+              <p className="text-[9px] text-gray-400 leading-none">Saída *</p>
+              <p className={`text-[11px] font-semibold mt-0.5 leading-tight truncate ${
+                origin ? 'text-gray-700' : 'text-brand'
+              }`}>
+                {origin?.name || 'Selecionar local'}
+              </p>
             </div>
           </button>
           <button
@@ -461,9 +497,9 @@ export default function Tours() {
 
                 {/* Suggestion card */}
                 <div className="bg-white rounded-2xl p-3 border border-gray-100 flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+                  <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${suggestion.vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
                     {suggestion.vehicle.image_url ? (
-                      <img src={suggestion.vehicle.image_url} alt={suggestion.vehicle.name} className="w-full h-full object-cover" />
+                      <img src={suggestion.vehicle.image_url} alt={suggestion.vehicle.name} className="w-full h-full object-contain p-0.5" />
                     ) : (
                       <Zap size={20} className="text-gray-400" />
                     )}
@@ -611,7 +647,7 @@ export default function Tours() {
 
       {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
       {mode === 'private' && cartHasItems && (() => {
-        const canContinue = cartCapacity >= people
+        const canContinue = cartCapacity >= people && !!origin
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
             <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
@@ -639,6 +675,7 @@ export default function Tours() {
                     ? () => navigate('/checkout/resumo', {
                         state: {
                           service_name:     selectedTour.name,
+                          short_description: selectedTour.short_description || null,
                           service_type:     'tour',
                           booking_mode:     'private',
                           service_date:     isToday(date) ? 'Hoje'
@@ -647,7 +684,7 @@ export default function Tours() {
                           service_date_iso: format(date, 'yyyy-MM-dd'),
                           service_time:     'A confirmar',
                           people_count:     people,
-                          origin_text:      originLabel,
+                          origin_text:      origin?.name ?? '',
                           origin_latitude:  origin?.latitude  ?? null,
                           origin_longitude: origin?.longitude ?? null,
                           vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
@@ -694,29 +731,37 @@ export default function Tours() {
                 </p>
               </div>
               <button
-                onClick={() => navigate('/checkout/resumo', {
-                  state: {
-                    service_name:     selectedTour.name,
-                    service_type:     'tour',
-                    booking_mode:     'shared',
-                    service_date:     isToday(date) ? 'Hoje'
-                                        : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
-                                        : format(date, "d 'de' MMMM", { locale: ptBR }),
-                    service_date_iso: format(date, 'yyyy-MM-dd'),
-                    service_time:     'A confirmar',
-                    people_count:     people,
-                    price_per_person: pricePerPerson,
-                    origin_text:      'Centro de Jericoacoara',
-                    total_price:      sharedTotal,
-                    breakdown:        { [`${people}x por pessoa`]: sharedTotal },
-                    cover_image_url:       selectedTour.cover_image_url || null,
-                    region_id:             selectedTour.regions?.id,
-                    service_id:            selectedTour.id,
-                    vehicles:              [],
-                    booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
-                  },
-                })}
-                className="bg-brand text-white font-bold rounded-xl px-5 py-2.5 text-[13px] active:scale-95 transition-transform shrink-0"
+                onClick={() => {
+                  if (!origin) { setShowOriginPicker(true); return }
+                  navigate('/checkout/resumo', {
+                    state: {
+                      service_name:     selectedTour.name,
+                      short_description: selectedTour.short_description || null,
+                      service_type:     'tour',
+                      booking_mode:     'shared',
+                      service_date:     isToday(date) ? 'Hoje'
+                                          : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                                          : format(date, "d 'de' MMMM", { locale: ptBR }),
+                      service_date_iso: format(date, 'yyyy-MM-dd'),
+                      service_time:     'A confirmar',
+                      people_count:     people,
+                      price_per_person: pricePerPerson,
+                      origin_text:      origin.name,
+                      origin_latitude:  origin.latitude,
+                      origin_longitude: origin.longitude,
+                      total_price:      sharedTotal,
+                      breakdown:        { [`${people}x por pessoa`]: sharedTotal },
+                      cover_image_url:       selectedTour.cover_image_url || null,
+                      region_id:             selectedTour.regions?.id,
+                      service_id:            selectedTour.id,
+                      vehicles:              [],
+                      booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
+                    },
+                  })
+                }}
+                className={`font-bold rounded-xl px-5 py-2.5 text-[13px] transition-transform shrink-0 ${
+                  origin ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400'
+                }`}
               >
                 Continuar
               </button>

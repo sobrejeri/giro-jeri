@@ -6,8 +6,8 @@ import { api } from '../lib/api'
 import { setLang, LANGS } from '../i18n/index.js'
 import ProfileDesktop from './ProfileDesktop'
 import {
-  User, Mail, LogOut, ChevronRight, CalendarCheck,
-  Camera, Pencil, Check, X,
+  User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck,
+  Camera, Pencil, Check, X, Search,
   Phone, Flag, AlertCircle, Globe, Loader2,
 } from 'lucide-react'
 
@@ -201,8 +201,22 @@ export default function Profile() {
     <>
     <div className="lg:hidden min-h-full bg-[#F8F8F8] pb-24">
 
-      <header className="bg-white px-4 pt-6 pb-4 sticky top-0 lg:top-14 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
-        <h1 className="text-xl font-bold text-gray-900">{t('profile.title')}</h1>
+      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-14 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
+        <div className="relative flex items-center justify-center min-h-[32px]">
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="Voltar"
+          >
+            <ChevronLeft size={20} className="text-gray-700" />
+          </button>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('profile.title')}</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <button className="w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform" aria-label="Buscar">
+              <Search size={15} />
+            </button>
+          </div>
+        </div>
       </header>
 
       <main className="px-4 pt-4 space-y-3 max-w-lg mx-auto">

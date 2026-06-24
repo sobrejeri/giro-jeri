@@ -26,10 +26,15 @@ const schema = z.object({
   is_featured: z.boolean().optional(),
   is_active:   z.boolean().optional(),
   sort_order:  z.number().int().optional(),
+  region_id:   z.string().uuid().optional().nullable(),
+  region_ids:  z.array(z.string().uuid()).optional(),
 });
 
 function clean(payload) {
-  Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null; });
+  Object.keys(payload).forEach((k) => {
+    if (Array.isArray(payload[k])) return;  // não toca em arrays
+    if (payload[k] === '') payload[k] = null;
+  });
   return payload;
 }
 
@@ -45,7 +50,11 @@ router.get('/', async (req, res, next) => {
       .order('sort_order',  { ascending: true })
       .order('created_at',  { ascending: false });
     if (req.query.category)  q = q.eq('category',  req.query.category);
-    if (req.query.region_id) q = q.eq('region_id', req.query.region_id);
+    if (req.query.region_id) {
+      q = q.or(
+        `region_ids.cs.{${req.query.region_id}},region_id.eq.${req.query.region_id}`
+      );
+    }
     const { data, error } = await q;
     if (error) throw error;
     if (!data?.length) return res.json([]);
