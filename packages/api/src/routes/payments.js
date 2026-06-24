@@ -125,6 +125,50 @@ async function computeChargedTotal({ data, userId }) {
   return chargedTotal
 }
 
+// Credenciais Mercado Pago da cooperativa (com refresh automático se o token
+// estiver expirando). Retorna { token, publicKey, platformPct } ou null quando
+// a cooperativa não conectou a conta dela.
+async function getOperatorMp(operatorId) {
+  if (!operatorId) return null
+  const { data: op } = await supabase
+    .from('users')
+    .select('mp_access_token, mp_refresh_token, mp_token_expires_at, mp_public_key, platform_split_pct')
+    .eq('id', operatorId)
+    .single()
+  if (!op?.mp_access_token) return null
+
+  let token     = op.mp_access_token
+  let publicKey = op.mp_public_key
+  const expMs   = op.mp_token_expires_at ? new Date(op.mp_token_expires_at).getTime() : 0
+  if (expMs && expMs < Date.now() + 60 * 1000 && op.mp_refresh_token) {
+    try {
+      const { refreshOAuthToken } = await import('../services/mercadoPago.js')
+      const tok = await refreshOAuthToken({ refreshToken: op.mp_refresh_token })
+      token     = tok.access_token || token
+      publicKey = tok.public_key   || publicKey
+      await supabase.from('users').update({
+        mp_access_token:     tok.access_token  || op.mp_access_token,
+        mp_refresh_token:    tok.refresh_token || op.mp_refresh_token,
+        mp_public_key:       tok.public_key    || op.mp_public_key,
+        mp_token_expires_at: tok.expires_in ? new Date(Date.now() + Number(tok.expires_in) * 1000).toISOString() : null,
+      }).eq('id', operatorId)
+    } catch (e) {
+      console.error('[split] refresh de token MP falhou:', e.message)
+    }
+  }
+  return { token, publicKey, platformPct: op.platform_split_pct }
+}
+
+// Contexto de split de um pagamento: token da cooperativa + comissão da
+// plataforma (application_fee). Null quando não há split (cai na plataforma).
+async function getSplitContext(booking, chargedTotal, cfg) {
+  const opMp = await getOperatorMp(booking?.operator_id)
+  if (!opMp) return null
+  const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
+  const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
+  return { sellerAccessToken: opMp.token, applicationFee }
+}
+
 // ── POST /api/payments/intent ───────────────────────────
 router.post('/intent', authenticate, async (req, res, next) => {
   try {
@@ -245,6 +289,11 @@ router.post('/intent', authenticate, async (req, res, next) => {
     } else if (gateway === 'mercado_pago') {
       const isCard = ['credit_card', 'debit_card'].includes(payment_method)
 
+      // Split automático: se a cooperativa atribuída está conectada ao Mercado
+      // Pago, o pagamento cai NA conta dela e a comissão da plataforma vira
+      // application_fee. Sem conexão → cai na conta da plataforma (sem split).
+      const split = await getSplitContext(booking, chargedTotal, cfg)
+
       if (isCard) {
         // ── Cartão: sem fallback fake — erro propaga ──────
         const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
@@ -260,6 +309,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
           payerEmail:      userInfo.data?.email,
           payerDoc:        payer_doc,
           externalRef:     booking.id,
+          sellerAccessToken: split?.sellerAccessToken,
+          applicationFee:    split?.applicationFee,
         })
 
         gatewayTransactionId = cardResult.mp_id
@@ -288,6 +339,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
             payerEmail:  userInfo.data?.email,
             payerName:   userInfo.data?.full_name,
             externalRef: booking.id,
+            sellerAccessToken: split?.sellerAccessToken,
+            applicationFee:    split?.applicationFee,
           })
           gatewayTransactionId = pixData.mp_id
           expiresAt            = pixData.expires_at || expiresAt
@@ -473,13 +526,38 @@ router.post('/request', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── GET /api/payments/booking/:id/checkout-key ─────────
+// Devolve a public_key do Mercado Pago da cooperativa atribuída à reserva, para
+// o checkout tokenizar o cartão NA conta dela (split). Sem cooperativa conectada
+// → null (o app usa a chave da plataforma, sem split).
+router.get('/booking/:id/checkout-key', authenticate, async (req, res, next) => {
+  try {
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id, user_id, operator_id')
+      .eq('id', req.params.id)
+      .single()
+    if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' })
+    if (req.user.user_type === 'tourist' && booking.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Sem permissão' })
+    }
+    let publicKey = null
+    if (booking.operator_id) {
+      const { data: op } = await supabase
+        .from('users').select('mp_public_key').eq('id', booking.operator_id).single()
+      publicKey = op?.mp_public_key || null
+    }
+    res.json({ public_key: publicKey, split: !!publicKey })
+  } catch (err) { next(err) }
+})
+
 // ── GET /api/payments/:id/status ───────────────────────
 // Polling: retorna status do pagamento
 router.get('/:id/status', authenticate, async (req, res, next) => {
   try {
     const { data: payment } = await supabase
       .from('payments')
-      .select('id, status, booking_id, gateway_name, gateway_transaction_id, expires_at, bookings(booking_code, status_commercial)')
+      .select('id, status, booking_id, gateway_name, gateway_transaction_id, expires_at, bookings(booking_code, status_commercial, operator_id)')
       .eq('id', req.params.id)
       .single()
 
@@ -502,7 +580,9 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
     if (payment.status === 'pending' && payment.gateway_name === 'mercado_pago' && payment.gateway_transaction_id && !payment.gateway_transaction_id.startsWith('TEST-')) {
       try {
         const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
-        const mpStatus = await getMpPaymentStatus(payment.gateway_transaction_id)
+        // Pagamento com split vive na conta da cooperativa → consulta com o token dela.
+        const opMp = await getOperatorMp(payment.bookings?.operator_id)
+        const mpStatus = await getMpPaymentStatus(payment.gateway_transaction_id, opMp?.token)
         if (mpStatus === 'approved') {
           await onPaymentApproved(payment)
           return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })

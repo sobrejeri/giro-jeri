@@ -132,6 +132,11 @@ export const api = {
   confirmBooking:      (id) => request(`/api/operator/bookings/${id}/confirm`,  { method: 'POST', body: {} }),
   completeBooking:     (id) => request(`/api/operator/bookings/${id}/complete`, { method: 'POST', body: {} }),
 
+  // Mercado Pago (split de pagamentos / marketplace)
+  getMpStatus:     () => request('/api/mp/status'),
+  getMpConnectUrl: () => request('/api/mp/connect-url'),
+  disconnectMp:    () => request('/api/mp/disconnect', { method: 'POST', body: {} }),
+
   // Notificações
   getNotifications:      ()    => request('/api/notifications'),
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),

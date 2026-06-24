@@ -7,28 +7,51 @@ const mp = accessToken
   ? new MercadoPagoConfig({ accessToken, options: { timeout: 10000 } })
   : null
 
-export async function createPixPayment({ amount, description, payerEmail, payerName, externalRef }) {
-  if (!mp) return createFakePix({ amount, description, externalRef })
+// ── Marketplace OAuth (split de pagamentos) ───────────
+// Credenciais do aplicativo marketplace (criado pelo lojista no painel MP).
+const OAUTH_CLIENT_ID     = process.env.MP_CLIENT_ID || process.env.MP_MARKETPLACE_CLIENT_ID || ''
+const OAUTH_CLIENT_SECRET = process.env.MP_CLIENT_SECRET || process.env.MP_MARKETPLACE_CLIENT_SECRET || ''
+
+export function isMarketplaceConfigured() {
+  return !!(OAUTH_CLIENT_ID && OAUTH_CLIENT_SECRET)
+}
+
+// Cria um cliente de pagamento. Com sellerAccessToken, opera NA conta da
+// cooperativa (split); sem ele, usa o token da plataforma.
+function paymentClientFor(sellerAccessToken) {
+  if (sellerAccessToken) {
+    const cfg = new MercadoPagoConfig({ accessToken: sellerAccessToken, options: { timeout: 10000 } })
+    return new Payment(cfg)
+  }
+  return mp ? new Payment(mp) : null
+}
+
+export async function createPixPayment({ amount, description, payerEmail, payerName, externalRef, sellerAccessToken, applicationFee }) {
+  const client = paymentClientFor(sellerAccessToken)
+  if (!client) return createFakePix({ amount, description, externalRef })
 
   // Render expõe RENDER_EXTERNAL_URL automaticamente; API_BASE_URL como fallback manual
   const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
   const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
 
-  const client = new Payment(mp)
-  const response = await client.create({
-    body: {
-      transaction_amount: amount,
-      description,
-      payment_method_id:  'pix',
-      external_reference: String(externalRef),
-      ...(notificationUrl ? { notification_url: notificationUrl } : {}),
-      payer: {
-        email:      payerEmail || 'comprador@girojeri.com',
-        first_name: (payerName || 'Comprador').split(' ')[0],
-        last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'GiroJeri',
-      },
+  const body = {
+    transaction_amount: amount,
+    description,
+    payment_method_id:  'pix',
+    external_reference: String(externalRef),
+    ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+    payer: {
+      email:      payerEmail || 'comprador@girojeri.com',
+      first_name: (payerName || 'Comprador').split(' ')[0],
+      last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'GiroJeri',
     },
-  })
+  }
+  // Split: comissão da plataforma quando o pagamento cai na conta da cooperativa
+  if (sellerAccessToken && applicationFee > 0) {
+    body.application_fee = Math.round(applicationFee * 100) / 100
+  }
+
+  const response = await client.create({ body })
 
   return {
     mp_id:       String(response.id),
@@ -66,11 +89,13 @@ export async function createCardPayment({
   payerEmail,
   payerDoc,
   externalRef,
+  sellerAccessToken,
+  applicationFee,
 }) {
-  // Sem fallback fake para cartão — erro propaga para o caller
-  if (!mp) throw new Error('Mercado Pago não configurado (access token ausente)')
-
-  const client = new Payment(mp)
+  // Com split, opera na conta da cooperativa; sem split, na conta da plataforma.
+  // Sem fallback fake para cartão — erro propaga para o caller.
+  const client = paymentClientFor(sellerAccessToken)
+  if (!client) throw new Error('Mercado Pago não configurado (access token ausente)')
 
   const body = {
     transaction_amount: amount,
@@ -88,6 +113,11 @@ export async function createCardPayment({
 
   // issuer_id é opcional — não enviar quando undefined para evitar rejeição MP
   if (issuerId) body.issuer_id = String(issuerId)
+
+  // Split: comissão da plataforma quando o pagamento cai na conta da cooperativa
+  if (sellerAccessToken && applicationFee > 0) {
+    body.application_fee = Math.round(applicationFee * 100) / 100
+  }
 
   const response = await client.create({
     body,
@@ -114,11 +144,54 @@ export async function createCardPayment({
   }
 }
 
-export async function getMpPaymentStatus(mpId) {
-  if (!mp) return null
-  const client = new Payment(mp)
+export async function getMpPaymentStatus(mpId, sellerAccessToken) {
+  // Pagamento com split vive na conta da cooperativa → consultar com o token dela.
+  const client = paymentClientFor(sellerAccessToken)
+  if (!client) return null
   const r = await client.get({ id: mpId })
   return r.status
+}
+
+// ── OAuth: autorização e troca de código ──────────────
+export function buildOAuthAuthorizeUrl({ redirectUri, state }) {
+  const params = new URLSearchParams({
+    client_id:     OAUTH_CLIENT_ID,
+    response_type: 'code',
+    platform_id:   'mp',
+    redirect_uri:  redirectUri,
+    ...(state ? { state } : {}),
+  })
+  return `https://auth.mercadopago.com.br/authorization?${params.toString()}`
+}
+
+async function oauthToken(payload) {
+  const res = await fetch('https://api.mercadopago.com/oauth/token', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body:    JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.message || data.error || `Mercado Pago OAuth erro ${res.status}`)
+  return data // { access_token, refresh_token, user_id, public_key, expires_in, live_mode, ... }
+}
+
+export function exchangeOAuthCode({ code, redirectUri }) {
+  return oauthToken({
+    client_id:     OAUTH_CLIENT_ID,
+    client_secret: OAUTH_CLIENT_SECRET,
+    grant_type:    'authorization_code',
+    code,
+    redirect_uri:  redirectUri,
+  })
+}
+
+export function refreshOAuthToken({ refreshToken }) {
+  return oauthToken({
+    client_id:     OAUTH_CLIENT_ID,
+    client_secret: OAUTH_CLIENT_SECRET,
+    grant_type:    'refresh_token',
+    refresh_token: refreshToken,
+  })
 }
 
 // Modo teste: gera um PIX fictício para desenvolvimento

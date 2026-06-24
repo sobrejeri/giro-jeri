@@ -13,10 +13,12 @@ function fmt(v) {
 }
 
 // ─── getMercadoPago ──────────────────────────────────────────
-// Instancia o SDK somente quando o script já carregou
-function getMercadoPago() {
+// Instancia o SDK somente quando o script já carregou. Com `publicKey` (chave
+// da cooperativa atribuída), tokeniza o cartão NA conta dela para o split;
+// sem ela, usa a chave da plataforma (VITE_MP_PUBLIC_KEY, sem split).
+function getMercadoPago(publicKey) {
   if (typeof window.MercadoPago === 'undefined') return null
-  const key = import.meta.env.VITE_MP_PUBLIC_KEY
+  const key = publicKey || import.meta.env.VITE_MP_PUBLIC_KEY
   if (!key) return null
   try {
     return new window.MercadoPago(key, { locale: 'pt-BR' })
@@ -36,7 +38,7 @@ function getUserEmail() {
 // com segurança (PCI) e devolve os dados no onSubmit; nós criamos o pagamento na
 // API. O Brick detecta crédito/débito pela bandeira; o método é inferido do
 // payment_method_id (deb* = débito).
-function CardBrick({ amount, onPay }) {
+function CardBrick({ amount, onPay, publicKey }) {
   const { t }    = useTranslation()
   const brickRef = useRef(null)
   const [phase,       setPhase]       = useState('loading') // loading | ready | error
@@ -47,7 +49,7 @@ function CardBrick({ amount, onPay }) {
     const containerId = 'cardPaymentBrick_container'
 
     async function mount() {
-      const mp = getMercadoPago()
+      const mp = getMercadoPago(publicKey)
       if (!mp) { setPhase('error'); return }
       let bricks
       try { bricks = mp.bricks() } catch { setPhase('error'); return }
@@ -108,7 +110,7 @@ function CardBrick({ amount, onPay }) {
       cancelled = true
       try { brickRef.current?.unmount?.() } catch { /* ignore */ }
     }
-  }, [amount]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [amount, publicKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (phase === 'error') {
     return (
@@ -148,6 +150,21 @@ export default function CheckoutPayment() {
   const [method, setMethod]   = useState('pix')
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
+  // Chave pública da cooperativa atribuída (split). Buscada para reservas já
+  // existentes (pagamento pós-aceite). keyChecked evita montar o Brick antes.
+  const [sellerKey,  setSellerKey]  = useState(null)
+  const [keyChecked, setKeyChecked] = useState(() => !state?.existing_booking_id)
+
+  useEffect(() => {
+    const bid = state?.existing_booking_id
+    if (!bid) { setKeyChecked(true); return }
+    let active = true
+    api.getCheckoutKey(bid)
+      .then((r) => { if (active) setSellerKey(r?.public_key || null) })
+      .catch(() => {})
+      .finally(() => { if (active) setKeyChecked(true) })
+    return () => { active = false }
+  }, [state?.existing_booking_id])
 
   const METHODS = [
     {
@@ -356,7 +373,14 @@ export default function CheckoutPayment() {
                   {/* Painel accordion do cartão (Brick do Mercado Pago) */}
                   {showPanel && (
                     <div className="px-4 pb-4 pt-2 border-t border-gray-50 bg-gray-50/40">
-                      <CardBrick amount={total_price} onPay={handleCardPayment} />
+                      {keyChecked ? (
+                        <CardBrick amount={total_price} onPay={handleCardPayment} publicKey={sellerKey} />
+                      ) : (
+                        <div className="flex items-center justify-center py-6 gap-2 text-gray-400">
+                          <div className="w-5 h-5 border-2 border-gray-300 border-t-brand rounded-full animate-spin" />
+                          <span className="text-[13px]">Preparando pagamento seguro…</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

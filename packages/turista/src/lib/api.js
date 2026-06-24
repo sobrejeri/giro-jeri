@@ -117,6 +117,7 @@ export const api = {
   // Pagamentos
   requestBooking:         (body) => request('/api/payments/request',     { method: 'POST', body }),
   createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
+  getCheckoutKey:         (id)   => request(`/api/payments/booking/${id}/checkout-key`),
   getPaymentStatus:       (id)   => request(`/api/payments/${id}/status`),
   simulatePaymentApprove: (id)   => request(`/api/payments/${id}/simulate`, { method: 'POST', body: {} }),
 
