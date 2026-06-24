@@ -45,6 +45,29 @@ const intentSchema = z.object({
   { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc)' },
 )
 
+// Solicitação de reserva (sem pagamento): subconjunto do intent, sem cartão.
+const requestSchema = z.object({
+  service_type:     z.enum(['tour', 'transfer']).optional(),
+  service_id:       z.string().uuid(),
+  service_date_iso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (YYYY-MM-DD)'),
+  total_price:      z.number({ coerce: true }).positive().min(5, 'Valor mínimo R$ 5,00'),
+  booking_mode:     z.enum(['private', 'shared']).optional(),
+  service_date:     z.string().optional(),
+  service_time:     z.string().optional(),
+  people_count:     z.number({ coerce: true }).int().min(1).max(200).optional(),
+  region_id:        z.string().uuid().optional(),
+  vehicles:         z.array(z.object({
+    vehicle_id: z.string().uuid(),
+    qty:        z.number({ coerce: true }).int().min(1),
+    unit_price: z.number({ coerce: true }).nonnegative(),
+  })).optional(),
+  origin_text:      z.string().max(500).optional(),
+  destination_text: z.string().max(500).optional(),
+  service_name:     z.string().max(300).optional(),
+  cover_image_url:  z.string().url().optional().nullable().or(z.literal('')),
+  coupon_code:      z.string().max(50).optional(),
+})
+
 const router = Router()
 
 async function getPaymentSettings() {
@@ -53,6 +76,53 @@ async function getPaymentSettings() {
     .select('setting_key, setting_value')
     .like('setting_key', 'payment_%')
   return Object.fromEntries(data.map((s) => [s.setting_key, s.setting_value]))
+}
+
+// Recalcula o valor autoritativo da reserva (alta temporada / feriado) a partir
+// do serviço, data e veículos. O cliente nunca define o valor cobrado.
+// Em caso de falha, mantém o total enviado pelo cliente como fallback.
+async function computeChargedTotal({ data, userId }) {
+  const {
+    service_type, service_id, booking_mode, service_date_iso,
+    people_count, region_id, vehicles = [], coupon_code, total_price,
+  } = data
+  let chargedTotal = Number(total_price)
+  try {
+    if (service_type === 'tour' && service_id && region_id && service_date_iso) {
+      let r = null
+      if (booking_mode === 'shared') {
+        r = await calculateSharedTour({
+          regionId: region_id, tourId: service_id, serviceDate: service_date_iso,
+          peopleCount: Number(people_count) || 1, couponCode: coupon_code, userId,
+        })
+      } else {
+        const vlist = (vehicles || []).map((v) => ({ vehicleId: v.vehicle_id, quantity: v.qty || 1 }))
+        if (vlist.length) {
+          r = await calculatePrivateTour({
+            regionId: region_id, tourId: service_id, serviceDate: service_date_iso,
+            vehicles: vlist, couponCode: coupon_code, userId,
+          })
+        }
+      }
+      if (r && typeof r.totalAmount === 'number') chargedTotal = r.totalAmount
+    } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
+      // Rota tabelada: recalcula a partir do preço da rota × veículos + acréscimo
+      // de data. Cotações (translado personalizado) têm preço fechado pela
+      // cooperativa e não casam com nenhuma rota → mantém o total enviado.
+      const { data: route } = await supabase
+        .from('transfer_routes').select('id, default_price').eq('id', service_id).maybeSingle()
+      if (route) {
+        const vehicleCount = (vehicles || []).reduce((s, v) => s + (Number(v.qty) || 1), 0) || 1
+        const baseSubtotal = Math.round(Number(route.default_price) * vehicleCount * 100) / 100
+        const surcharge    = await getDateSurcharge(region_id, service_date_iso, baseSubtotal)
+        chargedTotal       = Math.round((baseSubtotal + surcharge) * 100) / 100
+      }
+    }
+  } catch (e) {
+    console.error('[payments] recálculo de preço falhou, usando total do cliente:', e.message)
+    chargedTotal = Number(total_price)
+  }
+  return chargedTotal
 }
 
 // ── POST /api/payments/intent ───────────────────────────
@@ -74,47 +144,12 @@ router.post('/intent', authenticate, async (req, res, next) => {
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc,
     } = parsed.data
 
-    // ── Total autoritativo: o SERVIDOR recalcula o preço (alta temporada /
-    //    feriado). O cliente nunca define o valor cobrado. ─────────────────
-    let chargedTotal = Number(total_price)
-    if (!existing_booking_id) {
-      try {
-        if (service_type === 'tour' && service_id && region_id && service_date_iso) {
-          let r = null
-          if (booking_mode === 'shared') {
-            r = await calculateSharedTour({
-              regionId: region_id, tourId: service_id, serviceDate: service_date_iso,
-              peopleCount: Number(people_count) || 1, couponCode: coupon_code, userId: req.user.id,
-            })
-          } else {
-            const vlist = (vehicles || []).map((v) => ({ vehicleId: v.vehicle_id, quantity: v.qty || 1 }))
-            if (vlist.length) {
-              r = await calculatePrivateTour({
-                regionId: region_id, tourId: service_id, serviceDate: service_date_iso,
-                vehicles: vlist, couponCode: coupon_code, userId: req.user.id,
-              })
-            }
-          }
-          if (r && typeof r.totalAmount === 'number') chargedTotal = r.totalAmount
-        } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
-          // Rota tabelada: o SERVIDOR é a fonte de verdade — recalcula a partir
-          // do preço da rota × veículos + acréscimo de data. Cotações (translado
-          // personalizado) têm preço fechado pela cooperativa e não entram aqui
-          // (service_id não casa com nenhuma rota → mantém o total da cotação).
-          const { data: route } = await supabase
-            .from('transfer_routes').select('id, default_price').eq('id', service_id).maybeSingle()
-          if (route) {
-            const vehicleCount = (vehicles || []).reduce((s, v) => s + (Number(v.qty) || 1), 0) || 1
-            const baseSubtotal = Math.round(Number(route.default_price) * vehicleCount * 100) / 100
-            const surcharge    = await getDateSurcharge(region_id, service_date_iso, baseSubtotal)
-            chargedTotal       = Math.round((baseSubtotal + surcharge) * 100) / 100
-          }
-        }
-      } catch (e) {
-        console.error('[intent] recálculo de preço falhou, usando total do cliente:', e.message)
-        chargedTotal = Number(total_price)
-      }
-    }
+    // ── Total autoritativo: o SERVIDOR é a fonte de verdade do valor cobrado.
+    //    Reserva nova → recalcula (alta temporada/feriado). Reserva já existente
+    //    (pagamento pós-aceite) → usa o total já gravado no banco. ───────────
+    let chargedTotal = existing_booking_id
+      ? Number(total_price)
+      : await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     // ── 1. Lê configurações do gateway ─────────────────
     const cfg     = await getPaymentSettings()
@@ -139,6 +174,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
       booking     = existing
       bookingCode = existing.booking_code
+      // Pagamento de reserva já solicitada/aceita: o valor cobrado é o do banco.
+      chargedTotal = Number(existing.total_amount)
     } else {
       // ── 2. Gera código da reserva ──────────────────────
       bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
@@ -214,7 +251,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         const userInfo = await supabase.from('users').select('email').eq('id', req.user.id).single()
 
         cardResult = await createCardPayment({
-          amount:          Number(total_price),
+          amount:          chargedTotal,
           description:     service_name || `Reserva ${bookingCode}`,
           installments:    cardInstallments,
           paymentMethodId: payment_method_id,
@@ -246,7 +283,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
           const { createPixPayment } = await import('../services/mercadoPago.js')
           const userInfo = await supabase.from('users').select('full_name, email').eq('id', req.user.id).single()
           const pixData  = await createPixPayment({
-            amount:      Number(total_price),
+            amount:      chargedTotal,
             description: service_name || `Reserva ${bookingCode}`,
             payerEmail:  userInfo.data?.email,
             payerName:   userInfo.data?.full_name,
@@ -285,8 +322,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
       gateway_transaction_id: gatewayTransactionId,
       payment_method,
       payment_type:           'full',
-      amount_gross:           Number(total_price),
-      gateway_fee_amount:     isCard ? Math.round(Number(total_price) * (cardGatewayFeePct || 0.035) * 100) / 100 : 0,
+      amount_gross:           chargedTotal,
+      gateway_fee_amount:     isCard ? Math.round(chargedTotal * (cardGatewayFeePct || 0.035) * 100) / 100 : 0,
       currency:               'BRL',
       status:                 initialPaymentStatus,
       expires_at:             expiresAt,
@@ -332,7 +369,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         booking_id:   booking.id,
         booking_code: bookingCode,
         payment_id:   payment.id,
-        amount:       Number(total_price),
+        amount:       chargedTotal,
         status:       'rejected',
         error_code:   cardStatusDetail,
         message_key:  mapRejectionKey(cardStatusDetail),
@@ -363,6 +400,76 @@ router.post('/intent', authenticate, async (req, res, next) => {
       bank_account:     manual ? (cfg.payment_admin_bank_account || null) : null,
       bank_account_type:manual ? (cfg.payment_admin_bank_account_type || null) : null,
     })
+  } catch (err) { next(err) }
+})
+
+// ── POST /api/payments/request ─────────────────────────
+// Cria a reserva SEM pagamento (fluxo solicitar → aceitar → pagar). A reserva
+// nasce em 'awaiting_acceptance' e as cooperativas são notificadas para aceitar.
+// O pagamento acontece depois, via POST /intent com existing_booking_id.
+router.post('/request', authenticate, async (req, res, next) => {
+  try {
+    const parsed = requestSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
+    }
+
+    const {
+      service_type, service_id, booking_mode,
+      service_date_iso, service_time, people_count, region_id,
+      vehicles = [], origin_text, destination_text,
+    } = parsed.data
+
+    const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
+
+    const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
+    const { data: booking, error: bErr } = await supabase
+      .from('bookings')
+      .insert({
+        booking_code:       bookingCode,
+        user_id:            req.user.id,
+        region_id:          region_id || null,
+        service_type,
+        service_id,
+        booking_mode:       booking_mode || 'private',
+        service_date:       service_date_iso,
+        service_time:       service_time || null,
+        people_count:       Number(people_count) || 1,
+        origin_text:        origin_text || null,
+        destination_text:   destination_text || null,
+        total_amount:       chargedTotal,
+        status_commercial:  'awaiting_acceptance',
+        status_operational: 'new',
+        payment_status:     'pending',
+      })
+      .select()
+      .single()
+    if (bErr) throw bErr
+
+    if (vehicles.length > 0) {
+      await supabase.from('booking_vehicles').insert(vehicles.map((v) => ({
+        booking_id: booking.id,
+        vehicle_id: v.vehicle_id,
+        quantity:   v.qty || 1,
+        unit_price: v.unit_price || 0,
+      })))
+    }
+
+    // Notifica as cooperativas da nova solicitação (ANTES do pagamento) —
+    // elas aceitam e só então o cliente paga.
+    notifyOperatorsNewBooking(supabase, booking).catch((err) =>
+      console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+
+    const isTransfer = service_type === 'transfer'
+    const rota = [origin_text, destination_text].filter(Boolean).join(' → ')
+    notifyOperatorsAndAdmin({
+      bookingId:   booking.id,
+      templateKey: 'new_booking',
+      title:       'Nova solicitação disponível',
+      body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
+    })
+
+    res.json({ booking_id: booking.id, booking_code: bookingCode, amount: chargedTotal })
   } catch (err) { next(err) }
 })
 
@@ -572,13 +679,16 @@ router.post('/manual-confirm', authenticate, async (req, res, next) => {
 // ── Helpers ────────────────────────────────────────────
 async function onPaymentApproved(payment) {
   await supabase.from('payments').update({ status: 'approved', paid_at: new Date().toISOString() }).eq('id', payment.id)
-  await supabase.from('bookings').update({
-    status_commercial:  'paid',
-    status_operational: 'awaiting_dispatch',
-    payment_status:     'approved',
-  }).eq('id', payment.booking_id)
 
+  // Carrega a reserva ANTES de atualizar para saber se a cooperativa já aceitou.
   const booking = payment.bookings || (await supabase.from('bookings').select('*').eq('id', payment.booking_id).single()).data
+
+  // Fluxo novo (solicitar→aceitar→pagar): a cooperativa já está atribuída, então
+  // a reserva permanece 'assigned' e segue direto para o atendimento. Fluxo
+  // antigo (paga primeiro): vai para a fila de despacho para alguém aceitar.
+  const bookingUpdate = { status_commercial: 'paid', payment_status: 'approved' }
+  if (!booking?.operator_id) bookingUpdate.status_operational = 'awaiting_dispatch'
+  await supabase.from('bookings').update(bookingUpdate).eq('id', payment.booking_id)
 
   // If this booking came from a custom transfer quote, mark the quote as paid
   if (booking?.service_type === 'transfer' && booking?.service_id) {
@@ -618,11 +728,7 @@ async function onPaymentApproved(payment) {
   sendConfirmationEmail(booking).catch((err) =>
     console.error('[email] confirmação de reserva falhou:', err.message))
 
-  // Notifica as cooperativas sobre a nova reserva disponível (fire-and-forget)
-  notifyOperatorsNewBooking(supabase, booking).catch((err) =>
-    console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
-
-  // Central no app: confirma para o turista e avisa cooperativas + admin
+  // Central no app: confirma para o turista e avisa quem precisa.
   if (booking) {
     const isTransfer = booking.service_type === 'transfer'
     const tipo  = isTransfer ? 'translado' : 'passeio'
@@ -633,15 +739,31 @@ async function onPaymentApproved(payment) {
       bookingId:   booking.id,
       templateKey: 'payment_confirmed',
       title:       'Pagamento confirmado ✅',
-      body:        `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar uma cooperativa aceitar.`,
+      body:        booking.operator_id
+        ? `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). A cooperativa já vai cuidar de tudo! 🎉`
+        : `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar uma cooperativa aceitar.`,
     })
 
-    notifyOperatorsAndAdmin({
-      bookingId:   booking.id,
-      templateKey: 'new_booking',
-      title:       'Nova solicitação disponível',
-      body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
-    })
+    if (booking.operator_id) {
+      // Fluxo novo: a cooperativa que aceitou é avisada de que o pagamento entrou.
+      notifyUser({
+        userId:      booking.operator_id,
+        bookingId:   booking.id,
+        templateKey: 'payment_received',
+        title:       'Pagamento recebido 💰',
+        body:        `O cliente pagou o ${tipo} ${booking.booking_code}. Pode confirmar e seguir com o atendimento.`,
+      })
+    } else {
+      // Fluxo antigo: a reserva paga fica disponível para as cooperativas.
+      notifyOperatorsNewBooking(supabase, booking).catch((err) =>
+        console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+      notifyOperatorsAndAdmin({
+        bookingId:   booking.id,
+        templateKey: 'new_booking',
+        title:       'Nova solicitação disponível',
+        body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
+      })
+    }
   }
 }
 

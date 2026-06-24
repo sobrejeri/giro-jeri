@@ -122,7 +122,11 @@ router.put('/preferences/:type/:entityId', async (req, res, next) => {
 // Retorna corridas disponíveis (sem operador) + corridas do operador logado
 router.get('/bookings', async (req, res, next) => {
   try {
-    // Corridas disponíveis: pagas, aguardando despacho, sem operador
+    // Corridas disponíveis (sem cooperativa atribuída):
+    //  • awaiting_acceptance — fluxo novo: solicitadas, aguardando aceite (o
+    //    cliente paga depois do aceite);
+    //  • paid + awaiting_dispatch — fluxo antigo / cotações já pagas que ainda
+    //    precisam de uma cooperativa para atender.
     const { data: pending, error: e1 } = await supabase
       .from('bookings')
       .select(`
@@ -132,8 +136,7 @@ router.get('/bookings', async (req, res, next) => {
         users!bookings_user_id_fkey ( full_name, phone )
       `)
       .is('operator_id', null)
-      .eq('status_commercial', 'paid')
-      .eq('status_operational', 'awaiting_dispatch')
+      .or('status_commercial.eq.awaiting_acceptance,and(status_commercial.eq.paid,status_operational.eq.awaiting_dispatch)')
       .order('created_at', { ascending: true })
 
     if (e1) throw e1
@@ -158,24 +161,47 @@ router.get('/bookings', async (req, res, next) => {
 })
 
 // ── POST /api/operator/bookings/:id/accept ─────────────
-// Aceite atômico: somente quem chegar primeiro pega a corrida
+// Aceite atômico: a primeira cooperativa a aceitar pega a solicitação (ANTES do
+// pagamento). A reserva passa para 'awaiting_payment' e o cliente é avisado para
+// pagar. O split automático será possível porque a cooperativa já está definida.
 router.post('/bookings/:id/accept', async (req, res, next) => {
   try {
-    // UPDATE atômico: só altera se operator_id ainda for NULL
-    const { data, error } = await supabase
+    const SELECT = 'id, booking_code, user_id, service_type, users!bookings_user_id_fkey ( full_name, phone )'
+
+    // Tentativa 1 — fluxo novo: solicitação aguardando aceite → vai para pagamento.
+    let { data, error } = await supabase
       .from('bookings')
       .update({
         operator_id:        req.user.id,
+        status_commercial:  'awaiting_payment',
         status_operational: 'assigned',
       })
       .eq('id', req.params.id)
       .is('operator_id', null)
-      .eq('status_commercial', 'paid')
-      .select('id, booking_code, user_id, service_type, users!bookings_user_id_fkey ( full_name, phone )')
-
+      .eq('status_commercial', 'awaiting_acceptance')
+      .select(SELECT)
     if (error) throw error
 
-    // Array vazio = outro operador aceitou primeiro (condição de corrida)
+    // Tentativa 2 — fluxo antigo / cotação já paga: aguardando despacho → só atribui.
+    let alreadyPaid = false
+    if (!data || data.length === 0) {
+      const r2 = await supabase
+        .from('bookings')
+        .update({
+          operator_id:        req.user.id,
+          status_operational: 'assigned',
+        })
+        .eq('id', req.params.id)
+        .is('operator_id', null)
+        .eq('status_commercial', 'paid')
+        .eq('status_operational', 'awaiting_dispatch')
+        .select(SELECT)
+      if (r2.error) throw r2.error
+      data = r2.data
+      alreadyPaid = true
+    }
+
+    // Array vazio = outra cooperativa aceitou primeiro (condição de corrida)
     if (!data || data.length === 0) {
       return res.status(409).json({ error: 'Reserva já foi aceita por outra cooperativa' })
     }
@@ -185,8 +211,10 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
       userId:      b.user_id,
       bookingId:   b.id,
       templateKey: 'booking_accepted',
-      title:       'Reserva confirmada 🎉',
-      body:        `Uma cooperativa aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Tudo certo para a data marcada!`,
+      title:       alreadyPaid ? 'Reserva confirmada 🎉' : 'Cooperativa aceitou! 🎉',
+      body:        alreadyPaid
+        ? `Uma cooperativa aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Tudo certo para a data marcada!`
+        : `Uma cooperativa aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Pague para confirmar a reserva.`,
     })
 
     res.json({ ok: true, booking: b })
@@ -201,9 +229,13 @@ router.post('/bookings/:id/start', async (req, res, next) => {
       .update({ status_operational: 'in_progress' })
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
+      .eq('status_commercial', 'paid')
       .select('id, user_id, service_type, booking_code')
 
     if (error) throw error
+    if (!data || data.length === 0) {
+      return res.status(409).json({ error: 'Aguardando o pagamento do cliente para iniciar a corrida.' })
+    }
     const b = data?.[0]
     if (b) notifyUser({
       userId:      b.user_id,
@@ -217,16 +249,22 @@ router.post('/bookings/:id/start', async (req, res, next) => {
 })
 
 // ── POST /api/operator/bookings/:id/confirm ───────────
-// Operador confirma com o cliente → booking volta para fila de despacho
+// Operador confirma com o cliente → booking vai para a fila de despacho.
+// Só é permitido após o pagamento do cliente.
 router.post('/bookings/:id/confirm', async (req, res, next) => {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('bookings')
       .update({ status_operational: 'awaiting_dispatch' })
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
+      .eq('status_commercial', 'paid')
+      .select('id')
 
     if (error) throw error
+    if (!data || data.length === 0) {
+      return res.status(409).json({ error: 'Aguardando o pagamento do cliente para confirmar.' })
+    }
     res.json({ ok: true })
   } catch (err) { next(err) }
 })
@@ -242,9 +280,13 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
       })
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
+      .eq('status_commercial', 'paid')
       .select('id, user_id, service_type, booking_code')
 
     if (error) throw error
+    if (!data || data.length === 0) {
+      return res.status(409).json({ error: 'Esta corrida ainda não foi paga pelo cliente.' })
+    }
     const b = data?.[0]
     if (b) notifyUser({
       userId:      b.user_id,

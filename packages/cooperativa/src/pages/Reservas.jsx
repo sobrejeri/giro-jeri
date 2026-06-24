@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarCheck, Users, MapPin, Car, CheckCircle2,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
-  DollarSign, Send,
+  DollarSign, Send, Clock,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -136,7 +136,7 @@ function PendingCard({ booking, onAccept, accepting }) {
         {/* Valor + botão */}
         <div className="flex items-center justify-between pt-1 border-t border-gray-100 gap-3">
           <div>
-            <p className="text-[11px] text-gray-400">Valor da corrida</p>
+            <p className="text-[11px] text-gray-400">Valor da reserva</p>
             <p className="text-[20px] font-extrabold text-brand">{fmt(booking.total_amount)}</p>
           </div>
           <button
@@ -149,6 +149,15 @@ function PendingCard({ booking, onAccept, accepting }) {
               : <><Zap size={15} /> Aceitar</>}
           </button>
         </div>
+        {booking.status_commercial === 'awaiting_acceptance' ? (
+          <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+            <AlertCircle size={11} className="shrink-0" /> O cliente paga depois que você aceitar.
+          </p>
+        ) : (
+          <p className="text-[11px] text-emerald-600 flex items-center gap-1.5">
+            <CheckCircle2 size={11} className="shrink-0" /> Pagamento já realizado pelo cliente.
+          </p>
+        )}
       </div>
     </div>
   )
@@ -162,14 +171,19 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   const clientName  = booking.users?.full_name || 'Cliente'
   const waNumber    = clientPhone ? `55${clientPhone.replace(/\D/g, '')}` : null
   const isSending   = busy
+  const isPaid      = booking.status_commercial === 'paid'
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       {/* Status badge */}
-      <div className="bg-emerald-50 px-4 py-2 flex items-center gap-2 border-b border-emerald-100">
-        <CheckCircle2 size={13} className="text-emerald-500" />
-        <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide">
-          {booking.status_operational === 'in_progress' ? 'Em andamento' : 'Aceita'}
+      <div className={`px-4 py-2 flex items-center gap-2 border-b ${isPaid ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+        {isPaid
+          ? <CheckCircle2 size={13} className="text-emerald-500" />
+          : <Clock size={13} className="text-amber-500" />}
+        <span className={`text-[11px] font-bold uppercase tracking-wide ${isPaid ? 'text-emerald-700' : 'text-amber-700'}`}>
+          {booking.status_operational === 'in_progress'
+            ? 'Em andamento'
+            : isPaid ? 'Aceita · paga' : 'Aguardando pagamento'}
         </span>
         <span className="ml-auto text-[11px] font-mono text-gray-400">{booking.booking_code}</span>
       </div>
@@ -232,7 +246,19 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
 
         {/* Ações da corrida */}
         <div className="pt-1 border-t border-gray-100 space-y-2">
-          {booking.status_operational === 'in_progress' ? (
+          {!isPaid ? (
+            <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
+              <div className="relative shrink-0">
+                <div className="w-5 h-5 rounded-full bg-amber-300 animate-ping absolute inset-0 opacity-50" />
+                <div className="relative w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center">
+                  <Clock size={11} className="text-white" />
+                </div>
+              </div>
+              <p className="text-[12px] font-semibold text-amber-700">
+                Aguardando o cliente pagar para liberar o atendimento.
+              </p>
+            </div>
+          ) : booking.status_operational === 'in_progress' ? (
             <button
               onClick={() => onComplete(booking)}
               disabled={isSending}
@@ -420,7 +446,7 @@ export default function Reservas() {
     try {
       await api.acceptBooking(bookingId)
       queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
-      setToast({ message: 'Corrida aceita! Entre em contato com o cliente.', type: 'success' })
+      setToast({ message: 'Reserva aceita! Aguardando o cliente pagar.', type: 'success' })
       setTab('mine')
     } catch (err) {
       if (err.message?.includes('já foi aceita')) {

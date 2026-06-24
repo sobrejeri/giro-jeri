@@ -146,6 +146,8 @@ export default function CheckoutSummary() {
   /* ── All hooks unconditionally ──────────────────────────── */
   const [editing,       setEditing]  = useState(ls?.open_editing === true)
   const [showDatePicker, setShowDP]  = useState(false)
+  const [requesting,    setRequesting] = useState(false)
+  const [reqError,      setReqError]   = useState('')
   const [people,   setPeople]        = useState(ls?.people_count || 2)
   const [date,     setDate]          = useState(() => {
     if (ls?.service_date_iso) {
@@ -312,6 +314,29 @@ export default function CheckoutSummary() {
     display_total:   displayTotal,
     service_name:    ls.service_name,
     cover_image_url: ls.cover_image_url || undefined,
+  }
+
+  // Solicita a reserva (SEM pagar). A reserva fica aguardando uma cooperativa
+  // aceitar; o pagamento acontece depois, em Minhas Reservas.
+  async function handleRequest() {
+    if (requesting || !canProceed) return
+    setRequesting(true)
+    setReqError('')
+    try {
+      const result = await api.requestBooking(paymentState)
+      navigate('/checkout/solicitado', {
+        state: {
+          ...paymentState,
+          booking_id:   result.booking_id,
+          booking_code: result.booking_code,
+          amount:       result.amount,
+        },
+      })
+    } catch (err) {
+      setReqError(err?.message || 'Erro ao enviar solicitação. Tente novamente.')
+    } finally {
+      setRequesting(false)
+    }
   }
 
   const idx   = gi(ls.service_id || ls.service_name)
@@ -679,14 +704,21 @@ export default function CheckoutSummary() {
 
         <div className="flex items-center gap-2 px-1">
           <AlertCircle size={13} className="text-gray-400 shrink-0" />
-          <p className="text-[11px] text-gray-400">Sua reserva será enviada à cooperativa para confirmação após o pagamento.</p>
+          <p className="text-[11px] text-gray-400">Sua reserva será enviada às cooperativas. Você só paga depois que uma aceitar.</p>
         </div>
+
+        {reqError && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-2xl px-4 py-3">
+            <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
+            <p className="text-[13px] text-red-600">{reqError}</p>
+          </div>
+        )}
       </main>
 
       {/* Fixed Bottom */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 z-30 px-4 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
         <div className="mb-3">
-          <p className="text-[11px] text-gray-400">Total a pagar</p>
+          <p className="text-[11px] text-gray-400">Total estimado · paga após o aceite</p>
           {hasPricing
             ? <p className="text-[20px] font-bold text-brand">R$ {fmt(displayTotal)}</p>
             : <p className="text-[14px] font-semibold text-amber-600">Preço a confirmar</p>
@@ -721,15 +753,15 @@ export default function CheckoutSummary() {
                 Editar
               </button>
               <button
-                onClick={canProceed ? () => navigate('/checkout/pagamento', { state: paymentState }) : undefined}
-                disabled={!canProceed}
+                onClick={canProceed ? handleRequest : undefined}
+                disabled={!canProceed || requesting}
                 className={`flex-1 py-3 rounded-xl font-bold text-[14px] transition-all ${
-                  canProceed
+                  canProceed && !requesting
                     ? 'bg-brand text-white shadow-md active:bg-orange-700 active:scale-[0.97]'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {!hasPricing ? 'Sem preço configurado' : !time ? 'Selecione o horário' : 'Ir para pagamento'}
+                {requesting ? 'Enviando…' : !hasPricing ? 'Sem preço configurado' : !time ? 'Selecione o horário' : 'Solicitar reserva'}
               </button>
             </>
           )}

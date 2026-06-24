@@ -115,6 +115,7 @@ export const api = {
   cancelQuote:        (id)          => request(`/api/transfers/quotes/${id}/cancel`, { method: 'POST' }),
 
   // Pagamentos
+  requestBooking:         (body) => request('/api/payments/request',     { method: 'POST', body }),
   createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
   getPaymentStatus:       (id)   => request(`/api/payments/${id}/status`),
   simulatePaymentApprove: (id)   => request(`/api/payments/${id}/simulate`, { method: 'POST', body: {} }),

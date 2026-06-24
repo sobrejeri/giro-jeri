@@ -3,6 +3,7 @@ import { useAuth } from './contexts/AuthContext'
 import Layout              from './components/layout/Layout'
 import CheckoutLayout      from './components/layout/CheckoutLayout'
 import CheckoutSummary     from './pages/checkout/CheckoutSummary'
+import CheckoutSolicitado  from './pages/checkout/CheckoutSolicitado'
 import CheckoutPayment     from './pages/checkout/CheckoutPayment'
 import CheckoutProcessando from './pages/checkout/CheckoutProcessando'
 import CheckoutSucesso     from './pages/checkout/CheckoutSucesso'
@@ -32,6 +33,7 @@ export default function App() {
       {/* Checkout — frame 430px, sem nav bars */}
       <Route path="/checkout" element={<PrivateRoute><CheckoutLayout /></PrivateRoute>}>
         <Route path="resumo"      element={<CheckoutSummary />} />
+        <Route path="solicitado"  element={<CheckoutSolicitado />} />
         <Route path="pagamento"   element={<CheckoutPayment />} />
         <Route path="processando" element={<CheckoutProcessando />} />
         <Route path="sucesso"     element={<CheckoutSucesso />} />

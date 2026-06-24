@@ -25,24 +25,27 @@ function WhatsAppIcon() {
 
 // Map API dual-status fields to a single timeline status
 function resolveStatus(booking) {
-  if (!booking) return 'waiting_payment'
+  if (!booking) return 'waiting_acceptance'
   const c = booking.status_commercial
   const o = booking.status_operational
   if (c === 'cancelled' || o === 'cancelled') return 'cancelled'
   if (o === 'completed') return 'completed'
   if (o === 'in_progress') return 'in_progress'
+  // Fluxo solicitar → aceitar → pagar:
+  if (c === 'awaiting_acceptance') return 'waiting_acceptance' // aguardando cooperativa
+  if (c === 'awaiting_payment' || c === 'payment_failed') return 'waiting_payment' // aceita → pague
+  if (c === 'paid') return o === 'assigned' ? 'confirmed' : 'waiting_acceptance'
   if (o === 'assigned') return 'confirmed'
-  if (c === 'paid' || c === 'payment_failed') return 'waiting_acceptance'
-  // draft / awaiting_payment
-  return 'waiting_payment'
+  return 'waiting_acceptance'
 }
 
+// Ordem do fluxo: solicitar → (cooperativa aceita) → pagar → confirmada → ...
 const TIMELINE = [
-  { key: 'waiting_payment',    label: 'Aguardando pagamento'             },
-  { key: 'waiting_acceptance', label: 'Aguardando aceitação da cooperativa' },
-  { key: 'confirmed',          label: 'Confirmada'                       },
-  { key: 'in_progress',        label: 'Em andamento'                     },
-  { key: 'completed',          label: 'Finalizada'                       },
+  { key: 'waiting_acceptance', label: 'Aguardando uma cooperativa aceitar' },
+  { key: 'waiting_payment',    label: 'Pagamento'                          },
+  { key: 'confirmed',          label: 'Confirmada'                         },
+  { key: 'in_progress',        label: 'Em andamento'                       },
+  { key: 'completed',          label: 'Finalizada'                         },
 ]
 
 const STATUS_META = {
@@ -150,6 +153,31 @@ export default function BookingDetail() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Pagamento pós-aceite: leva à tela de pagamento usando a reserva existente.
+  function handlePay() {
+    if (!booking) return
+    let dStr = '—'
+    if (booking.service_date) {
+      try { dStr = format(new Date(booking.service_date + 'T00:00:00'), "d MMM", { locale: ptBR }) } catch {}
+    }
+    navigate('/checkout/pagamento', {
+      state: {
+        service_name:        booking.booking_items?.[0]?.title_snapshot
+          || `${booking.service_type === 'tour' ? 'Passeio' : 'Transfer'} · ${booking.booking_code}`,
+        service_type:        booking.service_type,
+        booking_mode:        booking.booking_mode || 'private',
+        service_date:        dStr,
+        service_date_iso:    booking.service_date,
+        service_time:        booking.service_time,
+        people_count:        booking.people_count,
+        total_price:         booking.total_amount,
+        origin_text:         booking.origin_text || booking.pickup_place_name || null,
+        destination_text:    booking.destination_text || booking.destination_place_name || null,
+        existing_booking_id: booking.id,
+      },
+    })
+  }
+
   if (isLoading) return (
     <div className="min-h-screen bg-[#F8F8F8] flex items-center justify-center">
       <PageSpinner />
@@ -228,7 +256,10 @@ export default function BookingDetail() {
             <div>
               <p className={`text-sm font-bold ${meta.color}`}>{meta.label}</p>
               {status === 'waiting_acceptance' && (
-                <p className="text-xs text-amber-600 mt-0.5">A cooperativa tem até 20 min para confirmar</p>
+                <p className="text-xs text-amber-600 mt-0.5">Assim que uma cooperativa aceitar, você poderá pagar</p>
+              )}
+              {status === 'waiting_payment' && (
+                <p className="text-xs text-amber-600 mt-0.5">Cooperativa aceitou — pague para confirmar</p>
               )}
               {status === 'cancelled' && (
                 <p className="text-xs text-red-500 mt-0.5">Esta reserva foi cancelada</p>
@@ -236,6 +267,27 @@ export default function BookingDetail() {
             </div>
           </div>
         </div>
+
+        {/* Pay CTA — cooperativa aceitou, falta pagar */}
+        {status === 'waiting_payment' && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-brand/20">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-brand/10 flex items-center justify-center shrink-0">
+                <CheckCircle size={20} className="text-brand" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-900">Cooperativa aceitou! 🎉</p>
+                <p className="text-xs text-gray-500 mt-0.5">Pague para confirmar sua reserva.</p>
+              </div>
+            </div>
+            <button
+              onClick={handlePay}
+              className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98] transition-transform"
+            >
+              Pagar agora · {fmt(booking.total_amount)}
+            </button>
+          </div>
+        )}
 
         {/* Operator confirmed card */}
         {status === 'confirmed' && booking.operator && (

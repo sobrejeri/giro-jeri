@@ -19,8 +19,13 @@ function resolveStatus(b) {
   if (c === 'cancelled' || o === 'cancelled') return 'cancelled'
   if (o === 'completed')                       return 'completed'
   if (o === 'in_progress')                     return 'in_progress'
+  // Fluxo solicitar → aceitar → pagar:
+  if (c === 'awaiting_acceptance')             return 'waiting_acceptance' // aguardando cooperativa aceitar
+  if (c === 'awaiting_payment')                return 'waiting_payment'    // aceita → pague agora
+  // Pago: se já há cooperativa atribuída, está confirmado; senão (fluxo antigo)
+  // ainda aguarda uma cooperativa aceitar.
+  if (c === 'paid')                            return o === 'assigned' ? 'confirmed' : 'waiting_acceptance'
   if (o === 'assigned')                        return 'confirmed'
-  if (c === 'paid')                            return 'waiting_acceptance'
   return 'waiting_payment'
 }
 
@@ -170,7 +175,9 @@ function BookingCard({ booking, onCancel, onDetail, onPay }) {
         {/* Total + actions */}
         <div className="flex items-center justify-between pt-0.5">
           <div>
-            <p className="text-[10px] text-gray-400 leading-none">Total pago</p>
+            <p className="text-[10px] text-gray-400 leading-none">
+              {['waiting_payment', 'waiting_acceptance'].includes(status) ? 'Total' : 'Total pago'}
+            </p>
             <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">{fmt(booking.total_amount)}</p>
           </div>
 
