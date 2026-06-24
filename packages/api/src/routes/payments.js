@@ -362,6 +362,13 @@ router.post('/intent', authenticate, async (req, res, next) => {
         } catch (mpErr) {
           console.error('Mercado Pago error — falling back to manual:', mpErr.message)
         }
+        // PIX criado mas SEM QR (conta sem PIX ativo, ou cobrança recusada) →
+        // avisa de forma clara em vez de mostrar uma tela de "expirado" vazia.
+        if (gatewayTransactionId && !pixCode && !qrBase64) {
+          return res.status(422).json({
+            error: 'Não foi possível gerar o QR do PIX. Confirme que o PIX está ativado na conta do Mercado Pago que vai receber (uma chave PIX registrada no próprio Mercado Pago).',
+          })
+        }
       }
     }
     // asaas / pagarme: adapters a implementar quando credentials disponíveis
