@@ -214,16 +214,27 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     if (existing_booking_id) {
       // ── Reutiliza reserva existente ────────────────────
-      const { data: existing, error: eErr } = await supabase
+      const { data: existing } = await supabase
         .from('bookings')
         .select('*')
         .eq('id', existing_booking_id)
         .eq('user_id', req.user.id)
-        .eq('status_commercial', 'awaiting_payment')
-        .single()
+        .maybeSingle()
 
-      if (eErr || !existing) {
-        return res.status(404).json({ error: 'Reserva não encontrada ou já processada' })
+      // Mensagens específicas: ajudam a entender o que está acontecendo.
+      if (!existing) {
+        return res.status(404).json({
+          error: 'Reserva não encontrada nesta conta. Entre com a mesma conta que fez a reserva.',
+        })
+      }
+      if (existing.status_commercial !== 'awaiting_payment') {
+        const s = existing.status_commercial
+        const msg =
+          s === 'awaiting_acceptance' ? 'Esta reserva ainda não foi aceita por uma cooperativa. Aguarde o aceite para pagar.' :
+          s === 'paid'                ? 'Esta reserva já foi paga.' :
+          s === 'cancelled'           ? 'Esta reserva foi cancelada.' :
+                                        `Esta reserva não está aguardando pagamento (status: ${s}).`
+        return res.status(409).json({ error: msg })
       }
 
       booking     = existing
