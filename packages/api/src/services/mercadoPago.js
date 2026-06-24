@@ -41,7 +41,9 @@ function mpDate(d) {
 
 export async function createPixPayment({ amount, description, payerEmail, payerName, payerDoc, externalRef, sellerAccessToken, applicationFee }) {
   const client = paymentClientFor(sellerAccessToken)
-  if (!client) return createFakePix({ amount, description, externalRef })
+  // Sem token nenhum (nem da plataforma, nem da cooperativa) = configuração
+  // ausente. Erro claro em vez de um PIX falso que só "expira".
+  if (!client) throw new Error('Mercado Pago não configurado: falta o Access Token (MP_ACCESS_TOKEN) no servidor.')
 
   // Render expõe RENDER_EXTERNAL_URL automaticamente; API_BASE_URL como fallback manual
   const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
