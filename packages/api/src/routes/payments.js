@@ -353,6 +353,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
             sellerAccessToken: split?.sellerAccessToken,
             applicationFee:    split?.applicationFee,
           })
+          console.log('[intent] PIX criado: status=%s detail=%s exp=%s split=%s qr=%s',
+            pixData.status, pixData.status_detail, pixData.expires_at, !!split, !!pixData.qr_base64)
           gatewayTransactionId = pixData.mp_id
           expiresAt            = pixData.expires_at || expiresAt
           pixCode              = pixData.pix_code

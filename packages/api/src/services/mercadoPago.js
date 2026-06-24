@@ -26,6 +26,19 @@ function paymentClientFor(sellerAccessToken) {
   return mp ? new Payment(mp) : null
 }
 
+// Formata uma data no padrão que o Mercado Pago espera em date_of_expiration:
+// ISO 8601 com offset (ex.: 2026-06-24T21:45:00.000+00:00). O MP pode recusar o
+// formato UTC com "Z".
+function mpDate(d) {
+  const pad = (n) => String(n).padStart(2, '0')
+  const off  = -d.getTimezoneOffset()
+  const sign = off >= 0 ? '+' : '-'
+  const oh   = pad(Math.floor(Math.abs(off) / 60))
+  const om   = pad(Math.abs(off) % 60)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+         `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000${sign}${oh}:${om}`
+}
+
 export async function createPixPayment({ amount, description, payerEmail, payerName, payerDoc, externalRef, sellerAccessToken, applicationFee }) {
   const client = paymentClientFor(sellerAccessToken)
   if (!client) return createFakePix({ amount, description, externalRef })
@@ -39,6 +52,8 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
     description,
     payment_method_id:  'pix',
     external_reference: String(externalRef),
+    // Validade explícita do QR (30 min) — não depende do padrão do MP.
+    date_of_expiration: mpDate(new Date(Date.now() + 30 * 60 * 1000)),
     ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     payer: {
       email:      payerEmail || 'comprador@girojeri.com',
@@ -56,11 +71,12 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
   const response = await client.create({ body })
 
   return {
-    mp_id:       String(response.id),
-    status:      response.status,
-    pix_code:    response.point_of_interaction?.transaction_data?.qr_code,
-    qr_base64:   response.point_of_interaction?.transaction_data?.qr_code_base64,
-    expires_at:  response.date_of_expiration,
+    mp_id:         String(response.id),
+    status:        response.status,
+    status_detail: response.status_detail || null,
+    pix_code:      response.point_of_interaction?.transaction_data?.qr_code,
+    qr_base64:     response.point_of_interaction?.transaction_data?.qr_code_base64,
+    expires_at:    response.date_of_expiration,
   }
 }
 
