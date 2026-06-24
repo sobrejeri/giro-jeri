@@ -350,11 +350,12 @@ router.post('/intent', authenticate, async (req, res, next) => {
           cardGatewayFeePct = 0.0498
         }
       } else {
-        // ── PIX: mantém comportamento original ────────────
+        // ── PIX ───────────────────────────────────────────
+        const { createPixPayment } = await import('../services/mercadoPago.js')
+        const userInfo = await supabase.from('users').select('full_name, email').eq('id', req.user.id).single()
+        let pixData
         try {
-          const { createPixPayment } = await import('../services/mercadoPago.js')
-          const userInfo = await supabase.from('users').select('full_name, email').eq('id', req.user.id).single()
-          const pixData  = await createPixPayment({
+          pixData = await createPixPayment({
             amount:      chargedTotal,
             description: service_name || `Reserva ${bookingCode}`,
             payerEmail:  userInfo.data?.email,
@@ -364,20 +365,24 @@ router.post('/intent', authenticate, async (req, res, next) => {
             sellerAccessToken: split?.sellerAccessToken,
             applicationFee:    split?.applicationFee,
           })
-          console.log('[intent] PIX criado: status=%s detail=%s exp=%s split=%s qr=%s',
-            pixData.status, pixData.status_detail, pixData.expires_at, !!split, !!pixData.qr_base64)
+        } catch (mpErr) {
+          console.error('[intent] PIX falhou:', mpErr.message)
+          return res.status(422).json({
+            error: `Não foi possível gerar o PIX: ${mpErr.message}. Confirme que o PIX está ativado na conta do Mercado Pago que vai receber.`,
+          })
+        }
+        console.log('[intent] PIX: status=%s detail=%s exp=%s split=%s qr=%s',
+          pixData.status, pixData.status_detail, pixData.expires_at, !!split, !!pixData.qr_base64)
+
+        if (pixData.status === 'pending' && (pixData.pix_code || pixData.qr_base64)) {
           gatewayTransactionId = pixData.mp_id
           expiresAt            = pixData.expires_at || expiresAt
           pixCode              = pixData.pix_code
           qrBase64             = pixData.qr_base64
-        } catch (mpErr) {
-          console.error('Mercado Pago error — falling back to manual:', mpErr.message)
-        }
-        // PIX criado mas SEM QR (conta sem PIX ativo, ou cobrança recusada) →
-        // avisa de forma clara em vez de mostrar uma tela de "expirado" vazia.
-        if (gatewayTransactionId && !pixCode && !qrBase64) {
+        } else {
+          // PIX recusado ou sem QR → mostra o MOTIVO real do Mercado Pago.
           return res.status(422).json({
-            error: 'Não foi possível gerar o QR do PIX. Confirme que o PIX está ativado na conta do Mercado Pago que vai receber (uma chave PIX registrada no próprio Mercado Pago).',
+            error: `Não foi possível gerar o PIX (status: ${pixData.status}${pixData.status_detail ? ` · ${pixData.status_detail}` : ''}). Confirme que o PIX está ativado na conta do Mercado Pago que vai receber.`,
           })
         }
       }
