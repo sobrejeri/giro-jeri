@@ -29,7 +29,7 @@ const verifySchema = z.object({
 async function loadProfile(userId) {
   const { data, error } = await supabase
     .from('users')
-    .select('id, auth_id, email, phone, phone_e164, email_verified, phone_verified, lang')
+    .select('id, auth_id, email, phone, phone_e164, email_verified, phone_verified, lang:language')
     .eq('id', userId)
     .single();
   if (error || !data) return null;

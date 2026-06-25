@@ -101,9 +101,9 @@ router.post('/register', async (req, res, next) => {
         user_type:      'tourist',
         email_verified: false,
         phone_verified: false,
-        lang:           body.lang,
+        language:       body.lang,
       })
-      .select('id, full_name, email, phone, phone_e164, user_type, email_verified, phone_verified, lang')
+      .select('id, full_name, email, phone, phone_e164, user_type, email_verified, phone_verified, lang:language')
       .single();
 
     if (profileError) {
