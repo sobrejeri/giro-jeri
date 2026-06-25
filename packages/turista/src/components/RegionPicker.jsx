@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { MapPin, Navigation, X, Check, Search, AlertCircle, Loader } from 'lucide-react'
-import { useRegion, findRegionForCoords } from '../contexts/RegionContext'
-import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
+import { useRegion, findRegionByCity } from '../contexts/RegionContext'
+import { getPlaceSuggestions, getPlaceDetails, reverseGeocodeMunicipality } from '../lib/geoServices'
 
 export default function RegionPicker() {
   const { regions, region, selectRegion, detectGPS, detecting, showPicker, setShowPicker, outsideError, setOutsideError } = useRegion()
@@ -50,7 +50,10 @@ export default function RegionPicker() {
       lat = parseFloat(r.lat)
       lon = parseFloat(r.lon)
     }
-    const found = findRegionForCoords(lat, lon, regions)
+    // Casa pelo MUNICÍPIO do local buscado (sem raio). Usa o nome do município
+    // detectado; se a geocodificação falhar, cai no texto principal do resultado.
+    const info  = await reverseGeocodeMunicipality(lat, lon).catch(() => null)
+    const found = findRegionByCity(info?.city || r.main_text, regions)
     if (found) {
       selectRegion(found)
       setResults([])
@@ -155,7 +158,7 @@ export default function RegionPicker() {
             </div>
             <div className="text-left">
               <p className="text-[13px] font-bold">{detecting ? 'Detectando...' : 'Usar minha localização (GPS)'}</p>
-              <p className="text-[11px] opacity-70">Detectar automaticamente dentro de 100 km</p>
+              <p className="text-[11px] opacity-70">Detecta seu município automaticamente</p>
             </div>
           </button>
         </div>
@@ -187,9 +190,9 @@ export default function RegionPicker() {
                 <MapPin size={16} className={active ? 'text-white' : 'text-brand'} />
                 <div className="flex-1 text-left">
                   <p className="text-[14px] font-semibold">{r.name}</p>
-                  {(r.radius_km || r.service_radius_km) && (
+                  {r.state && (
                     <p className={`text-[11px] ${active ? 'text-white/70' : 'text-gray-400'}`}>
-                      Cobertura: {r.radius_km ?? r.service_radius_km} km de raio
+                      {r.city && r.city !== r.name ? `${r.city} · ${r.state}` : r.state}
                     </p>
                   )}
                 </div>

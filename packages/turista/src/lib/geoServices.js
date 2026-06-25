@@ -263,3 +263,66 @@ export async function reverseGeocode(lat, lon) {
     return null
   }
 }
+
+// ---------------------------------------------------------------------------
+// reverseGeocodeMunicipality
+// ---------------------------------------------------------------------------
+
+/**
+ * Geocodificação reversa focada no MUNICÍPIO (cidade) — para casar com as
+ * regiões cadastradas pelo nome do município, sem depender de raio.
+ * Retorna { city, label } ou null. `city` é o município
+ * (administrative_area_level_2 no Google / municipality no Nominatim);
+ * `label` é "Município, UF" para exibição.
+ */
+export async function reverseGeocodeMunicipality(lat, lon) {
+  if (HAS_KEY) {
+    try {
+      const maps     = await loadGoogleMaps()
+      const geocoder = new maps.Geocoder()
+      return await new Promise((resolve, reject) => {
+        geocoder.geocode({ location: { lat, lng: lon } }, (results, status) => {
+          if (status !== maps.GeocoderStatus.OK || !results?.length) {
+            reject(new Error(status)); return
+          }
+          let city = null, state = null
+          for (const result of results) {
+            for (const comp of result.address_components) {
+              if (!city && comp.types.includes('administrative_area_level_2')) city = comp.long_name
+              if (!state && comp.types.includes('administrative_area_level_1')) state = comp.short_name
+            }
+            if (city && state) break
+          }
+          // Sem município no resultado → cai para a localidade
+          if (!city) {
+            for (const result of results) {
+              for (const comp of result.address_components) {
+                if (comp.types.includes('locality')) { city = comp.long_name; break }
+              }
+              if (city) break
+            }
+          }
+          if (city) resolve({ city, label: [city, state].filter(Boolean).join(', ') })
+          else reject(new Error('no_city'))
+        })
+      })
+    } catch {
+      // fall through to Nominatim
+    }
+  }
+
+  try {
+    // zoom=10 → nível de município no Nominatim
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=pt-BR`
+    const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
+    if (!res.ok) return null
+    const data = await res.json()
+    const a    = data.address ?? {}
+    const city = a.municipality || a.city || a.town || a.village || null
+    if (!city) return null
+    const state = a.state_code || a.state || null
+    return { city, label: [city, state].filter(Boolean).join(', ') }
+  } catch {
+    return null
+  }
+}

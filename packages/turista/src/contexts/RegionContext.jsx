@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
-import { reverseGeocode } from '../lib/geoServices'
+import { reverseGeocodeMunicipality } from '../lib/geoServices'
 
 const RegionContext = createContext(null)
 const STORAGE_KEY        = 'giro_region'
@@ -32,6 +32,24 @@ export function findRegionForCoords(lat, lon, regions) {
     }
   }
   return best
+}
+
+// Normaliza nomes para comparação (sem acento, minúsculo).
+function normalizeName(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim()
+}
+
+// Casa um município detectado com a região cadastrada de mesmo município.
+// Comparação EXATA (não "inclui") para não confundir "Jericoacoara" com
+// "Jijoca de Jericoacoara". Tenta primeiro region.city, depois region.name.
+export function findRegionByCity(city, regions) {
+  if (!city) return null
+  const target = normalizeName(city)
+  return regions.find((r) => r.city && normalizeName(r.city) === target)
+      || regions.find((r) => normalizeName(r.name) === target)
+      || null
 }
 
 export function RegionProvider({ children }) {
@@ -94,14 +112,16 @@ export function RegionProvider({ children }) {
     const next = { lat, lon }
     setUserCoords(next)
     try { localStorage.setItem(STORAGE_KEY_COORDS, JSON.stringify(next)) } catch {}
-    const found = findRegionForCoords(lat, lon, regions)
+    // Detecção por MUNICÍPIO (sem raio): descobre a cidade real e casa com a
+    // região de mesmo município. Em Cruz mostra Cruz — não "puxa" pra Jijoca.
+    const info  = await reverseGeocodeMunicipality(lat, lon)
+    const found = info?.city ? findRegionByCity(info.city, regions) : null
     // O GPS em segundo plano (auto) NÃO sobrescreve uma região escolhida à mão.
     // Detecção explícita (botão “usar minha localização”) sempre vale.
     if (found && !(auto && manualRef.current)) selectRegion(found, { manual: false })
-    const place = await reverseGeocode(lat, lon)
-    if (place) {
-      setUserPlace(place)
-      try { localStorage.setItem(STORAGE_KEY_PLACE, place) } catch {}
+    if (info?.label) {
+      setUserPlace(info.label)
+      try { localStorage.setItem(STORAGE_KEY_PLACE, info.label) } catch {}
     }
     return found
   }, [regions, selectRegion])
@@ -162,18 +182,11 @@ export function RegionProvider({ children }) {
 
   const openPicker = useCallback(() => { setOutsideError(false); setShowPicker(true) }, [])
 
-  // Monta os parâmetros de filtro geográfico para chamadas à API.
-  // Região escolhida à mão → filtra só por region_id (ignora o GPS). Caso
-  // contrário, com GPS real prioriza lat/lon (raio por serviço).
+  // Filtro de serviços é por MUNICÍPIO (region_id) — sem raio/lat-lon. A lista
+  // reflete a região escolhida/detectada, não a distância do GPS do usuário.
   const getServiceQuery = useCallback(() => {
-    const params = {}
-    if (!manualRegion && userCoords?.lat != null && userCoords?.lon != null) {
-      params.lat = userCoords.lat
-      params.lon = userCoords.lon
-    }
-    if (region?.id) params.region_id = region.id
-    return params
-  }, [userCoords, region, manualRegion])
+    return region?.id ? { region_id: region.id } : {}
+  }, [region])
 
   return (
     <RegionContext.Provider value={{
@@ -181,7 +194,7 @@ export function RegionProvider({ children }) {
       detectGPS, detecting, userCoords, userPlace,
       showPicker, setShowPicker, openPicker,
       outsideError, setOutsideError, manualRegion,
-      findRegionForCoords, getServiceQuery,
+      findRegionForCoords, findRegionByCity, getServiceQuery,
     }}>
       {children}
     </RegionContext.Provider>
