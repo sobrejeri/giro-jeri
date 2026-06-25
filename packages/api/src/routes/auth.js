@@ -38,6 +38,12 @@ const loginSchema = z.object({
 // Conjunto mínimo de colunas do perfil — usado em login e register
 const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number';
 
+// Verificação de contato (OTP) no cadastro de turista.
+// DESLIGADA por padrão: a conta é criada e já entra logada, sem código.
+// Para REATIVAR (exige migration 023 aplicada + RESEND_API_KEY no ambiente),
+// defina SIGNUP_REQUIRE_VERIFICATION=true.
+const REQUIRE_SIGNUP_VERIFICATION = process.env.SIGNUP_REQUIRE_VERIFICATION === 'true';
+
 // ── POST /api/auth/register ────────────────────────────────
 router.post('/register', async (req, res, next) => {
   try {
@@ -51,16 +57,22 @@ router.post('/register', async (req, res, next) => {
         return res.status(400).json({ error: 'Número de telefone inválido.' });
       }
     }
+    // Telefone a gravar na coluna `phone`: usa o E.164 normalizado quando válido.
+    const phoneToStore = phoneE164 || body.phone || null;
 
-    // Checar duplicidade de e-mail e phone_e164 ANTES de criar o Auth user.
+    // Checar duplicidade de e-mail e telefone ANTES de criar o Auth user.
     // Mensagem genérica anti-enumeração.
     const GENERIC_ERROR = 'Não foi possível concluir o cadastro. Tente fazer login.';
 
-    if (phoneE164) {
+    // Com verificação ligada, a unicidade usa phone_e164 (migration 023). Sem ela,
+    // checamos a coluna phone (já única na migration 001) — não depende do 023.
+    if (phoneToStore) {
+      const dupCol = REQUIRE_SIGNUP_VERIFICATION ? 'phone_e164' : 'phone';
+      const dupVal = REQUIRE_SIGNUP_VERIFICATION ? phoneE164 : phoneToStore;
       const { data: dupPhone } = await supabase
         .from('users')
         .select('id')
-        .eq('phone_e164', phoneE164)
+        .eq(dupCol, dupVal)
         .maybeSingle();
       if (dupPhone) {
         return res.status(409).json({ error: GENERIC_ERROR });
@@ -76,11 +88,12 @@ router.post('/register', async (req, res, next) => {
       return res.status(409).json({ error: GENERIC_ERROR });
     }
 
-    // Cria usuário no Supabase Auth — SEM email_confirm (verificação via OTP)
+    // Cria usuário no Supabase Auth. Sem verificação, já confirmamos o e-mail
+    // para permitir o login imediato; com verificação, fica pendente (OTP).
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email:         body.email,
       password:      body.password,
-      email_confirm: false,
+      email_confirm: !REQUIRE_SIGNUP_VERIFICATION,
     });
 
     if (authError) {
@@ -89,21 +102,25 @@ router.post('/register', async (req, res, next) => {
       return res.status(409).json({ error: GENERIC_ERROR });
     }
 
-    // Insere perfil na tabela users
+    // Insere perfil. Sem verificação, gravamos apenas colunas garantidas pela
+    // migration 001 (+ language) e já marcamos email_verified=true. Com
+    // verificação, incluímos phone_e164 (migration 023) e deixamos pendente.
+    const insertRow = {
+      auth_id:        authData.user.id,
+      full_name:      body.full_name,
+      email:          body.email,
+      phone:          phoneToStore,
+      user_type:      'tourist',
+      email_verified: !REQUIRE_SIGNUP_VERIFICATION,
+      phone_verified: false,
+      language:       body.lang,
+    };
+    if (REQUIRE_SIGNUP_VERIFICATION) insertRow.phone_e164 = phoneE164;
+
     const { data: profile, error: profileError } = await supabase
       .from('users')
-      .insert({
-        auth_id:        authData.user.id,
-        full_name:      body.full_name,
-        email:          body.email,
-        phone:          body.phone || null,
-        phone_e164:     phoneE164,
-        user_type:      'tourist',
-        email_verified: false,
-        phone_verified: false,
-        language:       body.lang,
-      })
-      .select('id, full_name, email, phone, phone_e164, user_type, email_verified, phone_verified, lang:language')
+      .insert(insertRow)
+      .select('id, full_name, email, phone, user_type, profile_photo_url, document_number, email_verified, phone_verified, lang:language')
       .single();
 
     if (profileError) {
@@ -113,7 +130,25 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({ error: profileError.message });
     }
 
-    // Dispara OTP de e-mail imediatamente
+    // ── Cadastro direto (sem OTP): abre a sessão e já entra logado ──────
+    if (!REQUIRE_SIGNUP_VERIFICATION) {
+      const { data: sess, error: sessErr } = await supabase.auth.signInWithPassword({
+        email:    body.email,
+        password: body.password,
+      });
+      if (sessErr || !sess?.session) {
+        // Conta criada, mas não conseguimos abrir sessão — manda para o login.
+        console.error('[register] signIn pós-cadastro falhou:', sessErr?.message);
+        return res.status(201).json({ status: 'ok', next: 'login' });
+      }
+      return res.status(201).json({
+        token:         sess.session.access_token,
+        refresh_token: sess.session.refresh_token,
+        user:          profile,
+      });
+    }
+
+    // ── Fluxo legado com verificação por OTP (exige 023 + e-mail) ──────
     try {
       await requestOtp({
         userId:      profile.id,
