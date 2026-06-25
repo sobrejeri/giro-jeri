@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
 import { reverseGeocode } from '../lib/geoServices'
 
@@ -6,6 +6,7 @@ const RegionContext = createContext(null)
 const STORAGE_KEY        = 'giro_region'
 const STORAGE_KEY_COORDS = 'giro_user_coords'
 const STORAGE_KEY_PLACE  = 'giro_user_place'
+const STORAGE_KEY_MANUAL = 'giro_region_manual'
 const DEFAULT_RADIUS_KM  = 100
 
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -53,6 +54,15 @@ export function RegionProvider({ children }) {
   const [userPlace, setUserPlace] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY_PLACE) || null } catch { return null }
   })
+  // Região escolhida manualmente tem prioridade sobre o GPS: enquanto ativa, o
+  // filtro usa só region_id (ignora lat/lon) e o GPS em segundo plano não a
+  // sobrescreve. Sem isso, ao escolher uma cidade distante da posição atual a
+  // lista vinha vazia (o backend filtra por proximidade quando recebe lat/lon).
+  const [manualRegion, setManualRegion] = useState(() => {
+    try { return localStorage.getItem(STORAGE_KEY_MANUAL) === '1' } catch { return false }
+  })
+  const manualRef = useRef(manualRegion)
+  useEffect(() => { manualRef.current = manualRegion }, [manualRegion])
 
   useEffect(() => {
     api.getRegions().then((data) => {
@@ -64,19 +74,30 @@ export function RegionProvider({ children }) {
     if (!region && regions.length > 0) setShowPicker(true)
   }, [region, regions])
 
-  const selectRegion = useCallback((r) => {
+  // Define a região. opts.manual=true (padrão) marca escolha explícita do
+  // usuário; o GPS chama com manual:false para não “travar” o seguimento.
+  const selectRegion = useCallback((r, opts = {}) => {
+    const manual = opts.manual !== false
     setRegionState(r)
+    setManualRegion(manual)
+    manualRef.current = manual
     setOutsideError(false)
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(r)) } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(r))
+      localStorage.setItem(STORAGE_KEY_MANUAL, manual ? '1' : '0')
+    } catch {}
     setShowPicker(false)
   }, [])
 
-  const applyCoords = useCallback(async (lat, lon) => {
+  const applyCoords = useCallback(async (lat, lon, opts = {}) => {
+    const auto = opts.auto === true
     const next = { lat, lon }
     setUserCoords(next)
     try { localStorage.setItem(STORAGE_KEY_COORDS, JSON.stringify(next)) } catch {}
     const found = findRegionForCoords(lat, lon, regions)
-    if (found) selectRegion(found)
+    // O GPS em segundo plano (auto) NÃO sobrescreve uma região escolhida à mão.
+    // Detecção explícita (botão “usar minha localização”) sempre vale.
+    if (found && !(auto && manualRef.current)) selectRegion(found, { manual: false })
     const place = await reverseGeocode(lat, lon)
     if (place) {
       setUserPlace(place)
@@ -92,6 +113,7 @@ export function RegionProvider({ children }) {
 
     async function onSuccess({ coords }) {
       setDetecting(false)
+      // Detecção explícita pelo usuário → assume o controle do GPS (não é auto).
       const found = await applyCoords(coords.latitude, coords.longitude)
       if (!found) setOutsideError(true)
     }
@@ -130,7 +152,7 @@ export function RegionProvider({ children }) {
         const lat = coords.latitude, lon = coords.longitude
         if (last && Math.abs(last.lat - lat) < 0.0015 && Math.abs(last.lon - lon) < 0.0015) return
         last = { lat, lon }
-        applyCoords(lat, lon)
+        applyCoords(lat, lon, { auto: true })
       },
       () => {},
       { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
@@ -141,24 +163,24 @@ export function RegionProvider({ children }) {
   const openPicker = useCallback(() => { setOutsideError(false); setShowPicker(true) }, [])
 
   // Monta os parâmetros de filtro geográfico para chamadas à API.
-  // Quando há GPS real do usuário, prioriza lat/lon (raio cai pra cada
-  // serviço); caso contrário, cai no filtro categórico por região.
+  // Região escolhida à mão → filtra só por region_id (ignora o GPS). Caso
+  // contrário, com GPS real prioriza lat/lon (raio por serviço).
   const getServiceQuery = useCallback(() => {
     const params = {}
-    if (userCoords?.lat != null && userCoords?.lon != null) {
+    if (!manualRegion && userCoords?.lat != null && userCoords?.lon != null) {
       params.lat = userCoords.lat
       params.lon = userCoords.lon
     }
     if (region?.id) params.region_id = region.id
     return params
-  }, [userCoords, region])
+  }, [userCoords, region, manualRegion])
 
   return (
     <RegionContext.Provider value={{
       region, regions, selectRegion,
       detectGPS, detecting, userCoords, userPlace,
       showPicker, setShowPicker, openPicker,
-      outsideError, setOutsideError,
+      outsideError, setOutsideError, manualRegion,
       findRegionForCoords, getServiceQuery,
     }}>
       {children}
