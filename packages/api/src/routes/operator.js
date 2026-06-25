@@ -122,41 +122,46 @@ router.put('/preferences/:type/:entityId', async (req, res, next) => {
 // Retorna corridas disponíveis (sem operador) + corridas do operador logado
 router.get('/bookings', async (req, res, next) => {
   try {
-    // Corridas disponíveis (sem cooperativa atribuída):
-    //  • awaiting_acceptance — fluxo novo: solicitadas, aguardando aceite (o
-    //    cliente paga depois do aceite);
-    //  • paid + awaiting_dispatch — fluxo antigo / cotações já pagas que ainda
-    //    precisam de uma cooperativa para atender.
-    const { data: pending, error: e1 } = await supabase
-      .from('bookings')
-      .select(`
-        id, booking_code, service_type, service_id, booking_mode,
-        service_date, service_time, people_count, total_amount, created_at,
-        origin_text, destination_text, status_commercial, status_operational,
-        users!bookings_user_id_fkey ( full_name, phone )
-      `)
-      .is('operator_id', null)
-      .or('status_commercial.eq.awaiting_acceptance,and(status_commercial.eq.paid,status_operational.eq.awaiting_dispatch)')
-      .order('created_at', { ascending: true })
+    const SELECT = `
+      id, booking_code, service_type, service_id, booking_mode,
+      service_date, service_time, people_count, total_amount, created_at,
+      origin_text, destination_text, status_commercial, status_operational,
+      users!bookings_user_id_fkey ( full_name, phone )
+    `
 
-    if (e1) throw e1
+    // Corridas disponíveis (sem cooperativa atribuída). Duas consultas simples e
+    // explícitas em vez de um filtro .or/and aninhado (que é frágil e já deixou
+    // de retornar solicitações):
+    //  • awaiting_acceptance — fluxo novo: solicitadas, aguardando aceite;
+    //  • paid + awaiting_dispatch — fluxo antigo / cotações já pagas.
+    const [reqRes, dispRes] = await Promise.all([
+      supabase.from('bookings').select(SELECT)
+        .is('operator_id', null)
+        .eq('status_commercial', 'awaiting_acceptance'),
+      supabase.from('bookings').select(SELECT)
+        .is('operator_id', null)
+        .eq('status_commercial', 'paid')
+        .eq('status_operational', 'awaiting_dispatch'),
+    ])
+    if (reqRes.error)  throw reqRes.error
+    if (dispRes.error) throw dispRes.error
+
+    const pending = [...(reqRes.data || []), ...(dispRes.data || [])]
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
     // Minhas corridas: aceitas ou em andamento
     const { data: mine, error: e2 } = await supabase
-      .from('bookings')
-      .select(`
-        id, booking_code, service_type, service_id, booking_mode,
-        service_date, service_time, people_count, total_amount, created_at,
-        origin_text, destination_text, status_commercial, status_operational,
-        users!bookings_user_id_fkey ( full_name, phone )
-      `)
+      .from('bookings').select(SELECT)
       .eq('operator_id', req.user.id)
       .in('status_operational', ['assigned', 'in_progress'])
       .order('service_date', { ascending: true })
 
     if (e2) throw e2
 
-    res.json({ pending: pending || [], mine: mine || [] })
+    console.log('[operator/bookings] op=%s pending=%d (aceite=%d despacho=%d) mine=%d',
+      req.user.id, pending.length, reqRes.data?.length || 0, dispRes.data?.length || 0, mine?.length || 0)
+
+    res.json({ pending, mine: mine || [] })
   } catch (err) { next(err) }
 })
 
