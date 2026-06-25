@@ -55,9 +55,12 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
       try {
         brickRef.current = await bricks.create('payment', containerId, {
           initialization: {
-            amount: Number(amount) || 0,
-            ...(email ? { payer: { email } } : {}),
-          },
+  amount: Number(amount) || 0,
+  payer: {
+    ...(email ? { email } : {}),
+    entityType: 'individual',
+  },
+},
           customization: {
             visual:         { style: { theme: 'default' } },
             paymentMethods: {
