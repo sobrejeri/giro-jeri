@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark, FlaskConical, Zap } from 'lucide-react'
+import QRCode from 'qrcode'
 import { api } from '../../lib/api'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
@@ -190,8 +191,9 @@ export default function CheckoutProcessando() {
   const navigate  = useNavigate()
   const { state } = useLocation()
   const { t }     = useTranslation()
-  const [copied, setCopied]   = useState(false)
-  const [status, setStatus]   = useState('pending')
+  const [copied, setCopied]     = useState(false)
+  const [status, setStatus]     = useState('pending')
+  const [generatedQr, setGeneratedQr] = useState(null)
   const pollRef = useRef(null)
 
   if (!state) { navigate('/'); return null }
@@ -202,6 +204,34 @@ export default function CheckoutProcessando() {
   const { pix_code, qr_base64, expires_at, payment_id, booking_code, total_price, amount, test_mode } = state
   const value = amount || total_price
   const { secs, display: countdown } = useCountdown(expires_at)
+
+  // Quando o Mercado Pago não envia qr_base64, geramos o QR Code localmente
+  // usando o código Pix copia e cola (pix_code).
+  useEffect(() => {
+    if (qr_base64 || !pix_code) {
+      setGeneratedQr(null)
+      return
+    }
+
+    let active = true
+
+    QRCode.toDataURL(pix_code, {
+      width: 320,
+      margin: 2,
+      errorCorrectionLevel: 'M',
+    })
+      .then((url) => {
+        if (active) setGeneratedQr(url)
+      })
+      .catch((err) => {
+        console.error('[pix] erro ao gerar QR Code local:', err)
+        if (active) setGeneratedQr(null)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [pix_code, qr_base64])
 
   // Test mode: count down to auto-approval (15s from payment creation)
   const [testSecsLeft, setTestSecsLeft] = useState(() => {
@@ -320,11 +350,30 @@ export default function CheckoutProcessando() {
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 flex flex-col items-center">
           <p className="text-[13px] font-semibold text-gray-700 mb-4">{t('payment.gateway.scanQR')}</p>
           {qr_base64 ? (
-            <img src={`data:image/png;base64,${qr_base64}`} alt="QR PIX" className="w-52 h-52 rounded-xl" />
+            <img
+              src={`data:image/png;base64,${qr_base64}`}
+              alt="QR PIX"
+              className="w-52 h-52 rounded-xl"
+            />
+          ) : generatedQr ? (
+            <img
+              src={generatedQr}
+              alt="QR PIX"
+              className="w-52 h-52 rounded-xl"
+            />
+          ) : pix_code ? (
+            <div className="w-52 h-52 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2">
+              <QrCode size={48} className="text-gray-300" />
+              <p className="text-[11px] text-gray-400 text-center">
+                Gerando QR Code...
+              </p>
+            </div>
           ) : (
             <div className="w-52 h-52 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2">
               <QrCode size={48} className="text-gray-300" />
-              <p className="text-[11px] text-gray-400 text-center">{test_mode ? t('payment.gateway.testQR') : t('payment.gateway.testQRSub')}</p>
+              <p className="text-[11px] text-gray-400 text-center">
+                Não foi possível carregar o QR Code. Use o Pix copia e cola abaixo.
+              </p>
             </div>
           )}
           <div className="flex items-center gap-2 mt-4 text-[11px] text-gray-400">
