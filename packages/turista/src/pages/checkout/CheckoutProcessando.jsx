@@ -7,17 +7,42 @@ import { api } from '../../lib/api'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
 
+function getRemainingSeconds(expiresAt) {
+  if (!expiresAt) return null
+
+  const expiresMs = new Date(expiresAt).getTime()
+  if (Number.isNaN(expiresMs)) return null
+
+  return Math.max(0, Math.floor((expiresMs - Date.now()) / 1000))
+}
+
 function useCountdown(expiresAt) {
-  const [secs, setSecs] = useState(0)
+  const [secs, setSecs] = useState(() => getRemainingSeconds(expiresAt))
+
   useEffect(() => {
-    if (!expiresAt) return
-    const calc = () => Math.max(0, Math.floor((new Date(expiresAt) - Date.now()) / 1000))
+    if (!expiresAt) {
+      setSecs(null)
+      return
+    }
+
+    const calc = () => getRemainingSeconds(expiresAt)
+
     setSecs(calc())
-    const t = setInterval(() => setSecs(calc()), 1000)
+
+    const t = setInterval(() => {
+      setSecs(calc())
+    }, 1000)
+
     return () => clearInterval(t)
   }, [expiresAt])
+
+  if (secs === null) {
+    return { secs: null, display: '--:--' }
+  }
+
   const m = Math.floor(secs / 60).toString().padStart(2, '0')
   const s = (secs % 60).toString().padStart(2, '0')
+
   return { secs, display: `${m}:${s}` }
 }
 
@@ -239,10 +264,16 @@ export default function CheckoutProcessando() {
     return 15
   })
   useEffect(() => {
-    if (!test_mode) return
-    const t = setInterval(() => setTestSecsLeft((s) => Math.max(0, s - 1)), 1000)
-    return () => clearInterval(t)
-  }, [test_mode])
+  if (!expires_at) return
+
+  const expiresMs = new Date(expires_at).getTime()
+  if (Number.isNaN(expiresMs)) return
+
+  if (Date.now() >= expiresMs) {
+    clearInterval(pollRef.current)
+    setStatus('expired')
+  }
+}, [secs, expires_at])
 
   const poll = useCallback(async () => {
     if (!payment_id) return
