@@ -23,7 +23,7 @@ const intentSchema = z.object({
   vehicles:            z.array(z.object({
     vehicle_id: z.string().uuid(),
     qty:        z.number({ coerce: true }).int().min(1),
-    unit_price: z.number({ coerce: true }).nonnegative(),
+    unit_price: z.number({ coerce: true }).nonnegative().optional(),
   })).optional(),
   origin_text:      z.string().max(500).optional(),
   destination_text: z.string().max(500).optional(),
@@ -63,7 +63,7 @@ const requestSchema = z.object({
   vehicles:         z.array(z.object({
     vehicle_id: z.string().uuid(),
     qty:        z.number({ coerce: true }).int().min(1),
-    unit_price: z.number({ coerce: true }).nonnegative(),
+    unit_price: z.number({ coerce: true }).nonnegative().optional(),
   })).optional(),
   origin_text:      z.string().max(500).optional(),
   destination_text: z.string().max(500).optional(),

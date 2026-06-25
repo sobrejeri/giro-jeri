@@ -187,7 +187,7 @@ export default function TransfersDesktop() {
         breakdown:           { 'Veículos': cartTotal },
         region_id:           region?.id || null,
         service_id:          matched?.id,
-        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
+        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: unitPrice })),
         booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
       },
     })

@@ -693,7 +693,7 @@ export default function Tours() {
                           cover_image_url:       selectedTour.cover_image_url || null,
                           region_id:             selectedTour.regions?.id,
                           service_id:            selectedTour.id,
-                          vehicles:              cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
+                          vehicles:              cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(vehicle.base_price) || 0 })),
                           booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
                         },
                       })
