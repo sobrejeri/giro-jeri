@@ -2,6 +2,10 @@
 
 Plataforma digital de reservas para passeios e transfers em Jericoacoara.
 
+> 📘 **Onboarding técnico completo** (arquitetura, API, integrações, banco,
+> deploy e variáveis de ambiente): [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
+> Ideal para integrar um novo dev ou uma nova sessão de IA ao projeto.
+
 ---
 
 ## Apps em produção
