@@ -2,10 +2,13 @@ import { createContext, useContext, useState, useCallback } from 'react'
 
 const AuthContext = createContext(null)
 
+// Prefixo próprio: turista, cooperativa e admin compartilham o mesmo domínio
+// (sobrejeri.github.io/<subpath>) e localStorage é por origem, não por path —
+// sem prefixo, logar num app sobrescrevia a sessão dos outros.
 const STORAGE = {
-  token:   'giro_token',
-  refresh: 'giro_refresh',
-  user:    'giro_user',
+  token:   'giro_coop_token',
+  refresh: 'giro_coop_refresh',
+  user:    'giro_coop_user',
 }
 
 export function AuthProvider({ children }) {

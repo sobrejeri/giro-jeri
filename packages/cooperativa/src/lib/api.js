@@ -1,9 +1,12 @@
 const BASE = import.meta.env.VITE_API_URL || ''
 
+// Prefixo próprio: turista/cooperativa/admin compartilham o mesmo domínio
+// (sobrejeri.github.io/<subpath>) e localStorage é por origem, não por path —
+// sem prefixo, logar num app sobrescrevia a sessão dos outros.
 const STORAGE = {
-  token:   'giro_token',
-  refresh: 'giro_refresh',
-  user:    'giro_user',
+  token:   'giro_coop_token',
+  refresh: 'giro_coop_refresh',
+  user:    'giro_coop_user',
 }
 
 function getToken()   { return localStorage.getItem(STORAGE.token)   }
