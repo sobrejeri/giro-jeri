@@ -100,6 +100,14 @@ export default function TransfersDesktop() {
     queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
     queryFn:  () => api.getVehicles(getServiceQuery()),
   })
+  // Serviço-pai do translado personalizado (transfers.pricing_mode='manual_quote')
+  // — precisamos do id dele para criar o booking via POST /api/payments/request.
+  const { data: transfersData } = useQuery({
+    queryKey: ['transfers', region?.id],
+    queryFn:  () => api.getTransfers(region?.id ? { region_id: region.id } : {}),
+  })
+  const transfersList = Array.isArray(transfersData) ? transfersData : transfersData?.data || []
+  const manualQuoteTransfer = transfersList.find(t => t.pricing_mode === 'manual_quote')
 
   const routes = Array.isArray(routesData?.routes) ? routesData.routes
                : Array.isArray(routesData) ? routesData : []
@@ -196,18 +204,28 @@ export default function TransfersDesktop() {
   async function handleRequestQuote() {
     if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canCustomBook) return
+    if (!manualQuoteTransfer?.id) {
+      setCustomError('Translado personalizado indisponível nesta região no momento.')
+      return
+    }
     setCustomLoading(true)
     setCustomError('')
     try {
-      await api.requestQuote({
-        region_id:              region?.id || '',
-        origin_place_name:      customOrigin.trim(),
-        destination_place_name: customDest.trim(),
-        service_date:           customDate,
-        service_time:           customTime,
-        people_count:           customPeople,
-        luggage_count:          0,
-        special_notes:          customNotes.trim() || undefined,
+      // Fluxo unificado de bookings: nasce sem total_price (precificação manual
+      // pela cooperativa) — POST /api/payments/request, NÃO /api/transfers/quotes.
+      await api.requestBooking({
+        service_type:            'transfer',
+        service_id:              manualQuoteTransfer.id,
+        service_date_iso:        customDate,
+        service_time:            customTime,
+        people_count:            customPeople,
+        region_id:               region?.id || undefined,
+        origin_text:             customOrigin.trim(),
+        destination_text:        customDest.trim(),
+        pickup_place_name:       customOrigin.trim(),
+        destination_place_name:  customDest.trim(),
+        luggage_count:           0,
+        special_notes:           customNotes.trim() || undefined,
       })
       setCustomSuccess(true)
     } catch (err) {
@@ -473,7 +491,7 @@ export default function TransfersDesktop() {
                   onClick={() => navigate('/minhas-reservas')}
                   className="inline-flex items-center gap-2 bg-brand text-white font-bold px-6 py-3 rounded-xl hover:bg-brand-600 transition-colors"
                 >
-                  Ver minhas cotações <ChevronRight size={16} />
+                  Ver minhas reservas <ChevronRight size={16} />
                 </button>
                 <button
                   onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomNotes('') }}

@@ -81,11 +81,6 @@ export const api = {
   updateBookingStatus:  (id, body)    => request(`/api/bookings/${id}/status`, { method: 'PATCH', body }),
   assignBooking:        (id, body)    => request(`/api/admin/operational/${id}/assign`, { method: 'POST', body }),
 
-  // Cotações
-  getPendingQuotes: ()         => request('/api/transfers/quotes/pending'),
-  getQuotesHistory: ()         => request('/api/transfers/quotes/history'),
-  setQuotePrice:   (id, body) => request(`/api/transfers/quotes/${id}/quote`, { method: 'PATCH', body }),
-
   // Veículos
   getVehicles:   (params = {}) => request(`/api/vehicles?${new URLSearchParams(params)}`),
   createVehicle: (body)        => request('/api/vehicles', { method: 'POST', body }),
@@ -126,8 +121,11 @@ export const api = {
     }),
 
   // Corridas (modelo Uber — primeiro a aceitar)
-  getOperatorBookings: ()   => request('/api/operator/bookings'),
-  acceptBooking:       (id) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body: {} }),
+  // body: {} para passeio/translado fixo; { quoted_price, quote_notes } para
+  // translado personalizado (is_manual_quote) — aceite + preço no mesmo ato,
+  // e também usado para corrigir o preço enquanto não pago (mesmo endpoint).
+  getOperatorBookings: ()         => request('/api/operator/bookings'),
+  acceptBooking:       (id, body = {}) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body }),
   startBooking:        (id) => request(`/api/operator/bookings/${id}/start`,    { method: 'POST', body: {} }),
   confirmBooking:      (id) => request(`/api/operator/bookings/${id}/confirm`,  { method: 'POST', body: {} }),
   completeBooking:     (id) => request(`/api/operator/bookings/${id}/complete`, { method: 'POST', body: {} }),

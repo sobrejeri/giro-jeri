@@ -369,18 +369,28 @@ export default function Transfers() {
   async function handleRequestQuote() {
     if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!customOrigin.trim() || !customDest.trim() || !customTime) return
+    if (!manualQuoteTransfer?.id) {
+      setCustomError('Translado personalizado indisponível nesta região no momento.')
+      return
+    }
     setCustomLoading(true)
     setCustomError('')
     try {
-      await api.requestQuote({
-        region_id:              region?.id || '',
-        origin_place_name:      customOrigin.trim(),
-        destination_place_name: customDest.trim(),
-        service_date:           format(customDate, 'yyyy-MM-dd'),
-        service_time:           customTime,
-        people_count:           customPeople,
-        luggage_count:          0,
-        special_notes:          customNotes.trim() || undefined,
+      // Fluxo unificado de bookings: nasce sem total_price (precificação manual
+      // pela cooperativa) — POST /api/payments/request, NÃO /api/transfers/quotes.
+      await api.requestBooking({
+        service_type:            'transfer',
+        service_id:              manualQuoteTransfer.id,
+        service_date_iso:        format(customDate, 'yyyy-MM-dd'),
+        service_time:            customTime,
+        people_count:            customPeople,
+        region_id:               region?.id || undefined,
+        origin_text:             customOrigin.trim(),
+        destination_text:        customDest.trim(),
+        pickup_place_name:       customOrigin.trim(),
+        destination_place_name:  customDest.trim(),
+        luggage_count:           0,
+        special_notes:           customNotes.trim() || undefined,
       })
       setCustomSuccess(true)
     } catch (err) {
@@ -406,6 +416,14 @@ export default function Transfers() {
     queryFn:  () => region?.id ? api.getVehicles({ region_id: region.id }) : Promise.resolve([]),
     enabled:  !!region?.id,
   })
+  // Serviço-pai do translado personalizado (transfers.pricing_mode='manual_quote')
+  // — precisamos do id dele para criar o booking via POST /api/payments/request.
+  const { data: transfersData } = useQuery({
+    queryKey: ['transfers', region?.id],
+    queryFn:  () => api.getTransfers(region?.id ? { region_id: region.id } : {}),
+  })
+  const transfersList = Array.isArray(transfersData) ? transfersData : transfersData?.data || []
+  const manualQuoteTransfer = transfersList.find(t => t.pricing_mode === 'manual_quote')
 
   const routes   = Array.isArray(routesData?.routes) ? routesData.routes
                  : Array.isArray(routesData) ? routesData : []
@@ -582,7 +600,7 @@ export default function Transfers() {
                 onClick={() => navigate('/minhas-reservas')}
                 className="bg-brand text-white font-bold rounded-2xl px-6 py-3 text-[14px] active:scale-95 transition-transform"
               >
-                Ver minhas cotações
+                Ver minhas reservas
               </button>
               <button
                 onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomNotes('') }}

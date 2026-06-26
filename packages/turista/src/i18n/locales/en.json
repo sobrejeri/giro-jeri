@@ -160,13 +160,53 @@
       "confirmed": "Confirmed",
       "in_progress": "Driver en route",
       "completed": "Completed",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "awaiting_price": "Awaiting price",
+      "expired": "Expired",
+      "rejected": "Declined"
     },
     "active": "Active",
     "completed": "Completed",
     "cancelled": "Cancelled",
     "history": "History",
-    "all": "All"
+    "all": "All",
+    "back": "Back",
+    "searchPlaceholder": "Search by code, tour or route…",
+    "noActive": "No active bookings right now",
+    "activeCountLabel_one": "You have {{count}} active booking",
+    "activeCountLabel_other": "You have {{count}} active bookings",
+    "emptyHint": "Your tour and transfer bookings will show up here.",
+    "emptyHere": "Nothing here",
+    "emptyHereHint": "We couldn't find bookings for this filter.",
+    "cancelError": "Could not cancel. Please try again.",
+    "priceToDefine": "Price to be set",
+    "total": "Total",
+    "totalPaid": "Total paid",
+    "requestAgain": "Request again",
+    "payNow": "Pay now",
+    "cancelBtnShort": "Cancel",
+    "expiredMsg": "The deadline has passed. You can request again.",
+    "rejectedMsg": "The cooperative declined this request.",
+    "awaitingPrice": {
+      "title": "Waiting for the cooperative to send the price",
+      "respondsBy": "The cooperative responds by {{time}}"
+    },
+    "priceReceived": {
+      "title": "Price received — payment still needed",
+      "payBy": "Pay by {{time}} to secure your booking"
+    },
+    "reject": {
+      "action": "Decline",
+      "title": "Decline offer",
+      "reasonLabel": "Reason (optional)",
+      "reasonPlaceholder": "Quickly tell us why, if you'd like…",
+      "confirmBtn": "Confirm decline"
+    },
+    "countdown": {
+      "expired": "expired",
+      "hoursMinutes": "{{hours}}h{{minutes}}min left",
+      "minutes": "{{minutes}}min left"
+    }
   },
   "checkout": {
     "summary": "Booking Summary",

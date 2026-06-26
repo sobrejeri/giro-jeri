@@ -6,7 +6,7 @@ import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
-import { calculatePrivateTour, calculateSharedTour, getDateSurcharge } from '../services/priceEngine.js'
+import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance } from '../services/priceEngine.js'
 
 const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -50,11 +50,14 @@ const intentSchema = z.object({
 )
 
 // Solicitação de reserva (sem pagamento): subconjunto do intent, sem cartão.
+// total_price é obrigatório apenas para serviços que NÃO são de precificação
+// manual (passeio, translado rota fixa) — validado condicionalmente abaixo
+// via .refine, depois de sabermos se o transfer pai é pricing_mode='manual_quote'.
 const requestSchema = z.object({
   service_type:     z.enum(['tour', 'transfer']).optional(),
   service_id:       z.string().uuid(),
   service_date_iso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (YYYY-MM-DD)'),
-  total_price:      z.number({ coerce: true }).positive().min(5, 'Valor mínimo R$ 5,00'),
+  total_price:      z.number({ coerce: true }).positive().min(5, 'Valor mínimo R$ 5,00').optional(),
   booking_mode:     z.enum(['private', 'shared']).optional(),
   service_date:     z.string().optional(),
   service_time:     z.string().optional(),
@@ -70,6 +73,17 @@ const requestSchema = z.object({
   service_name:     z.string().max(300).optional(),
   cover_image_url:  z.string().url().optional().nullable().or(z.literal('')),
   coupon_code:      z.string().max(50).optional(),
+  // Translado personalizado (precificação manual pela cooperativa)
+  luggage_count:    z.number({ coerce: true }).int().min(0).max(20).optional(),
+  special_notes:    z.string().max(1000).optional(),
+  pickup_place_id:          z.string().optional(),
+  pickup_place_name:        z.string().max(300).optional(),
+  pickup_latitude:          z.number({ coerce: true }).optional(),
+  pickup_longitude:         z.number({ coerce: true }).optional(),
+  destination_place_id:     z.string().optional(),
+  destination_place_name:   z.string().max(300).optional(),
+  destination_latitude:     z.number({ coerce: true }).optional(),
+  destination_longitude:    z.number({ coerce: true }).optional(),
 })
 
 const router = Router()
@@ -90,6 +104,31 @@ async function getPaymentSettings() {
     .select('setting_key, setting_value')
     .like('setting_key', 'payment_%')
   return Object.fromEntries(data.map((s) => [s.setting_key, s.setting_value]))
+}
+
+// Translado de rota personalizada (transfers.pricing_mode = 'manual_quote'):
+// não tem preço fechado, precisa de cotação manual da cooperativa. Passeio e
+// translado de rota fixa (fixed_route/by_vehicle/by_distance) seguem com preço
+// calculado pelo priceEngine, fluxo intocado.
+async function isManualQuoteService(serviceType, serviceId) {
+  if (serviceType !== 'transfer' || !serviceId) return false
+  const { data } = await supabase
+    .from('transfers')
+    .select('pricing_mode')
+    .eq('id', serviceId)
+    .maybeSingle()
+  return data?.pricing_mode === 'manual_quote'
+}
+
+// system_settings.quote_expiry_hours — mesmo setting já usado pelo fluxo
+// legado de transfer_quotes. Padrão 2h quando não configurado.
+async function getQuoteExpiryHours() {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('setting_value')
+    .eq('setting_key', 'quote_expiry_hours')
+    .maybeSingle()
+  return parseInt(data?.setting_value || '2', 10) || 2
 }
 
 // Recalcula o valor autoritativo da reserva (alta temporada / feriado) a partir
@@ -231,19 +270,44 @@ router.post('/intent', authenticate, async (req, res, next) => {
           error: 'Reserva não encontrada nesta conta. Entre com a mesma conta que fez a reserva.',
         })
       }
+      // Checagem lazy de expiração: solicitação de translado personalizado
+      // (is_manual_quote) cuja janela única (precificar + pagar) já passou.
+      // Vence antes de checar status_commercial porque a expiração some o
+      // status para 'expired' nesse mesmo request.
+      if (
+        existing.is_manual_quote &&
+        existing.quote_expires_at &&
+        new Date(existing.quote_expires_at) < new Date() &&
+        ['awaiting_acceptance', 'awaiting_payment'].includes(existing.status_commercial)
+      ) {
+        await supabase.from('bookings')
+          .update({ status_commercial: 'expired' })
+          .eq('id', existing.id)
+        notifyUser({
+          userId:      existing.user_id,
+          bookingId:   existing.id,
+          templateKey: 'quote_expired',
+          title:       'Solicitação expirada',
+          body:        `Sua solicitação de translado (${existing.booking_code}) expirou sem pagamento dentro do prazo. Solicite novamente.`,
+        })
+        return res.status(409).json({ error: 'Esta solicitação expirou. Solicite novamente.' })
+      }
+
       if (existing.status_commercial !== 'awaiting_payment') {
         const s = existing.status_commercial
         const msg =
           s === 'awaiting_acceptance' ? 'Esta reserva ainda não foi aceita por uma cooperativa. Aguarde o aceite para pagar.' :
           s === 'paid'                ? 'Esta reserva já foi paga.' :
           s === 'cancelled'           ? 'Esta reserva foi cancelada.' :
+          s === 'expired'             ? 'Esta solicitação expirou. Solicite novamente.' :
                                         `Esta reserva não está aguardando pagamento (status: ${s}).`
         return res.status(409).json({ error: msg })
       }
 
       booking     = existing
       bookingCode = existing.booking_code
-      // Pagamento de reserva já solicitada/aceita: o valor cobrado é o do banco.
+      // Pagamento de reserva já solicitada/aceita: o valor cobrado é SEMPRE o
+      // que está gravado no banco (nunca confia em total_price vindo do client).
       chargedTotal = Number(existing.total_amount)
     } else {
       // ── 2. Gera código da reserva ──────────────────────
@@ -503,6 +567,13 @@ router.post('/intent', authenticate, async (req, res, next) => {
 // Cria a reserva SEM pagamento (fluxo solicitar → aceitar → pagar). A reserva
 // nasce em 'awaiting_acceptance' e as cooperativas são notificadas para aceitar.
 // O pagamento acontece depois, via POST /intent com existing_booking_id.
+//
+// Translado de rota personalizada (transfers.pricing_mode='manual_quote'):
+// nasce SEM preço (total_amount=0), is_manual_quote=true e quote_expires_at
+// contado a partir de AGORA (created_at da solicitação original) — única
+// janela para a cooperativa precificar E o cliente pagar (ver migration 038).
+// Passeio e translado de rota fixa seguem o fluxo intocado: total_price
+// obrigatório, preço calculado pelo priceEngine, quote_expires_at NULL.
 router.post('/request', authenticate, async (req, res, next) => {
   try {
     const parsed = requestSchema.safeParse(nullToUndefined(req.body))
@@ -514,11 +585,34 @@ router.post('/request', authenticate, async (req, res, next) => {
       service_type, service_id, booking_mode,
       service_date_iso, service_time, people_count, region_id,
       vehicles = [], origin_text, destination_text,
+      luggage_count, special_notes,
+      pickup_place_id, pickup_place_name, pickup_latitude, pickup_longitude,
+      destination_place_id, destination_place_name, destination_latitude, destination_longitude,
     } = parsed.data
 
-    const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
+    const isManualQuote = await isManualQuoteService(service_type, service_id)
+
+    if (isManualQuote) {
+      // Sem antecedência mínima fixa do priceEngine (essa validação é do
+      // translado de ROTA FIXA) — mas reaproveitamos a mesma checagem de
+      // antecedência mínima de transfer, igual ao fluxo antigo de quotes.
+      await validateTransferAdvance(service_date_iso, service_time || '00:00')
+    } else if (parsed.data.total_price == null) {
+      return res.status(400).json({ error: 'total_price é obrigatório para este serviço' })
+    }
+
+    const chargedTotal = isManualQuote
+      ? 0
+      : await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
+    const nowIso = new Date().toISOString()
+    let quoteExpiresAt = null
+    if (isManualQuote) {
+      const expiryHours = await getQuoteExpiryHours()
+      quoteExpiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString()
+    }
+
     const { data: booking, error: bErr } = await supabase
       .from('bookings')
       .insert({
@@ -533,10 +627,24 @@ router.post('/request', authenticate, async (req, res, next) => {
         people_count:       Number(people_count) || 1,
         origin_text:        origin_text || null,
         destination_text:   destination_text || null,
+        ...(isManualQuote ? {
+          pickup_place_id:        pickup_place_id || null,
+          pickup_place_name:      pickup_place_name || null,
+          pickup_latitude:        pickup_latitude ?? null,
+          pickup_longitude:       pickup_longitude ?? null,
+          destination_place_id:   destination_place_id || null,
+          destination_place_name: destination_place_name || null,
+          destination_latitude:   destination_latitude ?? null,
+          destination_longitude:  destination_longitude ?? null,
+          luggage_count:          Number(luggage_count) || 0,
+          special_notes:          special_notes || null,
+        } : {}),
         total_amount:       chargedTotal,
         status_commercial:  'awaiting_acceptance',
         status_operational: 'new',
         payment_status:     'pending',
+        is_manual_quote:    isManualQuote,
+        quote_expires_at:   quoteExpiresAt,
       })
       .select()
       .single()
@@ -557,15 +665,24 @@ router.post('/request', authenticate, async (req, res, next) => {
       console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
 
     const isTransfer = service_type === 'transfer'
-    const rota = [origin_text, destination_text].filter(Boolean).join(' → ')
+    const rota = [
+      origin_text || pickup_place_name,
+      destination_text || destination_place_name,
+    ].filter(Boolean).join(' → ')
     notifyOperatorsAndAdmin({
       bookingId:   booking.id,
-      templateKey: 'new_booking',
-      title:       'Nova solicitação disponível',
-      body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
+      templateKey: isManualQuote ? 'new_transfer_quote' : 'new_booking',
+      title:       isManualQuote ? 'Nova cotação de translado' : 'Nova solicitação disponível',
+      body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para ${isManualQuote ? 'cotar' : 'aceitar'}.`,
     })
 
-    res.json({ booking_id: booking.id, booking_code: bookingCode, amount: chargedTotal })
+    res.json({
+      booking_id:       booking.id,
+      booking_code:     bookingCode,
+      amount:           chargedTotal,
+      is_manual_quote:  isManualQuote,
+      quote_expires_at: quoteExpiresAt,
+    })
   } catch (err) { next(err) }
 })
 

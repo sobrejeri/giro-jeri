@@ -160,13 +160,53 @@
       "confirmed": "Confirmado",
       "in_progress": "Motorista a caminho",
       "completed": "Concluído",
-      "cancelled": "Cancelado"
+      "cancelled": "Cancelado",
+      "awaiting_price": "Aguard. Preço",
+      "expired": "Expirada",
+      "rejected": "Recusada"
     },
     "active": "Ativas",
     "completed": "Concluídas",
     "cancelled": "Canceladas",
     "history": "Histórico",
-    "all": "Todas"
+    "all": "Todas",
+    "back": "Voltar",
+    "searchPlaceholder": "Buscar por código, passeio ou rota…",
+    "noActive": "Nenhuma reserva ativa agora",
+    "activeCountLabel_one": "Você tem {{count}} reserva ativa",
+    "activeCountLabel_other": "Você tem {{count}} reservas ativas",
+    "emptyHint": "Suas reservas de passeios e translados vão aparecer aqui.",
+    "emptyHere": "Nada por aqui",
+    "emptyHereHint": "Não encontramos reservas para este filtro.",
+    "cancelError": "Não foi possível cancelar. Tente novamente.",
+    "priceToDefine": "Valor a definir",
+    "total": "Total",
+    "totalPaid": "Total pago",
+    "requestAgain": "Solicitar novamente",
+    "payNow": "Pagar agora",
+    "cancelBtnShort": "Cancelar",
+    "expiredMsg": "O prazo terminou. Você pode solicitar novamente.",
+    "rejectedMsg": "A cooperativa recusou esta solicitação.",
+    "awaitingPrice": {
+      "title": "Aguardando a cooperativa enviar o valor",
+      "respondsBy": "A cooperativa responde até {{time}}"
+    },
+    "priceReceived": {
+      "title": "Valor recebido — falta confirmar o pagamento",
+      "payBy": "Pague até {{time}} para garantir sua reserva"
+    },
+    "reject": {
+      "action": "Recusar",
+      "title": "Recusar proposta",
+      "reasonLabel": "Motivo (opcional)",
+      "reasonPlaceholder": "Conte rapidamente o motivo, se quiser…",
+      "confirmBtn": "Confirmar recusa"
+    },
+    "countdown": {
+      "expired": "expirado",
+      "hoursMinutes": "faltam {{hours}}h{{minutes}}min",
+      "minutes": "faltam {{minutes}}min"
+    }
   },
   "checkout": {
     "summary": "Resumo da Reserva",

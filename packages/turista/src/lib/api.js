@@ -108,11 +108,6 @@ export const api = {
   getTransferRoutes:  (params = {}) => request(`/api/transfers/routes?${new URLSearchParams(params)}`),
   calculateTransfer:  (body)        => request('/api/transfers/calculate', { method: 'POST', body }),
   transferSurcharge:  (body)        => request('/api/transfers/surcharge', { method: 'POST', body }),
-  requestQuote:       (body)        => request('/api/transfers/quotes',    { method: 'POST', body }),
-  getMyQuotes:        ()            => request('/api/transfers/quotes'),
-  acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),
-  rejectQuote:        (id, body)    => request(`/api/transfers/quotes/${id}/reject`, { method: 'POST', body }),
-  cancelQuote:        (id)          => request(`/api/transfers/quotes/${id}/cancel`, { method: 'POST' }),
 
   // Pagamentos
   requestBooking:         (body) => request('/api/payments/request',     { method: 'POST', body }),
@@ -126,6 +121,7 @@ export const api = {
   getMyBookings: ()     => request('/api/bookings'),
   getBooking:    (id)   => request(`/api/bookings/${id}`),
   cancelBooking: (id, body) => request(`/api/bookings/${id}/cancel`, { method: 'POST', body }),
+  rejectBooking: (id, body = {}) => request(`/api/bookings/${id}/reject`, { method: 'POST', body }),
 
   // Notificações
   getNotifications:      ()   => request('/api/notifications'),

@@ -160,13 +160,53 @@
       "confirmed": "Confirmado",
       "in_progress": "Conductor en camino",
       "completed": "Completado",
-      "cancelled": "Cancelado"
+      "cancelled": "Cancelado",
+      "awaiting_price": "Esperando precio",
+      "expired": "Expirada",
+      "rejected": "Rechazada"
     },
     "active": "Activas",
     "completed": "Completadas",
     "cancelled": "Canceladas",
     "history": "Historial",
-    "all": "Todas"
+    "all": "Todas",
+    "back": "Volver",
+    "searchPlaceholder": "Buscar por código, paseo o ruta…",
+    "noActive": "No tienes reservas activas ahora",
+    "activeCountLabel_one": "Tienes {{count}} reserva activa",
+    "activeCountLabel_other": "Tienes {{count}} reservas activas",
+    "emptyHint": "Tus reservas de paseos y traslados aparecerán aquí.",
+    "emptyHere": "Nada por aquí",
+    "emptyHereHint": "No encontramos reservas para este filtro.",
+    "cancelError": "No se pudo cancelar. Inténtalo de nuevo.",
+    "priceToDefine": "Precio por definir",
+    "total": "Total",
+    "totalPaid": "Total pagado",
+    "requestAgain": "Solicitar de nuevo",
+    "payNow": "Pagar ahora",
+    "cancelBtnShort": "Cancelar",
+    "expiredMsg": "El plazo terminó. Puedes solicitar de nuevo.",
+    "rejectedMsg": "La cooperativa rechazó esta solicitud.",
+    "awaitingPrice": {
+      "title": "Esperando que la cooperativa envíe el precio",
+      "respondsBy": "La cooperativa responde antes de las {{time}}"
+    },
+    "priceReceived": {
+      "title": "Precio recibido — falta confirmar el pago",
+      "payBy": "Paga antes de las {{time}} para asegurar tu reserva"
+    },
+    "reject": {
+      "action": "Rechazar",
+      "title": "Rechazar propuesta",
+      "reasonLabel": "Motivo (opcional)",
+      "reasonPlaceholder": "Cuéntanos brevemente el motivo, si quieres…",
+      "confirmBtn": "Confirmar rechazo"
+    },
+    "countdown": {
+      "expired": "expirado",
+      "hoursMinutes": "faltan {{hours}}h{{minutes}}min",
+      "minutes": "faltan {{minutes}}min"
+    }
   },
   "checkout": {
     "summary": "Resumen de Reserva",

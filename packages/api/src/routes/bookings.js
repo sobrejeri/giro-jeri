@@ -13,6 +13,34 @@ import dayjs from 'dayjs';
 
 const serviceLabelBk = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
+// Expiração lazy: booking de translado personalizado (is_manual_quote) cuja
+// janela única (quote_expires_at, contada da solicitação original) já passou
+// sem pagamento aprovado. Espelha expire_pending_bookings() (migration 038) e
+// notifica o cliente, igual ao que o fluxo antigo de transfer_quotes fazia ao
+// detectar expiração na leitura. Usado em GET /api/bookings/:id (detalhe do
+// turista) e GET /api/bookings (lista).
+async function expireBookingIfNeeded(booking) {
+  if (!booking?.is_manual_quote) return booking;
+  if (!booking.quote_expires_at) return booking;
+  if (!['awaiting_acceptance', 'awaiting_payment'].includes(booking.status_commercial)) return booking;
+  if (new Date(booking.quote_expires_at) >= new Date()) return booking;
+
+  await supabase.from('bookings')
+    .update({ status_commercial: 'expired' })
+    .eq('id', booking.id)
+    .in('status_commercial', ['awaiting_acceptance', 'awaiting_payment']);
+
+  notifyUser({
+    userId:      booking.user_id,
+    bookingId:   booking.id,
+    templateKey: 'quote_expired',
+    title:       'Solicitação expirada',
+    body:        `Sua solicitação de translado (${booking.booking_code}) expirou sem pagamento dentro do prazo. Solicite novamente.`,
+  });
+
+  return { ...booking, status_commercial: 'expired' };
+}
+
 const router = Router();
 
 // ── Schema de criação de reserva ───────────────────────
@@ -241,6 +269,7 @@ router.get('/', authenticate, async (req, res, next) => {
         total_amount, status_commercial, status_operational,
         pickup_place_name, destination_place_name,
         origin_text, destination_text,
+        is_manual_quote, quote_expires_at, user_id,
         created_at,
         booking_vehicles ( vehicle_name_snapshot, quantity, unit_price ),
         payments ( status, paid_at )
@@ -259,14 +288,17 @@ router.get('/', authenticate, async (req, res, next) => {
     const { data, error, count } = await query;
     if (error) throw error;
 
-    res.json({ data, total: count, page: Number(page), limit: Number(limit) });
+    // Checagem lazy de expiração de translado personalizado.
+    const checked = await Promise.all((data || []).map(expireBookingIfNeeded));
+
+    res.json({ data: checked, total: count, page: Number(page), limit: Number(limit) });
   } catch (err) { next(err); }
 });
 
 // ── GET /api/bookings/:id ──────────────────────────────
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('bookings')
       .select(`
         *,
@@ -286,6 +318,9 @@ router.get('/:id', authenticate, async (req, res, next) => {
     if (req.user.user_type === 'tourist' && data.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Sem permissão' });
     }
+
+    // Checagem lazy de expiração de translado personalizado.
+    data = await expireBookingIfNeeded(data);
 
     // Adiciona link do Maps se tiver coordenadas
     if (data.pickup_latitude && data.destination_latitude) {
@@ -373,6 +408,72 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
           : 'Cancelamento fora do prazo. Sujeito a análise de reembolso pela operação.',
       },
     });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/bookings/:id/reject ─────────────────────
+// Turista recusa o PREÇO de um translado personalizado já cotado pela
+// cooperativa (status_commercial='awaiting_payment', is_manual_quote=true).
+// Semanticamente distinto de /cancel: aqui o turista não desistiu do
+// serviço, só não aceitou o valor. Só é permitido antes do pagamento.
+//
+// `status_commercial='rejected'` (migration 039 — DBA) já existe no enum,
+// então o UPDATE grava o estado real direto, sem workaround de prefixo em
+// cancel_reason.
+router.post('/:id/reject', authenticate, async (req, res, next) => {
+  try {
+    const { reason } = req.body || {};
+
+    const { data: booking, error: findErr } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (findErr || !booking) return res.status(404).json({ error: 'Reserva não encontrada' });
+
+    // Só o próprio turista recusa o preço da própria solicitação.
+    if (booking.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Sem permissão' });
+    }
+
+    if (!booking.is_manual_quote) {
+      return res.status(400).json({ error: 'Esta reserva não tem um preço cotado para recusar' });
+    }
+
+    if (booking.status_commercial !== 'awaiting_payment') {
+      return res.status(409).json({
+        error: booking.status_commercial === 'awaiting_acceptance'
+          ? 'Ainda não há preço cotado para recusar — use cancelar para desistir da solicitação'
+          : 'Esta cotação não pode mais ser recusada (já paga, cancelada, expirada ou concluída)',
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('bookings')
+      .update({
+        status_commercial:  'rejected',
+        status_operational: 'cancelled',
+        cancel_reason:       reason || null,
+        cancelled_at:        new Date().toISOString(),
+      })
+      .eq('id', req.params.id)
+      .eq('user_id', req.user.id)
+      .eq('status_commercial', 'awaiting_payment')
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(409).json({ error: 'Esta cotação não pode mais ser recusada' });
+
+    notifyOperatorsAndAdmin({
+      bookingId:   booking.id,
+      templateKey: 'quote_rejected',
+      title:       'Cotação recusada pelo cliente',
+      body:        `O cliente recusou o preço cotado para o translado ${booking.booking_code}.${reason ? ` Motivo: ${reason}` : ''}`,
+    });
+
+    res.json({ booking: data });
   } catch (err) { next(err); }
 });
 

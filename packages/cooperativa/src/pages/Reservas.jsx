@@ -1,21 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarCheck, Users, MapPin, Car, CheckCircle2,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
-  DollarSign, Send, Clock,
+  DollarSign, Clock, Hourglass, Pencil,
 } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }
-
-function fmtQuoteDate(s) {
-  try { return format(parseISO(s), "dd/MM 'às' HH:mm", { locale: ptBR }) } catch { return s }
-}
 
 function timeAgo(isoDate) {
   const diff = Math.floor((Date.now() - new Date(isoDate)) / 1000)
@@ -24,13 +18,23 @@ function timeAgo(isoDate) {
   return `${Math.floor(diff / 3600)}h atrás`
 }
 
-function WhatsAppIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2.546 20.2A1 1 0 0 0 3.8 21.454l3.032-.892A9.957 9.957 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.966 7.966 0 0 1-4.229-1.206l-.294-.18-2.456.722.722-2.456-.18-.294A7.966 7.966 0 0 1 4.357 12c0-4.271 3.372-7.643 7.643-7.643S19.643 7.729 19.643 12 16.271 19.643 12 19.643z" />
-    </svg>
-  )
+// Hora-alvo absoluta (ex.: "14:30") derivada de quote_expires_at, com o tempo
+// restante como complemento — mesmo padrão usado no app turista.
+function fmtAbsoluteTime(iso) {
+  if (!iso) return null
+  try {
+    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  } catch { return null }
+}
+
+function fmtRemaining(iso) {
+  if (!iso) return null
+  const ms = new Date(iso).getTime() - Date.now()
+  if (!Number.isFinite(ms) || ms <= 0) return null
+  const totalMin = Math.floor(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return h > 0 ? `faltam ${h}h${String(m).padStart(2, '0')}min` : `faltam ${Math.max(m, 1)}min`
 }
 
 function buildConfirmMsg(b) {
@@ -62,10 +66,6 @@ function buildConfirmMsg(b) {
   return encodeURIComponent(lines)
 }
 
-function buildWhatsAppMsg(b) {
-  return buildConfirmMsg(b)
-}
-
 // ── Toast simples ─────────────────────────────────────────
 function Toast({ message, type = 'info', onClose }) {
   useEffect(() => {
@@ -84,18 +84,26 @@ function Toast({ message, type = 'info', onClose }) {
   )
 }
 
-// ── Card de corrida disponível ────────────────────────────
-function PendingCard({ booking, onAccept, accepting }) {
+// ── Card de corrida disponível (normal OU translado personalizado) ────────
+function PendingCard({ booking, onAccept, onOpenPricing, accepting }) {
   const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
   const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
+  const isManualQuote = !!booking.is_manual_quote
+  const targetTime  = fmtAbsoluteTime(booking.quote_expires_at)
+  const remaining    = fmtRemaining(booking.quote_expires_at)
+  const route = (booking.pickup_place_name || booking.origin_text)
+    ? `${booking.pickup_place_name || booking.origin_text}${(booking.destination_place_name || booking.destination_text) ? ` → ${booking.destination_place_name || booking.destination_text}` : ''}`
+    : null
 
   return (
-    <div className="bg-white rounded-2xl border-2 border-brand/20 shadow-sm overflow-hidden">
+    <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${isManualQuote ? 'border-blue-200' : 'border-brand/20'}`}>
       {/* Header urgência */}
-      <div className="bg-brand/5 px-4 py-2 flex items-center justify-between border-b border-brand/10">
+      <div className={`px-4 py-2 flex items-center justify-between border-b ${isManualQuote ? 'bg-blue-50 border-blue-100' : 'bg-brand/5 border-brand/10'}`}>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-          <span className="text-[11px] font-bold text-brand uppercase tracking-wide">Nova solicitação</span>
+          <div className={`w-2 h-2 rounded-full animate-pulse ${isManualQuote ? 'bg-blue-500' : 'bg-brand'}`} />
+          <span className={`text-[11px] font-bold uppercase tracking-wide ${isManualQuote ? 'text-blue-600' : 'text-brand'}`}>
+            {isManualQuote ? 'Translado personalizado' : 'Nova solicitação'}
+          </span>
         </div>
         <span className="text-[11px] text-gray-400">{timeAgo(booking.created_at)}</span>
       </div>
@@ -106,6 +114,11 @@ function PendingCard({ booking, onAccept, accepting }) {
           <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">{type}</span>
           <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">{mode}</span>
         </div>
+
+        {/* Cliente */}
+        {(booking.users?.full_name) && (
+          <p className="text-[13px] font-semibold text-gray-900">{booking.users.full_name}</p>
+        )}
 
         {/* Detalhes */}
         <div className="space-y-1.5">
@@ -122,41 +135,70 @@ function PendingCard({ booking, onAccept, accepting }) {
             <Users size={13} className="text-gray-400 shrink-0" />
             <span>{booking.people_count} {booking.people_count === 1 ? 'pessoa' : 'pessoas'}</span>
           </div>
-          {booking.origin_text && (
+          {route && (
             <div className="flex items-start gap-2 text-[13px] text-gray-700">
               <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
-              <span className="truncate">
-                {booking.origin_text}
-                {booking.destination_text ? ` → ${booking.destination_text}` : ''}
-              </span>
+              <span className="truncate">{route}</span>
             </div>
+          )}
+          {booking.luggage_count != null && (
+            <div className="flex items-center gap-2 text-[13px] text-gray-700">
+              <span className="text-gray-400 text-[11px] font-semibold uppercase tracking-wide">Bagagens</span>
+              <span>{booking.luggage_count}</span>
+            </div>
+          )}
+          {booking.special_notes && (
+            <p className="text-[12px] text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">“{booking.special_notes}”</p>
           )}
         </div>
 
-        {/* Valor + botão */}
-        <div className="flex items-center justify-between pt-1 border-t border-gray-100 gap-3">
-          <div>
-            <p className="text-[11px] text-gray-400">Valor da reserva</p>
-            <p className="text-[20px] font-extrabold text-brand">{fmt(booking.total_amount)}</p>
-          </div>
-          <button
-            onClick={() => onAccept(booking.id)}
-            disabled={accepting}
-            className="flex items-center gap-2 bg-brand text-white font-bold px-5 py-3 rounded-2xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-brand/30"
-          >
-            {accepting
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aceitando…</>
-              : <><Zap size={15} /> Aceitar</>}
-          </button>
-        </div>
-        {booking.status_commercial === 'awaiting_acceptance' ? (
-          <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
-            <AlertCircle size={11} className="shrink-0" /> O cliente paga depois que você aceitar.
-          </p>
+        {isManualQuote ? (
+          <>
+            {/* Prazo de resposta */}
+            {targetTime && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                <Hourglass size={13} className="text-amber-600 shrink-0" />
+                <p className="text-[12px] text-amber-700 font-medium">
+                  Responda até {targetTime}{remaining ? ` · ${remaining}` : ''}
+                </p>
+              </div>
+            )}
+            <button
+              onClick={() => onOpenPricing(booking)}
+              disabled={accepting}
+              className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 min-h-[44px] rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-brand/30"
+            >
+              <DollarSign size={16} /> Aceitar e precificar
+            </button>
+          </>
         ) : (
-          <p className="text-[11px] text-emerald-600 flex items-center gap-1.5">
-            <CheckCircle2 size={11} className="shrink-0" /> Pagamento já realizado pelo cliente.
-          </p>
+          <div className="flex items-center justify-between pt-1 border-t border-gray-100 gap-3">
+            <div>
+              <p className="text-[11px] text-gray-400">Valor da reserva</p>
+              <p className="text-[20px] font-extrabold text-brand">{fmt(booking.total_amount)}</p>
+            </div>
+            <button
+              onClick={() => onAccept(booking.id)}
+              disabled={accepting}
+              className="flex items-center gap-2 bg-brand text-white font-bold px-5 py-3 min-h-[44px] rounded-2xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-brand/30"
+            >
+              {accepting
+                ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aceitando…</>
+                : <><Zap size={15} /> Aceitar</>}
+            </button>
+          </div>
+        )}
+
+        {!isManualQuote && (
+          booking.status_commercial === 'awaiting_acceptance' ? (
+            <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+              <AlertCircle size={11} className="shrink-0" /> O cliente paga depois que você aceitar.
+            </p>
+          ) : (
+            <p className="text-[11px] text-emerald-600 flex items-center gap-1.5">
+              <CheckCircle2 size={11} className="shrink-0" /> Pagamento já realizado pelo cliente.
+            </p>
+          )
         )}
       </div>
     </div>
@@ -164,7 +206,7 @@ function PendingCard({ booking, onAccept, accepting }) {
 }
 
 // ── Card de corrida aceita (minhas) ───────────────────────
-function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
+function MyCard({ booking, onConfirm, onStart, onComplete, onOpenRepricing, busy }) {
   const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
   const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
   const clientPhone = booking.users?.phone
@@ -172,6 +214,10 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   const waNumber    = clientPhone ? `55${clientPhone.replace(/\D/g, '')}` : null
   const isSending   = busy
   const isPaid      = booking.status_commercial === 'paid'
+  const isManualQuote = !!booking.is_manual_quote
+  const canReprice  = isManualQuote && booking.status_commercial === 'awaiting_payment'
+  const targetTime  = fmtAbsoluteTime(booking.quote_expires_at)
+  const remaining   = fmtRemaining(booking.quote_expires_at)
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -193,6 +239,9 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
         <div className="flex items-center gap-2">
           <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">{type}</span>
           <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">{mode}</span>
+          {isManualQuote && (
+            <span className="bg-blue-50 text-blue-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Personalizado</span>
+          )}
         </div>
 
         {/* Cliente */}
@@ -237,12 +286,34 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
               </span>
             </div>
           )}
+          {booking.quote_notes && (
+            <p className="text-[12px] text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">“{booking.quote_notes}”</p>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-[13px]">
           <span className="text-gray-400">Valor</span>
-          <span className="font-bold text-brand">{fmt(booking.total_amount)}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-brand">{fmt(booking.total_amount)}</span>
+            {canReprice && (
+              <button
+                onClick={() => onOpenRepricing(booking)}
+                className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg active:scale-95 transition-transform"
+              >
+                <Pencil size={11} /> Corrigir
+              </button>
+            )}
+          </div>
         </div>
+
+        {canReprice && targetTime && (
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+            <Hourglass size={13} className="text-amber-600 shrink-0" />
+            <p className="text-[12px] text-amber-700 font-medium">
+              Cliente paga até {targetTime}{remaining ? ` · ${remaining}` : ''}
+            </p>
+          </div>
+        )}
 
         {/* Ações da corrida */}
         <div className="pt-1 border-t border-gray-100 space-y-2">
@@ -262,7 +333,7 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
             <button
               onClick={() => onComplete(booking)}
               disabled={isSending}
-              className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white font-bold py-3 min-h-[44px] rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60"
             >
               {isSending
                 ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -273,7 +344,7 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
               <button
                 onClick={() => onConfirm(booking)}
                 disabled={isSending}
-                className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-green-500/20"
+                className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold py-3 min-h-[44px] rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-green-500/20"
               >
                 {isSending
                   ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -282,7 +353,7 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
               <button
                 onClick={() => onStart(booking)}
                 disabled={isSending}
-                className="w-full flex items-center justify-center gap-2 bg-brand/10 hover:bg-brand/20 text-brand font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-all disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 bg-brand/10 hover:bg-brand/20 text-brand font-bold py-2.5 min-h-[44px] rounded-xl text-[13px] active:scale-95 transition-all disabled:opacity-60"
               >
                 <Zap size={15} /> Iniciar corrida
               </button>
@@ -299,96 +370,129 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   )
 }
 
-// ── Card de cotação (rota personalizada) ──────────────────
-function QuoteRequestCard({ quote, onQuote }) {
-  const name   = quote.client_name || quote.users?.full_name || quote.user_name || 'Cliente'
-  const origin = quote.origin_place_name || quote.origin_description || '—'
-  const dest   = quote.destination_place_name || quote.destination_description || '—'
-  const notes  = quote.special_notes || quote.client_notes
-  const ppl    = quote.people_count || quote.passengers
-  const isQuoted = quote.status === 'quoted'
+// ── Modal: aceitar e precificar / corrigir preço ──────────
+function PricingModal({ open, booking, mode, onClose, onSubmit, loading, error }) {
+  const [price, setPrice] = useState('')
+  const [notes, setNotes] = useState('')
+  const [confirmStep, setConfirmStep] = useState(false)
+
+  useEffect(() => {
+    if (open && booking) {
+      setPrice(booking.total_amount ? String(booking.total_amount) : '')
+      setNotes(booking.quote_notes || '')
+      setConfirmStep(false)
+    }
+  }, [open, booking])
+
+  if (!booking) return null
+  const priceNum = Number(price)
+  const isValid  = price !== '' && !isNaN(priceNum) && priceNum > 0
+  const route = (booking.pickup_place_name || booking.origin_text)
+    ? `${booking.pickup_place_name || booking.origin_text}${(booking.destination_place_name || booking.destination_text) ? ` → ${booking.destination_place_name || booking.destination_text}` : ''}`
+    : '—'
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!isValid) return
+    setConfirmStep(true)
+  }
 
   return (
-    <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${isQuoted ? 'border-blue-100' : 'border-brand/20'}`}>
-      <div className={`px-4 py-2 flex items-center justify-between border-b ${isQuoted ? 'bg-blue-50 border-blue-100' : 'bg-brand/5 border-brand/10'}`}>
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isQuoted ? 'bg-blue-400' : 'bg-brand animate-pulse'}`} />
-          <span className={`text-[11px] font-bold uppercase tracking-wide ${isQuoted ? 'text-blue-600' : 'text-brand'}`}>
-            {isQuoted ? 'Aguardando cliente' : 'Nova cotação'}
-          </span>
-        </div>
-        <span className="text-[11px] text-gray-400">{timeAgo(quote.created_at)}</span>
-      </div>
-
-      <div className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">Transfer</span>
-          <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Translado personalizado</span>
-        </div>
-
-        <div className="bg-gray-50 rounded-xl px-3 py-2">
-          <p className="text-[11px] text-gray-400">Cliente</p>
-          <p className="text-[14px] font-bold text-gray-900">{name}</p>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-start gap-2 text-[13px] text-gray-700">
-            <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
-            <span>{origin} → {dest}</span>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={mode === 'reprice' ? 'Corrigir valor da corrida' : 'Aceitar e precificar'}
+      size="sm"
+    >
+      {!confirmStep ? (
+        <div className="space-y-4">
+          <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+            <p className="font-medium text-gray-900">{booking.users?.full_name || 'Cliente'}</p>
+            <p className="text-gray-500">{route}</p>
+            <p className="text-gray-500">
+              {booking.service_date}{booking.service_time ? ` ${booking.service_time.slice(0, 5)}` : ''} · {booking.people_count} pax
+            </p>
           </div>
-          <div className="flex items-center gap-4 text-[13px] text-gray-700">
-            <span className="flex items-center gap-1.5">
-              <CalendarCheck size={13} className="text-gray-400" />
-              {quote.service_date}{quote.service_time ? ` ${quote.service_time.slice(0, 5)}` : ''}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Users size={13} className="text-gray-400" />
-              {ppl} pax
-            </span>
-          </div>
-        </div>
 
-        {notes && (
-          <p className="text-[12px] text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">“{notes}”</p>
-        )}
-
-        <div className="pt-1 border-t border-gray-100">
-          {isQuoted ? (
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] text-gray-400">Valor enviado</p>
-                <p className="text-[18px] font-extrabold text-blue-600">{fmt(quote.quoted_price)}</p>
-              </div>
-              {quote.expires_at && (
-                <div className="text-right text-[11px] text-gray-400">
-                  <p>Expira</p>
-                  <p>{fmtQuoteDate(quote.expires_at)}</p>
-                </div>
-              )}
-            </div>
-          ) : (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <Input
+              label="Valor da corrida (R$)"
+              type="number"
+              inputMode="decimal"
+              min="1"
+              step="0.01"
+              placeholder="0,00"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              required
+              autoFocus
+            />
+            <Textarea
+              label="Observações para o cliente (opcional)"
+              rows={2}
+              placeholder="Inclui bagagem, ar-condicionado…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            {!isValid && (
+              <p className="text-[12px] text-gray-400">Informe o valor para aceitar</p>
+            )}
+            {error && <p className="text-[12px] text-red-500">{error}</p>}
             <button
-              onClick={() => onQuote(quote)}
-              className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all shadow-md shadow-brand/30"
+              type="submit"
+              disabled={!isValid}
+              className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 min-h-[44px] rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-40"
             >
-              <DollarSign size={16} /> Enviar valor da corrida
+              <DollarSign size={16} /> {mode === 'reprice' ? 'Revisar correção' : 'Revisar e confirmar'}
             </button>
-          )}
+          </form>
         </div>
-      </div>
-    </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
+            <p className="text-[12px] text-blue-600 font-semibold uppercase tracking-wide mb-1">
+              {mode === 'reprice' ? 'Novo valor' : 'Valor a enviar ao cliente'}
+            </p>
+            <p className="text-[28px] font-extrabold text-blue-700">{fmt(priceNum)}</p>
+            {notes && <p className="text-[12px] text-blue-500 italic mt-2">“{notes}”</p>}
+          </div>
+          <p className="text-[12px] text-gray-500 text-center">
+            {mode === 'reprice'
+              ? 'O cliente verá o novo valor. Confirma a correção?'
+              : 'Ao confirmar, você assume esta corrida e o cliente poderá pagar este valor.'}
+          </p>
+          {error && <p className="text-[12px] text-red-500 text-center">{error}</p>}
+          <div className="flex gap-3">
+            <button
+              onClick={() => setConfirmStep(false)}
+              className="flex-1 min-h-[44px] border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 active:scale-95 transition-transform"
+            >
+              Voltar
+            </button>
+            <button
+              onClick={() => onSubmit({ quoted_price: priceNum, quote_notes: notes || null })}
+              disabled={loading}
+              className="flex-1 min-h-[44px] bg-brand text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
+            >
+              {loading
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <CheckCircle2 size={16} />}
+              {mode === 'reprice' ? 'Confirmar correção' : 'Confirmar aceite'}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
 // ── Página principal ──────────────────────────────────────
 export default function Reservas() {
-  const [tab,        setTab]       = useState('pending')
-  const [toast,      setToast]     = useState(null)
-  const [accepting,  setAccepting] = useState(null)
-  const [confirming, setConfirming]= useState(null)
-  const [quoteModal, setQuoteModal]= useState(null)
-  const [price,      setPrice]     = useState('')
-  const [notes,      setNotes]     = useState('')
+  const [tab,       setTab]      = useState('pending')
+  const [toast,     setToast]    = useState(null)
+  const [accepting, setAccepting]= useState(null)
+  const [confirming,setConfirming]= useState(null)
+  const [pricingModal, setPricingModal] = useState(null) // { booking, mode: 'accept' | 'reprice' }
   const queryClient = useQueryClient()
 
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -398,46 +502,26 @@ export default function Reservas() {
     staleTime:       3000,
   })
 
-  // Cotações de rota personalizada (mesma tela das corridas) —
-  // a view v_quotes_dashboard já traz todas as cotações ativas (não pagas/canceladas)
-  const { data: pendingQuotesRaw } = useQuery({
-    queryKey:        ['quotes-pending'],
-    queryFn:         () => api.getPendingQuotes(),
-    refetchInterval: 20000,
-  })
-  const { data: quotesHistoryRaw } = useQuery({
-    queryKey: ['quotes-history'],
-    queryFn:  () => api.getQuotesHistory(),
-  })
-
   const pending = data?.pending || []
   const mine    = data?.mine    || []
-  // A view /quotes/pending traz TODAS as cotações não-pagas (pending, quoted,
-  // accepted...). Aqui mantemos só as que a cooperativa ainda precisa cotar —
-  // senão as já respondidas/aceitas reaparecem com o botão (duplicando e dando
-  // erro "já respondida"). As 'quoted' vêm da seção de histórico abaixo.
-  const pendingQuotes = (Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || []))
-    .filter((q) => q.status === 'pending_quote')
-  const quotedQuotes  = (Array.isArray(quotesHistoryRaw) ? quotesHistoryRaw : (quotesHistoryRaw?.data || []))
-    .filter((q) => q.status === 'quoted')
 
-  const setQuoteMut = useMutation({
-    mutationFn: ({ id, quoted_price, quote_notes }) =>
-      api.setQuotePrice(id, { quoted_price: Number(quoted_price), quote_notes }),
+  const acceptMut = useMutation({
+    mutationFn: ({ id, body }) => api.acceptBooking(id, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
-      setQuoteModal(null); setPrice(''); setNotes('')
-      setToast({ message: 'Cotação enviada ao cliente!', type: 'success' })
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setPricingModal(null)
+      setToast({ message: 'Reserva aceita! Aguardando o cliente pagar.', type: 'success' })
+      setTab('mine')
     },
-    onError: (err) => setToast({ message: err.message || 'Erro ao enviar cotação', type: 'error' }),
+    onError: (err) => setToast({ message: err.message || 'Erro ao aceitar corrida', type: 'error' }),
   })
 
-  function openQuoteModal(quote) { setQuoteModal(quote); setPrice(''); setNotes('') }
+  function openPricingModal(booking) { setPricingModal({ booking, mode: 'accept' }) }
+  function openRepricingModal(booking) { setPricingModal({ booking, mode: 'reprice' }) }
 
-  function submitQuote(e) {
-    e.preventDefault()
-    if (!price || isNaN(Number(price)) || Number(price) <= 0) return
-    setQuoteMut.mutate({ id: quoteModal.id, quoted_price: price, quote_notes: notes })
+  function submitPricing(body) {
+    if (!pricingModal) return
+    acceptMut.mutate({ id: pricingModal.booking.id, body })
   }
 
   async function handleAccept(bookingId) {
@@ -518,19 +602,13 @@ export default function Reservas() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Corridas</h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            {pending.length === 0 && pendingQuotes.length === 0
+            {pending.length === 0
               ? 'Nenhuma solicitação no momento'
-              : [
-                  pending.length > 0 ? `${pending.length} corrida${pending.length > 1 ? 's' : ''} disponível${pending.length > 1 ? 'is' : ''}` : null,
-                  pendingQuotes.length > 0 ? `${pendingQuotes.length} cotaç${pendingQuotes.length > 1 ? 'ões' : 'ão'} a responder` : null,
-                ].filter(Boolean).join(' · ')}
+              : `${pending.length} corrida${pending.length > 1 ? 's' : ''} disponível${pending.length > 1 ? 'is' : ''}`}
           </p>
         </div>
         <button
-          onClick={() => {
-            refetch()
-            queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
-          }}
+          onClick={() => refetch()}
           disabled={isFetching}
           className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors active:scale-95"
         >
@@ -541,21 +619,19 @@ export default function Reservas() {
       {/* Tabs */}
       <div className="flex bg-gray-100 rounded-xl p-1 mb-5">
         {[
-          { key: 'pending',  label: 'Disponíveis',     short: 'Disponíveis', count: pending.length },
-          { key: 'cotacoes', label: 'Cotações',        short: 'Cotações',    count: pendingQuotes.length },
-          { key: 'mine',     label: 'Minhas corridas', short: 'Minhas',      count: mine.length },
+          { key: 'pending', label: 'Disponíveis',     count: pending.length },
+          { key: 'mine',    label: 'Minhas corridas', count: mine.length },
         ].map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[13px] font-semibold whitespace-nowrap transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1 min-h-[44px] rounded-lg text-[13px] font-semibold whitespace-nowrap transition-all ${
               tab === t.key
                 ? 'bg-white shadow-sm text-gray-900'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span className="sm:hidden">{t.short}</span>
-            <span className="hidden sm:inline">{t.label}</span>
+            {t.label}
             {t.count > 0 && (
               <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
                 tab === t.key
@@ -588,33 +664,10 @@ export default function Reservas() {
                 key={b.id}
                 booking={b}
                 onAccept={handleAccept}
+                onOpenPricing={openPricingModal}
                 accepting={accepting === b.id}
               />
             ))}
-          </div>
-        )
-      ) : tab === 'cotacoes' ? (
-        pendingQuotes.length === 0 && quotedQuotes.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <DollarSign size={40} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">Nenhuma cotação no momento</p>
-            <p className="text-xs mt-1">Pedidos de translado personalizado aparecerão aqui</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {pendingQuotes.map((q) => (
-              <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
-            ))}
-            {quotedQuotes.length > 0 && (
-              <>
-                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide pt-2">
-                  Aguardando resposta do cliente
-                </p>
-                {quotedQuotes.map((q) => (
-                  <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
-                ))}
-              </>
-            )}
           </div>
         )
       ) : (
@@ -633,6 +686,7 @@ export default function Reservas() {
                 onConfirm={handleConfirm}
                 onStart={handleStart}
                 onComplete={handleComplete}
+                onOpenRepricing={openRepricingModal}
                 busy={confirming === b.id}
               />
             ))}
@@ -649,52 +703,16 @@ export default function Reservas() {
         />
       )}
 
-      {/* Modal: definir valor da cotação */}
-      <Modal open={!!quoteModal} onClose={() => setQuoteModal(null)} title="Definir valor da corrida" size="sm">
-        {quoteModal && (
-          <div className="space-y-4">
-            <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-              <p className="font-medium text-gray-900">
-                {quoteModal.client_name || quoteModal.users?.full_name || quoteModal.user_name || 'Cliente'}
-              </p>
-              <p className="text-gray-500">
-                {(quoteModal.origin_place_name || quoteModal.origin_description)} → {(quoteModal.destination_place_name || quoteModal.destination_description)}
-              </p>
-              <p className="text-gray-500">
-                {quoteModal.service_date}{quoteModal.service_time ? ` ${quoteModal.service_time.slice(0, 5)}` : ''} · {quoteModal.people_count || quoteModal.passengers} pax
-              </p>
-            </div>
-
-            <form onSubmit={submitQuote} className="space-y-3">
-              <Input
-                label="Valor da corrida (R$)"
-                type="number"
-                min="1"
-                step="0.01"
-                placeholder="0,00"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                required
-                autoFocus
-              />
-              <Textarea
-                label="Observações para o cliente"
-                rows={2}
-                placeholder="Inclui bagagem, ar-condicionado…"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-              <button
-                type="submit"
-                disabled={setQuoteMut.isPending}
-                className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60"
-              >
-                <Send size={16} /> {setQuoteMut.isPending ? 'Enviando…' : 'Enviar cotação ao cliente'}
-              </button>
-            </form>
-          </div>
-        )}
-      </Modal>
+      {/* Modal: aceitar e precificar / corrigir preço (translado personalizado) */}
+      <PricingModal
+        open={!!pricingModal}
+        booking={pricingModal?.booking}
+        mode={pricingModal?.mode}
+        onClose={() => { setPricingModal(null); acceptMut.reset() }}
+        onSubmit={submitPricing}
+        loading={acceptMut.isPending}
+        error={acceptMut.error?.message}
+      />
     </div>
   )
 }
