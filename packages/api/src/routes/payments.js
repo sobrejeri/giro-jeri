@@ -84,6 +84,35 @@ function nullToUndefined(obj) {
   return out
 }
 
+// Insere as linhas de booking_vehicles com snapshot de nome/capacidade do
+// veículo (colunas NOT NULL na tabela) e propaga erro em vez de engolir.
+async function insertBookingVehicles(bookingId, vehicles) {
+  const ids = vehicles.map((v) => v.vehicle_id)
+  const { data: vehicleRows = [], error: vErr } = await supabase
+    .from('vehicles')
+    .select('id, name, seat_capacity')
+    .in('id', ids)
+  if (vErr) throw vErr
+  const byId = new Map(vehicleRows.map((v) => [v.id, v]))
+
+  const rows = vehicles.map((v) => {
+    const vehicle = byId.get(v.vehicle_id)
+    const quantity = v.qty || 1
+    const unitPrice = v.unit_price || 0
+    return {
+      booking_id:                bookingId,
+      vehicle_id:                v.vehicle_id,
+      vehicle_name_snapshot:     vehicle?.name || 'Veículo',
+      vehicle_capacity_snapshot: vehicle?.seat_capacity || 1,
+      quantity,
+      unit_price:                unitPrice,
+      total_price:               unitPrice * quantity,
+    }
+  })
+  const { error } = await supabase.from('booking_vehicles').insert(rows)
+  if (error) throw error
+}
+
 async function getPaymentSettings() {
   const { data = [] } = await supabase
     .from('system_settings')
@@ -277,13 +306,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
       // ── 4. Insere veículos da reserva ──────────────────
       if (vehicles.length > 0) {
-        const vRows = vehicles.map((v) => ({
-          booking_id:  booking.id,
-          vehicle_id:  v.vehicle_id,
-          quantity:    v.qty || 1,
-          unit_price:  v.unit_price || 0,
-        }))
-        await supabase.from('booking_vehicles').insert(vRows)
+        await insertBookingVehicles(booking.id, vehicles)
       }
     }
 
@@ -543,12 +566,7 @@ router.post('/request', authenticate, async (req, res, next) => {
     if (bErr) throw bErr
 
     if (vehicles.length > 0) {
-      await supabase.from('booking_vehicles').insert(vehicles.map((v) => ({
-        booking_id: booking.id,
-        vehicle_id: v.vehicle_id,
-        quantity:   v.qty || 1,
-        unit_price: v.unit_price || 0,
-      })))
+      await insertBookingVehicles(booking.id, vehicles)
     }
 
     // Notifica as cooperativas da nova solicitação (ANTES do pagamento) —
