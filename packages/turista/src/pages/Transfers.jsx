@@ -5,7 +5,6 @@ import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { api }         from '../lib/api'
 import TransfersDesktop from './TransfersDesktop'
-import { loadGoogleMaps } from '../components/GoogleMap'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
@@ -16,9 +15,7 @@ import {
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-/* ── Place Autocomplete (Google Maps / Nominatim fallback) ───── */
-const JERI_LL = { lat: -2.7976, lng: -40.5147 }
-
+/* ── Place Autocomplete (via API proxy → Google Places) ───── */
 function usePlaceSuggestions(query) {
   const [results,  setResults]  = useState([])
   const [loading,  setLoading]  = useState(false)
@@ -30,49 +27,15 @@ function usePlaceSuggestions(query) {
     timerRef.current = setTimeout(async () => {
       setLoading(true)
       try {
-        if (import.meta.env.VITE_GOOGLE_MAPS_KEY) {
-          const maps = await loadGoogleMaps()
-          const svc = new maps.places.AutocompleteService()
-          svc.getPlacePredictions({
-            input: query,
-            componentRestrictions: { country: 'br' },
-            location: new maps.LatLng(JERI_LL.lat, JERI_LL.lng),
-            radius: 150000,
-          }, (predictions, status) => {
-            setLoading(false)
-            if (status !== 'OK' || !predictions) { setResults([]); return }
-            setResults(predictions.map(p => ({
-              id:          p.place_id,
-              label:       p.structured_formatting.main_text,
-              sublabel:    p.structured_formatting.secondary_text || '',
-              full:        p.description,
-              lat:         null,
-              lon:         null,
-              _source:     'google',
-            })))
-          })
-          return
-        }
-      } catch { /* fallback below */ }
-      // Fallback: Nominatim
-      try {
-        const params = new URLSearchParams({
-          q: query, format: 'json', limit: '6', addressdetails: '1',
-          countrycodes: 'br', 'accept-language': 'pt-BR',
-          viewbox: '-41.5,-3.8,-39.5,-2.0', bounded: '0',
-        })
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-          headers: { 'User-Agent': 'GiroJeri/1.0' },
-        })
-        const data = await res.json()
-        setResults(data.map(p => ({
-          id:      p.place_id,
-          label:   p.display_name.split(',').slice(0, 2).join(', '),
-          sublabel: p.display_name.split(',').slice(2, 4).join(',').trim(),
-          full:    p.display_name,
-          lat:     parseFloat(p.lat),
-          lon:     parseFloat(p.lon),
-          _source: 'nominatim',
+        const data = await api.placesAutocomplete(query)
+        setResults((data?.predictions || []).map((p) => ({
+          id:       p.id,
+          label:    p.label,
+          sublabel: p.sublabel || '',
+          full:     p.full,
+          lat:      p.lat ?? null,
+          lon:      p.lon ?? null,
+          _source:  p.source,
         })))
       } catch { setResults([]) }
       setLoading(false)
@@ -83,25 +46,11 @@ function usePlaceSuggestions(query) {
   return { results, loading }
 }
 
-// Resolve coordenadas/endereço de um place_id do Google (Places Details).
-// Necessário porque AutocompleteService só devolve previsões textuais.
+// Resolve coordenadas/endereço de um place_id via proxy do backend.
 async function resolvePlaceDetails(placeId) {
   try {
-    const maps = await loadGoogleMaps()
-    return await new Promise((resolve) => {
-      const svc = new maps.places.PlacesService(document.createElement('div'))
-      svc.getDetails(
-        { placeId, fields: ['geometry', 'formatted_address', 'name'] },
-        (place, status) => {
-          if (status !== 'OK' || !place?.geometry?.location) { resolve(null); return }
-          resolve({
-            lat:     place.geometry.location.lat(),
-            lon:     place.geometry.location.lng(),
-            address: place.formatted_address || place.name || null,
-          })
-        },
-      )
-    })
+    const data = await api.placeDetails(placeId)
+    return data?.details || null
   } catch { return null }
 }
 

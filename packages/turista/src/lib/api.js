@@ -113,6 +113,8 @@ export const api = {
   acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote:        (id, body)    => request(`/api/transfers/quotes/${id}/reject`, { method: 'POST', body }),
   cancelQuote:        (id)          => request(`/api/transfers/quotes/${id}/cancel`, { method: 'POST' }),
+  placesAutocomplete: (q)           => request(`/api/transfers/places/autocomplete?q=${encodeURIComponent(q)}`),
+  placeDetails:       (placeId)     => request(`/api/transfers/places/details?place_id=${encodeURIComponent(placeId)}`),
 
   // Pagamentos
   requestBooking:         (body) => request('/api/payments/request',     { method: 'POST', body }),
