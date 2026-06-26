@@ -118,27 +118,45 @@ router.put('/preferences/:type/:entityId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Colunas da reserva sem nenhum embed por FK — embeds dependem do PostgREST
+// resolver o relacionamento certo (schema cache, nome de constraint etc.) e já
+// se mostraram um ponto frágil. Buscamos os dados do cliente à parte e
+// juntamos em memória.
+const BOOKING_COLUMNS = `
+  id, booking_code, service_type, service_id, booking_mode, user_id,
+  service_date, service_time, people_count, total_amount, created_at,
+  origin_text, destination_text, status_commercial, status_operational
+`
+
+async function attachCustomers(bookings) {
+  const ids = [...new Set(bookings.map((b) => b.user_id).filter(Boolean))]
+  if (ids.length === 0) return bookings
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('id, full_name, phone')
+    .in('id', ids)
+  if (error) throw error
+  const byId = new Map((users || []).map((u) => [u.id, u]))
+  return bookings.map((b) => ({
+    ...b,
+    users: byId.get(b.user_id) || null,
+  }))
+}
+
 // ── GET /api/operator/bookings ─────────────────────────
 // Retorna corridas disponíveis (sem operador) + corridas do operador logado
 router.get('/bookings', async (req, res, next) => {
   try {
-    const SELECT = `
-      id, booking_code, service_type, service_id, booking_mode,
-      service_date, service_time, people_count, total_amount, created_at,
-      origin_text, destination_text, status_commercial, status_operational,
-      users!bookings_user_id_fkey ( full_name, phone )
-    `
-
     // Corridas disponíveis (sem cooperativa atribuída). Duas consultas simples e
     // explícitas em vez de um filtro .or/and aninhado (que é frágil e já deixou
     // de retornar solicitações):
     //  • awaiting_acceptance — fluxo novo: solicitadas, aguardando aceite;
     //  • paid + awaiting_dispatch — fluxo antigo / cotações já pagas.
     const [reqRes, dispRes] = await Promise.all([
-      supabase.from('bookings').select(SELECT)
+      supabase.from('bookings').select(BOOKING_COLUMNS)
         .is('operator_id', null)
         .eq('status_commercial', 'awaiting_acceptance'),
-      supabase.from('bookings').select(SELECT)
+      supabase.from('bookings').select(BOOKING_COLUMNS)
         .is('operator_id', null)
         .eq('status_commercial', 'paid')
         .eq('status_operational', 'awaiting_dispatch'),
@@ -146,22 +164,27 @@ router.get('/bookings', async (req, res, next) => {
     if (reqRes.error)  throw reqRes.error
     if (dispRes.error) throw dispRes.error
 
-    const pending = [...(reqRes.data || []), ...(dispRes.data || [])]
+    const pendingRaw = [...(reqRes.data || []), ...(dispRes.data || [])]
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
     // Minhas corridas: aceitas ou em andamento
-    const { data: mine, error: e2 } = await supabase
-      .from('bookings').select(SELECT)
+    const { data: mineRaw, error: e2 } = await supabase
+      .from('bookings').select(BOOKING_COLUMNS)
       .eq('operator_id', req.user.id)
       .in('status_operational', ['assigned', 'in_progress'])
       .order('service_date', { ascending: true })
 
     if (e2) throw e2
 
-    console.log('[operator/bookings] op=%s pending=%d (aceite=%d despacho=%d) mine=%d',
-      req.user.id, pending.length, reqRes.data?.length || 0, dispRes.data?.length || 0, mine?.length || 0)
+    const [pending, mine] = await Promise.all([
+      attachCustomers(pendingRaw),
+      attachCustomers(mineRaw || []),
+    ])
 
-    res.json({ pending, mine: mine || [] })
+    console.log('[operator/bookings] op=%s pending=%d (aceite=%d despacho=%d) mine=%d',
+      req.user.id, pending.length, reqRes.data?.length || 0, dispRes.data?.length || 0, mine.length)
+
+    res.json({ pending, mine })
   } catch (err) { next(err) }
 })
 
@@ -171,7 +194,7 @@ router.get('/bookings', async (req, res, next) => {
 // pagar. O split automático será possível porque a cooperativa já está definida.
 router.post('/bookings/:id/accept', async (req, res, next) => {
   try {
-    const SELECT = 'id, booking_code, user_id, service_type, users!bookings_user_id_fkey ( full_name, phone )'
+    const SELECT = 'id, booking_code, user_id, service_type'
 
     // Tentativa 1 — fluxo novo: solicitação aguardando aceite → vai para pagamento.
     let { data, error } = await supabase
