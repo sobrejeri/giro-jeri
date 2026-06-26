@@ -83,7 +83,29 @@ function usePlaceSuggestions(query) {
   return { results, loading }
 }
 
-export function PlaceInput({ value, onChange, placeholder, dotClass }) {
+// Resolve coordenadas/endereço de um place_id do Google (Places Details).
+// Necessário porque AutocompleteService só devolve previsões textuais.
+async function resolvePlaceDetails(placeId) {
+  try {
+    const maps = await loadGoogleMaps()
+    return await new Promise((resolve) => {
+      const svc = new maps.places.PlacesService(document.createElement('div'))
+      svc.getDetails(
+        { placeId, fields: ['geometry', 'formatted_address', 'name'] },
+        (place, status) => {
+          if (status !== 'OK' || !place?.geometry?.location) { resolve(null); return }
+          resolve({
+            lat:     place.geometry.location.lat(),
+            lon:     place.geometry.location.lng(),
+            address: place.formatted_address || place.name || null,
+          })
+        },
+      )
+    })
+  } catch { return null }
+}
+
+export function PlaceInput({ value, onChange, onPick, placeholder, dotClass }) {
   const [open, setOpen]  = useState(false)
   const wrapRef          = useRef(null)
   const { results, loading } = usePlaceSuggestions(open ? value : '')
@@ -96,6 +118,20 @@ export function PlaceInput({ value, onChange, placeholder, dotClass }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  async function handlePick(r) {
+    onChange(r.label)
+    setOpen(false)
+    if (!onPick) return
+    // Para resultados do Google, busca lat/lon via Places Details.
+    // Para Nominatim, lat/lon já vem na própria resposta.
+    let lat = r.lat, lon = r.lon, address = r.full
+    if (r._source === 'google' && r.id) {
+      const det = await resolvePlaceDetails(r.id)
+      if (det) { lat = det.lat; lon = det.lon; address = det.address || r.full }
+    }
+    onPick({ place_id: r._source === 'google' ? r.id : null, label: r.label, address, lat, lon })
+  }
+
   return (
     <div ref={wrapRef} className="relative">
       <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
@@ -103,23 +139,24 @@ export function PlaceInput({ value, onChange, placeholder, dotClass }) {
         <input
           type="text"
           value={value}
-          onChange={e => { onChange(e.target.value); setOpen(true) }}
+          onChange={e => { onChange(e.target.value); onPick?.(null); setOpen(true) }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
           className="flex-1 text-[13px] text-gray-800 bg-transparent outline-none placeholder-gray-400"
         />
-        {loading && <Loader2 size={13} className="animate-spin text-gray-400 shrink-0" />}
-        {value && !loading && (
-          <button onClick={() => { onChange(''); setOpen(false) }} className="shrink-0">
-            <X size={13} className="text-gray-400" />
-          </button>
-        )}
+        {loading
+          ? <Loader2 size={13} className="animate-spin text-gray-400 shrink-0" />
+          : value
+            ? <button onClick={() => { onChange(''); onPick?.(null); setOpen(false) }} className="shrink-0">
+                <X size={13} className="text-gray-400" />
+              </button>
+            : <Search size={13} className="text-gray-400 shrink-0" />}
       </div>
 
       {open && results.length > 0 && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
           {results.map(r => (
-            <button key={r.id} onClick={() => { onChange(r.label); setOpen(false) }}
+            <button key={r.id} onClick={() => handlePick(r)}
               className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0"
             >
               <MapPin size={13} className="text-brand shrink-0 mt-0.5" />
@@ -357,6 +394,11 @@ export default function Transfers() {
   // Custom ride state
   const [customOrigin,   setCustomOrigin]   = useState('')
   const [customDest,     setCustomDest]     = useState('')
+  // Metadados do place picado (place_id + coordenadas) — quando o usuário escolhe
+  // um item da busca do Maps, guardamos pra mandar para a cooperativa junto da
+  // solicitação. Se digitar livre sem selecionar, segue só com o texto mesmo.
+  const [customOriginMeta, setCustomOriginMeta] = useState(null)
+  const [customDestMeta,   setCustomDestMeta]   = useState(null)
   const [customDate,     setCustomDate]     = useState(startOfDay(new Date()))
   const [customTime,     setCustomTime]     = useState('08:00')
   const [customPeople,   setCustomPeople]   = useState(2)
@@ -373,14 +415,22 @@ export default function Transfers() {
     setCustomError('')
     try {
       await api.requestQuote({
-        region_id:              region?.id || '',
-        origin_place_name:      customOrigin.trim(),
-        destination_place_name: customDest.trim(),
-        service_date:           format(customDate, 'yyyy-MM-dd'),
-        service_time:           customTime,
-        people_count:           customPeople,
-        luggage_count:          0,
-        special_notes:          customNotes.trim() || undefined,
+        region_id:                region?.id || '',
+        origin_place_name:        customOrigin.trim(),
+        origin_place_id:          customOriginMeta?.place_id || undefined,
+        origin_latitude:          customOriginMeta?.lat ?? undefined,
+        origin_longitude:         customOriginMeta?.lon ?? undefined,
+        origin_address_text:      customOriginMeta?.address || undefined,
+        destination_place_name:   customDest.trim(),
+        destination_place_id:     customDestMeta?.place_id || undefined,
+        destination_latitude:     customDestMeta?.lat ?? undefined,
+        destination_longitude:    customDestMeta?.lon ?? undefined,
+        destination_address_text: customDestMeta?.address || undefined,
+        service_date:             format(customDate, 'yyyy-MM-dd'),
+        service_time:             customTime,
+        people_count:             customPeople,
+        luggage_count:            0,
+        special_notes:            customNotes.trim() || undefined,
       })
       setCustomSuccess(true)
     } catch (err) {
@@ -585,7 +635,7 @@ export default function Transfers() {
                 Ver minhas cotações
               </button>
               <button
-                onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomNotes('') }}
+                onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes('') }}
                 className="mt-3 text-[13px] text-gray-400 underline"
               >
                 Solicitar outra corrida
@@ -610,7 +660,8 @@ export default function Transfers() {
                       <PlaceInput
                         value={customOrigin}
                         onChange={setCustomOrigin}
-                        placeholder="Ex: Hotel Jeri Beach"
+                        onPick={setCustomOriginMeta}
+                        placeholder="Buscar endereço, hotel, ponto..."
                         dotClass="bg-brand"
                       />
                     </div>
@@ -621,7 +672,8 @@ export default function Transfers() {
                       <PlaceInput
                         value={customDest}
                         onChange={setCustomDest}
-                        placeholder="Ex: Aeroporto de Jericoacoara"
+                        onPick={setCustomDestMeta}
+                        placeholder="Buscar endereço, hotel, ponto..."
                         dotClass="border-2 border-gray-400 bg-transparent"
                       />
                     </div>
