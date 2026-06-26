@@ -541,7 +541,9 @@ export default function Reservas() {
       {/* Tabs */}
       <div className="flex bg-gray-100 rounded-xl p-1 mb-5">
         {[
-          { key: 'pending',  label: 'Disponíveis',     short: 'Disponíveis', count: pending.length },
+          // Disponíveis soma corridas (passeio/translado fixo) + cotações pendentes —
+          // qualquer solicitação nova, de qualquer serviço, conta como disponível.
+          { key: 'pending',  label: 'Disponíveis',     short: 'Disponíveis', count: pending.length + pendingQuotes.length },
           { key: 'cotacoes', label: 'Cotações',        short: 'Cotações',    count: pendingQuotes.length },
           { key: 'mine',     label: 'Minhas corridas', short: 'Minhas',      count: mine.length },
         ].map((t) => (
