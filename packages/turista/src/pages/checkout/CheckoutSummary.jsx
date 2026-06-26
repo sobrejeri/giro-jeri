@@ -299,7 +299,6 @@ export default function CheckoutSummary() {
     region_id:       ls.region_id,
     service_type:    ls.service_type,
     service_id:      ls.service_id,
-    quote_id:        ls.quote_id || undefined,
     booking_mode:    ls.booking_mode,
     service_date:    dateLabel,
     service_date_iso: format(date, 'yyyy-MM-dd'),

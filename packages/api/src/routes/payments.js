@@ -53,7 +53,6 @@ const intentSchema = z.object({
 const requestSchema = z.object({
   service_type:     z.enum(['tour', 'transfer']).optional(),
   service_id:       z.string().uuid(),
-  quote_id:         z.string().uuid().optional(),
   service_date_iso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (YYYY-MM-DD)'),
   total_price:      z.number({ coerce: true }).positive().min(5, 'Valor mínimo R$ 5,00'),
   booking_mode:     z.enum(['private', 'shared']).optional(),
@@ -535,56 +534,10 @@ router.post('/request', authenticate, async (req, res, next) => {
     }
 
     const {
-      service_type, service_id, quote_id, booking_mode,
+      service_type, service_id, booking_mode,
       service_date_iso, service_time, people_count, region_id,
       vehicles = [], origin_text, destination_text,
     } = parsed.data
-
-    // Translado personalizado já aceito pelo cliente: a cooperativa que cotou já
-    // está definida e o preço já foi negociado — pula a fila geral de aceite e
-    // nasce direto em 'awaiting_payment', atribuída a quem cotou.
-    if (quote_id) {
-      const { data: quote, error: qErr } = await supabase
-        .from('transfer_quotes')
-        .select('id, user_id, region_id, quoted_by_user_id, quoted_price, status, origin_place_name, destination_place_name, service_date, service_time, people_count')
-        .eq('id', quote_id)
-        .eq('user_id', req.user.id)
-        .maybeSingle()
-      if (qErr) throw qErr
-      if (!quote) return res.status(404).json({ error: 'Cotação não encontrada' })
-      if (quote.status !== 'accepted') {
-        return res.status(409).json({ error: 'Esta cotação ainda não foi aceita.' })
-      }
-
-      const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
-      const { data: booking, error: bErr } = await supabase
-        .from('bookings')
-        .insert({
-          booking_code:       bookingCode,
-          user_id:            req.user.id,
-          region_id:          quote.region_id || region_id || null,
-          service_type:       'transfer',
-          service_id:         quote.id,
-          operator_id:        quote.quoted_by_user_id,
-          booking_mode:       booking_mode || 'private',
-          service_date:       quote.service_date,
-          service_time:       quote.service_time,
-          people_count:       Number(quote.people_count) || 1,
-          origin_text:        quote.origin_place_name,
-          destination_text:   quote.destination_place_name,
-          total_amount:       quote.quoted_price,
-          status_commercial:  'awaiting_payment',
-          status_operational: 'assigned',
-          payment_status:     'pending',
-        })
-        .select()
-        .single()
-      if (bErr) throw bErr
-
-      await supabase.from('transfer_quotes').update({ booking_id: booking.id }).eq('id', quote.id)
-
-      return res.json({ booking_id: booking.id, booking_code: bookingCode, amount: quote.quoted_price })
-    }
 
     const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
