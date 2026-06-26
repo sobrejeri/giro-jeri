@@ -16,6 +16,28 @@ function slugify(text) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
+// Seleciona apenas as chaves permitidas de um objeto. Usado para não enviar
+// ao update/insert colunas inexistentes (ex.: o join `transfers` ou campos
+// somente-leitura como id/created_at que o front reenvia ao editar).
+function pick(obj, keys) {
+  const out = {}
+  for (const k of keys) if (obj[k] !== undefined) out[k] = obj[k]
+  return out
+}
+
+// Colunas graváveis de transfer_routes (migration 001)
+const ROUTE_COLS = [
+  'transfer_id', 'origin_name', 'destination_name',
+  'origin_latitude', 'origin_longitude', 'destination_latitude', 'destination_longitude',
+  'default_price', 'extra_stop_price', 'night_fee', 'is_active',
+]
+
+// Colunas graváveis de transfers (serviço-pai)
+const TRANSFER_COLS = [
+  'region_id', 'name', 'slug', 'short_description', 'pricing_mode',
+  'is_active', 'display_order', 'booking_cutoff_time',
+]
+
 // ── Categorias ────────────────────────────────────────────
 
 router.get('/categories', async (req, res, next) => {
@@ -133,7 +155,7 @@ router.get('/transfers', async (req, res, next) => {
 router.post('/transfers', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await req.supabase
-      .from('transfers').insert(req.body).select().single();
+      .from('transfers').insert(pick(req.body, TRANSFER_COLS)).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -142,7 +164,7 @@ router.post('/transfers', requireAdmin, async (req, res, next) => {
 router.put('/transfers/:id', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await req.supabase
-      .from('transfers').update(req.body).eq('id', req.params.id).select().single();
+      .from('transfers').update(pick(req.body, TRANSFER_COLS)).eq('id', req.params.id).select().single();
     if (error || !data) return res.status(404).json({ error: 'Transfer não encontrado' });
     res.json(data);
   } catch (err) { next(err); }
@@ -173,8 +195,10 @@ router.get('/transfer-routes', async (req, res, next) => {
 
 router.post('/transfer-routes', requireAdmin, async (req, res, next) => {
   try {
+    const body = pick(req.body, ROUTE_COLS);
+    if (body.default_price != null) body.default_price = Number(body.default_price);
     const { data, error } = await req.supabase
-      .from('transfer_routes').insert(req.body).select().single();
+      .from('transfer_routes').insert(body).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -182,9 +206,12 @@ router.post('/transfer-routes', requireAdmin, async (req, res, next) => {
 
 router.put('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   try {
+    const body = pick(req.body, ROUTE_COLS);
+    if (body.default_price != null) body.default_price = Number(body.default_price);
     const { data, error } = await req.supabase
-      .from('transfer_routes').update(req.body).eq('id', req.params.id).select().single();
-    if (error || !data) return res.status(404).json({ error: 'Rota não encontrada' });
+      .from('transfer_routes').update(body).eq('id', req.params.id).select().maybeSingle();
+    if (error) return res.status(400).json({ error: error.message });
+    if (!data)  return res.status(404).json({ error: 'Rota não encontrada' });
     res.json(data);
   } catch (err) { next(err); }
 });
