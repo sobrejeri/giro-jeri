@@ -600,7 +600,7 @@ export default function Transfers() {
               </div>
 
               {/* Origin / Dest */}
-              <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
+              <section className="bg-white rounded-2xl border border-gray-100 relative overflow-visible">
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Rota</p>
                 <div className="px-4 pb-4 space-y-3">
                   <div>
