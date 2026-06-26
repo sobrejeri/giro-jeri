@@ -199,14 +199,29 @@ router.get('/quotes/pending', authenticate, requireOperator, async (req, res, ne
 // ── GET /api/transfers/quotes/history — cotações já respondidas (operador)
 router.get('/quotes/history', authenticate, requireOperator, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    // Sem embed por FK (frágil — depende do PostgREST resolver o relacionamento
+    // certo entre as 2 FKs de transfer_quotes para users). Busca os clientes à
+    // parte e junta em memória, igual ao /operator/bookings.
+    const { data: quotes, error } = await supabase
       .from('transfer_quotes')
-      .select('*, users!transfer_quotes_user_id_fkey(full_name, phone, email)')
+      .select('*')
       .in('status', ['quoted', 'accepted', 'expired', 'rejected'])
       .order('created_at', { ascending: false })
       .limit(200);
     if (error) throw error;
-    res.json(data || []);
+
+    const userIds = [...new Set((quotes || []).map((q) => q.user_id).filter(Boolean))];
+    let byId = new Map();
+    if (userIds.length > 0) {
+      const { data: users, error: uErr } = await supabase
+        .from('users')
+        .select('id, full_name, phone, email')
+        .in('id', userIds);
+      if (uErr) throw uErr;
+      byId = new Map((users || []).map((u) => [u.id, u]));
+    }
+
+    res.json((quotes || []).map((q) => ({ ...q, users: byId.get(q.user_id) || null })));
   } catch (err) { next(err); }
 });
 
@@ -243,8 +258,6 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
     const expiryHours = parseInt(setting?.setting_value || '2');
     const expiresAt   = dayjs().add(expiryHours, 'hour').toISOString();
 
-    // transfer_quotes tem 2 FKs para users (user_id e quoted_by_user_id);
-    // o embed precisa do nome do vínculo, senão o PostgREST falha por ambiguidade.
     const { data, error } = await supabase
       .from('transfer_quotes')
       .update({
@@ -257,7 +270,7 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
       })
       .eq('id', req.params.id)
       .eq('status', 'pending_quote')
-      .select('*, users!transfer_quotes_user_id_fkey(full_name, phone)')
+      .select('*')
       .single();
 
     if (error) { console.error('[quote] update falhou:', error); return res.status(500).json({ error: error.message }); }
