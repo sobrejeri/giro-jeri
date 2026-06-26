@@ -317,10 +317,41 @@ router.post('/quotes/:id/accept', authenticate, async (req, res, next) => {
       .update({ status: 'accepted', client_responded_at: new Date().toISOString() })
       .eq('id', quote.id);
 
+    // Cria a reserva já atribuída à cooperativa que cotou — pula a fila geral
+    // de aceite, pois o preço e o prestador já foram negociados na cotação.
+    const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`;
+    const { data: booking, error: bErr } = await supabase
+      .from('bookings')
+      .insert({
+        booking_code:       bookingCode,
+        user_id:            req.user.id,
+        region_id:          quote.region_id,
+        service_type:       'transfer',
+        service_id:         quote.id,
+        operator_id:        quote.quoted_by_user_id,
+        booking_mode:       'private',
+        service_date:       quote.service_date,
+        service_time:       quote.service_time,
+        people_count:       quote.people_count,
+        origin_text:        quote.origin_place_name,
+        destination_text:   quote.destination_place_name,
+        total_amount:       quote.quoted_price,
+        status_commercial:  'awaiting_payment',
+        status_operational: 'assigned',
+        payment_status:     'pending',
+      })
+      .select('id, booking_code')
+      .single();
+    if (bErr) throw bErr;
+
+    await supabase.from('transfer_quotes').update({ booking_id: booking.id }).eq('id', quote.id);
+
     res.json({
       message:      'Cotação aceita! Prossiga para o pagamento.',
       quoted_price: quote.quoted_price,
       quote_id:     quote.id,
+      booking_id:   booking.id,
+      booking_code: booking.booking_code,
     });
   } catch (err) { next(err); }
 });

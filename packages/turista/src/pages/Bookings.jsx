@@ -481,21 +481,21 @@ export default function Bookings() {
     setQuoteActing(quote.id)
     try {
       const result = await api.acceptQuote(quote.id)
-      // Navigate to payment with quote_id as service_id
+      // A cotação aceita já criou a reserva (atribuída à cooperativa que cotou) —
+      // paga direto via existing_booking_id, sem reentrar na fila de solicitação.
       navigate('/checkout/pagamento', {
         state: {
-          service_name:     `${quote.origin_place_name} → ${quote.destination_place_name}`,
-          service_type:     'transfer',
-          booking_mode:     'private',
-          service_date:     fmtDate(quote.service_date),
-          service_date_iso: quote.service_date,
-          service_time:     quote.service_time,
-          people_count:     quote.people_count,
-          total_price:      result.quoted_price,
-          origin_text:      quote.origin_place_name,
-          destination_text: quote.destination_place_name,
-          service_id:       result.quote_id,
-          quote_id:         result.quote_id,
+          service_name:        `${quote.origin_place_name} → ${quote.destination_place_name}`,
+          service_type:        'transfer',
+          booking_mode:        'private',
+          service_date:        fmtDate(quote.service_date),
+          service_date_iso:    quote.service_date,
+          service_time:        quote.service_time,
+          people_count:        quote.people_count,
+          total_price:         result.quoted_price,
+          origin_text:         quote.origin_place_name,
+          destination_text:    quote.destination_place_name,
+          existing_booking_id: result.booking_id,
         },
       })
     } catch (err) {
@@ -557,18 +557,17 @@ export default function Bookings() {
   function handlePayQuote(quote) {
     navigate('/checkout/pagamento', {
       state: {
-        service_name:     `${quote.origin_place_name} → ${quote.destination_place_name}`,
-        service_type:     'transfer',
-        booking_mode:     'private',
-        service_date:     fmtDate(quote.service_date),
-        service_date_iso: quote.service_date,
-        service_time:     quote.service_time,
-        people_count:     quote.people_count,
-        total_price:      quote.quoted_price,
-        origin_text:      quote.origin_place_name,
-        destination_text: quote.destination_place_name,
-        service_id:       quote.id,
-        quote_id:         quote.id,
+        service_name:        `${quote.origin_place_name} → ${quote.destination_place_name}`,
+        service_type:        'transfer',
+        booking_mode:        'private',
+        service_date:        fmtDate(quote.service_date),
+        service_date_iso:    quote.service_date,
+        service_time:        quote.service_time,
+        people_count:        quote.people_count,
+        total_price:         quote.quoted_price,
+        origin_text:         quote.origin_place_name,
+        destination_text:    quote.destination_place_name,
+        existing_booking_id: quote.booking_id,
       },
     })
   }
