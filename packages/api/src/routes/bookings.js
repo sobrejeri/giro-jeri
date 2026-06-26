@@ -270,8 +270,6 @@ router.get('/:id', authenticate, async (req, res, next) => {
       .from('bookings')
       .select(`
         *,
-        users!bookings_user_id_fkey ( full_name, phone, email ),
-        operator:users!bookings_operator_id_fkey ( full_name, phone ),
         regions ( name ),
         booking_vehicles ( * ),
         booking_items ( * ),
@@ -285,6 +283,16 @@ router.get('/:id', authenticate, async (req, res, next) => {
     // Turista só acessa sua própria reserva
     if (req.user.user_type === 'tourist' && data.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Sem permissão' });
+    }
+
+    // Sem embed por FK (frágil) — busca cliente/operador à parte e junta em memória.
+    const ids = [data.user_id, data.operator_id].filter(Boolean);
+    if (ids.length > 0) {
+      const { data: users } = await supabase
+        .from('users').select('id, full_name, phone, email').in('id', ids);
+      const byId = new Map((users || []).map((u) => [u.id, u]));
+      data.users    = byId.get(data.user_id) || null;
+      data.operator = data.operator_id ? (byId.get(data.operator_id) || null) : null;
     }
 
     // Adiciona link do Maps se tiver coordenadas

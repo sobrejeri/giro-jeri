@@ -320,13 +320,11 @@ router.get('/operational', requireOperator, async (req, res, next) => {
     let query = supabase
       .from('bookings')
       .select(`
-        id, booking_code, service_type, service_id, booking_mode,
+        id, booking_code, service_type, service_id, booking_mode, user_id, operator_id,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
         pickup_place_name, destination_place_name, special_notes,
         origin_text, destination_text,
-        users!bookings_user_id_fkey ( full_name, phone ),
-        operator:users!bookings_operator_id_fkey ( id, full_name ),
         booking_vehicles ( vehicle_name_snapshot, quantity ),
         operational_assignments ( real_vehicle_text, dispatch_notes, driver_name, driver_phone, assigned_driver_user_id, assigned_guide_user_id )
       `)
@@ -341,11 +339,26 @@ router.get('/operational', requireOperator, async (req, res, next) => {
     const { data, error } = await query;
     if (error) throw error;
 
+    // Sem embed por FK (frágil) — busca clientes e operadores à parte e junta em memória.
+    const userIds = [...new Set((data || []).flatMap((b) => [b.user_id, b.operator_id]).filter(Boolean))];
+    let byId = new Map();
+    if (userIds.length > 0) {
+      const { data: users, error: uErr } = await supabase
+        .from('users').select('id, full_name, phone').in('id', userIds);
+      if (uErr) throw uErr;
+      byId = new Map((users || []).map((u) => [u.id, u]));
+    }
+    const enriched = (data || []).map((b) => ({
+      ...b,
+      users:    byId.get(b.user_id) || null,
+      operator: b.operator_id ? (byId.get(b.operator_id) || null) : null,
+    }));
+
     // Agrupa por status operacional
     const grouped = {};
     const statuses = ['new','awaiting_dispatch','confirmed','assigned','en_route','in_progress','completed','occurrence'];
     for (const s of statuses) grouped[s] = [];
-    for (const b of data || []) {
+    for (const b of enriched) {
       const key = b.status_operational || 'new';
       if (grouped[key]) grouped[key].push(b);
     }
@@ -851,7 +864,7 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
       .select(`
         id, booking_code, service_type, booking_mode, service_date, service_time,
         people_count, total_amount, status_commercial, status_operational, created_at,
-        users!bookings_user_id_fkey ( full_name, phone, email )
+        user_id, operator_id, region_id
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
@@ -864,7 +877,19 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
 
     const { data, error, count } = await query;
     if (error) throw error;
-    res.json({ data: data || [], total: count || 0, page: Number(page) });
+
+    // Sem embed por FK (frágil) — busca clientes à parte e junta em memória.
+    const userIds = [...new Set((data || []).map((b) => b.user_id).filter(Boolean))];
+    let byId = new Map();
+    if (userIds.length > 0) {
+      const { data: users, error: uErr } = await supabase
+        .from('users').select('id, full_name, phone, email').in('id', userIds);
+      if (uErr) throw uErr;
+      byId = new Map((users || []).map((u) => [u.id, u]));
+    }
+    const enriched = (data || []).map((b) => ({ ...b, users: byId.get(b.user_id) || null }));
+
+    res.json({ data: enriched, total: count || 0, page: Number(page) });
   } catch (err) { next(err); }
 });
 
