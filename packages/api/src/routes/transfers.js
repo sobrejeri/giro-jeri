@@ -325,13 +325,17 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
     }
 
     // Confirma existência e estado da cotação — erros claros em vez de genérico
+    console.log('[quote] PATCH op=%s quote_id=%s body=%j', req.user.id, req.params.id, req.body);
     const { data: existing, error: findErr } = await supabase
       .from('transfer_quotes')
       .select('id, status')
       .eq('id', req.params.id)
       .maybeSingle();
     if (findErr) { console.error('[quote] busca falhou:', findErr); return res.status(500).json({ error: findErr.message }); }
-    if (!existing) return res.status(404).json({ error: 'Cotação não encontrada' });
+    if (!existing) {
+      console.warn('[quote] não encontrada id=%s', req.params.id);
+      return res.status(404).json({ error: `Cotação ${req.params.id} não encontrada` });
+    }
     if (existing.status !== 'pending_quote') {
       return res.status(409).json({ error: 'Esta cotação já foi respondida. Atualize a lista.' });
     }
