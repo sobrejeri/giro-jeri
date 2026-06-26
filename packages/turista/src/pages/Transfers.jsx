@@ -25,7 +25,7 @@ function usePlaceSuggestions(query) {
   const timerRef = useRef(null)
 
   useEffect(() => {
-    if (!query || query.length < 3) { setResults([]); return }
+    if (!query || query.length < 1) { setResults([]); return }
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(async () => {
       setLoading(true)
@@ -76,7 +76,7 @@ function usePlaceSuggestions(query) {
         })))
       } catch { setResults([]) }
       setLoading(false)
-    }, 350)
+    }, 200)
     return () => clearTimeout(timerRef.current)
   }, [query])
 
