@@ -45,14 +45,33 @@ const returnUrl   = () => (process.env.MP_OAUTH_RETURN_URL || process.env.COOP_U
 // ── GET /api/mp/connect-url ────────────────────────────
 // Devolve a URL de autorização do Mercado Pago para a cooperativa logada.
 router.get('/connect-url', authenticate, requireOperator, (req, res) => {
-  if (!isMarketplaceConfigured()) {
-    return res.status(503).json({ error: 'Pagamento via Mercado Pago ainda não foi habilitado pelo administrador.' })
-  }
-  if (!apiBase()) {
-    return res.status(503).json({ error: 'URL pública da API não configurada (RENDER_EXTERNAL_URL/API_BASE_URL).' })
+  const missing = []
+  if (!process.env.MP_CLIENT_ID && !process.env.MP_MARKETPLACE_CLIENT_ID)         missing.push('MP_CLIENT_ID')
+  if (!process.env.MP_CLIENT_SECRET && !process.env.MP_MARKETPLACE_CLIENT_SECRET) missing.push('MP_CLIENT_SECRET')
+  if (!apiBase())                                                                  missing.push('RENDER_EXTERNAL_URL ou API_BASE_URL')
+  if (missing.length) {
+    return res.status(503).json({
+      error:   `Configuração de marketplace incompleta no servidor. Faltando: ${missing.join(', ')}.`,
+      missing,
+    })
   }
   const url = buildOAuthAuthorizeUrl({ redirectUri: redirectUri(), state: signState(req.user.id) })
-  res.json({ url })
+  res.json({ url, redirect_uri: redirectUri() })
+})
+
+// ── GET /api/mp/diag ────────────────────────────────────
+// Diagnóstico público (sem token) — só diz quais envs do OAuth marketplace
+// estão presentes, sem expor valores. Útil pra debugar "aplicativo não pronto".
+router.get('/diag', (_req, res) => {
+  res.json({
+    marketplace_configured: isMarketplaceConfigured(),
+    has_client_id:          !!(process.env.MP_CLIENT_ID || process.env.MP_MARKETPLACE_CLIENT_ID),
+    has_client_secret:      !!(process.env.MP_CLIENT_SECRET || process.env.MP_MARKETPLACE_CLIENT_SECRET),
+    has_access_token:       !!(process.env.MERCADO_PAGO_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN),
+    api_base:               apiBase() || null,
+    redirect_uri:           apiBase() ? redirectUri() : null,
+    return_url:             returnUrl() || null,
+  })
 })
 
 // ── GET /api/mp/status ─────────────────────────────────
