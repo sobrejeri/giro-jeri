@@ -391,7 +391,7 @@ export default function Reservas() {
   const [notes,      setNotes]     = useState('')
   const queryClient = useQueryClient()
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey:        ['operator-bookings'],
     queryFn:         () => api.getOperatorBookings(),
     refetchInterval: 6000,
@@ -570,7 +570,16 @@ export default function Reservas() {
       </div>
 
       {/* Conteúdo */}
-      {isLoading ? (
+      {isError ? (
+        <div className="text-center py-16 text-red-500">
+          <CalendarCheck size={40} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">Erro ao carregar corridas</p>
+          <p className="text-xs mt-1 text-red-400">{error?.message || 'Tente novamente em alguns segundos'}</p>
+          <button onClick={() => refetch()} className="mt-3 text-xs font-bold text-brand underline">
+            Tentar de novo
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center justify-center py-16 text-gray-400">
           <RefreshCw size={24} className="animate-spin" />
         </div>
