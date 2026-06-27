@@ -75,11 +75,24 @@ app.use('/api/auth/otp', otpLimiter);
 
 // ── Health check ───────────────────────────────────────
 app.get('/health', (_req, res) => {
+  // Ref do projeto Supabase (subdomínio da URL) — sem expor chave. Serve pra
+  // confirmar que a API fala com o MESMO projeto do dashboard.
+  const supaRef = (process.env.SUPABASE_URL || '').match(/https?:\/\/([^.]+)\./)?.[1] || null;
+  // Papel da service key — decodifica só o campo "role" do JWT (sem expor o
+  // valor) pra detectar anon key trocada por engano (deveria ser service_role).
+  let keyRole = null;
+  try {
+    const k = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    const payload = JSON.parse(Buffer.from(k.split('.')[1] || '', 'base64').toString('utf8'));
+    keyRole = payload.role || null;
+  } catch { keyRole = 'invalid'; }
   res.json({
-    status:    'ok',
-    version:   '2.0.0',
-    commit:    process.env.RENDER_GIT_COMMIT || null,
-    timestamp: new Date().toISOString(),
+    status:       'ok',
+    version:      '2.0.0',
+    commit:       process.env.RENDER_GIT_COMMIT || null,
+    supabase_ref: supaRef,
+    key_role:     keyRole,
+    timestamp:    new Date().toISOString(),
   });
 });
 
