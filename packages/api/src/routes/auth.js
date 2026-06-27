@@ -208,14 +208,24 @@ router.post('/login', async (req, res, next) => {
     if (body.cnpj) {
       // CNPJ vale tanto para cooperativas (operator) quanto pro admin com
       // CNPJ cadastrado — o painel da cooperativa aceita os dois.
+      //
+      // Comparação robusta: em vez de .eq() exato (que quebra se o
+      // document_number no banco tiver formatação/espaço/caractere oculto),
+      // busca os candidatos e compara só os dígitos em memória.
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
-      const { data: opUser, error: lookupErr } = await supabase
+      const { data: candidates, error: lookupErr } = await supabase
         .from('users')
-        .select('email')
-        .eq('document_number', cnpjDigits)
+        .select('email, document_number')
         .eq('document_type', 'cnpj')
-        .in('user_type', ['operator', 'admin'])
-        .maybeSingle();
+        .in('user_type', ['operator', 'admin']);
+
+      const opUser = (candidates || []).find(
+        (u) => String(u.document_number || '').replace(/\D/g, '') === cnpjDigits,
+      );
+
+      console.log('[login] cnpj=%s candidatos=%d achou=%s err=%s',
+        cnpjDigits, candidates?.length || 0, opUser ? opUser.email : 'NÃO',
+        lookupErr ? `${lookupErr.code}:${lookupErr.message}` : 'null');
 
       if (lookupErr || !opUser) {
         return res.status(401).json({ error: 'CNPJ não encontrado ou não autorizado' });
