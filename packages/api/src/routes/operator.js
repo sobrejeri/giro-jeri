@@ -7,6 +7,7 @@
  */
 import { Router } from 'express';
 import { z }      from 'zod';
+import dayjs      from 'dayjs';
 import { supabase } from '../supabase.js';
 import { authenticate, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
@@ -326,5 +327,111 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
     res.json({ ok: true })
   } catch (err) { next(err) }
 })
+
+// =============================================================================
+// FINANCEIRO — escopo do operador (não confundir com /api/admin/financial,
+// que é a visão consolidada da plataforma). Aqui filtramos pelos lançamentos
+// das reservas atribuídas à própria cooperativa.
+// =============================================================================
+
+function sumByType(rows, entryType, direction) {
+  return rows
+    .filter((r) => r.entry_type === entryType && r.direction === direction)
+    .reduce((s, r) => s + Number(r.amount), 0);
+}
+function sumByStatus(rows, direction, status) {
+  return rows
+    .filter((r) => r.direction === direction && r.financial_status === status)
+    .reduce((s, r) => s + Number(r.amount), 0);
+}
+
+// IDs das reservas dessa cooperativa. Retorna [] se ela ainda não tem nenhuma.
+async function operatorBookingIds(operatorId) {
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('operator_id', operatorId);
+  if (error) throw error;
+  return (data || []).map((b) => b.id);
+}
+
+// ── GET /api/operator/financial ─────────────────────────
+// Resumo financeiro do período para a cooperativa logada.
+router.get('/financial', async (req, res, next) => {
+  try {
+    const { period = 'month' } = req.query;
+    const starts = {
+      day:   dayjs().startOf('day').toISOString(),
+      week:  dayjs().startOf('week').toISOString(),
+      month: dayjs().startOf('month').toISOString(),
+      year:  dayjs().startOf('year').toISOString(),
+    };
+
+    const bookingIds = await operatorBookingIds(req.user.id);
+    if (bookingIds.length === 0) {
+      return res.json({
+        bruto: 0, taxas: 0, liquido: 0,
+        nao_creditado: 0, comissoes_plataforma: 0, repasses: 0,
+        margem_percent: 0,
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('financial_ledger')
+      .select('entry_type, amount, direction, financial_status')
+      .in('booking_id', bookingIds)
+      .gte('created_at', starts[period] || starts.month);
+    if (error) throw error;
+
+    const bruto     = sumByType(data, 'booking_gross',        'inflow');
+    const taxas     = sumByType(data, 'gateway_fee',          'outflow');
+    const liquido   = sumByType(data, 'booking_net',          'inflow');
+    const naoCredit = sumByStatus(data, 'inflow', 'pending');
+    const comissoes = sumByType(data, 'commission_platform',  'outflow');
+    const repasses  = sumByType(data, 'payout_operator',      'outflow');
+
+    res.json({
+      bruto, taxas, liquido,
+      nao_creditado:        naoCredit,
+      comissoes_plataforma: comissoes,
+      repasses,
+      margem_percent: bruto > 0 ? Math.round(((bruto - taxas - comissoes) / bruto) * 100) : 0,
+    });
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/operator/financial-daily ───────────────────
+// Série diária do faturamento bruto (para o gráfico do painel).
+router.get('/financial-daily', async (req, res, next) => {
+  try {
+    const days  = Number(req.query.days || 30);
+    const since = dayjs().subtract(days, 'day').format('YYYY-MM-DD');
+
+    const bookingIds = await operatorBookingIds(req.user.id);
+    if (bookingIds.length === 0) return res.json([]);
+
+    const { data, error } = await supabase
+      .from('financial_ledger')
+      .select('amount, effective_date')
+      .in('booking_id', bookingIds)
+      .eq('entry_type', 'booking_gross')
+      .eq('direction', 'inflow')
+      .gte('effective_date', since)
+      .order('effective_date');
+    if (error) throw error;
+
+    const byDay = {};
+    for (const row of data || []) {
+      const d = row.effective_date?.slice(0, 10) || '';
+      if (!d) continue;
+      byDay[d] = (byDay[d] || 0) + Number(row.amount);
+    }
+    res.json(
+      Object.entries(byDay)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, total]) => ({ date, total })),
+    );
+  } catch (err) { next(err); }
+});
 
 export default router;

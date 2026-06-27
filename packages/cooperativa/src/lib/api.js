@@ -96,8 +96,10 @@ export const api = {
   deleteVehicle: (id)          => request(`/api/vehicles/${id}`, { method: 'DELETE' }),
 
   // Financeiro
-  getFinancial:      (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),
-  getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),
+  // Endpoints operator-scoped (filtram pelas reservas da própria cooperativa).
+  // NÃO usar /api/admin/financial* aqui — aquilo é só admin (403 para coop).
+  getFinancial:      (params = {}) => request(`/api/operator/financial?${new URLSearchParams(params)}`),
+  getFinancialDaily: (params = {}) => request(`/api/operator/financial-daily?${new URLSearchParams(params)}`),
 
   // Regiões
   getRegions: () => request('/api/regions'),
