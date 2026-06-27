@@ -35,9 +35,35 @@ const MESSAGES = {
  * @param {{ phone: string, code: string, lang?: string }} opts
  *   phone deve estar em E.164 ('+55...')
  */
+function bookingSummary(booking) {
+  const tipo = booking.service_type === 'transfer' ? 'Translado' : 'Passeio'
+  const rota = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
+  const data = booking.service_date
+    ? new Date(booking.service_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : 'a definir'
+  return { tipo, rota, data }
+}
+
+async function sendToMany(numbers, message) {
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
+  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-text`
+  await Promise.allSettled(
+    numbers
+      .filter(Boolean)
+      .map((phone) =>
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
+          body: JSON.stringify({ phone: toZapiPhone(phone), message }),
+        }).catch((err) => console.error('[whatsapp] envio falhou:', err.message))
+      )
+  )
+}
+
 /**
- * Envia WhatsApp para todos os operadores ativos sobre nova reserva.
- * Fire-and-forget: erros são logados mas nunca derrubam o fluxo.
+ * WhatsApp para TODAS as cooperativas ativas — solicitação nova.
+ * Admin não recebe aqui; só após a expiração (notifyAdminExpiredBooking).
+ * Fire-and-forget: erros logados, nunca derrubam o fluxo.
  */
 export async function notifyOperatorsNewBooking(supabase, booking) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
@@ -45,37 +71,46 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
   const { data: operators } = await supabase
     .from('users')
     .select('whatsapp_number')
-    .in('user_type', ['operator', 'admin'])
+    .eq('user_type', 'operator')
     .eq('is_active', true)
 
   if (!operators?.length) return { skipped: true }
 
-  const tipo = booking.service_type === 'transfer' ? 'Translado' : 'Passeio'
-  const rota = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
-  const data = booking.service_date
-    ? new Date(booking.service_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    : 'a definir'
-
+  const { tipo, rota, data } = bookingSummary(booking)
   const message =
     `🚗 *Giro Jeri — Nova solicitação*\n` +
     `${tipo}${rota ? ` · ${rota}` : ''}\n` +
     `📅 ${data} · Cód: ${booking.booking_code || '-'}\n` +
-    `Acesse o app para aceitar.`
+    `Você tem 24h para aceitar. Abra o app pra ver.`
 
-  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
-  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-text`
+  await sendToMany(operators.map((op) => op.whatsapp_number), message)
+}
 
-  await Promise.allSettled(
-    operators
-      .filter((op) => op.whatsapp_number)
-      .map((op) =>
-        fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
-          body: JSON.stringify({ phone: toZapiPhone(op.whatsapp_number), message }),
-        }).catch((err) => console.error('[whatsapp] operador falhou:', err.message))
-      )
-  )
+/**
+ * WhatsApp para o(s) admin(s) — solicitação que ninguém aceitou em 24h.
+ * Chamado de forma lazy pelo /api/operator/bookings ao detectar expiradas
+ * ainda sem aviso (flag bookings.admin_notified_expired_at).
+ */
+export async function notifyAdminExpiredBooking(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+
+  const { data: admins } = await supabase
+    .from('users')
+    .select('whatsapp_number')
+    .eq('user_type', 'admin')
+    .eq('is_active', true)
+
+  if (!admins?.length) return { skipped: true }
+
+  const { tipo, rota, data } = bookingSummary(booking)
+  const message =
+    `⚠️ *Giro Jeri — Solicitação expirada*\n` +
+    `Nenhuma cooperativa aceitou em 24h.\n` +
+    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
+    `📅 ${data} · Cód: ${booking.booking_code || '-'}\n` +
+    `Acesse o app da cooperativa pra assumir.`
+
+  await sendToMany(admins.map((a) => a.whatsapp_number), message)
 }
 
 export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {

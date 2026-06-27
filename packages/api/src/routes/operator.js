@@ -11,6 +11,7 @@ import dayjs      from 'dayjs';
 import { supabase } from '../supabase.js';
 import { authenticate, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
+import { notifyAdminExpiredBooking } from '../services/whatsapp.js';
 
 // Rótulo amigável do serviço para o texto da notificação
 const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
@@ -179,6 +180,29 @@ router.get('/bookings', async (req, res, next) => {
         .eq('status_commercial', 'awaiting_acceptance')
         .is('operator_id', null)
         .lt('service_date', today);
+    }
+
+    // Detecção lazy de expiradas: marca as que passaram de 24h e ainda não
+    // tiveram aviso enviado ao admin. UPDATE first (race-safe) → pega os
+    // ids retornados → dispara WhatsApp pra cada (fire-and-forget).
+    try {
+      const { data: justExpired } = await supabase
+        .from('bookings')
+        .update({ admin_notified_expired_at: nowIso })
+        .eq('status_commercial', 'awaiting_acceptance')
+        .is('operator_id', null)
+        .lt('acceptance_expires_at', nowIso)
+        .is('admin_notified_expired_at', null)
+        .select('id, booking_code, service_type, service_date, origin_text, destination_text');
+      if (justExpired?.length) {
+        for (const b of justExpired) {
+          notifyAdminExpiredBooking(supabase, b).catch((err) =>
+            console.error('[whatsapp] aviso admin expirada falhou:', err.message));
+        }
+      }
+    } catch (err) {
+      // Coluna admin_notified_expired_at pode não existir antes da migration 038.
+      if (err?.code !== '42703') console.error('[operator/bookings] expiry sweep:', err.message);
     }
 
     let reqQuery = supabase.from('bookings').select(BOOKING_COLUMNS)
