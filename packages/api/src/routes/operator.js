@@ -82,8 +82,16 @@ router.get('/preferences', async (req, res, next) => {
       .from('operator_service_preferences')
       .select('entity_type, entity_id, is_active, notes')
       .eq('operator_id', req.user.id);
-    if (error) throw error;
-    res.json(data);
+    if (error) {
+      console.error('[operator/preferences] supabase falhou op=%s code=%s msg=%s details=%s hint=%s',
+        req.user.id, error.code, error.message, error.details, error.hint);
+      // Se a tabela ainda não existe nesse ambiente (migration 006 não rodou),
+      // devolvemos lista vazia em vez de 500 — a UI continua funcional mostrando
+      // todos os serviços como "disponíveis" por padrão.
+      if (error.code === '42P01') return res.json([]);
+      return res.status(500).json({ error: error.message, code: error.code, details: error.details });
+    }
+    res.json(data || []);
   } catch (err) { next(err); }
 });
 
