@@ -14,15 +14,24 @@ function formatCNPJ(v) {
     .replace(/(\d{4})(\d)/, '$1-$2')
 }
 
+// Heurística: tem @ → e-mail; senão tenta CNPJ.
+const looksLikeEmail = (s) => /@/.test(s)
+
 export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const [form, setForm]       = useState({ cnpj: '', password: '' })
+  const [form, setForm]       = useState({ identifier: '', password: '' })
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
 
-  function handleCNPJ(e) {
-    setForm({ ...form, cnpj: formatCNPJ(e.target.value) })
+  function handleIdentifier(e) {
+    const raw = e.target.value
+    // Se já parece e-mail, deixa o usuário digitar livre. Caso contrário,
+    // aplica máscara de CNPJ enquanto digita (apenas dígitos).
+    const next = looksLikeEmail(raw) || /[a-zA-Z@]/.test(raw)
+      ? raw
+      : formatCNPJ(raw)
+    setForm({ ...form, identifier: next })
   }
 
   async function handleSubmit(e) {
@@ -30,7 +39,11 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const data = await api.login({ cnpj: form.cnpj, password: form.password })
+      const id = form.identifier.trim()
+      const payload = looksLikeEmail(id)
+        ? { email: id, password: form.password }
+        : { cnpj:  id, password: form.password }
+      const data = await api.login(payload)
       if (!data) throw new Error('Credenciais inválidas')
 
       const user = data.user
@@ -64,11 +77,11 @@ export default function Login() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="CNPJ"
-              value={form.cnpj}
-              onChange={handleCNPJ}
-              placeholder="00.000.000/0001-00"
-              inputMode="numeric"
+              label="CNPJ ou e-mail"
+              value={form.identifier}
+              onChange={handleIdentifier}
+              placeholder="00.000.000/0001-00 ou seu@email.com"
+              autoComplete="username"
               required
               autoFocus
             />
@@ -87,16 +100,16 @@ export default function Login() {
             </Button>
           </form>
           <p className="mt-5 text-center text-xs text-gray-400">
-            Acesso com CNPJ cadastrado pelo administrador da plataforma.
+            Acesso para cooperativas (CNPJ) ou administradores (CNPJ ou e-mail).
           </p>
 
           <button
             type="button"
             onClick={() => {
               const phone = import.meta.env.VITE_ADMIN_WHATSAPP || '5588999999999'
-              const cnpj  = form.cnpj || '____________'
+              const id    = form.identifier || '____________'
               const msg = encodeURIComponent(
-                `Olá! Preciso redefinir a senha da minha cooperativa.\n\nCNPJ: ${cnpj}`
+                `Olá! Preciso redefinir a senha do meu acesso.\n\nLogin: ${id}`
               )
               window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
             }}

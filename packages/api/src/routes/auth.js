@@ -206,14 +206,16 @@ router.post('/login', async (req, res, next) => {
     let authPhone = body.phone;
 
     if (body.cnpj) {
+      // CNPJ vale tanto para cooperativas (operator) quanto pro admin com
+      // CNPJ cadastrado — o painel da cooperativa aceita os dois.
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
       const { data: opUser, error: lookupErr } = await supabase
         .from('users')
         .select('email')
         .eq('document_number', cnpjDigits)
         .eq('document_type', 'cnpj')
-        .eq('user_type', 'operator')
-        .single();
+        .in('user_type', ['operator', 'admin'])
+        .maybeSingle();
 
       if (lookupErr || !opUser) {
         return res.status(401).json({ error: 'CNPJ não encontrado ou não autorizado' });
