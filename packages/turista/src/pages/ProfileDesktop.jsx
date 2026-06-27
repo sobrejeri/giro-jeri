@@ -230,17 +230,33 @@ export default function ProfileDesktop() {
               { k: 'birth_date', label: 'Nascimento', type: 'date' },
               { k: 'nationality', label: 'Nacionalidade', type: 'text' },
               { k: 'document_number', label: 'Documento', type: 'text' },
-            ].map(({ k, label, type }) => (
-              <label key={k} className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
-                <input
-                  type={type}
-                  value={form[k] || ''}
-                  onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}
-                  className="border border-gray-200 rounded-xl px-3 py-2 text-[14px] focus:outline-none focus:border-brand"
-                />
-              </label>
-            ))}
+            ].map(({ k, label, type }) => {
+              // Telefone começa com +55 fixo — mesma regra de coop/admin.
+              const isPhone = k === 'phone'
+              const value = isPhone ? (form[k] || '+55 ') : (form[k] || '')
+              const onChange = isPhone
+                ? (e) => {
+                    let v = e.target.value
+                    if (!v.startsWith('+55')) v = '+55 ' + v.replace(/^\+?5?5?\s?/, '')
+                    setForm((f) => ({ ...f, [k]: v }))
+                  }
+                : (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+              const onFocus = isPhone
+                ? () => { if (!form[k]) setForm((f) => ({ ...f, [k]: '+55 ' })) }
+                : undefined
+              return (
+                <label key={k} className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
+                  <input
+                    type={type}
+                    value={value}
+                    onFocus={onFocus}
+                    onChange={onChange}
+                    className="border border-gray-200 rounded-xl px-3 py-2 text-[14px] focus:outline-none focus:border-brand"
+                  />
+                </label>
+              )
+            })}
           </div>
           <div className="flex gap-3 mt-5">
             <button onClick={saveEdit} disabled={saving} className="inline-flex items-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold px-5 py-2.5 rounded-xl disabled:opacity-60">
