@@ -9,6 +9,7 @@ import {
 } from '../services/priceEngine.js';
 import { filterByRadius } from '../services/geo.js';
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
+import { notifyOperatorsNewQuote } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
 
 const router = Router();
@@ -246,6 +247,12 @@ router.post('/quotes', authenticate, async (req, res, next) => {
       title:       'Nova cotação de translado',
       body:        `${req.user.full_name} pediu um translado personalizado: ${body.origin_place_name} → ${body.destination_place_name} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
     });
+
+    // WhatsApp pras cooperativas (fire-and-forget) — mesma estratégia da
+    // solicitação normal, mas com mensagem indicando que é cotação personalizada
+    // e que precisa enviar valor (não só aceitar).
+    notifyOperatorsNewQuote(supabase, data).catch((err) =>
+      console.error('[whatsapp] notificação de cotação falhou:', err.message));
 
     res.status(201).json(data);
   } catch (err) {

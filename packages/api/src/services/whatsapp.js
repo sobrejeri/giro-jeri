@@ -87,6 +87,36 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
 }
 
 /**
+ * WhatsApp pras cooperativas — nova cotação de translado personalizado.
+ * Diferente da reserva: a coop precisa abrir e enviar o PREÇO, não só aceitar.
+ */
+export async function notifyOperatorsNewQuote(supabase, quote) {
+  if (!isWhatsappEnabled() || !quote) return { skipped: true }
+
+  const { data: operators } = await supabase
+    .from('users')
+    .select('phone')
+    .eq('user_type', 'operator')
+    .eq('is_active', true)
+
+  if (!operators?.length) return { skipped: true }
+
+  const rota = [quote.origin_place_name, quote.destination_place_name].filter(Boolean).join(' → ')
+  const data = quote.service_date
+    ? new Date(quote.service_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : 'a definir'
+  const hora = quote.service_time ? ` ${quote.service_time.slice(0, 5)}` : ''
+
+  const message =
+    `💸 *Giro Jeri — Nova cotação personalizada*\n` +
+    `Translado privativo${rota ? ` · ${rota}` : ''}\n` +
+    `📅 ${data}${hora} · ${quote.people_count || 1} pax\n` +
+    `Abra o app pra enviar o valor ao cliente.`
+
+  await sendToMany(operators.map((op) => op.phone), message)
+}
+
+/**
  * WhatsApp para o(s) admin(s) — solicitação que ninguém aceitou em 24h.
  * Chamado de forma lazy pelo /api/operator/bookings ao detectar expiradas
  * ainda sem aviso (flag bookings.admin_notified_expired_at).
