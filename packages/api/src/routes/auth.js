@@ -415,6 +415,15 @@ router.patch('/me', authenticate, async (req, res, next) => {
   try {
     const body = updateProfileSchema.parse(req.body);
 
+    // CPF/CNPJ: guarda só os dígitos pra o login (que busca por dígitos) bater.
+    // Sem isso, salvar "86.981.608/0001-60" quebra o login por CNPJ.
+    if (body.document_number && (body.document_type === 'cpf' || body.document_type === 'cnpj')) {
+      body.document_number = body.document_number.replace(/\D/g, '');
+    }
+    if (body.bank_document) {
+      body.bank_document = body.bank_document.replace(/\D/g, '');
+    }
+
     const { data: updated, error } = await supabase
       .from('users')
       .update({ ...body, updated_at: new Date().toISOString() })
