@@ -980,6 +980,84 @@ router.post('/bookings/manual', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// =============================================================================
+// SOLICITAÇÕES EXPIRADAS — janela de 24h
+// Quando ninguém aceita em 24h, a solicitação some das telas das coops e cai
+// aqui pra o admin assumir como operador (operator_id = admin.id).
+// Também cancela em definitivo solicitações cuja data/hora de serviço passou.
+// =============================================================================
+
+const EXPIRED_COLS = `
+  id, booking_code, service_type, service_id, booking_mode, user_id,
+  service_date, service_time, people_count, total_amount, created_at,
+  origin_text, destination_text, status_commercial, status_operational,
+  acceptance_expires_at, region_id
+`;
+
+// ── GET /api/admin/bookings/expired-pending ─────────────
+// Solicitações que ninguém aceitou dentro de 24h e ainda não chegaram à data
+// do serviço. Estas só aparecem para o admin.
+router.get('/bookings/expired-pending', requireAdmin, async (req, res, next) => {
+  try {
+    const nowIso = new Date().toISOString();
+    const today  = dayjs().format('YYYY-MM-DD');
+
+    // Cleanup oportunista — solicitações cuja data já passou sem ninguém
+    // aceitar são canceladas de vez (somem até pro admin).
+    await supabase
+      .from('bookings')
+      .update({ status_commercial: 'cancelled', status_operational: 'cancelled' })
+      .eq('status_commercial', 'awaiting_acceptance')
+      .is('operator_id', null)
+      .lt('service_date', today);
+
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(EXPIRED_COLS)
+      .eq('status_commercial', 'awaiting_acceptance')
+      .is('operator_id', null)
+      .lt('acceptance_expires_at', nowIso)
+      .gte('service_date', today)
+      .order('service_date', { ascending: true });
+    if (error) throw error;
+
+    // Junta cliente (sem embed por FK frágil).
+    const userIds = [...new Set((data || []).map((b) => b.user_id).filter(Boolean))];
+    let byId = new Map();
+    if (userIds.length > 0) {
+      const { data: users, error: uErr } = await supabase
+        .from('users').select('id, full_name, phone, email').in('id', userIds);
+      if (uErr) throw uErr;
+      byId = new Map((users || []).map((u) => [u.id, u]));
+    }
+    res.json((data || []).map((b) => ({ ...b, users: byId.get(b.user_id) || null })));
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/bookings/:id/accept ─────────────────
+// Admin assume a solicitação como operador (operator_id = admin.id) e o fluxo
+// segue normal (cliente paga → admin despacha/conclui igual cooperativa).
+router.post('/bookings/:id/accept', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('bookings')
+      .update({
+        operator_id:        req.user.id,
+        status_commercial:  'awaiting_payment',
+        status_operational: 'assigned',
+      })
+      .eq('id', req.params.id)
+      .is('operator_id', null)
+      .eq('status_commercial', 'awaiting_acceptance')
+      .select('id, booking_code, user_id, service_type')
+      .single();
+    if (error || !data) {
+      return res.status(409).json({ error: 'Solicitação não disponível para assumir (já aceita ou cancelada).' });
+    }
+    res.json({ ok: true, booking_id: data.id, booking_code: data.booking_code });
+  } catch (err) { next(err); }
+});
+
 // ── Helpers ────────────────────────────────────────────
 function sum(rows, entryType, direction) {
   return rows

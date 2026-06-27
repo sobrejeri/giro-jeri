@@ -142,6 +142,9 @@ export const api = {
   getAdminBookings:     (params = {}) => request(`/api/admin/bookings?${new URLSearchParams(params)}`),
   createManualBooking:  (body) => request('/api/admin/bookings/manual', { method: 'POST', body }),
   confirmPaymentManual: (body) => request('/api/payments/manual-confirm', { method: 'POST', body }),
+  // Solicitações que ninguém aceitou em 24h (passam só pro admin assumir).
+  getExpiredPendingBookings: () => request('/api/admin/bookings/expired-pending'),
+  adminAcceptBooking:        (id) => request(`/api/admin/bookings/${id}/accept`, { method: 'POST' }),
 
   // Regiões
   getRegions:   ()         => request('/api/regions'),

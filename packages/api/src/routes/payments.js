@@ -560,6 +560,8 @@ router.post('/request', authenticate, async (req, res, next) => {
         status_commercial:  'awaiting_acceptance',
         status_operational: 'new',
         payment_status:     'pending',
+        // 24h para alguma cooperativa aceitar; depois passa só pro admin.
+        acceptance_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
       .select()
       .single()

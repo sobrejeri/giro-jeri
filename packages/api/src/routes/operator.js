@@ -160,15 +160,15 @@ async function attachCustomers(bookings) {
 // Retorna corridas disponíveis (sem operador) + corridas do operador logado
 router.get('/bookings', async (req, res, next) => {
   try {
-    // Corridas disponíveis (sem cooperativa atribuída). Duas consultas simples e
-    // explícitas em vez de um filtro .or/and aninhado (que é frágil e já deixou
-    // de retornar solicitações):
-    //  • awaiting_acceptance — fluxo novo: solicitadas, aguardando aceite;
-    //  • paid + awaiting_dispatch — fluxo antigo / cotações já pagas.
+    // Janela de aceite: cooperativas só veem solicitações com
+    // acceptance_expires_at > NOW(). Passou de 24h, some daqui e aparece
+    // pro admin (endpoint próprio em /api/admin/bookings/expired-pending).
+    const nowIso = new Date().toISOString();
     const [reqRes, dispRes] = await Promise.all([
       supabase.from('bookings').select(BOOKING_COLUMNS)
         .is('operator_id', null)
-        .eq('status_commercial', 'awaiting_acceptance'),
+        .eq('status_commercial', 'awaiting_acceptance')
+        .gt('acceptance_expires_at', nowIso),
       supabase.from('bookings').select(BOOKING_COLUMNS)
         .is('operator_id', null)
         .eq('status_commercial', 'paid')
@@ -210,6 +210,7 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
     const SELECT = 'id, booking_code, user_id, service_type'
 
     // Tentativa 1 — fluxo novo: solicitação aguardando aceite → vai para pagamento.
+    const nowIso = new Date().toISOString()
     let { data, error } = await supabase
       .from('bookings')
       .update({
@@ -220,6 +221,8 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
       .eq('id', req.params.id)
       .is('operator_id', null)
       .eq('status_commercial', 'awaiting_acceptance')
+      // Janela de 24h: depois expira pra cooperativas (passa só pro admin).
+      .gt('acceptance_expires_at', nowIso)
       .select(SELECT)
     if (error) throw error
 
