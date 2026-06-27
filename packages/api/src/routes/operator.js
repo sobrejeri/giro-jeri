@@ -205,40 +205,41 @@ router.get('/bookings', async (req, res, next) => {
       if (err?.code !== '42703') console.error('[operator/bookings] expiry sweep:', err.message);
     }
 
-    let reqQuery = supabase.from('bookings').select(`${BOOKING_COLUMNS}, acceptance_expires_at`)
+    // Busca TODAS as solicitações aguardando aceite (sem filtrar a janela no
+    // SQL — o filtro .gt/.lt do PostgREST exclui NULL e já se mostrou frágil).
+    // A partição da janela de 24h é feita em memória logo abaixo.
+    let reqRes = await supabase.from('bookings').select(`${BOOKING_COLUMNS}, acceptance_expires_at`)
       .is('operator_id', null)
       .eq('status_commercial', 'awaiting_acceptance');
-    reqQuery = isAdmin
-      ? reqQuery.lt('acceptance_expires_at', nowIso)
-      : reqQuery.gt('acceptance_expires_at', nowIso);
-    let reqRes = await reqQuery;
     if (reqRes.error?.code === '42703') {
-      console.warn('[operator/bookings] coluna acceptance_expires_at ausente — rodar migration 037. Sem filtro de janela.');
+      // Migration 037 não rodou — coluna não existe; busca sem ela.
+      console.warn('[operator/bookings] coluna acceptance_expires_at ausente — rodar migration 037.');
       reqRes = await supabase.from('bookings').select(BOOKING_COLUMNS)
         .is('operator_id', null)
         .eq('status_commercial', 'awaiting_acceptance');
     }
-    // Debug: se filtro retornou 0, conta quantas existem SEM o filtro pra
-    // entender se o problema é o filtro ou a query base.
-    if (!reqRes.error && (!reqRes.data || reqRes.data.length === 0)) {
-      const unfiltered = await supabase.from('bookings')
-        .select('id, booking_code, acceptance_expires_at, status_commercial, operator_id')
-        .is('operator_id', null)
-        .eq('status_commercial', 'awaiting_acceptance');
-      console.log('[operator/bookings DEBUG] role=%s now=%s aceite_filtrado=0 aceite_sem_filtro=%d rows=%j',
-        req.user?.user_type, nowIso, unfiltered.data?.length || 0,
-        (unfiltered.data || []).slice(0, 3).map((r) => ({ code: r.booking_code, exp: r.acceptance_expires_at })));
-    }
+    if (reqRes.error) throw reqRes.error
+
+    const nowMs = Date.now();
+    const all   = reqRes.data || [];
+    // exp NULL → tratado como "dentro da janela" (visível pra coop): nunca
+    // some por engano. Coop vê dentro do prazo; admin vê só as expiradas.
+    const within  = all.filter((b) => !b.acceptance_expires_at || new Date(b.acceptance_expires_at).getTime() > nowMs);
+    const expired = all.filter((b) =>  b.acceptance_expires_at && new Date(b.acceptance_expires_at).getTime() <= nowMs);
+    const acceptanceRows = isAdmin ? expired : within;
+
+    console.log('[operator/bookings] role=%s total_aceite=%d within=%d expired=%d → mostra=%d',
+      req.user?.user_type, all.length, within.length, expired.length, acceptanceRows.length);
+
     // dispRes: paid+awaiting_dispatch (sem operador) — fluxo antigo das cotações
     // já pagas. Mostramos pros dois (não tem janela de aceite aqui).
     const dispRes = await supabase.from('bookings').select(BOOKING_COLUMNS)
       .is('operator_id', null)
       .eq('status_commercial', 'paid')
       .eq('status_operational', 'awaiting_dispatch');
-    if (reqRes.error)  throw reqRes.error
     if (dispRes.error) throw dispRes.error
 
-    const pendingRaw = [...(reqRes.data || []), ...(dispRes.data || [])]
+    const pendingRaw = [...acceptanceRows, ...(dispRes.data || [])]
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
     // Minhas corridas: aceitas ou em andamento
@@ -254,9 +255,6 @@ router.get('/bookings', async (req, res, next) => {
       attachCustomers(pendingRaw),
       attachCustomers(mineRaw || []),
     ])
-
-    console.log('[operator/bookings] op=%s pending=%d (aceite=%d despacho=%d) mine=%d',
-      req.user.id, pending.length, reqRes.data?.length || 0, dispRes.data?.length || 0, mine.length)
 
     res.json({ pending, mine })
   } catch (err) { next(err) }
