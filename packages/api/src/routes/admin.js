@@ -1019,6 +1019,11 @@ router.get('/bookings/expired-pending', requireAdmin, async (req, res, next) => 
       .lt('acceptance_expires_at', nowIso)
       .gte('service_date', today)
       .order('service_date', { ascending: true });
+    if (error?.code === '42703') {
+      // Migration 037 ainda não rodou — sem janela de aceite, nada "expirou".
+      console.warn('[admin/expired-pending] coluna acceptance_expires_at ausente — rodar migration 037.');
+      return res.json([]);
+    }
     if (error) throw error;
 
     // Junta cliente (sem embed por FK frágil).

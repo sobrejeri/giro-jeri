@@ -542,29 +542,39 @@ router.post('/request', authenticate, async (req, res, next) => {
     const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
-    const { data: booking, error: bErr } = await supabase
+    const baseBooking = {
+      booking_code:       bookingCode,
+      user_id:            req.user.id,
+      region_id:          region_id || null,
+      service_type,
+      service_id,
+      booking_mode:       booking_mode || 'private',
+      service_date:       service_date_iso,
+      service_time:       service_time || null,
+      people_count:       Number(people_count) || 1,
+      origin_text:        origin_text || null,
+      destination_text:   destination_text || null,
+      total_amount:       chargedTotal,
+      status_commercial:  'awaiting_acceptance',
+      status_operational: 'new',
+      payment_status:     'pending',
+    }
+    // 24h para alguma cooperativa aceitar; depois passa só pro admin. Se a
+    // migration 037 ainda não rodou (coluna ausente = 42703), reusa o insert
+    // sem o campo pra não bloquear novas solicitações.
+    let { data: booking, error: bErr } = await supabase
       .from('bookings')
       .insert({
-        booking_code:       bookingCode,
-        user_id:            req.user.id,
-        region_id:          region_id || null,
-        service_type,
-        service_id,
-        booking_mode:       booking_mode || 'private',
-        service_date:       service_date_iso,
-        service_time:       service_time || null,
-        people_count:       Number(people_count) || 1,
-        origin_text:        origin_text || null,
-        destination_text:   destination_text || null,
-        total_amount:       chargedTotal,
-        status_commercial:  'awaiting_acceptance',
-        status_operational: 'new',
-        payment_status:     'pending',
-        // 24h para alguma cooperativa aceitar; depois passa só pro admin.
+        ...baseBooking,
         acceptance_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
       .select()
       .single()
+    if (bErr?.code === '42703') {
+      console.warn('[payments/request] coluna acceptance_expires_at ausente — rodar migration 037.')
+      const retry = await supabase.from('bookings').insert(baseBooking).select().single()
+      booking = retry.data; bErr = retry.error
+    }
     if (bErr) throw bErr
 
     if (vehicles.length > 0) {
