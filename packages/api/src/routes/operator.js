@@ -76,7 +76,12 @@ router.patch('/profile', async (req, res, next) => {
 });
 
 // GET /api/operator/preferences
-router.get('/preferences', async (req, res, next) => {
+// Preferências são opcionais (opt-in de quais serviços a cooperativa executa).
+// Qualquer falha aqui — tabela faltando, RLS, coluna divergente — NÃO deve
+// quebrar as telas de Veículos/Passeios/Rotas: devolvemos lista vazia e o
+// frontend trata todos os serviços como "disponíveis" por padrão. O erro
+// real fica nos logs do Render pra investigação posterior.
+router.get('/preferences', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('operator_service_preferences')
@@ -85,14 +90,13 @@ router.get('/preferences', async (req, res, next) => {
     if (error) {
       console.error('[operator/preferences] supabase falhou op=%s code=%s msg=%s details=%s hint=%s',
         req.user.id, error.code, error.message, error.details, error.hint);
-      // Se a tabela ainda não existe nesse ambiente (migration 006 não rodou),
-      // devolvemos lista vazia em vez de 500 — a UI continua funcional mostrando
-      // todos os serviços como "disponíveis" por padrão.
-      if (error.code === '42P01') return res.json([]);
-      return res.status(500).json({ error: error.message, code: error.code, details: error.details });
+      return res.json([]);
     }
     res.json(data || []);
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.error('[operator/preferences] exception op=%s err=%s', req.user.id, err?.message);
+    res.json([]);
+  }
 });
 
 // PUT /api/operator/preferences/:type/:id
