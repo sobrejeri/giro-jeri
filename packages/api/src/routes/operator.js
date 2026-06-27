@@ -220,20 +220,6 @@ router.get('/bookings', async (req, res, next) => {
     }
     if (reqRes.error) throw reqRes.error
 
-    // DEBUG temporário: busca solicitações sem operador SEM filtrar status,
-    // e loga os status que a API enxerga. Compara com o dashboard pra detectar
-    // schema cache do PostgREST desatualizado sobre o enum awaiting_acceptance.
-    {
-      const probe = await supabase.from('bookings')
-        .select('booking_code, status_commercial, operator_id, acceptance_expires_at')
-        .is('operator_id', null)
-        .order('created_at', { ascending: false })
-        .limit(8);
-      console.log('[operator/bookings PROBE] err=%j rows=%j',
-        probe.error ? { code: probe.error.code, msg: probe.error.message } : null,
-        (probe.data || []).map((r) => ({ code: r.booking_code, st: r.status_commercial })));
-    }
-
     const nowMs = Date.now();
     const all   = reqRes.data || [];
     // exp NULL → tratado como "dentro da janela" (visível pra coop): nunca
@@ -242,7 +228,7 @@ router.get('/bookings', async (req, res, next) => {
     const expired = all.filter((b) =>  b.acceptance_expires_at && new Date(b.acceptance_expires_at).getTime() <= nowMs);
     const acceptanceRows = isAdmin ? expired : within;
 
-    console.log('[operator/bookings] role=%s total_aceite=%d within=%d expired=%d → mostra=%d',
+    console.log('[operator/bookings] role=%s aguardando=%d dentro_prazo=%d fora_prazo=%d mostra=%d',
       req.user?.user_type, all.length, within.length, expired.length, acceptanceRows.length);
 
     // dispRes: paid+awaiting_dispatch (sem operador) — fluxo antigo das cotações
