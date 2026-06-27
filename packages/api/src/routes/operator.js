@@ -205,7 +205,7 @@ router.get('/bookings', async (req, res, next) => {
       if (err?.code !== '42703') console.error('[operator/bookings] expiry sweep:', err.message);
     }
 
-    let reqQuery = supabase.from('bookings').select(BOOKING_COLUMNS)
+    let reqQuery = supabase.from('bookings').select(`${BOOKING_COLUMNS}, acceptance_expires_at`)
       .is('operator_id', null)
       .eq('status_commercial', 'awaiting_acceptance');
     reqQuery = isAdmin
@@ -217,6 +217,17 @@ router.get('/bookings', async (req, res, next) => {
       reqRes = await supabase.from('bookings').select(BOOKING_COLUMNS)
         .is('operator_id', null)
         .eq('status_commercial', 'awaiting_acceptance');
+    }
+    // Debug: se filtro retornou 0, conta quantas existem SEM o filtro pra
+    // entender se o problema é o filtro ou a query base.
+    if (!reqRes.error && (!reqRes.data || reqRes.data.length === 0)) {
+      const unfiltered = await supabase.from('bookings')
+        .select('id, booking_code, acceptance_expires_at, status_commercial, operator_id')
+        .is('operator_id', null)
+        .eq('status_commercial', 'awaiting_acceptance');
+      console.log('[operator/bookings DEBUG] role=%s now=%s aceite_filtrado=0 aceite_sem_filtro=%d rows=%j',
+        req.user?.user_type, nowIso, unfiltered.data?.length || 0,
+        (unfiltered.data || []).slice(0, 3).map((r) => ({ code: r.booking_code, exp: r.acceptance_expires_at })));
     }
     // dispRes: paid+awaiting_dispatch (sem operador) — fluxo antigo das cotações
     // já pagas. Mostramos pros dois (não tem janela de aceite aqui).
