@@ -202,8 +202,13 @@ export default function Perfil() {
               <Input
                 label="Telefone / WhatsApp"
                 placeholder="+55 88 99999-9999"
-                value={form.phone}
-                onChange={(e) => set('phone', e.target.value)}
+                value={form.phone || '+55 '}
+                onFocus={() => { if (!form.phone) set('phone', '+55 ') }}
+                onChange={(e) => {
+                  let v = e.target.value
+                  if (!v.startsWith('+55')) v = '+55 ' + v.replace(/^\+?5?5?\s?/, '')
+                  set('phone', v)
+                }}
               />
               <Input
                 label="Data de nascimento"
