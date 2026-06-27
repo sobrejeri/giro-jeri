@@ -157,25 +157,45 @@ async function attachCustomers(bookings) {
 }
 
 // ── GET /api/operator/bookings ─────────────────────────
-// Retorna corridas disponíveis (sem operador) + corridas do operador logado
+// Retorna corridas disponíveis (sem operador) + corridas do operador logado.
+//
+// Janela de 24h:
+//  • user_type='operator' → vê APENAS solicitações com
+//    acceptance_expires_at > NOW() (dentro do prazo de aceite das coops).
+//  • user_type='admin'    → vê APENAS solicitações expiradas
+//    (acceptance_expires_at < NOW()) — as que ninguém da coop pegou em 24h.
+// Sem a migration 037 (coluna 42703), todo mundo vê tudo como antes.
 router.get('/bookings', async (req, res, next) => {
   try {
-    // Janela de aceite: cooperativas só veem solicitações com
-    // acceptance_expires_at > NOW(). Passou de 24h, some daqui e aparece
-    // pro admin (endpoint próprio em /api/admin/bookings/expired-pending).
-    // Se a migration 037 ainda não rodou (coluna não existe = 42703),
-    // a 1ª query falha; reusamos sem o filtro pra não derrubar a tela.
-    const nowIso = new Date().toISOString();
-    let reqRes = await supabase.from('bookings').select(BOOKING_COLUMNS)
+    const isAdmin = req.user?.user_type === 'admin';
+    const nowIso  = new Date().toISOString();
+
+    // Cleanup oportunista — solicitações cuja data já passou sem ninguém
+    // aceitar são canceladas pra não bagunçar nem coop nem admin.
+    if (isAdmin) {
+      const today = nowIso.slice(0, 10);
+      await supabase.from('bookings')
+        .update({ status_commercial: 'cancelled', status_operational: 'cancelled' })
+        .eq('status_commercial', 'awaiting_acceptance')
+        .is('operator_id', null)
+        .lt('service_date', today);
+    }
+
+    let reqQuery = supabase.from('bookings').select(BOOKING_COLUMNS)
       .is('operator_id', null)
-      .eq('status_commercial', 'awaiting_acceptance')
-      .gt('acceptance_expires_at', nowIso);
+      .eq('status_commercial', 'awaiting_acceptance');
+    reqQuery = isAdmin
+      ? reqQuery.lt('acceptance_expires_at', nowIso)
+      : reqQuery.gt('acceptance_expires_at', nowIso);
+    let reqRes = await reqQuery;
     if (reqRes.error?.code === '42703') {
-      console.warn('[operator/bookings] coluna acceptance_expires_at ausente — rodar migration 037. Caindo no filtro antigo.');
+      console.warn('[operator/bookings] coluna acceptance_expires_at ausente — rodar migration 037. Sem filtro de janela.');
       reqRes = await supabase.from('bookings').select(BOOKING_COLUMNS)
         .is('operator_id', null)
         .eq('status_commercial', 'awaiting_acceptance');
     }
+    // dispRes: paid+awaiting_dispatch (sem operador) — fluxo antigo das cotações
+    // já pagas. Mostramos pros dois (não tem janela de aceite aqui).
     const dispRes = await supabase.from('bookings').select(BOOKING_COLUMNS)
       .is('operator_id', null)
       .eq('status_commercial', 'paid')
@@ -216,8 +236,10 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
     const SELECT = 'id, booking_code, user_id, service_type'
 
     // Tentativa 1 — fluxo novo: solicitação aguardando aceite → vai para pagamento.
-    const nowIso = new Date().toISOString()
-    let resAccept = await supabase
+    const isAdmin = req.user?.user_type === 'admin'
+    const nowIso  = new Date().toISOString()
+
+    let acceptQuery = supabase
       .from('bookings')
       .update({
         operator_id:        req.user.id,
@@ -227,9 +249,11 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
       .eq('id', req.params.id)
       .is('operator_id', null)
       .eq('status_commercial', 'awaiting_acceptance')
-      // Janela de 24h: depois expira pra cooperativas (passa só pro admin).
-      .gt('acceptance_expires_at', nowIso)
-      .select(SELECT)
+    // Coop só aceita dentro do prazo de 24h. Admin assume sem restrição
+    // (justamente as expiradas que coop não pegou).
+    if (!isAdmin) acceptQuery = acceptQuery.gt('acceptance_expires_at', nowIso)
+
+    let resAccept = await acceptQuery.select(SELECT)
     if (resAccept.error?.code === '42703') {
       // Migration 037 ainda não rodou — aceita sem checar janela.
       resAccept = await supabase.from('bookings')

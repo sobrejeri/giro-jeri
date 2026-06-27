@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
-import { Search, ChevronLeft, ChevronRight, CalendarDays, AlertTriangle, Check } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card from '../components/ui/Card'
@@ -46,74 +46,10 @@ export default function Reservas() {
   const total    = data?.total || 0
   const pages    = Math.ceil(total / 30)
 
-  // Solicitações que ninguém aceitou em 24h — passam só pro admin assumir.
-  const queryClient = useQueryClient()
-  const { data: expired = [], isLoading: loadingExpired } = useQuery({
-    queryKey: ['admin-expired-pending'],
-    queryFn:  () => api.getExpiredPendingBookings(),
-    refetchInterval: 30000,
-  })
-  const assumeMut = useMutation({
-    mutationFn: (id) => api.adminAcceptBooking(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-expired-pending'] })
-      queryClient.invalidateQueries({ queryKey: ['admin-bookings'] })
-    },
-  })
-
   if (isLoading) return <PageSpinner />
 
   return (
     <div className="space-y-4">
-      {/* Solicitações expiradas — só pro admin assumir */}
-      {expired.length > 0 && (
-        <Card className="border border-amber-700/40">
-          <div className="px-5 py-3 border-b border-gray-700 flex items-center gap-2">
-            <AlertTriangle size={16} className="text-amber-500" />
-            <h2 className="text-sm font-semibold text-gray-100">
-              Solicitações sem cooperativa ({expired.length})
-            </h2>
-            <span className="text-xs text-gray-500 ml-auto">
-              Nenhuma cooperativa aceitou em 24h — assuma como operador
-            </span>
-          </div>
-          <div className="divide-y divide-gray-800">
-            {expired.map((b) => (
-              <div key={b.id} className="px-5 py-3 flex flex-wrap items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-brand">{b.booking_code}</span>
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${b.service_type === 'tour' ? 'bg-blue-900/40 text-blue-400' : 'bg-purple-900/40 text-purple-400'}`}>
-                      {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
-                    </span>
-                    <span className="text-xs text-gray-500">{b.people_count} pax</span>
-                  </div>
-                  <p className="text-sm text-gray-200 mt-1 truncate">
-                    {b.users?.full_name || '—'}
-                    {b.users?.phone && <span className="text-gray-500"> · {b.users.phone}</span>}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {b.service_date ? format(parseISO(b.service_date), 'dd/MM/yyyy') : '—'}
-                    {b.service_time ? ` · ${b.service_time.slice(0, 5)}` : ''}
-                    {b.origin_text && b.destination_text && ` · ${b.origin_text} → ${b.destination_text}`}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-200">{fmt(b.total_amount)}</p>
-                </div>
-                <button
-                  onClick={() => assumeMut.mutate(b.id)}
-                  disabled={assumeMut.isPending}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand text-white text-sm font-semibold hover:bg-brand/90 disabled:opacity-60 transition-colors"
-                >
-                  <Check size={14} /> Assumir
-                </button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
       {/* Filtros */}
       <Card className="p-4">
         <div className="flex flex-wrap gap-3">
