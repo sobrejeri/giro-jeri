@@ -217,6 +217,9 @@ router.post('/login', async (req, res, next) => {
         .in('user_type', ['operator', 'admin'])
         .maybeSingle();
 
+      console.log('[login] cnpj=%s achou=%s lookupErr=%s',
+        cnpjDigits, opUser ? opUser.email : 'NÃO', lookupErr ? `${lookupErr.code}:${lookupErr.message}` : 'null');
+
       if (lookupErr || !opUser) {
         return res.status(401).json({ error: 'CNPJ não encontrado ou não autorizado' });
       }
@@ -231,7 +234,10 @@ router.post('/login', async (req, res, next) => {
       password: body.password,
     });
 
-    if (error) return res.status(401).json({ error: 'Credenciais incorretas' });
+    if (error) {
+      console.log('[login] signIn falhou email=%s err=%s', authEmail, error.message);
+      return res.status(401).json({ error: 'Credenciais incorretas' });
+    }
 
     // Usa client scoped ao token do usuário para que RLS passe corretamente
     const sc = userScopedClient(data.session.access_token);
