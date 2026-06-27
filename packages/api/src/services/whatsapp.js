@@ -70,7 +70,7 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
 
   const { data: operators } = await supabase
     .from('users')
-    .select('whatsapp_number')
+    .select('phone')
     .eq('user_type', 'operator')
     .eq('is_active', true)
 
@@ -83,7 +83,7 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
     `📅 ${data} · Cód: ${booking.booking_code || '-'}\n` +
     `Você tem 24h para aceitar. Abra o app pra ver.`
 
-  await sendToMany(operators.map((op) => op.whatsapp_number), message)
+  await sendToMany(operators.map((op) => op.phone), message)
 }
 
 /**
@@ -96,7 +96,7 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
 
   const { data: admins } = await supabase
     .from('users')
-    .select('whatsapp_number')
+    .select('phone')
     .eq('user_type', 'admin')
     .eq('is_active', true)
 
@@ -110,7 +110,7 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
     `📅 ${data} · Cód: ${booking.booking_code || '-'}\n` +
     `Acesse o app da cooperativa pra assumir.`
 
-  await sendToMany(admins.map((a) => a.whatsapp_number), message)
+  await sendToMany(admins.map((a) => a.phone), message)
 }
 
 export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {
