@@ -4,18 +4,21 @@ import { Menu } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 
 const TITLES = {
-  '/dashboard':     'Dashboard',
-  '/usuarios':      'Gestão de Usuários',
-  '/catalogo':      'Catálogo',
-  '/precos':        'Motor de Preços',
-  '/regioes':       'Regiões',
-  '/cupons':        'Cupons',
-  '/temporada':     'Alta Temporada',
-  '/financeiro':    'Financeiro',
-  '/auditoria':     'Auditoria',
-  '/configuracoes': 'Configurações',
-  '/reservas':      'Reservas',
-  '/perfil':        'Meu Perfil',
+  '/dashboard':        'Dashboard',
+  '/usuarios':         'Gestão de Usuários',
+  '/catalogo':         'Catálogo',
+  '/precos':           'Motor de Preços',
+  '/regioes':          'Regiões',
+  '/cupons':           'Cupons',
+  '/temporada':        'Alta Temporada',
+  '/financeiro':       'Financeiro',
+  '/auditoria':        'Auditoria',
+  '/configuracoes':    'Configurações',
+  '/reservas':         'Reservas',
+  '/perfil':           'Meu Perfil',
+  '/feed':             'Feed & Eventos',
+  '/stories':          'Stories & Destaques',
+  '/estabelecimentos': 'Estabelecimentos',
 }
 
 export default function Header({ onMenu = () => {} }) {
