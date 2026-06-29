@@ -256,19 +256,7 @@ router.get('/bookings', async (req, res, next) => {
       attachCustomers(mineRaw || []),
     ])
 
-    res.json({
-      pending,
-      mine,
-      _debug: {
-        user_type:        req.user?.user_type,
-        is_admin:         isAdmin,
-        total_awaiting:   all.length,
-        within_window:    within.length,
-        expired_window:   expired.length,
-        showing:          acceptanceRows.length,
-        dispatch_count:   dispRes.data?.length || 0,
-      },
-    })
+    res.json({ pending, mine })
   } catch (err) { next(err) }
 })
 
