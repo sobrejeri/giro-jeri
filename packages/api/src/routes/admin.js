@@ -54,6 +54,101 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── GET /api/admin/auth-orphans ────────────────────────
+// Lista usuários que existem no Supabase Auth mas NÃO têm perfil na tabela
+// users. Útil para o admin importar usuários criados via Dashboard.
+router.get('/auth-orphans', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: { users: authUsers }, error: authErr } =
+      await supabase.auth.admin.listUsers({ perPage: 1000 });
+    if (authErr) throw authErr;
+
+    const authIds = authUsers.map((u) => u.id);
+
+    const { data: linked } = await supabase
+      .from('users').select('auth_id').in('auth_id', authIds);
+    const linkedSet = new Set((linked || []).map((r) => r.auth_id));
+
+    const orphans = authUsers
+      .filter((u) => !linkedSet.has(u.id))
+      .map((u) => ({
+        auth_id:    u.id,
+        email:      u.email,
+        phone:      u.phone,
+        created_at: u.created_at,
+      }));
+
+    res.json(orphans);
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/import-auth-user ──────────────────
+// Cria perfil na tabela users para um usuário que só existe no Auth.
+const importAuthSchema = z.object({
+  auth_id:   z.string().uuid(),
+  full_name: z.string().min(2).max(200),
+  user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
+  cnpj:      z.string().optional(),
+});
+
+router.post('/import-auth-user', requireAdmin, async (req, res, next) => {
+  try {
+    const body = importAuthSchema.parse(req.body);
+
+    const { data: { user: authUser }, error: authErr } =
+      await supabase.auth.admin.getUserById(body.auth_id);
+    if (authErr || !authUser) return res.status(404).json({ error: 'Usuário Auth não encontrado' });
+
+    const existing = await supabase
+      .from('users').select('id').eq('auth_id', body.auth_id).maybeSingle();
+    if (existing.data) return res.status(409).json({ error: 'Este usuário já tem perfil' });
+
+    let docNumber = null;
+    let docType   = null;
+    let email     = authUser.email;
+
+    if (body.user_type === 'operator' && body.cnpj) {
+      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      docNumber = cnpjDigits;
+      docType   = 'cnpj';
+      if (!email || !email.endsWith('@op.girojeri.app')) {
+        const syntheticEmail = `${cnpjDigits}@op.girojeri.app`;
+        await supabase.auth.admin.updateUserById(body.auth_id, { email: syntheticEmail });
+        email = syntheticEmail;
+      }
+    }
+
+    const { data: profile, error: profileErr } = await supabase
+      .from('users')
+      .insert({
+        auth_id:         body.auth_id,
+        full_name:       body.full_name,
+        email,
+        phone:           authUser.phone || null,
+        user_type:       body.user_type,
+        document_number: docNumber,
+        document_type:   docType,
+      })
+      .select('id, full_name, email, phone, user_type, is_active, created_at, document_number')
+      .single();
+
+    if (profileErr) return res.status(400).json({ error: profileErr.message });
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'users',
+      entity_id:       profile.id,
+      action_type:     'import_auth_user',
+      new_values_json: { auth_id: body.auth_id, user_type: body.user_type },
+    });
+
+    res.status(201).json(profile);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    next(err);
+  }
+});
+
 // ── GET /api/admin/users ───────────────────────────────
 router.get('/users', requireAdmin, async (req, res, next) => {
   try {

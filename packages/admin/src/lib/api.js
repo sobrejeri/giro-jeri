@@ -76,6 +76,8 @@ export const api = {
   updateUser:        (id, body)    => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
   resetUserPassword: (id, new_password) => request(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: { new_password } }),
   registerRecipient: (id)          => request(`/api/admin/users/${id}/register-recipient`, { method: 'POST', body: {} }),
+  getAuthOrphans:    ()            => request('/api/admin/auth-orphans'),
+  importAuthUser:    (body)        => request('/api/admin/import-auth-user', { method: 'POST', body }),
 
   // Financeiro
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),

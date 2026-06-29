@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle, KeyRound, Copy } from 'lucide-react'
+import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle, KeyRound, Copy, UserCheck } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
@@ -22,6 +22,7 @@ const USER_TYPE_LABELS = {
 }
 
 const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist' }
+const IMPORT_EMPTY = { full_name: '', user_type: 'tourist', cnpj: '' }
 
 function genPassword(len = 10) {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKMNPQRSTUVWXYZ'
@@ -36,9 +37,10 @@ export default function Usuarios() {
   const [modal, setModal]         = useState(null)   // null | { mode: 'edit', user } | { mode: 'create' } | { mode: 'reset', user }
   const [form, setForm]           = useState({})
   const [createForm, setCreateForm] = useState(CREATE_EMPTY)
-  const [resetPwd, setResetPwd]   = useState('')
+  const [resetPwd, setResetPwd]     = useState('')
   const [resetCopied, setResetCopied] = useState(false)
-  const qc                        = useQueryClient()
+  const [importForm, setImportForm]   = useState(IMPORT_EMPTY)
+  const qc                            = useQueryClient()
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page, search, typeFilter, activeFilter],
@@ -86,6 +88,36 @@ export default function Usuarios() {
       }
     },
   })
+
+  const { data: orphans = [] } = useQuery({
+    queryKey: ['auth-orphans'],
+    queryFn:  () => api.getAuthOrphans(),
+  })
+
+  const importMut = useMutation({
+    mutationFn: (body) => api.importAuthUser(body),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['auth-orphans'] })
+      setModal(null)
+      setImportForm(IMPORT_EMPTY)
+    },
+  })
+
+  function openImport(orphan) {
+    setModal({ mode: 'import', orphan })
+    setImportForm({ full_name: orphan.email?.split('@')[0] || '', user_type: 'tourist', cnpj: '' })
+  }
+
+  function handleImport(e) {
+    e.preventDefault()
+    importMut.mutate({
+      auth_id:   modal.orphan.auth_id,
+      full_name: importForm.full_name,
+      user_type: importForm.user_type,
+      ...(importForm.user_type === 'operator' ? { cnpj: importForm.cnpj } : {}),
+    })
+  }
 
   function openEdit(u) {
     setModal({ mode: 'edit', user: u })
@@ -252,6 +284,98 @@ export default function Usuarios() {
           </div>
         )}
       </Card>
+
+      {/* Usuários Auth sem perfil */}
+      {orphans.length > 0 && (
+        <Card className="border-amber-900/40">
+          <div className="px-5 py-3 border-b border-gray-700 flex items-center gap-2">
+            <AlertCircle size={16} className="text-amber-400 shrink-0" />
+            <h3 className="text-sm font-semibold text-amber-300">
+              {orphans.length} usuário{orphans.length > 1 ? 's' : ''} no Auth sem perfil
+            </h3>
+            <span className="text-xs text-gray-500 ml-1">
+              Criados via Supabase Dashboard — clique em "Importar" para vincular
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">E-mail / Telefone</th>
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Criado em</th>
+                  <th className="px-5 py-2 w-24" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {orphans.map((o) => (
+                  <tr key={o.auth_id} className="hover:bg-gray-750 transition-colors">
+                    <td className="px-5 py-2 text-gray-300">{o.email || o.phone || '—'}</td>
+                    <td className="px-5 py-2 text-xs text-gray-500">
+                      {o.created_at ? format(parseISO(o.created_at), 'dd/MM/yyyy') : '—'}
+                    </td>
+                    <td className="px-5 py-2">
+                      <button
+                        onClick={() => openImport(o)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-amber-900/30 text-amber-300 hover:bg-amber-900/50 transition-colors"
+                      >
+                        <UserCheck size={12} /> Importar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Modal importar usuário Auth */}
+      <Modal
+        open={modal?.mode === 'import'}
+        onClose={() => setModal(null)}
+        title="Importar Usuário do Auth"
+        size="sm"
+      >
+        {modal?.mode === 'import' && (
+          <form onSubmit={handleImport} className="space-y-4">
+            <div className="bg-gray-900 rounded-lg p-3 text-sm">
+              <p className="text-gray-400">Auth e-mail:</p>
+              <p className="font-medium text-gray-200">{modal.orphan.email || modal.orphan.phone || '—'}</p>
+            </div>
+            <Input
+              label="Nome completo"
+              value={importForm.full_name}
+              onChange={(e) => setImportForm({ ...importForm, full_name: e.target.value })}
+              required
+            />
+            <Select
+              label="Função na plataforma"
+              value={importForm.user_type}
+              onChange={(e) => setImportForm({ ...importForm, user_type: e.target.value, cnpj: '' })}
+            >
+              {USER_TYPES.map((t) => (
+                <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
+              ))}
+            </Select>
+            {importForm.user_type === 'operator' && (
+              <Input
+                label="CNPJ"
+                value={importForm.cnpj}
+                onChange={(e) => setImportForm({ ...importForm, cnpj: e.target.value })}
+                placeholder="00.000.000/0001-00"
+                inputMode="numeric"
+                required
+              />
+            )}
+            {importMut.isError && (
+              <p className="text-sm text-red-400">{importMut.error?.message || 'Erro ao importar'}</p>
+            )}
+            <Button type="submit" className="w-full" disabled={importMut.isPending}>
+              {importMut.isPending ? 'Importando…' : 'Criar Perfil e Vincular'}
+            </Button>
+          </form>
+        )}
+      </Modal>
 
       {/* Modal criar usuário */}
       <Modal
