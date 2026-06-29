@@ -12,11 +12,11 @@ services:
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: TURISTA_URL
-        value: https://sobrejeri.github.io
+        value: https://sobrejeri.github.io/giro-jeri
       - key: COOP_URL
-        value: https://sobrejeri.github.io
+        value: https://sobrejeri.github.io/giro-jeri/cooperativa
       - key: ADMIN_URL
-        value: https://sobrejeri.github.io
+        value: https://sobrejeri.github.io/giro-jeri/admin
       # Geoapify Places (OpenStreetMap) — diretório automático em "Descubra a Vila".
       # Gere a chave grátis em https://myprojects.geoapify.com e cole aqui no Render.
       - key: GEOAPIFY_API_KEY
@@ -27,6 +27,16 @@ services:
         sync: false
       # Assinatura secreta do webhook (Suas integrações > Webhooks > Assinatura secreta)
       - key: MERCADO_PAGO_WEBHOOK_SECRET
+        sync: false
+      # ── Split / Marketplace ──
+      # Para dividir pagamentos entre plataforma e cooperativa.
+      # Crie um aplicativo tipo Marketplace em mercadopago.com.br > Suas integrações.
+      - key: MP_CLIENT_ID
+        sync: false
+      - key: MP_CLIENT_SECRET
+        sync: false
+      # URL da cooperativa para onde redirecionar após o OAuth do MP
+      - key: MP_OAUTH_RETURN_URL
         sync: false
       # Resend — e-mails transacionais (confirmação de reserva). Chave em resend.com.
       - key: RESEND_API_KEY
