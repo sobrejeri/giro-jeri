@@ -16,19 +16,48 @@ import {
 import { ptBR } from 'date-fns/locale'
 
 /* ── Place Autocomplete (via API proxy → Google Places) ───── */
+// Fallback direto ao Nominatim (OpenStreetMap) — usado quando o backend
+// não responde a tempo (cold start do Render free) ou retorna vazio.
+async function nominatimSearch(q, signal) {
+  const params = new URLSearchParams({
+    q, format: 'json', limit: '6', addressdetails: '1',
+    countrycodes: 'br', 'accept-language': 'pt-BR',
+    viewbox: '-41.5,-3.8,-39.5,-2.0', bounded: '0',
+  })
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, { signal })
+  if (!res.ok) return []
+  const json = await res.json()
+  return (json || []).map((p) => ({
+    id:       `osm:${p.place_id}`,
+    label:    p.display_name.split(',').slice(0, 2).join(', '),
+    sublabel: p.display_name.split(',').slice(2, 4).join(',').trim(),
+    full:     p.display_name,
+    lat:      parseFloat(p.lat),
+    lon:      parseFloat(p.lon),
+    _source:  'nominatim',
+  }))
+}
+
 function usePlaceSuggestions(query) {
   const [results,  setResults]  = useState([])
   const [loading,  setLoading]  = useState(false)
   const timerRef = useRef(null)
+  const abortRef = useRef(null)
 
   useEffect(() => {
     if (!query || query.length < 1) { setResults([]); return }
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(async () => {
+      abortRef.current?.abort()
+      const ctrl = new AbortController()
+      abortRef.current = ctrl
       setLoading(true)
-      try {
-        const data = await api.placesAutocomplete(query)
-        setResults((data?.predictions || []).map((p) => ({
+
+      // Corrida: backend (Google/Nominatim curado) vs. timeout de 1.8s →
+      // se o backend não responder a tempo (cold start do Render free),
+      // usa Nominatim direto do browser sem fazer o usuário esperar.
+      const backend = api.placesAutocomplete(query)
+        .then((data) => (data?.predictions || []).map((p) => ({
           id:       p.id,
           label:    p.label,
           sublabel: p.sublabel || '',
@@ -37,7 +66,24 @@ function usePlaceSuggestions(query) {
           lon:      p.lon ?? null,
           _source:  p.source,
         })))
-      } catch { setResults([]) }
+        .catch(() => null)
+
+      const timeout = new Promise((resolve) => setTimeout(() => resolve('timeout'), 1800))
+
+      let list = await Promise.race([backend, timeout])
+
+      // Backend lento ou falhou → tenta Nominatim direto
+      if (list === 'timeout' || list == null || (Array.isArray(list) && list.length === 0)) {
+        try {
+          const direct = await nominatimSearch(query, ctrl.signal)
+          if (!ctrl.signal.aborted && direct.length > 0) list = direct
+          else if (!Array.isArray(list)) list = []
+        } catch {
+          if (!Array.isArray(list)) list = []
+        }
+      }
+
+      if (!ctrl.signal.aborted) setResults(Array.isArray(list) ? list : [])
       setLoading(false)
     }, 200)
     return () => clearTimeout(timerRef.current)

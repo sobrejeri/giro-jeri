@@ -19,58 +19,80 @@ const router = Router();
 // depender de VITE_GOOGLE_MAPS_KEY no cliente (e expor a chave pública).
 // Enviesado para Jericoacoara/Ceará, com fallback Nominatim se não houver chave.
 const JERI_LL = { lat: -2.7976, lng: -40.5147 };
-router.get('/places/autocomplete', async (req, res, next) => {
+router.get('/places/autocomplete', async (req, res) => {
+  // Nunca devolve 500 — em qualquer falha (Google off, Nominatim rate-limited,
+  // rede instável) responde 200 com predictions: []. Assim o cliente cai no
+  // próprio fallback (Nominatim direto do browser) sem ficar esperando.
   try {
     const q = String(req.query.q || '').trim();
     if (q.length < 1) return res.json({ predictions: [] });
 
     const key = process.env.GOOGLE_MAPS_API_KEY;
     if (key) {
-      const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
-      url.searchParams.set('input',     q);
-      url.searchParams.set('components','country:br');
-      url.searchParams.set('location',  `${JERI_LL.lat},${JERI_LL.lng}`);
-      url.searchParams.set('radius',    '150000');
-      url.searchParams.set('language',  'pt-BR');
-      url.searchParams.set('key',       key);
-      const gRes = await fetch(url);
-      const gJson = await gRes.json();
-      if (gJson.status === 'OK' || gJson.status === 'ZERO_RESULTS') {
-        return res.json({
-          predictions: (gJson.predictions || []).map((p) => ({
-            id:       p.place_id,
-            label:    p.structured_formatting?.main_text || p.description,
-            sublabel: p.structured_formatting?.secondary_text || '',
-            full:     p.description,
-            source:   'google',
-          })),
-        });
+      try {
+        const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
+        url.searchParams.set('input',     q);
+        url.searchParams.set('components','country:br');
+        url.searchParams.set('location',  `${JERI_LL.lat},${JERI_LL.lng}`);
+        url.searchParams.set('radius',    '150000');
+        url.searchParams.set('language',  'pt-BR');
+        url.searchParams.set('key',       key);
+        const gRes = await fetch(url);
+        const gJson = await gRes.json();
+        if (gJson.status === 'OK' || gJson.status === 'ZERO_RESULTS') {
+          return res.json({
+            predictions: (gJson.predictions || []).map((p) => ({
+              id:       p.place_id,
+              label:    p.structured_formatting?.main_text || p.description,
+              sublabel: p.structured_formatting?.secondary_text || '',
+              full:     p.description,
+              source:   'google',
+            })),
+          });
+        }
+        console.warn('[places/autocomplete] Google status=%s', gJson.status, gJson.error_message);
+      } catch (gErr) {
+        console.warn('[places/autocomplete] Google falhou:', gErr.message);
       }
-      console.warn('[places/autocomplete] Google status=%s', gJson.status, gJson.error_message);
     }
 
     // Fallback Nominatim
-    const params = new URLSearchParams({
-      q, format: 'json', limit: '6', addressdetails: '1',
-      countrycodes: 'br', 'accept-language': 'pt-BR',
-      viewbox: '-41.5,-3.8,-39.5,-2.0', bounded: '0',
-    });
-    const nRes = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-      headers: { 'User-Agent': 'GiroJeri/1.0' },
-    });
-    const nJson = await nRes.json();
-    res.json({
-      predictions: (nJson || []).map((p) => ({
-        id:       String(p.place_id),
-        label:    p.display_name.split(',').slice(0, 2).join(', '),
-        sublabel: p.display_name.split(',').slice(2, 4).join(',').trim(),
-        full:     p.display_name,
-        lat:      parseFloat(p.lat),
-        lon:      parseFloat(p.lon),
-        source:   'nominatim',
-      })),
-    });
-  } catch (err) { next(err); }
+    try {
+      const params = new URLSearchParams({
+        q, format: 'json', limit: '6', addressdetails: '1',
+        countrycodes: 'br', 'accept-language': 'pt-BR',
+        viewbox: '-41.5,-3.8,-39.5,-2.0', bounded: '0',
+      });
+      const nRes = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        headers: {
+          'User-Agent': 'GiroJeri/1.0 (contato@girojeri.com)',
+          'Accept-Language': 'pt-BR',
+        },
+      });
+      if (!nRes.ok) {
+        console.warn('[places/autocomplete] Nominatim status=%d', nRes.status);
+        return res.json({ predictions: [] });
+      }
+      const nJson = await nRes.json();
+      return res.json({
+        predictions: (Array.isArray(nJson) ? nJson : []).map((p) => ({
+          id:       String(p.place_id),
+          label:    p.display_name.split(',').slice(0, 2).join(', '),
+          sublabel: p.display_name.split(',').slice(2, 4).join(',').trim(),
+          full:     p.display_name,
+          lat:      parseFloat(p.lat),
+          lon:      parseFloat(p.lon),
+          source:   'nominatim',
+        })),
+      });
+    } catch (nErr) {
+      console.warn('[places/autocomplete] Nominatim falhou:', nErr.message);
+      return res.json({ predictions: [] });
+    }
+  } catch (err) {
+    console.error('[places/autocomplete] erro inesperado:', err.message);
+    res.json({ predictions: [] });
+  }
 });
 
 // ── GET /api/transfers/places/details ────────────────────
