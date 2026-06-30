@@ -10,12 +10,17 @@ export default function Register() {
   const navigate  = useNavigate()
   const { login } = useAuth()
 
-  const [form, setForm] = useState({ full_name: '', email: '', password: '', phone: '' })
+  const [form, setForm] = useState({ full_name: '', email: '', password: '', phone: '+55 ' })
   const [error,   setError]   = useState('')
   const [loading, setLoading] = useState(false)
 
   function set(field) {
-    return (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+    return (e) => {
+      let v = e.target.value
+      // Telefone: mantém o +55 fixo no início.
+      if (field === 'phone' && !v.startsWith('+55')) v = '+55 ' + v.replace(/^\+?5?5?\s?/, '')
+      setForm((f) => ({ ...f, [field]: v }))
+    }
   }
 
   async function handleSubmit(e) {

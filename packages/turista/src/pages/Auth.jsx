@@ -88,10 +88,16 @@ export default function Auth({ defaultTab = 'login' }) {
   }
 
   /* ── Register form ───────────────────────────────────── */
-  const [regForm, setRegForm] = useState({ full_name: '', email: '', phone: '', password: '', confirm: '' })
+  const [regForm, setRegForm] = useState({ full_name: '', email: '', phone: '+55 ', password: '', confirm: '' })
 
   function setReg(field) {
-    return (e) => { setError(''); setRegForm((f) => ({ ...f, [field]: e.target.value })) }
+    return (e) => {
+      setError('')
+      let v = e.target.value
+      // Telefone: mantém o +55 fixo no início — mesma regra dos perfis.
+      if (field === 'phone' && !v.startsWith('+55')) v = '+55 ' + v.replace(/^\+?5?5?\s?/, '')
+      setRegForm((f) => ({ ...f, [field]: v }))
+    }
   }
 
   async function handleRegister(e) {
