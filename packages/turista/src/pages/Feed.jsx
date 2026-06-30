@@ -4,12 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
-import GoogleMap from '../components/GoogleMap'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
-  Map, List, ChevronLeft, Search,
+  ChevronLeft, Search,
 } from 'lucide-react'
 import NotificationBell from '../components/NotificationBell'
 
@@ -482,7 +481,6 @@ function SectionTitle({ children }) {
 export default function Feed() {
   const navigate = useNavigate()
   const [filter, setFilter]       = useState('tudo')
-  const [viewMode, setViewMode]   = useState('lista') // 'lista' | 'mapa'
   const [reviewPlace, setReviewPlace] = useState(null)
   const { user } = useAuth()
   const { userCoords, region, getServiceQuery } = useRegion()
@@ -643,9 +641,9 @@ export default function Feed() {
                 return (
                   <button
                     key={id}
-                    onClick={() => { setFilter(id); setViewMode('lista') }}
+                    onClick={() => setFilter(id)}
                     className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${
-                      active && viewMode === 'lista' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                      active ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 active:bg-gray-200'
                     }`}
                   >
                     <Icon size={13} /> {label}
@@ -653,58 +651,20 @@ export default function Feed() {
                 )
               })}
             </div>
-            {/* Toggle mapa/lista */}
-            <div className="flex shrink-0 bg-gray-100 rounded-full p-0.5">
-              <button
-                onClick={() => setViewMode('lista')}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${viewMode === 'lista' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}
-              >
-                <List size={13} /> Lista
-              </button>
-              <button
-                onClick={() => setViewMode('mapa')}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${viewMode === 'mapa' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}
-              >
-                <Map size={13} /> Mapa
-              </button>
-            </div>
+            {/* Toggle mapa/lista — removido (estabelecimentos cadastrados manualmente) */}
           </div>
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-6">
-        {viewMode === 'mapa' ? (
-          <div className="space-y-3">
-            <GoogleMap
-              className="h-[60vh] w-full"
-              center={center.lat ? { lat: center.lat, lng: center.lon ?? center.lng } : undefined}
-              userPos={userCoords?.lat != null ? { lat: userCoords.lat, lng: userCoords.lon } : null}
-              markers={places
-                .filter((p) => p.latitude != null && p.longitude != null)
-                .map((p) => ({
-                  lat:      p.latitude,
-                  lng:      p.longitude,
-                  title:    p.name,
-                  subtitle: p.locality || p.address || '',
-                  category: p.category,
-                }))}
-            />
-            {places.filter((p) => p.latitude != null).length === 0 && (
-              <p className="text-center text-[11px] text-gray-400 pb-2">
-                Nenhum estabelecimento com coordenadas cadastradas ainda.
-              </p>
-            )}
-          </div>
-        ) : (
-          <>
-            {content}
-            {usingNearby && (
-              <p className="text-center text-[10px] text-gray-300 pt-2 pb-1">
-                Locais por OpenStreetMap · Geoapify
-              </p>
-            )}
-          </>
-        )}
+        <>
+          {content}
+          {usingNearby && (
+            <p className="text-center text-[10px] text-gray-300 pt-2 pb-1">
+              Locais por OpenStreetMap · Geoapify
+            </p>
+          )}
+        </>
       </main>
 
       {reviewPlace && (
