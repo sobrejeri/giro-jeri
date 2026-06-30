@@ -55,19 +55,21 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
 });
 
 // ── GET /api/admin/auth-orphans ────────────────────────
-// Lista usuários que existem no Supabase Auth mas NÃO têm perfil na tabela
-// users. Útil para o admin importar usuários criados via Dashboard.
+// Diagnóstico de integridade auth ↔ perfil.
+// Retorna { orphans: [...], unlinked: [...] }
+//   orphans  = auth.users SEM perfil em public.users (criados pelo Dashboard)
+//   unlinked = public.users cujo auth_id é NULL ou não existe mais no Auth
 router.get('/auth-orphans', requireAdmin, async (req, res, next) => {
   try {
     const { data: { users: authUsers }, error: authErr } =
       await supabase.auth.admin.listUsers({ perPage: 1000 });
     if (authErr) throw authErr;
 
-    const authIds = authUsers.map((u) => u.id);
+    const { data: profiles } = await supabase
+      .from('users').select('id, auth_id, full_name, email, user_type, created_at');
 
-    const { data: linked } = await supabase
-      .from('users').select('auth_id').in('auth_id', authIds);
-    const linkedSet = new Set((linked || []).map((r) => r.auth_id));
+    const authIdSet  = new Set(authUsers.map((u) => u.id));
+    const linkedSet  = new Set((profiles || []).map((r) => r.auth_id).filter(Boolean));
 
     const orphans = authUsers
       .filter((u) => !linkedSet.has(u.id))
@@ -78,7 +80,19 @@ router.get('/auth-orphans', requireAdmin, async (req, res, next) => {
         created_at: u.created_at,
       }));
 
-    res.json(orphans);
+    const unlinked = (profiles || [])
+      .filter((p) => !p.auth_id || !authIdSet.has(p.auth_id))
+      .map((p) => ({
+        id:         p.id,
+        auth_id:    p.auth_id,
+        full_name:  p.full_name,
+        email:      p.email,
+        user_type:  p.user_type,
+        reason:     !p.auth_id ? 'auth_id nulo' : 'auth_id não existe no Auth',
+        created_at: p.created_at,
+      }));
+
+    res.json({ orphans, unlinked });
   } catch (err) { next(err); }
 });
 

@@ -89,10 +89,12 @@ export default function Usuarios() {
     },
   })
 
-  const { data: orphans = [] } = useQuery({
+  const { data: integrity } = useQuery({
     queryKey: ['auth-orphans'],
     queryFn:  () => api.getAuthOrphans(),
   })
+  const orphans  = integrity?.orphans  ?? (Array.isArray(integrity) ? integrity : [])
+  const unlinked = integrity?.unlinked ?? []
 
   const importMut = useMutation({
     mutationFn: (body) => api.importAuthUser(body),
@@ -325,6 +327,55 @@ export default function Usuarios() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Perfis sem Auth válido */}
+      {unlinked.length > 0 && (
+        <Card className="border-red-900/40">
+          <div className="px-5 py-3 border-b border-gray-700 flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-400 shrink-0" />
+            <h3 className="text-sm font-semibold text-red-300">
+              {unlinked.length} perfil{unlinked.length > 1 ? 's' : ''} sem autenticação válida
+            </h3>
+            <span className="text-xs text-gray-500 ml-1">
+              auth_id ausente ou não existe no Supabase Auth — login impossível
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">E-mail</th>
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Problema</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {unlinked.map((u) => (
+                  <tr key={u.id} className="hover:bg-gray-750 transition-colors">
+                    <td className="px-5 py-2 text-gray-300">{u.full_name || '—'}</td>
+                    <td className="px-5 py-2 text-gray-400 text-xs">{u.email || '—'}</td>
+                    <td className="px-5 py-2"><Badge value={u.user_type} /></td>
+                    <td className="px-5 py-2 text-xs text-red-400">{u.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Todos ok */}
+      {orphans.length === 0 && unlinked.length === 0 && integrity && (
+        <Card className="border-green-900/40">
+          <div className="px-5 py-3 flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-green-400 shrink-0" />
+            <p className="text-sm text-green-300">
+              Todos os usuários estão corretamente vinculados entre Auth e perfil.
+            </p>
           </div>
         </Card>
       )}
