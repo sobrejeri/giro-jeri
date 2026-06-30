@@ -50,8 +50,19 @@ function TourRow({ tour, isFav, onToggleFav, onDetails }) {
 
       <div className="flex flex-col items-end justify-between py-1 pr-1 shrink-0">
         <div className="text-right">
-          <p className="text-[11px] text-gray-400">A partir de</p>
-          <p className="text-brand font-extrabold text-xl">{price > 0 ? fmtPrice(price) : '—'}</p>
+          {tour.is_shared_enabled && price > 0 ? (
+            <>
+              <p className="text-[11px] text-gray-400">A partir de</p>
+              <p className="text-brand font-extrabold text-xl">{fmtPrice(price)}</p>
+              <p className="text-[10px] text-gray-400">/pessoa</p>
+            </>
+          ) : tour.is_private_enabled ? (
+            <span className="text-[11px] text-brand font-semibold bg-brand/10 px-2.5 py-1 rounded-full">
+              Privativo
+            </span>
+          ) : (
+            <p className="text-brand font-extrabold text-xl">{price > 0 ? fmtPrice(price) : '—'}</p>
+          )}
         </div>
         <button
           onClick={() => onDetails(tour)}
