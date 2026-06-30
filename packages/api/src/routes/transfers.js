@@ -440,29 +440,40 @@ router.post('/quotes/:id/accept', authenticate, async (req, res, next) => {
 
     // Cria a reserva já atribuída à cooperativa que cotou — pula a fila geral
     // de aceite, pois o preço e o prestador já foram negociados na cotação.
+    // Janela: cliente tem 24h pra pagar; depois disso o sweep do admin vê
+    // como expirada e libera a agenda da coop (sem isso, ficava preso).
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`;
-    const { data: booking, error: bErr } = await supabase
+    const baseQuoteBooking = {
+      booking_code:       bookingCode,
+      user_id:            req.user.id,
+      region_id:          quote.region_id,
+      service_type:       'transfer',
+      service_id:         quote.id,
+      operator_id:        quote.quoted_by_user_id,
+      booking_mode:       'private',
+      service_date:       quote.service_date,
+      service_time:       quote.service_time,
+      people_count:       quote.people_count,
+      origin_text:        quote.origin_place_name,
+      destination_text:   quote.destination_place_name,
+      total_amount:       quote.quoted_price,
+      status_commercial:  'awaiting_payment',
+      status_operational: 'assigned',
+      payment_status:     'pending',
+    };
+    let { data: booking, error: bErr } = await supabase
       .from('bookings')
       .insert({
-        booking_code:       bookingCode,
-        user_id:            req.user.id,
-        region_id:          quote.region_id,
-        service_type:       'transfer',
-        service_id:         quote.id,
-        operator_id:        quote.quoted_by_user_id,
-        booking_mode:       'private',
-        service_date:       quote.service_date,
-        service_time:       quote.service_time,
-        people_count:       quote.people_count,
-        origin_text:        quote.origin_place_name,
-        destination_text:   quote.destination_place_name,
-        total_amount:       quote.quoted_price,
-        status_commercial:  'awaiting_payment',
-        status_operational: 'assigned',
-        payment_status:     'pending',
+        ...baseQuoteBooking,
+        acceptance_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
       .select('id, booking_code')
       .single();
+    if (bErr?.code === '42703') {
+      // Migration 037 ainda não rodou — insere sem o campo.
+      const retry = await supabase.from('bookings').insert(baseQuoteBooking).select('id, booking_code').single();
+      booking = retry.data; bErr = retry.error;
+    }
     if (bErr) throw bErr;
 
     await supabase.from('transfer_quotes').update({ booking_id: booking.id }).eq('id', quote.id);
@@ -513,11 +524,21 @@ router.post('/quotes/:id/cancel', authenticate, async (req, res, next) => {
       .eq('id', req.params.id)
       .eq('user_id', req.user.id)
       .in('status', ['pending_quote', 'quoted', 'accepted'])
-      .select('id')
+      .select('id, booking_id')
       .single();
 
     if (error || !data) {
       return res.status(404).json({ error: 'Cotação não encontrada ou já finalizada' });
+    }
+
+    // Cancela em cascata o booking gerado pela cotação (se já havia sido
+    // criado no /accept e ainda estiver aguardando pagamento). Sem isso, o
+    // booking ficaria órfão em awaiting_payment ocupando a agenda da coop.
+    if (data.booking_id) {
+      await supabase.from('bookings')
+        .update({ status_commercial: 'cancelled', status_operational: 'cancelled' })
+        .eq('id', data.booking_id)
+        .eq('status_commercial', 'awaiting_payment');
     }
 
     res.json({ message: 'Solicitação cancelada.' });

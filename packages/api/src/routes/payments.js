@@ -674,12 +674,17 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
 // ── Verificação de assinatura do Mercado Pago ─────────
 // Header x-signature: "ts=...,v1=<hmac>". Manifest:
 //   id:[data.id];request-id:[x-request-id];ts:[ts];
-// Sem MERCADO_PAGO_WEBHOOK_SECRET configurado, apenas loga aviso
-// (não bloqueia) para não quebrar ambientes ainda sem a chave.
+// Em desenvolvimento, aceita sem secret pra facilitar testes locais. Em
+// produção, BLOQUEIA quando secret ausente — sem isso, qualquer um poderia
+// mandar um POST /webhook forjado aprovando pagamentos.
 function verifyMpSignature(req, event) {
   const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET
   if (!secret) {
-    console.warn('[webhook] MERCADO_PAGO_WEBHOOK_SECRET ausente — assinatura NÃO verificada')
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[webhook] MERCADO_PAGO_WEBHOOK_SECRET ausente em produção — REJEITANDO evento')
+      return false
+    }
+    console.warn('[webhook] MERCADO_PAGO_WEBHOOK_SECRET ausente — assinatura NÃO verificada (dev)')
     return true
   }
   const sig = req.headers['x-signature']
@@ -746,17 +751,17 @@ router.post('/webhook', async (req, res, next) => {
     }
 
     // Registra evento bruto com payment_id para idempotência via UNIQUE constraint.
-    // Não use .catch() direto no builder do Supabase, porque ele é awaitable,
-    // mas não expõe .catch() como uma Promise nativa em todos os ambientes.
-    try {
-      await supabase.from('payment_events').insert({
-        payment_id:         paymentForEvent?.id || null,
-        event_name:         eventType,
-        event_payload_json: event,
-        processing_status:  'pending',
-      })
-    } catch {
-      // UNIQUE/payment_events duplicado ou falha de log não pode derrubar o webhook.
+    // Esperamos UNIQUE violation (23505) em retentativas do MP — silencia só
+    // esse caso. Qualquer outro erro de gravação é logado pra investigação.
+    const evIns = await supabase.from('payment_events').insert({
+      payment_id:         paymentForEvent?.id || null,
+      event_name:         eventType,
+      event_payload_json: event,
+      processing_status:  'pending',
+    })
+    if (evIns.error && evIns.error.code !== '23505') {
+      console.error('[webhook] falha ao gravar payment_events code=%s msg=%s',
+        evIns.error.code, evIns.error.message)
     }
 
     if ((eventType === 'payment' || eventType === 'payment.updated') && paymentForEvent) {
