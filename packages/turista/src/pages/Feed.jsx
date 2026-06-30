@@ -10,7 +10,6 @@ import {
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
   ChevronLeft, Search,
 } from 'lucide-react'
-import NotificationBell from '../components/NotificationBell'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
 
@@ -482,6 +481,8 @@ export default function Feed() {
   const navigate = useNavigate()
   const [filter, setFilter]       = useState('tudo')
   const [reviewPlace, setReviewPlace] = useState(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const { user } = useAuth()
   const { userCoords, region, getServiceQuery } = useRegion()
   const qc = useQueryClient()
@@ -531,16 +532,22 @@ export default function Feed() {
     likeMut.mutate(postId)
   }, [user, likeMut])
 
-  const posts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
+  const allPosts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
   const manual  = Array.isArray(placeData) ? placeData : (placeData?.data || [])
   const organic = nearbyData?.results || []
   const usingNearby = !!nearbyData?.enabled && organic.length > 0
 
-  const places = useMemo(() => {
+  const allPlaces = useMemo(() => {
     const names = new Set(manual.map((p) => (p.name || '').toLowerCase().trim()))
     const extra = organic.filter((o) => !names.has((o.name || '').toLowerCase().trim()))
     return [...manual, ...extra]
   }, [manual, organic])
+
+  // Filtro de busca em memória — bate em title/name/location/locality/address.
+  const q = searchQuery.trim().toLowerCase()
+  const matches = (s) => !q || String(s || '').toLowerCase().includes(q)
+  const posts  = !q ? allPosts  : allPosts.filter((p) => matches(p.title) || matches(p.location) || matches(p.body))
+  const places = !q ? allPlaces : allPlaces.filter((p) => matches(p.name) || matches(p.locality) || matches(p.address))
 
   const loadingPlacesAll = loadingPlaces || loadingNearby
 
@@ -625,13 +632,30 @@ export default function Feed() {
             </button>
             <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Descubra a Vila</h1>
             <div className="absolute right-0 flex items-center gap-1.5">
-              <NotificationBell />
-              <button className="w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform" aria-label="Buscar">
+              <button
+                onClick={() => { setSearchOpen((v) => !v); if (searchOpen) setSearchQuery('') }}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${searchOpen ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+                aria-label="Buscar"
+              >
                 <Search size={15} />
               </button>
             </div>
           </div>
-          <p className="text-[12px] text-gray-400 text-center mt-1">Eventos, promoções e recomendações em Jericoacoara</p>
+          {searchOpen ? (
+            <div className="mt-2 relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar eventos, lugares..."
+                autoFocus
+                className="w-full pl-9 pr-3 h-9 rounded-xl bg-gray-100 text-[13px] text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-gray-50 focus:ring-1 focus:ring-brand"
+              />
+            </div>
+          ) : (
+            <p className="text-[12px] text-gray-400 text-center mt-1">Eventos, promoções e recomendações em Jericoacoara</p>
+          )}
 
           <div className="flex items-center gap-2 mt-3">
             {/* Filtros — scroll horizontal */}
