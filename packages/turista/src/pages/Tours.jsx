@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import { useFavorites } from '../contexts/FavoritesContext'
 import OriginPicker from '../components/OriginPicker'
 import ToursDesktop from './ToursDesktop'
 import {
@@ -258,13 +259,11 @@ export default function Tours() {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
   const [cart, setCart] = useState({})
-  const [favs, setFavs] = useState(new Set())
+  const { favs, toggleFav } = useFavorites()
   const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
   const [showOriginPicker, setShowOriginPicker] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const toggleFav = (id) =>
-    setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   /* ── Queries ──────────────────────────────────────────────── */
   const geo = getServiceQuery()

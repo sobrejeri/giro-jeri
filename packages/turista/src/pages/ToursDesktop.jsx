@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import { useFavorites } from '../contexts/FavoritesContext'
 import {
   Star, Clock, Users, Heart, ChevronDown, Calendar, Minus, Plus,
   Zap,
@@ -81,8 +82,7 @@ export default function ToursDesktop() {
   const [category, setCategory] = useState('')
   const [people, setPeople]     = useState(2)
   const [date, setDate]         = useState('')
-  const [favs, setFavs]         = useState(new Set())
-  const toggleFav = (id) => setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const { favs, toggleFav } = useFavorites()
 
   const geo = getServiceQuery()
   const { data, isLoading } = useQuery({

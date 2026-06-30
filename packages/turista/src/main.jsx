@@ -7,6 +7,7 @@ import App from './App'
 import UpdatePrompt from './components/UpdatePrompt'
 import { AuthProvider } from './contexts/AuthContext'
 import { RegionProvider } from './contexts/RegionContext'
+import { FavoritesProvider } from './contexts/FavoritesContext'
 import { queryClient } from './lib/queryClient'
 import './i18n/index.js'
 import './index.css'
@@ -17,8 +18,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <RegionProvider>
           <AuthProvider>
-            <App />
-            <UpdatePrompt />
+            <FavoritesProvider>
+              <App />
+              <UpdatePrompt />
+            </FavoritesProvider>
           </AuthProvider>
         </RegionProvider>
       </BrowserRouter>

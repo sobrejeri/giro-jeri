@@ -7,6 +7,7 @@ import {
   Camera, Loader2, CalendarCheck, User, CreditCard, Heart, LifeBuoy,
   CheckCircle2, Star, ChevronRight, LogOut, Pencil, Check, X,
 } from 'lucide-react'
+import { useFavorites } from '../contexts/FavoritesContext'
 
 function StatCard({ icon: Icon, value, label, tint }) {
   return (
@@ -24,6 +25,7 @@ function StatCard({ icon: Icon, value, label, tint }) {
 
 export default function ProfileDesktop() {
   const { user, token, logout, updateUser } = useAuth()
+  const { count: favsCount } = useFavorites()
   const navigate = useNavigate()
   const fileRef  = useRef(null)
   const coverRef = useRef(null)
@@ -57,7 +59,7 @@ export default function ProfileDesktop() {
     { icon: CalendarCheck, value: bookings.length, label: 'Reservas realizadas', tint: 'bg-blue-50 text-blue-600' },
     { icon: CheckCircle2,  value: concluded,        label: 'Passeios concluídos', tint: 'bg-emerald-50 text-emerald-600' },
     { icon: Star,          value: 0,                label: 'Avaliações feitas',   tint: 'bg-amber-50 text-amber-500' },
-    { icon: Heart,         value: 0,                label: 'Favoritos salvos',    tint: 'bg-rose-50 text-rose-500' },
+    { icon: Heart,         value: favsCount,         label: 'Favoritos salvos',    tint: 'bg-rose-50 text-rose-500' },
   ]
 
   const MENU = [

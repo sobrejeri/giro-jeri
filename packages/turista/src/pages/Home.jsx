@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useFavorites } from '../contexts/FavoritesContext'
 import StoriesRow from '../components/StoriesRow'
 import StoryViewer from '../components/StoryViewer'
 import StoryPublisher from '../components/StoryPublisher'
@@ -215,9 +216,7 @@ export default function Home() {
   const isAdmin = user?.user_type === 'admin'
   const qc = useQueryClient()
   const [showPublisher, setShowPublisher] = useState(false)
-  const [favs, setFavs] = useState(new Set())
-  const toggleFav = (id) =>
-    setFavs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const { favs, toggleFav } = useFavorites()
 
   const geo = getServiceQuery()
   // Arredonda as coordenadas (~1 km) na chave para o GPS não recarregar a lista
