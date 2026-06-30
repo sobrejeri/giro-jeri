@@ -37,7 +37,7 @@ app.use(cors({
     process.env.TURISTA_URL || 'http://localhost:5173',
     process.env.COOP_URL    || 'http://localhost:5174',
     process.env.ADMIN_URL   || 'http://localhost:5175',
-  ],
+  ].map(u => { try { return new URL(u).origin } catch { return u } }),
   credentials: true,
 }));
 
