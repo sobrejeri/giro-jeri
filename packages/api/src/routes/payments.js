@@ -4,7 +4,7 @@ import { z }         from 'zod'
 import { supabase }  from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
-import { notifyOperatorsNewBooking } from '../services/whatsapp.js'
+import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge } from '../services/priceEngine.js'
 
@@ -912,6 +912,10 @@ async function onPaymentApproved(payment) {
         : `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar uma cooperativa aceitar.`,
     })
 
+    // WhatsApp pro cliente: pagamento confirmado (segurança de que deu certo).
+    notifyClientPaymentConfirmed(supabase, booking).catch((err) =>
+      console.error('[whatsapp] aviso cliente pagamento falhou:', err.message))
+
     if (booking.operator_id) {
       // Fluxo novo: a cooperativa que aceitou é avisada de que o pagamento entrou.
       notifyUser({
@@ -921,6 +925,9 @@ async function onPaymentApproved(payment) {
         title:       'Pagamento recebido 💰',
         body:        `O cliente pagou o ${tipo} ${booking.booking_code}. Pode confirmar e seguir com o atendimento.`,
       })
+      // WhatsApp pra coop: cliente pagou, hora de confirmar/despachar.
+      notifyOperatorPaymentReceived(supabase, booking).catch((err) =>
+        console.error('[whatsapp] aviso coop pagamento falhou:', err.message))
     } else {
       // Fluxo antigo: a reserva paga fica disponível para as cooperativas.
       notifyOperatorsNewBooking(supabase, booking).catch((err) =>

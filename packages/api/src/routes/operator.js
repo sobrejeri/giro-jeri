@@ -11,7 +11,7 @@ import dayjs      from 'dayjs';
 import { supabase } from '../supabase.js';
 import { authenticate, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
-import { notifyAdminExpiredBooking } from '../services/whatsapp.js';
+import { notifyAdminExpiredBooking, notifyClientBookingAccepted } from '../services/whatsapp.js';
 
 // Rótulo amigável do serviço para o texto da notificação
 const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
@@ -333,6 +333,16 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
         ? `Uma cooperativa aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Tudo certo para a data marcada!`
         : `Uma cooperativa aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Pague para confirmar a reserva.`,
     })
+
+    // WhatsApp pro cliente: só no fluxo novo (aguardava aceite → agora paga).
+    // No fluxo antigo (alreadyPaid) já estava pago, então não precisa cobrar.
+    if (!alreadyPaid) {
+      const { data: full } = await supabase.from('bookings')
+        .select('id, booking_code, user_id, service_type, service_date, total_amount, origin_text, destination_text')
+        .eq('id', b.id).maybeSingle()
+      if (full) notifyClientBookingAccepted(supabase, full).catch((err) =>
+        console.error('[whatsapp] aviso cliente aceite falhou:', err.message))
+    }
 
     res.json({ ok: true, booking: b })
   } catch (err) { next(err) }

@@ -1,8 +1,30 @@
 import { Router }       from 'express'
 import { supabase }     from '../supabase.js'
-import { authenticate } from '../middleware/auth.js'
+import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { isWhatsappEnabled, sendTestMessage } from '../services/whatsapp.js'
 
 const router = Router()
+
+// ── GET /api/notifications/wa-diag — diagnóstico Z-API (admin) ──
+// Confirma se as 3 envs Z-API estão setadas (sem expor valores).
+router.get('/wa-diag', authenticate, requireAdmin, (_req, res) => {
+  res.json({
+    enabled:            isWhatsappEnabled(),
+    has_instance_id:    !!process.env.ZAPI_INSTANCE_ID,
+    has_instance_token: !!process.env.ZAPI_INSTANCE_TOKEN,
+    has_client_token:   !!process.env.ZAPI_CLIENT_TOKEN,
+    base_url:           process.env.ZAPI_BASE_URL || 'https://api.z-api.io',
+  })
+})
+
+// ── POST /api/notifications/wa-test — envia msg de teste (admin) ──
+// body: { phone: '+5588...' }. Retorna a resposta crua da Z-API.
+router.post('/wa-test', authenticate, requireAdmin, async (req, res) => {
+  const phone = String(req.body?.phone || '').trim()
+  if (!phone) return res.status(400).json({ error: 'Informe um phone (ex.: +5588999999999)' })
+  const result = await sendTestMessage(phone)
+  res.json(result)
+})
 
 // ── GET /api/notifications — minhas notificações + total não lidas ──
 router.get('/', authenticate, async (req, res) => {

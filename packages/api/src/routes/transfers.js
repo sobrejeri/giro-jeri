@@ -9,7 +9,7 @@ import {
 } from '../services/priceEngine.js';
 import { filterByRadius } from '../services/geo.js';
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
-import { notifyOperatorsNewQuote } from '../services/whatsapp.js';
+import { notifyOperatorsNewQuote, notifyClientQuoteReady } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
 
 const router = Router();
@@ -404,6 +404,10 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
       title:       'Sua cotação está pronta 💸',
       body:        `Seu translado ${data.origin_place_name} → ${data.destination_place_name} saiu por R$ ${quoted_price.toFixed(2)}. Abra o app para aceitar (válido por ${expiryHours}h).`,
     });
+
+    // WhatsApp pro cliente com o valor — sem isso a cotação some no app.
+    notifyClientQuoteReady(supabase, data).catch((err) =>
+      console.error('[whatsapp] aviso cliente cotação falhou:', err.message));
 
     res.json(data);
   } catch (err) { next(err); }

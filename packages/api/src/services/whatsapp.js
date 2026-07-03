@@ -44,6 +44,9 @@ function bookingSummary(booking) {
   return { tipo, rota, data }
 }
 
+const fmtBRL = (v) =>
+  Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 async function sendToMany(numbers, message) {
   const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
   const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-text`
@@ -58,6 +61,34 @@ async function sendToMany(numbers, message) {
         }).catch((err) => console.error('[whatsapp] envio falhou:', err.message))
       )
   )
+}
+
+// Busca o telefone de um usuário (cliente ou operador) por id.
+async function userPhone(supabase, userId) {
+  if (!userId) return null
+  const { data } = await supabase.from('users').select('phone').eq('id', userId).maybeSingle()
+  return data?.phone || null
+}
+
+// Envia pra 1 número e RETORNA o resultado da Z-API (usado no diagnóstico).
+export async function sendTestMessage(phone) {
+  if (!isWhatsappEnabled()) return { skipped: true, reason: 'Z-API não configurada' }
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
+  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-text`
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
+      body: JSON.stringify({
+        phone:   toZapiPhone(phone),
+        message: '✅ Giro Jeri — teste de integração WhatsApp. Se você recebeu isto, o Z-API está funcionando!',
+      }),
+    })
+    const body = await res.json().catch(() => ({}))
+    return { ok: res.ok, status: res.status, body }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
 }
 
 /**
@@ -141,6 +172,66 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
     `Acesse o app da cooperativa pra assumir.`
 
   await sendToMany(admins.map((a) => a.phone), message)
+}
+
+// ── CLIENTE ────────────────────────────────────────────
+// Cooperativa aceitou → cliente precisa PAGAR pra confirmar. Gatilho de
+// conversão mais crítico: sem isso o cliente não sabe que pode pagar.
+export async function notifyClientBookingAccepted(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  const phone = await userPhone(supabase, booking.user_id)
+  if (!phone) return { skipped: true }
+  const { tipo, rota, data } = bookingSummary(booking)
+  const message =
+    `🎉 *Giro Jeri — Cooperativa aceitou!*\n` +
+    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
+    `📅 ${data} · ${fmtBRL(booking.total_amount)}\n` +
+    `Abra o app e *pague* para confirmar sua reserva (${booking.booking_code || '-'}).`
+  await sendToMany([phone], message)
+}
+
+// Cotação personalizada precificada → cliente vê o valor e decide.
+export async function notifyClientQuoteReady(supabase, quote) {
+  if (!isWhatsappEnabled() || !quote) return { skipped: true }
+  const phone = await userPhone(supabase, quote.user_id)
+  if (!phone) return { skipped: true }
+  const rota = [quote.origin_place_name, quote.destination_place_name].filter(Boolean).join(' → ')
+  const message =
+    `💸 *Giro Jeri — Sua cotação está pronta!*\n` +
+    `Translado${rota ? ` · ${rota}` : ''}\n` +
+    `Valor: *${fmtBRL(quote.quoted_price)}*\n` +
+    `Abra o app para aceitar e pagar (válido por tempo limitado).`
+  await sendToMany([phone], message)
+}
+
+// Pagamento confirmado → segurança pro cliente de que deu tudo certo.
+export async function notifyClientPaymentConfirmed(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  const phone = await userPhone(supabase, booking.user_id)
+  if (!phone) return { skipped: true }
+  const { tipo, rota, data } = bookingSummary(booking)
+  const message =
+    `✅ *Giro Jeri — Pagamento confirmado!*\n` +
+    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
+    `📅 ${data} · ${booking.booking_code || '-'}\n` +
+    `Tudo certo! A cooperativa vai cuidar do seu atendimento. 🚗`
+  await sendToMany([phone], message)
+}
+
+// ── COOPERATIVA ────────────────────────────────────────
+// Cliente pagou → a coop que aceitou precisa confirmar/despachar. Momento
+// em que a coop tem que AGIR, por isso vale o WhatsApp (além da central).
+export async function notifyOperatorPaymentReceived(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking?.operator_id) return { skipped: true }
+  const phone = await userPhone(supabase, booking.operator_id)
+  if (!phone) return { skipped: true }
+  const { tipo, rota, data } = bookingSummary(booking)
+  const message =
+    `💰 *Giro Jeri — Cliente pagou!*\n` +
+    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
+    `📅 ${data} · ${fmtBRL(booking.total_amount)} · ${booking.booking_code || '-'}\n` +
+    `Abra o app para confirmar e seguir com o atendimento.`
+  await sendToMany([phone], message)
 }
 
 export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {
