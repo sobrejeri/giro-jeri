@@ -115,7 +115,10 @@ export function RegionProvider({ children }) {
     // Detecção por MUNICÍPIO (sem raio): descobre a cidade real e casa com a
     // região de mesmo município. Em Cruz mostra Cruz — não "puxa" pra Jijoca.
     const info  = await reverseGeocodeMunicipality(lat, lon)
-    const found = info?.city ? findRegionByCity(info.city, regions) : null
+    let   found = info?.city ? findRegionByCity(info.city, regions) : null
+    // Geocoder indisponível (Nominatim/Google fora do ar) → casa pelo RAIO das
+    // regiões cadastradas, senão o usuário em Jeri veria "fora da área" à toa.
+    if (!found && !info?.city) found = findRegionForCoords(lat, lon, regions)
     // O GPS em segundo plano (auto) NÃO sobrescreve uma região escolhida à mão.
     // Detecção explícita (botão “usar minha localização”) sempre vale.
     if (found && !(auto && manualRef.current)) selectRegion(found, { manual: false })

@@ -64,15 +64,10 @@ async function getPlaceCoords(r) {
 
 function MapPreview({ lat, lon }) {
   if (!lat || !lon) return null
-  if (ADMIN_MAPS_KEY) {
-    const src = `https://www.google.com/maps/embed/v1/view?key=${ADMIN_MAPS_KEY}&center=${lat},${lon}&zoom=15&maptype=roadmap`
-    return (
-      <div className="rounded-xl overflow-hidden border border-gray-700 h-[160px]">
-        <iframe title="mapa" src={src} className="w-full h-full border-0" loading="lazy" allowFullScreen />
-      </div>
-    )
-  }
-  // Fallback OpenStreetMap
+  // Sempre OpenStreetMap: o Google Embed exige chave COM billing — sem isso
+  // renderiza o erro "Esta página não carregou o Google Maps corretamente"
+  // dentro do iframe. O OSM funciona sem chave e serve perfeitamente como
+  // conferência visual das coordenadas.
   const delta = 0.05
   const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
   const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`
