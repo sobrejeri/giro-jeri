@@ -661,7 +661,7 @@ export default function Dashboard() {
                 {assignModal.users?.phone && (
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">Tel. cliente</span>
-                    <a href={`https://wa.me/55${assignModal.users.phone.replace(/\D/g,'')}`}
+                    <a href={`https://wa.me/${(() => { const d = assignModal.users.phone.replace(/\D/g,''); return d.length <= 11 ? '55' + d : d })()}`}
                        target="_blank" rel="noreferrer"
                        className="font-medium text-green-600 hover:underline flex items-center gap-1">
                       <MessageCircle size={12} />{assignModal.users.phone}

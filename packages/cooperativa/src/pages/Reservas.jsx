@@ -169,7 +169,9 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
   const clientPhone = booking.users?.phone
   const clientName  = booking.users?.full_name || 'Cliente'
-  const waNumber    = clientPhone ? `55${clientPhone.replace(/\D/g, '')}` : null
+  // Telefones novos já vêm com +55; só prefixa quando faltar (≤11 dígitos).
+  const waDigits    = clientPhone ? clientPhone.replace(/\D/g, '') : ''
+  const waNumber    = waDigits ? (waDigits.length <= 11 ? `55${waDigits}` : waDigits) : null
   const isSending   = busy
   const isPaid      = booking.status_commercial === 'paid'
 
@@ -471,7 +473,8 @@ export default function Reservas() {
       // 2. Abre WhatsApp com os dados da reserva (se cliente tem telefone)
       const phone = booking.users?.phone
       if (phone) {
-        const intl = `55${phone.replace(/\D/g, '')}`
+        const d = phone.replace(/\D/g, '')
+        const intl = d.length <= 11 ? `55${d}` : d
         window.open(`https://wa.me/${intl}?text=${buildConfirmMsg(booking)}`, '_blank')
       }
 

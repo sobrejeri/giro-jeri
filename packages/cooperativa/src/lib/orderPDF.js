@@ -448,7 +448,9 @@ export async function shareOrderPDF(booking, form, target = 'driver', cooperativ
 
   if (!phone) return 'no_phone'
 
-  const intl = phone.startsWith('55') ? phone : `55${phone}`
+  // ≤11 dígitos = número local (DDD+número) sem código do país → prefixa 55.
+  // Checar por comprimento (não por startsWith) evita confundir DDD 55.
+  const intl = phone.length <= 11 ? `55${phone}` : phone
   const msg  = target === 'driver' ? buildDriverMessage(booking, form) : buildClientMessage(booking, form)
   window.open(`https://wa.me/${intl}?text=${encodeURIComponent(msg)}`, '_blank')
   return 'downloaded'

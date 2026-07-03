@@ -302,7 +302,7 @@ export default function BookingDetail() {
               </div>
               {booking.operator.phone && (
                 <a
-                  href={`https://wa.me/55${booking.operator.phone.replace(/\D/g, '')}`}
+                  href={`https://wa.me/${(() => { const d = booking.operator.phone.replace(/\D/g, ''); return d.length <= 11 ? '55' + d : d })()}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1.5 bg-[#25D366] text-white text-xs font-bold px-3 py-2 rounded-xl active:scale-95 transition-transform"
