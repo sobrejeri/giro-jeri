@@ -213,10 +213,12 @@ router.post('/login', async (req, res, next) => {
       // document_number no banco tiver formatação/espaço/caractere oculto),
       // busca os candidatos e compara só os dígitos em memória.
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      // NÃO filtra por document_type: cadastros antigos podem ter o tipo
+      // vazio/'CNPJ'/outro. O que identifica é o próprio número — 14 dígitos
+      // não colidem com CPF (11) — restrito a operator/admin.
       const { data: candidates, error: lookupErr } = await supabase
         .from('users')
-        .select('email, document_number')
-        .eq('document_type', 'cnpj')
+        .select('email, document_number, document_type')
         .in('user_type', ['operator', 'admin']);
 
       const opUser = (candidates || []).find(

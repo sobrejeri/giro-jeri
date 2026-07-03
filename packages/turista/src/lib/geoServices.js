@@ -1,7 +1,8 @@
 import { loadGoogleMaps } from '../components/GoogleMap'
 
 const JERI = { lat: -2.7976, lng: -40.5147 }
-const HAS_KEY = !!import.meta.env.VITE_GOOGLE_MAPS_KEY
+const HAS_KEY  = !!import.meta.env.VITE_GOOGLE_MAPS_KEY
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 // ---------------------------------------------------------------------------
 // Internal helpers — Google (throws on failure) + Nominatim/Overpass fallbacks
@@ -75,9 +76,27 @@ async function nominatimSearch(input, center) {
 // getPlaceSuggestions
 // ---------------------------------------------------------------------------
 
+// Último recurso: proxy no servidor (Google→Nominatim do lado do servidor).
+// Salva o dia quando a chave do Google está restrita no cliente E o Nominatim
+// recusa a origem por CORS/rate-limit (visto em produção).
+async function serverSuggestions(input) {
+  const res = await fetch(`${API_BASE}/api/transfers/places/autocomplete?q=${encodeURIComponent(input)}`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data?.predictions || []).map((p) => ({
+    place_id:       p.id,
+    display_name:   p.full || p.label,
+    main_text:      p.label,
+    secondary_text: p.sublabel || '',
+    lat:            p.lat ?? null,
+    lon:            p.lon ?? null,
+    _source:        p.source === 'google' ? 'google' : 'nominatim',
+  }))
+}
+
 /**
  * Sugestões de autocomplete para endereços.
- * Tenta Google Maps primeiro; se falhar ou retornar vazio, usa Nominatim.
+ * Google Maps → Nominatim direto → proxy do servidor.
  */
 export async function getPlaceSuggestions(input, center = JERI) {
   if (HAS_KEY) {
@@ -89,7 +108,13 @@ export async function getPlaceSuggestions(input, center = JERI) {
     }
   }
   try {
-    return await nominatimSearch(input, center)
+    const results = await nominatimSearch(input, center)
+    if (results.length > 0) return results
+  } catch {
+    // fall through to server proxy
+  }
+  try {
+    return await serverSuggestions(input)
   } catch {
     return []
   }
@@ -101,30 +126,47 @@ export async function getPlaceSuggestions(input, center = JERI) {
 
 /**
  * Detalhes (lat/lon/name) de um place_id Google.
+ * SDK no navegador → proxy do servidor (quando a chave do cliente está
+ * restrita mas o servidor tem chave própria).
  */
 export async function getPlaceDetails(placeId) {
-  if (!HAS_KEY) return null
-  try {
-    const maps = await loadGoogleMaps()
-    const div  = document.createElement('div')
-    const svc  = new maps.places.PlacesService(div)
-    return await new Promise((resolve, reject) => {
-      svc.getDetails(
-        { placeId, fields: ['geometry', 'name', 'formatted_address'] },
-        (place, status) => {
-          if (status === maps.places.PlacesServiceStatus.OK && place?.geometry) {
-            resolve({
-              name:    place.name ?? '',
-              address: place.formatted_address ?? '',
-              lat:     String(place.geometry.location.lat()),
-              lon:     String(place.geometry.location.lng()),
-            })
-          } else {
-            reject(new Error(status))
+  if (HAS_KEY) {
+    try {
+      const maps = await loadGoogleMaps()
+      const div  = document.createElement('div')
+      const svc  = new maps.places.PlacesService(div)
+      return await new Promise((resolve, reject) => {
+        svc.getDetails(
+          { placeId, fields: ['geometry', 'name', 'formatted_address'] },
+          (place, status) => {
+            if (status === maps.places.PlacesServiceStatus.OK && place?.geometry) {
+              resolve({
+                name:    place.name ?? '',
+                address: place.formatted_address ?? '',
+                lat:     String(place.geometry.location.lat()),
+                lon:     String(place.geometry.location.lng()),
+              })
+            } else {
+              reject(new Error(status))
+            }
           }
-        }
-      )
-    })
+        )
+      })
+    } catch {
+      // fall through to server proxy
+    }
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/transfers/places/details?place_id=${encodeURIComponent(placeId)}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data?.details) return null
+    return {
+      name:    '',
+      address: data.details.address || '',
+      lat:     String(data.details.lat),
+      lon:     String(data.details.lon),
+    }
   } catch {
     return null
   }
