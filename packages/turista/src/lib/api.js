@@ -31,7 +31,17 @@ async function tryRefresh() {
 
 function clearSession() {
   Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
-  window.location.href = '/login'
+  // Preserva o destino atual em ?next= para voltar após o login (sessão que
+  // caiu no meio do uso). window.location não carrega state do React Router,
+  // então usamos query param — o Login lê como fallback.
+  const base = import.meta.env.BASE_URL || '/'
+  const full = window.location.pathname + window.location.search
+  // Remove o basename pra o next ser relativo (o navigate do Router espera
+  // caminho sem o base; senão duplicaria /giro-jeri/giro-jeri/...).
+  const rel  = full.startsWith(base) ? '/' + full.slice(base.length) : full
+  const isLoginPage = window.location.pathname.endsWith('/login')
+  const next = isLoginPage ? '' : `?next=${encodeURIComponent(rel)}`
+  window.location.href = `${base}login${next}`
 }
 
 async function request(path, options = {}, isRetry = false) {

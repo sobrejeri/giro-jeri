@@ -42,7 +42,11 @@ export default function Auth({ defaultTab = 'login' }) {
   const location  = useLocation()
   const { login } = useAuth()
   const { t }     = useTranslation()
-  const from      = location.state?.from || '/'
+  // Destino após login: state do PrivateRoute (deep link) ou ?next= (sessão
+  // que caiu no meio do uso). Só aceita caminho interno (começa com "/" e não
+  // "//") pra evitar open-redirect.
+  const rawNext   = location.state?.from || new URLSearchParams(location.search).get('next')
+  const from      = (rawNext && /^\/(?!\/)/.test(rawNext)) ? rawNext : '/'
 
   const [tab,     setTab]     = useState(location.state?.tab || defaultTab)
   const [loading, setLoading] = useState(false)

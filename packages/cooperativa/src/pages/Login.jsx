@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import Button from '../components/ui/Button'
@@ -16,7 +16,12 @@ function formatCNPJ(v) {
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
+  // Destino após login: state do PrivateRoute (deep link), ?next= (sessão
+  // expirada) ou o dashboard. Só aceita caminho interno (anti open-redirect).
+  const rawNext = location.state?.from || new URLSearchParams(location.search).get('next')
+  const from    = (rawNext && /^\/(?!\/)/.test(rawNext)) ? rawNext : '/dashboard'
   const [form, setForm]       = useState({ cnpj: '', password: '' })
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -42,7 +47,7 @@ export default function Login() {
       }
 
       login(user, data.token, data.refresh_token)
-      navigate('/dashboard', { replace: true })
+      navigate(from, { replace: true })
     } catch (err) {
       setError(err.message || 'Erro ao entrar')
     } finally {

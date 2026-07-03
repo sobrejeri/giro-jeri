@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
@@ -20,7 +20,13 @@ import Perfil from './pages/Perfil'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
-  return token ? children : <Navigate to="/login" replace />
+  const location = useLocation()
+  // Guarda o destino para voltar após login (se a sessão cair no meio da tela).
+  if (!token) {
+    const next = location.pathname + location.search
+    return <Navigate to="/login" replace state={{ from: next }} />
+  }
+  return children
 }
 
 export default function App() {

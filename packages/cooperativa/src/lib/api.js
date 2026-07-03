@@ -39,7 +39,13 @@ async function tryRefresh() {
 
 function clearSession() {
   Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
-  window.location.href = (import.meta.env.BASE_URL || '/') + 'login'
+  // Preserva o destino em ?next= para voltar após o login (sessão expirada).
+  const base = import.meta.env.BASE_URL || '/'
+  const full = window.location.pathname + window.location.search
+  const rel  = full.startsWith(base) ? '/' + full.slice(base.length) : full
+  const isLoginPage = window.location.pathname.endsWith('/login')
+  const next = isLoginPage ? '' : `?next=${encodeURIComponent(rel)}`
+  window.location.href = `${base}login${next}`
 }
 
 // Faz uma requisição autenticada com re-tentativa automática após refresh.

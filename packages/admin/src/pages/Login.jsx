@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import Button from '../components/ui/Button'
@@ -7,7 +7,11 @@ import Input from '../components/ui/Input'
 
 export default function Login() {
   const navigate    = useNavigate()
+  const location    = useLocation()
   const { login }   = useAuth()
+  // Só aceita caminho interno (começa com "/" e não "//") — anti open-redirect.
+  const rawNext     = location.state?.from || new URLSearchParams(location.search).get('next')
+  const from        = (rawNext && /^\/(?!\/)/.test(rawNext)) ? rawNext : '/dashboard'
   const [form, setForm]       = useState({ email: '', password: '' })
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -35,7 +39,7 @@ export default function Login() {
       }
 
       login(profile, data.session.access_token, data.session.refresh_token)
-      navigate('/dashboard', { replace: true })
+      navigate(from, { replace: true })
     } catch (err) {
       setError(err.message || 'Erro ao entrar')
     } finally {

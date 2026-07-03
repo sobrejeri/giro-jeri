@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
@@ -13,7 +13,13 @@ import Reservas from './pages/Reservas'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
-  return token ? children : <Navigate to="/login" replace />
+  const location = useLocation()
+  // Guarda o destino para voltar após login (deep link do WhatsApp deslogado).
+  if (!token) {
+    const next = location.pathname + location.search
+    return <Navigate to="/login" replace state={{ from: next }} />
+  }
+  return children
 }
 
 export default function App() {
