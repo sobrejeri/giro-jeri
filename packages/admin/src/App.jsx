@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
@@ -29,8 +30,24 @@ function PrivateRoute({ children }) {
   return children
 }
 
+// Deep link direto: 404.html salva o caminho em sessionStorage; recupera aqui.
+function SpaRedirectHandler() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    const saved = sessionStorage.getItem('spa_redirect')
+    if (!saved) return
+    sessionStorage.removeItem('spa_redirect')
+    const base = import.meta.env.BASE_URL || '/'
+    const rel  = saved.startsWith(base) ? '/' + saved.slice(base.length) : saved
+    if (rel && rel !== '/' && !rel.startsWith('//')) navigate(rel, { replace: true })
+  }, [navigate])
+  return null
+}
+
 export default function App() {
   return (
+    <>
+    <SpaRedirectHandler />
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
@@ -53,5 +70,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
+    </>
   )
 }

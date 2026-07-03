@@ -34,7 +34,10 @@ function resolveStatus(booking) {
   // Fluxo solicitar → aceitar → pagar:
   if (c === 'awaiting_acceptance') return 'waiting_acceptance' // aguardando cooperativa
   if (c === 'awaiting_payment' || c === 'payment_failed') return 'waiting_payment' // aceita → pague
-  if (c === 'paid') return o === 'assigned' ? 'confirmed' : 'waiting_acceptance'
+  // Pago = dinheiro recebido, já passou da aceitação. Independente do
+  // sub-estado operacional (assigned/awaiting_dispatch/new), pro cliente é
+  // "confirmada". completed/in_progress já foram tratados acima.
+  if (c === 'paid') return 'confirmed'
   if (o === 'assigned') return 'confirmed'
   return 'waiting_acceptance'
 }

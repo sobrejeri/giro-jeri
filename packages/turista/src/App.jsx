@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout              from './components/layout/Layout'
 import CheckoutLayout      from './components/layout/CheckoutLayout'
@@ -30,8 +31,26 @@ function PrivateRoute({ children }) {
   return children
 }
 
+// Deep link direto (acesso fresco a /minhas-reservas/:id via WhatsApp): o
+// 404.html do GitHub Pages salva o caminho em sessionStorage e redireciona
+// pra raiz. Aqui lemos esse caminho de volta e navegamos pra ele.
+function SpaRedirectHandler() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    const saved = sessionStorage.getItem('spa_redirect')
+    if (!saved) return
+    sessionStorage.removeItem('spa_redirect')
+    const base = import.meta.env.BASE_URL || '/'
+    const rel  = saved.startsWith(base) ? '/' + saved.slice(base.length) : saved
+    if (rel && rel !== '/' && !rel.startsWith('//')) navigate(rel, { replace: true })
+  }, [navigate])
+  return null
+}
+
 export default function App() {
   return (
+    <>
+    <SpaRedirectHandler />
     <Routes>
       {/* Auth — full screen, sem layout */}
       <Route path="/login"    element={<Auth defaultTab="login" />} />
@@ -62,5 +81,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }
