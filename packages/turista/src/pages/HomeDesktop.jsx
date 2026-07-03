@@ -71,26 +71,32 @@ function HeroTourCard({ tour, tag, gradient, onClick }) {
         ) : (
           <div className={`w-full h-full bg-gradient-to-br ${gradient}`} />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
         {tag && (
           <span className="absolute top-3 left-3 bg-brand text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-md">
             {tag}
           </span>
         )}
         <div className="absolute bottom-3 left-4 right-4 text-white">
-          <p className="font-extrabold text-[18px] leading-tight drop-shadow">{tour?.name || 'Passeio em Jericoacoara'}</p>
-          <p className="text-[12px] text-white/90 line-clamp-1 mt-0.5">
+          <p className="font-extrabold text-[17px] leading-tight drop-shadow-md line-clamp-1">{tour?.name || 'Passeio em Jericoacoara'}</p>
+          <p className="text-[12px] text-white/85 line-clamp-1 mt-0.5 drop-shadow">
             {tour?.short_description || 'Uma experiência inesquecível em Jeri'}
           </p>
         </div>
       </div>
       <div className="flex items-center justify-between px-4 py-3.5">
         <div>
-          <p className="text-[11px] text-gray-400 leading-none">A partir de</p>
-          <p className="text-brand font-extrabold text-[17px] leading-tight mt-0.5">
-            {fmtPrice(tour?.shared_price_per_person || 0)}
-            <span className="text-[11px] text-gray-400 font-medium"> por pessoa</span>
-          </p>
+          {Number(tour?.shared_price_per_person) > 0 ? (
+            <>
+              <p className="text-[11px] text-gray-400 leading-none">A partir de</p>
+              <p className="text-brand font-extrabold text-[17px] leading-tight mt-0.5">
+                {fmtPrice(tour.shared_price_per_person)}
+                <span className="text-[11px] text-gray-400 font-medium"> por pessoa</span>
+              </p>
+            </>
+          ) : (
+            <p className="text-brand font-bold text-[14px]">Consultar valores</p>
+          )}
         </div>
         <span className="inline-flex items-center gap-1 text-brand font-semibold text-[13px] border border-brand/20 bg-brand/5 hover:bg-brand/10 rounded-lg px-3 py-1.5 transition-colors">
           Ver detalhes <ArrowRight size={13} />
@@ -131,10 +137,14 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
           )}
         </div>
         <div className="mt-2.5 pt-2.5 border-t border-gray-50 flex items-end justify-between gap-2">
-          <div>
-            <p className="text-[10px] text-gray-400 leading-none">A partir de</p>
-            <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(tour?.shared_price_per_person || 0)}</p>
-          </div>
+          {Number(tour?.shared_price_per_person) > 0 ? (
+            <div>
+              <p className="text-[10px] text-gray-400 leading-none">A partir de</p>
+              <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(tour.shared_price_per_person)}</p>
+            </div>
+          ) : (
+            <p className="text-[12px] text-brand font-bold">Consultar valores</p>
+          )}
           <span className="text-[11px] text-brand font-semibold">Reservar →</span>
         </div>
       </div>
@@ -184,12 +194,12 @@ export default function HomeDesktop({
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
-        <div className="relative z-10 px-8 lg:px-14 pt-24 pb-32 max-w-3xl">
-          <p className="text-brand text-[22px] font-display italic tracking-wide drop-shadow-md">
-            {bannerTitle ? '' : 'Viva o melhor de'}
+        <div className="relative z-10 px-8 lg:px-14 pt-20 pb-32 max-w-3xl">
+          <p className="text-orange-300 text-[20px] italic font-semibold tracking-wide drop-shadow-md">
+            Viva o melhor de
           </p>
-          <h1 className="mt-1 text-white font-display font-extrabold uppercase leading-[0.95] tracking-tight text-[76px] lg:text-[92px] drop-shadow-2xl">
-            {bannerTitle || 'Jericoacoara'}
+          <h1 className="mt-1 text-white font-extrabold uppercase leading-[0.95] tracking-tight text-[56px] xl:text-[68px] drop-shadow-2xl break-words">
+            Jericoacoara
           </h1>
           <p className="mt-5 text-white/90 text-[17px] leading-relaxed max-w-[520px] drop-shadow">
             {bannerSubtitle || 'Passeios, transfers e experiências incríveis com atendimento local e reserva rápida.'}
@@ -234,42 +244,42 @@ export default function HomeDesktop({
           </div>
 
           {/* Campos */}
-          <div className="grid grid-cols-12 gap-2 p-4 pt-3 border-t border-gray-100">
-            <div className="col-span-3 flex flex-col gap-1 px-4 py-2 rounded-2xl hover:bg-gray-50 transition-colors">
-              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Saindo de</label>
+          <div className="grid grid-cols-12 gap-3 p-4 pt-3 border-t border-gray-100">
+            <div className="col-span-3 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Saindo de</label>
               <input
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
-                className="text-[15px] font-semibold text-gray-800 bg-transparent outline-none placeholder-gray-400"
+                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none placeholder-gray-400 w-full"
                 placeholder="Jericoacoara"
               />
             </div>
-            <div className="col-span-3 flex flex-col gap-1 px-4 py-2 rounded-2xl hover:bg-gray-50 transition-colors border-l border-gray-100">
-              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
+            <div className="col-span-3 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
                 {tab === 'transfers' ? 'Para onde?' : 'Escolha o passeio'}
               </label>
               <input
                 value={destino}
                 onChange={(e) => setDestino(e.target.value)}
-                className="text-[15px] font-semibold text-gray-800 bg-transparent outline-none placeholder-gray-400"
+                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none placeholder-gray-400 w-full"
                 placeholder={tab === 'transfers' ? 'Fortaleza, Aeroporto, Preá…' : 'Litoral Leste, Pôr do sol…'}
               />
             </div>
-            <div className="col-span-2 flex flex-col gap-1 px-4 py-2 rounded-2xl hover:bg-gray-50 transition-colors border-l border-gray-100">
-              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Data</label>
+            <div className="col-span-2 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Data</label>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="text-[15px] font-semibold text-gray-800 bg-transparent outline-none"
+                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none w-full"
               />
             </div>
-            <div className="col-span-2 flex flex-col gap-1 px-4 py-2 rounded-2xl hover:bg-gray-50 transition-colors border-l border-gray-100">
-              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Pessoas</label>
+            <div className="col-span-2 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Pessoas</label>
               <select
                 value={people}
                 onChange={(e) => setPeople(Number(e.target.value))}
-                className="text-[15px] font-semibold text-gray-800 bg-transparent outline-none appearance-none pr-4"
+                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full"
               >
                 {[1,2,3,4,5,6,7,8,9,10,12,15,20].map((n) => (
                   <option key={n} value={n}>{n} pessoa{n !== 1 ? 's' : ''}</option>
@@ -279,7 +289,7 @@ export default function HomeDesktop({
             <div className="col-span-2 flex">
               <button
                 onClick={handleSearch}
-                className="w-full h-full inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold rounded-2xl px-4 py-3 transition-colors shadow-md shadow-brand/30"
+                className="w-full h-full inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold text-[14px] rounded-xl px-4 py-3 transition-colors shadow-md shadow-brand/30"
               >
                 Buscar agora <ArrowRight size={16} />
               </button>
@@ -345,7 +355,7 @@ export default function HomeDesktop({
             Em breve, novos passeios por aqui.
           </div>
         ) : (
-          <div className="grid grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-3 gap-5">
             {gridRest.map((t, i) => (
               <MiniTourCard
                 key={t.id}
@@ -366,14 +376,11 @@ export default function HomeDesktop({
           {/* Ornamentos */}
           <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-white/5" />
           <div className="absolute -bottom-32 -left-16 w-96 h-96 rounded-full bg-white/5" />
-          <div className="absolute top-8 right-16 opacity-20">
-            <Car size={220} className="text-white" />
-          </div>
 
           <div className="relative grid grid-cols-2 gap-8 items-center">
             <div>
-              <h2 className="text-white font-display font-extrabold text-[36px] leading-tight">
-                Chegue em Jericoacoara <br /><span className="italic text-orange-300 font-normal">com tranquilidade</span>
+              <h2 className="text-white font-extrabold text-[32px] leading-tight">
+                Chegue em Jericoacoara <br /><span className="italic text-orange-300">com tranquilidade</span>
               </h2>
               <p className="text-white/85 text-[15px] mt-4 leading-relaxed max-w-md">
                 Transfers privativos saindo de Fortaleza, Aeroporto de Cruz, Jijoca, Preá, Parnaíba e Barreirinhas.
@@ -455,7 +462,7 @@ export default function HomeDesktop({
           <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-brand/20 blur-2xl" />
           <div className="relative flex items-center justify-between gap-8">
             <div className="max-w-2xl">
-              <h2 className="text-white font-display font-extrabold text-[30px] leading-tight">
+              <h2 className="text-white font-extrabold text-[28px] leading-tight">
                 Pronto para viver momentos únicos em Jericoacoara?
               </h2>
               <p className="text-white/85 text-[15px] mt-3">
