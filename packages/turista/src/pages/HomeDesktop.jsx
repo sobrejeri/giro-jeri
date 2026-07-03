@@ -184,7 +184,7 @@ export default function HomeDesktop({
   return (
     <div className="w-full">
       {/* ── HERO ─────────────────────────────────────────────── */}
-      <section className="relative min-h-[540px] xl:min-h-[620px] overflow-hidden">
+      <section className="relative overflow-hidden">
         {heroImg ? (
           <img src={heroImg} alt="Jericoacoara" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
@@ -194,18 +194,18 @@ export default function HomeDesktop({
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
-        <div className="relative z-10 max-w-[1520px] mx-auto px-10 xl:px-16 pt-20 pb-36">
-          <p className="text-orange-300 text-[20px] italic font-semibold tracking-wide drop-shadow-md">
+        <div className="relative z-10 max-w-[1520px] mx-auto px-10 xl:px-16 pt-14 pb-44">
+          <p className="text-orange-300 text-[19px] italic font-semibold tracking-wide drop-shadow-md">
             Viva o melhor de
           </p>
-          <h1 className="mt-1 text-white font-extrabold uppercase leading-[0.95] tracking-tight text-[56px] xl:text-[68px] drop-shadow-2xl break-words">
+          <h1 className="mt-1 text-white font-extrabold uppercase leading-[0.95] tracking-tight text-[54px] xl:text-[64px] drop-shadow-2xl break-words">
             Jericoacoara
           </h1>
-          <p className="mt-5 text-white/90 text-[17px] leading-relaxed max-w-[520px] drop-shadow">
+          <p className="mt-4 text-white/90 text-[16px] leading-relaxed max-w-[440px] drop-shadow">
             {bannerSubtitle || 'Passeios, transfers e experiências incríveis com atendimento local e reserva rápida.'}
           </p>
 
-          <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3">
+          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2.5">
             {HERO_BADGES.map(({ icon: Icon, label }) => (
               <div key={label} className="inline-flex items-center gap-2 text-white/90 text-[13px] font-medium">
                 <span className="w-6 h-6 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center">
@@ -219,7 +219,7 @@ export default function HomeDesktop({
       </section>
 
       {/* ── BOX DE BUSCA (sobreposto) ────────────────────────── */}
-      <div className="relative z-20 -mt-24 max-w-[1280px] mx-auto px-10">
+      <div className="relative z-20 -mt-28 max-w-[1280px] mx-auto px-10">
         <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
           {/* Abas */}
           <div className="flex items-center gap-1 px-3 pt-3">
