@@ -38,6 +38,7 @@ export default function TopNav() {
           <NavLink to="/eventos"           className={navLinkClass}>Descubra a Vila</NavLink>
           {token && <NavLink to="/minhas-reservas" className={navLinkClass}>Reservas</NavLink>}
           {token && <NavLink to="/perfil"          className={navLinkClass}>Perfil</NavLink>}
+          <a href="#sobre" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">Sobre nós</a>
         </nav>
 
         {/* Chip de localização — desktop */}
@@ -66,9 +67,11 @@ export default function TopNav() {
             </>
           ) : (
             <>
-              <Link to="/login"    className="text-sm font-medium text-gray-600 hover:text-gray-900">Entrar</Link>
-              <Link to="/cadastro" className="inline-flex items-center gap-1.5 h-8 px-4 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition-colors">
-                <User size={13} /> Cadastrar
+              <Link to="/login" className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-700 hover:text-gray-900 h-8 px-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <User size={13} /> Entrar
+              </Link>
+              <Link to="/passeios" className="inline-flex items-center gap-1.5 h-8 px-4 bg-brand text-white text-sm font-semibold rounded-lg hover:bg-brand-600 transition-colors shadow-sm shadow-brand/30">
+                Reservar agora
               </Link>
             </>
           )}
