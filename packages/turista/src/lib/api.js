@@ -44,7 +44,27 @@ function clearSession() {
   window.location.href = `${base}login${next}`
 }
 
+// Renova ANTES de expirar (janela de 60s) — evita o 401 "esperado" na
+// primeira chamada após tempo parado e a corrida de refreshes paralelos.
+function tokenExpiringSoon() {
+  const t = getToken()
+  if (!t) return false
+  try {
+    const payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.exp ? payload.exp * 1000 - Date.now() < 60_000 : false
+  } catch { return false }
+}
+
+let refreshInFlight = null
+function refreshOnce() {
+  if (!refreshInFlight) {
+    refreshInFlight = tryRefresh().finally(() => { refreshInFlight = null })
+  }
+  return refreshInFlight
+}
+
 async function request(path, options = {}, isRetry = false) {
+  if (!isRetry && tokenExpiringSoon()) await refreshOnce()
   const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
     headers: {
@@ -57,7 +77,7 @@ async function request(path, options = {}, isRetry = false) {
 
   if (res.status === 401) {
     if (!isRetry) {
-      const refreshed = await tryRefresh()
+      const refreshed = await refreshOnce()
       if (refreshed) return request(path, options, true)
     }
     clearSession()
