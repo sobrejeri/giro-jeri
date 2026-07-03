@@ -184,7 +184,7 @@ export default function HomeDesktop({
   return (
     <div className="w-full">
       {/* ── HERO ─────────────────────────────────────────────── */}
-      <section className="relative min-h-[540px] overflow-hidden">
+      <section className="relative min-h-[540px] xl:min-h-[620px] overflow-hidden">
         {heroImg ? (
           <img src={heroImg} alt="Jericoacoara" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
@@ -194,7 +194,7 @@ export default function HomeDesktop({
         <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
-        <div className="relative z-10 px-8 lg:px-14 pt-20 pb-32 max-w-3xl">
+        <div className="relative z-10 max-w-[1520px] mx-auto px-10 xl:px-16 pt-20 pb-36">
           <p className="text-orange-300 text-[20px] italic font-semibold tracking-wide drop-shadow-md">
             Viva o melhor de
           </p>
@@ -219,7 +219,7 @@ export default function HomeDesktop({
       </section>
 
       {/* ── BOX DE BUSCA (sobreposto) ────────────────────────── */}
-      <div className="relative z-20 -mt-24 px-8 lg:px-14">
+      <div className="relative z-20 -mt-24 max-w-[1280px] mx-auto px-10">
         <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
           {/* Abas */}
           <div className="flex items-center gap-1 px-3 pt-3">
@@ -306,7 +306,7 @@ export default function HomeDesktop({
       </div>
 
       {/* ── MAIS PROCURADOS EM JERI ──────────────────────────── */}
-      <section className="mt-14 px-8 lg:px-14">
+      <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="flex items-end justify-between mb-5">
           <div>
             <h2 className="text-[28px] font-extrabold text-gray-900 leading-tight">Mais procurados em Jeri 🌴</h2>
@@ -340,7 +340,7 @@ export default function HomeDesktop({
       </section>
 
       {/* ── EXPERIÊNCIAS EM DESTAQUE ─────────────────────────── */}
-      <section className="mt-14 px-8 lg:px-14">
+      <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="flex items-end justify-between mb-5">
           <div>
             <h2 className="text-[24px] font-extrabold text-gray-900">Experiências em destaque</h2>
@@ -371,7 +371,7 @@ export default function HomeDesktop({
       </section>
 
       {/* ── FAIXA DE TRANSFERS ──────────────────────────────── */}
-      <section className="mt-14 px-8 lg:px-14">
+      <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0d3b46] via-[#155e75] to-[#1c8ba3] p-10 lg:p-12">
           {/* Ornamentos */}
           <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-white/5" />
@@ -408,7 +408,7 @@ export default function HomeDesktop({
       </section>
 
       {/* ── BENEFÍCIOS ───────────────────────────────────────── */}
-      <section id="sobre" className="mt-14 px-8 lg:px-14">
+      <section id="sobre" className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="grid grid-cols-4 gap-4">
           {BENEFITS.map(({ icon: Icon, title, desc }) => (
             <div key={title} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
@@ -423,7 +423,7 @@ export default function HomeDesktop({
       </section>
 
       {/* ── DEPOIMENTOS ──────────────────────────────────────── */}
-      <section className="mt-16 px-8 lg:px-14">
+      <section className="mt-16 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="flex items-end justify-between mb-6">
           <div>
             <h2 className="text-[26px] font-extrabold text-gray-900">Quem visita, recomenda</h2>
@@ -457,7 +457,7 @@ export default function HomeDesktop({
       </section>
 
       {/* ── CTA FINAL ────────────────────────────────────────── */}
-      <section className="mt-16 px-8 lg:px-14">
+      <section className="mt-16 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1c8ba3] via-[#0d3b46] to-[#0a2e37] p-10 lg:p-12">
           <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-brand/20 blur-2xl" />
           <div className="relative flex items-center justify-between gap-8">
@@ -486,7 +486,8 @@ export default function HomeDesktop({
       </section>
 
       {/* ── FOOTER ───────────────────────────────────────────── */}
-      <footer className="mt-16 border-t border-gray-100 pt-10 pb-8 px-8 lg:px-14 bg-white">
+      <footer className="mt-16 border-t border-gray-100 pt-10 pb-8 bg-white">
+        <div className="max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="grid grid-cols-4 gap-8 mb-8">
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -545,6 +546,7 @@ export default function HomeDesktop({
         <div className="border-t border-gray-100 pt-5 flex items-center justify-between text-[11px] text-gray-400">
           <p>© {new Date().getFullYear()} Giro Jeri · Passeios e transfers em Jericoacoara.</p>
           <p>Feito com <span className="text-brand">♥</span> na vila.</p>
+        </div>
         </div>
       </footer>
     </div>

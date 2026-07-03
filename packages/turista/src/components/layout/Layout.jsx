@@ -16,8 +16,8 @@ export default function Layout() {
     <div className="min-h-screen bg-[#EBEBEB] lg:bg-gray-50">
       <TopNav />
 
-      <div className="relative w-full max-w-[430px] lg:max-w-6xl mx-auto min-h-screen lg:min-h-0 bg-[#F8F8F8] lg:bg-transparent overflow-x-hidden shadow-2xl lg:shadow-none">
-        <div className="pb-[68px] lg:pb-10">
+      <div className="relative w-full max-w-[430px] lg:max-w-none mx-auto min-h-screen lg:min-h-0 bg-[#F8F8F8] lg:bg-transparent overflow-x-hidden shadow-2xl lg:shadow-none">
+        <div className="pb-[68px] lg:pb-0">
           <PullToRefresh onRefresh={handleRefresh}>
             <Outlet />
           </PullToRefresh>

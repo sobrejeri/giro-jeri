@@ -23,7 +23,7 @@ export default function TopNav() {
 
   return (
     <header className="hidden lg:block sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100">
-      <div className="max-w-6xl mx-auto h-14 flex items-center px-6">
+      <div className="max-w-[1520px] mx-auto h-14 flex items-center px-6 xl:px-10">
         <Link to="/" className="flex items-center gap-2 mr-8 shrink-0">
           <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-7 h-7 rounded-lg shrink-0" />
           <div>
