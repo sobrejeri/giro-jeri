@@ -196,6 +196,7 @@ export const api = {
   // Notificações
   getNotifications:      ()    => request('/api/notifications'),
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
+  deleteNotification:    (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
 

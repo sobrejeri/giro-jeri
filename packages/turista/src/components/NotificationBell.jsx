@@ -67,6 +67,13 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
   }
   function openItem(n) {
     setOpen(false)
+    // Já foi vista e clicada → some da central (remoção otimista + servidor)
+    qc.setQueryData(['notifications'], (old) => old && ({
+      ...old,
+      items:  (old.items || []).filter((i) => i.id !== n.id),
+      unread: Math.max(0, (old.unread || 0) - (n.read_at ? 0 : 1)),
+    }))
+    api.deleteNotification(n.id).catch(() => {})
     // Reserva → abre o detalhe; cotação (sem booking) → lista de reservas
     navigate(n.booking_id ? `/minhas-reservas/${n.booking_id}` : '/minhas-reservas')
   }

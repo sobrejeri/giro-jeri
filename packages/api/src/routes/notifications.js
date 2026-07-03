@@ -73,6 +73,21 @@ router.post('/read-all', authenticate, async (req, res) => {
   }
 })
 
+// ── DELETE /api/notifications/:id — exclui após o clique/ação ──
+router.delete('/:id', authenticate, async (req, res) => {
+  try {
+    await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('user_id', req.user.id)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] delete falhou:', err.message)
+    res.json({ ok: false })
+  }
+})
+
 // ── POST /api/notifications/:id/read — marca uma como lida ──
 router.post('/:id/read', authenticate, async (req, res) => {
   try {
