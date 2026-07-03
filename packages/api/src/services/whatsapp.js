@@ -5,6 +5,16 @@
 
 const ZAPI_BASE = process.env.ZAPI_BASE_URL || 'https://api.z-api.io';
 
+// URLs dos apps para os deep links das notificações. Defaults já apontam pra
+// produção — podem ser sobrescritos por env se o domínio mudar.
+const TURISTA_APP = (process.env.TURISTA_APP_URL || 'https://sobrejeri.github.io/giro-jeri').replace(/\/$/, '');
+const COOP_APP    = (process.env.COOP_APP_URL    || 'https://sobrejeri.github.io/giro-jeri/cooperativa').replace(/\/$/, '');
+
+// Deep links prontos.
+const linkBookingPay  = (id) => `${TURISTA_APP}/minhas-reservas/${id}`;
+const linkMyBookings  = ()   => `${TURISTA_APP}/minhas-reservas`;
+const linkCoopRides   = ()   => `${COOP_APP}/reservas`;
+
 export function isWhatsappEnabled() {
   return !!(
     process.env.ZAPI_INSTANCE_ID &&
@@ -109,10 +119,14 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
 
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `🚗 *Giro Jeri — Nova solicitação*\n` +
-    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
-    `📅 ${data} · Cód: ${booking.booking_code || '-'}\n` +
-    `Você tem 24h para aceitar. Abra o app pra ver.`
+    `*GIRO JERI* · Nova solicitação 🚗\n` +
+    `\n` +
+    `${tipo}${rota ? `\n${rota}` : ''}\n` +
+    `🗓 ${data}\n` +
+    `🔖 ${booking.booking_code || '-'}\n` +
+    `\n` +
+    `Você tem *24h* para aceitar antes que passe para outra cooperativa.\n` +
+    `👉 Aceitar agora: ${linkCoopRides()}`
 
   await sendToMany(operators.map((op) => op.phone), message)
 }
@@ -139,10 +153,14 @@ export async function notifyOperatorsNewQuote(supabase, quote) {
   const hora = quote.service_time ? ` ${quote.service_time.slice(0, 5)}` : ''
 
   const message =
-    `💸 *Giro Jeri — Nova cotação personalizada*\n` +
-    `Translado privativo${rota ? ` · ${rota}` : ''}\n` +
-    `📅 ${data}${hora} · ${quote.people_count || 1} pax\n` +
-    `Abra o app pra enviar o valor ao cliente.`
+    `*GIRO JERI* · Nova cotação 💸\n` +
+    `\n` +
+    `Translado privativo${rota ? `\n${rota}` : ''}\n` +
+    `🗓 ${data}${hora}\n` +
+    `👥 ${quote.people_count || 1} passageiro(s)\n` +
+    `\n` +
+    `Defina o valor para enviar ao cliente.\n` +
+    `👉 Responder cotação: ${linkCoopRides()}`
 
   await sendToMany(operators.map((op) => op.phone), message)
 }
@@ -165,11 +183,15 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
 
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `⚠️ *Giro Jeri — Solicitação expirada*\n` +
+    `*GIRO JERI* · Solicitação sem cooperativa ⚠️\n` +
+    `\n` +
     `Nenhuma cooperativa aceitou em 24h.\n` +
-    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
-    `📅 ${data} · Cód: ${booking.booking_code || '-'}\n` +
-    `Acesse o app da cooperativa pra assumir.`
+    `${tipo}${rota ? `\n${rota}` : ''}\n` +
+    `🗓 ${data}\n` +
+    `🔖 ${booking.booking_code || '-'}\n` +
+    `\n` +
+    `Assuma como operador para não perder o atendimento.\n` +
+    `👉 Abrir: ${linkCoopRides()}`
 
   await sendToMany(admins.map((a) => a.phone), message)
 }
@@ -183,10 +205,16 @@ export async function notifyClientBookingAccepted(supabase, booking) {
   if (!phone) return { skipped: true }
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `🎉 *Giro Jeri — Cooperativa aceitou!*\n` +
-    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
-    `📅 ${data} · ${fmtBRL(booking.total_amount)}\n` +
-    `Abra o app e *pague* para confirmar sua reserva (${booking.booking_code || '-'}).`
+    `*GIRO JERI* · Reserva aceita 🎉\n` +
+    `\n` +
+    `Uma cooperativa aceitou seu ${tipo.toLowerCase()}!\n` +
+    `${rota ? `${rota}\n` : ''}` +
+    `🗓 ${data}\n` +
+    `💰 *${fmtBRL(booking.total_amount)}*\n` +
+    `🔖 ${booking.booking_code || '-'}\n` +
+    `\n` +
+    `Falta só o pagamento para confirmar.\n` +
+    `👉 Pagar agora: ${linkBookingPay(booking.id)}`
   await sendToMany([phone], message)
 }
 
@@ -197,10 +225,14 @@ export async function notifyClientQuoteReady(supabase, quote) {
   if (!phone) return { skipped: true }
   const rota = [quote.origin_place_name, quote.destination_place_name].filter(Boolean).join(' → ')
   const message =
-    `💸 *Giro Jeri — Sua cotação está pronta!*\n` +
-    `Translado${rota ? ` · ${rota}` : ''}\n` +
-    `Valor: *${fmtBRL(quote.quoted_price)}*\n` +
-    `Abra o app para aceitar e pagar (válido por tempo limitado).`
+    `*GIRO JERI* · Cotação pronta 💸\n` +
+    `\n` +
+    `Seu translado personalizado foi precificado!\n` +
+    `${rota ? `${rota}\n` : ''}` +
+    `💰 *${fmtBRL(quote.quoted_price)}*\n` +
+    `\n` +
+    `Aceite e pague para confirmar (válido por tempo limitado).\n` +
+    `👉 Ver cotação: ${linkMyBookings()}`
   await sendToMany([phone], message)
 }
 
@@ -211,10 +243,15 @@ export async function notifyClientPaymentConfirmed(supabase, booking) {
   if (!phone) return { skipped: true }
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `✅ *Giro Jeri — Pagamento confirmado!*\n` +
-    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
-    `📅 ${data} · ${booking.booking_code || '-'}\n` +
-    `Tudo certo! A cooperativa vai cuidar do seu atendimento. 🚗`
+    `*GIRO JERI* · Pagamento confirmado ✅\n` +
+    `\n` +
+    `Tudo certo com seu ${tipo.toLowerCase()}!\n` +
+    `${rota ? `${rota}\n` : ''}` +
+    `🗓 ${data}\n` +
+    `🔖 ${booking.booking_code || '-'}\n` +
+    `\n` +
+    `A cooperativa já vai cuidar do seu atendimento. Boa viagem! 🚗\n` +
+    `👉 Ver reserva: ${linkBookingPay(booking.id)}`
   await sendToMany([phone], message)
 }
 
@@ -227,10 +264,15 @@ export async function notifyOperatorPaymentReceived(supabase, booking) {
   if (!phone) return { skipped: true }
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `💰 *Giro Jeri — Cliente pagou!*\n` +
-    `${tipo}${rota ? ` · ${rota}` : ''}\n` +
-    `📅 ${data} · ${fmtBRL(booking.total_amount)} · ${booking.booking_code || '-'}\n` +
-    `Abra o app para confirmar e seguir com o atendimento.`
+    `*GIRO JERI* · Cliente pagou 💰\n` +
+    `\n` +
+    `${tipo}${rota ? `\n${rota}` : ''}\n` +
+    `🗓 ${data}\n` +
+    `💰 *${fmtBRL(booking.total_amount)}*\n` +
+    `🔖 ${booking.booking_code || '-'}\n` +
+    `\n` +
+    `Confirme com o cliente e siga com o atendimento.\n` +
+    `👉 Abrir corrida: ${linkCoopRides()}`
   await sendToMany([phone], message)
 }
 
