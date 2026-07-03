@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { api }         from '../lib/api'
+import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
@@ -15,88 +16,51 @@ import {
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-/* ── Place Autocomplete (via API proxy → Google Places) ───── */
-// Fallback direto ao Nominatim (OpenStreetMap) — usado quando o backend
-// não responde a tempo (cold start do Render free) ou retorna vazio.
-async function nominatimSearch(q, signal) {
-  const params = new URLSearchParams({
-    q, format: 'json', limit: '6', addressdetails: '1',
-    countrycodes: 'br', 'accept-language': 'pt-BR',
-    viewbox: '-41.5,-3.8,-39.5,-2.0', bounded: '0',
-  })
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, { signal })
-  if (!res.ok) return []
-  const json = await res.json()
-  return (json || []).map((p) => ({
-    id:       `osm:${p.place_id}`,
-    label:    p.display_name.split(',').slice(0, 2).join(', '),
-    sublabel: p.display_name.split(',').slice(2, 4).join(',').trim(),
-    full:     p.display_name,
-    lat:      parseFloat(p.lat),
-    lon:      parseFloat(p.lon),
-    _source:  'nominatim',
-  }))
-}
-
+/* ── Place Autocomplete (Google Places no navegador → OSM fallback) ───── */
+// Google Places direto pelo SDK no browser: resultados detalhados e sem
+// depender do servidor acordar (Render free). Se o Google falhar (chave
+// sem billing, rede etc.), o geoServices cai sozinho para o OpenStreetMap.
 function usePlaceSuggestions(query) {
   const [results,  setResults]  = useState([])
   const [loading,  setLoading]  = useState(false)
   const timerRef = useRef(null)
-  const abortRef = useRef(null)
+  const seqRef   = useRef(0)
 
   useEffect(() => {
     if (!query || query.length < 1) { setResults([]); return }
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(async () => {
-      abortRef.current?.abort()
-      const ctrl = new AbortController()
-      abortRef.current = ctrl
+      const seq = ++seqRef.current
       setLoading(true)
-
-      // Corrida: backend (Google/Nominatim curado) vs. timeout de 1.8s →
-      // se o backend não responder a tempo (cold start do Render free),
-      // usa Nominatim direto do browser sem fazer o usuário esperar.
-      const backend = api.placesAutocomplete(query)
-        .then((data) => (data?.predictions || []).map((p) => ({
-          id:       p.id,
-          label:    p.label,
-          sublabel: p.sublabel || '',
-          full:     p.full,
-          lat:      p.lat ?? null,
-          lon:      p.lon ?? null,
-          _source:  p.source,
+      try {
+        const list = await getPlaceSuggestions(query)
+        if (seq !== seqRef.current) return // digitação mais nova em andamento
+        setResults((list || []).map((p) => ({
+          id:       String(p.place_id),
+          label:    p.main_text || p.display_name.split(',')[0],
+          sublabel: p.secondary_text || '',
+          full:     p.display_name,
+          lat:      p.lat != null ? parseFloat(p.lat) : null,
+          lon:      p.lon != null ? parseFloat(p.lon) : null,
+          _source:  p._source,
         })))
-        .catch(() => null)
-
-      const timeout = new Promise((resolve) => setTimeout(() => resolve('timeout'), 1800))
-
-      let list = await Promise.race([backend, timeout])
-
-      // Backend lento ou falhou → tenta Nominatim direto
-      if (list === 'timeout' || list == null || (Array.isArray(list) && list.length === 0)) {
-        try {
-          const direct = await nominatimSearch(query, ctrl.signal)
-          if (!ctrl.signal.aborted && direct.length > 0) list = direct
-          else if (!Array.isArray(list)) list = []
-        } catch {
-          if (!Array.isArray(list)) list = []
-        }
+      } catch {
+        if (seq === seqRef.current) setResults([])
       }
-
-      if (!ctrl.signal.aborted) setResults(Array.isArray(list) ? list : [])
-      setLoading(false)
-    }, 200)
+      if (seq === seqRef.current) setLoading(false)
+    }, 250)
     return () => clearTimeout(timerRef.current)
   }, [query])
 
   return { results, loading }
 }
 
-// Resolve coordenadas/endereço de um place_id via proxy do backend.
+// Coordenadas/endereço de um place_id do Google (SDK no navegador).
 async function resolvePlaceDetails(placeId) {
   try {
-    const data = await api.placeDetails(placeId)
-    return data?.details || null
+    const det = await getPlaceDetails(placeId)
+    if (!det) return null
+    return { lat: parseFloat(det.lat), lon: parseFloat(det.lon), address: det.address || det.name || null }
   } catch { return null }
 }
 

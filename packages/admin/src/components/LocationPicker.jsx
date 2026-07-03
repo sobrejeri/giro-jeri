@@ -62,24 +62,58 @@ async function getPlaceCoords(r) {
   return { lat: parseFloat(r.lat), lon: parseFloat(r.lon) }
 }
 
-function MapPreview({ lat, lon }) {
+// Preview com o Google Maps JS (mapa real, com marcador). Se a chave não
+// existir ou o SDK falhar, cai para o embed do OpenStreetMap. Evitamos o
+// Google Embed API: sem billing ele mostra o erro "não carregou o Google
+// Maps corretamente" dentro do iframe, sem como detectar.
+export function MapPreview({ lat, lon, radius = null, heightClass = 'h-[160px]' }) {
+  const mapRef = useRef(null)
+  const [fallback, setFallback] = useState(!ADMIN_MAPS_KEY)
+
+  useEffect(() => {
+    if (!ADMIN_MAPS_KEY || lat == null || lon == null) return
+    let alive = true
+    loadAdminMaps()
+      .then((maps) => {
+        if (!alive || !mapRef.current) return
+        // Zoom aproximado pela área de cobertura (raio em km) — sem raio, POI.
+        const zoom = radius
+          ? Math.max(7, Math.min(14, Math.round(13.5 - Math.log2(Math.max(radius, 2) / 2))))
+          : 15
+        const map = new maps.Map(mapRef.current, {
+          center: { lat: Number(lat), lng: Number(lon) },
+          zoom,
+          disableDefaultUI: true,
+          gestureHandling:  'cooperative',
+        })
+        new maps.Marker({ position: { lat: Number(lat), lng: Number(lon) }, map })
+      })
+      .catch(() => { if (alive) setFallback(true) })
+    return () => { alive = false }
+  }, [lat, lon, radius])
+
   if (!lat || !lon) return null
-  // Sempre OpenStreetMap: o Google Embed exige chave COM billing — sem isso
-  // renderiza o erro "Esta página não carregou o Google Maps corretamente"
-  // dentro do iframe. O OSM funciona sem chave e serve perfeitamente como
-  // conferência visual das coordenadas.
-  const delta = 0.05
-  const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
-  const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`
+
+  if (fallback) {
+    const delta = radius ? Math.min(radius / 111, 3) : 0.05
+    const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
+    const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`
+    return (
+      <div className={`rounded-xl overflow-hidden border border-gray-700 ${heightClass} relative`}>
+        <iframe title="mapa" src={src} className="w-full h-full" style={{ filter: 'invert(0.85) hue-rotate(180deg) brightness(0.9)' }} loading="lazy" />
+        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-lg">© OpenStreetMap</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="rounded-xl overflow-hidden border border-gray-700 h-[160px] relative">
-      <iframe title="mapa" src={src} className="w-full h-full" style={{ filter: 'invert(0.85) hue-rotate(180deg) brightness(0.9)' }} loading="lazy" />
-      <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-lg">© OpenStreetMap</div>
+    <div className={`rounded-xl overflow-hidden border border-gray-700 ${heightClass}`}>
+      <div ref={mapRef} className="w-full h-full" />
     </div>
   )
 }
 
-function LocationSearch({ onSelect }) {
+export function LocationSearch({ onSelect }) {
   const [query, setQuery]     = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -112,7 +146,7 @@ function LocationSearch({ onSelect }) {
 
   async function pick(r) {
     const coords = await getPlaceCoords(r)
-    if (coords) onSelect(coords)
+    if (coords) onSelect({ ...coords, display_name: r.display_name })
     setQuery(r.display_name.split(',')[0])
     setOpen(false)
   }
