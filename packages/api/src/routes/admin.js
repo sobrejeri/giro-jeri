@@ -29,13 +29,15 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
       supabase.from('bookings').select('*', { count: 'exact', head: true })
         .eq('status_commercial', 'cancelled').eq('booking_date', today),
 
+      // effective_date = dia do recebimento (preenchida pela migration 039);
+      // fallback para created_at cobre lançamentos criados antes do reparo.
       supabase.from('financial_ledger').select('amount')
-        .eq('entry_type', 'booking_gross').eq('financial_status', 'pending')
-        .gte('created_at', today),
+        .eq('entry_type', 'booking_gross')
+        .or(`effective_date.gte.${today},and(effective_date.is.null,created_at.gte.${today})`),
 
       supabase.from('financial_ledger').select('amount')
         .eq('entry_type', 'booking_gross')
-        .gte('created_at', monthStart),
+        .or(`effective_date.gte.${monthStart},and(effective_date.is.null,created_at.gte.${monthStart})`),
     ]);
 
     const valorBrutoHoje = (financeiroHoje.data || [])
@@ -935,20 +937,23 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
     const { days = 30 } = req.query;
     const since = dayjs().subtract(Number(days), 'day').format('YYYY-MM-DD');
 
+    // Lançamentos antigos podem ter effective_date NULL — nesse caso vale
+    // a data de criação (senão o gráfico ignora a linha e fica "Sem dados").
     const { data, error } = await supabase
       .from('financial_ledger')
-      .select('amount, effective_date')
+      .select('amount, effective_date, created_at')
       .eq('entry_type', 'booking_gross')
       .eq('direction', 'inflow')
-      .gte('effective_date', since)
-      .order('effective_date');
+      .or(`effective_date.gte.${since},and(effective_date.is.null,created_at.gte.${since})`)
+      .order('created_at');
 
     if (error) throw error;
 
     // Agrupa por dia
     const byDay = {};
     for (const row of data || []) {
-      const d = row.effective_date?.slice(0, 10) || '';
+      const d = (row.effective_date || row.created_at || '').slice(0, 10);
+      if (!d) continue;
       byDay[d] = (byDay[d] || 0) + Number(row.amount);
     }
 

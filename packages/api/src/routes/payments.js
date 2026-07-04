@@ -882,14 +882,21 @@ async function onPaymentApproved(payment) {
     const gatewayFee = freshPayment?.gateway_fee_amount > 0
       ? freshPayment.gateway_fee_amount
       : Math.round(amount * feePct * 100) / 100
+    // Data efetiva do recebimento — o gráfico de faturamento agrupa por ela
+    const effectiveDate = new Date().toISOString().slice(0, 10)
 
-    await supabase.from('financial_ledger').insert([
-      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${booking?.booking_code}`,  amount,                direction: 'inflow',  financial_status: 'pending' },
-      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${booking?.booking_code}`,    amount: gatewayFee,    direction: 'outflow', financial_status: 'pending' },
-      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${booking?.booking_code}`, amount: amount - gatewayFee, direction: 'inflow',  financial_status: 'pending' },
+    const { error: ledgerErr } = await supabase.from('financial_ledger').insert([
+      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${booking?.booking_code}`,  amount,                direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
+      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${booking?.booking_code}`,    amount: gatewayFee,    direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+      { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${booking?.booking_code}`, amount: amount - gatewayFee, direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
     ])
 
-    await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
+    if (ledgerErr) {
+      // Não marca ledger_created: a próxima aprovação/consulta tenta de novo
+      console.error('[ledger] falha ao lançar receita:', ledgerErr.message)
+    } else {
+      await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
+    }
   }
 
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
