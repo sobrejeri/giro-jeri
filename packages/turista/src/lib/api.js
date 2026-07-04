@@ -9,23 +9,27 @@ const STORAGE = {
 function getToken()   { return localStorage.getItem(STORAGE.token) }
 function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
 
+// Retorna 'ok' | 'invalid' | 'network'. 'network' (servidor lento/cold start
+// do Render, rede instável) NÃO desloga — evita o loop de login.
 async function tryRefresh() {
   const refreshToken = getRefresh()
-  if (!refreshToken) return false
+  if (!refreshToken) return 'invalid'
   try {
     const res = await fetch(`${BASE}/api/auth/refresh`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ refresh_token: refreshToken }),
     })
-    if (!res.ok) return false
-    const data = await res.json()
+    if (res.status === 401) return 'invalid'
+    if (!res.ok)            return 'network'
+    const data = await res.json().catch(() => null)
+    if (!data?.token)       return 'network'
     localStorage.setItem(STORAGE.token,   data.token)
     localStorage.setItem(STORAGE.refresh, data.refresh_token)
     if (data.user) localStorage.setItem(STORAGE.user, JSON.stringify(data.user))
-    return true
+    return 'ok'
   } catch {
-    return false
+    return 'network'
   }
 }
 
@@ -77,8 +81,10 @@ async function request(path, options = {}, isRetry = false) {
 
   if (res.status === 401) {
     if (!isRetry) {
-      const refreshed = await refreshOnce()
-      if (refreshed) return request(path, options, true)
+      const r = await refreshOnce()
+      if (r === 'ok') return request(path, options, true)
+      // Servidor lento/instável: não desloga — evita o loop de login.
+      if (r === 'network') throw new Error('Conexão instável. Tente novamente em instantes.')
     }
     clearSession()
     return null

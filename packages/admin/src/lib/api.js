@@ -10,19 +10,25 @@ const STORAGE = {
 
 function getToken()   { return localStorage.getItem(STORAGE.token)   }
 
+// Retorna 'ok' | 'invalid' | 'network'. 'network' (rede/servidor lento) NÃO
+// desloga — antes, qualquer falha derrubava o login e causava o loop.
 async function tryRefresh() {
   try {
     // Fonte única de verdade: a sessão gerenciada pelo próprio client do Supabase.
-    // Passar o refresh token guardado à mão dessincronizava com a rotação
-    // automática do client (autoRefreshToken) e derrubava o login ("desconectando").
     const { data, error } = await supabase.auth.refreshSession()
-    if (error || !data.session) return false
+    if (error) {
+      // AuthApiError (token inválido/revogado) → deslogar. Erro de rede
+      // (fetch falhou, sem status) → tratar como 'network'.
+      const looksNetwork = !error.status || error.status >= 500
+      return looksNetwork ? 'network' : 'invalid'
+    }
+    if (!data.session) return 'invalid'
 
     localStorage.setItem(STORAGE.token,   data.session.access_token)
     localStorage.setItem(STORAGE.refresh, data.session.refresh_token)
-    return true
+    return 'ok'
   } catch {
-    return false
+    return 'network'   // exceção (rede/timeout) — não desloga
   }
 }
 
@@ -70,8 +76,10 @@ async function request(path, options = {}, isRetry = false) {
 
   if (res.status === 401) {
     if (!isRetry) {
-      const refreshed = await refreshOnce()
-      if (refreshed) return request(path, options, true)
+      const r = await refreshOnce()
+      if (r === 'ok') return request(path, options, true)
+      // Servidor lento/instável: não desloga — evita o loop de login.
+      if (r === 'network') throw new Error('Conexão instável. Tente novamente em instantes.')
     }
     clearSession()
     return null
