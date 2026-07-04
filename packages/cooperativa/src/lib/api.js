@@ -16,24 +16,31 @@ function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
 // do Supabase no browser), então NÃO existe sessão de client para
 // refreshSession() usar — tentar isso fazia todo refresh falhar e derrubava o
 // login. O refresh token guardado é a fonte de verdade, igual ao app turista.
+// Retorna 'ok' | 'invalid' | 'network':
+//  • 'ok'      → renovou, token atualizado
+//  • 'invalid' → refresh token genuinamente rejeitado (401) → deslogar
+//  • 'network' → servidor lento/instável (cold start do Render, rede) →
+//                NÃO deslogar; mantém a sessão pra tentar de novo. Antes,
+//                tratar isso como inválido causava o loop de login.
 async function tryRefresh() {
   const refreshToken = getRefresh()
-  if (!refreshToken) return false
+  if (!refreshToken) return 'invalid'
   try {
     const res = await fetch(`${BASE}/api/auth/refresh`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ refresh_token: refreshToken }),
     })
-    if (!res.ok) return false
+    if (res.status === 401) return 'invalid'   // token realmente inválido
+    if (!res.ok)            return 'network'    // 5xx / cold start
     const data = await res.json().catch(() => null)
-    if (!data?.token) return false
+    if (!data?.token)       return 'network'
 
     localStorage.setItem(STORAGE.token, data.token)
     if (data.refresh_token) localStorage.setItem(STORAGE.refresh, data.refresh_token)
-    return true
+    return 'ok'
   } catch {
-    return false
+    return 'network'   // fetch falhou (timeout/rede) — não desloga
   }
 }
 
@@ -87,10 +94,13 @@ async function request(path, options = {}, isRetry = false) {
 
   if (res.status === 401 && !isAuthEndpoint) {
     if (!isRetry) {
-      const refreshed = await refreshOnce()
-      if (refreshed) return request(path, options, true)
+      const r = await refreshOnce()
+      if (r === 'ok') return request(path, options, true)
+      // Servidor lento/instável (cold start): não desloga — propaga erro
+      // pra UI, que tenta de novo. Evita o loop de login.
+      if (r === 'network') throw new Error('Conexão instável. Tente novamente em instantes.')
     }
-    clearSession()
+    clearSession()   // só desloga em 'invalid' (ou 401 persistente após retry)
     return null
   }
 
