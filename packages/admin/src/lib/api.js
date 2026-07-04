@@ -1,5 +1,3 @@
-import { supabase } from './supabase'
-
 const BASE = import.meta.env.VITE_API_URL || ''
 
 const STORAGE = {
@@ -9,23 +7,29 @@ const STORAGE = {
 }
 
 function getToken()   { return localStorage.getItem(STORAGE.token)   }
+function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
 
-// Retorna 'ok' | 'invalid' | 'network'. 'network' (rede/servidor lento) NÃO
-// desloga — antes, qualquer falha derrubava o login e causava o loop.
+// Renova via API com o refresh_token guardado (mesmo mecanismo do coop/turista).
+// Antes o admin dependia de supabase.auth.refreshSession() — a sessão interna
+// do client dessincronizava com o token do localStorage e derrubava o login
+// em loop. Usar o refresh_token guardado como fonte única resolve isso.
+// Retorna 'ok' | 'invalid' | 'network' ('network' NÃO desloga).
 async function tryRefresh() {
+  const refreshToken = getRefresh()
+  if (!refreshToken) return 'invalid'
   try {
-    // Fonte única de verdade: a sessão gerenciada pelo próprio client do Supabase.
-    const { data, error } = await supabase.auth.refreshSession()
-    if (error) {
-      // AuthApiError (token inválido/revogado) → deslogar. Erro de rede
-      // (fetch falhou, sem status) → tratar como 'network'.
-      const looksNetwork = !error.status || error.status >= 500
-      return looksNetwork ? 'network' : 'invalid'
-    }
-    if (!data.session) return 'invalid'
+    const res = await fetch(`${BASE}/api/auth/refresh`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (res.status === 401) return 'invalid'   // refresh token revogado
+    if (!res.ok)            return 'network'    // 5xx / instabilidade
+    const data = await res.json().catch(() => null)
+    if (!data?.token)       return 'network'
 
-    localStorage.setItem(STORAGE.token,   data.session.access_token)
-    localStorage.setItem(STORAGE.refresh, data.session.refresh_token)
+    localStorage.setItem(STORAGE.token, data.token)
+    if (data.refresh_token) localStorage.setItem(STORAGE.refresh, data.refresh_token)
     return 'ok'
   } catch {
     return 'network'   // exceção (rede/timeout) — não desloga
