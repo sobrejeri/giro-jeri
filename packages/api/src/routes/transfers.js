@@ -29,6 +29,43 @@ router.get('/places/autocomplete', async (req, res) => {
 
     const key = process.env.GOOGLE_MAPS_API_KEY;
     if (key) {
+      // 1) Places API (New) — obrigatória para chaves criadas após mar/2025
+      //    (a legada devolve REQUEST_DENIED/ApiTargetBlocked para chaves novas)
+      try {
+        const gRes = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key },
+          body: JSON.stringify({
+            input:               q,
+            languageCode:        'pt-BR',
+            regionCode:          'BR',
+            includedRegionCodes: ['br'],
+            locationBias: {
+              circle: { center: { latitude: JERI_LL.lat, longitude: JERI_LL.lng }, radius: 50000 },
+            },
+          }),
+        });
+        const gJson = await gRes.json();
+        if (gRes.ok) {
+          return res.json({
+            predictions: (gJson.suggestions || [])
+              .map((s) => s.placePrediction)
+              .filter(Boolean)
+              .map((p) => ({
+                id:       p.placeId,
+                label:    p.structuredFormat?.mainText?.text || p.text?.text || '',
+                sublabel: p.structuredFormat?.secondaryText?.text || '',
+                full:     p.text?.text || '',
+                source:   'google',
+              })),
+          });
+        }
+        console.warn('[places/autocomplete] Places New status=%d %s', gRes.status, gJson.error?.message || '');
+      } catch (gErr) {
+        console.warn('[places/autocomplete] Places New falhou:', gErr.message);
+      }
+
+      // 2) API legada — ainda funciona para chaves antigas
       try {
         const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
         url.searchParams.set('input',     q);
@@ -50,9 +87,9 @@ router.get('/places/autocomplete', async (req, res) => {
             })),
           });
         }
-        console.warn('[places/autocomplete] Google status=%s', gJson.status, gJson.error_message);
+        console.warn('[places/autocomplete] Google legado status=%s', gJson.status, gJson.error_message);
       } catch (gErr) {
-        console.warn('[places/autocomplete] Google falhou:', gErr.message);
+        console.warn('[places/autocomplete] Google legado falhou:', gErr.message);
       }
     }
 
@@ -104,6 +141,27 @@ router.get('/places/details', async (req, res, next) => {
     const key = process.env.GOOGLE_MAPS_API_KEY;
     if (!key) return res.json({ details: null });
 
+    // 1) Places API (New)
+    try {
+      const gRes = await fetch(
+        `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?languageCode=pt-BR`,
+        { headers: { 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'location,formattedAddress,displayName' } }
+      );
+      if (gRes.ok) {
+        const g = await gRes.json();
+        if (g.location) {
+          return res.json({
+            details: {
+              lat:     g.location.latitude,
+              lon:     g.location.longitude,
+              address: g.formattedAddress || g.displayName?.text || null,
+            },
+          });
+        }
+      }
+    } catch { /* cai para a API legada */ }
+
+    // 2) API legada (chaves antigas)
     const url = new URL('https://maps.googleapis.com/maps/api/place/details/json');
     url.searchParams.set('place_id', placeId);
     url.searchParams.set('fields',   'geometry,formatted_address,name');

@@ -21,6 +21,10 @@ services:
       # Gere a chave grátis em https://myprojects.geoapify.com e cole aqui no Render.
       - key: GEOAPIFY_API_KEY
         sync: false
+      # Google Maps (server-side) — autocomplete/detalhes de endereços nos
+      # transfers via Places API (New). Habilite "Places API (New)" no projeto.
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
       # Mercado Pago — produção. Token em mercadopago.com.br > Suas integrações.
       # O código lê MP_ACCESS_TOKEN (services/mercadoPago.js).
       - key: MP_ACCESS_TOKEN

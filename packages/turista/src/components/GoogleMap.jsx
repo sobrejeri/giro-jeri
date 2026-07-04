@@ -12,7 +12,7 @@ export function loadGoogleMaps() {
   _promise = new Promise((resolve, reject) => {
     window.__giro_gmcb = () => { delete window.__giro_gmcb; resolve(window.google.maps) }
     const s = document.createElement('script')
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${KEY}&libraries=places&callback=__giro_gmcb&loading=async`
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${KEY}&v=weekly&libraries=places&callback=__giro_gmcb&loading=async`
     s.onerror = (e) => { _promise = null; reject(e) }
     document.head.appendChild(s)
   })

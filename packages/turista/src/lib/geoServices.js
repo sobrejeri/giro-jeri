@@ -9,37 +9,31 @@ const API_BASE = import.meta.env.VITE_API_URL || ''
 // ---------------------------------------------------------------------------
 
 async function googleSuggestions(input, center) {
-  const maps = await loadGoogleMaps()
-  const svc  = new maps.places.AutocompleteService()
-  const lat  = center.lat
-  const lng  = center.lng ?? center.lon ?? JERI.lng
-  return new Promise((resolve, reject) => {
-    svc.getPlacePredictions(
-      {
-        input,
-        componentRestrictions: { country: 'br' },
-        location: new maps.LatLng(lat, lng),
-        radius:   150000,
-      },
-      (predictions, status) => {
-        if (status === maps.places.PlacesServiceStatus.OK && predictions?.length) {
-          resolve(
-            predictions.map((p) => ({
-              place_id:       p.place_id,
-              display_name:   p.description,
-              main_text:      p.structured_formatting?.main_text ?? p.description.split(',')[0],
-              secondary_text: p.structured_formatting?.secondary_text ?? '',
-              lat:            null,
-              lon:            null,
-              _source:        'google',
-            }))
-          )
-        } else {
-          reject(new Error(status))
-        }
-      }
-    )
+  // Places API (New): AutocompleteSuggestion substitui o AutocompleteService
+  // legado, que o Google bloqueou para chaves criadas após mar/2025.
+  await loadGoogleMaps()
+  const { AutocompleteSuggestion } = await window.google.maps.importLibrary('places')
+  const lat = center.lat ?? JERI.lat
+  const lng = center.lng ?? center.lon ?? JERI.lng
+  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+    input,
+    language:            'pt-BR',
+    region:              'br',
+    includedRegionCodes: ['br'],
+    locationBias:        { center: { lat, lng }, radius: 50000 },
   })
+  return (suggestions || [])
+    .map((s) => s.placePrediction)
+    .filter(Boolean)
+    .map((p) => ({
+      place_id:       p.placeId,
+      display_name:   p.text?.text ?? '',
+      main_text:      p.mainText?.text ?? (p.text?.text ?? '').split(',')[0],
+      secondary_text: p.secondaryText?.text ?? '',
+      lat:            null,
+      lon:            null,
+      _source:        'google',
+    }))
 }
 
 async function nominatimSearch(input, center) {
@@ -104,17 +98,19 @@ export async function getPlaceSuggestions(input, center = JERI) {
       const results = await googleSuggestions(input, center)
       if (results.length > 0) return results
     } catch {
-      // fall through to Nominatim
+      // fall through to server proxy
     }
   }
+  // Proxy do servidor primeiro: usa a chave do servidor no Places (New),
+  // então devolve resultado Google mesmo quando a chave do cliente falha.
   try {
-    const results = await nominatimSearch(input, center)
+    const results = await serverSuggestions(input)
     if (results.length > 0) return results
   } catch {
-    // fall through to server proxy
+    // fall through to Nominatim
   }
   try {
-    return await serverSuggestions(input)
+    return await nominatimSearch(input, center)
   } catch {
     return []
   }
@@ -132,26 +128,20 @@ export async function getPlaceSuggestions(input, center = JERI) {
 export async function getPlaceDetails(placeId) {
   if (HAS_KEY) {
     try {
-      const maps = await loadGoogleMaps()
-      const div  = document.createElement('div')
-      const svc  = new maps.places.PlacesService(div)
-      return await new Promise((resolve, reject) => {
-        svc.getDetails(
-          { placeId, fields: ['geometry', 'name', 'formatted_address'] },
-          (place, status) => {
-            if (status === maps.places.PlacesServiceStatus.OK && place?.geometry) {
-              resolve({
-                name:    place.name ?? '',
-                address: place.formatted_address ?? '',
-                lat:     String(place.geometry.location.lat()),
-                lon:     String(place.geometry.location.lng()),
-              })
-            } else {
-              reject(new Error(status))
-            }
-          }
-        )
-      })
+      // Places API (New): classe Place substitui o PlacesService legado
+      await loadGoogleMaps()
+      const { Place } = await window.google.maps.importLibrary('places')
+      const place = new Place({ id: placeId, requestedLanguage: 'pt-BR' })
+      await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] })
+      if (place.location) {
+        return {
+          name:    place.displayName ?? '',
+          address: place.formattedAddress ?? '',
+          lat:     String(place.location.lat()),
+          lon:     String(place.location.lng()),
+        }
+      }
+      throw new Error('sem_localizacao')
     } catch {
       // fall through to server proxy
     }
@@ -183,36 +173,27 @@ export async function getPlaceDetails(placeId) {
 export async function getNearbyLodging(lat, lon, radiusKm = 10) {
   if (HAS_KEY) {
     try {
-      const maps   = await loadGoogleMaps()
-      const div    = document.createElement('div')
-      const svc    = new maps.places.PlacesService(div)
-      const radius = radiusKm * 1000
-      const results = await new Promise((resolve, reject) => {
-        svc.nearbySearch(
-          { location: new maps.LatLng(lat, lon), radius, type: 'lodging' },
-          (places, status) => {
-            if (
-              status === maps.places.PlacesServiceStatus.OK && places?.length
-            ) {
-              resolve(
-                places.map((place) => ({
-                  place_id:     place.place_id,
-                  display_name: place.name + (place.vicinity ? ', ' + place.vicinity : ''),
-                  lat:          String(place.geometry.location.lat()),
-                  lon:          String(place.geometry.location.lng()),
-                  _nearby:      true,
-                  _source:      'google',
-                }))
-              )
-            } else if (status === maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-              resolve([])
-            } else {
-              reject(new Error(status))
-            }
-          }
-        )
+      // Places API (New): Place.searchNearby substitui o nearbySearch legado
+      await loadGoogleMaps()
+      const { Place } = await window.google.maps.importLibrary('places')
+      const { places } = await Place.searchNearby({
+        fields:               ['id', 'displayName', 'location', 'formattedAddress'],
+        locationRestriction:  { center: { lat, lng: lon }, radius: Math.min(radiusKm * 1000, 50000) },
+        includedPrimaryTypes: ['lodging'],
+        maxResultCount:       20,
+        language:             'pt-BR',
+        region:               'br',
       })
-      if (results.length > 0) return results
+      if (places?.length) {
+        return places.map((p) => ({
+          place_id:     p.id,
+          display_name: p.displayName + (p.formattedAddress ? ', ' + p.formattedAddress : ''),
+          lat:          String(p.location.lat()),
+          lon:          String(p.location.lng()),
+          _nearby:      true,
+          _source:      'google',
+        }))
+      }
     } catch {
       // fall through to Overpass
     }
