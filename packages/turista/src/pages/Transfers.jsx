@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { useQuery }    from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { api }         from '../lib/api'
@@ -326,6 +326,8 @@ export function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
 /* ── Main ───────────────────────────────────────────────────── */
 export default function Transfers() {
   const navigate  = useNavigate()
+  // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
+  const { state: navState } = useLocation()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
@@ -338,11 +340,14 @@ export default function Transfers() {
   const [showSearch, setShowSearch] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
 
-  const [origin,     setOrigin]     = useState('Jericoacoara')
-  const [dest,       setDest]       = useState('')
-  const [date,       setDate]       = useState(startOfDay(new Date()))
+  const [origin,     setOrigin]     = useState(navState?.origin || 'Jericoacoara')
+  const [dest,       setDest]       = useState(navState?.dest   || '')
+  const [date,       setDate]       = useState(() => {
+    const d = navState?.date ? new Date(`${navState.date}T12:00:00`) : new Date()
+    return startOfDay(Number.isNaN(d.getTime()) ? new Date() : d)
+  })
   const [time,       setTime]       = useState('08:00')
-  const [people,     setPeople]     = useState(2)
+  const [people,     setPeople]     = useState(Number(navState?.people) || 2)
   const [cart,       setCart]       = useState({})   // vehicleId → qty
   const [notes,      setNotes]      = useState('')
   const [showDate,   setShowDate]   = useState(false)
