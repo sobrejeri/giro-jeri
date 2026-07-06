@@ -27,7 +27,7 @@ export default function TopNav() {
         <Link to="/" className="flex items-center gap-2 mr-8 shrink-0">
           <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-7 h-7 rounded-lg shrink-0" />
           <div>
-            <p className="font-giro font-semibold text-[13px] text-gray-900 leading-tight tracking-wide">TURIVA</p>
+            <p className="font-giro font-semibold text-[13px] text-gray-900 leading-tight tracking-[0.09em]">TURIVA</p>
             <p className="text-[9px] text-gray-400 leading-none">Passeios & Transfers</p>
           </div>
         </Link>
