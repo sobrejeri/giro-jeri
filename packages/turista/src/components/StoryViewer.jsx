@@ -2,21 +2,31 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Camera, Volume2, VolumeX, MoreVertical, Trash2 } from 'lucide-react'
 
+// Selo verificado estilo Instagram (azul + check branco)
+function VerifiedBadge({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className="shrink-0" aria-label="Verificado" role="img">
+      <path fill="#3897F0" d="M12 1l2.35 2.06 3.12-.36 1.19 2.9 2.9 1.19-.36 3.12L23 12l-2.06 2.35.36 3.12-2.9 1.19-1.19 2.9-3.12-.36L12 23l-2.35-2.06-3.12.36-1.19-2.9-2.9-1.19.36-3.12L1 12l2.06-2.35-.36-3.12 2.9-1.19 1.19-2.9 3.12.36L12 1z" />
+      <path fill="#fff" d="M10.4 15.3l-2.95-2.95 1.32-1.32 1.63 1.63 3.83-3.83 1.32 1.32z" />
+    </svg>
+  )
+}
+
 /**
- * StoryViewer — full-screen Instagram-style story viewer.
+ * StoryViewer — visualizador de destaques em tela cheia, estilo Instagram.
+ * Navega entre grupos (destaques) e itens: toca para pular, avança para o
+ * próximo destaque ao terminar e arrasta pro lado para trocar de destaque.
  *
  * Props:
- *   stories     — array of story objects
- *   title       — highlight title shown at the top (Instagram-style)
- *   cover       — highlight cover image shown in the top circle
- *   startIndex  — index of the first story to display
- *   onClose     — called when all stories are done or the X is tapped
- *   isAdmin     — quando true, mostra o menu (3 pontos) com opção de excluir
- *   onDelete    — (storyId) => void   exclui o item atual (somente admin)
+ *   highlights — array de destaques [{ id, title, cover_image_url, stories:[...] }]
+ *   startGroup — índice do destaque inicial
+ *   onClose    — fecha o visualizador (ou ao passar do último item)
+ *   isAdmin / onDelete — menu de excluir (somente admin)
  */
-export default function StoryViewer({ stories = [], title, cover, startIndex = 0, onClose, isAdmin = false, onDelete }) {
+export default function StoryViewer({ highlights = [], startGroup = 0, onClose, isAdmin = false, onDelete }) {
   const { t } = useTranslation()
-  const [currentIndex, setCurrentIndex] = useState(startIndex)
+  const [groupIndex, setGroupIndex] = useState(startGroup)
+  const [storyIndex, setStoryIndex] = useState(0)
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
   const [muted, setMuted] = useState(false)
@@ -26,27 +36,36 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
   const touchStartRef = useRef(null)
   const swipedRef = useRef(false)
 
-  const story = stories[currentIndex]
-  const isVideo = story?.media_type === 'video'
-  const duration = story?.duration_sec || 20
+  const group        = highlights[groupIndex]
+  const groupStories = group?.stories || []
+  const story        = groupStories[storyIndex]
+  const isVideo      = story?.media_type === 'video'
+  const duration     = story?.duration_sec || 20
 
-  // ── Navigation helpers ─────────────────────────────────────────────────────
+  // ── Navegação entre grupos (destaques) ─────────────────────────────────────
+  const nextGroup = useCallback(() => {
+    if (groupIndex + 1 >= highlights.length) { onClose(); return }
+    setGroupIndex(groupIndex + 1); setStoryIndex(0); setProgress(0)
+  }, [groupIndex, highlights.length, onClose])
+
+  const prevGroup = useCallback(() => {
+    if (groupIndex <= 0) { setStoryIndex(0); setProgress(0); return }
+    setGroupIndex(groupIndex - 1); setStoryIndex(0); setProgress(0)
+  }, [groupIndex])
+
+  // ── Navegação entre itens ──────────────────────────────────────────────────
   const goNext = useCallback(() => {
-    setCurrentIndex((idx) => {
-      const next = idx + 1
-      if (next >= stories.length) {
-        onClose()
-        return idx
-      }
-      return next
-    })
-  }, [stories.length, onClose])
+    if (storyIndex + 1 < groupStories.length) { setStoryIndex(storyIndex + 1); setProgress(0) }
+    else nextGroup()
+  }, [storyIndex, groupStories.length, nextGroup])
 
   const goPrev = useCallback(() => {
-    setCurrentIndex((idx) => Math.max(0, idx - 1))
-  }, [])
+    if (storyIndex > 0) { setStoryIndex(storyIndex - 1); setProgress(0) }
+    else if (groupIndex > 0) prevGroup()
+    else setProgress(0)
+  }, [storyIndex, groupIndex, prevGroup])
 
-  // ── Reset progress + (re)play video whenever the story index changes ───────
+  // ── Reset + (re)play do vídeo ao mudar de item/grupo ───────────────────────
   useEffect(() => {
     setProgress(0)
     setPaused(false)
@@ -55,18 +74,16 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
       v.currentTime = 0
       v.muted = muted
       v.play().catch(() => {
-        // Navegador bloqueou autoplay com som → toca mudo (usuário reativa no ícone)
         if (!v.muted) { v.muted = true; setMuted(true) }
         v.play().catch(() => {})
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex])
+  }, [groupIndex, storyIndex])
 
-  // ── Progress timer (images only) ───────────────────────────────────────────
+  // ── Timer de progresso (imagens) ───────────────────────────────────────────
   useEffect(() => {
     if (isVideo || paused) return
-
     clearInterval(intervalRef.current)
     intervalRef.current = setInterval(() => {
       setProgress((p) => {
@@ -74,34 +91,27 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
         return next >= 100 ? 100 : next
       })
     }, 100)
-
     return () => clearInterval(intervalRef.current)
-  }, [currentIndex, isVideo, paused, duration])
+  }, [groupIndex, storyIndex, isVideo, paused, duration])
 
-  // ── Auto-advance when progress hits 100 (images) ──────────────────────────
+  // ── Auto-avança quando o progresso chega a 100 (imagens) ───────────────────
   useEffect(() => {
-    if (!isVideo && progress >= 100) {
-      goNext()
-    }
+    if (!isVideo && progress >= 100) goNext()
   }, [progress, isVideo, goNext])
 
-  // ── Tap zones ──────────────────────────────────────────────────────────────
+  // ── Zonas de toque ─────────────────────────────────────────────────────────
   function handleTap(e) {
-    // Ignora o clique sintético que segue um arrastar (swipe) já tratado
     if (swipedRef.current) { swipedRef.current = false; return }
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
-    if (x < rect.width * 0.3) {
-      goPrev()
-    } else {
-      goNext()
-    }
+    if (x < rect.width * 0.3) goPrev()
+    else goNext()
   }
 
-  // ── Touch: long-press pausa, arrastar vertical fecha ───────────────────────
+  // ── Toque: segurar pausa, arrastar lateral troca destaque, vertical fecha ──
   function handleTouchStart(e) {
-    const t = e.touches[0]
-    touchStartRef.current = { x: t.clientX, y: t.clientY }
+    const t0 = e.touches[0]
+    touchStartRef.current = { x: t0.clientX, y: t0.clientY }
     swipedRef.current = false
     setPaused(true)
     if (videoRef.current) videoRef.current.pause()
@@ -111,43 +121,34 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
     const start = touchStartRef.current
     touchStartRef.current = null
     if (start) {
-      const t = e.changedTouches[0]
-      const dx = t.clientX - start.x
-      const dy = t.clientY - start.y
-      // Arrastar pra cima ou pra baixo fecha os destaques
-      if (Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx)) {
+      const tt = e.changedTouches[0]
+      const dx = tt.clientX - start.x
+      const dy = tt.clientY - start.y
+      const adx = Math.abs(dx), ady = Math.abs(dy)
+      // Vertical → fecha
+      if (ady > 70 && ady > adx) { swipedRef.current = true; onClose(); return }
+      // Horizontal → troca de destaque (Instagram)
+      if (adx > 55 && adx > ady) {
         swipedRef.current = true
-        onClose()
+        if (dx < 0) nextGroup(); else prevGroup()
         return
       }
     }
     if (videoRef.current) videoRef.current.play().catch(() => {})
   }
 
-  // ── Mute toggle (vídeo) ────────────────────────────────────────────────────
+  // ── Mute (vídeo) ───────────────────────────────────────────────────────────
   function toggleMute(e) {
     e.stopPropagation()
     const next = !muted
     setMuted(next)
     const v = videoRef.current
-    if (v) {
-      v.muted = next
-      if (v.paused) v.play().catch(() => {})
-    }
+    if (v) { v.muted = next; if (v.paused) v.play().catch(() => {}) }
   }
 
-  // ── Menu admin (3 pontos): excluir item ────────────────────────────────────
-  function openMenu(e) {
-    e.stopPropagation()
-    setMenuOpen(true)
-    setPaused(true)
-    videoRef.current?.pause()
-  }
-  function closeMenu() {
-    setMenuOpen(false)
-    setPaused(false)
-    videoRef.current?.play().catch(() => {})
-  }
+  // ── Menu admin (excluir) ───────────────────────────────────────────────────
+  function openMenu(e) { e.stopPropagation(); setMenuOpen(true); setPaused(true); videoRef.current?.pause() }
+  function closeMenu() { setMenuOpen(false); setPaused(false); videoRef.current?.play().catch(() => {}) }
   function handleDelete(e) {
     e.stopPropagation()
     if (!story || !confirm('Excluir esta foto/vídeo?')) return
@@ -155,7 +156,7 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
     onDelete?.(story.id)
   }
 
-  // ── Keyboard support ───────────────────────────────────────────────────────
+  // ── Teclado ────────────────────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'ArrowRight') goNext()
@@ -168,36 +169,28 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
 
   if (!story) return null
 
-  // Topo estilo Destaques do Instagram: capa + título do destaque.
-  // Cai para o avatar/legenda do item se o destaque não tiver capa/título.
-  const headerTitle  = title || story.display_name
-  const headerAvatar = cover || story.avatar_url || (story.media_type !== 'video' ? story.media_url : null)
+  const headerTitle  = group?.title || story.display_name
+  const headerAvatar = group?.cover_image_url || story.avatar_url || (story.media_type !== 'video' ? story.media_url : null)
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col select-none">
-      {/* ── Progress bars ────────────────────────────────────────────────── */}
+      {/* ── Barras de progresso (itens do destaque atual) ────────────────── */}
       <div className="absolute top-0 inset-x-0 z-10 flex gap-1 px-2 pt-2">
-        {stories.map((_, i) => (
+        {groupStories.map((_, i) => (
           <div key={i} className="flex-1 h-[3px] rounded-full bg-white/30 overflow-hidden">
             <div
               className="h-full bg-white rounded-full"
               style={{
-                width:
-                  i < currentIndex
-                    ? '100%'
-                    : i === currentIndex
-                    ? `${progress}%`
-                    : '0%',
-                transition: i === currentIndex && !paused ? 'none' : undefined,
+                width: i < storyIndex ? '100%' : i === storyIndex ? `${progress}%` : '0%',
+                transition: i === storyIndex && !paused ? 'none' : undefined,
               }}
             />
           </div>
         ))}
       </div>
 
-      {/* ── Top bar: avatar + name + close ───────────────────────────────── */}
+      {/* ── Barra superior: avatar + nome + selo + fechar ────────────────── */}
       <div className="absolute top-6 inset-x-0 z-10 flex items-center gap-3 px-4 pt-1">
-        {/* Avatar (capa do destaque) */}
         <div className="w-10 h-10 rounded-full bg-white/20 overflow-hidden flex items-center justify-center shrink-0 border-2 border-white/50">
           {headerAvatar ? (
             <img src={headerAvatar} alt={headerTitle || ''} className="w-full h-full object-cover" />
@@ -206,60 +199,43 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
           )}
         </div>
 
-        <p className="flex-1 text-white text-sm font-semibold drop-shadow truncate">
-          {headerTitle}
-        </p>
+        <div className="flex-1 min-w-0 flex items-center gap-1">
+          <p className="text-white text-sm font-semibold drop-shadow truncate">{headerTitle}</p>
+          <VerifiedBadge size={15} />
+        </div>
 
-        {/* Som (apenas vídeo) */}
         {isVideo && (
-          <button
-            onClick={toggleMute}
-            className="p-1.5 text-white active:scale-90 transition-transform"
-            aria-label={muted ? 'Ativar som' : 'Silenciar'}
-          >
+          <button onClick={toggleMute} className="p-1.5 text-white active:scale-90 transition-transform" aria-label={muted ? 'Ativar som' : 'Silenciar'}>
             {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
           </button>
         )}
 
-        {/* Menu (3 pontos) — somente admin */}
         {isAdmin && onDelete && (
-          <button
-            onClick={openMenu}
-            className="p-1.5 text-white active:scale-90 transition-transform"
-            aria-label="Mais opções"
-          >
+          <button onClick={openMenu} className="p-1.5 text-white active:scale-90 transition-transform" aria-label="Mais opções">
             <MoreVertical size={22} />
           </button>
         )}
 
-        {/* Close */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onClose() }}
-          className="p-1.5 text-white active:scale-90 transition-transform"
-          aria-label={t('common.close')}
-        >
+        <button onClick={(e) => { e.stopPropagation(); onClose() }} className="p-1.5 text-white active:scale-90 transition-transform" aria-label={t('common.close')}>
           <X size={22} />
         </button>
       </div>
 
-      {/* ── Menu admin: backdrop + dropdown ──────────────────────────────── */}
+      {/* ── Menu admin ───────────────────────────────────────────────────── */}
       {menuOpen && (
         <>
           <div className="absolute inset-0 z-[105]" onClick={closeMenu} />
           <div className="absolute top-16 right-3 z-[110] bg-white rounded-xl shadow-xl overflow-hidden min-w-[190px]">
-            <button
-              onClick={handleDelete}
-              className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm font-medium text-red-600 active:bg-gray-100"
-            >
+            <button onClick={handleDelete} className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm font-medium text-red-600 active:bg-gray-100">
               <Trash2 size={16} /> Excluir {isVideo ? 'vídeo' : 'foto'}
             </button>
           </div>
         </>
       )}
 
-      {/* ── Media area (tap zones handled here) ──────────────────────────── */}
+      {/* ── Mídia (centralizada, com fundo desfocado) ────────────────────── */}
       <div
-        className="flex-1 w-full relative cursor-pointer touch-none"
+        className="flex-1 w-full relative flex items-center justify-center overflow-hidden cursor-pointer touch-none"
         onClick={handleTap}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -270,7 +246,7 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
             key={story.id}
             src={story.media_url}
             playsInline
-            className="w-full h-full object-cover"
+            className="relative z-10 max-w-full max-h-full object-contain"
             onEnded={goNext}
             onTimeUpdate={() => {
               const v = videoRef.current
@@ -284,14 +260,14 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
               src={story.media_url}
               alt=""
               aria-hidden="true"
-              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60"
+              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-50"
               draggable={false}
             />
             <img
               key={story.id}
               src={story.media_url}
               alt={story.display_name}
-              className="relative z-10 w-full h-full object-contain"
+              className="relative z-10 max-w-full max-h-full object-contain"
               draggable={false}
             />
           </>
@@ -301,9 +277,9 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
           </div>
         )}
 
-        {/* Invisible left / right tap targets for clarity on desktop */}
-        <div className="absolute inset-y-0 left-0 w-[30%]" />
-        <div className="absolute inset-y-0 right-0 w-[70%]" />
+        {/* Zonas de toque invisíveis (prev/next) */}
+        <div className="absolute inset-y-0 left-0 w-[30%] z-20" />
+        <div className="absolute inset-y-0 right-0 w-[70%] z-20" />
       </div>
     </div>
   )

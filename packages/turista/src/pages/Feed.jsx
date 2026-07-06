@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
+import Stories from '../components/Stories'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
-  ChevronLeft, Search,
+  ChevronLeft, Search, Home as HomeIcon,
 } from 'lucide-react'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
@@ -487,6 +488,15 @@ export default function Feed() {
   const { userCoords, region, getServiceQuery } = useRegion()
   const qc = useQueryClient()
 
+  // Onde exibir os Destaques (reversível, salvo no aparelho)
+  const [storiesPlace, setStoriesPlace] = useState(
+    () => localStorage.getItem('turiva_stories_place') || 'descubra'
+  )
+  function moveStoriesToHome() {
+    localStorage.setItem('turiva_stories_place', 'home')
+    setStoriesPlace('home')
+  }
+
   const center = (userCoords?.lat != null && userCoords?.lon != null)
     ? userCoords
     : (region?.center_latitude != null
@@ -679,6 +689,19 @@ export default function Feed() {
           </div>
         </div>
       </header>
+
+      {/* ── Destaques (highlights) — aqui quando o flag aponta 'descubra' ── */}
+      {storiesPlace === 'descubra' && (
+        <>
+          <Stories className="lg:max-w-2xl lg:mx-auto" />
+          <button
+            onClick={moveStoriesToHome}
+            className="mx-auto flex items-center gap-1.5 text-[11px] text-gray-400 active:text-gray-600 py-1.5"
+          >
+            <HomeIcon size={12} /> Mover destaques para o Início
+          </button>
+        </>
+      )}
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-6">
         <>

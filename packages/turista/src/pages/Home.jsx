@@ -1,13 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useFavorites } from '../contexts/FavoritesContext'
-import StoriesRow from '../components/StoriesRow'
-import StoryViewer from '../components/StoryViewer'
-import StoryPublisher from '../components/StoryPublisher'
+import Stories from '../components/Stories'
 import InstallPrompt from '../components/InstallPrompt'
 import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
@@ -214,10 +212,16 @@ export default function Home() {
   const navigate = useNavigate()
   const { region, openPicker, userCoords, getServiceQuery } = useRegion()
   const { user } = useAuth()
-  const isAdmin = user?.user_type === 'admin'
-  const qc = useQueryClient()
-  const [showPublisher, setShowPublisher] = useState(false)
   const { favs, toggleFav } = useFavorites()
+
+  // Onde exibir os Destaques: 'home' ou 'descubra' (reversível, salvo no aparelho)
+  const [storiesPlace, setStoriesPlace] = useState(
+    () => localStorage.getItem('turiva_stories_place') || 'descubra'
+  )
+  function moveStories(to) {
+    localStorage.setItem('turiva_stories_place', to)
+    setStoriesPlace(to)
+  }
 
   const geo = getServiceQuery()
   // Arredonda as coordenadas (~1 km) na chave para o GPS não recarregar a lista
@@ -229,13 +233,6 @@ export default function Home() {
     queryFn:  () => api.getTours({ limit: 12, ...geo }),
   })
 
-  // Stories
-  const { data: stories = [] } = useQuery({
-    queryKey: ['stories'],
-    queryFn:  () => api.getStories(),
-    staleTime: 60_000,
-  })
-  const [activeHighlight, setActiveHighlight] = useState(null)
   const tours    = toursData?.tours || toursData || []
   const featured = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
@@ -325,41 +322,17 @@ export default function Home() {
         </button>
       </div>
 
-      {/* ── Destaques (highlights) ───────────────────────────────── */}
-      {(stories.length > 0 || isAdmin) && (
-        <div className="bg-white border-b border-gray-100 lg:max-w-6xl lg:mx-auto">
-          <StoriesRow
-            highlights={stories}
-            onSelect={(i) => setActiveHighlight(stories[i])}
-            isAdmin={isAdmin}
-            onPublish={() => setShowPublisher(true)}
-          />
-        </div>
-      )}
-
-      {activeHighlight && (activeHighlight.stories || []).length > 0 && (
-        <StoryViewer
-          stories={activeHighlight.stories}
-          title={activeHighlight.title}
-          cover={activeHighlight.cover_image_url}
-          startIndex={0}
-          onClose={() => setActiveHighlight(null)}
-          isAdmin={isAdmin}
-          onDelete={async (id) => {
-            try { await api.deleteStoryItem(id) }
-            catch (err) { alert(err?.message || 'Erro ao excluir'); return }
-            qc.invalidateQueries({ queryKey: ['stories'] })
-            setActiveHighlight(null)
-          }}
-        />
-      )}
-
-      {showPublisher && (
-        <StoryPublisher
-          highlights={stories}
-          onClose={() => setShowPublisher(false)}
-          onPublished={() => qc.invalidateQueries({ queryKey: ['stories'] })}
-        />
+      {/* ── Destaques (highlights) — na Home só se o flag apontar aqui ─ */}
+      {storiesPlace === 'home' && (
+        <>
+          <Stories className="lg:max-w-6xl lg:mx-auto" />
+          <button
+            onClick={() => moveStories('descubra')}
+            className="mx-auto flex items-center gap-1.5 text-[11px] text-gray-400 active:text-gray-600 py-1.5"
+          >
+            <Sparkles size={12} /> Mover destaques para a Descubra
+          </button>
+        </>
       )}
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto lg:space-y-6 lg:pt-6 lg:px-6">
