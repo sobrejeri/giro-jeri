@@ -47,4 +47,4 @@ services:
         sync: false
       # Remetente dos e-mails. Sem domínio verificado no Resend, use onboarding@resend.dev
       - key: EMAIL_FROM
-        value: Giro Jeri <onboarding@resend.dev>
+        value: Turiva <onboarding@resend.dev>

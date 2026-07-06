@@ -65,7 +65,7 @@ export default function Login() {
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="admin@girojeri.com"
+              placeholder="admin@turiva.com"
               required
               autoFocus
             />
