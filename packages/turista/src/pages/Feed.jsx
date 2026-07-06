@@ -666,27 +666,6 @@ export default function Feed() {
           ) : (
             <p className="text-[12px] text-gray-400 text-center mt-1">Eventos, promoções e recomendações em Jericoacoara</p>
           )}
-
-          <div className="flex items-center gap-2 mt-3">
-            {/* Filtros — scroll horizontal */}
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1 -mx-0">
-              {FILTERS.map(({ id, label, Icon }) => {
-                const active = filter === id
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setFilter(id)}
-                    className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${
-                      active ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 active:bg-gray-200'
-                    }`}
-                  >
-                    <Icon size={13} /> {label}
-                  </button>
-                )
-              })}
-            </div>
-            {/* Toggle mapa/lista — removido (estabelecimentos cadastrados manualmente) */}
-          </div>
         </div>
       </header>
 
@@ -702,6 +681,28 @@ export default function Feed() {
           </button>
         </>
       )}
+
+      {/* ── Filtros (cards) — abaixo dos destaques ────────────────────────── */}
+      <div className="bg-white border-b border-gray-100">
+        <div className="max-w-2xl mx-auto px-4 py-2.5">
+          <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
+            {FILTERS.map(({ id, label, Icon }) => {
+              const active = filter === id
+              return (
+                <button
+                  key={id}
+                  onClick={() => setFilter(id)}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${
+                    active ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                  }`}
+                >
+                  <Icon size={13} /> {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-6">
         <>
