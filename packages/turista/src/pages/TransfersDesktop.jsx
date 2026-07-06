@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import { api } from '../lib/api'
@@ -69,15 +69,17 @@ export default function TransfersDesktop() {
   const navigate  = useNavigate()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
+  // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
+  const { state: navState } = useLocation()
 
   const [mode, setMode] = useState('rota')
 
   /* ── Rota definida ── */
-  const [origin, setOrigin] = useState('')
-  const [dest,   setDest]   = useState('')
-  const [date,   setDate]   = useState(todayIso)
+  const [origin, setOrigin] = useState(navState?.origin || '')
+  const [dest,   setDest]   = useState(navState?.dest   || '')
+  const [date,   setDate]   = useState(navState?.date   || todayIso())
   const [time,   setTime]   = useState('08:00')
-  const [people, setPeople] = useState(2)
+  const [people, setPeople] = useState(Number(navState?.people) || 2)
   const [cart,   setCart]   = useState({})
 
   /* ── Corrida personalizada ── */

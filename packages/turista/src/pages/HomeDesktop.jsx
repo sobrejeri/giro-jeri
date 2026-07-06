@@ -1,10 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import {
   Star, Clock, Heart, ArrowRight, Compass, Car, Calendar, Users,
   ShieldCheck, MapPin, CalendarCheck, Headphones, Lock, RefreshCcw,
-  ChevronRight, Instagram, Send, Sparkles,
+  ChevronRight, ChevronDown, Instagram, Send, Sparkles,
 } from 'lucide-react'
 
 const fmtPrice   = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -159,10 +161,15 @@ export default function HomeDesktop({
   const navigate = useNavigate()
   const { region, openPicker } = useRegion()
 
+  // Nome do lugar dinâmico — segue a região selecionada/detectada
+  const placeName  = bannerTitle || region?.name || 'Jericoacoara'
+  const placeShort = /jericoacoara/i.test(placeName) ? 'Jeri' : placeName
+
   // Estado do box de busca
   const [tab,       setTab]       = useState('passeios') // 'passeios' | 'transfers'
-  const [origin,    setOrigin]    = useState('Jericoacoara')
-  const [destino,   setDestino]   = useState('')
+  const [tourId,    setTourId]    = useState('')          // passeio escolhido (dropdown)
+  const [tOrigin,   setTOrigin]   = useState('')          // transfer: saindo de
+  const [tDest,     setTDest]     = useState('')          // transfer: para onde
   const [date,      setDate]      = useState(todayIso())
   const [people,    setPeople]    = useState(2)
 
@@ -171,14 +178,51 @@ export default function HomeDesktop({
     return (Array.isArray(src) ? src : []).filter((t) => t)
   }, [tours, featured])
 
+  // Opções do dropdown de passeios — catálogo real da região
+  const tourOptions = useMemo(() => {
+    const src = (Array.isArray(tours) && tours.length ? tours : list).filter((t) => t?.id && t?.name)
+    return [...src].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+  }, [tours, list])
+
+  // Rotas predefinidas de transfer — alimentam os dropdowns "Saindo de" / "Para onde?"
+  const { data: routesData } = useQuery({
+    queryKey: ['transfer-routes'],
+    queryFn:  () => api.getTransferRoutes(),
+  })
+  const routes = Array.isArray(routesData?.routes) ? routesData.routes
+               : Array.isArray(routesData) ? routesData : []
+  const routeOrigins = useMemo(() => [...new Set(routes.map((r) => r.origin_name))], [routes])
+  const routeDests   = useMemo(
+    () => [...new Set(routes.filter((r) => r.origin_name === tOrigin).map((r) => r.destination_name))],
+    [routes, tOrigin],
+  )
+
+  // Origem padrão do transfer: prefere a região atual, senão Jericoacoara
+  useEffect(() => {
+    if (tOrigin || !routeOrigins.length) return
+    const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    setTOrigin(
+      routeOrigins.find((o) => region?.name && norm(o).includes(norm(region.name)))
+      || routeOrigins.find((o) => /jeri/i.test(o))
+      || routeOrigins[0],
+    )
+  }, [routeOrigins, tOrigin, region?.name])
+
+  // Se trocar a origem, o destino escolhido pode não existir mais na rota
+  useEffect(() => {
+    if (tDest && !routeDests.includes(tDest)) setTDest('')
+  }, [routeDests, tDest])
+
   const topThree = list.slice(0, 3)
   const gridRest = list.slice(3, 9)
   const heroImg  = bannerImg || list.find((t) => t.cover_image_url)?.cover_image_url || null
 
   function handleSearch() {
-    navigate(tab === 'transfers' ? '/transfers' : '/passeios', {
-      state: { origin, destino, date, people },
-    })
+    if (tab === 'transfers') {
+      navigate('/transfers', { state: { origin: tOrigin, dest: tDest, date, people } })
+    } else {
+      navigate('/passeios', { state: { selectedId: tourId || undefined, date, people } })
+    }
   }
 
   return (
@@ -186,7 +230,7 @@ export default function HomeDesktop({
       {/* ── HERO ─────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
         {heroImg ? (
-          <img src={heroImg} alt="Jericoacoara" className="absolute inset-0 w-full h-full object-cover" />
+          <img src={heroImg} alt={placeName} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-orange-500 via-amber-400 to-cyan-500" />
         )}
@@ -199,7 +243,7 @@ export default function HomeDesktop({
             Viva o melhor de
           </p>
           <h1 className="mt-1 text-white font-extrabold uppercase leading-[0.95] tracking-tight text-[54px] xl:text-[64px] drop-shadow-2xl break-words">
-            Jericoacoara
+            {placeName}
           </h1>
           <p className="mt-4 text-white/90 text-[16px] leading-relaxed max-w-[440px] drop-shadow">
             {bannerSubtitle || 'Passeios, transfers e experiências incríveis com atendimento local e reserva rápida.'}
@@ -243,55 +287,101 @@ export default function HomeDesktop({
             })}
           </div>
 
-          {/* Campos */}
+          {/* Campos — min-w-0 + truncate mantêm o conteúdo dentro do box */}
           <div className="grid grid-cols-12 gap-3 p-4 pt-3 border-t border-gray-100">
-            <div className="col-span-3 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Saindo de</label>
-              <input
-                value={origin}
-                onChange={(e) => setOrigin(e.target.value)}
-                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none placeholder-gray-400 w-full"
-                placeholder="Jericoacoara"
-              />
-            </div>
-            <div className="col-span-3 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
+            {tab === 'transfers' ? (
+              <div className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Saindo de</label>
+                <div className="relative w-full min-w-0">
+                  <select
+                    value={tOrigin}
+                    onChange={(e) => setTOrigin(e.target.value)}
+                    className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
+                  >
+                    {routeOrigins.length === 0 && <option value="">Carregando rotas…</option>}
+                    {routeOrigins.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={openPicker}
+                className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors text-left"
+              >
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Saindo de</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <MapPin size={13} className="text-brand shrink-0" />
+                  <span className="text-[14px] font-semibold text-gray-800 truncate">{region?.name || 'Selecionar região'}</span>
+                  <ChevronDown size={14} className="text-gray-400 shrink-0 ml-auto" />
+                </span>
+              </button>
+            )}
+            <div className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
                 {tab === 'transfers' ? 'Para onde?' : 'Escolha o passeio'}
               </label>
-              <input
-                value={destino}
-                onChange={(e) => setDestino(e.target.value)}
-                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none placeholder-gray-400 w-full"
-                placeholder={tab === 'transfers' ? 'Fortaleza, Aeroporto, Preá…' : 'Litoral Leste, Pôr do sol…'}
-              />
+              <div className="relative w-full min-w-0">
+                {tab === 'transfers' ? (
+                  <select
+                    value={tDest}
+                    onChange={(e) => setTDest(e.target.value)}
+                    className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
+                  >
+                    <option value="">{routeDests.length ? 'Selecione o destino' : 'Escolha a origem primeiro'}</option>
+                    {routeDests.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <select
+                    value={tourId}
+                    onChange={(e) => setTourId(e.target.value)}
+                    className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
+                  >
+                    <option value="">Todos os passeios</option>
+                    {tourOptions.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+                <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
             </div>
-            <div className="col-span-2 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
+            <div className="col-span-2 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Data</label>
               <input
                 type="date"
                 value={date}
+                min={todayIso()}
                 onChange={(e) => setDate(e.target.value)}
-                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none w-full"
+                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none w-full min-w-0"
               />
             </div>
-            <div className="col-span-2 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
+            <div className="col-span-2 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Pessoas</label>
-              <select
-                value={people}
-                onChange={(e) => setPeople(Number(e.target.value))}
-                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full"
-              >
-                {[1,2,3,4,5,6,7,8,9,10,12,15,20].map((n) => (
-                  <option key={n} value={n}>{n} pessoa{n !== 1 ? 's' : ''}</option>
-                ))}
-              </select>
+              <div className="relative w-full min-w-0">
+                <select
+                  value={people}
+                  onChange={(e) => setPeople(Number(e.target.value))}
+                  className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
+                >
+                  {[1,2,3,4,5,6,7,8,9,10,12,15,20].map((n) => (
+                    <option key={n} value={n}>{n} pessoa{n !== 1 ? 's' : ''}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
             </div>
-            <div className="col-span-2 flex">
+            <div className="col-span-2 min-w-0 flex">
               <button
                 onClick={handleSearch}
                 className="w-full h-full inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold text-[14px] rounded-xl px-4 py-3 transition-colors shadow-md shadow-brand/30"
               >
-                Buscar agora <ArrowRight size={16} />
+                <span className="truncate">Buscar agora</span> <ArrowRight size={16} className="shrink-0" />
               </button>
             </div>
           </div>
@@ -309,7 +399,7 @@ export default function HomeDesktop({
       <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="flex items-end justify-between mb-5">
           <div>
-            <h2 className="text-[28px] font-extrabold text-gray-900 leading-tight">Mais procurados em Jeri 🌴</h2>
+            <h2 className="text-[28px] font-extrabold text-gray-900 leading-tight">Mais procurados em {placeShort} 🌴</h2>
             <p className="text-[13px] text-gray-500 mt-1">Os favoritos de quem já visitou.</p>
           </div>
           <Link to="/passeios" className="hidden lg:inline-flex items-center gap-1 text-[14px] font-semibold text-brand hover:gap-1.5 transition-all">
@@ -380,7 +470,7 @@ export default function HomeDesktop({
           <div className="relative grid grid-cols-2 gap-8 items-center">
             <div>
               <h2 className="text-white font-extrabold text-[32px] leading-tight">
-                Chegue em Jericoacoara <br /><span className="italic text-orange-300">com tranquilidade</span>
+                Chegue em {placeName} <br /><span className="italic text-orange-300">com tranquilidade</span>
               </h2>
               <p className="text-white/85 text-[15px] mt-4 leading-relaxed max-w-md">
                 Transfers privativos saindo de Fortaleza, Aeroporto de Cruz, Jijoca, Preá, Parnaíba e Barreirinhas.
@@ -463,7 +553,7 @@ export default function HomeDesktop({
           <div className="relative flex items-center justify-between gap-8">
             <div className="max-w-2xl">
               <h2 className="text-white font-extrabold text-[28px] leading-tight">
-                Pronto para viver momentos únicos em Jericoacoara?
+                Pronto para viver momentos únicos em {placeName}?
               </h2>
               <p className="text-white/85 text-[15px] mt-3">
                 Faça sua reserva online com praticidade e segurança. Acompanhe e gerencie tudo — reservas, cotações e status — dentro da própria plataforma.
