@@ -278,13 +278,23 @@ export default function StoryViewer({ stories = [], title, cover, startIndex = 0
             }}
           />
         ) : story.media_url ? (
-          <img
-            key={story.id}
-            src={story.media_url}
-            alt={story.display_name}
-            className="w-full h-full object-cover"
-            draggable={false}
-          />
+          <>
+            {/* Fundo desfocado preenche as bordas sem cortar flyers verticais */}
+            <img
+              src={story.media_url}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60"
+              draggable={false}
+            />
+            <img
+              key={story.id}
+              src={story.media_url}
+              alt={story.display_name}
+              className="relative z-10 w-full h-full object-contain"
+              draggable={false}
+            />
+          </>
         ) : (
           <div className="w-full h-full bg-gray-900 flex items-center justify-center">
             <Camera size={48} className="text-white/20" />
