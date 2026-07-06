@@ -7,35 +7,102 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Giro Jeri" />
+    <meta name="apple-mobile-web-app-title" content="Turiva" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="icon" href="/giro-jeri/logo.jpeg" type="image/jpeg" />
     <link rel="apple-touch-icon" href="/giro-jeri/logo-icon.jpeg" />
     <link rel="manifest" href="/giro-jeri/manifest.webmanifest" />
-    <title>Giro Jeri — Passeios e Transfers em Jericoacoara</title>
-    <meta name="description" content="Reserve passeios e transfers em Jericoacoara com facilidade. Buggys, lagoas, pôr do sol, eventos e os melhores estabelecimentos da vila." />
+    <title>Turiva — Passeios, transfers e experiências</title>
+    <meta name="description" content="Viagens, passeios e mobilidade para viver momentos inesquecíveis. Reserve com operadores locais." />
     <meta name="keywords" content="jericoacoara, passeios, buggy, transfer, lagoa do paraíso, lagoa azul, pôr do sol, jeri, turismo ceará" />
 
     <!-- Open Graph (WhatsApp, Instagram, Facebook) -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Giro Jeri" />
-    <meta property="og:title" content="Giro Jeri — Passeios e Transfers em Jericoacoara" />
-    <meta property="og:description" content="Reserve passeios de buggy, transfers e descubra eventos e os melhores lugares da vila de Jericoacoara." />
+    <meta property="og:site_name" content="Turiva" />
+    <meta property="og:title" content="Turiva — Passeios, transfers e experiências" />
+    <meta property="og:description" content="Viagens, passeios e mobilidade para viver momentos inesquecíveis. Reserve com operadores locais." />
     <meta property="og:url" content="https://sobrejeri.github.io/giro-jeri/" />
     <meta property="og:locale" content="pt_BR" />
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Giro Jeri — Passeios e Transfers em Jericoacoara" />
-    <meta name="twitter:description" content="Reserve passeios de buggy, transfers e descubra os melhores lugares da vila." />
+    <meta name="twitter:title" content="Turiva — Passeios, transfers e experiências" />
+    <meta name="twitter:description" content="Viagens, passeios e mobilidade para viver momentos inesquecíveis." />
     <!-- Mercado Pago SDK -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
-    <script type="module" crossorigin src="/giro-jeri/assets/index-Ux0PZ6wS.js"></script>
-    <link rel="stylesheet" crossorigin href="/giro-jeri/assets/index-CkePYvJT.css">
+
+    <!-- Splash screen (estilo WhatsApp) — pinta antes do React, sem flash -->
+    <style>
+      #splash {
+        position: fixed; inset: 0; z-index: 99999;
+        background: #ffffff;
+        display: flex; align-items: center; justify-content: center;
+        opacity: 1; transition: opacity .45s ease;
+      }
+      #splash.is-hiding { opacity: 0; pointer-events: none; }
+      #splash .splash-logo {
+        width: 96px; height: 96px; border-radius: 22px; -o-object-fit: cover; object-fit: cover;
+        box-shadow: 0 14px 34px rgba(255,106,0,.20);
+        animation: splashPop .55s cubic-bezier(.2,.7,.3,1) both;
+      }
+      #splash .splash-footer {
+        position: absolute; left: 0; right: 0; text-align: center;
+        bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+        animation: splashFade .8s ease .15s both;
+      }
+      #splash .splash-brand {
+        margin: 0; font-family: 'Fredoka','Syne',system-ui,sans-serif;
+        font-weight: 700; font-size: 15px; letter-spacing: .14em; color: #FF6A00;
+      }
+      #splash .splash-tag {
+        margin: 4px 0 0; font-family: 'Plus Jakarta Sans',system-ui,sans-serif;
+        font-size: 11px; color: #9ca3af;
+      }
+      @keyframes splashPop  { from { opacity: 0; transform: scale(.82) } to { opacity: 1; transform: scale(1) } }
+      @keyframes splashFade { from { opacity: 0 } to { opacity: 1 } }
+      @media (prefers-reduced-motion: reduce) {
+        #splash .splash-logo, #splash .splash-footer { animation: none }
+      }
+    </style>
+    <script type="module" crossorigin src="/giro-jeri/assets/index-Wx1QzFvx.js"></script>
+    <link rel="stylesheet" crossorigin href="/giro-jeri/assets/index-YpZaBF9X.css">
   </head>
   <body class="overscroll-none">
     <div id="root"></div>
+
+    <!-- Splash: logo centralizada + marca no rodapé (igual ao abrir o WhatsApp) -->
+    <div id="splash" aria-hidden="true">
+      <img src="/giro-jeri/logo-icon.jpeg" alt="Turiva" class="splash-logo" />
+      <div class="splash-footer">
+        <p class="splash-brand">TURIVA</p>
+        <p class="splash-tag">Passeios &amp; Transfers</p>
+      </div>
+    </div>
+
+    <script>
+      // Mantém a splash por um tempo mínimo (sem "piscar") e some com fade.
+      // O React chama window.__hideSplash() quando monta; há um fallback por tempo.
+      (function () {
+        var MIN_MS  = 1000; // tempo mínimo visível
+        var FADE_MS = 500;  // duração do fade-out (bate com o CSS)
+        var started = Date.now();
+        var done    = false;
+        window.__hideSplash = function () {
+          if (done) return; done = true;
+          var el = document.getElementById('splash');
+          if (!el) return;
+          var wait = Math.max(0, MIN_MS - (Date.now() - started));
+          setTimeout(function () {
+            el.classList.add('is-hiding');
+            setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); }, FADE_MS + 60);
+          }, wait);
+        };
+        // Rede/JS travados: nunca deixa a splash presa mais que 4s.
+        setTimeout(function () { window.__hideSplash(); }, 4000);
+      })();
+    </script>
+
   </body>
 </html>
