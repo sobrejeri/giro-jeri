@@ -482,7 +482,6 @@ export default function Feed() {
   const navigate = useNavigate()
   const [filter, setFilter]       = useState('tudo')
   const [reviewPlace, setReviewPlace] = useState(null)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const { user } = useAuth()
   const { userCoords, region, getServiceQuery } = useRegion()
@@ -641,31 +640,8 @@ export default function Feed() {
               <ChevronLeft size={20} className="text-gray-700" />
             </button>
             <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Descubra a Vila</h1>
-            <div className="absolute right-0 flex items-center gap-1.5">
-              <button
-                onClick={() => { setSearchOpen((v) => !v); if (searchOpen) setSearchQuery('') }}
-                className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${searchOpen ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
-                aria-label="Buscar"
-              >
-                <Search size={15} />
-              </button>
-            </div>
           </div>
-          {searchOpen ? (
-            <div className="mt-2 relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar eventos, lugares..."
-                autoFocus
-                className="w-full pl-9 pr-3 h-9 rounded-xl bg-gray-100 text-[13px] text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-gray-50 focus:ring-1 focus:ring-brand"
-              />
-            </div>
-          ) : (
-            <p className="text-[12px] text-gray-400 text-center mt-1">Eventos, promoções e recomendações em Jericoacoara</p>
-          )}
+          <p className="text-[12px] text-gray-400 text-center mt-1">Eventos, promoções e recomendações em Jericoacoara</p>
         </div>
       </header>
 
@@ -682,8 +658,31 @@ export default function Feed() {
         </>
       )}
 
-      {/* ── Filtros (cards) — abaixo dos destaques ────────────────────────── */}
-      <div className="bg-white border-b border-gray-100">
+      {/* ── Buscador em destaque ──────────────────────────────────────────── */}
+      <div className="max-w-2xl mx-auto px-4 pt-3">
+        <div className="relative">
+          <Search size={19} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar eventos, lugares, promoções…"
+            className="w-full h-12 pl-12 pr-11 rounded-2xl bg-white border border-gray-200 shadow-sm text-[14px] text-gray-800 placeholder-gray-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform"
+              aria-label="Limpar busca"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Filtros (cards) — abaixo do buscador ───────────────────────────── */}
+      <div className="bg-white border-b border-gray-100 mt-3">
         <div className="max-w-2xl mx-auto px-4 py-2.5">
           <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
             {FILTERS.map(({ id, label, Icon }) => {
