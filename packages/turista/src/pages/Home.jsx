@@ -12,6 +12,7 @@ import InstallPrompt from '../components/InstallPrompt'
 import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
+  Sparkles, CalendarCheck, RotateCcw,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
@@ -257,6 +258,37 @@ export default function Home() {
   const bannerTitle    = settings?.home_banner_title     || null
   const bannerSubtitle = settings?.home_banner_subtitle  || null
 
+  // ── Layout da home: 'novo' (redesign UX) ou 'classico' (anterior) ──
+  // Guardado no aparelho para permitir voltar ao layout anterior a qualquer
+  // momento, sem novo deploy (recomendado pelo relatório de UI/UX).
+  const [homeLayout, setHomeLayout] = useState(
+    () => localStorage.getItem('turiva_home_layout') || 'novo'
+  )
+  function toggleLayout() {
+    const next = homeLayout === 'novo' ? 'classico' : 'novo'
+    localStorage.setItem('turiva_home_layout', next)
+    setHomeLayout(next)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Estado de "Minhas Reservas" na home (continuidade) — só se logado
+  const { data: myBookingsRaw } = useQuery({
+    queryKey: ['home-bookings'],
+    queryFn:  () => api.getMyBookings(),
+    enabled:  !!user,
+    staleTime: 60_000,
+  })
+  const todayStr    = format(startOfDay(new Date()), 'yyyy-MM-dd')
+  const myBookings  = Array.isArray(myBookingsRaw) ? myBookingsRaw : (myBookingsRaw?.data || [])
+  const upcomingCnt = myBookings.filter(
+    (b) => (b.service_date || '') >= todayStr && b.status_commercial !== 'cancelled'
+  ).length
+  const reservasLabel = !user
+    ? 'Entre para ver'
+    : upcomingCnt > 0
+      ? `${upcomingCnt} próxima${upcomingCnt > 1 ? 's' : ''}`
+      : 'Sem reservas ainda'
+
   return (
     <>
     <div className="lg:hidden min-h-screen bg-gray-50 pb-24">
@@ -325,69 +357,156 @@ export default function Home() {
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto lg:space-y-6 lg:pt-6 lg:px-6">
 
-        {/* ── Saudação ──────────────────────────────────────────── */}
-        <div>
-          <p className="text-[21px] lg:text-3xl font-extrabold text-gray-900 leading-tight">Olá, explorador! 👋</p>
-          <p className="text-[13px] lg:text-base text-gray-500 mt-1">O que você quer reservar hoje?</p>
-        </div>
+        {homeLayout === 'classico' ? (
+          <>
+            {/* ── Saudação ──────────────────────────────────────── */}
+            <div>
+              <p className="text-[21px] lg:text-3xl font-extrabold text-gray-900 leading-tight">Olá, explorador! 👋</p>
+              <p className="text-[13px] lg:text-base text-gray-500 mt-1">O que você quer reservar hoje?</p>
+            </div>
 
-        {/* ── Cards principais ──────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => navigate('/passeios')}
-            className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
-            style={{ background: 'linear-gradient(135deg,#FF6A00,#FF9040)' }}
-          >
-            <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
-            <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
-            <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
-              <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
-                <Compass size={15} className="text-white" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-[14px] lg:text-2xl">Passeios</p>
-                <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Buggy · UTV · Hilux</p>
+            {/* ── Cards principais ──────────────────────────────── */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => navigate('/passeios')}
+                className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
+                style={{ background: 'linear-gradient(135deg,#FF6A00,#FF9040)' }}
+              >
+                <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+                <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
+                <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
+                  <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
+                    <Compass size={15} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-white font-bold text-[14px] lg:text-2xl">Passeios</p>
+                    <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Buggy · UTV · Hilux</p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate('/transfers')}
+                className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
+                style={{ background: 'linear-gradient(135deg,#1A4D5F,#2E7D9A)' }}
+              >
+                <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+                <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
+                <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
+                  <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
+                    <Car size={15} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-white font-bold text-[14px] lg:text-2xl">Transfers</p>
+                    <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Aeroporto · Hotel</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* ── Acesso rápido 2×2 ─────────────────────────────── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
+                <button
+                  key={title}
+                  onClick={() => navigate(route, state ? { state } : undefined)}
+                  className="flex items-center gap-2.5 bg-white rounded-2xl p-3 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left"
+                >
+                  <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+                    <Icon size={17} className={ic} />
+                  </div>
+                  <div>
+                    <p className="text-[12px] font-bold text-gray-900 leading-tight">{title}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* ── Heading funcional ─────────────────────────────── */}
+            <div>
+              <p className="text-[21px] font-extrabold text-gray-900 leading-tight">
+                Vamos explorar{region?.name ? ` ${region.name}` : ''}? 🌴
+              </p>
+              <p className="text-[13px] text-gray-500 mt-1">Reserve passeios e translados com operadores locais.</p>
+            </div>
+
+            {/* ── Serviço: escolha principal (contraste corrigido) ─ */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">O que você procura?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => navigate('/passeios')}
+                  aria-label="Ver passeios"
+                  className="relative rounded-2xl overflow-hidden h-[122px] active:scale-[0.97] transition-transform text-left"
+                  style={{ background: 'linear-gradient(135deg,#D94E00,#FF7A1F)' }}
+                >
+                  <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+                  <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
+                  <div className="absolute inset-0 flex flex-col justify-between p-3.5">
+                    <div className="w-9 h-9 rounded-xl bg-white/25 flex items-center justify-center">
+                      <Compass size={17} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-white font-extrabold text-[15px] [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">Passeios</p>
+                      <p className="text-white text-[11px] font-medium mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">Buggy · lagoas · pôr do sol</p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => navigate('/transfers')}
+                  aria-label="Ver translados"
+                  className="relative rounded-2xl overflow-hidden h-[122px] active:scale-[0.97] transition-transform text-left"
+                  style={{ background: 'linear-gradient(135deg,#154457,#2E7D9A)' }}
+                >
+                  <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+                  <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
+                  <div className="absolute inset-0 flex flex-col justify-between p-3.5">
+                    <div className="w-9 h-9 rounded-xl bg-white/25 flex items-center justify-center">
+                      <Car size={17} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-white font-extrabold text-[15px] [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">Translados</p>
+                      <p className="text-white text-[11px] font-medium mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">Aeroporto · hotel · rotas</p>
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
-          </button>
 
-          <button
-            onClick={() => navigate('/transfers')}
-            className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
-            style={{ background: 'linear-gradient(135deg,#1A4D5F,#2E7D9A)' }}
-          >
-            <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
-            <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
-            <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
-              <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
-                <Car size={15} className="text-white" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-[14px] lg:text-2xl">Transfers</p>
-                <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Aeroporto · Hotel</p>
-              </div>
+            {/* ── Continuidade + descoberta ─────────────────────── */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => navigate(user ? '/minhas-reservas' : '/login')}
+                className="flex flex-col justify-between bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left h-[88px]"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+                    <CalendarCheck size={16} className="text-purple-600" />
+                  </div>
+                  <p className="text-[13px] font-bold text-gray-900 leading-tight">Minhas Reservas</p>
+                </div>
+                <p className="text-[11px] font-semibold text-gray-500">{reservasLabel}</p>
+              </button>
+
+              <button
+                onClick={() => navigate('/eventos')}
+                className="flex flex-col justify-between bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left h-[88px]"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+                    <Sparkles size={16} className="text-brand" />
+                  </div>
+                  <p className="text-[13px] font-bold text-gray-900 leading-tight">Descubra a Vila</p>
+                </div>
+                <p className="text-[11px] text-gray-400">Eventos, promoções e lugares</p>
+              </button>
             </div>
-          </button>
-        </div>
-
-        {/* ── Acesso rápido 2×2 ─────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-          {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
-            <button
-              key={title}
-              onClick={() => navigate(route, state ? { state } : undefined)}
-              className="flex items-center gap-2.5 bg-white rounded-2xl p-3 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left"
-            >
-              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
-                <Icon size={17} className={ic} />
-              </div>
-              <div>
-                <p className="text-[12px] font-bold text-gray-900 leading-tight">{title}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{desc}</p>
-              </div>
-            </button>
-          ))}
-        </div>
+          </>
+        )}
 
         {/* ── Passeios em destaque ──────────────────────────────── */}
         <section>
@@ -440,6 +559,17 @@ export default function Home() {
         </section>
 
         <InstallPrompt />
+
+        {/* ── Alternar layout (novo ⇄ anterior) ─────────────────── */}
+        <div className="flex justify-center pb-1">
+          <button
+            onClick={toggleLayout}
+            className="inline-flex items-center gap-1.5 text-[11px] text-gray-400 active:text-gray-600"
+          >
+            <RotateCcw size={12} />
+            {homeLayout === 'novo' ? 'Voltar ao layout anterior' : 'Usar o novo layout'}
+          </button>
+        </div>
 
       </div>
     </div>
