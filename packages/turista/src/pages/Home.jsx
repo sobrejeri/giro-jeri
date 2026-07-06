@@ -12,8 +12,7 @@ import InstallPrompt from '../components/InstallPrompt'
 import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
-  Sparkles, CalendarCheck, RotateCcw,
-  ShieldCheck, CreditCard, BadgeCheck, MessageCircle, HeartHandshake,
+  Sparkles, CalendarCheck, RotateCcw, HeartHandshake,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
@@ -594,29 +593,6 @@ export default function Home() {
                 </div>
               </section>
             )}
-
-            {/* ── Confiança (por que reservar aqui) ─────────────── */}
-            <section>
-              <p className="text-[15px] font-bold text-gray-900 mb-3">Por que reservar aqui?</p>
-              <div className="grid grid-cols-2 gap-2.5">
-                {[
-                  { Icon: ShieldCheck,   c: 'text-emerald-600', bg: 'bg-emerald-50', t: 'Cancelamento grátis', d: 'até 24h antes' },
-                  { Icon: CreditCard,    c: 'text-blue-600',    bg: 'bg-blue-50',    t: 'Pagamento seguro',    d: 'PIX na hora' },
-                  { Icon: BadgeCheck,    c: 'text-brand',       bg: 'bg-orange-50',  t: 'Operadores locais',   d: 'parceiros verificados' },
-                  { Icon: MessageCircle, c: 'text-green-600',   bg: 'bg-green-50',   t: 'Suporte de verdade',  d: 'fale no WhatsApp' },
-                ].map(({ Icon, c, bg, t, d }) => (
-                  <div key={t} className="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 flex items-start gap-2.5">
-                    <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
-                      <Icon size={17} className={c} />
-                    </div>
-                    <div>
-                      <p className="text-[12.5px] font-bold text-gray-900 leading-tight">{t}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{d}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
 
             {/* ── CTA final ─────────────────────────────────────── */}
             <button
