@@ -110,6 +110,9 @@ export const api = {
   // Configurações públicas (banner da home etc.)
   getPublicSettings: () => request('/api/settings/public'),
 
+  // Cooperativas parceiras (vitrine na home) — público
+  getPartners: () => request('/api/operator/partners'),
+
   // Feed de eventos / promoções da vila
   getFeed: () => request('/api/feed'),
 

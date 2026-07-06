@@ -13,7 +13,7 @@ import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
   Sparkles, CalendarCheck, RotateCcw,
-  ShieldCheck, CreditCard, BadgeCheck, MessageCircle,
+  ShieldCheck, CreditCard, BadgeCheck, MessageCircle, HeartHandshake,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
@@ -271,6 +271,13 @@ export default function Home() {
     setHomeLayout(next)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  // Cooperativas parceiras (vitrine de confiança)
+  const { data: partners = [] } = useQuery({
+    queryKey: ['partners'],
+    queryFn:  () => api.getPartners(),
+    staleTime: 10 * 60 * 1000,
+  })
 
   // Estado de "Minhas Reservas" na home (continuidade) — só se logado
   const { data: myBookingsRaw } = useQuery({
@@ -561,6 +568,33 @@ export default function Home() {
 
         {homeLayout === 'novo' && (
           <>
+            {/* ── Cooperativas parceiras ────────────────────────── */}
+            {partners.length > 0 && (
+              <section className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+                    <HeartHandshake size={17} className="text-teal-600" />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-bold text-gray-900 leading-tight">Cooperativas parceiras</p>
+                    <p className="text-[11px] text-gray-400 leading-tight">Operadores locais que realizam seus passeios</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {partners.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2 bg-gray-50 rounded-full pl-1 pr-3 py-1">
+                      <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden shrink-0">
+                        {p.profile_photo_url
+                          ? <img src={p.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-gray-500">{(p.full_name || '?')[0].toUpperCase()}</div>}
+                      </div>
+                      <span className="text-[12px] font-semibold text-gray-700">{p.full_name}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* ── Confiança (por que reservar aqui) ─────────────── */}
             <section>
               <p className="text-[15px] font-bold text-gray-900 mb-3">Por que reservar aqui?</p>

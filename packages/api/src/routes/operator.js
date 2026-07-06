@@ -41,6 +41,25 @@ const profileSchema = z.object({
 });
 
 const router = Router();
+
+// ── GET /api/operator/partners ─────────────────────────
+// Público: cooperativas/operadores ativos (só nome + foto) para a vitrine
+// de parceiros na home. Não expõe e-mail, telefone, documento nem dados
+// bancários. Fica ANTES do middleware de auth de propósito.
+router.get('/partners', async (_req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, full_name, profile_photo_url')
+      .eq('user_type', 'operator')
+      .eq('is_active', true)
+      .order('full_name', { ascending: true })
+      .limit(24);
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) { next(err); }
+});
+
 router.use(authenticate, requireOperator);
 
 // GET /api/operator/profile
