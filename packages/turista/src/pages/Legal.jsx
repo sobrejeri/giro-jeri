@@ -15,9 +15,9 @@ function Section({ title, children }) {
 function Termos() {
   return (
     <div className="space-y-6">
-      <Section title="1. Sobre o Giro Jeri">
+      <Section title="1. Sobre o Turiva">
         <p>
-          O Giro Jeri é uma plataforma de intermediação que conecta turistas a operadores
+          O Turiva é uma plataforma de intermediação que conecta turistas a operadores
           locais de passeios e transfers em Jericoacoara e região (Preá, Jijoca, Lagoa do
           Paraíso e arredores). Os serviços são executados por operadores e cooperativas
           parceiras devidamente cadastradas.
@@ -55,14 +55,14 @@ function Termos() {
         <p>
           Nos comentários e avaliações da aba "Descubra a Vila", não são permitidos:
           conteúdo ofensivo, discriminatório ou difamatório; spam ou propaganda não
-          autorizada; informações falsas sobre estabelecimentos. O Giro Jeri pode remover
+          autorizada; informações falsas sobre estabelecimentos. O Turiva pode remover
           conteúdo e suspender contas que violem estas regras.
         </p>
       </Section>
 
       <Section title="6. Responsabilidades">
         <p>
-          O Giro Jeri intermedeia a contratação, mas a execução dos passeios e transfers é
+          O Turiva intermedeia a contratação, mas a execução dos passeios e transfers é
           de responsabilidade dos operadores parceiros, que mantêm os licenciamentos e
           seguros exigidos pela legislação. Recomendações de estabelecimentos na aba
           "Descubra a Vila" são informativas e não constituem garantia de qualidade.

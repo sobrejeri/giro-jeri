@@ -167,10 +167,10 @@ export default function Auth({ defaultTab = 'login' }) {
       <div className="lg:hidden bg-white pt-14 pb-6 px-6 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <img
           src={import.meta.env.BASE_URL + 'logo-icon.jpeg'}
-          alt="Giro Jeri"
+          alt="Turiva"
           className="w-14 h-14 rounded-2xl mx-auto mb-3 shadow-md object-cover"
         />
-        <h1 className="font-bold text-[22px] text-gray-900 leading-tight">Giro Jeri</h1>
+        <h1 className="font-bold text-[22px] text-gray-900 leading-tight">Turiva</h1>
         <p className="text-[13px] text-gray-400 mt-0.5">{t('auth.subtitle')}</p>
       </div>
 

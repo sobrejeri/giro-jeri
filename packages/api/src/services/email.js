@@ -19,7 +19,7 @@ async function send({ to, subject, html }) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM || 'Giro Jeri <onboarding@resend.dev>',
+        from: process.env.EMAIL_FROM || 'Turiva <onboarding@resend.dev>',
         to:   [to],
         subject,
         html,
@@ -46,7 +46,7 @@ function layout(inner) {
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;">
         <tr>
           <td style="background:linear-gradient(135deg,#FF6A00,#FF8A3D);padding:28px 32px;">
-            <p style="margin:0;color:#ffffff;font-size:22px;font-weight:bold;letter-spacing:-0.3px;">Giro Jeri</p>
+            <p style="margin:0;color:#ffffff;font-size:22px;font-weight:bold;letter-spacing:-0.3px;">Turiva</p>
             <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Passeios &amp; transfers em Jericoacoara</p>
           </td>
         </tr>
@@ -54,7 +54,7 @@ function layout(inner) {
         <tr>
           <td style="padding:20px 32px;border-top:1px solid #f0f0f0;">
             <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.5;">
-              Você recebeu este e-mail porque tem uma conta no Giro Jeri.<br/>
+              Você recebeu este e-mail porque tem uma conta no Turiva.<br/>
               Jericoacoara — Ceará, Brasil
             </p>
           </td>
@@ -77,16 +77,16 @@ function fmtDateBR(iso) {
 
 // ── OTP de verificação de e-mail ──────────────────────
 const OTP_SUBJECTS = {
-  pt: (code) => `Seu código Giro Jeri: ${code}`,
-  en: (code) => `Your Giro Jeri code: ${code}`,
-  es: (code) => `Tu código Giro Jeri: ${code}`,
+  pt: (code) => `Seu código Turiva: ${code}`,
+  en: (code) => `Your Turiva code: ${code}`,
+  es: (code) => `Tu código Turiva: ${code}`,
 };
 
 const OTP_BODIES = {
   pt: (code) => `
     <p style="margin:0 0 6px;color:#111827;font-size:18px;font-weight:bold;">Confirme seu e-mail</p>
     <p style="margin:0 0 24px;color:#4b5563;font-size:14px;line-height:1.6;">
-      Use o código abaixo para confirmar seu e-mail no Giro Jeri.
+      Use o código abaixo para confirmar seu e-mail no Turiva.
     </p>
     <div style="background:#f9fafb;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
       <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#FF6A00;">${code}</span>
@@ -101,7 +101,7 @@ const OTP_BODIES = {
   en: (code) => `
     <p style="margin:0 0 6px;color:#111827;font-size:18px;font-weight:bold;">Confirm your email</p>
     <p style="margin:0 0 24px;color:#4b5563;font-size:14px;line-height:1.6;">
-      Use the code below to confirm your email on Giro Jeri.
+      Use the code below to confirm your email on Turiva.
     </p>
     <div style="background:#f9fafb;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
       <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#FF6A00;">${code}</span>
@@ -116,7 +116,7 @@ const OTP_BODIES = {
   es: (code) => `
     <p style="margin:0 0 6px;color:#111827;font-size:18px;font-weight:bold;">Confirma tu correo</p>
     <p style="margin:0 0 24px;color:#4b5563;font-size:14px;line-height:1.6;">
-      Usa el código de abajo para confirmar tu correo en Giro Jeri.
+      Usa el código de abajo para confirmar tu correo en Turiva.
     </p>
     <div style="background:#f9fafb;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
       <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#FF6A00;">${code}</span>

@@ -38,7 +38,7 @@ export async function sendPushToUser(userId, { title, body, bookingId = null, te
   if (!subs?.length) return
 
   const payload = JSON.stringify({
-    title: title || 'Giro Jeri',
+    title: title || 'Turiva',
     body:  body || '',
     bookingId,
     templateKey,

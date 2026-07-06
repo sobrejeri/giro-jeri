@@ -51,7 +51,7 @@ async function nominatimSearch(input, center) {
   })
   const res = await fetch(
     `https://nominatim.openstreetmap.org/search?${params}`,
-    { headers: { 'User-Agent': 'GiroJeri/1.0' } }
+    { headers: { 'User-Agent': 'Turiva/1.0' } }
   )
   if (!res.ok) return []
   const data = await res.json()
@@ -275,7 +275,7 @@ export async function reverseGeocode(lat, lon) {
   // Fallback: Nominatim
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=pt-BR`
-    const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
+    const res = await fetch(url, { headers: { 'User-Agent': 'Turiva/1.0' } })
     if (!res.ok) return null
     const data = await res.json()
     const a    = data.address ?? {}
@@ -337,7 +337,7 @@ export async function reverseGeocodeMunicipality(lat, lon) {
   try {
     // zoom=10 → nível de município no Nominatim
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=pt-BR`
-    const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
+    const res = await fetch(url, { headers: { 'User-Agent': 'Turiva/1.0' } })
     if (!res.ok) return null
     const data = await res.json()
     const a    = data.address ?? {}

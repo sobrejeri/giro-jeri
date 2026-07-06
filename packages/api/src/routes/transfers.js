@@ -102,7 +102,7 @@ router.get('/places/autocomplete', async (req, res) => {
       });
       const nRes = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
         headers: {
-          'User-Agent': 'GiroJeri/1.0 (contato@girojeri.com)',
+          'User-Agent': 'Turiva/1.0 (contato@girojeri.com)',
           'Accept-Language': 'pt-BR',
         },
       });

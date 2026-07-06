@@ -267,7 +267,7 @@ export default function Home() {
           <div className="flex items-center gap-2.5">
             <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
             <div>
-              <p className="font-giro font-semibold text-[17px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+              <p className="font-giro font-semibold text-[17px] text-gray-900 leading-tight tracking-wide">TURIVA</p>
               <p className="text-[10px] text-gray-400 leading-none mt-0.5">Passeios & Transfers</p>
             </div>
           </div>

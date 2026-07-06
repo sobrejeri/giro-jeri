@@ -2,7 +2,7 @@ import { supabase } from '../supabase.js';
 import dayjs from 'dayjs';
 
 // =============================================================================
-// MOTOR DE PREÇOS — Giro Jeri
+// MOTOR DE PREÇOS — Turiva
 //
 // Responsável por calcular o valor correto de qualquer reserva.
 // O backend é a única fonte de verdade — o frontend só exibe o resultado.

@@ -492,7 +492,7 @@ export default function HomeDesktop({
           <div>
             <div className="flex items-center gap-2 mb-3">
               <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg" />
-              <p className="font-giro font-bold text-[15px] text-gray-900 tracking-wide">GIRO JERI</p>
+              <p className="font-giro font-bold text-[15px] text-gray-900 tracking-wide">TURIVA</p>
             </div>
             <p className="text-[12px] text-gray-500 leading-relaxed">
               Plataforma local de passeios e transfers em Jericoacoara. Atendimento 100% dentro do app.
@@ -544,7 +544,7 @@ export default function HomeDesktop({
         </div>
 
         <div className="border-t border-gray-100 pt-5 flex items-center justify-between text-[11px] text-gray-400">
-          <p>© {new Date().getFullYear()} Giro Jeri · Passeios e transfers em Jericoacoara.</p>
+          <p>© {new Date().getFullYear()} Turiva · Passeios e transfers em Jericoacoara.</p>
           <p>Feito com <span className="text-brand">♥</span> na vila.</p>
         </div>
         </div>

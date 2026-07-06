@@ -4,7 +4,7 @@ export async function createPaymentIntent({ amount, description }) {
   // PIX EMV simulado (não é válido para pagamento real)
   const fakePixCode =
     `00020126580014br.gov.bcb.pix0136${crypto.randomUUID()}` +
-    `5204000053039865802BR5912GIRO JERI TU6009JERICOACOA` +
+    `5204000053039865802BR5906TURIVA6009JERICOACOA` +
     `6214051010TESTE${ts}6304ABCD`
 
   return {

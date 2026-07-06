@@ -56,7 +56,7 @@ function buildConfirmMsg(b) {
     `💰 *Valor:* ${fmt(b.total_amount)} ✅ PAGO`,
     ``,
     `Em breve enviaremos os dados do veículo e motorista. Qualquer dúvida estamos à disposição! 😊`,
-    `_Giro Jeri — Passeios & Transfers_`,
+    `_Turiva — Passeios & Transfers_`,
   ].filter(Boolean).join('\n')
 
   return encodeURIComponent(lines)

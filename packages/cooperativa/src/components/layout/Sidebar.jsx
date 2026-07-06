@@ -30,7 +30,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         <div className="h-16 flex items-center px-4 border-b border-gray-100 gap-2.5">
           <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
           <div>
-            <p className="font-giro font-semibold text-[14px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+            <p className="font-giro font-semibold text-[14px] text-gray-900 leading-tight tracking-wide">TURIVA</p>
             <p className="text-[9px] text-gray-400 leading-none">Cooperativa</p>
           </div>
           <button

@@ -61,7 +61,7 @@ export default function Login() {
         <div className="flex flex-col items-center mb-8 gap-2">
           <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-16 h-16 rounded-2xl" />
           <div className="text-center">
-            <p className="font-giro font-semibold text-[24px] text-gray-900 leading-tight tracking-wide">GIRO JERI</p>
+            <p className="font-giro font-semibold text-[24px] text-gray-900 leading-tight tracking-wide">TURIVA</p>
             <p className="text-gray-500 text-sm mt-0.5">Painel da Cooperativa</p>
           </div>
         </div>

@@ -68,7 +68,7 @@ export default function ProfileDesktop() {
     { icon: CalendarCheck, title: 'Histórico de Passeios', desc: 'Veja todos os passeios realizados', onClick: () => navigate('/minhas-reservas') },
     { icon: CreditCard,    title: 'Formas de Pagamento',  desc: 'Cartões e métodos salvos',        onClick: () => helpWA('Quero gerenciar minhas formas de pagamento.') },
     { icon: Heart,         title: 'Favoritos',            desc: 'Passeios que você salvou',        onClick: () => navigate('/passeios') },
-    { icon: LifeBuoy,      title: 'Central de Ajuda',     desc: 'Dúvidas e suporte',               onClick: () => helpWA('Olá! Preciso de ajuda no Giro Jeri.') },
+    { icon: LifeBuoy,      title: 'Central de Ajuda',     desc: 'Dúvidas e suporte',               onClick: () => helpWA('Olá! Preciso de ajuda no Turiva.') },
   ]
 
   function helpWA(text) {
@@ -209,7 +209,7 @@ export default function ProfileDesktop() {
         </div>
         <div className="pb-2">
           <h1 className="text-2xl font-extrabold text-gray-900">Olá, {firstName}! 👋</h1>
-          <p className="text-gray-500 text-[14px]">Bem-vindo de volta ao Giro Jeri</p>
+          <p className="text-gray-500 text-[14px]">Bem-vindo de volta ao Turiva</p>
         </div>
       </div>
 
@@ -300,7 +300,7 @@ export default function ProfileDesktop() {
         </button>
       </div>
 
-      <p className="text-center text-[12px] text-gray-300 mt-8">Giro Jeri v2.0</p>
+      <p className="text-center text-[12px] text-gray-300 mt-8">Turiva v2.0</p>
     </div>
   )
 }

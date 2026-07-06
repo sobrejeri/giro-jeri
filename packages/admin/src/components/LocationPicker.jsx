@@ -41,7 +41,7 @@ async function searchPlaces(q) {
   }
   // Fallback Nominatim
   const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&countrycodes=br&accept-language=pt-BR`
-  const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri-Admin/1.0' } })
+  const res = await fetch(url, { headers: { 'User-Agent': 'Turiva-Admin/1.0' } })
   if (!res.ok) return []
   return res.json()
 }

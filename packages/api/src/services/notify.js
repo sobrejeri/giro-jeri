@@ -43,7 +43,7 @@ export async function notifyUser({ userId, bookingId = null, templateKey = null,
       booking_id:   bookingId,
       channel:      'internal',
       template_key: templateKey,
-      title:        title || 'Giro Jeri',
+      title:        title || 'Turiva',
       message_body: body,
       send_status:  'sent',
       sent_at:      new Date().toISOString(),
@@ -51,7 +51,7 @@ export async function notifyUser({ userId, bookingId = null, templateKey = null,
   } catch (err) {
     console.error('[notify] insert (user) falhou:', err.message)
   }
-  firePush(userId, { title: title || 'Giro Jeri', body, bookingId, templateKey })
+  firePush(userId, { title: title || 'Turiva', body, bookingId, templateKey })
 }
 
 // Notifica TODAS as cooperativas ativas + admins (ex.: nova solicitação).
@@ -72,14 +72,14 @@ export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = 
       booking_id:   bookingId,
       channel:      'internal',
       template_key: templateKey,
-      title:        title || 'Giro Jeri',
+      title:        title || 'Turiva',
       message_body: body,
       send_status:  'sent',
       sent_at:      now,
     }))
 
     await supabase.from('notifications').insert(rows)
-    for (const r of recipients) firePush(r.id, { title: title || 'Giro Jeri', body, bookingId, templateKey })
+    for (const r of recipients) firePush(r.id, { title: title || 'Turiva', body, bookingId, templateKey })
   } catch (err) {
     console.error('[notify] insert (operators/admin) falhou:', err.message)
   }

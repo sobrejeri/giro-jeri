@@ -107,7 +107,7 @@ app.use(notFound);
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`🚀 Giro Jeri API v2 rodando na porta ${PORT}`);
+  console.log(`🚀 Turiva API v2 rodando na porta ${PORT}`);
   console.log(`   Ambiente: ${process.env.NODE_ENV || 'development'}`);
 });
 

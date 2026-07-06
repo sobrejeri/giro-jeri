@@ -64,7 +64,7 @@
     "emergencyPhone": "Teléfono del contacto",
     "notProvided": "No informado",
     "logout": "Cerrar sesión",
-    "version": "Giro Jeri v2.0",
+    "version": "Turiva v2.0",
     "roleAdmin": "Administrador",
     "roleDriver": "Conductor",
     "roleClient": "Cliente",
@@ -211,7 +211,7 @@
     "choose": "Elige cómo pagar",
     "secureNote": "Pago seguro. Recibirás confirmación de la reserva después del pago.",
     "confirmBtn": "Generar PIX · R$ {{amount}}",
-    "terms": "Al confirmar, aceptas los términos de uso de Giro Jeri",
+    "terms": "Al confirmar, aceptas los términos de uso de Turiva",
     "errorGeneric": "Error al procesar el pago. Inténtalo de nuevo.",
     "method": {
       "pix": "Pix",

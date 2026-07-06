@@ -327,7 +327,7 @@ function PostCard({ post, liked, onLike, user }) {
           {isPromo ? <BadgePercent size={16} className="text-white" /> : <MapPin size={16} className="text-white" />}
         </div>
         <div className="min-w-0">
-          <p className="text-[13px] font-bold text-gray-900 leading-tight">Giro Jeri</p>
+          <p className="text-[13px] font-bold text-gray-900 leading-tight">Turiva</p>
           <p className="text-[11px] text-gray-400 leading-tight">{isPromo ? 'Promoção' : 'Evento'} · Jericoacoara</p>
         </div>
         {dateLabel && !isPromo && (

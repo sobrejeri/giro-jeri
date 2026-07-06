@@ -60,7 +60,7 @@ export default function InstallPrompt() {
           <Download size={20} className="text-white" />
         </div>
         <div className="flex-1 text-left">
-          <p className="text-[14px] font-bold text-gray-900">Instalar o app Giro Jeri</p>
+          <p className="text-[14px] font-bold text-gray-900">Instalar o app Turiva</p>
           <p className="text-[11px] text-gray-500">Acesso rápido na tela inicial, como um aplicativo</p>
         </div>
       </button>

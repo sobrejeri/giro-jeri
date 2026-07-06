@@ -33,11 +33,11 @@ export function toZapiPhone(e164) {
 
 const MESSAGES = {
   pt: (code) =>
-    `Giro Jeri: seu código de verificação é ${code}. Válido por 10 minutos. Não compartilhe.`,
+    `Turiva: seu código de verificação é ${code}. Válido por 10 minutos. Não compartilhe.`,
   en: (code) =>
-    `Giro Jeri: your verification code is ${code}. Valid for 10 minutes. Do not share.`,
+    `Turiva: your verification code is ${code}. Valid for 10 minutes. Do not share.`,
   es: (code) =>
-    `Giro Jeri: tu código de verificación es ${code}. Válido por 10 minutos. No lo compartas.`,
+    `Turiva: tu código de verificación es ${code}. Válido por 10 minutos. No lo compartas.`,
 };
 
 /**
@@ -91,7 +91,7 @@ export async function sendTestMessage(phone) {
       headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
       body: JSON.stringify({
         phone:   toZapiPhone(phone),
-        message: '✅ Giro Jeri — teste de integração WhatsApp. Se você recebeu isto, o Z-API está funcionando!',
+        message: '✅ Turiva — teste de integração WhatsApp. Se você recebeu isto, o Z-API está funcionando!',
       }),
     })
     const body = await res.json().catch(() => ({}))
@@ -119,7 +119,7 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
 
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `*GIRO JERI* · Nova solicitação 🚗\n` +
+    `*TURIVA* · Nova solicitação 🚗\n` +
     `\n` +
     `${tipo}${rota ? `\n${rota}` : ''}\n` +
     `🗓 ${data}\n` +
@@ -153,7 +153,7 @@ export async function notifyOperatorsNewQuote(supabase, quote) {
   const hora = quote.service_time ? ` ${quote.service_time.slice(0, 5)}` : ''
 
   const message =
-    `*GIRO JERI* · Nova cotação 💸\n` +
+    `*TURIVA* · Nova cotação 💸\n` +
     `\n` +
     `Translado privativo${rota ? `\n${rota}` : ''}\n` +
     `🗓 ${data}${hora}\n` +
@@ -183,7 +183,7 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
 
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `*GIRO JERI* · Solicitação sem cooperativa ⚠️\n` +
+    `*TURIVA* · Solicitação sem cooperativa ⚠️\n` +
     `\n` +
     `Nenhuma cooperativa aceitou em 24h.\n` +
     `${tipo}${rota ? `\n${rota}` : ''}\n` +
@@ -205,7 +205,7 @@ export async function notifyClientBookingAccepted(supabase, booking) {
   if (!phone) return { skipped: true }
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `*GIRO JERI* · Reserva aceita 🎉\n` +
+    `*TURIVA* · Reserva aceita 🎉\n` +
     `\n` +
     `Uma cooperativa aceitou seu ${tipo.toLowerCase()}!\n` +
     `${rota ? `${rota}\n` : ''}` +
@@ -225,7 +225,7 @@ export async function notifyClientQuoteReady(supabase, quote) {
   if (!phone) return { skipped: true }
   const rota = [quote.origin_place_name, quote.destination_place_name].filter(Boolean).join(' → ')
   const message =
-    `*GIRO JERI* · Cotação pronta 💸\n` +
+    `*TURIVA* · Cotação pronta 💸\n` +
     `\n` +
     `Seu translado personalizado foi precificado!\n` +
     `${rota ? `${rota}\n` : ''}` +
@@ -243,7 +243,7 @@ export async function notifyClientPaymentConfirmed(supabase, booking) {
   if (!phone) return { skipped: true }
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `*GIRO JERI* · Pagamento confirmado ✅\n` +
+    `*TURIVA* · Pagamento confirmado ✅\n` +
     `\n` +
     `Tudo certo com seu ${tipo.toLowerCase()}!\n` +
     `${rota ? `${rota}\n` : ''}` +
@@ -264,7 +264,7 @@ export async function notifyOperatorPaymentReceived(supabase, booking) {
   if (!phone) return { skipped: true }
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `*GIRO JERI* · Cliente pagou 💰\n` +
+    `*TURIVA* · Cliente pagou 💰\n` +
     `\n` +
     `${tipo}${rota ? `\n${rota}` : ''}\n` +
     `🗓 ${data}\n` +

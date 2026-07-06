@@ -54,7 +54,7 @@ export default function Register() {
           <div className="w-12 h-12 bg-brand rounded-2xl flex items-center justify-center mx-auto mb-3">
             <MapPin size={22} className="text-white" />
           </div>
-          <h1 className="font-display font-bold text-2xl text-gray-900">Giro Jeri</h1>
+          <h1 className="font-display font-bold text-2xl text-gray-900">Turiva</h1>
           <p className="text-gray-500 mt-1 text-sm">Crie sua conta gratuita</p>
         </div>
 

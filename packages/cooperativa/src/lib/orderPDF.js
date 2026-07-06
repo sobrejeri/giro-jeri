@@ -91,7 +91,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   const modo     = booking.booking_mode  === 'shared' ? 'Compartilhado' : 'Privativo'
   const colW2    = CW / 2 - 4
 
-  const coopName    = cooperativa?.full_name      || 'Giro Jeri Passeios & Transfers'
+  const coopName    = cooperativa?.full_name      || 'Turiva Passeios & Transfers'
   const coopCNPJ    = cooperativa?.document_number
   const coopPhone   = cooperativa?.phone
   const coopAddress = cooperativa?.address
@@ -181,7 +181,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(8)
   doc.setTextColor(...WHITE)
-  doc.text('GIRO JERI — PLATAFORMA DE PASSEIOS & TRANSFERS · JERICOACOARA, CE', pageW / 2, HEADER_H + 5.5, { align: 'center' })
+  doc.text('TURIVA — PLATAFORMA DE PASSEIOS & TRANSFERS · JERICOACOARA, CE', pageW / 2, HEADER_H + 5.5, { align: 'center' })
 
   y = HEADER_H + 7
 
@@ -361,11 +361,11 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   y += 9
 
   // ── Termos de Responsabilidade ─────────────────────────
-  const coopRef = coopName !== 'Giro Jeri Passeios & Transfers' ? `"${coopName}"` : 'a cooperativa parceira credenciada'
+  const coopRef = coopName !== 'Turiva Passeios & Transfers' ? `"${coopName}"` : 'a cooperativa parceira credenciada'
   const termsText =
     `TERMOS DE RESPONSABILIDADE: Este serviço será executado integralmente por ${coopRef}, ` +
     `que assume plena responsabilidade pela qualidade, segurança e cumprimento do contratado. ` +
-    `A plataforma GIRO JERI atua exclusivamente como intermediária tecnológica, não sendo responsável ` +
+    `A plataforma TURIVA atua exclusivamente como intermediária tecnológica, não sendo responsável ` +
     `pela execução, imprevistos ou danos durante o serviço. O recebimento deste documento via WhatsApp ` +
     `confirma o conhecimento e aceite destes termos pelo cliente.`
 
@@ -397,7 +397,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setFontSize(7)
   doc.setTextColor(...WHITE)
   doc.text(
-    'Giro Jeri — Plataforma de Passeios & Transfers · Jericoacoara, CE · Documento gerado automaticamente',
+    'Turiva — Plataforma de Passeios & Transfers · Jericoacoara, CE · Documento gerado automaticamente',
     pageW / 2, footY + 2, { align: 'center' }
   )
 
@@ -432,7 +432,7 @@ export async function shareOrderPDF(booking, form, target = 'driver', cooperativ
 
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: `OS — ${booking.booking_code}`, text: `OS Giro Jeri — ${booking.booking_code}` })
+      await navigator.share({ files: [file], title: `OS — ${booking.booking_code}`, text: `OS Turiva — ${booking.booking_code}` })
       return 'shared'
     } catch (e) {
       if (e.name !== 'AbortError') console.warn('share error', e)
@@ -471,7 +471,7 @@ function buildDriverMessage(booking, form) {
   const dest    = booking.destination_place_name || booking.destination_text  || '—'
 
   return [
-    `🚗 *ORDEM DE SERVIÇO — GIRO JERI*`,
+    `🚗 *ORDEM DE SERVIÇO — TURIVA*`,
     `📋 *OS Nº:* ${booking.booking_code}`,
     ``,
     `👤 *Cliente:* ${booking.users?.full_name || '—'}`,
@@ -510,9 +510,9 @@ function buildClientMessage(booking, form) {
     ``,
     `💰 *Valor:* ${fmtMoney(booking.total_amount)} ✅ PAGO`,
     ``,
-    `_Obrigado por escolher a Giro Jeri! Qualquer dúvida estamos à disposição._`,
+    `_Obrigado por escolher a Turiva! Qualquer dúvida estamos à disposição._`,
     `_Sua Ordem de Serviço está em anexo._`,
     ``,
-    `⚠️ *AVISO DE RESPONSABILIDADE:* O serviço contratado será executado integralmente pela cooperativa parceira credenciada responsável por este atendimento. A plataforma GIRO JERI atua exclusivamente como intermediária tecnológica e não se responsabiliza pela execução do serviço, por imprevistos, danos ou ocorrências durante a sua realização.`,
+    `⚠️ *AVISO DE RESPONSABILIDADE:* O serviço contratado será executado integralmente pela cooperativa parceira credenciada responsável por este atendimento. A plataforma TURIVA atua exclusivamente como intermediária tecnológica e não se responsabiliza pela execução do serviço, por imprevistos, danos ou ocorrências durante a sua realização.`,
   ].filter(Boolean).join('\n')
 }

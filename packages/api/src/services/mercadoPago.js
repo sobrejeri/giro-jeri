@@ -60,7 +60,7 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
     payer: {
       email:      payerEmail || 'comprador@girojeri.com',
       first_name: (payerName || 'Comprador').split(' ')[0],
-      last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'GiroJeri',
+      last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'Turiva',
       // Identificação do pagador (o Payment Brick envia o CPF/CNPJ no PIX)
       ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
     },
@@ -123,7 +123,7 @@ export async function createCardPayment({
     installments:       Number(installments) || 1,
     payment_method_id:  paymentMethodId,
     token:              cardToken,
-    statement_descriptor: 'GIROJERI',
+    statement_descriptor: 'TURIVA',
     external_reference: externalRef,
     payer: {
       email:          payerEmail || 'comprador@girojeri.com',
@@ -216,7 +216,7 @@ export function refreshOAuthToken({ refreshToken }) {
 
 // Modo teste: gera um PIX fictício para desenvolvimento
 function createFakePix({ amount, description, externalRef }) {
-  const fakeCode = `00020126580014BR.GOV.BCB.PIX0136${externalRef || 'test'}520400005303986540${String(amount.toFixed(2)).padStart(6,'0')}5802BR5913GIRO JERI TUR6009JERICOACOA62290525GIROJERI${Date.now()}6304ABCD`
+  const fakeCode = `00020126580014BR.GOV.BCB.PIX0136${externalRef || 'test'}520400005303986540${String(amount.toFixed(2)).padStart(6,'0')}5802BR5906TURIVA6009JERICOACOA62290525TURIVA${Date.now()}6304ABCD`
   return {
     mp_id:      `TEST-${Date.now()}`,
     status:     'pending',
