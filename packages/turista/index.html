@@ -32,9 +32,76 @@
     <meta name="twitter:description" content="Viagens, passeios e mobilidade para viver momentos inesquecíveis." />
     <!-- Mercado Pago SDK -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
+
+    <!-- Splash screen (estilo WhatsApp) — pinta antes do React, sem flash -->
+    <style>
+      #splash {
+        position: fixed; inset: 0; z-index: 99999;
+        background: #ffffff;
+        display: flex; align-items: center; justify-content: center;
+        opacity: 1; transition: opacity .45s ease;
+      }
+      #splash.is-hiding { opacity: 0; pointer-events: none; }
+      #splash .splash-logo {
+        width: 96px; height: 96px; border-radius: 22px; object-fit: cover;
+        box-shadow: 0 14px 34px rgba(255,106,0,.20);
+        animation: splashPop .55s cubic-bezier(.2,.7,.3,1) both;
+      }
+      #splash .splash-footer {
+        position: absolute; left: 0; right: 0; text-align: center;
+        bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+        animation: splashFade .8s ease .15s both;
+      }
+      #splash .splash-brand {
+        margin: 0; font-family: 'Fredoka','Syne',system-ui,sans-serif;
+        font-weight: 700; font-size: 15px; letter-spacing: .14em; color: #FF6A00;
+      }
+      #splash .splash-tag {
+        margin: 4px 0 0; font-family: 'Plus Jakarta Sans',system-ui,sans-serif;
+        font-size: 11px; color: #9ca3af;
+      }
+      @keyframes splashPop  { from { opacity: 0; transform: scale(.82) } to { opacity: 1; transform: scale(1) } }
+      @keyframes splashFade { from { opacity: 0 } to { opacity: 1 } }
+      @media (prefers-reduced-motion: reduce) {
+        #splash .splash-logo, #splash .splash-footer { animation: none }
+      }
+    </style>
   </head>
   <body class="overscroll-none">
     <div id="root"></div>
+
+    <!-- Splash: logo centralizada + marca no rodapé (igual ao abrir o WhatsApp) -->
+    <div id="splash" aria-hidden="true">
+      <img src="/logo-icon.jpeg" alt="Turiva" class="splash-logo" />
+      <div class="splash-footer">
+        <p class="splash-brand">TURIVA</p>
+        <p class="splash-tag">Passeios &amp; Transfers</p>
+      </div>
+    </div>
+
+    <script>
+      // Mantém a splash por um tempo mínimo (sem "piscar") e some com fade.
+      // O React chama window.__hideSplash() quando monta; há um fallback por tempo.
+      (function () {
+        var MIN_MS  = 1000; // tempo mínimo visível
+        var FADE_MS = 500;  // duração do fade-out (bate com o CSS)
+        var started = Date.now();
+        var done    = false;
+        window.__hideSplash = function () {
+          if (done) return; done = true;
+          var el = document.getElementById('splash');
+          if (!el) return;
+          var wait = Math.max(0, MIN_MS - (Date.now() - started));
+          setTimeout(function () {
+            el.classList.add('is-hiding');
+            setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); }, FADE_MS + 60);
+          }, wait);
+        };
+        // Rede/JS travados: nunca deixa a splash presa mais que 4s.
+        setTimeout(function () { window.__hideSplash(); }, 4000);
+      })();
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

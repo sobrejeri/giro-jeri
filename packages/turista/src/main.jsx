@@ -30,6 +30,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>
 )
 
+// Esconde a splash quando o app pintou o primeiro quadro (respeitando o
+// tempo mínimo definido no index.html). Dois rAFs = app já visível por baixo.
+requestAnimationFrame(() =>
+  requestAnimationFrame(() => window.__hideSplash && window.__hideSplash())
+)
+
 // PWA: registra o service worker (instalável + offline básico + push)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
