@@ -13,6 +13,7 @@ import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
   Sparkles, CalendarCheck, RotateCcw,
+  ShieldCheck, CreditCard, BadgeCheck, MessageCircle,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
@@ -557,6 +558,52 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        {homeLayout === 'novo' && (
+          <>
+            {/* ── Confiança (por que reservar aqui) ─────────────── */}
+            <section>
+              <p className="text-[15px] font-bold text-gray-900 mb-3">Por que reservar aqui?</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { Icon: ShieldCheck,   c: 'text-emerald-600', bg: 'bg-emerald-50', t: 'Cancelamento grátis', d: 'até 24h antes' },
+                  { Icon: CreditCard,    c: 'text-blue-600',    bg: 'bg-blue-50',    t: 'Pagamento seguro',    d: 'PIX na hora' },
+                  { Icon: BadgeCheck,    c: 'text-brand',       bg: 'bg-orange-50',  t: 'Operadores locais',   d: 'parceiros verificados' },
+                  { Icon: MessageCircle, c: 'text-green-600',   bg: 'bg-green-50',   t: 'Suporte de verdade',  d: 'fale no WhatsApp' },
+                ].map(({ Icon, c, bg, t, d }) => (
+                  <div key={t} className="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 flex items-start gap-2.5">
+                    <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+                      <Icon size={17} className={c} />
+                    </div>
+                    <div>
+                      <p className="text-[12.5px] font-bold text-gray-900 leading-tight">{t}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{d}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* ── CTA final ─────────────────────────────────────── */}
+            <button
+              onClick={() => navigate('/passeios')}
+              className="relative w-full overflow-hidden rounded-2xl active:scale-[0.98] transition-transform text-left"
+              style={{ background: 'linear-gradient(135deg,#D94E00,#FF7A1F)' }}
+            >
+              <div className="absolute -right-4 -top-6 w-24 h-24 rounded-full bg-white/10" />
+              <div className="absolute -right-10 -bottom-8 w-28 h-28 rounded-full bg-white/10" />
+              <div className="relative flex items-center justify-between gap-3 p-4">
+                <div>
+                  <p className="text-white font-extrabold text-[16px] [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">Bora pro paraíso? 🌅</p>
+                  <p className="text-white/95 text-[12px] mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">Reserve seu passeio em poucos minutos</p>
+                </div>
+                <span className="shrink-0 inline-flex items-center gap-1 bg-white text-brand font-bold text-[12px] px-3 py-2 rounded-xl">
+                  Ver <ArrowRight size={14} />
+                </span>
+              </div>
+            </button>
+          </>
+        )}
 
         <InstallPrompt />
 
