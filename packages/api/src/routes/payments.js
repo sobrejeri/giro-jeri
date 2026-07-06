@@ -6,7 +6,7 @@ import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
-import { calculatePrivateTour, calculateSharedTour, getDateSurcharge } from '../services/priceEngine.js'
+import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance } from '../services/priceEngine.js'
 
 const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -538,6 +538,12 @@ router.post('/request', authenticate, async (req, res, next) => {
       service_date_iso, service_time, people_count, region_id,
       vehicles = [], origin_text, destination_text,
     } = parsed.data
+
+    // Antecedência mínima para transfers (rota definida) — mesma regra do
+    // translado personalizado. Bloqueia agendamento "ao vivo"/imediato.
+    if (service_type === 'transfer' && service_date_iso) {
+      await validateTransferAdvance(service_date_iso, service_time || '00:00')
+    }
 
     const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 

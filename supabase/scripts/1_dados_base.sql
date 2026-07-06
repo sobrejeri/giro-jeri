@@ -120,7 +120,7 @@ INSERT INTO system_settings (setting_key, setting_value, value_type, description
   ('booking_deposit_percent',    '30',                'number',  'Percentual de entrada'),
   ('cancellation_tour_hours',    '24',                'number',  'Horas antes p/ cancelamento gratuito de passeio'),
   ('cancellation_transfer_days', '3',                 'number',  'Dias antes p/ cancelamento gratuito de transfer'),
-  ('transfer_min_advance_hours', '4',                 'number',  'Antecedencia minima transfer (horas)'),
+  ('transfer_min_advance_hours', '3',                 'number',  'Antecedencia minima transfer (horas)'),
   ('quote_expiry_hours',         '2',                 'number',  'Horas para cliente aceitar cotacao'),
   ('platform_fee_percent',       '7',                 'number',  'Taxa da plataforma (%)'),
   ('gateway_fee_percent',        '3.5',               'number',  'Taxa estimada do gateway (%)'),

@@ -313,7 +313,7 @@ export async function calculateTabbedTransfer({
   couponCode,
   userId,
 }) {
-  // Valida antecedência mínima de 4h
+  // Valida antecedência mínima (setting transfer_min_advance_hours = 3h)
   await validateTransferAdvance(serviceDate, serviceTime);
 
   const { data: route } = await supabase
@@ -357,7 +357,7 @@ export async function calculateTabbedTransfer({
 // =============================================================================
 
 export async function validateTransferAdvance(serviceDate, serviceTime) {
-  const minHours = parseInt(await getSetting('transfer_min_advance_hours', '4'));
+  const minHours = parseInt(await getSetting('transfer_min_advance_hours', '3'));
 
   const serviceDateTime = dayjs(`${serviceDate}T${serviceTime}`);
   const minAllowed      = dayjs().add(minHours, 'hour');
