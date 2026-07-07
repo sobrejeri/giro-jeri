@@ -10,6 +10,7 @@ import {
 } from '../services/priceEngine.js';
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
+import { sweepExpiredLegBookings } from '../services/legFlow.js';
 import dayjs from 'dayjs';
 
 const serviceLabelBk = (t) => (t === 'transfer' ? 'translado' : 'passeio');
@@ -234,6 +235,10 @@ router.get('/', authenticate, async (req, res, next) => {
     const { status_commercial, status_operational, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
+    // Varredura lazy (R3): cancela reservas com prazo de pagamento vencido antes
+    // de o cliente ver a lista. Best-effort e inerte com a flag off.
+    await sweepExpiredLegBookings().catch(() => {});
+
     let query = supabase
       .from('bookings')
       .select(`
@@ -267,6 +272,10 @@ router.get('/', authenticate, async (req, res, next) => {
 // ── GET /api/bookings/:id ──────────────────────────────
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
+    // Varredura lazy (R3): garante que uma reserva com prazo vencido apareça já
+    // cancelada quando o cliente abre o detalhe. Best-effort e inerte com flag off.
+    await sweepExpiredLegBookings().catch(() => {});
+
     const { data, error } = await supabase
       .from('bookings')
       .select(`

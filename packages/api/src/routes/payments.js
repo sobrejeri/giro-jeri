@@ -8,6 +8,7 @@ import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperator
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
+import { sweepExpiredLegBookings } from '../services/legFlow.js'
 
 const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -826,11 +827,17 @@ router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, nex
 
     const { data: booking, error: bErr } = await supabase
       .from('bookings')
-      .select('id, user_id, booking_code, status_commercial')
+      .select('id, user_id, booking_code, status_commercial, payment_deadline_at')
       .eq('id', req.params.id)
       .maybeSingle()
     if (bErr) throw bErr
     if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' })
+    // Prazo de pagamento vencido → a reserva será cancelada pela varredura;
+    // recusa o checkout com mensagem clara em vez de deixar pagar fora do prazo.
+    if (booking.payment_deadline_at && new Date(booking.payment_deadline_at) < new Date()) {
+      await sweepExpiredLegBookings().catch(() => {})
+      return res.status(409).json({ error: 'Prazo de pagamento expirado — o veículo ficou indisponível. Faça uma nova solicitação.' })
+    }
     // Checkout é ação do CLIENTE (R3): só o turista dono do pedido ou um admin.
     // Bloqueia operadores/coop e turistas de pedidos alheios — senão qualquer
     // operador poderia cancelar as pernas pendentes e reescrever o total de
@@ -869,14 +876,11 @@ router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, nex
 
     const dynamicTotal = Math.round(accepted.reduce((s, l) => s + Number(l.leg_price), 0) * 100) / 100
 
-    // Ajusta o total autoritativo do pedido para a soma do que sobrou aceito
-    // e tenta avançar para awaiting_payment. NOTA (ver Riscos/Objeções): a
-    // função booking_all_legs_accepted() do banco (migration 042) considera
-    // pernas 'cancelled' como "não aceitas" — ela NÃO exclui canceladas do
-    // cômputo. Isso faz o trigger enforce_pay_after_all_legs bloquear esta
-    // transição sempre que houve checkout parcial (havia perna cancelada).
-    // É uma pendência de schema do DBA; aqui só capturamos o erro com uma
-    // mensagem clara em vez de devolver 500 cru.
+    // Ajusta o total autoritativo do pedido para a soma do que sobrou aceito e
+    // avança para awaiting_payment. A migration 043 corrigiu
+    // booking_all_legs_accepted() para IGNORAR pernas canceladas, então o
+    // trigger enforce_pay_after_all_legs não bloqueia mais o checkout parcial.
+    // O try/catch abaixo permanece apenas como defesa (nunca devolver 500 cru).
     let advancedToPayment = booking.status_commercial === 'awaiting_payment'
     if (!advancedToPayment) {
       try {
@@ -910,7 +914,7 @@ router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, nex
       dynamic_total:     dynamicTotal,
       ready_to_pay:      advancedToPayment,
       ...(advancedToPayment ? {} : {
-        warning: 'Pernas pendentes canceladas, mas o pedido ainda não foi liberado para pagamento por uma restrição do banco (booking_all_legs_accepted não desconsidera pernas canceladas). Acionar o DBA.',
+        warning: 'Pernas pendentes canceladas e total recalculado, mas o pedido não foi liberado para pagamento. Tente novamente; se persistir, acione o suporte.',
       }),
     })
   } catch (err) { next(err) }

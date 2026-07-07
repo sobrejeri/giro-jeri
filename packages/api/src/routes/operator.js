@@ -13,6 +13,7 @@ import { authenticate, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
 import { notifyAdminExpiredBooking, notifyClientBookingAccepted } from '../services/whatsapp.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
+import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
 
 // Rótulo amigável do serviço para o texto da notificação
 const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
@@ -552,21 +553,20 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
 
     const leg = data[0];
 
-    // Fecha o combo? Se todas as pernas não-canceladas do pedido já estão
-    // aceitas, avança o pedido para awaiting_payment e avisa o cliente —
-    // equivalente ao "dispara a notificação de pague" do fluxo antigo.
+    // Fecha o combo? Se todas as pernas não-canceladas já estão aceitas, avança
+    // para awaiting_payment. Em qualquer caso (parcial OU completo), grava o
+    // prazo de pagamento e notifica o cliente (R3 — checkout parcial). O aviso e
+    // o prazo são idempotentes: só disparam no PRIMEIRO aceite do pedido.
     let comboComplete = false;
     try {
       const { advanced, booking } = await advanceBookingIfComboComplete(leg.booking_id);
       comboComplete = advanced;
+
+      // Prazo de pagamento + notificação (parcial ou completo) — idempotente.
+      await ensurePaymentDeadlineAndNotify(leg.booking_id, { comboComplete: advanced });
+
+      // WhatsApp só no combo completo (mantém o comportamento anterior).
       if (advanced && booking) {
-        notifyUser({
-          userId:      booking.user_id,
-          bookingId:   booking.id,
-          templateKey: 'booking_accepted',
-          title:       'Cooperativa(s) aceitaram! 🎉',
-          body:        `Seu pedido (${booking.booking_code}) foi totalmente aceito. Pague para confirmar a reserva.`,
-        });
         notifyClientBookingAccepted(supabase, {
           id: booking.id, booking_code: booking.booking_code, user_id: booking.user_id,
           service_type: booking.service_type, service_date: booking.service_date,
@@ -575,9 +575,9 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
         }).catch((err) => console.error('[whatsapp] aviso cliente combo completo falhou:', err.message));
       }
     } catch (err) {
-      // Não derruba o aceite (já commitado) por falha ao avançar o pedido —
+      // Não derruba o aceite (já commitado) por falha ao avançar/notificar —
       // loga para investigação; o pedido fica visível na Central do admin.
-      console.error('[operator/legs] avanço do pedido após aceite falhou leg=%s err=%s', leg.id, err.message);
+      console.error('[operator/legs] pós-aceite falhou leg=%s err=%s', leg.id, err.message);
     }
 
     res.json({ ok: true, leg, combo_complete: comboComplete });
