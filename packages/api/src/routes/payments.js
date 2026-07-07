@@ -1172,13 +1172,19 @@ async function recordLegAccounting(booking, payment) {
     })
   }
 
+  // Upsert idempotente contra os índices únicos da migration 046: uma corrida
+  // webhook+polling (ou um retry após falha parcial) NÃO duplica lançamentos.
   if (ledgerRows.length > 0) {
-    const { error: lErr } = await supabase.from('financial_ledger').insert(ledgerRows)
-    if (lErr) console.error('[ledger] falha ao lançar comissão/repasse por perna booking=%s:', booking.id, lErr.message)
+    const { error: lErr } = await supabase
+      .from('financial_ledger')
+      .upsert(ledgerRows, { onConflict: 'leg_id,entry_type', ignoreDuplicates: true })
+    if (lErr) throw new Error(`ledger por perna: ${lErr.message}`)
   }
   if (commissionRows.length > 0) {
-    const { error: cErr } = await supabase.from('commissions').insert(commissionRows)
-    if (cErr) console.error('[commissions] falha ao lançar comissão por perna booking=%s:', booking.id, cErr.message)
+    const { error: cErr } = await supabase
+      .from('commissions')
+      .upsert(commissionRows, { onConflict: 'leg_id', ignoreDuplicates: true })
+    if (cErr) throw new Error(`commissions por perna: ${cErr.message}`)
   }
 }
 
@@ -1238,13 +1244,15 @@ async function onPaymentApproved(payment) {
       console.error('[ledger] falha ao lançar receita:', ledgerErr.message)
     } else {
       await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
-      // Contabilidade por perna (Etapa 2, Onda A) — só roda quando o motor
-      // está ligado E o pedido tem pernas aceitas. Best-effort: nunca derruba
-      // a aprovação do pagamento (já commitada acima).
-      recordLegAccounting(booking, payment).catch((err) =>
-        console.error('[ledger] contabilidade por perna falhou booking=%s err=%s', payment.booking_id, err.message))
     }
   }
+
+  // Contabilidade por perna (Etapa 2, Onda A) — só roda quando o motor está
+  // ligado E o pedido tem pernas aceitas. Fora do gate ledger_created e
+  // idempotente (upsert, migration 046): se falhar aqui, a próxima aprovação/
+  // polling reprocessa sem duplicar. Best-effort: nunca derruba a aprovação.
+  await recordLegAccounting(booking, payment).catch((err) =>
+    console.error('[ledger] contabilidade por perna falhou booking=%s err=%s', payment.booking_id, err.message))
 
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
   sendConfirmationEmail(booking).catch((err) =>
