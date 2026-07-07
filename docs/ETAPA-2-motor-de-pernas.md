@@ -33,11 +33,17 @@ do pagamento).
   até esse limite. Alerta ao admin ao se aproximar (parametrizável,
   `leg_cutoff_alert_minutes`, default 120min). No cutoff sem fechar → o pedido
   não confirma.
-- **R3 — pagamento bloqueado até o combo fechar (carrinho).** Mantém e reforça o
-  fluxo "aceite → depois pagamento". O cliente monta o carrinho e envia a
-  solicitação, mas o **pagamento fica bloqueado**: só quando **todas** as pernas
-  estão `accepted` o botão de pagar libera. O cliente paga **uma vez**. Combo
-  incompleto nunca vira cobrança (tudo-ou-nada; sem custódia, sem pré-autorização).
+- **R3 — checkout controlado pelo cliente (carrinho com total dinâmico).** O
+  cliente monta o carrinho e envia a solicitação; o pagamento fica **bloqueado** e
+  o total vai **somando conforme cada perna é aceita**. Com ≥1 perna aceita, o
+  cliente escolhe: **(a) pagar só o aceito agora** → cobra as pernas aceitas e
+  **cancela automaticamente** as pendentes; ou **(b) esperar** → mais pernas
+  somam ao total e ele paga o conjunto maior depois. **Nunca há reembolso** — só
+  se cobra o que já está aceito. O cancelamento das pernas pendentes ao pagar é
+  **atômico** (uma coop não pode aceitar a perna que está sendo cancelada).
+  - Caso "mesmo grupo em 2 veículos": pagar parcial pode deixar parte do grupo
+    sem transporte → a tela **avisa explicitamente** qual perna será cancelada.
+    É escolha informada do cliente.
 - **R4 — cancelamento pós-aceite é manual.** Coop que cancela devolve a perna à
   fila/Central; a realocação é feita pelo admin (automática = Etapa 3). Se o
   pedido já estava pago, alerta prioritário.
@@ -162,15 +168,37 @@ leg_status='awaiting_acceptance' AND (isAdmin OR cutoff_at > now())` — 0 linha
 
 ## 9. Escopo
 
-**IN (Etapa 2):** `booking_legs` + agregado tudo-ou-nada; explosão a partir do
-"Monte sua combinação"; feed/aceite por perna; status por perna no cliente;
-Central de combos; alerta de cutoff; pagamento bloqueado até o combo fechar +
-split nativo MP direto às coops no pagamento (registro contábil por perna); job
-de cutoff.
+**Carrinho universal:** o carrinho aceita **qualquer serviço ao mesmo tempo** —
+passeio privativo, passeio compartilhado, transfer de rota definida e transfer
+personalizado (cotação) — porque cada item é aceito **separadamente**. A intenção
+é o cliente fechar o **combo completo**. Cada item é uma "perna" generalizada:
 
-**OUT (Etapa 3/4):** realocação automática de perna; reembolso parcial por perna
-(caso raro pós-pagamento); auto-dispatch/ranking de coop;
-combos multi-serviço (tour + transfer no mesmo pedido); dashboards de ocupação.
+| Tipo de item | Unidade | Roteamento / aceite | Preço |
+|---|---|---|---|
+| Passeio privativo | 1 veículo | pool de coops do veículo (Model B) | fixo (priceEngine) |
+| Passeio compartilhado | vaga(s)/pessoa | coops que operam o passeio | fixo por pessoa |
+| Transfer rota definida | 1 veículo | pool de coops do veículo | fixo (rota) |
+| Transfer personalizado | trajeto | cotação: coop **propõe preço** → cliente aceita | definido no aceite |
+
+> O transfer personalizado tem **dois passos** (coop propõe valor → cliente
+> aceita o valor) e por isso soma ao total só quando o cliente aceita a cotação —
+> encaixa no "total dinâmico" do R3. O compartilhado não tem veículo (roteia pelo
+> passeio, não por `booking_vehicles`).
+
+**IN (Etapa 2):** `booking_legs` + agregado; explosão a partir do carrinho;
+feed/aceite por item; status por item no cliente; Central de combos; alerta de
+cutoff; **checkout parcial** (paga o aceito / cancela o pendente, total dinâmico)
++ split nativo MP direto às coops no pagamento (registro contábil por perna); job
+de cutoff. Carrinho **multi-serviço** (mistura os 4 tipos acima).
+
+**Implementação em ondas** (a generalização não é toda de uma vez):
+1. **Onda A** — itens **por veículo** (passeio privativo + transfer de rota), que
+   a migration `042` já modela; carrinho, checkout parcial e split nativo.
+2. **Onda B** — generaliza para **compartilhado** (por pessoa, sem veículo) e
+   **transfer personalizado** (cotação, preço no aceite).
+
+**OUT (Etapa 3/4):** realocação automática de perna; reembolso (não há — o
+checkout parcial evita); auto-dispatch/ranking de coop; dashboards de ocupação.
 
 ## 10. Riscos / pendências
 
