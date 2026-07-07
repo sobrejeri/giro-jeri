@@ -798,7 +798,13 @@ router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, nex
       .maybeSingle()
     if (bErr) throw bErr
     if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' })
-    if (req.user.user_type === 'tourist' && booking.user_id !== req.user.id) {
+    // Checkout é ação do CLIENTE (R3): só o turista dono do pedido ou um admin.
+    // Bloqueia operadores/coop e turistas de pedidos alheios — senão qualquer
+    // operador poderia cancelar as pernas pendentes e reescrever o total de
+    // uma reserva que não é dele.
+    const isOwnerTourist = req.user.user_type === 'tourist' && booking.user_id === req.user.id
+    const isAdmin        = req.user.user_type === 'admin'
+    if (!isOwnerTourist && !isAdmin) {
       return res.status(403).json({ error: 'Sem permissão' })
     }
     if (!['awaiting_acceptance', 'awaiting_payment'].includes(booking.status_commercial)) {

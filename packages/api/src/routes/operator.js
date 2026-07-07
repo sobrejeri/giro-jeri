@@ -506,6 +506,33 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
     const isAdmin = req.user?.user_type === 'admin';
     const nowIso  = new Date().toISOString();
 
+    // Roteamento (opt-out): uma coop não pode aceitar perna de um veículo que
+    // ela desligou em operator_service_preferences. Admin não tem essa
+    // restrição. É uma pré-checagem — a atomicidade do "primeiro a aceitar
+    // vence" continua garantida pelo UPDATE condicional atômico abaixo.
+    if (!isAdmin) {
+      const { data: legRow, error: legErr } = await supabase
+        .from('booking_legs')
+        .select('vehicle_id')
+        .eq('id', req.params.legId)
+        .maybeSingle();
+      if (legErr) throw legErr;
+      if (!legRow) return res.status(404).json({ error: 'Perna não encontrada' });
+
+      const { data: disabled, error: prefErr } = await supabase
+        .from('operator_service_preferences')
+        .select('id')
+        .eq('operator_id', req.user.id)
+        .eq('entity_type', 'vehicle')
+        .eq('entity_id',   legRow.vehicle_id)
+        .eq('is_active',   false)
+        .maybeSingle();
+      if (prefErr) throw prefErr;
+      if (disabled) {
+        return res.status(403).json({ error: 'Este veículo não é operado por você' });
+      }
+    }
+
     let q = supabase
       .from('booking_legs')
       .update({ operator_id: req.user.id, status_leg: 'accepted' })
