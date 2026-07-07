@@ -212,6 +212,47 @@ async function getSplitContext(booking, chargedTotal, cfg) {
   return { sellerAccessToken: opMp.token, applicationFee }
 }
 
+// ── Cutoff de solicitação (R6) ─────────────────────────────────────────
+// Passeios/transfers podem ter horário limite para reserva no MESMO dia
+// (tours.booking_cutoff_time / transfers.booking_cutoff_time). Passou do
+// horário → só a partir do dia seguinte. O frontend já bloqueia o calendário;
+// esta é a defesa real no servidor. America/Fortaleza é UTC-3 o ano todo.
+function fortalezaNowParts() {
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Fortaleza',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date()).reduce((acc, x) => { acc[x.type] = x.value; return acc }, {})
+  return { todayIso: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) }
+}
+
+async function checkBookingCutoff({ service_type, service_id, service_date_iso }) {
+  if (!service_id || !service_date_iso) return null
+  const { todayIso, minutes: nowMin } = fortalezaNowParts()
+  // Só restringe o próprio dia; datas futuras estão sempre liberadas.
+  if (service_date_iso !== todayIso) return null
+
+  let cutoff = null
+  if (service_type === 'tour') {
+    const { data } = await supabase.from('tours')
+      .select('booking_cutoff_time').eq('id', service_id).maybeSingle()
+    cutoff = data?.booking_cutoff_time || null
+  } else if (service_type === 'transfer') {
+    // service_id é um transfer_route; o cutoff mora no transfer pai.
+    const { data } = await supabase.from('transfer_routes')
+      .select('transfers ( booking_cutoff_time )').eq('id', service_id).maybeSingle()
+    cutoff = data?.transfers?.booking_cutoff_time || null
+  }
+  if (!cutoff) return null
+
+  const cutoffMin = Number(String(cutoff).slice(0, 2)) * 60 + Number(String(cutoff).slice(3, 5))
+  if (nowMin >= cutoffMin) {
+    const label = `${String(cutoff).slice(0, 2)}h${String(cutoff).slice(3, 5)}`
+    return `Este serviço só aceita solicitações até ${label} para o mesmo dia. Escolha a partir de amanhã.`
+  }
+  return null
+}
+
 // ── POST /api/payments/intent ───────────────────────────
 router.post('/intent', authenticate, async (req, res, next) => {
   try {
@@ -230,6 +271,12 @@ router.post('/intent', authenticate, async (req, res, next) => {
       coupon_code, existing_booking_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc,
     } = parsed.data
+
+    // R6: reserva nova (não repagamento) respeita o cutoff do serviço.
+    if (!existing_booking_id) {
+      const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
+      if (cutoffErr) return res.status(400).json({ error: cutoffErr })
+    }
 
     // ── Total autoritativo: o SERVIDOR é a fonte de verdade do valor cobrado.
     //    Reserva nova → recalcula (alta temporada/feriado). Reserva já existente
@@ -538,6 +585,10 @@ router.post('/request', authenticate, async (req, res, next) => {
       service_date_iso, service_time, people_count, region_id,
       vehicles = [], origin_text, destination_text,
     } = parsed.data
+
+    // R6: respeita o horário limite de solicitação do serviço.
+    const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
+    if (cutoffErr) return res.status(400).json({ error: cutoffErr })
 
     const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
