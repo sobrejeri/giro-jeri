@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -117,10 +117,19 @@ export default function BookingDetail() {
   const navigate     = useNavigate()
   const queryClient  = useQueryClient()
 
-  const [copied,        setCopied]        = useState(false)
-  const [showCancel,    setShowCancel]    = useState(false)
-  const [cancelLoading, setCancelLoading] = useState(false)
-  const [cancelError,   setCancelError]   = useState(null)
+  const [copied,          setCopied]          = useState(false)
+  const [showCancel,      setShowCancel]      = useState(false)
+  const [cancelLoading,   setCancelLoading]   = useState(false)
+  const [cancelError,     setCancelError]     = useState(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutError,   setCheckoutError]   = useState(null)
+  const [nowTs,           setNowTs]           = useState(() => Date.now())
+
+  // Relógio para a contagem regressiva do prazo de pagamento (checkout parcial).
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   const { data, isLoading } = useQuery({
     queryKey:        ['booking', id],
@@ -157,7 +166,8 @@ export default function BookingDetail() {
   }
 
   // Pagamento pós-aceite: leva à tela de pagamento usando a reserva existente.
-  function handlePay() {
+  // totalOverride: usado no checkout parcial (paga só o total das pernas aceitas).
+  function handlePay(totalOverride) {
     if (!booking) return
     let dStr = '—'
     if (booking.service_date) {
@@ -173,12 +183,29 @@ export default function BookingDetail() {
         service_date_iso:    booking.service_date,
         service_time:        booking.service_time,
         people_count:        booking.people_count,
-        total_price:         booking.total_amount,
+        total_price:         totalOverride != null ? totalOverride : booking.total_amount,
         origin_text:         booking.origin_text || booking.pickup_place_name || null,
         destination_text:    booking.destination_text || booking.destination_place_name || null,
         existing_booking_id: booking.id,
       },
     })
+  }
+
+  // Checkout parcial (R3): confirma pagando só o(s) veículo(s) aceito(s); as
+  // pernas ainda pendentes são canceladas no servidor. Depois segue ao pagamento
+  // com o total dinâmico retornado.
+  async function handleConfirmPartial() {
+    setCheckoutLoading(true)
+    setCheckoutError(null)
+    try {
+      const r = await api.checkoutAccepted(id)
+      await queryClient.invalidateQueries({ queryKey: ['booking', id] })
+      handlePay(r?.dynamic_total)
+    } catch (err) {
+      setCheckoutError(err.message || 'Não foi possível confirmar. Tente novamente.')
+    } finally {
+      setCheckoutLoading(false)
+    }
   }
 
   if (isLoading) return (
@@ -203,6 +230,17 @@ export default function BookingDetail() {
   const currentIdx  = TIMELINE.findIndex((s) => s.key === status)
   const isCancelled = status === 'cancelled'
   const isCancellable = ['waiting_payment', 'waiting_acceptance', 'confirmed'].includes(status)
+
+  // ── Aceite parcial (R3): alguma perna aceita, mas ainda há pendentes ──────
+  const ls          = booking.legs_summary
+  const isPartial   = !!ls && ls.accepted_count > 0 && ls.pending_count > 0 && status === 'waiting_acceptance'
+  const acceptedTot = ls?.dynamic_total_accepted ?? 0
+  // Contagem regressiva do prazo de pagamento
+  const deadlineMs  = booking.payment_deadline_at ? new Date(booking.payment_deadline_at).getTime() : null
+  const msLeft      = deadlineMs != null ? deadlineMs - nowTs : null
+  const mmss        = msLeft != null && msLeft > 0
+    ? `${String(Math.floor(msLeft / 60000)).padStart(2, '0')}:${String(Math.floor((msLeft % 60000) / 1000)).padStart(2, '0')}`
+    : null
 
   const gradientIdx = Math.abs(booking.id?.charCodeAt?.(0) || 0) % TOUR_GRADIENTS.length
   const IconComp    = TOUR_ICONS[gradientIdx]
@@ -270,6 +308,61 @@ export default function BookingDetail() {
             </div>
           </div>
         </div>
+
+        {/* Aceite parcial (R3) — 1+ veículo aceito, ainda há pendentes.
+            O cliente confirma e paga só o aceito, ou cancela a corrida. */}
+        {isPartial && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-amber-200">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                <CheckCircle size={20} className="text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-900">
+                  {ls.accepted_count} de {ls.total_legs} veículos aceitos
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Confirme para pagar só o que foi aceito. {ls.pending_count > 0 && (
+                    <span className="text-amber-700">
+                      {ls.pending_count} veículo{ls.pending_count > 1 ? 's' : ''} sem cooperativa {ls.pending_count > 1 ? 'serão cancelados' : 'será cancelado'}.
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {mmss ? (
+              <div className="flex items-center justify-center gap-1.5 mb-3 text-amber-700">
+                <Clock size={14} />
+                <span className="text-sm font-bold tabular-nums">{mmss}</span>
+                <span className="text-xs">para confirmar</span>
+              </div>
+            ) : (
+              <p className="text-center text-xs text-red-500 mb-3">Prazo expirado — atualize a página.</p>
+            )}
+
+            {checkoutError && (
+              <p className="text-xs text-red-500 text-center mb-2">{checkoutError}</p>
+            )}
+
+            <button
+              onClick={handleConfirmPartial}
+              disabled={checkoutLoading || !mmss}
+              className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {checkoutLoading
+                ? <><Loader2 size={16} className="animate-spin" /> Confirmando…</>
+                : <>Confirmar e pagar · {fmt(acceptedTot)}</>}
+            </button>
+            <button
+              onClick={() => setShowCancel(true)}
+              disabled={checkoutLoading}
+              className="w-full mt-2 text-gray-500 font-semibold rounded-2xl py-2.5 text-sm active:scale-[0.98] transition-transform disabled:opacity-50"
+            >
+              Cancelar corrida
+            </button>
+          </div>
+        )}
 
         {/* Pay CTA — cooperativa aceitou, falta pagar */}
         {status === 'waiting_payment' && (
