@@ -82,6 +82,63 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
   }
 }
 
+// =============================================================================
+// MOTOR DE PERNAS (Etapa 2, Onda A) — split nativo N-recebedores
+// =============================================================================
+// "Split de pagamentos" do Mercado Pago Brasil: 1 pagamento com N
+// `disbursements`, cada um com collector_id (mp_user_id da coop) + amount +
+// application_fee (comissão da plataforma sobre a fatia daquela perna).
+// DIFERENTE do split de 1 recebedor acima (sellerAccessToken + application_fee
+// simples, que cria o pagamento NA conta da coop): aqui o pagamento é criado
+// com o token da PLATAFORMA, que distribui para várias contas ao mesmo tempo.
+// Requer a aplicação marketplace com "Split de pagamentos" habilitado no
+// painel do MP — NÃO validado em produção/sandbox real neste ambiente (sem
+// acesso a uma conta MP com o recurso ativo). Ver Riscos/Objeções do handoff.
+export function buildDisbursements(recipients) {
+  return recipients.map((r) => ({
+    amount:              Math.round(r.amount * 100) / 100,
+    collector_id:        Number(r.collectorId),
+    ...(r.applicationFee > 0 ? { application_fee: Math.round(r.applicationFee * 100) / 100 } : {}),
+    external_reference:  r.externalReference,
+  }))
+}
+
+export async function createPixPaymentSplit({ amount, description, payerEmail, payerName, payerDoc, externalRef, disbursements }) {
+  if (!mp) throw new Error('Mercado Pago não configurado: falta o Access Token da plataforma (MP_ACCESS_TOKEN) para o split multi-recebedor.')
+  if (!disbursements?.length) throw new Error('Split multi-recebedor exige ao menos 1 disbursement.')
+
+  const client = new Payment(mp)
+  const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
+  const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
+
+  const body = {
+    transaction_amount: amount,
+    description,
+    payment_method_id:  'pix',
+    external_reference: String(externalRef),
+    date_of_expiration: mpDate(new Date(Date.now() + 30 * 60 * 1000)),
+    ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+    payer: {
+      email:      payerEmail || 'comprador@girojeri.com',
+      first_name: (payerName || 'Comprador').split(' ')[0],
+      last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'Turiva',
+      ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
+    },
+    disbursements,
+  }
+
+  const response = await client.create({ body })
+
+  return {
+    mp_id:         String(response.id),
+    status:        response.status,
+    status_detail: response.status_detail || null,
+    pix_code:      response.point_of_interaction?.transaction_data?.qr_code,
+    qr_base64:     response.point_of_interaction?.transaction_data?.qr_code_base64,
+    expires_at:    response.date_of_expiration,
+  }
+}
+
 // ── Mapa de recusas → chave i18n ──────────────────────
 const REJECTION_MAP = {
   cc_rejected_insufficient_amount:    'payment.rejected.insufficient_amount',
