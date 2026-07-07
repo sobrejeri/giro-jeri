@@ -239,17 +239,22 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
         </>
       )}
 
-      {/* ── Mídia (centralizada, com fundo desfocado) ────────────────────── */}
+      {/* ── Mídia (encaixada na tela, estilo Instagram Stories) ──────────────
+          O container é travado à altura da tela (min-h-0 impede que cresça
+          além do viewport e amplie a mídia). A mídia é centralizada num
+          wrapper absoluto (inset-0) e usa object-contain com max-w/max-h,
+          então aparece inteira, sem cortar nem ampliar; o fundo desfocado
+          preenche as sobras. */}
       <div
-        className="flex-1 w-full relative flex items-center justify-center overflow-hidden cursor-pointer touch-none"
+        className="flex-1 min-h-0 w-full relative overflow-hidden cursor-pointer touch-none"
         onClick={handleTap}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
         {story.media_url && !mediaError ? (
           <>
-            {/* Fundo desfocado preenche as bordas sem cortar flyers/vídeos verticais.
-                Para vídeo usa a capa/avatar do destaque (a URL do vídeo não é imagem). */}
+            {/* Fundo desfocado preenche as bordas. Para vídeo usa a capa/avatar
+                do destaque (a URL do vídeo não é imagem). */}
             {backdropSrc && (
               <img
                 src={backdropSrc}
@@ -259,30 +264,32 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
                 draggable={false}
               />
             )}
-            {isVideo ? (
-              <video
-                ref={videoRef}
-                key={story.id}
-                src={story.media_url}
-                playsInline
-                className="relative z-10 w-full h-full object-contain"
-                onEnded={goNext}
-                onError={() => setMediaError(true)}
-                onTimeUpdate={() => {
-                  const v = videoRef.current
-                  if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
-                }}
-              />
-            ) : (
-              <img
-                key={story.id}
-                src={story.media_url}
-                alt={story.display_name}
-                className="relative z-10 w-full h-full object-cover"
-                draggable={false}
-                onError={() => setMediaError(true)}
-              />
-            )}
+            <div className="absolute inset-0 z-10 flex items-center justify-center">
+              {isVideo ? (
+                <video
+                  ref={videoRef}
+                  key={story.id}
+                  src={story.media_url}
+                  playsInline
+                  className="max-w-full max-h-full object-contain"
+                  onEnded={goNext}
+                  onError={() => setMediaError(true)}
+                  onTimeUpdate={() => {
+                    const v = videoRef.current
+                    if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
+                  }}
+                />
+              ) : (
+                <img
+                  key={story.id}
+                  src={story.media_url}
+                  alt={story.display_name}
+                  className="max-w-full max-h-full object-contain"
+                  draggable={false}
+                  onError={() => setMediaError(true)}
+                />
+              )}
+            </div>
           </>
         ) : (
           <div className="w-full h-full bg-gray-900 flex flex-col items-center justify-center gap-3 px-8 text-center">
