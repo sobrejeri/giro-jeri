@@ -246,7 +246,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
             key={story.id}
             src={story.media_url}
             playsInline
-            className="relative z-10 max-w-full max-h-full object-contain"
+            className="relative z-10 w-full h-full object-contain"
             onEnded={goNext}
             onTimeUpdate={() => {
               const v = videoRef.current
@@ -267,7 +267,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
               key={story.id}
               src={story.media_url}
               alt={story.display_name}
-              className="relative z-10 max-w-full max-h-full object-contain"
+              className="relative z-10 w-full h-full object-contain"
               draggable={false}
             />
           </>
