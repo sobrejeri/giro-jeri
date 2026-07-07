@@ -24,7 +24,7 @@ do pagamento).
 |---|---|
 | **Pedido** | `bookings` (existente). Unidade tudo-ou-nada; dono de total/cliente/pagamento. |
 | **Perna** | `booking_legs` (nova). 1 linha = 1 veículo do pedido; roteável e unidade de split. |
-| **Coop-fantasma** | Um `user_type='operator'` real, com CNPJ e conta Mercado Pago próprios, operado pelo admin. Hub de coleta/repasse dos combos e executor de última instância. |
+| **Coop-fantasma** | Um `user_type='operator'` real, com CNPJ e conta Mercado Pago próprios, operado pelo admin. **Executor de última instância** da perna órfã — entra no split como qualquer coop, sem custódia de dinheiro de terceiros. |
 
 ## 3. Regras de negócio (confirmadas com o cliente)
 
@@ -33,9 +33,11 @@ do pagamento).
   até esse limite. Alerta ao admin ao se aproximar (parametrizável,
   `leg_cutoff_alert_minutes`, default 120min). No cutoff sem fechar → o pedido
   não confirma.
-- **R3 — pay-after-all.** Mantém o fluxo atual "aceite → depois pagamento". Só
-  cobra quando **todas** as pernas estão `accepted`. Combo incompleto nunca vira
-  cobrança (tudo-ou-nada barato, sem pré-autorização).
+- **R3 — pagamento bloqueado até o combo fechar (carrinho).** Mantém e reforça o
+  fluxo "aceite → depois pagamento". O cliente monta o carrinho e envia a
+  solicitação, mas o **pagamento fica bloqueado**: só quando **todas** as pernas
+  estão `accepted` o botão de pagar libera. O cliente paga **uma vez**. Combo
+  incompleto nunca vira cobrança (tudo-ou-nada; sem custódia, sem pré-autorização).
 - **R4 — cancelamento pós-aceite é manual.** Coop que cancela devolve a perna à
   fila/Central; a realocação é feita pelo admin (automática = Etapa 3). Se o
   pedido já estava pago, alerta prioritário.
@@ -53,20 +55,29 @@ do pagamento).
 - **Perna órfã perto do cutoff** → cai na **coop-fantasma** (admin) com **alerta
   de prioridade**; o admin fecha (a fantasma executa ou realoca).
 
-### Dinheiro (split)
-- **Pedido de 1 coop** → pagamento **direto na conta da coop** (fluxo marketplace
-  atual, `sellerAccessToken` + `application_fee`). Sem fantasma.
-- **Pedido multi-coop (2+)** → pagamento **coleta na conta da coop-fantasma**
-  (uma conta, um pagamento) e ela **repassa por perna** às coops reais — **mesmo
-  quando as duas pernas são aceitas por coops reais**, porque o Mercado Pago não
-  divide um pagamento único entre contas distintas. A parte de perna executada
-  pela própria fantasma fica com ela.
+### Dinheiro (split via split NATIVO do Mercado Pago)
+Como o pagamento só ocorre **depois** de todas as pernas aceitas (R3), na hora de
+cobrar **todos os recebedores já são conhecidos** — então usa-se o **split nativo
+do Mercado Pago** (múltiplos recebedores num único pagamento, `application_fee`
+no Checkout Bricks). Cada cooperativa recebe **direto na própria conta MP** a
+fatia da(s) perna(s) que executou; a plataforma retém a comissão.
 
-> **Por que a coop-fantasma:** legitima a custódia. Em vez de "a plataforma
-> segura dinheiro de terceiros" (risco fiscal), é uma prestadora registrada, com
-> CNPJ dedicado, que recebe e subcontrata as coops. Encaixa no modelo existente:
-> é só um operador com CNPJ (migration 010), dados bancários (009) e conexão MP
-> marketplace (036); o admin agir "como ela" é o modo elevado da Etapa 1.
+- **Ninguém recebe dinheiro de passagem.** O valor não transita por uma conta
+  coletora — vai direto a cada coop. Evita o problema fiscal de custódia/pass-through.
+- **Pedido de 1 coop** → split nativo com 1 recebedor (a coop) + comissão da
+  plataforma. É o fluxo marketplace atual.
+- **Pedido multi-coop** → split nativo com N recebedores (as coops que aceitaram),
+  cada uma com a fatia da sua perna, + comissão da plataforma.
+- **Pré-requisito:** cada coop tem conta MP conectada via OAuth (migration 036) —
+  já faz parte do sistema.
+
+> **Papel da coop-fantasma (reduzido):** é só um **operador executor** da perna
+> órfã (rede de segurança). Quando o admin fecha uma perna sem coop, ela é
+> atribuída à fantasma, que entra no split como qualquer recebedor e recebe **só
+> a fatia daquela perna** — tributada apenas sobre o que de fato ganhou, sem
+> custódia de valores de terceiros. É um `user_type='operator'` com CNPJ próprio
+> (migration 010), conta MP (036) e dados bancários (009); o admin opera "como
+> ela" no modo elevado da Etapa 1.
 
 ## 5. Máquina de estados
 
@@ -133,8 +144,10 @@ leg_status='awaiting_acceptance' AND (isAdmin OR cutoff_at > now())` — 0 linha
   incompletos (countdown, aceitar/fechar/escolher coop como admin/fantasma).
 - `GET /api/bookings/:id` — embute `legs[]` com status por perna + agregado
   (visão do cliente).
-- `getSplitContext` **bifurcado**: pedido de 1 coop = direto à coop; multi-coop =
-  coleta na fantasma + repasse por perna no ledger.
+- `getSplitContext` passa a montar o **split nativo com N recebedores** (as coops
+  que aceitaram cada perna, a fantasma inclusa quando executora) + comissão da
+  plataforma. Como o pagamento só ocorre com o combo fechado, os recebedores já
+  são todos conhecidos.
 - `GET /api/operator/financial` — passa a somar por `operator_id`/`leg_id` (hoje
   soma por `booking_id`; com multi-coop vazaria receita entre coops).
 
@@ -151,19 +164,25 @@ leg_status='awaiting_acceptance' AND (isAdmin OR cutoff_at > now())` — 0 linha
 
 **IN (Etapa 2):** `booking_legs` + agregado tudo-ou-nada; explosão a partir do
 "Monte sua combinação"; feed/aceite por perna; status por perna no cliente;
-Central de combos; alerta de cutoff; coleta/repasse via coop-fantasma
-(registro contábil por perna); job de cutoff.
+Central de combos; alerta de cutoff; pagamento bloqueado até o combo fechar +
+split nativo MP direto às coops no pagamento (registro contábil por perna); job
+de cutoff.
 
-**OUT (Etapa 3/4):** execução automática do repasse (fantasma → coops); realocação
-automática de perna; reembolso parcial por perna; auto-dispatch/ranking de coop;
+**OUT (Etapa 3/4):** realocação automática de perna; reembolso parcial por perna
+(caso raro pós-pagamento); auto-dispatch/ranking de coop;
 combos multi-serviço (tour + transfer no mesmo pedido); dashboards de ocupação.
 
 ## 10. Riscos / pendências
 
-- **Fiscal/contábil da coop-fantasma** — a receita inclui valores de passagem;
-  o CNPJ dedicado é o que torna correto. **Validação do cliente com a
-  contabilidade.**
-- **Execução do repasse** multi-coop fica como obrigação no ledger até a Etapa 3.
+- **Fiscal/contábil da coop-fantasma** — com o split nativo, ela recebe **só a
+  fatia das pernas que executou** (sem pass-through), então tributa apenas o que
+  ganha. Ainda vale conectar a conta MP e ter o CNPJ dedicado. Sem custódia de
+  valores de terceiros.
+- **Split é automático no pagamento** (nativo MP) — não há repasse manual
+  pendente; a divisão sai direto pra conta de cada coop na cobrança.
+- **Janela "aceito mas não pago"** — entre o combo fechar e o cliente pagar, as
+  coops estão comprometidas sem cobrança. Herda o comportamento atual
+  (`awaiting_payment` + prazo); se não pagar, libera as pernas.
 - **Infra de scheduler** — não há worker de cron hoje; decisão de infra.
 - **`GET /operator/financial` por `booking_id`** vaza receita entre coops se não
   migrar para `operator_id`/`leg_id` — obrigatório junto com o motor.
@@ -176,7 +195,8 @@ combos multi-serviço (tour + transfer no mesmo pedido); dashboards de ocupaçã
 1. Ligar o schema (`042`) em staging + criar a coop-fantasma (operador + CNPJ +
    conta MP).
 2. API: explosão em pernas na `request`; feed/aceite por perna; Central + assign;
-   `getSplitContext` bifurcado; `/financial` por operador; job de cutoff.
+   `getSplitContext` com split nativo N-recebedores; pagamento liberado só com
+   combo fechado; `/financial` por operador; job de cutoff.
 3. Frontend: cliente (status por perna) + coop (feed leg-shaped + Central com
    countdown); i18n pt/en/es.
 4. Ligar a flag `booking_legs_engine_enabled` só quando aceite/cancelamento/cutoff
