@@ -283,11 +283,19 @@ export default function Tours() {
 
   // R6: horário limite de solicitação — se já passou do cutoff do passeio,
   // a data mínima selecionável passa a ser amanhã (bloqueia "hoje").
+  // O backend valida em America/Fortaleza (UTC-3); o cliente precisa usar o
+  // mesmo relógio, senão um turista em outro fuso vê "hoje" disponível e leva
+  // 400 no checkout.
   const cutoffMinDate = useMemo(() => {
     const c = selectedTour?.booking_cutoff_time
     const todayStart = startOfDay(new Date())
     if (!c) return todayStart
-    const nowMin    = new Date().getHours() * 60 + new Date().getMinutes()
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date())
+    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)
+    const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
+    const nowMin    = h * 60 + m
     const cutoffMin = Number(c.slice(0, 2)) * 60 + Number(c.slice(3, 5))
     return nowMin >= cutoffMin ? addDays(todayStart, 1) : todayStart
   }, [selectedTour?.booking_cutoff_time])

@@ -107,6 +107,9 @@ CREATE TABLE IF NOT EXISTS booking_legs (
   UNIQUE (booking_id, leg_number)
 );
 
+-- Idempotente: o helper faz um CREATE TRIGGER "cru" (sem IF NOT EXISTS), então
+-- removemos antes para a migração poder ser re-executada sem abortar.
+DROP TRIGGER IF EXISTS trg_booking_legs_updated ON booking_legs;
 SELECT create_updated_at_trigger('booking_legs');
 
 COMMENT ON TABLE booking_legs IS
