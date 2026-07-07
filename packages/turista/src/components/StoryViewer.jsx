@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { X, Camera, Volume2, VolumeX, MoreVertical, Trash2, ImageOff } from 'lucide-react'
 
@@ -178,7 +179,10 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
   const headerTitle  = group?.title || story.display_name
   const headerAvatar = group?.cover_image_url || story.avatar_url || (story.media_type !== 'video' ? story.media_url : null)
 
-  return (
+  // Portal para o body: escapa de qualquer ancestral com transform/will-change
+  // (ex.: o wrapper do PullToRefresh), que "prende" o position:fixed e impede
+  // o viewer de cobrir a tela toda e centralizar a mídia corretamente.
+  return createPortal(
     <div className="fixed inset-0 z-[100] bg-black flex flex-col select-none">
       {/* ── Barras de progresso (itens do destaque atual) ────────────────── */}
       <div className="absolute top-0 inset-x-0 z-10 flex gap-1 px-2 pt-2">
@@ -309,6 +313,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
         <div className="absolute inset-y-0 left-0 w-[30%] z-20" />
         <div className="absolute inset-y-0 right-0 w-[70%] z-20" />
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
