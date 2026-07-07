@@ -130,6 +130,12 @@ router.put('/preferences/:type/:entityId', async (req, res, next) => {
       return res.status(400).json({ error: 'entity_type inválido' });
     }
 
+    // Model B (opt-out): a coop escolhe passeios/transfers, mas o catálogo de
+    // veículos operados é curado pelo admin (ver /api/admin/operators/:id/vehicles).
+    if (type === 'vehicle' && req.user.user_type === 'operator') {
+      return res.status(403).json({ error: 'Preferência de veículo é gerida pelo administrador' });
+    }
+
     const { data, error } = await supabase
       .from('operator_service_preferences')
       .upsert(
@@ -245,10 +251,52 @@ router.get('/bookings', async (req, res, next) => {
     // some por engano. Coop vê dentro do prazo; admin vê só as expiradas.
     const within  = all.filter((b) => !b.acceptance_expires_at || new Date(b.acceptance_expires_at).getTime() > nowMs);
     const expired = all.filter((b) =>  b.acceptance_expires_at && new Date(b.acceptance_expires_at).getTime() <= nowMs);
-    const acceptanceRows = isAdmin ? expired : within;
+    let acceptanceRows = isAdmin ? expired : within;
 
     console.log('[operator/bookings] role=%s aguardando=%d dentro_prazo=%d fora_prazo=%d mostra=%d',
       req.user?.user_type, all.length, within.length, expired.length, acceptanceRows.length);
+
+    // Roteamento por veículo operado (Etapa 1 — Model B, opt-out): a coop só
+    // deixa de ver um pedido se ele exige ao menos um veículo que ela
+    // desativou explicitamente em operator_service_preferences. Sem linha
+    // (default) = veículo operado. Admin não é filtrado (vê tudo o que já
+    // via). Fail-open em qualquer erro/ausência: nunca esconde pedido por
+    // engano — só loga e segue sem filtrar.
+    if (!isAdmin && acceptanceRows.length > 0) {
+      try {
+        const ids = acceptanceRows.map((b) => b.id);
+        const [bvRes, prefsRes] = await Promise.all([
+          supabase.from('booking_vehicles').select('booking_id, vehicle_id').in('booking_id', ids),
+          supabase.from('operator_service_preferences').select('entity_id')
+            .eq('operator_id', req.user.id)
+            .eq('entity_type', 'vehicle')
+            .eq('is_active', false),
+        ]);
+
+        if (bvRes.error || prefsRes.error) {
+          console.error(
+            '[operator/bookings] filtro por veículo falhou op=%s bv_err=%s prefs_err=%s — fail-open, sem filtrar',
+            req.user.id, bvRes.error?.message, prefsRes.error?.message,
+          );
+        } else {
+          const vehiclesByBooking = new Map();
+          for (const row of bvRes.data || []) {
+            if (!vehiclesByBooking.has(row.booking_id)) vehiclesByBooking.set(row.booking_id, []);
+            vehiclesByBooking.get(row.booking_id).push(row.vehicle_id);
+          }
+          const disabled = new Set((prefsRes.data || []).map((r) => r.entity_id));
+
+          acceptanceRows = acceptanceRows.filter((b) => {
+            const vehicleIds = vehiclesByBooking.get(b.id);
+            if (!vehicleIds || vehicleIds.length === 0) return true; // sem booking_vehicles → fail-open
+            return !vehicleIds.some((vId) => disabled.has(vId));
+          });
+        }
+      } catch (err) {
+        console.error('[operator/bookings] exceção no filtro por veículo op=%s err=%s — fail-open, sem filtrar',
+          req.user.id, err?.message);
+      }
+    }
 
     // dispRes: paid+awaiting_dispatch (sem operador) — fluxo antigo das cotações
     // já pagas. Mostramos pros dois (não tem janela de aceite aqui).
