@@ -235,6 +235,26 @@ async function getAcceptedLegRecipients(bookingId) {
   return byOperator
 }
 
+// Distribui `totalCents` (inteiro) entre N recebedores proporcionalmente a
+// `weights`, somando EXATAMENTE ao total (método do maior resto). Trabalha em
+// centavos inteiros para não acumular drift de float, e garante o invariante
+// que o split nativo do MP exige: Σ(amounts) === transaction_amount.
+function allocateCents(totalCents, weights) {
+  const n = weights.length
+  if (n === 0) return []
+  let sum = weights.reduce((a, b) => a + b, 0)
+  let w   = weights
+  if (sum <= 0) { w = weights.map(() => 1); sum = n } // pesos degenerados → igual
+  const raw   = w.map((x) => (totalCents * x) / sum)
+  const cents = raw.map((x) => Math.floor(x))
+  const rest  = totalCents - cents.reduce((a, b) => a + b, 0) // centavos a distribuir (0..n-1)
+  const order = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac) // maiores restos primeiro
+  for (let k = 0; k < rest; k++) cents[order[k % n].i] += 1
+  return cents
+}
+
 // Contexto de split "consciente de pernas": se o pedido não tem pernas (Onda B
 // ainda não implementada — compartilhado/cotação) ou tem pernas mas só 1
 // cooperativa aceitou, retorna o MESMO formato de getSplitContext (caminho de
@@ -260,9 +280,20 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
   // N recebedores — todas as cooperativas precisam ter conta MP conectada
   // (pré-requisito do desenho, migration 036/OAuth). Sem token/mp_user_id de
   // alguma delas, aborta com erro claro em vez de cobrar sem repassar.
+  // Particiona o TOTAL COBRADO (chargedTotal) — não a soma dos leg_price —
+  // proporcionalmente ao leg_price de cada cooperativa, em centavos inteiros e
+  // somando exato ao total. Assim Σ(disbursements.amount) == transaction_amount
+  // (invariante do split nativo do MP) mesmo com surcharge de data/feriado
+  // embutida no total e sem drift de arredondamento entre recebedores.
+  const entries    = [...byOperator.entries()]                       // [operatorId, sliceReais]
+  const totalCents = Math.round(Number(chargedTotal) * 100)
+  const weights    = entries.map(([, slice]) => Math.round(Number(slice) * 100))
+  const shareCents = allocateCents(totalCents, weights)
+
   const recipients = []
-  let totalApplicationFee = 0
-  for (const [operatorId, sliceAmount] of byOperator) {
+  let totalApplicationFeeCents = 0
+  for (let idx = 0; idx < entries.length; idx++) {
+    const [operatorId] = entries[idx]
     const opMp = await getOperatorMp(operatorId)
     if (!opMp?.token) {
       throw new Error(`Cooperativa ${operatorId} sem conta Mercado Pago conectada — split multi-cooperativa exige todas as pernas aceitas conectadas.`)
@@ -271,19 +302,21 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
     if (!op?.mp_user_id) {
       throw new Error(`Cooperativa ${operatorId} sem mp_user_id (reconecte a conta Mercado Pago) — split multi-cooperativa bloqueado.`)
     }
-    const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
-    const applicationFee = Math.round(sliceAmount * (pct / 100) * 100) / 100
-    totalApplicationFee += applicationFee
+    const pct      = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
+    const amtCents = shareCents[idx]
+    // Comissão da plataforma sobre a fatia da perna, nunca maior que a fatia.
+    const feeCents = Math.min(amtCents, Math.round(amtCents * (pct / 100)))
+    totalApplicationFeeCents += feeCents
     recipients.push({
       operatorId,
       collectorId:        op.mp_user_id,
-      amount:              Math.round(sliceAmount * 100) / 100,
-      applicationFee,
+      amount:              amtCents / 100,
+      applicationFee:      feeCents / 100,
       externalReference:  `${booking.id}:${operatorId}`,
     })
   }
 
-  return { mode: 'multi', recipients, totalApplicationFee: Math.round(totalApplicationFee * 100) / 100 }
+  return { mode: 'multi', recipients, totalApplicationFee: totalApplicationFeeCents / 100 }
 }
 
 // ── Cutoff de solicitação (R6) ─────────────────────────────────────────
