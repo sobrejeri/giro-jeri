@@ -36,14 +36,17 @@ export async function getLegPaymentWindowMinutes() {
 export async function ensurePaymentDeadlineAndNotify(bookingId, { comboComplete }) {
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('id, user_id, booking_code, payment_deadline_at')
+    .select('id, user_id, booking_code, payment_deadline_at, service_datetime')
     .eq('id', bookingId)
     .maybeSingle()
   if (error) throw error
   if (!booking || booking.payment_deadline_at) return booking || null
+  // Sem horário do passeio não dá pra ancorar o prazo — não trava a notificação.
+  if (!booking.service_datetime) return booking
 
-  const minutes  = await getLegPaymentWindowMinutes()
-  const deadline = new Date(Date.now() + minutes * 60_000).toISOString()
+  // Prazo ancorado no PASSEIO: pagar até 15 min antes do horário agendado
+  // (não um timer a partir do aceite). O cliente pode esperar o combo fechar.
+  const deadline = new Date(new Date(booking.service_datetime).getTime() - 15 * 60_000).toISOString()
 
   const { data: upd, error: upErr } = await supabase
     .from('bookings')
@@ -56,8 +59,8 @@ export async function ensurePaymentDeadlineAndNotify(bookingId, { comboComplete 
 
   const title = comboComplete ? 'Cooperativa(s) aceitaram! 🎉' : 'Um veículo foi aceito 🚗'
   const body  = comboComplete
-    ? `Seu pedido (${booking.booking_code}) foi aceito. Pague em até ${minutes} min para confirmar.`
-    : `Uma cooperativa aceitou parte do seu pedido (${booking.booking_code}). Confirme e pague o veículo aceito, ou cancele — você tem ${minutes} min.`
+    ? `Seu pedido (${booking.booking_code}) foi aceito. Pague até 15 min antes do passeio para confirmar.`
+    : `Uma cooperativa aceitou parte do seu pedido (${booking.booking_code}). Confirme e pague o veículo aceito, ou cancele — até 15 min antes do passeio.`
 
   await notifyUser({
     userId:      booking.user_id,
@@ -77,45 +80,21 @@ export async function ensurePaymentDeadlineAndNotify(bookingId, { comboComplete 
 export async function sweepExpiredLegBookings() {
   if (!(await isBookingLegsEngineEnabled())) return 0
 
-  const nowIso = new Date().toISOString()
-  const { data: expired, error } = await supabase
-    .from('bookings')
-    .select('id, user_id, booking_code')
-    .lt('payment_deadline_at', nowIso)
-    .in('status_commercial', ['awaiting_acceptance', 'awaiting_payment'])
-    .neq('payment_status', 'approved')
+  // Cancelamento ancorado no horário do passeio (migration 048): cancela em SQL
+  // reservas não pagas passadas de service−15min, e as não-aceitas por ninguém
+  // passadas de service−20min (5 min antes). Devolve as canceladas p/ notificar.
+  const { data: cancelledRows, error } = await supabase.rpc('cancel_overdue_leg_bookings')
   if (error) { console.error('[legFlow] varredura falhou:', error.message); return 0 }
-  if (!expired?.length) return 0
+  if (!cancelledRows?.length) return 0
 
-  let cancelled = 0
-  for (const b of expired) {
-    // Cancela as pernas ainda vivas (pendentes ou aceitas mas não pagas).
-    const { error: legErr } = await supabase
-      .from('booking_legs')
-      .update({ status_leg: 'cancelled' })
-      .eq('booking_id', b.id)
-      .in('status_leg', ['awaiting_acceptance', 'accepted'])
-    if (legErr) { console.error('[legFlow] cancelar pernas booking=%s:', b.id, legErr.message); continue }
-
-    // Cancela a reserva — condicional para não pisar em mudança concorrente.
-    const { data: upd, error: upErr } = await supabase
-      .from('bookings')
-      .update({ status_commercial: 'cancelled', status_operational: 'cancelled' })
-      .eq('id', b.id)
-      .in('status_commercial', ['awaiting_acceptance', 'awaiting_payment'])
-      .neq('payment_status', 'approved')
-      .select('id')
-    if (upErr) { console.error('[legFlow] cancelar reserva booking=%s:', b.id, upErr.message); continue }
-    if (!upd?.length) continue // já paga/cancelada por outro caminho
-
-    cancelled++
+  for (const b of cancelledRows) {
     notifyUser({
       userId:      b.user_id,
       bookingId:   b.id,
       templateKey: 'booking_expired_unavailable',
       title:       'Corrida cancelada',
-      body:        `Ninguém confirmou o pagamento a tempo e o veículo ficou indisponível. Faça uma nova solicitação (${b.booking_code}).`,
+      body:        `Ninguém confirmou a tempo e o veículo ficou indisponível. Faça uma nova solicitação (${b.booking_code}).`,
     }).catch((e) => console.error('[legFlow] notify varredura falhou booking=%s:', b.id, e.message))
   }
-  return cancelled
+  return cancelledRows.length
 }
