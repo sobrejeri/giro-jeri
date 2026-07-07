@@ -5,7 +5,6 @@ import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useFavorites } from '../contexts/FavoritesContext'
-import Stories from '../components/Stories'
 import InstallPrompt from '../components/InstallPrompt'
 import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
@@ -214,15 +213,6 @@ export default function Home() {
   const { user } = useAuth()
   const { favs, toggleFav } = useFavorites()
 
-  // Onde exibir os Destaques: 'home' ou 'descubra' (reversível, salvo no aparelho)
-  const [storiesPlace, setStoriesPlace] = useState(
-    () => localStorage.getItem('turiva_stories_place') || 'descubra'
-  )
-  function moveStories(to) {
-    localStorage.setItem('turiva_stories_place', to)
-    setStoriesPlace(to)
-  }
-
   const geo = getServiceQuery()
   // Arredonda as coordenadas (~1 km) na chave para o GPS não recarregar a lista
   // a cada micro-variação.
@@ -321,19 +311,6 @@ export default function Home() {
           <ChevronRight size={11} className="text-gray-400 ml-0.5" />
         </button>
       </div>
-
-      {/* ── Destaques (highlights) — na Home só se o flag apontar aqui ─ */}
-      {storiesPlace === 'home' && (
-        <>
-          <Stories className="lg:max-w-6xl lg:mx-auto" />
-          <button
-            onClick={() => moveStories('descubra')}
-            className="mx-auto flex items-center gap-1.5 text-[11px] text-gray-400 active:text-gray-600 py-1.5"
-          >
-            <Sparkles size={12} /> Mover destaques para a Descubra
-          </button>
-        </>
-      )}
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto lg:space-y-6 lg:pt-6 lg:px-6">
 
