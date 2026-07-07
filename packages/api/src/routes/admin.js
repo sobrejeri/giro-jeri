@@ -866,6 +866,117 @@ router.get('/operator-performance', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// =============================================================================
+// VEÍCULOS OPERADOS POR COOPERATIVA (Etapa 1 — roteamento do feed, Model B)
+// Catálogo de vehicles é global; cada operator pode ter linhas em
+// operator_service_preferences (entity_type='vehicle') desativando um
+// veículo específico. Sem linha = veículo operado (default opt-out).
+// Escrita é admin-only (ver migration 041 e o bloqueio 403 em operator.js).
+// =============================================================================
+
+// ── GET /api/admin/operators/:operatorId/vehicles ──────
+router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, next) => {
+  try {
+    const { operatorId } = req.params;
+
+    const { data: operator, error: opErr } = await supabase
+      .from('users')
+      .select('id, full_name, user_type')
+      .eq('id', operatorId)
+      .eq('user_type', 'operator')
+      .maybeSingle();
+    if (opErr) throw opErr;
+    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+
+    const { data: vehicles, error: vErr } = await supabase
+      .from('vehicles')
+      .select('id, name, vehicle_type, seat_capacity, image_url')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
+    if (vErr) throw vErr;
+
+    const { data: prefs, error: prefsErr } = await supabase
+      .from('operator_service_preferences')
+      .select('entity_id, is_active, notes')
+      .eq('operator_id', operatorId)
+      .eq('entity_type', 'vehicle');
+    if (prefsErr) throw prefsErr;
+
+    const prefsById = new Map((prefs || []).map((p) => [p.entity_id, p]));
+
+    const result = (vehicles || []).map((v) => {
+      const pref = prefsById.get(v.id);
+      return {
+        vehicle_id:    v.id,
+        name:          v.name,
+        vehicle_type:  v.vehicle_type,
+        seat_capacity: v.seat_capacity,
+        image_url:     v.image_url,
+        // Model B (opt-out): default é operado (true); só é false quando
+        // existe linha explícita is_active=false.
+        is_active:     pref ? pref.is_active !== false : true,
+        notes:         pref?.notes ?? null,
+      };
+    });
+
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+// ── PUT /api/admin/operators/:operatorId/vehicles/:vehicleId ──
+const operatorVehiclePrefSchema = z.object({
+  is_active: z.boolean(),
+  notes:     z.string().max(500).optional().nullable(),
+});
+
+router.put('/operators/:operatorId/vehicles/:vehicleId', requireAdmin, async (req, res, next) => {
+  try {
+    const { operatorId, vehicleId } = req.params;
+    const body = operatorVehiclePrefSchema.parse(req.body);
+
+    const { data: operator, error: opErr } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', operatorId)
+      .eq('user_type', 'operator')
+      .maybeSingle();
+    if (opErr) throw opErr;
+    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+
+    const { data: vehicle, error: vErr } = await supabase
+      .from('vehicles')
+      .select('id')
+      .eq('id', vehicleId)
+      .maybeSingle();
+    if (vErr) throw vErr;
+    if (!vehicle) return res.status(404).json({ error: 'Veículo não encontrado' });
+
+    const { data, error } = await supabase
+      .from('operator_service_preferences')
+      .upsert(
+        {
+          operator_id: operatorId,
+          entity_type: 'vehicle',
+          entity_id:   vehicleId,
+          is_active:   body.is_active,
+          notes:       body.notes ?? null,
+          updated_at:  new Date().toISOString(),
+        },
+        { onConflict: 'operator_id,entity_type,entity_id' },
+      )
+      .select()
+      .single();
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
+});
+
 // ── GET /api/admin/pricing-rules ───────────────────────
 router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
   try {

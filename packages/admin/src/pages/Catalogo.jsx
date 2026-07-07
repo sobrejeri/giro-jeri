@@ -9,6 +9,18 @@ import Input, { Select, Textarea } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 
+// Horários pré-definidos para o limite de solicitação (30 em 30 min, 06h–22h).
+const CUTOFF_TIME_OPTIONS = (() => {
+  const opts = []
+  for (let h = 6; h <= 22; h++) {
+    for (const m of ['00', '30']) {
+      if (h === 22 && m === '30') break
+      opts.push(`${String(h).padStart(2, '0')}:${m}`)
+    }
+  }
+  return opts
+})()
+
 function slugify(text) {
   return text.toString().toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -579,12 +591,19 @@ export default function Catalogo() {
               <label className="block text-xs font-medium text-gray-400 mb-1.5">
                 Horário limite de solicitação
               </label>
-              <input
-                type="time"
-                value={form.booking_cutoff_time || ''}
+              <select
+                value={(form.booking_cutoff_time || '').slice(0, 5)}
                 onChange={(e) => setForm({ ...form, booking_cutoff_time: e.target.value || null })}
                 className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
-              />
+              >
+                <option value="">Sem restrição</option>
+                {(() => {
+                  const cur  = (form.booking_cutoff_time || '').slice(0, 5)
+                  const list = cur && !CUTOFF_TIME_OPTIONS.includes(cur)
+                    ? [cur, ...CUTOFF_TIME_OPTIONS] : CUTOFF_TIME_OPTIONS
+                  return list.map((t) => <option key={t} value={t}>{t}</option>)
+                })()}
+              </select>
               <p className="text-[11px] text-gray-500 mt-1">
                 Após este horário, só aceita reservas a partir do dia seguinte. Deixe em branco para não restringir.
               </p>
@@ -669,12 +688,19 @@ export default function Catalogo() {
               <label className="block text-xs font-medium text-gray-400 mb-1.5">
                 Horário limite de solicitação
               </label>
-              <input
-                type="time"
-                value={form.booking_cutoff_time || ''}
+              <select
+                value={(form.booking_cutoff_time || '').slice(0, 5)}
                 onChange={(e) => setForm({ ...form, booking_cutoff_time: e.target.value || null })}
                 className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
-              />
+              >
+                <option value="">Sem restrição</option>
+                {(() => {
+                  const cur  = (form.booking_cutoff_time || '').slice(0, 5)
+                  const list = cur && !CUTOFF_TIME_OPTIONS.includes(cur)
+                    ? [cur, ...CUTOFF_TIME_OPTIONS] : CUTOFF_TIME_OPTIONS
+                  return list.map((t) => <option key={t} value={t}>{t}</option>)
+                })()}
+              </select>
               <p className="text-[11px] text-gray-500 mt-1">
                 Após este horário, o sistema só aceita reservas a partir do dia seguinte. Deixe em branco para não restringir.
               </p>
