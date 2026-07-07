@@ -159,6 +159,9 @@ export const api = {
   requestBooking:         (body) => request('/api/payments/request',     { method: 'POST', body }),
   createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
   getCheckoutKey:         (id)   => request(`/api/payments/booking/${id}/checkout-key`),
+  // Checkout parcial (R3): cancela as pernas ainda pendentes e libera o
+  // pagamento só do(s) veículo(s) já aceito(s). Retorna { dynamic_total, ... }.
+  checkoutAccepted:       (id)   => request(`/api/payments/booking/${id}/checkout-accepted`, { method: 'POST', body: {} }),
   getPaymentStatus:       (id)   => request(`/api/payments/${id}/status`),
   simulatePaymentApprove: (id)   => request(`/api/payments/${id}/simulate`, { method: 'POST', body: {} }),
 

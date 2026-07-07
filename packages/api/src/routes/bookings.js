@@ -9,6 +9,8 @@ import {
   validateTransferAdvance,
 } from '../services/priceEngine.js';
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
+import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
+import { sweepExpiredLegBookings } from '../services/legFlow.js';
 import dayjs from 'dayjs';
 
 const serviceLabelBk = (t) => (t === 'transfer' ? 'translado' : 'passeio');
@@ -233,6 +235,10 @@ router.get('/', authenticate, async (req, res, next) => {
     const { status_commercial, status_operational, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
+    // Varredura lazy (R3): cancela reservas com prazo de pagamento vencido antes
+    // de o cliente ver a lista. Best-effort e inerte com a flag off.
+    await sweepExpiredLegBookings().catch(() => {});
+
     let query = supabase
       .from('bookings')
       .select(`
@@ -266,6 +272,10 @@ router.get('/', authenticate, async (req, res, next) => {
 // ── GET /api/bookings/:id ──────────────────────────────
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
+    // Varredura lazy (R3): garante que uma reserva com prazo vencido apareça já
+    // cancelada quando o cliente abre o detalhe. Best-effort e inerte com flag off.
+    await sweepExpiredLegBookings().catch(() => {});
+
     const { data, error } = await supabase
       .from('bookings')
       .select(`
@@ -302,6 +312,45 @@ router.get('/:id', authenticate, async (req, res, next) => {
         `&origin=${data.pickup_latitude},${data.pickup_longitude}` +
         `&destination=${data.destination_latitude},${data.destination_longitude}` +
         `&travelmode=driving`;
+    }
+
+    // ── Motor de pernas (Etapa 2, Onda A) — atrás da flag ────────────────
+    // Quando ligado E o pedido tem pernas (privativo/transfer de rota), expõe
+    // legs[] + agregado + total dinâmico (soma das pernas aceitas). Pedidos
+    // sem pernas (compartilhado/cotação, Onda B) ficam exatamente como hoje.
+    if (await isBookingLegsEngineEnabled()) {
+      const { data: legs, error: legsErr } = await supabase
+        .from('booking_legs')
+        .select(`
+          id, leg_number, vehicle_id, vehicle_name_snapshot, vehicle_type_snapshot,
+          vehicle_capacity_snapshot, pax_count, leg_price, operator_id,
+          status_leg, acceptance_expires_at
+        `)
+        .eq('booking_id', data.id)
+        .order('leg_number', { ascending: true });
+
+      if (!legsErr && legs && legs.length > 0) {
+        const accepted  = legs.filter((l) => l.status_leg === 'accepted');
+        const pendingL  = legs.filter((l) => l.status_leg === 'awaiting_acceptance');
+        const cancelled = legs.filter((l) => l.status_leg === 'cancelled');
+        const expired   = legs.filter((l) => l.status_leg === 'expired');
+
+        data.legs = legs;
+        data.legs_summary = {
+          total_legs:      legs.length,
+          accepted_count:  accepted.length,
+          pending_count:   pendingL.length,
+          cancelled_count: cancelled.length,
+          expired_count:   expired.length,
+          // Combo fechado = nenhuma perna pendente/expirada e ao menos 1 aceita.
+          all_accepted:    accepted.length > 0 && pendingL.length === 0 && expired.length === 0,
+          // Total dinâmico (R3): soma só das pernas ACEITAS — é o valor que o
+          // cliente pagaria hoje via checkout parcial.
+          dynamic_total_accepted: Math.round(accepted.reduce((s, l) => s + Number(l.leg_price), 0) * 100) / 100,
+        };
+      } else if (legsErr) {
+        console.error('[bookings/:id] leitura de booking_legs falhou (segue sem legs[]):', legsErr.message);
+      }
     }
 
     res.json(data);

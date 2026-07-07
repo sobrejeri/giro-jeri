@@ -158,8 +158,10 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
 }
 
 /* ── Calendário (bottom sheet) ──────────────────────────────── */
-function DatePickerSheet({ value, onChange, onClose }) {
-  const today = startOfDay(new Date())
+function DatePickerSheet({ value, onChange, onClose, minDate }) {
+  // R6: 'today' aqui é a data mínima selecionável — se passou do cutoff do
+  // passeio, minDate já vem como amanhã e o dia de hoje fica bloqueado.
+  const today = minDate || startOfDay(new Date())
   const [viewMonth, setViewMonth] = useState(startOfMonth(value))
 
   const days = eachDayOfInterval({
@@ -278,6 +280,31 @@ export default function Tours() {
     ? allTours.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
     : allTours
   const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
+
+  // R6: horário limite de solicitação — se já passou do cutoff do passeio,
+  // a data mínima selecionável passa a ser amanhã (bloqueia "hoje").
+  // O backend valida em America/Fortaleza (UTC-3); o cliente precisa usar o
+  // mesmo relógio, senão um turista em outro fuso vê "hoje" disponível e leva
+  // 400 no checkout.
+  const cutoffMinDate = useMemo(() => {
+    const c = selectedTour?.booking_cutoff_time
+    const todayStart = startOfDay(new Date())
+    if (!c) return todayStart
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date())
+    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)
+    const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
+    const nowMin    = h * 60 + m
+    const cutoffMin = Number(c.slice(0, 2)) * 60 + Number(c.slice(3, 5))
+    return nowMin >= cutoffMin ? addDays(todayStart, 1) : todayStart
+  }, [selectedTour?.booking_cutoff_time])
+
+  // Se a data selecionada ficou antes do mínimo (ex.: hoje após o cutoff),
+  // empurra para a data mínima válida — evita levar "hoje" inválido ao checkout.
+  useEffect(() => {
+    if (isBefore(date, cutoffMinDate)) setDate(cutoffMinDate)
+  }, [cutoffMinDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: vehiclesData, isFetched: vehiclesFetched } = useQuery({
     queryKey: ['tour-vehicles', selectedTour?.id],
@@ -639,6 +666,7 @@ export default function Tours() {
       {showDatePicker && (
         <DatePickerSheet
           value={date}
+          minDate={cutoffMinDate}
           onChange={setDate}
           onClose={() => setShowDatePicker(false)}
         />

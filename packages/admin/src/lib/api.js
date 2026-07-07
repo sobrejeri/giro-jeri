@@ -117,6 +117,10 @@ export const api = {
   getAuthOrphans:    ()            => request('/api/admin/auth-orphans'),
   importAuthUser:    (body)        => request('/api/admin/import-auth-user', { method: 'POST', body }),
 
+  // Frota liberada por cooperativa (roteamento por veículo operado)
+  getOperatorVehicles: (operatorId)                    => request(`/api/admin/operators/${operatorId}/vehicles`),
+  setOperatorVehicle:  (operatorId, vehicleId, body)   => request(`/api/admin/operators/${operatorId}/vehicles/${vehicleId}`, { method: 'PUT', body }),
+
   // Financeiro
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),
 

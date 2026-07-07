@@ -1,9 +1,12 @@
 import { useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ToggleLeft, ToggleRight, Car, Users } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import {
+  Car, Users, Info, MessageCircle, CheckCircle2, MinusCircle, AlertTriangle,
+} from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import { fleetCopy as t } from '../copy/fleet'
 
 const TYPE_LABEL = {
   buggy:      'Buggy',
@@ -16,20 +19,30 @@ const TYPE_LABEL = {
   other:      'Outro',
 }
 
-export default function Veiculos() {
-  const qc = useQueryClient()
+const ADMIN_WHATSAPP = import.meta.env.VITE_ADMIN_WHATSAPP
 
-  const { data: vehicles = [], isLoading: lv } = useQuery({
+export default function Veiculos() {
+  const {
+    data: vehicles = [],
+    isLoading: lv,
+    isError: ev,
+    refetch: refetchVehicles,
+  } = useQuery({
     queryKey: ['vehicles'],
     queryFn:  () => api.getVehicles({ is_active: 'true' }),
   })
 
-  const { data: preferences = [], isLoading: lp } = useQuery({
+  const {
+    data: preferences = [],
+    isLoading: lp,
+    isError: ep,
+    refetch: refetchPreferences,
+  } = useQuery({
     queryKey: ['operator-prefs'],
     queryFn:  () => api.getPreferences(),
   })
 
-  // Monta mapa rápido de preferências
+  // Monta mapa rápido de preferências (leitura — só para exibir status)
   const prefMap = useMemo(() => {
     const map = {}
     for (const p of preferences) {
@@ -38,93 +51,115 @@ export default function Veiculos() {
     return map
   }, [preferences])
 
-  const toggleMut = useMutation({
-    mutationFn: ({ id, next }) => api.setPreference('vehicle', id, next),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['operator-prefs'] }),
-    onError:    (err) => alert(`Erro: ${err.message}`),
-  })
-
   if (lv || lp) return <PageSpinner />
 
-  // Separa por status de preferência
-  const active   = vehicles.filter((v) => prefMap[v.id] !== false)
-  const inactive = vehicles.filter((v) => prefMap[v.id] === false)
+  const isError = ev || ep
+  function retry() {
+    refetchVehicles()
+    refetchPreferences()
+  }
+
+  if (isError) {
+    return (
+      <div className="py-16 text-center">
+        <AlertTriangle size={32} className="mx-auto text-red-400 mb-3" />
+        <p className="text-sm font-medium text-gray-700">{t.errorTitle}</p>
+        <button
+          onClick={retry}
+          className="mt-4 inline-flex items-center justify-center min-h-11 px-4 text-sm font-semibold text-brand hover:underline"
+        >
+          {t.errorRetry}
+        </button>
+      </div>
+    )
+  }
+
+  // Model B: veículo é operado a menos que exista preferência explícita is_active === false
+  const operating = vehicles.filter((v) => prefMap[v.id] !== false)
+  const blocked    = vehicles.filter((v) => prefMap[v.id] === false)
+
+  const waMsg = encodeURIComponent('Olá! Gostaria de solicitar uma mudança na frota liberada para minha cooperativa.')
 
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">Minha Frota</h2>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Selecione os veículos com que sua cooperativa trabalha.
-          Apenas administradores podem cadastrar ou editar veículos.
-        </p>
+        <h2 className="text-base font-semibold text-gray-900">{t.title}</h2>
+        <p className="text-xs text-gray-500 mt-0.5">{t.subtitle}</p>
       </div>
 
-      {/* Ativos */}
-      <Card>
-        <CardHeader>
-          <p className="text-sm font-semibold text-gray-700">
-            Trabalhando ({active.length})
-          </p>
-        </CardHeader>
-        <div className="divide-y divide-gray-100">
-          {active.map((v) => (
-            <VehicleRow
-              key={v.id}
-              vehicle={v}
-              enabled
-              onToggle={() => toggleMut.mutate({ id: v.id, next: false })}
-              pending={toggleMut.isPending}
-            />
-          ))}
-          {active.length === 0 && (
-            <CardBody>
-              <p className="text-sm text-gray-600">Nenhum veículo ativado. Ative abaixo.</p>
-            </CardBody>
+      {/* Banner permanente — somente leitura */}
+      <div className="bg-brand/5 border border-brand/10 rounded-xl px-4 py-3 flex items-start gap-3">
+        <Info size={18} className="text-brand shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-gray-700">{t.readonlyNote}</p>
+          {ADMIN_WHATSAPP && (
+            <a
+              href={`https://wa.me/${ADMIN_WHATSAPP}?text=${waMsg}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 mt-2 min-h-11 text-sm font-semibold text-brand hover:underline"
+            >
+              <MessageCircle size={15} />
+              {t.requestChange}
+            </a>
           )}
         </div>
-      </Card>
+      </div>
 
-      {/* Inativos */}
-      {inactive.length > 0 && (
-        <Card>
-          <CardHeader>
-            <p className="text-sm font-semibold text-gray-500">
-              Não trabalho com ({inactive.length})
-            </p>
-          </CardHeader>
-          <div className="divide-y divide-gray-100">
-            {inactive.map((v) => (
-              <VehicleRow
-                key={v.id}
-                vehicle={v}
-                enabled={false}
-                onToggle={() => toggleMut.mutate({ id: v.id, next: true })}
-                pending={toggleMut.isPending}
-              />
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {vehicles.length === 0 && (
+      {vehicles.length === 0 ? (
         <Card>
           <CardBody>
             <div className="py-10 text-center">
               <Car size={32} className="mx-auto text-gray-700 mb-2" />
-              <p className="text-sm text-gray-600">Nenhum veículo no catálogo ainda.</p>
-              <p className="text-xs text-gray-700 mt-1">Aguarde o administrador cadastrar os veículos.</p>
+              <p className="text-sm text-gray-600">{t.emptyCatalogTitle}</p>
+              <p className="text-xs text-gray-700 mt-1">{t.emptyCatalogDesc}</p>
             </div>
           </CardBody>
         </Card>
+      ) : (
+        <>
+          {/* Você opera */}
+          <Card>
+            <CardHeader>
+              <p className="text-sm font-semibold text-gray-700">{t.sectionOperating(operating.length)}</p>
+            </CardHeader>
+            <div className="divide-y divide-gray-100">
+              {operating.map((v) => (
+                <VehicleRow key={v.id} vehicle={v} operating />
+              ))}
+              {operating.length === 0 && (
+                <CardBody>
+                  <div className="py-6 text-center">
+                    <p className="text-sm font-medium text-gray-700">{t.emptyReleasedTitle}</p>
+                    <p className="text-xs text-gray-500 mt-1">{t.emptyReleasedDesc}</p>
+                  </div>
+                </CardBody>
+              )}
+            </div>
+          </Card>
+
+          {/* Não liberados */}
+          {blocked.length > 0 && (
+            <Card>
+              <CardHeader>
+                <p className="text-sm font-semibold text-gray-500">{t.sectionBlocked(blocked.length)}</p>
+              </CardHeader>
+              <div className="divide-y divide-gray-100">
+                {blocked.map((v) => (
+                  <VehicleRow key={v.id} vehicle={v} operating={false} />
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
       )}
     </div>
   )
 }
 
-function VehicleRow({ vehicle: v, enabled, onToggle, pending }) {
+function VehicleRow({ vehicle: v, operating }) {
   return (
-    <div className={`flex items-center gap-3 px-5 py-3 transition-opacity ${enabled ? '' : 'opacity-50'}`}>
+    <div className={`flex items-center gap-3 px-5 py-3 transition-opacity ${operating ? '' : 'opacity-60'}`}>
       <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
         {v.image_url
           ? <img src={v.image_url} alt={v.name} className="w-full h-full object-cover" />
@@ -139,16 +174,17 @@ function VehicleRow({ vehicle: v, enabled, onToggle, pending }) {
           <span>{v.seat_capacity} pax</span>
         </div>
       </div>
-      <button
-        onClick={onToggle}
-        disabled={pending}
-        title={enabled ? 'Desativar da minha frota' : 'Ativar na minha frota'}
-        className="shrink-0 disabled:opacity-50"
-      >
-        {enabled
-          ? <ToggleRight size={26} className="text-brand" />
-          : <ToggleLeft  size={26} className="text-gray-600" />}
-      </button>
+      {operating ? (
+        <span className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+          <CheckCircle2 size={13} />
+          {t.statusOperating}
+        </span>
+      ) : (
+        <span className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+          <MinusCircle size={13} />
+          {t.statusBlocked}
+        </span>
+      )}
     </div>
   )
 }

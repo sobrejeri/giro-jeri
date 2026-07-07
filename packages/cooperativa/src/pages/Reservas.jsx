@@ -3,13 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarCheck, Users, MapPin, Car, CheckCircle2,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
-  DollarSign, Send, Clock,
+  DollarSign, Send, Clock, ShieldAlert,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
+import { elevatedModeCopy } from '../copy/fleet'
 
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }
 
@@ -384,6 +386,8 @@ function QuoteRequestCard({ quote, onQuote }) {
 
 // ── Página principal ──────────────────────────────────────
 export default function Reservas() {
+  const { user }    = useAuth()
+  const isElevated  = user?.user_type === 'admin'
   const [tab,        setTab]       = useState('pending')
   const [toast,      setToast]     = useState(null)
   const [accepting,  setAccepting] = useState(null)
@@ -540,6 +544,20 @@ export default function Reservas() {
           <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
         </button>
       </div>
+
+      {/* Faixa modo administrador — visível só quando o usuário logado é admin */}
+      {isElevated && (
+        <div
+          role="status"
+          className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5"
+        >
+          <ShieldAlert size={16} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-bold text-amber-800">{elevatedModeCopy.badge}</p>
+            <p className="text-xs text-amber-700 mt-0.5">{elevatedModeCopy.desc}</p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex bg-gray-100 rounded-xl p-1 mb-5">

@@ -7,6 +7,8 @@ import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance } from '../services/priceEngine.js'
+import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
+import { sweepExpiredLegBookings } from '../services/legFlow.js'
 
 const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -212,6 +214,153 @@ async function getSplitContext(booking, chargedTotal, cfg) {
   return { sellerAccessToken: opMp.token, applicationFee }
 }
 
+// =============================================================================
+// MOTOR DE PERNAS (Etapa 2, Onda A) — split nativo N-recebedores, atrás da
+// flag booking_legs_engine_enabled. Escopo: só itens por veículo (privativo +
+// transfer de rota) — únicos que geram booking_legs hoje.
+// =============================================================================
+
+// Soma o leg_price das pernas ACEITAS por operador. Map<operatorId, valor>.
+async function getAcceptedLegRecipients(bookingId) {
+  const { data: legs, error } = await supabase
+    .from('booking_legs')
+    .select('operator_id, leg_price')
+    .eq('booking_id', bookingId)
+    .eq('status_leg', 'accepted')
+  if (error) throw error
+  const byOperator = new Map()
+  for (const l of legs || []) {
+    if (!l.operator_id) continue
+    byOperator.set(l.operator_id, (byOperator.get(l.operator_id) || 0) + Number(l.leg_price))
+  }
+  return byOperator
+}
+
+// Distribui `totalCents` (inteiro) entre N recebedores proporcionalmente a
+// `weights`, somando EXATAMENTE ao total (método do maior resto). Trabalha em
+// centavos inteiros para não acumular drift de float, e garante o invariante
+// que o split nativo do MP exige: Σ(amounts) === transaction_amount.
+function allocateCents(totalCents, weights) {
+  const n = weights.length
+  if (n === 0) return []
+  let sum = weights.reduce((a, b) => a + b, 0)
+  let w   = weights
+  if (sum <= 0) { w = weights.map(() => 1); sum = n } // pesos degenerados → igual
+  const raw   = w.map((x) => (totalCents * x) / sum)
+  const cents = raw.map((x) => Math.floor(x))
+  const rest  = totalCents - cents.reduce((a, b) => a + b, 0) // centavos a distribuir (0..n-1)
+  const order = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac) // maiores restos primeiro
+  for (let k = 0; k < rest; k++) cents[order[k % n].i] += 1
+  return cents
+}
+
+// Contexto de split "consciente de pernas": se o pedido não tem pernas (Onda B
+// ainda não implementada — compartilhado/cotação) ou tem pernas mas só 1
+// cooperativa aceitou, retorna o MESMO formato de getSplitContext (caminho de
+// 1 recebedor intacto, sem chamada diferente ao MP). Só quando há 2+
+// cooperativas distintas entre as pernas aceitas é que monta o split nativo
+// com `disbursements` (N recebedores em 1 pagamento).
+async function getSplitContextForBooking(booking, chargedTotal, cfg) {
+  const byOperator = await getAcceptedLegRecipients(booking.id)
+
+  if (byOperator.size === 0) {
+    // Sem pernas aceitas registradas (pedido sem booking_legs, ou pernas sem
+    // operator_id) — cai no caminho legado por bookings.operator_id.
+    const legacy = await getSplitContext(booking, chargedTotal, cfg)
+    return legacy ? { ...legacy, mode: 'single' } : null
+  }
+
+  if (byOperator.size === 1) {
+    const [operatorId] = [...byOperator.keys()]
+    const legacy = await getSplitContext({ ...booking, operator_id: operatorId }, chargedTotal, cfg)
+    return legacy ? { ...legacy, mode: 'single' } : null
+  }
+
+  // N recebedores — todas as cooperativas precisam ter conta MP conectada
+  // (pré-requisito do desenho, migration 036/OAuth). Sem token/mp_user_id de
+  // alguma delas, aborta com erro claro em vez de cobrar sem repassar.
+  // Particiona o TOTAL COBRADO (chargedTotal) — não a soma dos leg_price —
+  // proporcionalmente ao leg_price de cada cooperativa, em centavos inteiros e
+  // somando exato ao total. Assim Σ(disbursements.amount) == transaction_amount
+  // (invariante do split nativo do MP) mesmo com surcharge de data/feriado
+  // embutida no total e sem drift de arredondamento entre recebedores.
+  const entries    = [...byOperator.entries()]                       // [operatorId, sliceReais]
+  const totalCents = Math.round(Number(chargedTotal) * 100)
+  const weights    = entries.map(([, slice]) => Math.round(Number(slice) * 100))
+  const shareCents = allocateCents(totalCents, weights)
+
+  const recipients = []
+  let totalApplicationFeeCents = 0
+  for (let idx = 0; idx < entries.length; idx++) {
+    const [operatorId] = entries[idx]
+    const opMp = await getOperatorMp(operatorId)
+    if (!opMp?.token) {
+      throw new Error(`Cooperativa ${operatorId} sem conta Mercado Pago conectada — split multi-cooperativa exige todas as pernas aceitas conectadas.`)
+    }
+    const { data: op } = await supabase.from('users').select('mp_user_id').eq('id', operatorId).single()
+    if (!op?.mp_user_id) {
+      throw new Error(`Cooperativa ${operatorId} sem mp_user_id (reconecte a conta Mercado Pago) — split multi-cooperativa bloqueado.`)
+    }
+    const pct      = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
+    const amtCents = shareCents[idx]
+    // Comissão da plataforma sobre a fatia da perna, nunca maior que a fatia.
+    const feeCents = Math.min(amtCents, Math.round(amtCents * (pct / 100)))
+    totalApplicationFeeCents += feeCents
+    recipients.push({
+      operatorId,
+      collectorId:        op.mp_user_id,
+      amount:              amtCents / 100,
+      applicationFee:      feeCents / 100,
+      externalReference:  `${booking.id}:${operatorId}`,
+    })
+  }
+
+  return { mode: 'multi', recipients, totalApplicationFee: totalApplicationFeeCents / 100 }
+}
+
+// ── Cutoff de solicitação (R6) ─────────────────────────────────────────
+// Passeios/transfers podem ter horário limite para reserva no MESMO dia
+// (tours.booking_cutoff_time / transfers.booking_cutoff_time). Passou do
+// horário → só a partir do dia seguinte. O frontend já bloqueia o calendário;
+// esta é a defesa real no servidor. America/Fortaleza é UTC-3 o ano todo.
+function fortalezaNowParts() {
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Fortaleza',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date()).reduce((acc, x) => { acc[x.type] = x.value; return acc }, {})
+  return { todayIso: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) }
+}
+
+async function checkBookingCutoff({ service_type, service_id, service_date_iso }) {
+  if (!service_id || !service_date_iso) return null
+  const { todayIso, minutes: nowMin } = fortalezaNowParts()
+  // Só restringe o próprio dia; datas futuras estão sempre liberadas.
+  if (service_date_iso !== todayIso) return null
+
+  let cutoff = null
+  if (service_type === 'tour') {
+    const { data } = await supabase.from('tours')
+      .select('booking_cutoff_time').eq('id', service_id).maybeSingle()
+    cutoff = data?.booking_cutoff_time || null
+  } else if (service_type === 'transfer') {
+    // service_id é um transfer_route; o cutoff mora no transfer pai.
+    const { data } = await supabase.from('transfer_routes')
+      .select('transfers ( booking_cutoff_time )').eq('id', service_id).maybeSingle()
+    cutoff = data?.transfers?.booking_cutoff_time || null
+  }
+  if (!cutoff) return null
+
+  const cutoffMin = Number(String(cutoff).slice(0, 2)) * 60 + Number(String(cutoff).slice(3, 5))
+  if (nowMin >= cutoffMin) {
+    const label = `${String(cutoff).slice(0, 2)}h${String(cutoff).slice(3, 5)}`
+    return `Este serviço só aceita solicitações até ${label} para o mesmo dia. Escolha a partir de amanhã.`
+  }
+  return null
+}
+
 // ── POST /api/payments/intent ───────────────────────────
 router.post('/intent', authenticate, async (req, res, next) => {
   try {
@@ -230,6 +379,12 @@ router.post('/intent', authenticate, async (req, res, next) => {
       coupon_code, existing_booking_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc,
     } = parsed.data
+
+    // R6: reserva nova (não repagamento) respeita o cutoff do serviço.
+    if (!existing_booking_id) {
+      const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
+      if (cutoffErr) return res.status(400).json({ error: cutoffErr })
+    }
 
     // ── Total autoritativo: o SERVIDOR é a fonte de verdade do valor cobrado.
     //    Reserva nova → recalcula (alta temporada/feriado). Reserva já existente
@@ -274,6 +429,27 @@ router.post('/intent', authenticate, async (req, res, next) => {
       bookingCode = existing.booking_code
       // Pagamento de reserva já solicitada/aceita: o valor cobrado é o do banco.
       chargedTotal = Number(existing.total_amount)
+
+      // ── Motor de pernas (Onda A) — pay-after-all na API ─────────────────
+      // A trava do banco (enforce_pay_after_all_legs) já bloqueia isso a
+      // nível de UPDATE de bookings; aqui é só a mensagem amigável ANTES de
+      // gerar cobrança no gateway (evita criar PIX/cartão que nunca vai poder
+      // confirmar a reserva).
+      if (await isBookingLegsEngineEnabled()) {
+        const { data: legs, error: legsErr } = await supabase
+          .from('booking_legs')
+          .select('status_leg')
+          .eq('booking_id', booking.id)
+        if (!legsErr && legs && legs.length > 0) {
+          const relevant = legs.filter((l) => l.status_leg !== 'cancelled')
+          const allAccepted = relevant.length > 0 && relevant.every((l) => l.status_leg === 'accepted')
+          if (!allAccepted) {
+            return res.status(409).json({
+              error: 'Ainda há perna(s) deste pedido aguardando aceite de cooperativa. Aguarde o combo fechar ou pague só o que já foi aceito (checkout parcial).',
+            })
+          }
+        }
+      }
     } else {
       // ── 2. Gera código da reserva ──────────────────────
       bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
@@ -340,9 +516,24 @@ router.post('/intent', authenticate, async (req, res, next) => {
       // Split automático: se a cooperativa atribuída está conectada ao Mercado
       // Pago, o pagamento cai NA conta dela e a comissão da plataforma vira
       // application_fee. Sem conexão → cai na conta da plataforma (sem split).
-      const split = await getSplitContext(booking, chargedTotal, cfg)
+      // Motor de pernas (Onda A) ligado: quando o pedido tem 2+ cooperativas
+      // com pernas aceitas, monta split nativo N-recebedores; com 1 (ou sem
+      // pernas), cai no MESMO caminho de sempre (mode:'single').
+      const split = (await isBookingLegsEngineEnabled())
+        ? await getSplitContextForBooking(booking, chargedTotal, cfg)
+        : await getSplitContext(booking, chargedTotal, cfg)
 
       if (isCard) {
+        // Split multi-recebedor (N cooperativas) via cartão ainda não
+        // implementado nesta Onda — o mecanismo de `disbursements` do MP foi
+        // validado aqui só para PIX. Bloqueia com mensagem clara em vez de
+        // cobrar sem conseguir repassar corretamente. Ver Riscos/Objeções.
+        if (split?.mode === 'multi') {
+          return res.status(422).json({
+            error: 'Este pedido tem cooperativas diferentes por perna. Pagamento com cartão para pedidos multi-cooperativa ainda não é suportado — pague via PIX.',
+          })
+        }
+
         // ── Cartão: sem fallback fake — erro propaga ──────
         const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
         const userInfo = await supabase.from('users').select('email').eq('id', req.user.id).single()
@@ -378,23 +569,37 @@ router.post('/intent', authenticate, async (req, res, next) => {
         }
       } else {
         // ── PIX ───────────────────────────────────────────
-        const { createPixPayment } = await import('../services/mercadoPago.js')
+        const { createPixPayment, createPixPaymentSplit, buildDisbursements } = await import('../services/mercadoPago.js')
         const userInfo = await supabase.from('users').select('full_name, email').eq('id', req.user.id).single()
         let pixData
         try {
-          pixData = await createPixPayment({
-            amount:      chargedTotal,
-            description: service_name || `Reserva ${bookingCode}`,
-            payerEmail:  userInfo.data?.email,
-            payerName:   userInfo.data?.full_name,
-            // IMPORTANTE: para PIX não envie payerDoc/entityType/entity_type.
-            // O erro do Brick "entityType only receives individual or association"
-            // costuma aparecer quando o front/backend manda CPF/CNPJ/fisica/juridica
-            // como entityType. PIX funciona só com email/nome do pagador.
-            externalRef: booking.id,
-            sellerAccessToken: split?.sellerAccessToken,
-            applicationFee:    split?.applicationFee,
-          })
+          if (split?.mode === 'multi') {
+            // Split nativo N-recebedores: 1 pagamento com `disbursements` — um
+            // por cooperativa com perna aceita. Ver Riscos/Objeções (a validar
+            // em staging com app marketplace com Split habilitado).
+            pixData = await createPixPaymentSplit({
+              amount:       chargedTotal,
+              description:  service_name || `Reserva ${bookingCode}`,
+              payerEmail:   userInfo.data?.email,
+              payerName:    userInfo.data?.full_name,
+              externalRef:  booking.id,
+              disbursements: buildDisbursements(split.recipients),
+            })
+          } else {
+            pixData = await createPixPayment({
+              amount:      chargedTotal,
+              description: service_name || `Reserva ${bookingCode}`,
+              payerEmail:  userInfo.data?.email,
+              payerName:   userInfo.data?.full_name,
+              // IMPORTANTE: para PIX não envie payerDoc/entityType/entity_type.
+              // O erro do Brick "entityType only receives individual or association"
+              // costuma aparecer quando o front/backend manda CPF/CNPJ/fisica/juridica
+              // como entityType. PIX funciona só com email/nome do pagador.
+              externalRef: booking.id,
+              sellerAccessToken: split?.sellerAccessToken,
+              applicationFee:    split?.applicationFee,
+            })
+          }
         } catch (mpErr) {
           console.error('[intent] PIX falhou:', mpErr.message)
           return res.status(422).json({
@@ -545,6 +750,10 @@ router.post('/request', authenticate, async (req, res, next) => {
       await validateTransferAdvance(service_date_iso, service_time || '00:00')
     }
 
+    // R6: respeita o horário limite de solicitação do serviço.
+    const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
+    if (cutoffErr) return res.status(400).json({ error: cutoffErr })
+
     const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
@@ -602,6 +811,112 @@ router.post('/request', authenticate, async (req, res, next) => {
     })
 
     res.json({ booking_id: booking.id, booking_code: bookingCode, amount: chargedTotal })
+  } catch (err) { next(err) }
+})
+
+// ── POST /api/bookings/:id/checkout-accepted ───────────
+// Motor de pernas (Etapa 2, Onda A) — checkout parcial (R3): cancela
+// ATOMICAMENTE as pernas ainda `awaiting_acceptance` e deixa o pedido pronto
+// para pagar só o que já foi aceito. Nunca há reembolso — só se cobra o que
+// já está aceito (o total é recalculado para a soma das pernas aceitas).
+router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, next) => {
+  try {
+    if (!(await isBookingLegsEngineEnabled())) {
+      return res.status(404).json({ error: 'Motor de pernas não habilitado' })
+    }
+
+    const { data: booking, error: bErr } = await supabase
+      .from('bookings')
+      .select('id, user_id, booking_code, status_commercial, payment_deadline_at')
+      .eq('id', req.params.id)
+      .maybeSingle()
+    if (bErr) throw bErr
+    if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' })
+    // Prazo de pagamento vencido → a reserva será cancelada pela varredura;
+    // recusa o checkout com mensagem clara em vez de deixar pagar fora do prazo.
+    if (booking.payment_deadline_at && new Date(booking.payment_deadline_at) < new Date()) {
+      await sweepExpiredLegBookings().catch(() => {})
+      return res.status(409).json({ error: 'Prazo de pagamento expirado — o veículo ficou indisponível. Faça uma nova solicitação.' })
+    }
+    // Checkout é ação do CLIENTE (R3): só o turista dono do pedido ou um admin.
+    // Bloqueia operadores/coop e turistas de pedidos alheios — senão qualquer
+    // operador poderia cancelar as pernas pendentes e reescrever o total de
+    // uma reserva que não é dele.
+    const isOwnerTourist = req.user.user_type === 'tourist' && booking.user_id === req.user.id
+    const isAdmin        = req.user.user_type === 'admin'
+    if (!isOwnerTourist && !isAdmin) {
+      return res.status(403).json({ error: 'Sem permissão' })
+    }
+    if (!['awaiting_acceptance', 'awaiting_payment'].includes(booking.status_commercial)) {
+      return res.status(409).json({ error: `Reserva não está aguardando aceite/pagamento (status: ${booking.status_commercial})` })
+    }
+
+    // Cancelamento atômico: só afeta pernas AINDA pendentes no momento exato
+    // do UPDATE — uma coop que aceite no mesmo instante "vence" a corrida
+    // porque a guarda WHERE status_leg='awaiting_acceptance' não vai mais
+    // encontrar a linha dela (já virou 'accepted').
+    const { data: cancelledLegs, error: cancelErr } = await supabase
+      .from('booking_legs')
+      .update({ status_leg: 'cancelled' })
+      .eq('booking_id', booking.id)
+      .eq('status_leg', 'awaiting_acceptance')
+      .select('id, vehicle_name_snapshot, leg_price')
+    if (cancelErr) throw cancelErr
+
+    const { data: remainingLegs, error: legsErr } = await supabase
+      .from('booking_legs')
+      .select('id, status_leg, leg_price')
+      .eq('booking_id', booking.id)
+    if (legsErr) throw legsErr
+
+    const accepted = (remainingLegs || []).filter((l) => l.status_leg === 'accepted')
+    if (accepted.length === 0) {
+      return res.status(400).json({ error: 'Nenhuma perna foi aceita ainda — não há o que pagar. Aguarde uma cooperativa aceitar.' })
+    }
+
+    const dynamicTotal = Math.round(accepted.reduce((s, l) => s + Number(l.leg_price), 0) * 100) / 100
+
+    // Ajusta o total autoritativo do pedido para a soma do que sobrou aceito e
+    // avança para awaiting_payment. A migration 043 corrigiu
+    // booking_all_legs_accepted() para IGNORAR pernas canceladas, então o
+    // trigger enforce_pay_after_all_legs não bloqueia mais o checkout parcial.
+    // O try/catch abaixo permanece apenas como defesa (nunca devolver 500 cru).
+    let advancedToPayment = booking.status_commercial === 'awaiting_payment'
+    if (!advancedToPayment) {
+      try {
+        const { data: updRows, error: upErr } = await supabase
+          .from('bookings')
+          .update({ total_amount: dynamicTotal, status_commercial: 'awaiting_payment' })
+          .eq('id', booking.id)
+          .eq('status_commercial', 'awaiting_acceptance')
+          .select('id')
+        if (upErr) throw upErr
+        advancedToPayment = (updRows?.length || 0) > 0
+      } catch (err) {
+        console.error('[checkout-accepted] avanço para awaiting_payment bloqueado (ver booking_all_legs_accepted) booking=%s err=%s',
+          booking.id, err.message)
+        // Ainda assim já cancelamos as pernas pendentes e recalculamos o total —
+        // atualiza só o total_amount, sem trocar o status_commercial.
+        await supabase.from('bookings').update({ total_amount: dynamicTotal }).eq('id', booking.id)
+      }
+    } else {
+      // Já estava awaiting_payment (combo tinha fechado 100% antes deste
+      // checkout parcial) — sincroniza o total defensivamente.
+      await supabase.from('bookings').update({ total_amount: dynamicTotal }).eq('id', booking.id)
+    }
+
+    res.json({
+      ok:                true,
+      booking_id:        booking.id,
+      booking_code:      booking.booking_code,
+      cancelled_legs:    cancelledLegs || [],
+      accepted_legs:     accepted.length,
+      dynamic_total:     dynamicTotal,
+      ready_to_pay:      advancedToPayment,
+      ...(advancedToPayment ? {} : {
+        warning: 'Pernas pendentes canceladas e total recalculado, mas o pedido não foi liberado para pagamento. Tente novamente; se persistir, acione o suporte.',
+      }),
+    })
   } catch (err) { next(err) }
 })
 
@@ -846,6 +1161,70 @@ router.post('/manual-confirm', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── Motor de pernas (Etapa 2, Onda A) — contabilidade por perna ─────────
+// Registra 1 par de lançamentos (commission_platform/payout_operator) em
+// financial_ledger + 1 linha em commissions POR PERNA aceita, cada uma com
+// leg_id/operator_id (migration 042). Sem isso, /operator/financial não
+// consegue separar receita entre cooperativas diferentes no mesmo pedido —
+// risco já registrado no design (seção 10). NÃO mexe nos lançamentos de nível
+// pedido (booking_gross/gateway_fee/booking_net, leg_id NULL).
+async function recordLegAccounting(booking, payment) {
+  if (!booking?.id) return
+  if (!(await isBookingLegsEngineEnabled())) return
+
+  const { data: legs, error } = await supabase
+    .from('booking_legs')
+    .select('id, operator_id, leg_price')
+    .eq('booking_id', booking.id)
+    .eq('status_leg', 'accepted')
+  if (error) throw error
+  if (!legs || legs.length === 0) return
+
+  const cfg = await getPaymentSettings()
+  const effectiveDate = new Date().toISOString().slice(0, 10)
+  const ledgerRows = []
+  const commissionRows = []
+
+  for (const leg of legs) {
+    if (!leg.operator_id) continue
+    const opMp = await getOperatorMp(leg.operator_id)
+    const pct = (opMp?.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
+    const commission = Math.round(Number(leg.leg_price) * (pct / 100) * 100) / 100
+    const payout = Math.round((Number(leg.leg_price) - commission) * 100) / 100
+
+    ledgerRows.push(
+      { booking_id: booking.id, payment_id: payment.id, leg_id: leg.id, entry_type: 'commission_platform', description: `Comissão plataforma — perna ${leg.id} (${booking.booking_code})`, amount: commission, direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+      { booking_id: booking.id, payment_id: payment.id, leg_id: leg.id, entry_type: 'payout_operator',     description: `Repasse cooperativa — perna ${leg.id} (${booking.booking_code})`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+    )
+    commissionRows.push({
+      booking_id:         booking.id,
+      leg_id:             leg.id,
+      operator_id:        leg.operator_id,
+      commission_model:   'percentage',
+      commission_percent: pct,
+      commission_amount:  commission,
+      platform_amount:    commission,
+      operator_amount:    payout,
+      payout_status:      'pending',
+    })
+  }
+
+  // Upsert idempotente contra os índices únicos da migration 046: uma corrida
+  // webhook+polling (ou um retry após falha parcial) NÃO duplica lançamentos.
+  if (ledgerRows.length > 0) {
+    const { error: lErr } = await supabase
+      .from('financial_ledger')
+      .upsert(ledgerRows, { onConflict: 'leg_id,entry_type', ignoreDuplicates: true })
+    if (lErr) throw new Error(`ledger por perna: ${lErr.message}`)
+  }
+  if (commissionRows.length > 0) {
+    const { error: cErr } = await supabase
+      .from('commissions')
+      .upsert(commissionRows, { onConflict: 'leg_id', ignoreDuplicates: true })
+    if (cErr) throw new Error(`commissions por perna: ${cErr.message}`)
+  }
+}
+
 // ── Helpers ────────────────────────────────────────────
 async function onPaymentApproved(payment) {
   await supabase.from('payments').update({ status: 'approved', paid_at: new Date().toISOString() }).eq('id', payment.id)
@@ -904,6 +1283,13 @@ async function onPaymentApproved(payment) {
       await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
     }
   }
+
+  // Contabilidade por perna (Etapa 2, Onda A) — só roda quando o motor está
+  // ligado E o pedido tem pernas aceitas. Fora do gate ledger_created e
+  // idempotente (upsert, migration 046): se falhar aqui, a próxima aprovação/
+  // polling reprocessa sem duplicar. Best-effort: nunca derruba a aprovação.
+  await recordLegAccounting(booking, payment).catch((err) =>
+    console.error('[ledger] contabilidade por perna falhou booking=%s err=%s', payment.booking_id, err.message))
 
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
   sendConfirmationEmail(booking).catch((err) =>

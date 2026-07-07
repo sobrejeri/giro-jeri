@@ -9,7 +9,7 @@ import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
-  ChevronLeft, Search, Home as HomeIcon,
+  ChevronLeft, Search,
 } from 'lucide-react'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
@@ -487,15 +487,6 @@ export default function Feed() {
   const { userCoords, region, getServiceQuery } = useRegion()
   const qc = useQueryClient()
 
-  // Onde exibir os Destaques (reversível, salvo no aparelho)
-  const [storiesPlace, setStoriesPlace] = useState(
-    () => localStorage.getItem('turiva_stories_place') || 'descubra'
-  )
-  function moveStoriesToHome() {
-    localStorage.setItem('turiva_stories_place', 'home')
-    setStoriesPlace('home')
-  }
-
   const center = (userCoords?.lat != null && userCoords?.lon != null)
     ? userCoords
     : (region?.center_latitude != null
@@ -641,22 +632,11 @@ export default function Feed() {
             </button>
             <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Descubra a Vila</h1>
           </div>
-          <p className="text-[12px] text-gray-400 text-center mt-1">Eventos, promoções e recomendações em Jericoacoara</p>
         </div>
       </header>
 
-      {/* ── Destaques (highlights) — aqui quando o flag aponta 'descubra' ── */}
-      {storiesPlace === 'descubra' && (
-        <>
-          <Stories className="lg:max-w-2xl lg:mx-auto" />
-          <button
-            onClick={moveStoriesToHome}
-            className="mx-auto flex items-center gap-1.5 text-[11px] text-gray-400 active:text-gray-600 py-1.5"
-          >
-            <HomeIcon size={12} /> Mover destaques para o Início
-          </button>
-        </>
-      )}
+      {/* ── Destaques (highlights) — fixos na Descubra ───────────────────── */}
+      <Stories className="lg:max-w-2xl lg:mx-auto" />
 
       {/* ── Buscador em destaque ──────────────────────────────────────────── */}
       <div className="max-w-2xl mx-auto px-4 pt-3">
@@ -679,6 +659,7 @@ export default function Feed() {
             </button>
           )}
         </div>
+        <p className="text-[12px] text-gray-400 text-center mt-2">Eventos, promoções e recomendações em Jericoacoara</p>
       </div>
 
       {/* ── Filtros (cards) — abaixo do buscador ───────────────────────────── */}
