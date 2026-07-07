@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Camera, Volume2, VolumeX, MoreVertical, Trash2 } from 'lucide-react'
+import { X, Camera, Volume2, VolumeX, MoreVertical, Trash2, ImageOff } from 'lucide-react'
 
 // Selo verificado estilo Instagram (azul + check branco)
 function VerifiedBadge({ size = 15 }) {
@@ -31,6 +31,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
   const [paused, setPaused] = useState(false)
   const [muted, setMuted] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [mediaError, setMediaError] = useState(false)
   const intervalRef = useRef(null)
   const videoRef = useRef(null)
   const touchStartRef = useRef(null)
@@ -41,6 +42,10 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
   const story        = groupStories[storyIndex]
   const isVideo      = story?.media_type === 'video'
   const duration     = story?.duration_sec || 20
+  // Fundo desfocado: imagens usam a própria mídia; vídeos usam capa/avatar do destaque
+  const backdropSrc  = isVideo
+    ? (group?.cover_image_url || story?.avatar_url || null)
+    : story?.media_url
 
   // ── Navegação entre grupos (destaques) ─────────────────────────────────────
   const nextGroup = useCallback(() => {
@@ -69,6 +74,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
   useEffect(() => {
     setProgress(0)
     setPaused(false)
+    setMediaError(false)
     const v = videoRef.current
     if (v) {
       v.currentTime = 0
@@ -240,40 +246,55 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {isVideo ? (
-          <video
-            ref={videoRef}
-            key={story.id}
-            src={story.media_url}
-            playsInline
-            className="relative z-10 w-full h-full object-contain"
-            onEnded={goNext}
-            onTimeUpdate={() => {
-              const v = videoRef.current
-              if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
-            }}
-          />
-        ) : story.media_url ? (
+        {story.media_url && !mediaError ? (
           <>
-            {/* Fundo desfocado preenche as bordas sem cortar flyers verticais */}
-            <img
-              src={story.media_url}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-50"
-              draggable={false}
-            />
-            <img
-              key={story.id}
-              src={story.media_url}
-              alt={story.display_name}
-              className="relative z-10 w-full h-full object-contain"
-              draggable={false}
-            />
+            {/* Fundo desfocado preenche as bordas sem cortar flyers/vídeos verticais.
+                Para vídeo usa a capa/avatar do destaque (a URL do vídeo não é imagem). */}
+            {backdropSrc && (
+              <img
+                src={backdropSrc}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-50"
+                draggable={false}
+              />
+            )}
+            {isVideo ? (
+              <video
+                ref={videoRef}
+                key={story.id}
+                src={story.media_url}
+                playsInline
+                className="relative z-10 w-full h-full object-contain"
+                onEnded={goNext}
+                onError={() => setMediaError(true)}
+                onTimeUpdate={() => {
+                  const v = videoRef.current
+                  if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
+                }}
+              />
+            ) : (
+              <img
+                key={story.id}
+                src={story.media_url}
+                alt={story.display_name}
+                className="relative z-10 w-full h-full object-contain"
+                draggable={false}
+                onError={() => setMediaError(true)}
+              />
+            )}
           </>
         ) : (
-          <div className="w-full h-full bg-gray-900 flex items-center justify-center">
-            <Camera size={48} className="text-white/20" />
+          <div className="w-full h-full bg-gray-900 flex flex-col items-center justify-center gap-3 px-8 text-center">
+            {mediaError ? (
+              <>
+                <ImageOff size={44} className="text-white/30" />
+                <p className="text-white/70 text-sm font-medium">Não foi possível carregar {isVideo ? 'o vídeo' : 'a imagem'}</p>
+                <p className="text-white/40 text-xs">Verifique a conexão ou reenvie a mídia no painel.</p>
+              </>
+            ) : (
+              <Camera size={48} className="text-white/20" />
+            )}
           </div>
         )}
 
