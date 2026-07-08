@@ -17,18 +17,16 @@ export default function CartFab() {
     pathname.startsWith('/cadastro') || pathname.startsWith('/carrinho')
   ) return null
 
-  // Passeios e Translados têm um resumo flutuante fixo no rodapé — o FAB do
-  // carrinho sobe pra ficar ACIMA dele, sem cobrir o botão "Adicionar ao
-  // carrinho". Nas demais telas fica na posição normal (logo acima da nav).
-  const aboveSummaryBar = pathname.startsWith('/passeios') || pathname.startsWith('/transfers')
+  // Passeios e Translados têm um resumo fixo no rodapé com o carrinho embutido
+  // (chip à esquerda da barra) — aqui o FAB solto não aparece, pra não cobrir o
+  // conteúdo que rola atrás dele. Nas demais telas o FAB segue normal.
+  if (pathname.startsWith('/passeios') || pathname.startsWith('/transfers')) return null
 
   return (
     <button
       onClick={() => navigate('/carrinho')}
       aria-label="Abrir carrinho"
-      className={`fixed z-40 right-4 lg:bottom-8 lg:right-8 w-14 h-14 rounded-full bg-brand shadow-lg shadow-brand/40 flex items-center justify-center active:scale-95 transition-transform ${
-        aboveSummaryBar ? 'bottom-[150px]' : 'bottom-[86px]'
-      }`}
+      className="fixed z-40 bottom-[86px] right-4 lg:bottom-8 lg:right-8 w-14 h-14 rounded-full bg-brand shadow-lg shadow-brand/40 flex items-center justify-center active:scale-95 transition-transform"
     >
       <ShoppingCart size={22} className="text-white" />
       <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-gray-900 text-white text-[11px] font-bold flex items-center justify-center border-2 border-white">

@@ -28,6 +28,14 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (carrinho embutido na barra)** — O FAB flutuante
+  cobria o conteúdo que rola atrás dele (botão do resumo, +/- de passageiros/
+  veículos). Solução: em Passeios/Translados o `CartFab` solto some, e o
+  carrinho vira um **chip dentro da barra de resumo** (canto esquerdo, ícone +
+  badge, leva a `/carrinho`) — parte do rodapé fixo, nunca sobre conteúdo.
+  Chip adicionado às barras principais: Tours (privativo) e Transfers (rota).
+  Arquivos: `CartFab.jsx`, `Tours.jsx`, `Transfers.jsx`.
+
 - **2026-07-08 · Agente B (FAB acima do resumo)** — O `CartFab` (carrinho
   flutuante) cobria o botão "Adicionar ao carrinho" do resumo em Passeios/
   Translados. Agora ele sobe para `bottom-[150px]` nessas rotas (`/passeios`,

@@ -9,7 +9,7 @@ import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
-  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
+  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search, ShoppingCart,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -329,7 +329,7 @@ export default function Transfers() {
   const navigate  = useNavigate()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
-  const { upsertItem: saveCartItem } = useCart()
+  const { upsertItem: saveCartItem, count: cartCount } = useCart()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
@@ -956,8 +956,20 @@ export default function Transfers() {
 
       {/* Bottom CTA */}
       <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
-        <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-          <div>
+        <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center gap-2 px-3 py-3">
+          {cartCount > 0 && (
+            <button
+              onClick={() => navigate('/carrinho')}
+              aria-label="Abrir carrinho"
+              className="relative shrink-0 w-10 h-10 rounded-xl bg-brand/10 flex items-center justify-center active:scale-95 transition-transform"
+            >
+              <ShoppingCart size={18} className="text-brand" />
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gray-900 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
+                {cartCount}
+              </span>
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
             <p className="text-[10px] text-gray-400">Total dos veículos</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
               {cartTotal

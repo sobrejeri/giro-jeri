@@ -10,7 +10,7 @@ import ToursDesktop from './ToursDesktop'
 import {
   MapPin, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
-  ChevronLeft, ChevronRight, X, Info, Bus, Search,
+  ChevronLeft, ChevronRight, X, Info, Bus, Search, ShoppingCart,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth,
@@ -255,7 +255,7 @@ export default function Tours() {
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
-  const { items: savedCartItems, upsertItem: saveCartItem } = useCart()
+  const { items: savedCartItems, upsertItem: saveCartItem, count: cartCount } = useCart()
 
   // "Retomar" do carrinho flutuante: restaura o rascunho salvo (data/pessoas/
   // veículos) do passeio escolhido. Os dados vivem no localStorage (CartContext).
@@ -724,9 +724,22 @@ export default function Tours() {
         const canContinue = cartHasItems && cartCapacity >= people
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
-            <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
+            <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center gap-2 px-3 py-3">
+              {/* Carrinho (aparece quando há itens salvos) */}
+              {cartCount > 0 && (
+                <button
+                  onClick={() => navigate('/carrinho')}
+                  aria-label="Abrir carrinho"
+                  className="relative shrink-0 w-10 h-10 rounded-xl bg-brand/10 flex items-center justify-center active:scale-95 transition-transform"
+                >
+                  <ShoppingCart size={18} className="text-brand" />
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gray-900 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
+                    {cartCount}
+                  </span>
+                </button>
+              )}
               {/* Resumo do que está selecionado */}
-              <div className="flex-1 min-w-0 mr-3">
+              <div className="flex-1 min-w-0 mr-1">
                 {cartHasItems ? (
                   <>
                     <p className="text-[13px] font-bold text-gray-900 truncate">
