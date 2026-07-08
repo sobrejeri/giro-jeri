@@ -28,6 +28,22 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (pré-seleção → carrinho)** — Assumi a atividade que o
+  **Agente A** estava fazendo quando bateu o limite semanal. ⚠️ O WIP dele
+  (+939/-8, visto no chat) **não foi enviado** ao remoto — ficou no container
+  dele; a branch `claude/jericoacoara-dynamic-location-ewp8t9` no origin estava
+  igual à GFBFR. Então **reimplementei** a pedido do usuário:
+  - **Tours (privativo)** e **Transfers (rota definida)**: adicionar veículos
+    virou **pré-seleção local** (removido o auto-save no carrinho). O botão
+    **"Continuar"** salva a pré-seleção no carrinho (`upsertItem`) e navega para
+    `/carrinho`, onde data/hora/saída são refinadas na edição do item.
+  - `canContinue`/`canBook` passaram a exigir só capacidade (veículos cobrindo
+    as pessoas) — horário/origem deixaram de ser obrigatórios na pré-seleção.
+  - Resumo do transfer: removidos "Data & Hora" e o acréscimo de temporada
+    (agora calculados no carrinho); mostra "Total dos veículos" + aviso. Botão
+    "Confirmar Transfer" → "Continuar". Removida a query de surcharge órfã.
+  - Arquivos: `Tours.jsx`, `Transfers.jsx`. Build turista OK.
+
 - **2026-07-08 · Agente A (carrinho/motor de pernas)** — Carrinho estilo ML
   (`/carrinho`): regra de capacidade dos veículos trava o Salvar e o
   "Solicitar tudo"; sugestão automática de veículo + "Adicionar outro

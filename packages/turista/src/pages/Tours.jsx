@@ -255,7 +255,7 @@ export default function Tours() {
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
-  const { items: savedCartItems, upsertItem: saveCartItem, removeItem: removeCartItem } = useCart()
+  const { items: savedCartItems, upsertItem: saveCartItem } = useCart()
 
   // "Retomar" do carrinho flutuante: restaura o rascunho salvo (data/pessoas/
   // veículos) do passeio escolhido. Os dados vivem no localStorage (CartContext).
@@ -369,39 +369,30 @@ export default function Tours() {
   const cartHasItems = cartItems.length > 0
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
 
-  // Auto-save no carrinho flutuante (localStorage): qualquer combinação montada
-  // vira rascunho persistido — o turista pode navegar/fechar o app sem perder.
-  // Zerar a seleção do passeio remove o rascunho dele.
-  useEffect(() => {
-    if (!selectedTour?.id || mode !== 'private') return
-    if (cartHasItems) {
-      // Preserva o que foi completado na página do carrinho (horário/saída)
-      const existing = savedCartItems.find((i) => i.id === selectedTour.id)
-      saveCartItem({
-        id:      selectedTour.id,
-        kind:    'tour',
-        mode:    'private',
-        name:    selectedTour.name,
-        cover_image_url: selectedTour.cover_image_url || null,
-        booking_cutoff_time: selectedTour.booking_cutoff_time || null,
-        dateIso: format(date, 'yyyy-MM-dd'),
-        time:    existing?.time || null,
-        people,
-        region_id:   selectedTour.regions?.id || null,
-        origin_text: origin?.name || existing?.origin_text || null,
-        vehicles: cartItems.map(({ vehicle, qty }) => ({
-          id: vehicle.id, name: vehicle.name, qty,
-          price: Number(vehicle.base_price) || 0, cap: vehicle.seat_capacity || null,
-        })),
-        total: cartTotal,
-      })
-    } else if (Object.values(cart).every((q) => !q)) {
-      // Só remove quando o usuário de fato zerou a seleção — se há quantidades
-      // no estado mas os veículos ainda não carregaram (restauração), preserva.
-      removeCartItem(selectedTour.id)
+  // Monta o rascunho do carrinho a partir da PRÉ-SELEÇÃO atual (passeio +
+  // veículos + pessoas). NÃO é auto-salvo: só vai pro carrinho quando o cliente
+  // clica em "Continuar". Data/hora/saída são refinadas depois, no carrinho.
+  const buildCartDraft = () => {
+    const existing = savedCartItems.find((i) => i.id === selectedTour.id)
+    return {
+      id:      selectedTour.id,
+      kind:    'tour',
+      mode:    'private',
+      name:    selectedTour.name,
+      cover_image_url: selectedTour.cover_image_url || null,
+      booking_cutoff_time: selectedTour.booking_cutoff_time || null,
+      dateIso: format(date, 'yyyy-MM-dd'),
+      time:    existing?.time || null,
+      people,
+      region_id:   selectedTour.regions?.id || null,
+      origin_text: origin?.name || existing?.origin_text || null,
+      vehicles: cartItems.map(({ vehicle, qty }) => ({
+        id: vehicle.id, name: vehicle.name, qty,
+        price: Number(vehicle.base_price) || 0, cap: vehicle.seat_capacity || null,
+      })),
+      total: cartTotal,
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, date, people, selectedTour?.id, mode])
+  }
 
   const applySuggestion = () => {
     if (!suggestion) return
@@ -728,7 +719,9 @@ export default function Tours() {
 
       {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
       {mode === 'private' && cartHasItems && (() => {
-        const canContinue = cartCapacity >= people && !!origin
+        // Basta a pré-seleção cobrir as pessoas; data/hora/saída são definidas
+        // depois, na edição dentro do carrinho.
+        const canContinue = cartCapacity >= people
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
             <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
@@ -753,31 +746,7 @@ export default function Tours() {
                 )}
                 <button
                   onClick={canContinue
-                    ? () => navigate('/checkout/resumo', {
-                        state: {
-                          service_name:     selectedTour.name,
-                          short_description: selectedTour.short_description || null,
-                          service_type:     'tour',
-                          booking_mode:     'private',
-                          service_date:     isToday(date) ? 'Hoje'
-                                              : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
-                                              : format(date, "d 'de' MMMM", { locale: ptBR }),
-                          service_date_iso: format(date, 'yyyy-MM-dd'),
-                          service_time:     'A confirmar',
-                          people_count:     people,
-                          origin_text:      origin?.name ?? '',
-                          origin_latitude:  origin?.latitude  ?? null,
-                          origin_longitude: origin?.longitude ?? null,
-                          vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
-                          total_price:      cartTotal,
-                          breakdown:        { 'Veículos selecionados': cartTotal },
-                          cover_image_url:       selectedTour.cover_image_url || null,
-                          region_id:             selectedTour.regions?.id,
-                          service_id:            selectedTour.id,
-                          vehicles:              cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(vehicle.base_price) || 0 })),
-                          booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
-                        },
-                      })
+                    ? () => { saveCartItem(buildCartDraft()); navigate('/carrinho') }
                     : undefined}
                   className={`font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
                     canContinue

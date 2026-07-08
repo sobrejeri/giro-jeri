@@ -329,7 +329,7 @@ export default function Transfers() {
   const navigate  = useNavigate()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
-  const { upsertItem: saveCartItem, removeItem: removeCartItem } = useCart()
+  const { upsertItem: saveCartItem } = useCart()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
@@ -472,32 +472,26 @@ export default function Transfers() {
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const cartHasItems = cartItems.length > 0
 
-  // Auto-save no carrinho flutuante (mesmo carrinho dos passeios): a rota com
-  // veículos selecionados vira rascunho persistido; zerar a seleção remove.
-  useEffect(() => {
-    if (!matched?.id) return
-    if (cartHasItems) {
-      saveCartItem({
-        id:      matched.id,
-        kind:    'transfer',
-        name:    `${shortPlace(origin)} → ${shortPlace(dest)}`,
-        origin, dest,
-        dateIso: format(date, 'yyyy-MM-dd'),
-        time, people,
-        region_id: region?.id || null,
-        booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
-        vehicles: cartItems.map(({ vehicle, qty }) => ({
-          id: vehicle.id, name: vehicle.name, qty,
-          price: unitPrice || 0, cap: vehicle.seat_capacity || null,
-        })),
-        total: cartTotal,
-      })
-    } else if (Object.values(cart).every((q) => !q)) {
-      removeCartItem(matched.id)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, date, time, people, matched?.id])
-  const canBook      = !!matched && cartHasItems && cartCapacity >= people && !!time
+  // Monta o rascunho do carrinho a partir da PRÉ-SELEÇÃO (rota definida +
+  // veículos + pessoas). NÃO é auto-salvo: só vai pro carrinho no "Continuar".
+  // Data/hora são refinadas depois, na edição dentro do carrinho.
+  const buildCartDraft = () => ({
+    id:      matched.id,
+    kind:    'transfer',
+    name:    `${shortPlace(origin)} → ${shortPlace(dest)}`,
+    origin, dest,
+    dateIso: format(date, 'yyyy-MM-dd'),
+    time, people,
+    region_id: region?.id || null,
+    booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
+    vehicles: cartItems.map(({ vehicle, qty }) => ({
+      id: vehicle.id, name: vehicle.name, qty,
+      price: unitPrice || 0, cap: vehicle.seat_capacity || null,
+    })),
+    total: cartTotal,
+  })
+  // Basta a rota + veículos cobrindo as pessoas; o horário é definido no carrinho.
+  const canBook      = !!matched && cartHasItems && cartCapacity >= people
 
   // True when suggestion is already the only item in cart at the right qty
   const suggestionIsApplied = !!(suggestion &&
@@ -505,20 +499,9 @@ export default function Transfers() {
     cartItems[0].vehicle.id === suggestion.vehicle.id &&
     cartItems[0].qty === suggestion.qty)
 
-  // Acréscimo de alta temporada / feriado já no resumo (antes de confirmar)
-  const { data: surchargeData } = useQuery({
-    queryKey: ['transfer-surcharge', region?.id, format(date, 'yyyy-MM-dd'), cartTotal],
-    queryFn:  () => api.transferSurcharge({
-      region_id:    region.id,
-      service_date: format(date, 'yyyy-MM-dd'),
-      subtotal:     cartTotal,
-    }),
-    enabled:   !!matched && cartHasItems && cartTotal > 0 && !!region?.id,
-    staleTime: 30_000,
-    retry:     false,
-  })
-  const seasonAddition = Number(surchargeData?.seasonAdditional) || 0
-  const grandTotal     = Math.round((cartTotal + seasonAddition) * 100) / 100
+  // Acréscimo de alta temporada / feriado NÃO é mais calculado aqui: a data
+  // final é definida no carrinho, então é lá que o total com temporada é
+  // computado. Nesta pré-seleção mostra-se só o total dos veículos.
 
   const dateLabel = isToday(date) ? 'Hoje'
     : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
@@ -527,28 +510,9 @@ export default function Transfers() {
   async function handleConfirm() {
     if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canBook) return
-    navigate('/checkout/resumo', {
-      state: {
-        service_name:        `Transfer ${origin} → ${dest}`,
-        short_description:   matched?.transfers?.short_description || null,
-        service_type:        'transfer',
-        booking_mode:        'private',
-        service_date:        dateLabel,
-        service_date_iso:    format(date, 'yyyy-MM-dd'),
-        service_time:        time,
-        people_count:        people,
-        origin_text:         origin,
-        destination_text:    dest,
-        vehicle_name:        cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
-        total_price:         cartTotal,
-        transfer_unit_price: unitPrice,
-        breakdown:           { 'Veículos': cartTotal },
-        region_id:           region?.id || null,
-        service_id:          matched?.id,
-        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: unitPrice })),
-        booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
-      },
-    })
+    // Pré-seleção → carrinho: continua a solicitação (data/hora/edição) lá.
+    saveCartItem(buildCartDraft())
+    navigate('/carrinho')
   }
 
   return (
@@ -956,7 +920,6 @@ export default function Transfers() {
               {[
                 { dot: 'bg-brand',    label: 'Origem',      val: origin },
                 { dot: 'bg-gray-400', label: 'Destino',     val: dest   },
-                { icon: Calendar,     label: 'Data & Hora', val: `${dateLabel} às ${time || '—'}` },
                 { icon: Users,        label: 'Passageiros', val: `${people} pessoa${people !== 1 ? 's' : ''}` },
                 ...(cartItems.length ? [{ icon: Car, label: 'Veículo', val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
               ].map((row, i) => (
@@ -970,22 +933,13 @@ export default function Transfers() {
                   </div>
                 </div>
               ))}
-              {seasonAddition > 0 && (
-                <>
-                  <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
-                    <p className="text-[12px] text-gray-400">Subtotal</p>
-                    <p className="text-[13px] font-semibold text-gray-800">R$ {cartTotal.toLocaleString('pt-BR')}</p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-[12px] text-amber-600">Alta temporada / feriado</p>
-                    <p className="text-[13px] font-semibold text-amber-600">+ R$ {seasonAddition.toLocaleString('pt-BR')}</p>
-                  </div>
-                </>
-              )}
-              <div className={`flex items-center justify-between ${seasonAddition > 0 ? 'pt-0.5' : 'border-t border-gray-100 pt-2'}`}>
-                <p className="text-[13px] font-bold text-gray-900">Total</p>
-                <p className="text-[16px] font-extrabold text-brand">R$ {grandTotal ? grandTotal.toLocaleString('pt-BR') : '—'}</p>
+              <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+                <p className="text-[13px] font-bold text-gray-900">Total dos veículos</p>
+                <p className="text-[16px] font-extrabold text-brand">R$ {cartTotal ? cartTotal.toLocaleString('pt-BR') : '—'}</p>
               </div>
+              <p className="text-[11px] text-gray-400 leading-snug">
+                Data, horário e eventuais acréscimos de temporada são definidos ao continuar, no carrinho.
+              </p>
             </div>
           </section>
         )}
@@ -1004,10 +958,10 @@ export default function Transfers() {
       <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
           <div>
-            <p className="text-[10px] text-gray-400">Total estimado{seasonAddition > 0 ? ' · com alta temporada' : ''}</p>
+            <p className="text-[10px] text-gray-400">Total dos veículos</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-              {grandTotal
-                ? `R$ ${grandTotal.toLocaleString('pt-BR')}`
+              {cartTotal
+                ? `R$ ${cartTotal.toLocaleString('pt-BR')}`
                 : matched ? 'Selecione um veículo' : 'Selecione a rota'}
             </p>
           </div>
@@ -1018,7 +972,7 @@ export default function Transfers() {
               canBook ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {loading ? 'Aguarde…' : 'Confirmar Transfer'}
+            {loading ? 'Aguarde…' : 'Continuar'}
           </button>
         </div>
       </div>
