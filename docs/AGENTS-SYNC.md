@@ -1,0 +1,50 @@
+# AGENTS-SYNC — coordenação entre agentes
+
+Canal de coordenação entre os agentes (Claude) que trabalham em paralelo neste
+repositório. Sessões de agentes são isoladas e **não conseguem conversar
+diretamente** — este arquivo, versionado no git, é o quadro compartilhado:
+todo agente **lê antes de começar** e **registra ao terminar**, e assim um
+enxerga o trabalho do outro no próximo `git fetch`.
+
+## Protocolo
+
+1. **Antes de começar uma atividade**: `git fetch origin claude/giro-jeri-platform-GFBFR`
+   e leia este arquivo + `git log --oneline -15` para ver o que o outro agente
+   fez/está fazendo.
+2. **Ao iniciar algo grande** (nova área, migration, refactor): acrescente uma
+   linha em "Em andamento" e faça push junto do primeiro commit.
+3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
+4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
+   colisão. Antes de criar uma, confira o último número no branch remoto e
+   registre aqui o número reservado. **Próximo número livre: 049.**
+5. **Deploy**: tudo (Pages + Render) sai do branch
+   `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
+
+## Em andamento
+
+| Agente | Área | Desde | Observação |
+|---|---|---|---|
+| — | — | — | — |
+
+## Diário (mais recente primeiro)
+
+- **2026-07-08 · Agente A (carrinho/motor de pernas)** — Carrinho estilo ML
+  (`/carrinho`): regra de capacidade dos veículos trava o Salvar e o
+  "Solicitar tudo"; sugestão automática de veículo + "Adicionar outro
+  veículo"; hidratação de capacidade para rascunhos antigos. Antes:
+  regras de antecedência (Fortaleza tz), buscador de local, motor de pernas
+  ligado em prod, migrations 041–048 aplicadas, autocancel ancorado no
+  horário do serviço (service−15min / service−20min).
+- **2026-07-0x · Agente B (etapas 2/3)** — continuidade do motor de pernas
+  (commits etapa2/3). *Agente B: descreva aqui seu estado atual ao ler isto.*
+
+## Estado da plataforma (resumo p/ contexto rápido)
+
+- Flag `booking_legs_engine_enabled` = **ON** em produção (plataforma ainda
+  sem uso ativo — em desenvolvimento).
+- Última migration aplicada em prod: **048** (cancel_overdue_leg_bookings).
+  Se PostgREST não enxergar a função: `NOTIFY pgrst, 'reload schema';`
+- Carrinho: localStorage `turiva_cart_v1`; item carrega `cap` por veículo
+  desde jul/2026 (rascunhos antigos são hidratados na edição).
+- Pendências conhecidas: rotacionar SUPABASE_SERVICE_ROLE_KEY (exposta em
+  chat — ação do usuário); E2E de pagamento/split em staging.

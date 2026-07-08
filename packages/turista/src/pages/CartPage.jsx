@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   ShoppingCart, Trash2, Calendar, Clock, Users, Car, MapPin, Pencil,
   CheckCircle2, AlertTriangle, Loader2, Send, X, Plus, Minus, ChevronRight,
@@ -56,12 +57,79 @@ function EditSheet({ item, onSave, onClose }) {
   const [people, setPeople]     = useState(item.people || 1)
   const [originText, setOrigin] = useState(item.origin_text || '')
   const [vehicles, setVehicles] = useState(() => (item.vehicles || []).map((v) => ({ ...v })))
+  const [showExtras, setShowExtras] = useState(false)
+
+  // Capacidades/preços reais vêm da API — rascunhos antigos podem não ter a
+  // capacidade gravada, e sem ela a regra "pessoas × lugares" não fecha.
+  // Também alimenta o "Adicionar outro veículo".
+  const { data: tourVehiclesData, isFetched: tvFetched } = useQuery({
+    queryKey: ['cart-edit-tour-vehicles', item.id],
+    queryFn:  () => api.getTourVehicles(item.id),
+    enabled:  !isTransfer,
+    staleTime: 5 * 60 * 1000,
+  })
+  const needAll = isTransfer || (tvFetched && (tourVehiclesData || []).length === 0)
+  const { data: allVehiclesData } = useQuery({
+    queryKey: ['cart-edit-all-vehicles'],
+    queryFn:  () => api.getVehicles({ is_active: 'true' }),
+    enabled:  needAll,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const unitPrice = isTransfer ? (Number(item.vehicles?.[0]?.price) || 0) : null
+  const available = useMemo(() => {
+    const all = Array.isArray(allVehiclesData) ? allVehiclesData : (allVehiclesData?.vehicles || [])
+    if (isTransfer) {
+      return all
+        .filter((v) => v.is_transfer_allowed !== false && v.is_active !== false)
+        .map((v) => ({ id: v.id, name: v.name, price: unitPrice, cap: v.seat_capacity || null }))
+    }
+    const list = (tourVehiclesData || []).length ? tourVehiclesData : all
+    return list
+      .filter((v) => v.is_tour_allowed !== false && v.is_private_allowed !== false && v.is_active !== false)
+      .map((v) => ({ id: v.id, name: v.name, price: Number(v.base_price) || 0, cap: v.seat_capacity || null }))
+  }, [isTransfer, tourVehiclesData, allVehiclesData, unitPrice])
+
+  // Preenche capacidade/preço que faltarem nos veículos já escolhidos
+  useEffect(() => {
+    if (!available.length) return
+    setVehicles((prev) => prev.map((v) => {
+      const src = available.find((a) => a.id === v.id)
+      if (!src) return v
+      return {
+        ...v,
+        cap:   Number(v.cap)   > 0 ? v.cap   : src.cap,
+        price: Number(v.price) > 0 ? v.price : src.price,
+      }
+    }))
+  }, [available])
+
+  const extras = available.filter((a) => !vehicles.some((v) => v.id === a.id))
 
   const total = vehicles.reduce((s, v) => s + (Number(v.price) || 0) * (v.qty || 0), 0)
   const qtyTotal = vehicles.reduce((s, v) => s + (v.qty || 0), 0)
-  const capsKnown = vehicles.every((v) => Number(v.cap) > 0)
+  const capsKnown = vehicles.length > 0 && vehicles.every((v) => Number(v.cap) > 0)
   const capacity  = capsKnown ? vehicles.reduce((s, v) => s + (Number(v.cap) || 0) * (v.qty || 0), 0) : null
   const capacityOk = !capsKnown || capacity >= people
+
+  // Sugestão quando falta lugar: o menor veículo que cobre o déficit
+  // (senão o maior disponível) — existente ou do catálogo.
+  const suggestion = useMemo(() => {
+    if (capacityOk || !capsKnown) return null
+    const deficit = people - capacity
+    const pool = [...vehicles, ...extras].filter((v) => Number(v.cap) > 0)
+    if (!pool.length) return null
+    const fits = pool.filter((v) => v.cap >= deficit).sort((a, b) => a.cap - b.cap)
+    return fits[0] || pool.sort((a, b) => b.cap - a.cap)[0]
+  }, [capacityOk, capsKnown, people, capacity, vehicles, extras])
+
+  function addVehicle(a) {
+    setVehicles((prev) => {
+      const i = prev.findIndex((v) => v.id === a.id)
+      if (i >= 0) return prev.map((v, j) => j === i ? { ...v, qty: (v.qty || 0) + 1 } : v)
+      return [...prev, { id: a.id, name: a.name, qty: 1, price: a.price, cap: a.cap }]
+    })
+  }
 
   // Regras de antecedência (mesmo relógio do servidor — America/Fortaleza):
   // • Cutoff do serviço (booking_cutoff_time): passou do horário → só a
@@ -215,9 +283,52 @@ function EditSheet({ item, onSave, onClose }) {
               ))}
             </div>
             {!capacityOk && (
-              <p className="mt-2 text-[11.5px] font-semibold text-amber-600 flex items-center gap-1.5">
-                <AlertTriangle size={13} /> Capacidade insuficiente: {capacity} lugar{capacity === 1 ? '' : 'es'} para {people} pessoas — adicione veículos.
-              </p>
+              <div className="mt-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 space-y-2">
+                <p className="text-[11.5px] font-semibold text-amber-700 flex items-start gap-1.5">
+                  <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                  Capacidade insuficiente: {capacity} lugar{capacity === 1 ? '' : 'es'} para {people} pessoas — adicione veículos.
+                </p>
+                {suggestion && (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[12px] text-amber-800">
+                      Sugestão: <span className="font-bold">+1x {suggestion.name}</span>
+                      {Number(suggestion.cap) > 0 ? ` (até ${suggestion.cap} pessoas)` : ''}
+                    </p>
+                    <button onClick={() => addVehicle(suggestion)}
+                      className="shrink-0 bg-brand text-white text-[11.5px] font-bold px-3 py-1.5 rounded-lg active:scale-95 transition-transform">
+                      Adicionar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {extras.length > 0 && (
+              <div className="mt-2">
+                <button onClick={() => setShowExtras((s) => !s)}
+                  className="inline-flex items-center gap-1 text-[12px] font-bold text-brand active:scale-95 transition-transform">
+                  <Plus size={13} /> {showExtras ? 'Ocultar outros veículos' : 'Adicionar outro veículo'}
+                </button>
+                {showExtras && (
+                  <div className="mt-2 space-y-2">
+                    {extras.map((a) => (
+                      <div key={a.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-3 py-2.5">
+                        <Car size={15} className="text-gray-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-gray-800 truncate">{a.name}</p>
+                          <p className="text-[11px] text-gray-400">
+                            {fmt(a.price)}/veículo{Number(a.cap) > 0 ? ` · até ${a.cap} pessoas` : ''}
+                          </p>
+                        </div>
+                        <button onClick={() => addVehicle(a)} aria-label={`Adicionar ${a.name}`}
+                          className="w-7 h-7 rounded-full bg-brand flex items-center justify-center shrink-0 active:scale-95">
+                          <Plus size={11} className="text-white" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

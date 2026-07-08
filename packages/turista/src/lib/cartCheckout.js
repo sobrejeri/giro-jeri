@@ -35,7 +35,15 @@ export function itemMissing(item) {
   if (!item.dateIso) miss.push('data')
   if (!item.time) miss.push('horário')
   if (!(Number(item.people) >= 1)) miss.push('pessoas')
-  if (!(item.vehicles || []).some((v) => v.qty > 0)) miss.push('veículo')
+  const chosen = (item.vehicles || []).filter((v) => v.qty > 0)
+  if (!chosen.length) miss.push('veículo')
+  else if (chosen.every((v) => Number(v.cap) > 0)) {
+    // Regra de capacidade: só valida quando TODOS os veículos escolhidos têm
+    // capacidade conhecida (rascunhos antigos sem `cap` são hidratados na
+    // edição, onde a regra também trava o Salvar).
+    const capacity = chosen.reduce((s, v) => s + Number(v.cap) * v.qty, 0)
+    if (capacity < Number(item.people || 1)) miss.push('veículos para todas as pessoas')
+  }
   if (item.kind === 'transfer') {
     if (!item.origin) miss.push('origem')
     if (!item.dest) miss.push('destino')
