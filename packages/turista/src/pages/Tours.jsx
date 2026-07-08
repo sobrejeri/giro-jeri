@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
@@ -10,7 +11,7 @@ import ToursDesktop from './ToursDesktop'
 import {
   MapPin, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
-  ChevronLeft, ChevronRight, X, Info, Bus, Search, ShoppingCart,
+  ChevronLeft, ChevronRight, X, Info, Bus, Search,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth,
@@ -255,7 +256,7 @@ export default function Tours() {
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
-  const { items: savedCartItems, upsertItem: saveCartItem, count: cartCount } = useCart()
+  const { items: savedCartItems, upsertItem: saveCartItem } = useCart()
 
   // "Retomar" do carrinho flutuante: restaura o rascunho salvo (data/pessoas/
   // veículos) do passeio escolhido. Os dados vivem no localStorage (CartContext).
@@ -717,29 +718,19 @@ export default function Tours() {
         />
       )}
 
-      {/* ── Resumo flutuante (modo privativo) — sempre visível ── */}
-      {mode === 'private' && selectedTour && (() => {
+      {/* ── Resumo flutuante (modo privativo) — fixo no viewport, sempre visível.
+          Portal p/ document.body: o wrapper do PullToRefresh usa transform/
+          will-change e prenderia o position:fixed na página (a barra sumia no
+          fim do conteúdo ao rolar). Pelo portal ela cola no rodapé da tela. ── */}
+      {mode === 'private' && selectedTour && createPortal((() => {
         // Basta a pré-seleção cobrir as pessoas; data/hora/saída são definidas
         // depois, na edição dentro do carrinho.
         const canContinue = cartHasItems && cartCapacity >= people
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
-            <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center gap-2 px-3 py-3">
-              {/* Carrinho (aparece quando há itens salvos) */}
-              {cartCount > 0 && (
-                <button
-                  onClick={() => navigate('/carrinho')}
-                  aria-label="Abrir carrinho"
-                  className="relative shrink-0 w-10 h-10 rounded-xl bg-brand/10 flex items-center justify-center active:scale-95 transition-transform"
-                >
-                  <ShoppingCart size={18} className="text-brand" />
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gray-900 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
-                    {cartCount}
-                  </span>
-                </button>
-              )}
+            <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
               {/* Resumo do que está selecionado */}
-              <div className="flex-1 min-w-0 mr-1">
+              <div className="flex-1 min-w-0 mr-3">
                 {cartHasItems ? (
                   <>
                     <p className="text-[13px] font-bold text-gray-900 truncate">
@@ -779,10 +770,10 @@ export default function Tours() {
             </div>
           </div>
         )
-      })()}
+      })(), document.body)}
 
       {/* ── CTA fixo (modo compartilhado) ───────────────────────── */}
-      {mode === 'shared' && selectedTour?.shared_price_per_person && (() => {
+      {mode === 'shared' && selectedTour?.shared_price_per_person && createPortal((() => {
         const pricePerPerson = Number(selectedTour.shared_price_per_person)
         const sharedTotal    = pricePerPerson * people
         return (
@@ -837,7 +828,7 @@ export default function Tours() {
             </div>
           </div>
         )
-      })()}
+      })(), document.body)}
 
       <OriginPicker
         open={showOriginPicker}

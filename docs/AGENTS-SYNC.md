@@ -28,6 +28,17 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (barra de resumo fixa via portal)** — CAUSA RAIZ: a
+  barra de resumo (Tours/Transfers) usava `fixed`, mas fica dentro do wrapper do
+  `PullToRefresh` (transform/will-change) → o `fixed` era preso na PÁGINA, não no
+  viewport, e a barra "sumia no fim do conteúdo" ao rolar. Mesmo bug do
+  StoryViewer. Fix: **renderizar as barras via `createPortal(document.body)`** —
+  agora coladas no rodapé da tela, sempre visíveis; só o conteúdo (veículos)
+  rola. Revertido o chip do carrinho na barra; o `CartFab` voltou a ser o FAB
+  solto, posicionado ACIMA da barra (`bottom-[150px]`) em `/passeios` e
+  `/transfers`. Arquivos: `Tours.jsx` (barra privativa + compartilhada),
+  `Transfers.jsx` (barra rota), `CartFab.jsx`.
+
 - **2026-07-08 · Agente B (carrinho embutido na barra)** — O FAB flutuante
   cobria o conteúdo que rola atrás dele (botão do resumo, +/- de passageiros/
   veículos). Solução: em Passeios/Translados o `CartFab` solto some, e o
