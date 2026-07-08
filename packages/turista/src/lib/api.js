@@ -147,6 +147,8 @@ export const api = {
   getTransferRoutes:  (params = {}) => request(`/api/transfers/routes?${new URLSearchParams(params)}`),
   calculateTransfer:  (body)        => request('/api/transfers/calculate', { method: 'POST', body }),
   transferSurcharge:  (body)        => request('/api/transfers/surcharge', { method: 'POST', body }),
+  // Alta temporada (público): regras ativas p/ sinalizar datas no calendário
+  getSeasons:         (params = {}) => request(`/api/seasons?${new URLSearchParams(params)}`),
   requestQuote:       (body)        => request('/api/transfers/quotes',    { method: 'POST', body }),
   getMyQuotes:        ()            => request('/api/transfers/quotes'),
   acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),

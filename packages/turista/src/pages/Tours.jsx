@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
+import { highSeasonMonthSet } from '../lib/season'
 import OriginPicker from '../components/OriginPicker'
 import ToursDesktop from './ToursDesktop'
 import {
@@ -160,7 +161,7 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
 }
 
 /* ── Calendário (bottom sheet) ──────────────────────────────── */
-function DatePickerSheet({ value, onChange, onClose, minDate }) {
+function DatePickerSheet({ value, onChange, onClose, minDate, highSeasonMonths }) {
   // R6: 'today' aqui é a data mínima selecionável — se passou do cutoff do
   // passeio, minDate já vem como amanhã e o dia de hoje fica bloqueado.
   const today = minDate || startOfDay(new Date())
@@ -219,23 +220,35 @@ function DatePickerSheet({ value, onChange, onClose, minDate }) {
             const past     = isBefore(day, today)
             const selected = isSameDay(day, value)
             const todayDay = isToday(day)
+            const highSeason = !!highSeasonMonths?.has(day.getMonth() + 1)
             return (
               <button
                 key={day.toISOString()}
                 disabled={past}
                 onClick={() => { onChange(day); onClose() }}
-                className={`aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
+                className={`relative aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
                   ${selected  ? 'bg-brand text-white font-bold' : ''}
-                  ${!selected && todayDay ? 'text-brand font-bold' : ''}
-                  ${!selected && !todayDay && !past ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
-                  ${past ? 'text-gray-300 cursor-not-allowed' : ''}
+                  ${!selected && past ? 'text-gray-300 cursor-not-allowed' : ''}
+                  ${!selected && !past && highSeason ? 'text-amber-600 font-bold' : ''}
+                  ${!selected && !past && !highSeason && todayDay ? 'text-brand font-bold' : ''}
+                  ${!selected && !past && !highSeason && !todayDay ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
                 `}
               >
                 {format(day, 'd')}
+                {!selected && !past && highSeason && (
+                  <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500" />
+                )}
               </button>
             )
           })}
         </div>
+
+        {highSeasonMonths?.size > 0 && (
+          <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
+            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+            Datas em laranja: alta temporada (pode ter acréscimo no valor)
+          </div>
+        )}
 
         <div className="px-4 pb-8">
           <button
@@ -297,6 +310,15 @@ export default function Tours() {
     staleTime: 5 * 60 * 1000,
     retry: 2,
   })
+  // Alta temporada: meses com acréscimo, p/ sinalizar no calendário.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  })
+  const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
+
   const allTours = toursData?.tours || toursData || []
   const tours = searchTerm.trim()
     ? allTours.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -715,6 +737,7 @@ export default function Tours() {
         <DatePickerSheet
           value={date}
           minDate={cutoffMinDate}
+          highSeasonMonths={highSeasonMonths}
           onChange={setDate}
           onClose={() => setShowDatePicker(false)}
         />

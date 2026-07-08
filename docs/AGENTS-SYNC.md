@@ -28,6 +28,19 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (data/calendário + alta temporada)** — Barras de
+  resumo agora só aparecem com veículo selecionado. Regra de data: padrão
+  meio-dia (Fortaleza) → passou de 12h, só amanhã+ (corrige "sempre Hoje");
+  cutoff do serviço tem prioridade. Sheets de data (Tours + Transfers) e
+  RouteSheet portalados p/ document.body (estavam presos pelo transform do
+  PullToRefresh e abriam fora da tela). NOVO endpoint público **`GET
+  /api/seasons`** (`routes/seasons.js` + registrado no index) — lista regras de
+  alta temporada ativas; o calendário pinta de laranja os dias de alta
+  temporada (helper `lib/season.js`). ⚠️ O endpoint só responde depois de
+  merge na main + redeploy do Render; até lá o calendário fica sem cor
+  (degrada bem). Arquivos: api `index.js`+`seasons.js`, turista `api.js`,
+  `lib/season.js`, `Tours.jsx`, `Transfers.jsx`.
+
 - **2026-07-08 · Agente B (barra de resumo fixa via portal)** — CAUSA RAIZ: a
   barra de resumo (Tours/Transfers) usava `fixed`, mas fica dentro do wrapper do
   `PullToRefresh` (transform/will-change) → o `fixed` era preso na PÁGINA, não no

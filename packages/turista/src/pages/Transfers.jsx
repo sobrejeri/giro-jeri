@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { useCart }     from '../contexts/CartContext'
+import { highSeasonMonthSet } from '../lib/season'
 import { api }         from '../lib/api'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
@@ -192,7 +193,7 @@ function PresetCard({ route, bg, active, onSelect }) {
 }
 
 /* ── Date picker (bottom sheet) ─────────────────────────────── */
-function DateSheet({ value, onChange, onClose, minDate }) {
+function DateSheet({ value, onChange, onClose, minDate, highSeasonMonths }) {
   const today  = minDate || startOfDay(new Date())
   const [view, setView] = useState(startOfMonth(value))
   const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
@@ -225,17 +226,28 @@ function DateSheet({ value, onChange, onClose, minDate }) {
           {days.map(day => {
             const past = isBefore(day, today)
             const sel  = isSameDay(day, value)
+            const hs   = !!highSeasonMonths?.has(day.getMonth() + 1)
             return (
               <button key={day.toISOString()} disabled={past} onClick={() => { onChange(day); onClose() }}
-                className={`aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
+                className={`relative aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
                   ${sel ? 'bg-brand text-white font-bold' : ''}
-                  ${!sel && isToday(day) ? 'text-brand font-bold' : ''}
-                  ${!sel && !isToday(day) && !past ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
-                  ${past ? 'text-gray-300 cursor-not-allowed' : ''}`}
-              >{format(day, 'd')}</button>
+                  ${!sel && past ? 'text-gray-300 cursor-not-allowed' : ''}
+                  ${!sel && !past && hs ? 'text-amber-600 font-bold' : ''}
+                  ${!sel && !past && !hs && isToday(day) ? 'text-brand font-bold' : ''}
+                  ${!sel && !past && !hs && !isToday(day) ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}`}
+              >
+                {format(day, 'd')}
+                {!sel && !past && hs && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500" />}
+              </button>
             )
           })}
         </div>
+        {highSeasonMonths?.size > 0 && (
+          <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
+            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+            Datas em laranja: alta temporada (pode ter acréscimo no valor)
+          </div>
+        )}
         <div className="px-4 pb-8">
           <button onClick={onClose} className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">Confirmar</button>
         </div>
@@ -438,6 +450,15 @@ export default function Transfers() {
                  : Array.isArray(routesData) ? routesData : []
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
                     .filter(v => v.is_transfer_allowed && v.is_active !== false)
+
+  // Alta temporada: meses com acréscimo, p/ sinalizar no calendário.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  })
+  const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
 
   const origins    = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
   const dests      = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
@@ -747,7 +768,7 @@ export default function Transfers() {
           )}
 
           {showCustomDate && (
-            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} />
+            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} highSeasonMonths={highSeasonMonths} />
           )}
         </div>
       )}
@@ -1006,7 +1027,7 @@ export default function Transfers() {
       )}
 
       {/* Sheets */}
-      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} />}
+      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} highSeasonMonths={highSeasonMonths} />}
       {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
       {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
     </> )} {/* end mode === 'rota' */}
