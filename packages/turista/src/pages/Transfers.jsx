@@ -485,6 +485,7 @@ export default function Transfers() {
         dateIso: format(date, 'yyyy-MM-dd'),
         time, people,
         region_id: region?.id || null,
+        booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
         vehicles: cartItems.map(({ vehicle, qty }) => ({
           id: vehicle.id, name: vehicle.name, qty,
           price: unitPrice || 0, cap: vehicle.seat_capacity || null,

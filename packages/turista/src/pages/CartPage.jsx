@@ -9,11 +9,35 @@ import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { itemMissing, requestPayloadFor } from '../lib/cartCheckout'
+import { PlaceInput } from './Transfers'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 const todayIso = () => format(new Date(), 'yyyy-MM-dd')
+
+// Relógio de referência das regras de antecedência: America/Fortaleza (UTC-3),
+// o mesmo fuso que o servidor usa para validar cutoff e antecedência mínima.
+function fortalezaNow() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Fortaleza',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date())
+  const get = (t) => parts.find((x) => x.type === t)?.value
+  return {
+    todayIso: `${get('year')}-${get('month')}-${get('day')}`,
+    minutes:  Number(get('hour')) * 60 + Number(get('minute')),
+  }
+}
+const toMin = (hhmm) => hhmm ? Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5)) : null
+const fromMin = (m) => `${String(Math.floor((m % 1440) / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+const nextDayIso = (iso) => format(new Date(new Date(`${iso}T12:00:00`).getTime() + 86400000), 'yyyy-MM-dd')
+
+// Antecedência mínima para o MESMO dia: transfers seguem a regra do servidor
+// (transfer_min_advance_hours, padrão 3h — validateTransferAdvance); passeios
+// ganham uma folga mínima de 30min para a operação.
+const LEAD_MINUTES = { transfer: 180, tour: 30 }
 
 function dayLabel(iso) {
   if (!iso) return '—'
@@ -39,9 +63,35 @@ function EditSheet({ item, onSave, onClose }) {
   const capacity  = capsKnown ? vehicles.reduce((s, v) => s + (Number(v.cap) || 0) * (v.qty || 0), 0) : null
   const capacityOk = !capsKnown || capacity >= people
 
+  // Regras de antecedência (mesmo relógio do servidor — America/Fortaleza):
+  // • Cutoff do serviço (booking_cutoff_time): passou do horário → só a
+  //   partir de amanhã.
+  // • Mesmo dia: horário precisa respeitar a antecedência mínima
+  //   (transfer 3h, passeio 30min).
+  const { todayIso: fToday, minutes: nowMin } = fortalezaNow()
+  const cutoffMin  = toMin(item.booking_cutoff_time || null)
+  const afterCutoff = cutoffMin != null && nowMin >= cutoffMin
+  const minDateIso = afterCutoff ? nextDayIso(fToday) : fToday
+  const lead       = LEAD_MINUTES[isTransfer ? 'transfer' : 'tour']
+  const earliestTodayMin = nowMin + lead
+
+  const dateOk = !!dateIso && dateIso >= minDateIso
+  const sameDay = dateIso === fToday
+  const timeOk  = !!time && (!sameDay || toMin(time) >= earliestTodayMin)
+
+  let timeHint = null
+  if (dateIso && !dateOk && afterCutoff) {
+    timeHint = `Este serviço aceita solicitações para o mesmo dia só até ${item.booking_cutoff_time.slice(0, 5)} — escolha a partir de ${dayLabel(minDateIso)}.`
+  } else if (time && sameDay && !timeOk && earliestTodayMin < 1440) {
+    timeHint = `Para hoje, escolha a partir de ${fromMin(earliestTodayMin)} (antecedência mínima de ${isTransfer ? '3h' : '30min'}).`
+  } else if (time && sameDay && !timeOk) {
+    timeHint = `Não há mais horários para hoje — escolha a partir de ${dayLabel(nextDayIso(fToday))}.`
+  }
+
   const missing = []
-  if (!dateIso || dateIso < todayIso()) missing.push('data válida')
+  if (!dateOk) missing.push('data válida')
   if (!time) missing.push('horário')
+  else if (!timeOk) missing.push('horário com antecedência')
   if (!(people >= 1)) missing.push('pessoas')
   if (qtyTotal < 1) missing.push('veículo')
   if (!isTransfer && !originText.trim()) missing.push('local de saída')
@@ -86,12 +136,15 @@ function EditSheet({ item, onSave, onClose }) {
           {!isTransfer && (
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Local de saída *</label>
-              <input
-                value={originText}
-                onChange={(e) => setOrigin(e.target.value)}
-                placeholder="Ex.: nome da pousada ou ponto de encontro"
-                className="mt-1 w-full bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30 placeholder-gray-400"
-              />
+              <div className="mt-1">
+                <PlaceInput
+                  value={originText}
+                  onChange={setOrigin}
+                  onPick={(p) => { if (p) setOrigin(p.label || p.address || '') }}
+                  placeholder="Busque a pousada ou ponto de encontro"
+                  dotClass="bg-brand"
+                />
+              </div>
             </div>
           )}
 
@@ -99,7 +152,7 @@ function EditSheet({ item, onSave, onClose }) {
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Data *</label>
               <input
-                type="date" value={dateIso} min={todayIso()}
+                type="date" value={dateIso} min={minDateIso}
                 onChange={(e) => setDateIso(e.target.value)}
                 className="mt-1 w-full bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30"
               />
@@ -113,6 +166,12 @@ function EditSheet({ item, onSave, onClose }) {
               />
             </div>
           </div>
+
+          {timeHint && (
+            <p className="text-[11.5px] font-semibold text-amber-600 flex items-start gap-1.5 -mt-1">
+              <AlertTriangle size={13} className="shrink-0 mt-0.5" /> {timeHint}
+            </p>
+          )}
 
           <div>
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Pessoas *</label>

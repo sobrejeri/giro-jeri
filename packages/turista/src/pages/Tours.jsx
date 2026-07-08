@@ -383,6 +383,7 @@ export default function Tours() {
         mode:    'private',
         name:    selectedTour.name,
         cover_image_url: selectedTour.cover_image_url || null,
+        booking_cutoff_time: selectedTour.booking_cutoff_time || null,
         dateIso: format(date, 'yyyy-MM-dd'),
         time:    existing?.time || null,
         people,
