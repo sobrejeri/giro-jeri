@@ -382,6 +382,8 @@ export default function Tours() {
         name:    selectedTour.name,
         dateIso: format(date, 'yyyy-MM-dd'),
         people,
+        region_id:   selectedTour.regions?.id || null,
+        origin_text: origin?.name || null,
         vehicles: cartItems.map(({ vehicle, qty }) => ({
           id: vehicle.id, name: vehicle.name, qty, price: Number(vehicle.base_price) || 0,
         })),

@@ -484,6 +484,7 @@ export default function Transfers() {
         origin, dest,
         dateIso: format(date, 'yyyy-MM-dd'),
         time, people,
+        region_id: region?.id || null,
         vehicles: cartItems.map(({ vehicle, qty }) => ({
           id: vehicle.id, name: vehicle.name, qty, price: unitPrice || 0,
         })),
