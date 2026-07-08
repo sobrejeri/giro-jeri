@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useCart } from '../../contexts/CartContext'
+import { checkoutStateFor } from '../../lib/cartCheckout'
 import {
   ChevronLeft, ChevronRight, MapPin, Calendar, Clock, Users, Car,
   Shield, AlertCircle, Pen, Zap, Sun, Waves, Anchor, Plus, Minus, Check,
@@ -121,7 +122,16 @@ function VehicleRow({ vehicle, qty, unitPrice, onAdd, onRemove }) {
 }
 
 /* ── Main ───────────────────────────────────────────────────── */
+// Wrapper: no fluxo "Solicitar tudo" a mesma rota recebe itens diferentes em
+// sequência — a key força o React a remontar o formulário para cada item
+// (todos os useState inicializam do location.state).
 export default function CheckoutSummary() {
+  const { state } = useLocation()
+  const k = state?.cartBatch ? `lote-${state.cartBatch.index}-${state?.service_id}` : (state?.service_id || 'unico')
+  return <CheckoutSummaryInner key={k} />
+}
+
+function CheckoutSummaryInner() {
   const navigate       = useNavigate()
   const { state: ls }  = useLocation()
   const { removeItem: removeCartItem } = useCart()
@@ -328,12 +338,31 @@ export default function CheckoutSummary() {
       const result = await api.requestBooking(paymentState)
       // Solicitação enviada: tira o rascunho deste serviço do carrinho flutuante
       if (ls?.service_id) removeCartItem(ls.service_id)
+
+      // Fluxo "Solicitar tudo": há mais itens na fila → próximo Resumo.
+      const cb = ls?.cartBatch
+      const doneResults = cb
+        ? [...(cb.results || []), { name: ls.service_name, booking_code: result.booking_code }]
+        : null
+      if (cb && cb.index + 1 < cb.queue.length) {
+        const next = cb.queue[cb.index + 1]
+        navigate('/checkout/resumo', {
+          replace: true,
+          state: {
+            ...checkoutStateFor(next),
+            cartBatch: { ...cb, index: cb.index + 1, results: doneResults },
+          },
+        })
+        return
+      }
+
       navigate('/checkout/solicitado', {
         state: {
           ...paymentState,
           booking_id:   result.booking_id,
           booking_code: result.booking_code,
           amount:       result.amount,
+          ...(doneResults ? { batchResults: doneResults } : {}),
         },
       })
     } catch (err) {
@@ -359,7 +388,7 @@ export default function CheckoutSummary() {
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
           <h1 className="text-lg font-bold text-gray-900">
-            {editing ? 'Editar reserva' : 'Resumo da reserva'}
+            {editing ? 'Editar reserva' : (ls?.cartBatch ? `Confirmar ${ls.cartBatch.index + 1} de ${ls.cartBatch.queue.length}` : 'Resumo da reserva')}
           </h1>
         </div>
       </header>
