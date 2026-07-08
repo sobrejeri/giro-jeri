@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
+import { useCart } from '../contexts/CartContext'
 import OriginPicker from '../components/OriginPicker'
 import ToursDesktop from './ToursDesktop'
 import {
@@ -254,13 +255,32 @@ export default function Tours() {
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
+  const { items: savedCartItems, upsertItem: saveCartItem, removeItem: removeCartItem } = useCart()
+
+  // "Retomar" do carrinho flutuante: restaura o rascunho salvo (data/pessoas/
+  // veículos) do passeio escolhido. Os dados vivem no localStorage (CartContext).
+  const restoredItem = locationState?.restoreFromCart
+    ? savedCartItems.find((i) => i.id === locationState?.selectedId)
+    : null
+
   const [mode, setMode] = useState(locationState?.mode || 'private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
-  const [people, setPeople] = useState(2)
-  const [date, setDate] = useState(startOfDay(new Date()))
+  const [people, setPeople] = useState(restoredItem?.people || 2)
+  const [date, setDate] = useState(() => {
+    if (restoredItem?.dateIso) {
+      const d = new Date(`${restoredItem.dateIso}T12:00:00`)
+      if (!Number.isNaN(d.getTime()) && !isBefore(d, startOfDay(new Date()))) return startOfDay(d)
+    }
+    return startOfDay(new Date())
+  })
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
-  const [cart, setCart] = useState({})
+  const [cart, setCart] = useState(() => {
+    if (!restoredItem?.vehicles?.length) return {}
+    const c = {}
+    for (const v of restoredItem.vehicles) c[v.id] = v.qty
+    return c
+  })
   const { favs, toggleFav } = useFavorites()
   const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
   const [showOriginPicker, setShowOriginPicker] = useState(false)
@@ -348,6 +368,32 @@ export default function Tours() {
   )
   const cartHasItems = cartItems.length > 0
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
+
+  // Auto-save no carrinho flutuante (localStorage): qualquer combinação montada
+  // vira rascunho persistido — o turista pode navegar/fechar o app sem perder.
+  // Zerar a seleção do passeio remove o rascunho dele.
+  useEffect(() => {
+    if (!selectedTour?.id || mode !== 'private') return
+    if (cartHasItems) {
+      saveCartItem({
+        id:      selectedTour.id,
+        kind:    'tour',
+        mode:    'private',
+        name:    selectedTour.name,
+        dateIso: format(date, 'yyyy-MM-dd'),
+        people,
+        vehicles: cartItems.map(({ vehicle, qty }) => ({
+          id: vehicle.id, name: vehicle.name, qty, price: Number(vehicle.base_price) || 0,
+        })),
+        total: cartTotal,
+      })
+    } else if (Object.values(cart).every((q) => !q)) {
+      // Só remove quando o usuário de fato zerou a seleção — se há quantidades
+      // no estado mas os veículos ainda não carregaram (restauração), preserva.
+      removeCartItem(selectedTour.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, date, people, selectedTour?.id, mode])
 
   const applySuggestion = () => {
     if (!suggestion) return

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
+import { useCart } from '../../contexts/CartContext'
 import {
   ChevronLeft, ChevronRight, MapPin, Calendar, Clock, Users, Car,
   Shield, AlertCircle, Pen, Zap, Sun, Waves, Anchor, Plus, Minus, Check,
@@ -123,6 +124,7 @@ function VehicleRow({ vehicle, qty, unitPrice, onAdd, onRemove }) {
 export default function CheckoutSummary() {
   const navigate       = useNavigate()
   const { state: ls }  = useLocation()
+  const { removeItem: removeCartItem } = useCart()
   const timeRef        = useRef(null)
 
   const isPrivateTour  = ls?.service_type === 'tour' && ls?.booking_mode === 'private'
@@ -324,6 +326,8 @@ export default function CheckoutSummary() {
     setReqError('')
     try {
       const result = await api.requestBooking(paymentState)
+      // Solicitação enviada: tira o rascunho deste serviço do carrinho flutuante
+      if (ls?.service_id) removeCartItem(ls.service_id)
       navigate('/checkout/solicitado', {
         state: {
           ...paymentState,

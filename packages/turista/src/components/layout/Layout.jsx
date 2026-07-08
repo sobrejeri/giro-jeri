@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import TopNav from './TopNav'
 import BottomNav from './BottomNav'
 import RegionPicker from '../RegionPicker'
+import CartFab from '../CartFab'
 import PullToRefresh from '../PullToRefresh'
 
 export default function Layout() {
@@ -24,6 +25,7 @@ export default function Layout() {
         </div>
       </div>
 
+      <CartFab />
       <BottomNav />
       <RegionPicker />
     </div>
