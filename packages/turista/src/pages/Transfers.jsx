@@ -486,7 +486,8 @@ export default function Transfers() {
         time, people,
         region_id: region?.id || null,
         vehicles: cartItems.map(({ vehicle, qty }) => ({
-          id: vehicle.id, name: vehicle.name, qty, price: unitPrice || 0,
+          id: vehicle.id, name: vehicle.name, qty,
+          price: unitPrice || 0, cap: vehicle.seat_capacity || null,
         })),
         total: cartTotal,
       })

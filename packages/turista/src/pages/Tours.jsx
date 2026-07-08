@@ -375,17 +375,22 @@ export default function Tours() {
   useEffect(() => {
     if (!selectedTour?.id || mode !== 'private') return
     if (cartHasItems) {
+      // Preserva o que foi completado na página do carrinho (horário/saída)
+      const existing = savedCartItems.find((i) => i.id === selectedTour.id)
       saveCartItem({
         id:      selectedTour.id,
         kind:    'tour',
         mode:    'private',
         name:    selectedTour.name,
+        cover_image_url: selectedTour.cover_image_url || null,
         dateIso: format(date, 'yyyy-MM-dd'),
+        time:    existing?.time || null,
         people,
         region_id:   selectedTour.regions?.id || null,
-        origin_text: origin?.name || null,
+        origin_text: origin?.name || existing?.origin_text || null,
         vehicles: cartItems.map(({ vehicle, qty }) => ({
-          id: vehicle.id, name: vehicle.name, qty, price: Number(vehicle.base_price) || 0,
+          id: vehicle.id, name: vehicle.name, qty,
+          price: Number(vehicle.base_price) || 0, cap: vehicle.seat_capacity || null,
         })),
         total: cartTotal,
       })

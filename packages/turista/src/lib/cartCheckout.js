@@ -26,3 +26,46 @@ export function checkoutStateFor(item) {
     open_editing:     false,
   }
 }
+
+// Campos obrigatórios que ainda faltam num item do carrinho (estilo Mercado
+// Livre: a prévia fica no carrinho, mas só dá pra solicitar quando todos os
+// dados de todos os itens estão completos).
+export function itemMissing(item) {
+  const miss = []
+  if (!item.dateIso) miss.push('data')
+  if (!item.time) miss.push('horário')
+  if (!(Number(item.people) >= 1)) miss.push('pessoas')
+  if (!(item.vehicles || []).some((v) => v.qty > 0)) miss.push('veículo')
+  if (item.kind === 'transfer') {
+    if (!item.origin) miss.push('origem')
+    if (!item.dest) miss.push('destino')
+  } else if (!item.origin_text) {
+    miss.push('local de saída')
+  }
+  return miss
+}
+
+// Corpo do POST /api/payments/request para um item COMPLETO do carrinho.
+// O servidor recalcula o total autoritativo e valida o cutoff.
+export function requestPayloadFor(item) {
+  const base = {
+    service_type:     item.kind === 'transfer' ? 'transfer' : 'tour',
+    service_id:       item.id,
+    booking_mode:     item.mode === 'shared' ? 'shared' : 'private',
+    service_date_iso: item.dateIso,
+    service_time:     item.time || undefined,
+    people_count:     item.people || 1,
+    region_id:        item.region_id || undefined,
+    total_price:      Number(item.total) || 0,
+    vehicles: (item.vehicles || []).filter((v) => v.qty > 0).map((v) => ({
+      vehicle_id: v.id, qty: v.qty, unit_price: Number(v.price) || 0,
+    })),
+  }
+  if (item.kind === 'transfer') {
+    base.origin_text      = item.origin || undefined
+    base.destination_text = item.dest || undefined
+  } else {
+    base.origin_text = item.origin_text || undefined
+  }
+  return base
+}
