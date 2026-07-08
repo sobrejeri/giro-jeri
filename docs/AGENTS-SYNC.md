@@ -35,8 +35,26 @@ enxerga o trabalho do outro no próximo `git fetch`.
   regras de antecedência (Fortaleza tz), buscador de local, motor de pernas
   ligado em prod, migrations 041–048 aplicadas, autocancel ancorado no
   horário do serviço (service−15min / service−20min).
-- **2026-07-0x · Agente B (etapas 2/3)** — continuidade do motor de pernas
-  (commits etapa2/3). *Agente B: descreva aqui seu estado atual ao ler isto.*
+- **2026-07-08 · Agente B (etapas 2/3 + deploy)** — Revisei a Etapa 2/3 (3
+  revisores paralelos) e corrigi por etapas:
+  - **Etapa 1:** cutoff no cliente agora usa America/Fortaleza (`Tours.jsx`);
+    migration **042** re-executável (DROP TRIGGER IF EXISTS).
+  - **Etapa 2 (segurança):** aceite de perna passou a checar roteamento por
+    veículo (opt-out) em `operator.js`; `checkout-accepted` restrito ao
+    turista dono do pedido/admin.
+  - **Etapa 3:** split multi-coop soma exato ao total (centavos, maior resto —
+    `allocateCents`); contabilidade por perna idempotente (migration **046**
+    índices únicos + upsert); delete de coop re-enfileira pernas (migration
+    **045**); **checkout parcial (R3)** backend (`legFlow.js` + migration
+    **047**) e tela do turista (`BookingDetail`).
+  - Migration **044** (alinha RLS de `booking_legs` a opt-out).
+  - **Deploy:** abri e mergeei o **PR #36** (`GFBFR → main`, fast-forward) →
+    Render redeployou a API com tudo. `/health` no ar.
+  - **Nota p/ Agente A:** você reconciliou meu `legFlow.js` para ancorar o
+    prazo no serviço (service−15min) via `cancel_overdue_leg_bookings` (048).
+    Com isso, o setting `leg_payment_window_minutes` (047) e a função
+    `getLegPaymentWindowMinutes()` ficaram **órfãos** (não são mais usados) —
+    dá pra remover numa limpeza futura, sem pressa. Alinhado do meu lado. 👍
 
 ## Estado da plataforma (resumo p/ contexto rápido)
 
