@@ -192,13 +192,13 @@ function PresetCard({ route, bg, active, onSelect }) {
 }
 
 /* ── Date picker (bottom sheet) ─────────────────────────────── */
-function DateSheet({ value, onChange, onClose }) {
-  const today  = startOfDay(new Date())
+function DateSheet({ value, onChange, onClose, minDate }) {
+  const today  = minDate || startOfDay(new Date())
   const [view, setView] = useState(startOfMonth(value))
   const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
   const offset = getDay(startOfMonth(view))
   const canPrev = !isBefore(subMonths(view, 1), startOfMonth(today))
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
@@ -240,13 +240,14 @@ function DateSheet({ value, onChange, onClose }) {
           <button onClick={onClose} className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">Confirmar</button>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
 /* ── Route picker (bottom sheet) ────────────────────────────── */
 function RouteSheet({ title, options, selected, onSelect, onClose }) {
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
@@ -269,7 +270,8 @@ function RouteSheet({ title, options, selected, onSelect, onClose }) {
           ))}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
@@ -442,6 +444,25 @@ export default function Transfers() {
   const matched    = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
   const unitPrice  = matched ? Number(matched.default_price) : null
   const popularRoutes = useMemo(() => pickPopularRoutes(routes), [routes])
+
+  // Data mínima: padrão meio-dia (Fortaleza). Passou de 12h → só amanhã+.
+  // O transfer da rota pode definir um booking_cutoff_time próprio (prioritário).
+  const minDate = useMemo(() => {
+    const c = matched?.transfers?.booking_cutoff_time || '12:00'
+    const todayStart = startOfDay(new Date())
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date())
+    const nowMin = Number(parts.find(p => p.type === 'hour')?.value ?? 0) * 60
+                 + Number(parts.find(p => p.type === 'minute')?.value ?? 0)
+    const cutoffMin = Number(c.slice(0, 2)) * 60 + Number(c.slice(3, 5))
+    return nowMin >= cutoffMin ? addDays(todayStart, 1) : todayStart
+  }, [matched?.transfers?.booking_cutoff_time])
+
+  useEffect(() => {
+    if (isBefore(date, minDate)) setDate(minDate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minDate])
 
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
 
@@ -955,10 +976,11 @@ export default function Transfers() {
         </div>
       </div>
 
-      {/* Bottom CTA — resumo fixo no viewport. Portal p/ document.body: o
-          wrapper do PullToRefresh usa transform/will-change e prenderia o
-          position:fixed na página (a barra sumia no fim do conteúdo). */}
-      {createPortal(
+      {/* Bottom CTA — resumo fixo no viewport, só quando há veículo selecionado.
+          Portal p/ document.body: o wrapper do PullToRefresh usa transform/
+          will-change e prenderia o position:fixed na página (a barra sumia no
+          fim do conteúdo). */}
+      {cartHasItems && createPortal(
         <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
           <div className="flex-1 min-w-0">
@@ -984,7 +1006,7 @@ export default function Transfers() {
       )}
 
       {/* Sheets */}
-      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} />}
+      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} />}
       {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
       {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
     </> )} {/* end mode === 'rota' */}

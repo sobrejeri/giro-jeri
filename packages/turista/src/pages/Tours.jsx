@@ -173,7 +173,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate }) {
   const offset = getDay(startOfMonth(viewMonth))
   const canGoPrev = !isBefore(subMonths(viewMonth, 1), startOfMonth(today))
 
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
@@ -246,7 +246,8 @@ function DatePickerSheet({ value, onChange, onClose, minDate }) {
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
@@ -308,9 +309,10 @@ export default function Tours() {
   // mesmo relógio, senão um turista em outro fuso vê "hoje" disponível e leva
   // 400 no checkout.
   const cutoffMinDate = useMemo(() => {
-    const c = selectedTour?.booking_cutoff_time
+    // Padrão: meio-dia. Passou de 12h (Fortaleza) → só a partir de amanhã.
+    // Se o passeio definir um booking_cutoff_time próprio, ele tem prioridade.
+    const c = selectedTour?.booking_cutoff_time || '12:00'
     const todayStart = startOfDay(new Date())
-    if (!c) return todayStart
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false,
     }).formatToParts(new Date())
@@ -722,10 +724,10 @@ export default function Tours() {
           Portal p/ document.body: o wrapper do PullToRefresh usa transform/
           will-change e prenderia o position:fixed na página (a barra sumia no
           fim do conteúdo ao rolar). Pelo portal ela cola no rodapé da tela. ── */}
-      {mode === 'private' && selectedTour && createPortal((() => {
-        // Basta a pré-seleção cobrir as pessoas; data/hora/saída são definidas
-        // depois, na edição dentro do carrinho.
-        const canContinue = cartHasItems && cartCapacity >= people
+      {mode === 'private' && cartHasItems && createPortal((() => {
+        // Barra aparece só quando há veículo selecionado. Basta a pré-seleção
+        // cobrir as pessoas; data/hora/saída são definidas depois, no carrinho.
+        const canContinue = cartCapacity >= people
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
             <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
