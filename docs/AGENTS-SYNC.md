@@ -28,6 +28,12 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (FAB acima do resumo)** — O `CartFab` (carrinho
+  flutuante) cobria o botão "Adicionar ao carrinho" do resumo em Passeios/
+  Translados. Agora ele sobe para `bottom-[150px]` nessas rotas (`/passeios`,
+  `/transfers`), ficando ACIMA do resumo; nas demais telas segue em
+  `bottom-[86px]`. Arquivo: `components/CartFab.jsx`.
+
 - **2026-07-08 · Agente B (UX pré-seleção + sugestões no carrinho)** — Refino do
   fluxo de pré-seleção: resumo flutuante SEMPRE visível embaixo (Tours modo
   privativo agora aparece mesmo sem veículo, com prompt); botão renomeado de
