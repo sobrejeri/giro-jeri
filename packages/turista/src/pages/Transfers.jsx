@@ -972,7 +972,7 @@ export default function Transfers() {
               canBook ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {loading ? 'Aguarde…' : 'Continuar'}
+            {loading ? 'Aguarde…' : 'Adicionar ao carrinho'}
           </button>
         </div>
       </div>

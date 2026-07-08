@@ -717,46 +717,52 @@ export default function Tours() {
         />
       )}
 
-      {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
-      {mode === 'private' && cartHasItems && (() => {
+      {/* ── Resumo flutuante (modo privativo) — sempre visível ── */}
+      {mode === 'private' && selectedTour && (() => {
         // Basta a pré-seleção cobrir as pessoas; data/hora/saída são definidas
         // depois, na edição dentro do carrinho.
-        const canContinue = cartCapacity >= people
+        const canContinue = cartHasItems && cartCapacity >= people
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
             <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-              {/* Resumo */}
+              {/* Resumo do que está selecionado */}
               <div className="flex-1 min-w-0 mr-3">
-                <p className="text-[13px] font-bold text-gray-900 truncate">
-                  {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
-                </p>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Users size={11} className={canContinue ? 'text-gray-400' : 'text-red-400'} />
-                  <span className={`text-[11px] font-medium ${canContinue ? 'text-gray-500' : 'text-red-400'}`}>
-                    {cartCapacity}/{people}
-                  </span>
-                </div>
-              </div>
-              {/* Preço + botão */}
-              <div className="flex items-center gap-3 shrink-0">
-                {cartTotal > 0 && (
-                  <span className={`text-[15px] font-extrabold ${canContinue ? 'text-brand' : 'text-gray-400'}`}>
-                    R$ {cartTotal.toLocaleString('pt-BR')}
-                  </span>
+                {cartHasItems ? (
+                  <>
+                    <p className="text-[13px] font-bold text-gray-900 truncate">
+                      {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="inline-flex items-center gap-1">
+                        <Users size={11} className={cartCapacity >= people ? 'text-gray-400' : 'text-red-400'} />
+                        <span className={`text-[11px] font-medium ${cartCapacity >= people ? 'text-gray-500' : 'text-red-400'}`}>
+                          {cartCapacity}/{people} lugares
+                        </span>
+                      </span>
+                      {cartTotal > 0 && (
+                        <span className="text-[13px] font-extrabold text-brand">
+                          R$ {cartTotal.toLocaleString('pt-BR')}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-[13px] text-gray-400">Selecione um veículo abaixo</p>
                 )}
-                <button
-                  onClick={canContinue
-                    ? () => { saveCartItem(buildCartDraft()); navigate('/carrinho') }
-                    : undefined}
-                  className={`font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
-                    canContinue
-                      ? 'bg-brand text-white active:scale-95 cursor-pointer'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  Continuar
-                </button>
               </div>
+              {/* Botão */}
+              <button
+                onClick={canContinue
+                  ? () => { saveCartItem(buildCartDraft()); navigate('/carrinho') }
+                  : undefined}
+                className={`shrink-0 font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
+                  canContinue
+                    ? 'bg-brand text-white active:scale-95 cursor-pointer'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Adicionar ao carrinho
+              </button>
             </div>
           </div>
         )

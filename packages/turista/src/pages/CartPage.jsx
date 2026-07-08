@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ShoppingCart, Trash2, Calendar, Clock, Users, Car, MapPin, Pencil,
-  CheckCircle2, AlertTriangle, Loader2, Send, X, Plus, Minus, ChevronRight,
+  CheckCircle2, AlertTriangle, Loader2, Send, X, Plus, Minus, ChevronRight, Sparkles,
 } from 'lucide-react'
 import PageHeader from '../components/layout/PageHeader'
 import { useCart } from '../contexts/CartContext'
@@ -371,6 +371,19 @@ export default function CartPage() {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
+  // Sugestões (cross-sell): incentiva o cliente a adicionar passeios. Mostra
+  // passeios que ainda não estão no carrinho — aparece quando já há um item
+  // (transfer ou passeio) para estimular a montar mais da viagem.
+  const { data: toursData } = useQuery({
+    queryKey:  ['cart-suggested-tours'],
+    queryFn:   () => api.getTours({ limit: 10 }),
+    staleTime: 5 * 60_000,
+  })
+  const cartIds = new Set(items.map((i) => i.id))
+  const suggestedTours = (Array.isArray(toursData) ? toursData : toursData?.data || toursData?.tours || [])
+    .filter((t) => t && !cartIds.has(t.id))
+    .slice(0, 8)
+
   const list = batch || items
   const allComplete = items.length > 0 && items.every((i) => itemMissing(i).length === 0)
   const okCount  = Object.values(results).filter((r) => r.status === 'ok').length
@@ -492,6 +505,38 @@ export default function CartPage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* ── Sugestões: complete a viagem com passeios ── */}
+      {items.length > 0 && !done && suggestedTours.length > 0 && (
+        <div className="mt-6">
+          <div className="px-4 flex items-center gap-2">
+            <Sparkles size={15} className="text-brand" />
+            <p className="text-[14px] font-extrabold text-gray-900">Complete sua viagem</p>
+          </div>
+          <p className="px-4 text-[12px] text-gray-400 mt-0.5 mb-3">Que tal adicionar um passeio guiado?</p>
+          <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide">
+            {suggestedTours.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => navigate('/passeios', { state: { selectedId: t.id } })}
+                className="shrink-0 w-[150px] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden text-left active:scale-[0.97] transition-transform"
+              >
+                <div className="h-[90px] bg-gray-100">
+                  {t.cover_image_url
+                    ? <img src={t.cover_image_url} alt={t.name} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full bg-gradient-to-br from-orange-400 to-amber-300" />}
+                </div>
+                <div className="p-2.5">
+                  <p className="text-[12px] font-bold text-gray-900 leading-tight line-clamp-2 min-h-[30px]">{t.name}</p>
+                  <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-bold text-brand">
+                    <Plus size={12} /> Adicionar
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

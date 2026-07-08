@@ -28,6 +28,15 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (UX pré-seleção + sugestões no carrinho)** — Refino do
+  fluxo de pré-seleção: resumo flutuante SEMPRE visível embaixo (Tours modo
+  privativo agora aparece mesmo sem veículo, com prompt); botão renomeado de
+  "Continuar" → **"Adicionar ao carrinho"** (Tours + Transfers). Na `CartPage`,
+  nova seção **"Complete sua viagem"** (cross-sell): sugere passeios que ainda
+  não estão no carrinho (query `getTours`, filtra por id), card leva a
+  `/passeios` já pré-selecionando o passeio (`state.selectedId`). Arquivos:
+  `Tours.jsx`, `Transfers.jsx`, `CartPage.jsx`. Build OK.
+
 - **2026-07-08 · Agente B (pré-seleção → carrinho)** — Assumi a atividade que o
   **Agente A** estava fazendo quando bateu o limite semanal. ⚠️ O WIP dele
   (+939/-8, visto no chat) **não foi enviado** ao remoto — ficou no container
