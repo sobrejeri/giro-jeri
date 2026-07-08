@@ -30,7 +30,18 @@ export default function CartFab() {
 
   function resume(item) {
     setOpen(false)
-    navigate('/passeios', { state: { selectedId: item.id, restoreFromCart: true, mode: item.mode || 'private' } })
+    if (item.kind === 'transfer') {
+      navigate('/transfers', {
+        state: {
+          restoreFromCart: true,
+          origin: item.origin, dest: item.dest,
+          date: item.dateIso, time: item.time, people: item.people,
+          cartVehicles: item.vehicles,
+        },
+      })
+    } else {
+      navigate('/passeios', { state: { selectedId: item.id, restoreFromCart: true, mode: item.mode || 'private' } })
+    }
   }
 
   return (
@@ -82,6 +93,9 @@ export default function CartFab() {
                   <div className="flex items-center gap-3 mt-1.5 text-[11.5px] text-gray-500">
                     <span className="inline-flex items-center gap-1"><Calendar size={11} className="text-brand" />{dayLabel(item.dateIso)}</span>
                     <span className="inline-flex items-center gap-1"><Users size={11} className="text-brand" />{item.people} pessoa{item.people > 1 ? 's' : ''}</span>
+                    {item.kind === 'transfer' && item.time && (
+                      <span className="inline-flex items-center gap-1">🕐 {item.time}</span>
+                    )}
                   </div>
                   {item.vehicles?.length > 0 && (
                     <p className="text-[12px] text-gray-600 mt-1.5">

@@ -3,6 +3,7 @@ import { useQuery }    from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
+import { useCart }     from '../contexts/CartContext'
 import { api }         from '../lib/api'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
@@ -328,6 +329,7 @@ export default function Transfers() {
   const navigate  = useNavigate()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
+  const { upsertItem: saveCartItem, removeItem: removeCartItem } = useCart()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
@@ -346,9 +348,17 @@ export default function Transfers() {
     const d = navState?.date ? new Date(`${navState.date}T12:00:00`) : new Date()
     return startOfDay(Number.isNaN(d.getTime()) ? new Date() : d)
   })
-  const [time,       setTime]       = useState('08:00')
+  const [time,       setTime]       = useState(navState?.time || '08:00')
   const [people,     setPeople]     = useState(Number(navState?.people) || 2)
-  const [cart,       setCart]       = useState({})   // vehicleId → qty
+  const [cart,       setCart]       = useState(() => {  // vehicleId → qty
+    // "Retomar" do carrinho flutuante: restaura os veículos salvos da rota
+    if (navState?.restoreFromCart && Array.isArray(navState.cartVehicles)) {
+      const c = {}
+      for (const v of navState.cartVehicles) c[v.id] = v.qty
+      return c
+    }
+    return {}
+  })
   const [notes,      setNotes]      = useState('')
   const [showDate,   setShowDate]   = useState(false)
   const [showOrigin, setShowOrigin] = useState(false)
@@ -461,6 +471,29 @@ export default function Transfers() {
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const cartHasItems = cartItems.length > 0
+
+  // Auto-save no carrinho flutuante (mesmo carrinho dos passeios): a rota com
+  // veículos selecionados vira rascunho persistido; zerar a seleção remove.
+  useEffect(() => {
+    if (!matched?.id) return
+    if (cartHasItems) {
+      saveCartItem({
+        id:      matched.id,
+        kind:    'transfer',
+        name:    `${shortPlace(origin)} → ${shortPlace(dest)}`,
+        origin, dest,
+        dateIso: format(date, 'yyyy-MM-dd'),
+        time, people,
+        vehicles: cartItems.map(({ vehicle, qty }) => ({
+          id: vehicle.id, name: vehicle.name, qty, price: unitPrice || 0,
+        })),
+        total: cartTotal,
+      })
+    } else if (Object.values(cart).every((q) => !q)) {
+      removeCartItem(matched.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, date, time, people, matched?.id])
   const canBook      = !!matched && cartHasItems && cartCapacity >= people && !!time
 
   // True when suggestion is already the only item in cart at the right qty
