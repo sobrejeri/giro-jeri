@@ -18,6 +18,7 @@ import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
 import Auth            from './pages/Auth'
 import Legal           from './pages/Legal'
+import CartPage        from './pages/CartPage'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="passeios"            element={<Tours />} />
         <Route path="passeios/:id"        element={<TourDetail />} />
         <Route path="transfers"           element={<Transfers />} />
+        <Route path="carrinho"            element={<CartPage />} />
         <Route path="minhas-reservas"     element={<PrivateRoute><Bookings /></PrivateRoute>} />
         <Route path="minhas-reservas/:id" element={<PrivateRoute><BookingDetail /></PrivateRoute>} />
         <Route path="perfil"              element={<Profile />} />

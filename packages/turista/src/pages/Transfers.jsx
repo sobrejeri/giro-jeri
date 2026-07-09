@@ -1,8 +1,12 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery }    from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
+import { useCart }     from '../contexts/CartContext'
+import { highSeasonMonthSet } from '../lib/season'
+import DateSheet from '../components/DateSheet'
 import { api }         from '../lib/api'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
@@ -189,62 +193,10 @@ function PresetCard({ route, bg, active, onSelect }) {
   )
 }
 
-/* ── Date picker (bottom sheet) ─────────────────────────────── */
-function DateSheet({ value, onChange, onClose }) {
-  const today  = startOfDay(new Date())
-  const [view, setView] = useState(startOfMonth(value))
-  const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
-  const offset = getDay(startOfMonth(view))
-  const canPrev = !isBefore(subMonths(view, 1), startOfMonth(today))
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
-        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
-        <div className="flex items-center justify-between px-5 py-3">
-          <p className="text-[16px] font-bold text-gray-900">Escolha a data</p>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"><X size={14} className="text-gray-500" /></button>
-        </div>
-        <div className="flex items-center justify-between px-5 mb-3">
-          <button disabled={!canPrev} onClick={() => setView(m => subMonths(m, 1))}
-            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center disabled:opacity-30 active:scale-95">
-            <ChevronLeft size={16} className="text-gray-600" />
-          </button>
-          <p className="text-[14px] font-semibold text-gray-900 capitalize">{format(view, 'MMMM yyyy', { locale: ptBR })}</p>
-          <button onClick={() => setView(m => addMonths(m, 1))} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95">
-            <ChevronRight size={16} className="text-gray-600" />
-          </button>
-        </div>
-        <div className="grid grid-cols-7 px-4 mb-1">
-          {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>)}
-        </div>
-        <div className="grid grid-cols-7 px-4 gap-y-0.5 mb-4">
-          {Array.from({ length: offset }).map((_, i) => <div key={`e${i}`} />)}
-          {days.map(day => {
-            const past = isBefore(day, today)
-            const sel  = isSameDay(day, value)
-            return (
-              <button key={day.toISOString()} disabled={past} onClick={() => { onChange(day); onClose() }}
-                className={`aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
-                  ${sel ? 'bg-brand text-white font-bold' : ''}
-                  ${!sel && isToday(day) ? 'text-brand font-bold' : ''}
-                  ${!sel && !isToday(day) && !past ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
-                  ${past ? 'text-gray-300 cursor-not-allowed' : ''}`}
-              >{format(day, 'd')}</button>
-            )
-          })}
-        </div>
-        <div className="px-4 pb-8">
-          <button onClick={onClose} className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">Confirmar</button>
-        </div>
-      </div>
-    </>
-  )
-}
 
 /* ── Route picker (bottom sheet) ────────────────────────────── */
 function RouteSheet({ title, options, selected, onSelect, onClose }) {
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
@@ -267,7 +219,8 @@ function RouteSheet({ title, options, selected, onSelect, onClose }) {
           ))}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
@@ -328,6 +281,7 @@ export default function Transfers() {
   const navigate  = useNavigate()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
+  const { upsertItem: saveCartItem } = useCart()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
@@ -346,9 +300,17 @@ export default function Transfers() {
     const d = navState?.date ? new Date(`${navState.date}T12:00:00`) : new Date()
     return startOfDay(Number.isNaN(d.getTime()) ? new Date() : d)
   })
-  const [time,       setTime]       = useState('08:00')
+  const [time,       setTime]       = useState(navState?.time || '08:00')
   const [people,     setPeople]     = useState(Number(navState?.people) || 2)
-  const [cart,       setCart]       = useState({})   // vehicleId → qty
+  const [cart,       setCart]       = useState(() => {  // vehicleId → qty
+    // "Retomar" do carrinho flutuante: restaura os veículos salvos da rota
+    if (navState?.restoreFromCart && Array.isArray(navState.cartVehicles)) {
+      const c = {}
+      for (const v of navState.cartVehicles) c[v.id] = v.qty
+      return c
+    }
+    return {}
+  })
   const [notes,      setNotes]      = useState('')
   const [showDate,   setShowDate]   = useState(false)
   const [showOrigin, setShowOrigin] = useState(false)
@@ -408,7 +370,12 @@ export default function Transfers() {
     : isSameDay(customDate, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
     : format(customDate, 'd MMM', { locale: ptBR })
 
-  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime
+  const customChosen = (() => {
+    const [th, tm] = String(customTime || '00:00').split(':').map(Number)
+    const d = new Date(customDate); d.setHours(th || 0, tm || 0, 0, 0); return d
+  })()
+  const customAdvanceOk = customChosen >= minBookable
+  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime && customAdvanceOk
 
   /* ── Queries ── */
   const { data: routesData } = useQuery({
@@ -426,11 +393,58 @@ export default function Transfers() {
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
                     .filter(v => v.is_transfer_allowed && v.is_active !== false)
 
+  // Alta temporada: meses com acréscimo, p/ sinalizar no calendário.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  })
+  const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
+
   const origins    = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
   const dests      = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
   const matched    = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
   const unitPrice  = matched ? Number(matched.default_price) : null
   const popularRoutes = useMemo(() => pickPopularRoutes(routes), [routes])
+
+  // Antecedência mínima de 4h (America/Fortaleza): bloqueia datas E horários
+  // anteriores a "agora + 4h". minBookable é a wall-clock de Fortaleza + 4h.
+  const MIN_ADVANCE_HOURS = 4
+  const minBookable = useMemo(() => {
+    const p = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Fortaleza',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a }, {})
+    const d = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), 0)
+    d.setHours(d.getHours() + MIN_ADVANCE_HOURS)
+    return d
+  }, [])
+  const minDate = useMemo(() => startOfDay(minBookable), [minBookable])
+  // Horário mínimo: só restringe quando a data escolhida é o 1º dia disponível.
+  const minTime = isSameDay(date, minDate) ? format(minBookable, 'HH:mm') : '00:00'
+
+  useEffect(() => {
+    if (isBefore(date, minDate)) setDate(minDate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minDate])
+  // Se a data é o dia mínimo e o horário ficou antes do limite, empurra o horário.
+  useEffect(() => {
+    if (isSameDay(date, minDate) && time && time < minTime) setTime(minTime)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, minTime])
+
+  // Mesma regra de 4h para o TRANSFER PERSONALIZADO (customDate/customTime).
+  const customMinTime = isSameDay(customDate, minDate) ? format(minBookable, 'HH:mm') : '00:00'
+  useEffect(() => {
+    if (isBefore(customDate, minDate)) setCustomDate(minDate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minDate])
+  useEffect(() => {
+    if (isSameDay(customDate, minDate) && customTime && customTime < customMinTime) setCustomTime(customMinTime)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customDate, customMinTime])
 
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
 
@@ -461,7 +475,33 @@ export default function Transfers() {
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const cartHasItems = cartItems.length > 0
-  const canBook      = !!matched && cartHasItems && cartCapacity >= people && !!time
+
+  // Monta o rascunho do carrinho a partir da PRÉ-SELEÇÃO (rota definida +
+  // veículos + pessoas). NÃO é auto-salvo: só vai pro carrinho no "Continuar".
+  // Data/hora são refinadas depois, na edição dentro do carrinho.
+  const buildCartDraft = () => ({
+    id:      matched.id,
+    kind:    'transfer',
+    name:    `${shortPlace(origin)} → ${shortPlace(dest)}`,
+    origin, dest,
+    dateIso: format(date, 'yyyy-MM-dd'),
+    time, people,
+    region_id: region?.id || null,
+    booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
+    vehicles: cartItems.map(({ vehicle, qty }) => ({
+      id: vehicle.id, name: vehicle.name, qty,
+      price: unitPrice || 0, cap: vehicle.seat_capacity || null,
+    })),
+    total: cartTotal,
+  })
+  // Basta a rota + veículos cobrindo as pessoas; o horário é definido no carrinho.
+  // Data+hora escolhidas como wall-clock, p/ conferir a antecedência de 4h.
+  const chosenDateTime = useMemo(() => {
+    const [th, tm] = String(time || '00:00').split(':').map(Number)
+    const d = new Date(date); d.setHours(th || 0, tm || 0, 0, 0); return d
+  }, [date, time])
+  const advanceOk    = chosenDateTime >= minBookable
+  const canBook      = !!matched && cartHasItems && cartCapacity >= people && advanceOk
 
   // True when suggestion is already the only item in cart at the right qty
   const suggestionIsApplied = !!(suggestion &&
@@ -469,20 +509,9 @@ export default function Transfers() {
     cartItems[0].vehicle.id === suggestion.vehicle.id &&
     cartItems[0].qty === suggestion.qty)
 
-  // Acréscimo de alta temporada / feriado já no resumo (antes de confirmar)
-  const { data: surchargeData } = useQuery({
-    queryKey: ['transfer-surcharge', region?.id, format(date, 'yyyy-MM-dd'), cartTotal],
-    queryFn:  () => api.transferSurcharge({
-      region_id:    region.id,
-      service_date: format(date, 'yyyy-MM-dd'),
-      subtotal:     cartTotal,
-    }),
-    enabled:   !!matched && cartHasItems && cartTotal > 0 && !!region?.id,
-    staleTime: 30_000,
-    retry:     false,
-  })
-  const seasonAddition = Number(surchargeData?.seasonAdditional) || 0
-  const grandTotal     = Math.round((cartTotal + seasonAddition) * 100) / 100
+  // Acréscimo de alta temporada / feriado NÃO é mais calculado aqui: a data
+  // final é definida no carrinho, então é lá que o total com temporada é
+  // computado. Nesta pré-seleção mostra-se só o total dos veículos.
 
   const dateLabel = isToday(date) ? 'Hoje'
     : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
@@ -491,28 +520,9 @@ export default function Transfers() {
   async function handleConfirm() {
     if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canBook) return
-    navigate('/checkout/resumo', {
-      state: {
-        service_name:        `Transfer ${origin} → ${dest}`,
-        short_description:   matched?.transfers?.short_description || null,
-        service_type:        'transfer',
-        booking_mode:        'private',
-        service_date:        dateLabel,
-        service_date_iso:    format(date, 'yyyy-MM-dd'),
-        service_time:        time,
-        people_count:        people,
-        origin_text:         origin,
-        destination_text:    dest,
-        vehicle_name:        cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
-        total_price:         cartTotal,
-        transfer_unit_price: unitPrice,
-        breakdown:           { 'Veículos': cartTotal },
-        region_id:           region?.id || null,
-        service_id:          matched?.id,
-        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: unitPrice })),
-        booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
-      },
-    })
+    // Pré-seleção → carrinho: continua a solicitação (data/hora/edição) lá.
+    saveCartItem(buildCartDraft())
+    navigate('/carrinho')
   }
 
   return (
@@ -668,6 +678,7 @@ export default function Transfers() {
                       ref={customTimeRef}
                       type="time"
                       value={customTime}
+                      min={customMinTime}
                       onChange={e => setCustomTime(e.target.value)}
                       className="absolute inset-0 opacity-0 w-full cursor-pointer"
                     />
@@ -725,7 +736,7 @@ export default function Transfers() {
           )}
 
           {showCustomDate && (
-            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} />
+            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} minDate={minDate} highSeasonMonths={highSeasonMonths} />
           )}
         </div>
       )}
@@ -804,11 +815,17 @@ export default function Transfers() {
                 ref={timeRef}
                 type="time"
                 value={time}
+                min={minTime}
                 onChange={e => setTime(e.target.value)}
                 className="absolute inset-0 opacity-0 w-full cursor-pointer"
               />
             </button>
           </div>
+          {!advanceOk && (
+            <p className="px-4 pb-3 -mt-1 text-[11px] text-amber-600">
+              Transfers precisam de no mínimo {MIN_ADVANCE_HOURS}h de antecedência — escolha a partir de {format(minBookable, "d/MM 'às' HH:mm")}.
+            </p>
+          )}
         </section>
 
         {/* PASSAGEIROS */}
@@ -920,7 +937,6 @@ export default function Transfers() {
               {[
                 { dot: 'bg-brand',    label: 'Origem',      val: origin },
                 { dot: 'bg-gray-400', label: 'Destino',     val: dest   },
-                { icon: Calendar,     label: 'Data & Hora', val: `${dateLabel} às ${time || '—'}` },
                 { icon: Users,        label: 'Passageiros', val: `${people} pessoa${people !== 1 ? 's' : ''}` },
                 ...(cartItems.length ? [{ icon: Car, label: 'Veículo', val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
               ].map((row, i) => (
@@ -934,22 +950,13 @@ export default function Transfers() {
                   </div>
                 </div>
               ))}
-              {seasonAddition > 0 && (
-                <>
-                  <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
-                    <p className="text-[12px] text-gray-400">Subtotal</p>
-                    <p className="text-[13px] font-semibold text-gray-800">R$ {cartTotal.toLocaleString('pt-BR')}</p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-[12px] text-amber-600">Alta temporada / feriado</p>
-                    <p className="text-[13px] font-semibold text-amber-600">+ R$ {seasonAddition.toLocaleString('pt-BR')}</p>
-                  </div>
-                </>
-              )}
-              <div className={`flex items-center justify-between ${seasonAddition > 0 ? 'pt-0.5' : 'border-t border-gray-100 pt-2'}`}>
-                <p className="text-[13px] font-bold text-gray-900">Total</p>
-                <p className="text-[16px] font-extrabold text-brand">R$ {grandTotal ? grandTotal.toLocaleString('pt-BR') : '—'}</p>
+              <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
+                <p className="text-[13px] font-bold text-gray-900">Total dos veículos</p>
+                <p className="text-[16px] font-extrabold text-brand">R$ {cartTotal ? cartTotal.toLocaleString('pt-BR') : '—'}</p>
               </div>
+              <p className="text-[11px] text-gray-400 leading-snug">
+                Data, horário e eventuais acréscimos de temporada são definidos ao continuar, no carrinho.
+              </p>
             </div>
           </section>
         )}
@@ -964,14 +971,18 @@ export default function Transfers() {
         </div>
       </div>
 
-      {/* Bottom CTA */}
-      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
+      {/* Bottom CTA — resumo fixo no viewport, só quando há veículo selecionado.
+          Portal p/ document.body: o wrapper do PullToRefresh usa transform/
+          will-change e prenderia o position:fixed na página (a barra sumia no
+          fim do conteúdo). */}
+      {cartHasItems && createPortal(
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-          <div>
-            <p className="text-[10px] text-gray-400">Total estimado{seasonAddition > 0 ? ' · com alta temporada' : ''}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-gray-400">Total dos veículos</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-              {grandTotal
-                ? `R$ ${grandTotal.toLocaleString('pt-BR')}`
+              {cartTotal
+                ? `R$ ${cartTotal.toLocaleString('pt-BR')}`
                 : matched ? 'Selecione um veículo' : 'Selecione a rota'}
             </p>
           </div>
@@ -982,13 +993,15 @@ export default function Transfers() {
               canBook ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {loading ? 'Aguarde…' : 'Confirmar Transfer'}
+            {loading ? 'Aguarde…' : 'Adicionar ao carrinho'}
           </button>
         </div>
-      </div>
+        </div>,
+        document.body,
+      )}
 
       {/* Sheets */}
-      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} />}
+      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} highSeasonMonths={highSeasonMonths} />}
       {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
       {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
     </> )} {/* end mode === 'rota' */}

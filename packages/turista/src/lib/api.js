@@ -129,6 +129,10 @@ export const api = {
   getComments:    (postId)     => request(`/api/feed/${postId}/comments`),
   addComment:     (postId, body) => request(`/api/feed/${postId}/comments`, { method: 'POST', body: { body } }),
   deleteComment:  (id)         => request(`/api/feed/comments/${id}`, { method: 'DELETE' }),
+  // Publicação no feed (admin): criar / editar / excluir posts (evento/promo)
+  createPost:     (body)       => request('/api/feed',        { method: 'POST',   body }),
+  updatePost:     (id, body)   => request(`/api/feed/${id}`,  { method: 'PUT',    body }),
+  deletePost:     (id)         => request(`/api/feed/${id}`,  { method: 'DELETE' }),
 
   // Regiões
   getRegions: () => request('/api/regions'),
@@ -147,6 +151,8 @@ export const api = {
   getTransferRoutes:  (params = {}) => request(`/api/transfers/routes?${new URLSearchParams(params)}`),
   calculateTransfer:  (body)        => request('/api/transfers/calculate', { method: 'POST', body }),
   transferSurcharge:  (body)        => request('/api/transfers/surcharge', { method: 'POST', body }),
+  // Alta temporada (público): regras ativas p/ sinalizar datas no calendário
+  getSeasons:         (params = {}) => request(`/api/seasons?${new URLSearchParams(params)}`),
   requestQuote:       (body)        => request('/api/transfers/quotes',    { method: 'POST', body }),
   getMyQuotes:        ()            => request('/api/transfers/quotes'),
   acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),

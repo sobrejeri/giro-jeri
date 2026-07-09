@@ -1,15 +1,18 @@
 import { useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import Stories from '../components/Stories'
+import VerifiedBadge from '../components/VerifiedBadge'
+import FeedPublisher from '../components/FeedPublisher'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
-  ChevronLeft, Search,
+  ChevronLeft, Search, Pencil, Plus,
 } from 'lucide-react'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
@@ -95,8 +98,7 @@ function StarRating({ value, onChange, size = 18 }) {
 }
 
 /* ── Comments Section ──────────────────────────────────── */
-function CommentsSection({ postId, commentCount, user }) {
-  const [open, setOpen] = useState(false)
+function CommentsSection({ postId, commentCount, user, open, setOpen }) {
   const [text, setText] = useState('')
   const qc = useQueryClient()
 
@@ -225,7 +227,7 @@ function ReviewModal({ place, onClose, user }) {
     addMut.mutate({ rating, comment: comment.trim() || null })
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl max-h-[85vh] overflow-y-auto">
@@ -300,12 +302,14 @@ function ReviewModal({ place, onClose, user }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
 /* ── feed card (evento / promoção) ─────────────────────── */
-function PostCard({ post, liked, onLike, user }) {
+function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
+  const [commentsOpen, setCommentsOpen] = useState(false)
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
@@ -322,42 +326,75 @@ function PostCard({ post, liked, onLike, user }) {
   }
 
   return (
-    <article className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
-          {isPromo ? <BadgePercent size={16} className="text-white" /> : <MapPin size={16} className="text-white" />}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[13px] font-bold text-gray-900 leading-tight">Turiva</p>
-          <p className="text-[11px] text-gray-400 leading-tight">{isPromo ? 'Promoção' : 'Evento'} · Jericoacoara</p>
-        </div>
-        {dateLabel && !isPromo && (
-          <span className="ml-auto inline-flex items-center gap-1 bg-orange-50 text-brand text-[11px] font-bold px-2.5 py-1 rounded-full">
-            <Calendar size={12} /> {dateLabel}
-          </span>
+    <article className="-mx-4 bg-white">
+      {/* ── Mídia full-bleed (estilo Instagram): preenche a largura toda; fundo
+          desfocado completa as laterais sem cortar/ampliar a imagem ── */}
+      <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-900">
+        {post.image_url ? (
+          <>
+            <img src={post.image_url} alt="" aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60" draggable={false} />
+            <img src={post.image_url} alt={post.title}
+              className="relative z-10 w-full h-full object-contain" draggable={false} />
+          </>
+        ) : (
+          <div className={`w-full h-full flex items-center justify-center p-6 ${isPromo ? 'bg-gradient-to-br from-emerald-500 to-teal-400' : 'bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]'}`}>
+            <p className="text-white font-extrabold text-2xl text-center leading-tight">{post.title}</p>
+          </div>
         )}
-        {isPromo && post.discount_label && (
-          <span className="ml-auto inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[11px] font-extrabold px-2.5 py-1 rounded-full">
-            {post.discount_label}
-          </span>
-        )}
+
+        {/* Gradiente + cabeçalho SOBRE a imagem */}
+        <div className="absolute top-0 inset-x-0 h-24 z-20 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
+        <div className="absolute top-3 inset-x-0 z-20 px-4 flex items-center gap-2.5">
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 border-white/70 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
+            {post.author_avatar ? (
+              <img src={post.author_avatar} alt="" className="w-full h-full object-cover" />
+            ) : isPromo ? (
+              <BadgePercent size={16} className="text-white" />
+            ) : (
+              <MapPin size={16} className="text-white" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold text-white leading-tight drop-shadow flex items-center gap-1">
+              Turiva <VerifiedBadge size={13} />
+            </p>
+            <p className="text-[11px] text-white/80 leading-tight drop-shadow">{isPromo ? 'Promoção' : 'Evento'} · Jericoacoara</p>
+          </div>
+          {dateLabel && !isPromo && (
+            <span className="ml-auto inline-flex items-center gap-1 bg-white/90 backdrop-blur text-brand text-[11px] font-bold px-2.5 py-1 rounded-full shadow">
+              <Calendar size={12} /> {dateLabel}
+            </span>
+          )}
+          {isPromo && post.discount_label && (
+            <span className="ml-auto inline-flex items-center gap-1 bg-white/90 backdrop-blur text-emerald-600 text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow">
+              {post.discount_label}
+            </span>
+          )}
+        </div>
       </div>
 
-      {post.image_url ? (
-        <img src={post.image_url} alt={post.title} className="w-full h-auto max-h-[80vh] object-cover bg-gray-100" />
-      ) : (
-        <div className={`w-full aspect-[4/3] flex items-center justify-center p-6 ${isPromo ? 'bg-gradient-to-br from-emerald-500 to-teal-400' : 'bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]'}`}>
-          <p className="text-white font-extrabold text-2xl text-center leading-tight">{post.title}</p>
-        </div>
-      )}
-
-      <div className="flex items-center gap-4 px-4 pt-3">
+      {/* ── Ações (curtir · comentar · compartilhar) ── */}
+      <div className="flex items-center gap-5 px-4 pt-3">
         <button onClick={onLike} className="active:scale-90 transition-transform" aria-label="Curtir">
-          <Heart size={22} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-700'} />
+          <Heart size={24} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-800'} />
+        </button>
+        <button onClick={() => setCommentsOpen((v) => !v)} className="active:scale-90 transition-transform" aria-label="Comentar">
+          <MessageCircle size={23} className="text-gray-800" />
         </button>
         <button onClick={share} className="active:scale-90 transition-transform" aria-label="Compartilhar">
-          <Share2 size={21} className="text-gray-700" />
+          <Share2 size={22} className="text-gray-800" />
         </button>
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-3">
+            <button onClick={() => onEdit?.(post)} className="active:scale-90 transition-transform" aria-label="Editar">
+              <Pencil size={19} className="text-gray-500" />
+            </button>
+            <button onClick={() => onDelete?.(post)} className="active:scale-90 transition-transform" aria-label="Excluir">
+              <Trash2 size={19} className="text-red-400" />
+            </button>
+          </div>
+        )}
       </div>
 
       {post.like_count > 0 && (
@@ -367,7 +404,10 @@ function PostCard({ post, liked, onLike, user }) {
       )}
 
       <div className="px-4 py-3 space-y-1.5">
-        <p className="text-[15px] font-bold text-gray-900">{post.title}</p>
+        <p className="text-[14px] text-gray-900">
+          <span className="font-bold">Turiva</span>{' '}
+          <span className="font-semibold">{post.title}</span>
+        </p>
         {post.body && <p className="text-[13px] text-gray-600 whitespace-pre-line leading-relaxed">{post.body}</p>}
         <div className="flex flex-wrap items-center gap-3 pt-1 text-[12px] text-gray-500">
           {post.event_time && <span className="flex items-center gap-1"><Clock size={12} className="text-brand" />{post.event_time}</span>}
@@ -375,7 +415,8 @@ function PostCard({ post, liked, onLike, user }) {
           {post.location && <span className="flex items-center gap-1"><MapPin size={12} className="text-brand" />{post.location}</span>}
         </div>
         <div className="pt-1">
-          <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user} />
+          <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user}
+            open={commentsOpen} setOpen={setCommentsOpen} />
         </div>
       </div>
     </article>
@@ -487,6 +528,16 @@ export default function Feed() {
   const { userCoords, region, getServiceQuery } = useRegion()
   const qc = useQueryClient()
 
+  // Publicação no feed (admin): compositor/editor. undefined = fechado,
+  // null = nova publicação, objeto = editar aquele post.
+  const isAdmin = user?.user_type === 'admin'
+  const [composerPost, setComposerPost] = useState(undefined)
+  async function handleDeletePost(post) {
+    if (!confirm(`Excluir "${post.title}"?`)) return
+    try { await api.deletePost(post.id) } catch (err) { alert(err?.message || 'Erro ao excluir'); return }
+    qc.invalidateQueries({ queryKey: ['feed'] })
+  }
+
   const center = (userCoords?.lat != null && userCoords?.lon != null)
     ? userCoords
     : (region?.center_latitude != null
@@ -562,7 +613,8 @@ export default function Feed() {
   )
 
   const renderPost = (p) => (
-    <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user} />
+    <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user}
+      isAdmin={isAdmin} onEdit={(post) => setComposerPost(post)} onDelete={handleDeletePost} />
   )
   const renderPlace = (p) => (
     <PlaceCard key={p.id} place={p} onReview={p.id ? () => setReviewPlace(p) : undefined} />
@@ -660,6 +712,14 @@ export default function Feed() {
           )}
         </div>
         <p className="text-[12px] text-gray-400 text-center mt-2">Eventos, promoções e recomendações em Jericoacoara</p>
+        {isAdmin && (
+          <button
+            onClick={() => setComposerPost(null)}
+            className="mt-3 w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform"
+          >
+            <Plus size={18} /> Nova publicação
+          </button>
+        )}
       </div>
 
       {/* ── Filtros (cards) — abaixo do buscador ───────────────────────────── */}
@@ -697,6 +757,14 @@ export default function Feed() {
 
       {reviewPlace && (
         <ReviewModal place={reviewPlace} onClose={() => setReviewPlace(null)} user={user} />
+      )}
+
+      {composerPost !== undefined && (
+        <FeedPublisher
+          post={composerPost}
+          onClose={() => setComposerPost(undefined)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['feed'] })}
+        />
       )}
     </div>
   )

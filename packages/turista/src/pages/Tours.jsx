@@ -1,9 +1,12 @@
 import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
+import { useCart } from '../contexts/CartContext'
+import { highSeasonMonthSet } from '../lib/season'
 import OriginPicker from '../components/OriginPicker'
 import ToursDesktop from './ToursDesktop'
 import {
@@ -158,7 +161,7 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
 }
 
 /* ── Calendário (bottom sheet) ──────────────────────────────── */
-function DatePickerSheet({ value, onChange, onClose, minDate }) {
+function DatePickerSheet({ value, onChange, onClose, minDate, highSeasonMonths }) {
   // R6: 'today' aqui é a data mínima selecionável — se passou do cutoff do
   // passeio, minDate já vem como amanhã e o dia de hoje fica bloqueado.
   const today = minDate || startOfDay(new Date())
@@ -171,7 +174,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate }) {
   const offset = getDay(startOfMonth(viewMonth))
   const canGoPrev = !isBefore(subMonths(viewMonth, 1), startOfMonth(today))
 
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
@@ -217,23 +220,35 @@ function DatePickerSheet({ value, onChange, onClose, minDate }) {
             const past     = isBefore(day, today)
             const selected = isSameDay(day, value)
             const todayDay = isToday(day)
+            const highSeason = !!highSeasonMonths?.has(day.getMonth() + 1)
             return (
               <button
                 key={day.toISOString()}
                 disabled={past}
                 onClick={() => { onChange(day); onClose() }}
-                className={`aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
+                className={`relative aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
                   ${selected  ? 'bg-brand text-white font-bold' : ''}
-                  ${!selected && todayDay ? 'text-brand font-bold' : ''}
-                  ${!selected && !todayDay && !past ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
-                  ${past ? 'text-gray-300 cursor-not-allowed' : ''}
+                  ${!selected && past ? 'text-gray-300 cursor-not-allowed' : ''}
+                  ${!selected && !past && highSeason ? 'text-amber-600 font-bold' : ''}
+                  ${!selected && !past && !highSeason && todayDay ? 'text-brand font-bold' : ''}
+                  ${!selected && !past && !highSeason && !todayDay ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
                 `}
               >
                 {format(day, 'd')}
+                {!selected && !past && highSeason && (
+                  <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500" />
+                )}
               </button>
             )
           })}
         </div>
+
+        {highSeasonMonths?.size > 0 && (
+          <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
+            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+            Datas em laranja: alta temporada (pode ter acréscimo no valor)
+          </div>
+        )}
 
         <div className="px-4 pb-8">
           <button
@@ -244,7 +259,8 @@ function DatePickerSheet({ value, onChange, onClose, minDate }) {
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
@@ -254,13 +270,32 @@ export default function Tours() {
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
+  const { items: savedCartItems, upsertItem: saveCartItem } = useCart()
+
+  // "Retomar" do carrinho flutuante: restaura o rascunho salvo (data/pessoas/
+  // veículos) do passeio escolhido. Os dados vivem no localStorage (CartContext).
+  const restoredItem = locationState?.restoreFromCart
+    ? savedCartItems.find((i) => i.id === locationState?.selectedId)
+    : null
+
   const [mode, setMode] = useState(locationState?.mode || 'private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
-  const [people, setPeople] = useState(2)
-  const [date, setDate] = useState(startOfDay(new Date()))
+  const [people, setPeople] = useState(restoredItem?.people || 2)
+  const [date, setDate] = useState(() => {
+    if (restoredItem?.dateIso) {
+      const d = new Date(`${restoredItem.dateIso}T12:00:00`)
+      if (!Number.isNaN(d.getTime()) && !isBefore(d, startOfDay(new Date()))) return startOfDay(d)
+    }
+    return startOfDay(new Date())
+  })
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
-  const [cart, setCart] = useState({})
+  const [cart, setCart] = useState(() => {
+    if (!restoredItem?.vehicles?.length) return {}
+    const c = {}
+    for (const v of restoredItem.vehicles) c[v.id] = v.qty
+    return c
+  })
   const { favs, toggleFav } = useFavorites()
   const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
   const [showOriginPicker, setShowOriginPicker] = useState(false)
@@ -275,6 +310,15 @@ export default function Tours() {
     staleTime: 5 * 60 * 1000,
     retry: 2,
   })
+  // Alta temporada: meses com acréscimo, p/ sinalizar no calendário.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  })
+  const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
+
   const allTours = toursData?.tours || toursData || []
   const tours = searchTerm.trim()
     ? allTours.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -287,9 +331,10 @@ export default function Tours() {
   // mesmo relógio, senão um turista em outro fuso vê "hoje" disponível e leva
   // 400 no checkout.
   const cutoffMinDate = useMemo(() => {
-    const c = selectedTour?.booking_cutoff_time
+    // Padrão: meio-dia. Passou de 12h (Fortaleza) → só a partir de amanhã.
+    // Se o passeio definir um booking_cutoff_time próprio, ele tem prioridade.
+    const c = selectedTour?.booking_cutoff_time || '12:00'
     const todayStart = startOfDay(new Date())
-    if (!c) return todayStart
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false,
     }).formatToParts(new Date())
@@ -348,6 +393,31 @@ export default function Tours() {
   )
   const cartHasItems = cartItems.length > 0
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
+
+  // Monta o rascunho do carrinho a partir da PRÉ-SELEÇÃO atual (passeio +
+  // veículos + pessoas). NÃO é auto-salvo: só vai pro carrinho quando o cliente
+  // clica em "Continuar". Data/hora/saída são refinadas depois, no carrinho.
+  const buildCartDraft = () => {
+    const existing = savedCartItems.find((i) => i.id === selectedTour.id)
+    return {
+      id:      selectedTour.id,
+      kind:    'tour',
+      mode:    'private',
+      name:    selectedTour.name,
+      cover_image_url: selectedTour.cover_image_url || null,
+      booking_cutoff_time: selectedTour.booking_cutoff_time || null,
+      dateIso: format(date, 'yyyy-MM-dd'),
+      time:    existing?.time || null,
+      people,
+      region_id:   selectedTour.regions?.id || null,
+      origin_text: origin?.name || existing?.origin_text || null,
+      vehicles: cartItems.map(({ vehicle, qty }) => ({
+        id: vehicle.id, name: vehicle.name, qty,
+        price: Number(vehicle.base_price) || 0, cap: vehicle.seat_capacity || null,
+      })),
+      total: cartTotal,
+    }
+  }
 
   const applySuggestion = () => {
     if (!suggestion) return
@@ -667,80 +737,68 @@ export default function Tours() {
         <DatePickerSheet
           value={date}
           minDate={cutoffMinDate}
+          highSeasonMonths={highSeasonMonths}
           onChange={setDate}
           onClose={() => setShowDatePicker(false)}
         />
       )}
 
-      {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
-      {mode === 'private' && cartHasItems && (() => {
-        const canContinue = cartCapacity >= people && !!origin
+      {/* ── Resumo flutuante (modo privativo) — fixo no viewport, sempre visível.
+          Portal p/ document.body: o wrapper do PullToRefresh usa transform/
+          will-change e prenderia o position:fixed na página (a barra sumia no
+          fim do conteúdo ao rolar). Pelo portal ela cola no rodapé da tela. ── */}
+      {mode === 'private' && cartHasItems && createPortal((() => {
+        // Barra aparece só quando há veículo selecionado. Basta a pré-seleção
+        // cobrir as pessoas; data/hora/saída são definidas depois, no carrinho.
+        const canContinue = cartCapacity >= people
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
             <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-              {/* Resumo */}
+              {/* Resumo do que está selecionado */}
               <div className="flex-1 min-w-0 mr-3">
-                <p className="text-[13px] font-bold text-gray-900 truncate">
-                  {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
-                </p>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Users size={11} className={canContinue ? 'text-gray-400' : 'text-red-400'} />
-                  <span className={`text-[11px] font-medium ${canContinue ? 'text-gray-500' : 'text-red-400'}`}>
-                    {cartCapacity}/{people}
-                  </span>
-                </div>
-              </div>
-              {/* Preço + botão */}
-              <div className="flex items-center gap-3 shrink-0">
-                {cartTotal > 0 && (
-                  <span className={`text-[15px] font-extrabold ${canContinue ? 'text-brand' : 'text-gray-400'}`}>
-                    R$ {cartTotal.toLocaleString('pt-BR')}
-                  </span>
+                {cartHasItems ? (
+                  <>
+                    <p className="text-[13px] font-bold text-gray-900 truncate">
+                      {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="inline-flex items-center gap-1">
+                        <Users size={11} className={cartCapacity >= people ? 'text-gray-400' : 'text-red-400'} />
+                        <span className={`text-[11px] font-medium ${cartCapacity >= people ? 'text-gray-500' : 'text-red-400'}`}>
+                          {cartCapacity}/{people} lugares
+                        </span>
+                      </span>
+                      {cartTotal > 0 && (
+                        <span className="text-[13px] font-extrabold text-brand">
+                          R$ {cartTotal.toLocaleString('pt-BR')}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-[13px] text-gray-400">Selecione um veículo abaixo</p>
                 )}
-                <button
-                  onClick={canContinue
-                    ? () => navigate('/checkout/resumo', {
-                        state: {
-                          service_name:     selectedTour.name,
-                          short_description: selectedTour.short_description || null,
-                          service_type:     'tour',
-                          booking_mode:     'private',
-                          service_date:     isToday(date) ? 'Hoje'
-                                              : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
-                                              : format(date, "d 'de' MMMM", { locale: ptBR }),
-                          service_date_iso: format(date, 'yyyy-MM-dd'),
-                          service_time:     'A confirmar',
-                          people_count:     people,
-                          origin_text:      origin?.name ?? '',
-                          origin_latitude:  origin?.latitude  ?? null,
-                          origin_longitude: origin?.longitude ?? null,
-                          vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
-                          total_price:      cartTotal,
-                          breakdown:        { 'Veículos selecionados': cartTotal },
-                          cover_image_url:       selectedTour.cover_image_url || null,
-                          region_id:             selectedTour.regions?.id,
-                          service_id:            selectedTour.id,
-                          vehicles:              cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(vehicle.base_price) || 0 })),
-                          booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
-                        },
-                      })
-                    : undefined}
-                  className={`font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
-                    canContinue
-                      ? 'bg-brand text-white active:scale-95 cursor-pointer'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  Continuar
-                </button>
               </div>
+              {/* Botão */}
+              <button
+                onClick={canContinue
+                  ? () => { saveCartItem(buildCartDraft()); navigate('/carrinho') }
+                  : undefined}
+                className={`shrink-0 font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
+                  canContinue
+                    ? 'bg-brand text-white active:scale-95 cursor-pointer'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Adicionar ao carrinho
+              </button>
             </div>
           </div>
         )
-      })()}
+      })(), document.body)}
 
       {/* ── CTA fixo (modo compartilhado) ───────────────────────── */}
-      {mode === 'shared' && selectedTour?.shared_price_per_person && (() => {
+      {mode === 'shared' && selectedTour?.shared_price_per_person && createPortal((() => {
         const pricePerPerson = Number(selectedTour.shared_price_per_person)
         const sharedTotal    = pricePerPerson * people
         return (
@@ -795,7 +853,7 @@ export default function Tours() {
             </div>
           </div>
         )
-      })()}
+      })(), document.body)}
 
       <OriginPicker
         open={showOriginPicker}

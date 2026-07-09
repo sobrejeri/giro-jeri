@@ -18,6 +18,7 @@ export default function CheckoutSolicitado() {
   const {
     service_name, service_date, service_time, people_count,
     total_price, display_total, amount, booking_code, booking_id, cover_image_url,
+    batchResults,
   } = state
 
   const value = amount ?? display_total ?? total_price
@@ -85,6 +86,19 @@ export default function CheckoutSolicitado() {
             {booking_code && (
               <div className="text-[12px] font-mono font-bold text-brand bg-brand/5 rounded-lg px-3 py-2">
                 Código: {booking_code}
+              </div>
+            )}
+
+            {Array.isArray(batchResults) && batchResults.length > 1 && (
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2.5 space-y-1">
+                <p className="text-[11px] font-bold text-emerald-700">
+                  {batchResults.length} solicitações enviadas do seu carrinho ✓
+                </p>
+                {batchResults.map((r) => (
+                  <p key={r.booking_code} className="text-[11px] text-emerald-700">
+                    <span className="font-mono font-bold">{r.booking_code}</span> · {r.name}
+                  </p>
+                ))}
               </div>
             )}
 

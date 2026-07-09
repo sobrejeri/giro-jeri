@@ -2,16 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { X, Camera, Volume2, VolumeX, MoreVertical, Trash2, ImageOff } from 'lucide-react'
-
-// Selo verificado estilo Instagram (azul + check branco)
-function VerifiedBadge({ size = 15 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" className="shrink-0" aria-label="Verificado" role="img">
-      <path fill="#3897F0" d="M12 1l2.35 2.06 3.12-.36 1.19 2.9 2.9 1.19-.36 3.12L23 12l-2.06 2.35.36 3.12-2.9 1.19-1.19 2.9-3.12-.36L12 23l-2.35-2.06-3.12.36-1.19-2.9-2.9-1.19.36-3.12L1 12l2.06-2.35-.36-3.12 2.9-1.19 1.19-2.9 3.12.36L12 1z" />
-      <path fill="#fff" d="M10.4 15.3l-2.95-2.95 1.32-1.32 1.63 1.63 3.83-3.83 1.32 1.32z" />
-    </svg>
-  )
-}
+import VerifiedBadge from './VerifiedBadge'
 
 /**
  * StoryViewer — visualizador de destaques em tela cheia, estilo Instagram.
@@ -184,8 +175,11 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
   // o viewer de cobrir a tela toda e centralizar a mídia corretamente.
   return createPortal(
     <div className="fixed inset-0 z-[100] bg-black flex flex-col select-none">
+      {/* Gradiente superior para o cabeçalho ficar legível sobre mídia clara */}
+      <div className="absolute top-0 inset-x-0 h-28 z-20 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
+
       {/* ── Barras de progresso (itens do destaque atual) ────────────────── */}
-      <div className="absolute top-0 inset-x-0 z-10 flex gap-1 px-2 pt-2">
+      <div className="absolute top-0 inset-x-0 z-30 flex gap-1 px-2 pt-2">
         {groupStories.map((_, i) => (
           <div key={i} className="flex-1 h-[3px] rounded-full bg-white/30 overflow-hidden">
             <div
@@ -200,7 +194,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
       </div>
 
       {/* ── Barra superior: avatar + nome + selo + fechar ────────────────── */}
-      <div className="absolute top-6 inset-x-0 z-10 flex items-center gap-3 px-4 pt-1">
+      <div className="absolute top-6 inset-x-0 z-30 flex items-center gap-3 px-4 pt-1">
         <div className="w-10 h-10 rounded-full bg-white/20 overflow-hidden flex items-center justify-center shrink-0 border-2 border-white/50">
           {headerAvatar ? (
             <img src={headerAvatar} alt={headerTitle || ''} className="w-full h-full object-cover" />

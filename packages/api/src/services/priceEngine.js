@@ -357,15 +357,22 @@ export async function calculateTabbedTransfer({
 // =============================================================================
 
 export async function validateTransferAdvance(serviceDate, serviceTime) {
-  const minHours = parseInt(await getSetting('transfer_min_advance_hours', '3'));
+  const minHours = parseInt(await getSetting('transfer_min_advance_hours', '4'));
 
-  const serviceDateTime = dayjs(`${serviceDate}T${serviceTime}`);
+  // service_time é horário LOCAL de Jericoacoara/Fortaleza (UTC-3 o ano todo).
+  // Ancorar o offset -03:00 evita interpretar como UTC (dava 3h de erro e
+  // recusava agendamentos válidos). minAllowed = instante atual + minHours.
+  const serviceDateTime = dayjs(`${serviceDate}T${String(serviceTime).slice(0, 5)}:00-03:00`);
   const minAllowed      = dayjs().add(minHours, 'hour');
 
   if (serviceDateTime.isBefore(minAllowed)) {
+    const minLocal = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Fortaleza', day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(minAllowed.toDate());
     throw {
       status: 400,
-      message: `Transfers precisam ser agendados com pelo menos ${minHours} horas de antecedência. Horário mínimo: ${minAllowed.format('DD/MM [às] HH:mm')}.`,
+      message: `Transfers precisam ser agendados com pelo menos ${minHours} horas de antecedência. Horário mínimo: ${minLocal}.`,
     };
   }
 }

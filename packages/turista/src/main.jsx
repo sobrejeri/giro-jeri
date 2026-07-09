@@ -8,6 +8,7 @@ import UpdatePrompt from './components/UpdatePrompt'
 import { AuthProvider } from './contexts/AuthContext'
 import { RegionProvider } from './contexts/RegionContext'
 import { FavoritesProvider } from './contexts/FavoritesContext'
+import { CartProvider } from './contexts/CartContext'
 import { queryClient } from './lib/queryClient'
 import './i18n/index.js'
 import './index.css'
@@ -19,8 +20,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <RegionProvider>
           <AuthProvider>
             <FavoritesProvider>
-              <App />
-              <UpdatePrompt />
+              <CartProvider>
+                <App />
+                <UpdatePrompt />
+              </CartProvider>
             </FavoritesProvider>
           </AuthProvider>
         </RegionProvider>
