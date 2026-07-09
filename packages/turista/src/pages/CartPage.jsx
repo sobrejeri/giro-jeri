@@ -137,7 +137,8 @@ function EditSheet({ item, onSave, onClose }) {
     queryKey: ['seasons', item.region_id],
     queryFn:  () => api.getSeasons(item.region_id ? { region_id: item.region_id } : {}),
     staleTime: 10 * 60 * 1000,
-    retry: false,
+    retry: 3,               // API pode estar “acordando” (Render) — não desistir na 1ª
+    refetchOnWindowFocus: true,
   })
   const highSeasonMonths = highSeasonMonthSet(seasonsData || [])
   const [showDate, setShowDate] = useState(false)
@@ -391,6 +392,7 @@ export default function CartPage() {
   const [results, setResults] = useState({})       // id → {status, code?, msg?}
   const [batch, setBatch] = useState(null)         // snapshot durante envio
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
   const [done, setDone] = useState(false)
 
   // Sugestões (cross-sell): incentiva o cliente a adicionar passeios. Mostra
@@ -417,20 +419,34 @@ export default function CartPage() {
     const snapshot = [...items]
     setBatch(snapshot)
     setSubmitting(true)
+    setSubmitError(null)
     const res = {}
-    for (const item of snapshot) {
-      res[item.id] = { status: 'sending' }; setResults({ ...res })
-      try {
-        const r = await api.requestBooking(requestPayloadFor(item))
-        res[item.id] = { status: 'ok', code: r?.booking_code }
-        removeItem(item.id)
-      } catch (err) {
-        res[item.id] = { status: 'error', msg: err?.message || 'Erro ao solicitar' }
+    snapshot.forEach((it) => { res[it.id] = { status: 'sending' } })
+    setResults({ ...res })
+    try {
+      // Carrinho universal: 1 chamada → N reservas no MESMO grupo (atômico).
+      const created = await api.cartRequest(snapshot.map(requestPayloadFor))
+      // Casa cada reserva ao item por service_id (permite repetição do mesmo
+      // serviço no carrinho consumindo em ordem).
+      const byService = new Map()
+      for (const b of created?.bookings || []) {
+        if (!byService.has(b.service_id)) byService.set(b.service_id, [])
+        byService.get(b.service_id).push(b)
+      }
+      for (const it of snapshot) {
+        const b = byService.get(it.id)?.shift()
+        res[it.id] = { status: 'ok', code: b?.booking_code }
+        removeItem(it.id)
       }
       setResults({ ...res })
+      setDone(true)
+    } catch (err) {
+      // Atômico: nada foi criado. Mantém os itens no carrinho para reenvio.
+      setBatch(null)
+      setSubmitError(err?.message || 'Não foi possível enviar o carrinho. Tente novamente.')
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
-    setDone(true)
   }
 
   return (
@@ -594,6 +610,9 @@ export default function CartPage() {
                   ? <><Loader2 size={16} className="animate-spin" /> Enviando…</>
                   : <><Send size={15} /> Solicitar tudo ({items.length})</>}
               </button>
+              {submitError && (
+                <p className="text-[11px] text-red-600 font-semibold text-center">{submitError}</p>
+              )}
               {!allComplete && items.length > 0 && (
                 <p className="text-[10.5px] text-amber-600 font-semibold text-center">
                   Complete os dados de todos os itens (botão Editar) para solicitar.

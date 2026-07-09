@@ -163,6 +163,7 @@ export const api = {
 
   // Pagamentos
   requestBooking:         (body) => request('/api/payments/request',     { method: 'POST', body }),
+  cartRequest:            (items) => request('/api/payments/cart-request', { method: 'POST', body: { items } }),
   createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
   getCheckoutKey:         (id)   => request(`/api/payments/booking/${id}/checkout-key`),
   // Checkout parcial (R3): cancela as pernas ainda pendentes e libera o

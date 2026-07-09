@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 050.**
+   registre aqui o número reservado. **Próximo número livre: 051.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,20 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-09 · Agente B (carrinho universal — Fatia A: fundação)** — Início da
+  Etapa 3 (N reservas, 1 pagamento). Migration **050** (`order_group_id` em
+  `bookings` e `payments` + índices parciais — ⚠️ rodar no Supabase). Novo
+  endpoint **`POST /api/payments/cart-request`**: recebe o array de itens,
+  valida TODOS (antecedência/cutoff/total autoritativo) antes de inserir
+  qualquer um (atômico "tudo-ou-nada") e cria N reservas com o mesmo
+  `order_group_id`. Frontend: "Solicitar tudo" passa a fazer **1 chamada** (era
+  laço por item) — `api.cartRequest`. **NÃO** mexe no pagamento ainda: cada
+  reserva continua pagável individualmente (fluxo atual) — Fatia A é
+  não-quebrante. **Fatia B (a fazer):** `intent`/`checkout-accepted` de grupo,
+  webhook marcando todas paid, botão "Pagar tudo" + parcial. Próx. migration
+  livre: **051**. Doc: `docs/ETAPA-3-carrinho-pagamento-unico.md` (o `049`
+  citado lá virou `050`).
 
 - **2026-07-09 · Agente B (antecedência mínima POR SERVIÇO)** — Antecedência
   mínima deixou de ser só global e passou a ser **configurável por serviço no

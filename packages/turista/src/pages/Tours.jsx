@@ -315,7 +315,8 @@ export default function Tours() {
     queryKey: ['seasons', region?.id],
     queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
     staleTime: 10 * 60 * 1000,
-    retry: false,
+    retry: 3,               // API pode estar “acordando” (Render) — não desistir na 1ª
+    refetchOnWindowFocus: true,
   })
   const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
 
