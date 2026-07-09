@@ -442,6 +442,21 @@ export default function Bookings() {
     Array.isArray(data) ? data : []
   ).map(b => ({ ...b, _status: resolveStatus(b) }))
 
+  // Carrinho universal: reservas do mesmo grupo (order_group_id) prontas para
+  // pagamento podem ser quitadas num pagamento único ("Pagar tudo").
+  const payableGroups = (() => {
+    const map = new Map()
+    for (const b of all) {
+      if (b._status === 'waiting_payment' && b.order_group_id) {
+        if (!map.has(b.order_group_id)) map.set(b.order_group_id, [])
+        map.get(b.order_group_id).push(b)
+      }
+    }
+    return [...map.entries()]
+      .filter(([, arr]) => arr.length >= 2)
+      .map(([gid, arr]) => ({ gid, bookings: arr, total: arr.reduce((s, b) => s + Number(b.total_amount || 0), 0) }))
+  })()
+
   const q = searchTerm.trim().toLowerCase()
   const filtered = all.filter(b => {
     if (q) {
@@ -553,6 +568,20 @@ export default function Bookings() {
     })
   }
 
+  // Carrinho universal: paga TODAS as reservas prontas do grupo num pagamento só.
+  function handlePayGroup(group) {
+    navigate('/checkout/pagamento', {
+      state: {
+        service_name:   `${group.bookings.length} serviços`,
+        service_type:   'tour',
+        booking_mode:   'private',
+        people_count:   group.bookings.reduce((s, b) => s + Number(b.people_count || 0), 0),
+        total_price:    group.total,
+        order_group_id: group.gid,
+      },
+    })
+  }
+
   // Retoma o pagamento de uma cotação já aceita (sem reaceitar)
   function handlePayQuote(quote) {
     navigate('/checkout/pagamento', {
@@ -656,6 +685,26 @@ export default function Bookings() {
           })}
         </div>
       </header>
+
+      {/* Pagar tudo — grupos do carrinho universal prontos para pagamento */}
+      {payableGroups.length > 0 && (tab === 'todos' || tab === 'ativos') && (
+        <div className="px-4 pt-4 lg:max-w-5xl lg:mx-auto space-y-2">
+          {payableGroups.map((g) => (
+            <div key={g.gid} className="flex items-center justify-between gap-3 bg-brand/5 border border-brand/20 rounded-2xl px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-gray-900">Pague suas {g.bookings.length} reservas juntas</p>
+                <p className="text-[11px] text-gray-500">Aceitas e prontas — um único pagamento de {fmt(g.total)}.</p>
+              </div>
+              <button
+                onClick={() => handlePayGroup(g)}
+                className="shrink-0 bg-brand text-white text-[12px] font-bold px-4 py-2.5 rounded-xl active:scale-95 transition-transform shadow-sm shadow-brand/20"
+              >
+                Pagar tudo
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* List */}
       <main className="px-4 pt-4 space-y-3 lg:max-w-5xl lg:mx-auto">
