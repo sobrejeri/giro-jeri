@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 049.**
+   registre aqui o número reservado. **Próximo número livre: 050.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,24 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-09 · Agente B (antecedência mínima POR SERVIÇO)** — Antecedência
+  mínima deixou de ser só global e passou a ser **configurável por serviço no
+  catálogo** (pedido do usuário). Migration **049** (`min_advance_hours INT` em
+  `tours` e `transfers`, aditivo/idempotente — ⚠️ precisa rodar no Supabase).
+  Backend: `validateTransferAdvance(date, time, { serviceId })` busca a regra do
+  transfer pai (via `transfer_routes → transfers.min_advance_hours`) e só cai no
+  setting global `transfer_min_advance_hours` (4h) quando NULL; ligado em
+  `payments.js` (/request) e `calculateTabbedTransfer`. `catalog.js` grava o
+  campo (tours POST/PUT + TRANSFER_COLS) e o GET /transfers voltou a devolver
+  cutoff/advance/etc (antes só id,name,is_active → edição não carregava). Tours/
+  transfers turista já devolvem o campo. Admin: campo **"Antecedência mínima
+  (horas)"** nos forms de passeio e transfer (`Catalogo.jsx`). Turista: Tours
+  (`cutoffMinDate` considera advance), Transfers (rota usa
+  `matched.transfers.min_advance_hours`; personalizado usa padrão 4h — separado
+  em `customMin*`), CartPage (`lead` por serviço). **Bug pré-existente
+  corrigido:** em Transfers.jsx `customAdvanceOk` referenciava `minBookable`
+  antes da declaração (TDZ) — movido p/ depois. **Próxima migration livre: 050.**
 
 - **2026-07-08 · Agente B (datas unificadas em todas as telas)** — Criado
   `components/DateSheet.jsx` (calendário compartilhado, portalado, com minDate +

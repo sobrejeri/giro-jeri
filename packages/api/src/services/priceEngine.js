@@ -313,8 +313,8 @@ export async function calculateTabbedTransfer({
   couponCode,
   userId,
 }) {
-  // Valida antecedência mínima (setting transfer_min_advance_hours = 3h)
-  await validateTransferAdvance(serviceDate, serviceTime);
+  // Valida antecedência mínima (por serviço, senão setting global)
+  await validateTransferAdvance(serviceDate, serviceTime, { serviceId: routeId });
 
   const { data: route } = await supabase
     .from('transfer_routes')
@@ -356,8 +356,23 @@ export async function calculateTabbedTransfer({
 // VALIDAÇÃO DE ANTECEDÊNCIA MÍNIMA PARA TRANSFER
 // =============================================================================
 
-export async function validateTransferAdvance(serviceDate, serviceTime) {
-  const minHours = parseInt(await getSetting('transfer_min_advance_hours', '4'));
+export async function validateTransferAdvance(serviceDate, serviceTime, opts = {}) {
+  // Antecedência por serviço (admin define no catálogo). service_id de transfer
+  // é um transfer_route → a regra mora no transfer pai. NULL = usa o padrão
+  // global (setting transfer_min_advance_hours, default 4h).
+  let minHours = null;
+  if (opts.serviceId) {
+    const { data } = await supabase
+      .from('transfer_routes')
+      .select('transfers ( min_advance_hours )')
+      .eq('id', opts.serviceId)
+      .maybeSingle();
+    const perService = data?.transfers?.min_advance_hours;
+    if (perService != null) minHours = Number(perService);
+  }
+  if (minHours == null) {
+    minHours = parseInt(await getSetting('transfer_min_advance_hours', '4'));
+  }
 
   // service_time é horário LOCAL de Jericoacoara/Fortaleza (UTC-3 o ano todo).
   // Ancorar o offset -03:00 evita interpretar como UTC (dava 3h de erro e

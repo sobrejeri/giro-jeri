@@ -58,12 +58,12 @@ const TOUR_EMPTY = {
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '', region_ids: [], is_featured: false, display_order: 0,
+  booking_cutoff_time: '', min_advance_hours: '', region_ids: [], is_featured: false, display_order: 0,
 }
 const TRANSFER_EMPTY = {
   name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '', region_ids: [],
+  booking_cutoff_time: '', min_advance_hours: '', region_ids: [],
 }
 const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true }
 const VEHICLE_EMPTY = {
@@ -609,6 +609,26 @@ export default function Catalogo() {
               </p>
             </div>
 
+            {/* Antecedência mínima */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                Antecedência mínima (horas)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                placeholder="Padrão"
+                value={form.min_advance_hours ?? ''}
+                onChange={(e) => setForm({ ...form, min_advance_hours: e.target.value })}
+                className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Horas mínimas entre a reserva e o passeio. Deixe em branco para usar o padrão.
+              </p>
+            </div>
+
             <CidadesSelector
               value={form.region_ids}
               onChange={(next) => setForm((f) => ({ ...f, region_ids: next }))}
@@ -703,6 +723,26 @@ export default function Catalogo() {
               </select>
               <p className="text-[11px] text-gray-500 mt-1">
                 Após este horário, o sistema só aceita reservas a partir do dia seguinte. Deixe em branco para não restringir.
+              </p>
+            </div>
+
+            {/* Antecedência mínima */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                Antecedência mínima (horas)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                placeholder="Padrão"
+                value={form.min_advance_hours ?? ''}
+                onChange={(e) => setForm({ ...form, min_advance_hours: e.target.value })}
+                className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Horas mínimas entre a reserva e o transfer. Deixe em branco para usar o padrão.
               </p>
             </div>
 

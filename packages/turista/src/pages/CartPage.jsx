@@ -147,7 +147,9 @@ function EditSheet({ item, onSave, onClose }) {
   //   meio-dia) + 30min de folga. Se o mínimo passa da meia-noite, rola p/ amanhã.
   const { todayIso: fToday, minutes: nowMin } = fortalezaNow()
   const cutoffMin  = toMin(item.booking_cutoff_time || null) ?? (isTransfer ? null : 720)
-  const lead       = LEAD_MINUTES[isTransfer ? 'transfer' : 'tour']
+  // Antecedência por serviço (admin define no catálogo). Se ausente, usa o padrão.
+  const perServiceLead = item.min_advance_hours != null ? Number(item.min_advance_hours) * 60 : null
+  const lead       = perServiceLead ?? LEAD_MINUTES[isTransfer ? 'transfer' : 'tour']
   const earliestTodayMin = nowMin + lead
   const afterCutoff = cutoffMin != null && nowMin >= cutoffMin
   const rollsToTomorrow = afterCutoff || earliestTodayMin >= 1440
@@ -162,7 +164,7 @@ function EditSheet({ item, onSave, onClose }) {
   if (dateIso && !dateOk && afterCutoff) {
     timeHint = `Este serviço aceita solicitações para o mesmo dia só até ${item.booking_cutoff_time.slice(0, 5)} — escolha a partir de ${dayLabel(minDateIso)}.`
   } else if (time && sameDay && !timeOk && earliestTodayMin < 1440) {
-    timeHint = `Para hoje, escolha a partir de ${fromMin(earliestTodayMin)} (antecedência mínima de ${isTransfer ? '4h' : '30min'}).`
+    timeHint = `Para hoje, escolha a partir de ${fromMin(earliestTodayMin)} (antecedência mínima de ${perServiceLead != null ? `${item.min_advance_hours}h` : isTransfer ? '4h' : '30min'}).`
   } else if (time && sameDay && !timeOk) {
     timeHint = `Não há mais horários para hoje — escolha a partir de ${dayLabel(nextDayIso(fToday))}.`
   }

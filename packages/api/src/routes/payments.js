@@ -747,7 +747,7 @@ router.post('/request', authenticate, async (req, res, next) => {
     // Antecedência mínima para transfers (rota definida) — mesma regra do
     // translado personalizado. Bloqueia agendamento "ao vivo"/imediato.
     if (service_type === 'transfer' && service_date_iso) {
-      await validateTransferAdvance(service_date_iso, service_time || '00:00')
+      await validateTransferAdvance(service_date_iso, service_time || '00:00', { serviceId: service_id })
     }
 
     // R6: respeita o horário limite de solicitação do serviço.
