@@ -39,20 +39,28 @@ router.get('/', async (_req, res, next) => {
     if (!posts?.length) return res.json([]);
 
     const ids = posts.map((p) => p.id);
-    const [{ data: likes }, { data: comments }] = await Promise.all([
+    const authorIds = [...new Set(posts.map((p) => p.created_by_user_id).filter(Boolean))];
+    const [{ data: likes }, { data: comments }, { data: authors }] = await Promise.all([
       supabase.from('post_likes').select('post_id').in('post_id', ids),
       supabase.from('post_comments').select('post_id').in('post_id', ids),
+      authorIds.length
+        ? supabase.from('users').select('id, full_name, profile_photo_url').in('id', authorIds)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const likeMap = {};
     (likes || []).forEach((l) => { likeMap[l.post_id] = (likeMap[l.post_id] || 0) + 1; });
     const commentMap = {};
     (comments || []).forEach((c) => { commentMap[c.post_id] = (commentMap[c.post_id] || 0) + 1; });
+    const authorMap = {};
+    (authors || []).forEach((u) => { authorMap[u.id] = u; });
 
     res.json(posts.map((p) => ({
       ...p,
       like_count:    likeMap[p.id] || 0,
       comment_count: commentMap[p.id] || 0,
+      author_avatar: authorMap[p.created_by_user_id]?.profile_photo_url || null,
+      author_name:   authorMap[p.created_by_user_id]?.full_name || null,
     })));
   } catch (err) { next(err); }
 });

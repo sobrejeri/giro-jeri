@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import Stories from '../components/Stories'
+import VerifiedBadge from '../components/VerifiedBadge'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
@@ -342,11 +343,19 @@ function PostCard({ post, liked, onLike, user }) {
         {/* Gradiente + cabeçalho SOBRE a imagem */}
         <div className="absolute top-0 inset-x-0 h-24 z-20 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
         <div className="absolute top-3 inset-x-0 z-20 px-4 flex items-center gap-2.5">
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 border-2 border-white/70 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
-            {isPromo ? <BadgePercent size={16} className="text-white" /> : <MapPin size={16} className="text-white" />}
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 border-white/70 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
+            {post.author_avatar ? (
+              <img src={post.author_avatar} alt="" className="w-full h-full object-cover" />
+            ) : isPromo ? (
+              <BadgePercent size={16} className="text-white" />
+            ) : (
+              <MapPin size={16} className="text-white" />
+            )}
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-bold text-white leading-tight drop-shadow">Turiva</p>
+            <p className="text-[13px] font-bold text-white leading-tight drop-shadow flex items-center gap-1">
+              Turiva <VerifiedBadge size={13} />
+            </p>
             <p className="text-[11px] text-white/80 leading-tight drop-shadow">{isPromo ? 'Promoção' : 'Evento'} · Jericoacoara</p>
           </div>
           {dateLabel && !isPromo && (
