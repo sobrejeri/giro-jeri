@@ -275,6 +275,8 @@ async function attachLegContext(legs) {
       leg_price:             l.leg_price,
       status_leg:            l.status_leg,
       acceptance_expires_at: l.acceptance_expires_at,
+      created_at:            l.created_at,
+      people_count:          l.pax_count,       // alias p/ compat. com telas antigas
       customer:              customer ? { full_name: customer.full_name, phone: customer.phone } : null,
     };
   });

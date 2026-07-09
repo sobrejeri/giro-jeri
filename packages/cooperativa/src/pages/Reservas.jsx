@@ -87,9 +87,19 @@ function Toast({ message, type = 'info', onClose }) {
 }
 
 // ── Card de corrida disponível ────────────────────────────
+// Aceita tanto o item legado (kind:'booking') quanto a PERNA do motor de pernas
+// (kind:'leg') — a coop enxerga só a própria perna (veículo/pax/valor da perna).
 function PendingCard({ booking, onAccept, accepting }) {
-  const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
-  const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
+  const isLeg  = booking.kind === 'leg'
+  const type   = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
+  const mode   = isLeg
+    ? (booking.vehicle_name || 'Privativo')
+    : (booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado')
+  const people = isLeg ? booking.pax_count   : booking.people_count
+  const price  = isLeg ? booking.leg_price   : booking.total_amount
+  // Pernas sempre aguardam aceite (pagamento vem depois); só o item legado
+  // já-pago mostra "pagamento realizado".
+  const alreadyPaid = !isLeg && booking.status_commercial !== 'awaiting_acceptance'
 
   return (
     <div className="bg-white rounded-2xl border-2 border-brand/20 shadow-sm overflow-hidden">
@@ -122,7 +132,7 @@ function PendingCard({ booking, onAccept, accepting }) {
           </div>
           <div className="flex items-center gap-2 text-[13px] text-gray-700">
             <Users size={13} className="text-gray-400 shrink-0" />
-            <span>{booking.people_count} {booking.people_count === 1 ? 'pessoa' : 'pessoas'}</span>
+            <span>{people ?? '—'} {people === 1 ? 'pessoa' : 'pessoas'}</span>
           </div>
           {booking.origin_text && (
             <div className="flex items-start gap-2 text-[13px] text-gray-700">
@@ -138,11 +148,11 @@ function PendingCard({ booking, onAccept, accepting }) {
         {/* Valor + botão */}
         <div className="flex items-center justify-between pt-1 border-t border-gray-100 gap-3">
           <div>
-            <p className="text-[11px] text-gray-400">Valor da reserva</p>
-            <p className="text-[20px] font-extrabold text-brand">{fmt(booking.total_amount)}</p>
+            <p className="text-[11px] text-gray-400">{isLeg ? 'Valor da perna' : 'Valor da reserva'}</p>
+            <p className="text-[20px] font-extrabold text-brand">{fmt(price)}</p>
           </div>
           <button
-            onClick={() => onAccept(booking.id)}
+            onClick={() => onAccept(booking)}
             disabled={accepting}
             className="flex items-center gap-2 bg-brand text-white font-bold px-5 py-3 rounded-2xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-brand/30"
           >
@@ -151,13 +161,13 @@ function PendingCard({ booking, onAccept, accepting }) {
               : <><Zap size={15} /> Aceitar</>}
           </button>
         </div>
-        {booking.status_commercial === 'awaiting_acceptance' ? (
-          <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
-            <AlertCircle size={11} className="shrink-0" /> O cliente paga depois que você aceitar.
-          </p>
-        ) : (
+        {alreadyPaid ? (
           <p className="text-[11px] text-emerald-600 flex items-center gap-1.5">
             <CheckCircle2 size={11} className="shrink-0" /> Pagamento já realizado pelo cliente.
+          </p>
+        ) : (
+          <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+            <AlertCircle size={11} className="shrink-0" /> O cliente paga depois que você aceitar.
           </p>
         )}
       </div>
@@ -446,11 +456,14 @@ export default function Reservas() {
     setQuoteMut.mutate({ id: quoteModal.id, quoted_price: price, quote_notes: notes })
   }
 
-  async function handleAccept(bookingId) {
+  async function handleAccept(item) {
     if (accepting) return
-    setAccepting(bookingId)
+    const isLeg = item.kind === 'leg'
+    const id    = isLeg ? item.leg_id : item.id
+    setAccepting(id)
     try {
-      await api.acceptBooking(bookingId)
+      if (isLeg) await api.acceptLeg(id)
+      else       await api.acceptBooking(id)
       queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
       setToast({ message: 'Reserva aceita! Aguardando o cliente pagar.', type: 'success' })
       setTab('mine')
@@ -618,14 +631,17 @@ export default function Reservas() {
           // Mantém os dois tipos de card lado a lado pra cooperativa não precisar
           // pular de aba pra ver tudo que tem em aberto.
           <div className="space-y-4">
-            {pending.map((b) => (
-              <PendingCard
-                key={b.id}
-                booking={b}
-                onAccept={handleAccept}
-                accepting={accepting === b.id}
-              />
-            ))}
+            {pending.map((b) => {
+              const rowId = b.kind === 'leg' ? b.leg_id : b.id
+              return (
+                <PendingCard
+                  key={rowId}
+                  booking={b}
+                  onAccept={handleAccept}
+                  accepting={accepting === rowId}
+                />
+              )
+            })}
             {pendingQuotes.map((q) => (
               <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
             ))}
