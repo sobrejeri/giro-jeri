@@ -137,7 +137,8 @@ function EditSheet({ item, onSave, onClose }) {
     queryKey: ['seasons', item.region_id],
     queryFn:  () => api.getSeasons(item.region_id ? { region_id: item.region_id } : {}),
     staleTime: 10 * 60 * 1000,
-    retry: false,
+    retry: 3,               // API pode estar “acordando” (Render) — não desistir na 1ª
+    refetchOnWindowFocus: true,
   })
   const highSeasonMonths = highSeasonMonthSet(seasonsData || [])
   const [showDate, setShowDate] = useState(false)
