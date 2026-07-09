@@ -129,6 +129,10 @@ export const api = {
   getComments:    (postId)     => request(`/api/feed/${postId}/comments`),
   addComment:     (postId, body) => request(`/api/feed/${postId}/comments`, { method: 'POST', body: { body } }),
   deleteComment:  (id)         => request(`/api/feed/comments/${id}`, { method: 'DELETE' }),
+  // Publicação no feed (admin): criar / editar / excluir posts (evento/promo)
+  createPost:     (body)       => request('/api/feed',        { method: 'POST',   body }),
+  updatePost:     (id, body)   => request(`/api/feed/${id}`,  { method: 'PUT',    body }),
+  deletePost:     (id)         => request(`/api/feed/${id}`,  { method: 'DELETE' }),
 
   // Regiões
   getRegions: () => request('/api/regions'),

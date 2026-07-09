@@ -6,11 +6,12 @@ import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import Stories from '../components/Stories'
 import VerifiedBadge from '../components/VerifiedBadge'
+import FeedPublisher from '../components/FeedPublisher'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
-  ChevronLeft, Search,
+  ChevronLeft, Search, Pencil, Plus,
 } from 'lucide-react'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
@@ -306,7 +307,7 @@ function ReviewModal({ place, onClose, user }) {
 }
 
 /* ── feed card (evento / promoção) ─────────────────────── */
-function PostCard({ post, liked, onLike, user }) {
+function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
@@ -382,6 +383,16 @@ function PostCard({ post, liked, onLike, user }) {
         <button onClick={share} className="active:scale-90 transition-transform" aria-label="Compartilhar">
           <Share2 size={22} className="text-gray-800" />
         </button>
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-3">
+            <button onClick={() => onEdit?.(post)} className="active:scale-90 transition-transform" aria-label="Editar">
+              <Pencil size={19} className="text-gray-500" />
+            </button>
+            <button onClick={() => onDelete?.(post)} className="active:scale-90 transition-transform" aria-label="Excluir">
+              <Trash2 size={19} className="text-red-400" />
+            </button>
+          </div>
+        )}
       </div>
 
       {post.like_count > 0 && (
@@ -514,6 +525,16 @@ export default function Feed() {
   const { userCoords, region, getServiceQuery } = useRegion()
   const qc = useQueryClient()
 
+  // Publicação no feed (admin): compositor/editor. undefined = fechado,
+  // null = nova publicação, objeto = editar aquele post.
+  const isAdmin = user?.user_type === 'admin'
+  const [composerPost, setComposerPost] = useState(undefined)
+  async function handleDeletePost(post) {
+    if (!confirm(`Excluir "${post.title}"?`)) return
+    try { await api.deletePost(post.id) } catch (err) { alert(err?.message || 'Erro ao excluir'); return }
+    qc.invalidateQueries({ queryKey: ['feed'] })
+  }
+
   const center = (userCoords?.lat != null && userCoords?.lon != null)
     ? userCoords
     : (region?.center_latitude != null
@@ -589,7 +610,8 @@ export default function Feed() {
   )
 
   const renderPost = (p) => (
-    <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user} />
+    <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user}
+      isAdmin={isAdmin} onEdit={(post) => setComposerPost(post)} onDelete={handleDeletePost} />
   )
   const renderPlace = (p) => (
     <PlaceCard key={p.id} place={p} onReview={p.id ? () => setReviewPlace(p) : undefined} />
@@ -687,6 +709,14 @@ export default function Feed() {
           )}
         </div>
         <p className="text-[12px] text-gray-400 text-center mt-2">Eventos, promoções e recomendações em Jericoacoara</p>
+        {isAdmin && (
+          <button
+            onClick={() => setComposerPost(null)}
+            className="mt-3 w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform"
+          >
+            <Plus size={18} /> Nova publicação
+          </button>
+        )}
       </div>
 
       {/* ── Filtros (cards) — abaixo do buscador ───────────────────────────── */}
@@ -724,6 +754,14 @@ export default function Feed() {
 
       {reviewPlace && (
         <ReviewModal place={reviewPlace} onClose={() => setReviewPlace(null)} user={user} />
+      )}
+
+      {composerPost !== undefined && (
+        <FeedPublisher
+          post={composerPost}
+          onClose={() => setComposerPost(undefined)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['feed'] })}
+        />
       )}
     </div>
   )

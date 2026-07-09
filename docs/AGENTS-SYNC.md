@@ -28,6 +28,18 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (feed Instagram + publicação admin)** — Descubra: post
+  redesenhado estilo Instagram (mídia full-bleed 4:5 com fundo desfocado, sem
+  corte; cabeçalho perfil/nome/tag SOBRE a imagem; ações curtir·comentar·
+  compartilhar). Selo verificado extraído p/ `components/VerifiedBadge.jsx`
+  (usado no feed e nos destaques). Feed API passou a devolver author_avatar/
+  author_name (foto do admin autor — precisa deploy). NOVO: **publicação direta
+  do admin no Descubra** — `components/FeedPublisher.jsx` (compositor/editor de
+  evento/promoção com upload de imagem), botão "Nova publicação" (admin) + editar
+  /excluir por post. Usa as rotas admin já existentes (POST/PUT/DELETE /api/feed)
+  e `createPost/updatePost/deletePost` no cliente. Home fixada no layout novo.
+  Badge do carrinho conta serviços. Transfer: regra de 4h (tela + backend/fuso).
+
 - **2026-07-08 · Agente B (design carrinho universal + mín. R$1)** — Baixou o
   valor mínimo de pagamento de R$5 → R$1 (`payments.js`, precisa merge p/ Render)
   e entregou SQL de passeio de teste a R$1. Escreveu o **desenho da Etapa 3 —
