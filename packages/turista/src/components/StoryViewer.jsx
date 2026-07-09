@@ -184,8 +184,11 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
   // o viewer de cobrir a tela toda e centralizar a mídia corretamente.
   return createPortal(
     <div className="fixed inset-0 z-[100] bg-black flex flex-col select-none">
+      {/* Gradiente superior para o cabeçalho ficar legível sobre mídia clara */}
+      <div className="absolute top-0 inset-x-0 h-28 z-20 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
+
       {/* ── Barras de progresso (itens do destaque atual) ────────────────── */}
-      <div className="absolute top-0 inset-x-0 z-10 flex gap-1 px-2 pt-2">
+      <div className="absolute top-0 inset-x-0 z-30 flex gap-1 px-2 pt-2">
         {groupStories.map((_, i) => (
           <div key={i} className="flex-1 h-[3px] rounded-full bg-white/30 overflow-hidden">
             <div
@@ -200,7 +203,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
       </div>
 
       {/* ── Barra superior: avatar + nome + selo + fechar ────────────────── */}
-      <div className="absolute top-6 inset-x-0 z-10 flex items-center gap-3 px-4 pt-1">
+      <div className="absolute top-6 inset-x-0 z-30 flex items-center gap-3 px-4 pt-1">
         <div className="w-10 h-10 rounded-full bg-white/20 overflow-hidden flex items-center justify-center shrink-0 border-2 border-white/50">
           {headerAvatar ? (
             <img src={headerAvatar} alt={headerTitle || ''} className="w-full h-full object-cover" />
