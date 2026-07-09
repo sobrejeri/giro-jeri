@@ -20,16 +20,21 @@ async function getSetting(key, defaultValue) {
 
 // ── Verifica se a data está em alta temporada ─────────
 export async function getSeasonAddition(regionId, serviceDate, subtotal) {
-  const { data: rule } = await supabase
+  let q = supabase
     .from('high_season_rules')
-    .select('additional_type, additional_value')
-    .eq('region_id', regionId)
+    .select('additional_type, additional_value, region_id')
     .eq('is_active', true)
     .lte('start_date', serviceDate)
-    .gte('end_date', serviceDate)
-    .limit(1)
-    .single();
+    .gte('end_date', serviceDate);
+  // Regra da região específica + regra GLOBAL (region_id nulo → vale p/ todas
+  // as regiões). Mesmo tratamento dos feriados nacionais.
+  q = regionId ? q.or(`region_id.eq.${regionId},region_id.is.null`) : q.is('region_id', null);
 
+  const { data: rows } = await q
+    .order('region_id', { ascending: false, nullsFirst: false }) // específica antes da global
+    .limit(1);
+
+  const rule = rows?.[0];
   if (!rule) return 0;
 
   if (rule.additional_type === 'percentage') {
