@@ -74,6 +74,11 @@ const requestSchema = z.object({
   coupon_code:      z.string().max(50).optional(),
 })
 
+// Carrinho universal: array de itens, cada um no formato do requestSchema.
+const cartRequestSchema = z.object({
+  items: z.array(requestSchema).min(1, 'Carrinho vazio').max(20, 'Muitos itens no carrinho'),
+})
+
 const router = Router()
 
 // O app envia null em campos vazios vindos do banco (ex.: origin_text de um
@@ -811,6 +816,120 @@ router.post('/request', authenticate, async (req, res, next) => {
     })
 
     res.json({ booking_id: booking.id, booking_code: bookingCode, amount: chargedTotal })
+  } catch (err) { next(err) }
+})
+
+// ── POST /api/payments/cart-request ────────────────────
+// Carrinho universal (N reservas, 1 pagamento). Cria TODAS as reservas do
+// carrinho de uma vez, compartilhando o mesmo `order_group_id`. Valida cada
+// item ANTES de inserir qualquer um — se um falhar, nada é criado (evita grupo
+// meia-boca). O pagamento único do grupo vem depois (fase B).
+router.post('/cart-request', authenticate, async (req, res, next) => {
+  try {
+    const body = req.body && Array.isArray(req.body.items)
+      ? { items: req.body.items.map(nullToUndefined) }
+      : req.body
+    const parsed = cartRequestSchema.safeParse(body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
+    }
+    const { items } = parsed.data
+
+    // 1) Valida TODOS os itens (antecedência, cutoff, total autoritativo) antes
+    //    de criar qualquer reserva. Falha → índice + motivo, nada é inserido.
+    const prepared = []
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]
+      try {
+        if (it.service_type === 'transfer' && it.service_date_iso) {
+          await validateTransferAdvance(it.service_date_iso, it.service_time || '00:00', { serviceId: it.service_id })
+        }
+        const cutoffErr = await checkBookingCutoff({
+          service_type: it.service_type, service_id: it.service_id, service_date_iso: it.service_date_iso,
+        })
+        if (cutoffErr) throw { status: 400, message: cutoffErr }
+        const chargedTotal = await computeChargedTotal({ data: it, userId: req.user.id })
+        prepared.push({ it, chargedTotal })
+      } catch (err) {
+        return res.status(err?.status || 400).json({
+          error: err?.message || 'Item inválido no carrinho', item_index: i, service_id: it.service_id,
+        })
+      }
+    }
+
+    // 2) Cria as N reservas com um order_group_id compartilhado (insert em lote
+    //    = atômico). booking_code único por item.
+    const orderGroupId = crypto.randomUUID()
+    const now = Date.now()
+    const acceptanceExpiresAt = new Date(now + 24 * 60 * 60 * 1000).toISOString()
+    const rows = prepared.map(({ it, chargedTotal }, i) => ({
+      booking_code:       `GJ${(now + i).toString(36).toUpperCase().slice(-6)}`,
+      user_id:            req.user.id,
+      order_group_id:     orderGroupId,
+      region_id:          it.region_id || null,
+      service_type:       it.service_type,
+      service_id:         it.service_id,
+      booking_mode:       it.booking_mode || 'private',
+      service_date:       it.service_date_iso,
+      service_time:       it.service_time || null,
+      people_count:       Number(it.people_count) || 1,
+      origin_text:        it.origin_text || null,
+      destination_text:   it.destination_text || null,
+      total_amount:       chargedTotal,
+      status_commercial:  'awaiting_acceptance',
+      status_operational: 'new',
+      payment_status:     'pending',
+    }))
+    // Casa cada linha ao item de origem por booking_code (a ordem do RETURNING
+    // não é garantida pelo SQL — não confiar no índice do array).
+    const bySrc = new Map(rows.map((r, i) => [r.booking_code, prepared[i].it]))
+
+    let { data: bookings, error: bErr } = await supabase
+      .from('bookings')
+      .insert(rows.map((r) => ({ ...r, acceptance_expires_at: acceptanceExpiresAt })))
+      .select()
+    if (bErr?.code === '42703') {
+      // Coluna nova ausente. Tenta sem acceptance_expires_at (037); se ainda
+      // faltar, sem order_group_id (050) — degrada para reservas avulsas.
+      const retry1 = await supabase.from('bookings').insert(rows).select()
+      bookings = retry1.data; bErr = retry1.error
+      if (bErr?.code === '42703') {
+        console.warn('[cart-request] coluna order_group_id ausente — rodar migration 050.')
+        const noGroup = rows.map(({ order_group_id, ...r }) => r)
+        const retry2 = await supabase.from('bookings').insert(noGroup).select()
+        bookings = retry2.data; bErr = retry2.error
+      }
+    }
+    if (bErr) throw bErr
+
+    // 3) Veículos + notificações por reserva (best-effort; não bloqueiam a
+    //    resposta nem derrubam o grupo já criado).
+    for (const b of bookings) {
+      const src = bySrc.get(b.booking_code)
+      const vehicles = src?.vehicles || []
+      if (vehicles.length > 0) {
+        await insertBookingVehicles(b.id, vehicles).catch((err) =>
+          console.error('[cart-request] veículos falharam:', err.message))
+      }
+      notifyOperatorsNewBooking(supabase, b).catch((err) =>
+        console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+      const isTransfer = b.service_type === 'transfer'
+      const rota = [b.origin_text, b.destination_text].filter(Boolean).join(' → ')
+      notifyOperatorsAndAdmin({
+        bookingId:   b.id,
+        templateKey: 'new_booking',
+        title:       'Nova solicitação disponível',
+        body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(b.service_date)}. Abra para aceitar.`,
+      })
+    }
+
+    res.json({
+      order_group_id: orderGroupId,
+      bookings: bookings.map((b) => ({
+        booking_id: b.id, booking_code: b.booking_code,
+        service_id: b.service_id, amount: b.total_amount,
+      })),
+    })
   } catch (err) { next(err) }
 })
 
