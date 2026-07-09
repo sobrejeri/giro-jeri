@@ -370,13 +370,6 @@ export default function Transfers() {
     : isSameDay(customDate, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
     : format(customDate, 'd MMM', { locale: ptBR })
 
-  const customChosen = (() => {
-    const [th, tm] = String(customTime || '00:00').split(':').map(Number)
-    const d = new Date(customDate); d.setHours(th || 0, tm || 0, 0, 0); return d
-  })()
-  const customAdvanceOk = customChosen >= minBookable
-  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime && customAdvanceOk
-
   /* ── Queries ── */
   const { data: routesData } = useQuery({
     queryKey: ['transfer-routes'],
@@ -408,19 +401,24 @@ export default function Transfers() {
   const unitPrice  = matched ? Number(matched.default_price) : null
   const popularRoutes = useMemo(() => pickPopularRoutes(routes), [routes])
 
-  // Antecedência mínima de 4h (America/Fortaleza): bloqueia datas E horários
-  // anteriores a "agora + 4h". minBookable é a wall-clock de Fortaleza + 4h.
-  const MIN_ADVANCE_HOURS = 4
-  const minBookable = useMemo(() => {
+  // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
+  // anteriores a "agora + N horas". Padrão 4h; a rota selecionada pode definir
+  // a sua própria antecedência (transfers.min_advance_hours, via admin).
+  const DEFAULT_MIN_ADVANCE_HOURS = 4
+  const bookableAfter = (hours) => {
     const p = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Fortaleza',
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hour12: false,
     }).formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a }, {})
     const d = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), 0)
-    d.setHours(d.getHours() + MIN_ADVANCE_HOURS)
+    d.setHours(d.getHours() + hours)
     return d
-  }, [])
+  }
+
+  // Rota definida: usa a antecedência da rota (senão o padrão).
+  const MIN_ADVANCE_HOURS = matched?.transfers?.min_advance_hours ?? DEFAULT_MIN_ADVANCE_HOURS
+  const minBookable = useMemo(() => bookableAfter(MIN_ADVANCE_HOURS), [MIN_ADVANCE_HOURS])
   const minDate = useMemo(() => startOfDay(minBookable), [minBookable])
   // Horário mínimo: só restringe quando a data escolhida é o 1º dia disponível.
   const minTime = isSameDay(date, minDate) ? format(minBookable, 'HH:mm') : '00:00'
@@ -435,16 +433,25 @@ export default function Transfers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, minTime])
 
-  // Mesma regra de 4h para o TRANSFER PERSONALIZADO (customDate/customTime).
-  const customMinTime = isSameDay(customDate, minDate) ? format(minBookable, 'HH:mm') : '00:00'
+  // TRANSFER PERSONALIZADO (customDate/customTime): sem rota, usa o padrão.
+  const customMinBookable = useMemo(() => bookableAfter(DEFAULT_MIN_ADVANCE_HOURS), [])
+  const customMinDate = useMemo(() => startOfDay(customMinBookable), [customMinBookable])
+  const customMinTime = isSameDay(customDate, customMinDate) ? format(customMinBookable, 'HH:mm') : '00:00'
   useEffect(() => {
-    if (isBefore(customDate, minDate)) setCustomDate(minDate)
+    if (isBefore(customDate, customMinDate)) setCustomDate(customMinDate)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minDate])
+  }, [customMinDate])
   useEffect(() => {
-    if (isSameDay(customDate, minDate) && customTime && customTime < customMinTime) setCustomTime(customMinTime)
+    if (isSameDay(customDate, customMinDate) && customTime && customTime < customMinTime) setCustomTime(customMinTime)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customDate, customMinTime])
+
+  const customChosen = (() => {
+    const [th, tm] = String(customTime || '00:00').split(':').map(Number)
+    const d = new Date(customDate); d.setHours(th || 0, tm || 0, 0, 0); return d
+  })()
+  const customAdvanceOk = customChosen >= customMinBookable
+  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime && customAdvanceOk
 
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
 
@@ -488,6 +495,7 @@ export default function Transfers() {
     time, people,
     region_id: region?.id || null,
     booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
+    min_advance_hours: matched?.transfers?.min_advance_hours ?? null,
     vehicles: cartItems.map(({ vehicle, qty }) => ({
       id: vehicle.id, name: vehicle.name, qty,
       price: unitPrice || 0, cap: vehicle.seat_capacity || null,
@@ -736,7 +744,7 @@ export default function Transfers() {
           )}
 
           {showCustomDate && (
-            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} minDate={minDate} highSeasonMonths={highSeasonMonths} />
+            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} minDate={customMinDate} highSeasonMonths={highSeasonMonths} />
           )}
         </div>
       )}

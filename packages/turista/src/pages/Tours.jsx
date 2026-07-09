@@ -342,8 +342,17 @@ export default function Tours() {
     const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
     const nowMin    = h * 60 + m
     const cutoffMin = Number(c.slice(0, 2)) * 60 + Number(c.slice(3, 5))
-    return nowMin >= cutoffMin ? addDays(todayStart, 1) : todayStart
-  }, [selectedTour?.booking_cutoff_time])
+    let minDate = nowMin >= cutoffMin ? addDays(todayStart, 1) : todayStart
+
+    // Antecedência mínima por serviço (admin): se definida, a data mínima não
+    // pode cair dentro da janela de antecedência (agora + N horas, Fortaleza).
+    const adv = Number(selectedTour?.min_advance_hours)
+    if (Number.isFinite(adv) && adv > 0) {
+      const advStart = startOfDay(new Date(Date.now() + adv * 3600_000))
+      if (isBefore(minDate, advStart)) minDate = advStart
+    }
+    return minDate
+  }, [selectedTour?.booking_cutoff_time, selectedTour?.min_advance_hours])
 
   // Se a data selecionada ficou antes do mínimo (ex.: hoje após o cutoff),
   // empurra para a data mínima válida — evita levar "hoje" inválido ao checkout.
@@ -406,6 +415,7 @@ export default function Tours() {
       name:    selectedTour.name,
       cover_image_url: selectedTour.cover_image_url || null,
       booking_cutoff_time: selectedTour.booking_cutoff_time || null,
+      min_advance_hours: selectedTour.min_advance_hours ?? null,
       dateIso: format(date, 'yyyy-MM-dd'),
       time:    existing?.time || null,
       people,
@@ -841,6 +851,7 @@ export default function Tours() {
                       service_id:            selectedTour.id,
                       vehicles:              [],
                       booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
+                      min_advance_hours:     selectedTour.min_advance_hours ?? null,
                     },
                   })
                 }}
