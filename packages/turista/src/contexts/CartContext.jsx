@@ -40,10 +40,9 @@ export function CartProvider({ children }) {
 
   const clearCart = useCallback(() => setItems([]), [])
 
-  // Badge do FAB: total de veículos/unidades salvos no carrinho
-  const count = items.reduce(
-    (s, i) => s + (i.vehicles?.reduce((q, v) => q + (v.qty || 0), 0) || 1), 0,
-  )
+  // Badge do FAB: número de SERVIÇOS (itens/reservas) no carrinho — cada
+  // reserva pode ter vários veículos, mas conta como 1 no badge.
+  const count = items.length
   const total = items.reduce((s, i) => s + (Number(i.total) || 0), 0)
 
   return (
