@@ -9,7 +9,7 @@ import InstallPrompt from '../components/InstallPrompt'
 import {
   Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
-  Sparkles, CalendarCheck, RotateCcw, HeartHandshake,
+  Sparkles, CalendarCheck, HeartHandshake,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
@@ -245,18 +245,8 @@ export default function Home() {
   const bannerTitle    = settings?.home_banner_title     || null
   const bannerSubtitle = settings?.home_banner_subtitle  || null
 
-  // ── Layout da home: 'novo' (redesign UX) ou 'classico' (anterior) ──
-  // Guardado no aparelho para permitir voltar ao layout anterior a qualquer
-  // momento, sem novo deploy (recomendado pelo relatório de UI/UX).
-  const [homeLayout, setHomeLayout] = useState(
-    () => localStorage.getItem('turiva_home_layout') || 'novo'
-  )
-  function toggleLayout() {
-    const next = homeLayout === 'novo' ? 'classico' : 'novo'
-    localStorage.setItem('turiva_home_layout', next)
-    setHomeLayout(next)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  // Layout da home fixado no 'novo' (redesign UX) — definitivo.
+  const homeLayout = 'novo'
 
   // Cooperativas parceiras (vitrine de confiança)
   const { data: partners = [] } = useQuery({
@@ -566,17 +556,6 @@ export default function Home() {
         )}
 
         <InstallPrompt />
-
-        {/* ── Alternar layout (novo ⇄ anterior) ─────────────────── */}
-        <div className="flex justify-center pb-1">
-          <button
-            onClick={toggleLayout}
-            className="inline-flex items-center gap-1.5 text-[11px] text-gray-400 active:text-gray-600"
-          >
-            <RotateCcw size={12} />
-            {homeLayout === 'novo' ? 'Voltar ao layout anterior' : 'Usar o novo layout'}
-          </button>
-        </div>
 
       </div>
     </div>
