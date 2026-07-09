@@ -322,41 +322,56 @@ function PostCard({ post, liked, onLike, user }) {
   }
 
   return (
-    <article className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
-          {isPromo ? <BadgePercent size={16} className="text-white" /> : <MapPin size={16} className="text-white" />}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[13px] font-bold text-gray-900 leading-tight">Turiva</p>
-          <p className="text-[11px] text-gray-400 leading-tight">{isPromo ? 'Promoção' : 'Evento'} · Jericoacoara</p>
-        </div>
-        {dateLabel && !isPromo && (
-          <span className="ml-auto inline-flex items-center gap-1 bg-orange-50 text-brand text-[11px] font-bold px-2.5 py-1 rounded-full">
-            <Calendar size={12} /> {dateLabel}
-          </span>
+    <article className="-mx-4 bg-white">
+      {/* ── Mídia full-bleed (estilo Instagram): preenche a largura toda; fundo
+          desfocado completa as laterais sem cortar/ampliar a imagem ── */}
+      <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-900">
+        {post.image_url ? (
+          <>
+            <img src={post.image_url} alt="" aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60" draggable={false} />
+            <img src={post.image_url} alt={post.title}
+              className="relative z-10 w-full h-full object-contain" draggable={false} />
+          </>
+        ) : (
+          <div className={`w-full h-full flex items-center justify-center p-6 ${isPromo ? 'bg-gradient-to-br from-emerald-500 to-teal-400' : 'bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]'}`}>
+            <p className="text-white font-extrabold text-2xl text-center leading-tight">{post.title}</p>
+          </div>
         )}
-        {isPromo && post.discount_label && (
-          <span className="ml-auto inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[11px] font-extrabold px-2.5 py-1 rounded-full">
-            {post.discount_label}
-          </span>
-        )}
+
+        {/* Gradiente + cabeçalho SOBRE a imagem */}
+        <div className="absolute top-0 inset-x-0 h-24 z-20 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
+        <div className="absolute top-3 inset-x-0 z-20 px-4 flex items-center gap-2.5">
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 border-2 border-white/70 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
+            {isPromo ? <BadgePercent size={16} className="text-white" /> : <MapPin size={16} className="text-white" />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold text-white leading-tight drop-shadow">Turiva</p>
+            <p className="text-[11px] text-white/80 leading-tight drop-shadow">{isPromo ? 'Promoção' : 'Evento'} · Jericoacoara</p>
+          </div>
+          {dateLabel && !isPromo && (
+            <span className="ml-auto inline-flex items-center gap-1 bg-white/90 backdrop-blur text-brand text-[11px] font-bold px-2.5 py-1 rounded-full shadow">
+              <Calendar size={12} /> {dateLabel}
+            </span>
+          )}
+          {isPromo && post.discount_label && (
+            <span className="ml-auto inline-flex items-center gap-1 bg-white/90 backdrop-blur text-emerald-600 text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow">
+              {post.discount_label}
+            </span>
+          )}
+        </div>
       </div>
 
-      {post.image_url ? (
-        <img src={post.image_url} alt={post.title} className="w-full h-auto max-h-[80vh] object-cover bg-gray-100" />
-      ) : (
-        <div className={`w-full aspect-[4/3] flex items-center justify-center p-6 ${isPromo ? 'bg-gradient-to-br from-emerald-500 to-teal-400' : 'bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]'}`}>
-          <p className="text-white font-extrabold text-2xl text-center leading-tight">{post.title}</p>
-        </div>
-      )}
-
-      <div className="flex items-center gap-4 px-4 pt-3">
+      {/* ── Ações (curtir · comentar · compartilhar) ── */}
+      <div className="flex items-center gap-5 px-4 pt-3">
         <button onClick={onLike} className="active:scale-90 transition-transform" aria-label="Curtir">
-          <Heart size={22} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-700'} />
+          <Heart size={24} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-800'} />
         </button>
+        <a href={`#comments-${post.id}`} className="active:scale-90 transition-transform" aria-label="Comentar">
+          <MessageCircle size={23} className="text-gray-800" />
+        </a>
         <button onClick={share} className="active:scale-90 transition-transform" aria-label="Compartilhar">
-          <Share2 size={21} className="text-gray-700" />
+          <Share2 size={22} className="text-gray-800" />
         </button>
       </div>
 
@@ -367,14 +382,17 @@ function PostCard({ post, liked, onLike, user }) {
       )}
 
       <div className="px-4 py-3 space-y-1.5">
-        <p className="text-[15px] font-bold text-gray-900">{post.title}</p>
+        <p className="text-[14px] text-gray-900">
+          <span className="font-bold">Turiva</span>{' '}
+          <span className="font-semibold">{post.title}</span>
+        </p>
         {post.body && <p className="text-[13px] text-gray-600 whitespace-pre-line leading-relaxed">{post.body}</p>}
         <div className="flex flex-wrap items-center gap-3 pt-1 text-[12px] text-gray-500">
           {post.event_time && <span className="flex items-center gap-1"><Clock size={12} className="text-brand" />{post.event_time}</span>}
           {validLabel && isPromo && <span className="flex items-center gap-1"><Calendar size={12} className="text-emerald-500" />Válido até {validLabel}</span>}
           {post.location && <span className="flex items-center gap-1"><MapPin size={12} className="text-brand" />{post.location}</span>}
         </div>
-        <div className="pt-1">
+        <div id={`comments-${post.id}`} className="pt-1">
           <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user} />
         </div>
       </div>
