@@ -28,6 +28,23 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-09 · Agente B (carrinho universal — Fatia B: pagamento único · BACKEND)**
+  — ⚠️ **NÃO DEPLOYADO** (muda fluxo de dinheiro; aguarda OK + validação com
+  R$1). `POST /payments/intent` passou a aceitar **`order_group_id`**: soma os
+  totais das reservas do grupo (aguardando pagamento, todas as pernas aceitas se
+  motor ON) e gera **1 pagamento** com `payments.order_group_id` (âncora =
+  1ª reserva, pois `payments.booking_id` é NOT NULL). Split de grupo
+  (`getSplitContextForGroup`) resolve só **recebedor único** (1 coop) ou sem
+  split; **multi-coop → 422** (Opção 2, seguro). `onPaymentApproved` delega para
+  novo **`onGroupPaymentApproved`** quando há `order_group_id` — marca TODAS as
+  reservas do grupo pagas, lança receita por reserva (rateando a taxa de gateway
+  pelo total de cada uma, gate `ledger_created`), contabilidade por perna +
+  notificações por reserva. **Caminho de reserva única intacto** (early-return).
+  Bloco de notificação extraído p/ `notifyBookingPaid()`. Todos os callers de
+  aprovação (in-request cartão, polling, webhook, simulate, manual-confirm)
+  propagam `order_group_id` (corrigido o SELECT do polling). Expiração de PIX
+  também virou ciente de grupo. **Falta:** frontend "Pagar tudo" + teste real.
+
 - **2026-07-09 · Agente B (carrinho universal — Fatia A: fundação)** — Início da
   Etapa 3 (N reservas, 1 pagamento). Migration **050** (`order_group_id` em
   `bookings` e `payments` + índices parciais — ⚠️ rodar no Supabase). Novo

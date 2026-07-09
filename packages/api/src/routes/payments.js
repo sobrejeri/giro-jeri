@@ -17,6 +17,7 @@ const intentSchema = z.object({
   total_price:         z.number({ coerce: true }).positive().min(1, 'Valor mínimo R$ 1,00').optional(),
   payment_method:      z.enum(['pix', 'credit_card', 'debit_card']).default('pix'),
   existing_booking_id: z.string().uuid().optional(),
+  order_group_id:      z.string().uuid().optional(),   // carrinho universal: paga o grupo todo
   booking_mode:        z.enum(['private', 'shared']).optional(),
   service_date:        z.string().optional(),
   service_time:        z.string().optional(),
@@ -43,7 +44,7 @@ const intentSchema = z.object({
     z.string().regex(/^\d{11,14}$/).optional(),
   ),
 }).refine(
-  (d) => d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
+  (d) => d.order_group_id || d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
   { message: 'Dados incompletos para criar reserva' },
 ).refine(
   (d) => !['credit_card', 'debit_card'].includes(d.payment_method) ||
@@ -325,6 +326,26 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
   return { mode: 'multi', recipients, totalApplicationFee: totalApplicationFeeCents / 100 }
 }
 
+// Split do GRUPO (carrinho universal): agrega as pernas aceitas de TODAS as
+// reservas do grupo por cooperativa. Opção 2 (segura): resolve só o caminho de
+// recebedor ÚNICO (1 coop) ou sem split (motor OFF/compartilhado); 2+ coops
+// devolve mode:'multi' para o chamador BLOQUEAR — split multi-coop de grupo
+// fica para depois de validar o split nativo do MP em staging.
+async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
+  const byOperator = new Map()
+  for (const b of bookings) {
+    const m = await getAcceptedLegRecipients(b.id)
+    for (const [op, val] of m) byOperator.set(op, (byOperator.get(op) || 0) + val)
+  }
+  if (byOperator.size === 0) return { mode: 'single' }          // sem split → plataforma
+  if (byOperator.size === 1) {
+    const [operatorId] = [...byOperator.keys()]
+    const legacy = await getSplitContext({ operator_id: operatorId }, combinedTotal, cfg)
+    return legacy ? { ...legacy, mode: 'single' } : { mode: 'single' }
+  }
+  return { mode: 'multi' }                                       // bloqueado no chamador (Opção 2)
+}
+
 // ── Cutoff de solicitação (R6) ─────────────────────────────────────────
 // Passeios/transfers podem ter horário limite para reserva no MESMO dia
 // (tours.booking_cutoff_time / transfers.booking_cutoff_time). Passou do
@@ -381,31 +402,73 @@ router.post('/intent', authenticate, async (req, res, next) => {
       origin_text, destination_text,
       total_price, payment_method = 'pix',
       service_name, cover_image_url,
-      coupon_code, existing_booking_id,
+      coupon_code, existing_booking_id, order_group_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc,
     } = parsed.data
 
-    // R6: reserva nova (não repagamento) respeita o cutoff do serviço.
-    if (!existing_booking_id) {
+    const isGroup = !!order_group_id
+
+    // R6: reserva nova (não repagamento nem grupo) respeita o cutoff do serviço.
+    // Grupo já validou cutoff/antecedência na criação (cart-request).
+    if (!existing_booking_id && !isGroup) {
       const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
       if (cutoffErr) return res.status(400).json({ error: cutoffErr })
     }
 
     // ── Total autoritativo: o SERVIDOR é a fonte de verdade do valor cobrado.
     //    Reserva nova → recalcula (alta temporada/feriado). Reserva já existente
-    //    (pagamento pós-aceite) → usa o total já gravado no banco. ───────────
+    //    (pagamento pós-aceite) → usa o total já gravado no banco. Grupo → soma
+    //    dos totais já gravados das reservas do grupo (definido abaixo). ───────
     let chargedTotal = existing_booking_id
       ? Number(total_price)
-      : await computeChargedTotal({ data: parsed.data, userId: req.user.id })
+      : isGroup ? 0 : await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     // ── 1. Lê configurações do gateway ─────────────────
     const cfg     = await getPaymentSettings()
     const gateway = cfg.payment_gateway || 'manual'
     console.log('[intent] gateway=%s env=%s', gateway, cfg.payment_gateway_env)
 
-    let booking, bookingCode
+    let booking, bookingCode, groupBookings = null
 
-    if (existing_booking_id) {
+    if (isGroup) {
+      // ── Carrinho universal: paga TODAS as reservas do grupo de uma vez ──
+      const { data: all } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('order_group_id', order_group_id)
+        .eq('user_id', req.user.id)
+      if (!all || all.length === 0) {
+        return res.status(404).json({ error: 'Grupo não encontrado nesta conta.' })
+      }
+      // Só cobra as reservas aguardando pagamento; ignora canceladas/pagas.
+      const payable = all.filter((b) => b.status_commercial === 'awaiting_payment')
+      if (payable.length === 0) {
+        return res.status(409).json({
+          error: 'Nenhuma reserva do grupo está pronta para pagamento. Aguarde o aceite das cooperativas.',
+        })
+      }
+      // Motor de pernas ligado: cada reserva precisa ter TODAS as pernas (não
+      // canceladas) aceitas antes de entrar no pagamento do grupo.
+      if (await isBookingLegsEngineEnabled()) {
+        for (const b of payable) {
+          const { data: legs } = await supabase
+            .from('booking_legs').select('status_leg').eq('booking_id', b.id)
+          if (legs && legs.length > 0) {
+            const relevant = legs.filter((l) => l.status_leg !== 'cancelled')
+            const allAccepted = relevant.length > 0 && relevant.every((l) => l.status_leg === 'accepted')
+            if (!allAccepted) {
+              return res.status(409).json({
+                error: `A reserva ${b.booking_code} ainda tem veículo(s) aguardando aceite. Aguarde o combo fechar ou pague por reserva.`,
+              })
+            }
+          }
+        }
+      }
+      groupBookings = payable
+      chargedTotal  = payable.reduce((s, b) => s + Number(b.total_amount || 0), 0)
+      booking       = payable[0]            // âncora (payments.booking_id é NOT NULL)
+      bookingCode   = booking.booking_code
+    } else if (existing_booking_id) {
       // ── Reutiliza reserva existente ────────────────────
       const { data: existing } = await supabase
         .from('bookings')
@@ -524,9 +587,20 @@ router.post('/intent', authenticate, async (req, res, next) => {
       // Motor de pernas (Onda A) ligado: quando o pedido tem 2+ cooperativas
       // com pernas aceitas, monta split nativo N-recebedores; com 1 (ou sem
       // pernas), cai no MESMO caminho de sempre (mode:'single').
-      const split = (await isBookingLegsEngineEnabled())
-        ? await getSplitContextForBooking(booking, chargedTotal, cfg)
-        : await getSplitContext(booking, chargedTotal, cfg)
+      const split = isGroup
+        ? await getSplitContextForGroup(groupBookings, chargedTotal, cfg)
+        : (await isBookingLegsEngineEnabled())
+          ? await getSplitContextForBooking(booking, chargedTotal, cfg)
+          : await getSplitContext(booking, chargedTotal, cfg)
+
+      // Opção 2: pagamento único de GRUPO só para recebedor único (1 coop) ou
+      // sem split. Grupo multi-cooperativa fica bloqueado até validar o split
+      // nativo do MP — o cliente paga por reserva nesse caso.
+      if (isGroup && split?.mode === 'multi') {
+        return res.status(422).json({
+          error: 'Este grupo tem cooperativas diferentes entre as reservas. O pagamento único multi-cooperativa ainda não é suportado — pague cada reserva separadamente.',
+        })
+      }
 
       if (isCard) {
         // Split multi-recebedor (N cooperativas) via cartão ainda não
@@ -646,7 +720,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
     }
 
     const paymentInsertRow = {
-      booking_id:             booking.id,
+      booking_id:             booking.id,          // âncora do grupo (NOT NULL)
+      ...(isGroup ? { order_group_id } : {}),
       gateway_name:           effectiveGateway,
       gateway_transaction_id: gatewayTransactionId,
       payment_method,
@@ -708,6 +783,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
     res.json({
       booking_id:   booking.id,
       booking_code: bookingCode,
+      order_group_id: isGroup ? order_group_id : null,
+      group_count:  isGroup ? groupBookings.length : null,
       payment_id:   payment.id,
       amount:       chargedTotal,
       expires_at:   payment.expires_at,
@@ -1070,7 +1147,7 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
   try {
     const { data: payment } = await supabase
       .from('payments')
-      .select('id, status, booking_id, gateway_name, gateway_transaction_id, expires_at, bookings(booking_code, status_commercial, operator_id)')
+      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, expires_at, amount_gross, gateway_fee_pct, gateway_fee_amount, bookings(booking_code, status_commercial, operator_id)')
       .eq('id', req.params.id)
       .single()
 
@@ -1085,7 +1162,16 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
     // Verifica se expirou
     if (payment.status === 'pending' && payment.expires_at && new Date(payment.expires_at) < new Date()) {
       await supabase.from('payments').update({ status: 'expired' }).eq('id', payment.id)
-      await supabase.from('bookings').update({ status_commercial: 'expired', payment_status: 'expired' }).eq('id', payment.booking_id)
+      if (payment.order_group_id) {
+        // Grupo: expira só as reservas ainda aguardando pagamento (não toca
+        // canceladas/pagas). Evita grupo "meio-expirado".
+        await supabase.from('bookings')
+          .update({ status_commercial: 'expired', payment_status: 'expired' })
+          .eq('order_group_id', payment.order_group_id)
+          .eq('status_commercial', 'awaiting_payment')
+      } else {
+        await supabase.from('bookings').update({ status_commercial: 'expired', payment_status: 'expired' }).eq('id', payment.booking_id)
+      }
       return res.json({ status: 'expired', booking_id: payment.booking_id })
     }
 
@@ -1346,6 +1432,11 @@ async function recordLegAccounting(booking, payment) {
 
 // ── Helpers ────────────────────────────────────────────
 async function onPaymentApproved(payment) {
+  // Carrinho universal: pagamento de GRUPO segue por caminho próprio, que
+  // aplica a aprovação a TODAS as reservas do grupo. O caminho de reserva
+  // única abaixo permanece intacto.
+  if (payment.order_group_id) return onGroupPaymentApproved(payment)
+
   await supabase.from('payments').update({ status: 'approved', paid_at: new Date().toISOString() }).eq('id', payment.id)
 
   // Carrega a reserva ANTES de atualizar para saber se a cooperativa já aceitou.
@@ -1415,48 +1506,129 @@ async function onPaymentApproved(payment) {
     console.error('[email] confirmação de reserva falhou:', err.message))
 
   // Central no app: confirma para o turista e avisa quem precisa.
-  if (booking) {
-    const isTransfer = booking.service_type === 'transfer'
-    const tipo  = isTransfer ? 'translado' : 'passeio'
-    const rota  = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
+  if (booking) notifyBookingPaid(booking)
+}
 
+// Notificações de "pagamento confirmado" de UMA reserva (app + WhatsApp).
+// Extraído para ser reusado pelo pagamento único de grupo (carrinho universal).
+function notifyBookingPaid(booking) {
+  if (!booking) return
+  const isTransfer = booking.service_type === 'transfer'
+  const tipo  = isTransfer ? 'translado' : 'passeio'
+  const rota  = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
+
+  notifyUser({
+    userId:      booking.user_id,
+    bookingId:   booking.id,
+    templateKey: 'payment_confirmed',
+    title:       'Pagamento confirmado ✅',
+    body:        booking.operator_id
+      ? `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). A cooperativa já vai cuidar de tudo! 🎉`
+      : `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar uma cooperativa aceitar.`,
+  })
+
+  // WhatsApp pro cliente: pagamento confirmado (segurança de que deu certo).
+  notifyClientPaymentConfirmed(supabase, booking).catch((err) =>
+    console.error('[whatsapp] aviso cliente pagamento falhou:', err.message))
+
+  if (booking.operator_id) {
+    // Fluxo novo: a cooperativa que aceitou é avisada de que o pagamento entrou.
     notifyUser({
-      userId:      booking.user_id,
+      userId:      booking.operator_id,
       bookingId:   booking.id,
-      templateKey: 'payment_confirmed',
-      title:       'Pagamento confirmado ✅',
-      body:        booking.operator_id
-        ? `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). A cooperativa já vai cuidar de tudo! 🎉`
-        : `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar uma cooperativa aceitar.`,
+      templateKey: 'payment_received',
+      title:       'Pagamento recebido 💰',
+      body:        `O cliente pagou o ${tipo} ${booking.booking_code}. Pode confirmar e seguir com o atendimento.`,
     })
+    // WhatsApp pra coop: cliente pagou, hora de confirmar/despachar.
+    notifyOperatorPaymentReceived(supabase, booking).catch((err) =>
+      console.error('[whatsapp] aviso coop pagamento falhou:', err.message))
+  } else {
+    // Fluxo antigo: a reserva paga fica disponível para as cooperativas.
+    notifyOperatorsNewBooking(supabase, booking).catch((err) =>
+      console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+    notifyOperatorsAndAdmin({
+      bookingId:   booking.id,
+      templateKey: 'new_booking',
+      title:       'Nova solicitação disponível',
+      body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
+    })
+  }
+}
 
-    // WhatsApp pro cliente: pagamento confirmado (segurança de que deu certo).
-    notifyClientPaymentConfirmed(supabase, booking).catch((err) =>
-      console.error('[whatsapp] aviso cliente pagamento falhou:', err.message))
+// Aprovação de pagamento de GRUPO (carrinho universal): aplica a aprovação a
+// TODAS as reservas do grupo. Idempotente — webhook+polling/retry não duplicam
+// status nem lançamentos. Espelha o caminho de reserva única, rateando a taxa
+// de gateway por reserva pelo total de cada uma.
+async function onGroupPaymentApproved(payment) {
+  await supabase.from('payments')
+    .update({ status: 'approved', paid_at: new Date().toISOString() })
+    .eq('id', payment.id)
 
-    if (booking.operator_id) {
-      // Fluxo novo: a cooperativa que aceitou é avisada de que o pagamento entrou.
-      notifyUser({
-        userId:      booking.operator_id,
-        bookingId:   booking.id,
-        templateKey: 'payment_received',
-        title:       'Pagamento recebido 💰',
-        body:        `O cliente pagou o ${tipo} ${booking.booking_code}. Pode confirmar e seguir com o atendimento.`,
-      })
-      // WhatsApp pra coop: cliente pagou, hora de confirmar/despachar.
-      notifyOperatorPaymentReceived(supabase, booking).catch((err) =>
-        console.error('[whatsapp] aviso coop pagamento falhou:', err.message))
-    } else {
-      // Fluxo antigo: a reserva paga fica disponível para as cooperativas.
-      notifyOperatorsNewBooking(supabase, booking).catch((err) =>
-        console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
-      notifyOperatorsAndAdmin({
-        bookingId:   booking.id,
-        templateKey: 'new_booking',
-        title:       'Nova solicitação disponível',
-        body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
-      })
+  const { data: bookings } = await supabase
+    .from('bookings').select('*').eq('order_group_id', payment.order_group_id)
+  const list = (bookings || []).filter((b) => b.status_commercial !== 'cancelled')
+  if (list.length === 0) return
+
+  // 1) Marca cada reserva do grupo como paga (idempotente).
+  for (const b of list) {
+    const upd = { status_commercial: 'paid', payment_status: 'approved' }
+    if (!b.operator_id) upd.status_operational = 'awaiting_dispatch'
+    await supabase.from('bookings').update(upd).eq('id', b.id)
+    if (b.service_type === 'transfer' && b.service_id) {
+      try {
+        await supabase.from('transfer_quotes').update({ status: 'paid' })
+          .eq('id', b.service_id).eq('status', 'accepted')
+      } catch { /* service_id é rota, não cotação */ }
     }
+  }
+
+  // 2) Receita no ledger — uma vez por pagamento (gate ledger_created),
+  //    rateando a taxa de gateway entre as reservas pelo total de cada uma.
+  const { data: fresh } = await supabase.from('payments')
+    .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount')
+    .eq('id', payment.id).single()
+
+  if (!fresh?.ledger_created) {
+    const combined = Number(fresh?.amount_gross ?? payment.amount_gross) || 0
+    const feePct   = fresh?.gateway_fee_pct ?? 0.035
+    const totalFee = fresh?.gateway_fee_amount > 0
+      ? Number(fresh.gateway_fee_amount)
+      : Math.round(combined * feePct * 100) / 100
+    const effectiveDate = new Date().toISOString().slice(0, 10)
+    const sumTotals = list.reduce((s, b) => s + Number(b.total_amount || 0), 0) || combined
+
+    const rows = []
+    let feeAllocated = 0
+    for (let i = 0; i < list.length; i++) {
+      const b   = list[i]
+      const amt = Number(b.total_amount || 0)
+      // A última reserva absorve o resto da taxa p/ fechar exatamente em totalFee.
+      const fee = i === list.length - 1
+        ? Math.round((totalFee - feeAllocated) * 100) / 100
+        : Math.round(totalFee * (sumTotals ? amt / sumTotals : 0) * 100) / 100
+      feeAllocated = Math.round((feeAllocated + fee) * 100) / 100
+      rows.push(
+        { booking_id: b.id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${b.booking_code}`,  amount: amt,                              direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
+        { booking_id: b.id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${b.booking_code}`,    amount: fee,                              direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+        { booking_id: b.id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${b.booking_code}`, amount: Math.round((amt - fee) * 100) / 100, direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
+      )
+    }
+    const { error: ledgerErr } = await supabase.from('financial_ledger').insert(rows)
+    if (ledgerErr) {
+      console.error('[ledger] grupo: falha ao lançar receita:', ledgerErr.message)
+    } else {
+      await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
+    }
+  }
+
+  // 3) Contabilidade por perna + e-mail + notificações — por reserva.
+  for (const b of list) {
+    await recordLegAccounting(b, payment).catch((err) =>
+      console.error('[ledger] contabilidade por perna (grupo) falhou booking=%s err=%s', b.id, err.message))
+    sendConfirmationEmail(b).catch((err) =>
+      console.error('[email] confirmação (grupo) falhou:', err.message))
+    notifyBookingPaid(b)
   }
 }
 
