@@ -246,7 +246,7 @@ router.get('/', authenticate, async (req, res, next) => {
         service_date, service_time, people_count,
         total_amount, status_commercial, status_operational,
         pickup_place_name, destination_place_name,
-        origin_text, destination_text,
+        origin_text, destination_text, order_group_id,
         created_at,
         booking_vehicles ( vehicle_name_snapshot, quantity, unit_price ),
         payments ( status, paid_at )

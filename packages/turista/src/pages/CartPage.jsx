@@ -584,7 +584,7 @@ export default function CartPage() {
           {done ? (
             <>
               <p className="text-[13px] text-gray-600 text-center">
-                {okCount > 0 && <span className="font-bold text-emerald-600">{okCount} solicitação{okCount > 1 ? 'ões' : ''} enviada{okCount > 1 ? 's' : ''} ✓</span>}
+                {okCount > 0 && <span className="font-bold text-emerald-600">{okCount} solicitaç{okCount > 1 ? 'ões' : 'ão'} enviada{okCount > 1 ? 's' : ''} ✓</span>}
                 {okCount > 0 && errCount > 0 && ' · '}
                 {errCount > 0 && <span className="font-bold text-red-500">{errCount} com erro (segue no carrinho)</span>}
               </p>

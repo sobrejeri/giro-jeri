@@ -181,7 +181,7 @@ export default function CheckoutPayment() {
     service_date, service_date_iso, service_time,
     people_count, total_price: rawPrice, region_id, service_id,
     vehicles = [], origin_text, destination_text, cover_image_url,
-    existing_booking_id,
+    existing_booking_id, order_group_id,
   } = state
 
   const total_price = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
@@ -202,6 +202,7 @@ export default function CheckoutPayment() {
       total_price, payment_method: 'pix',
       service_name, cover_image_url,
       existing_booking_id: existing_booking_id || undefined,
+      order_group_id: order_group_id || undefined,
       payer_doc: formData?.payer?.identification?.number,
     })
     if (!result) throw new Error(t('payment.errorGeneric'))
@@ -237,6 +238,7 @@ export default function CheckoutPayment() {
       origin_text, destination_text,
       total_price, service_name, cover_image_url,
       existing_booking_id: existing_booking_id || undefined,
+      order_group_id: order_group_id || undefined,
       ...cardFields,
     })
 
