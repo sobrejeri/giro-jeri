@@ -28,6 +28,14 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (design carrinho universal + mín. R$1)** — Baixou o
+  valor mínimo de pagamento de R$5 → R$1 (`payments.js`, precisa merge p/ Render)
+  e entregou SQL de passeio de teste a R$1. Escreveu o **desenho da Etapa 3 —
+  carrinho universal** (`docs/ETAPA-3-carrinho-pagamento-unico.md`): modelo
+  escolhido = **N reservas + 1 pagamento** via `order_group_id`, reusando o
+  split do motor de pernas. Reserva a **migration 049** para os `order_group_id`.
+  Ainda é só desenho — implementação não começou.
+
 - **2026-07-08 · Agente B (data/calendário + alta temporada)** — Barras de
   resumo agora só aparecem com veículo selecionado. Regra de data: padrão
   meio-dia (Fortaleza) → passou de 12h, só amanhã+ (corrige "sempre Hoje");
