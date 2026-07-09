@@ -466,24 +466,32 @@ export default function Transfers() {
   const unitPrice  = matched ? Number(matched.default_price) : null
   const popularRoutes = useMemo(() => pickPopularRoutes(routes), [routes])
 
-  // Data mínima: padrão meio-dia (Fortaleza). Passou de 12h → só amanhã+.
-  // O transfer da rota pode definir um booking_cutoff_time próprio (prioritário).
-  const minDate = useMemo(() => {
-    const c = matched?.transfers?.booking_cutoff_time || '12:00'
-    const todayStart = startOfDay(new Date())
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false,
-    }).formatToParts(new Date())
-    const nowMin = Number(parts.find(p => p.type === 'hour')?.value ?? 0) * 60
-                 + Number(parts.find(p => p.type === 'minute')?.value ?? 0)
-    const cutoffMin = Number(c.slice(0, 2)) * 60 + Number(c.slice(3, 5))
-    return nowMin >= cutoffMin ? addDays(todayStart, 1) : todayStart
-  }, [matched?.transfers?.booking_cutoff_time])
+  // Antecedência mínima de 4h (America/Fortaleza): bloqueia datas E horários
+  // anteriores a "agora + 4h". minBookable é a wall-clock de Fortaleza + 4h.
+  const MIN_ADVANCE_HOURS = 4
+  const minBookable = useMemo(() => {
+    const p = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Fortaleza',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a }, {})
+    const d = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), 0)
+    d.setHours(d.getHours() + MIN_ADVANCE_HOURS)
+    return d
+  }, [])
+  const minDate = useMemo(() => startOfDay(minBookable), [minBookable])
+  // Horário mínimo: só restringe quando a data escolhida é o 1º dia disponível.
+  const minTime = isSameDay(date, minDate) ? format(minBookable, 'HH:mm') : '00:00'
 
   useEffect(() => {
     if (isBefore(date, minDate)) setDate(minDate)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minDate])
+  // Se a data é o dia mínimo e o horário ficou antes do limite, empurra o horário.
+  useEffect(() => {
+    if (isSameDay(date, minDate) && time && time < minTime) setTime(minTime)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, minTime])
 
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
 
@@ -534,7 +542,13 @@ export default function Transfers() {
     total: cartTotal,
   })
   // Basta a rota + veículos cobrindo as pessoas; o horário é definido no carrinho.
-  const canBook      = !!matched && cartHasItems && cartCapacity >= people
+  // Data+hora escolhidas como wall-clock, p/ conferir a antecedência de 4h.
+  const chosenDateTime = useMemo(() => {
+    const [th, tm] = String(time || '00:00').split(':').map(Number)
+    const d = new Date(date); d.setHours(th || 0, tm || 0, 0, 0); return d
+  }, [date, time])
+  const advanceOk    = chosenDateTime >= minBookable
+  const canBook      = !!matched && cartHasItems && cartCapacity >= people && advanceOk
 
   // True when suggestion is already the only item in cart at the right qty
   const suggestionIsApplied = !!(suggestion &&
@@ -847,11 +861,17 @@ export default function Transfers() {
                 ref={timeRef}
                 type="time"
                 value={time}
+                min={minTime}
                 onChange={e => setTime(e.target.value)}
                 className="absolute inset-0 opacity-0 w-full cursor-pointer"
               />
             </button>
           </div>
+          {!advanceOk && (
+            <p className="px-4 pb-3 -mt-1 text-[11px] text-amber-600">
+              Transfers precisam de no mínimo {MIN_ADVANCE_HOURS}h de antecedência — escolha a partir de {format(minBookable, "d/MM 'às' HH:mm")}.
+            </p>
+          )}
         </section>
 
         {/* PASSAGEIROS */}
