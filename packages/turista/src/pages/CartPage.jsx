@@ -11,8 +11,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { itemMissing, requestPayloadFor } from '../lib/cartCheckout'
 import { PlaceInput } from './Transfers'
-import { format } from 'date-fns'
+import { format, startOfDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import DateSheet from '../components/DateSheet'
+import { highSeasonMonthSet } from '../lib/season'
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 const todayIso = () => format(new Date(), 'yyyy-MM-dd')
@@ -35,10 +37,9 @@ const toMin = (hhmm) => hhmm ? Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice
 const fromMin = (m) => `${String(Math.floor((m % 1440) / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 const nextDayIso = (iso) => format(new Date(new Date(`${iso}T12:00:00`).getTime() + 86400000), 'yyyy-MM-dd')
 
-// Antecedência mínima para o MESMO dia: transfers seguem a regra do servidor
-// (transfer_min_advance_hours, padrão 3h — validateTransferAdvance); passeios
-// ganham uma folga mínima de 30min para a operação.
-const LEAD_MINUTES = { transfer: 180, tour: 30 }
+// Antecedência mínima para o MESMO dia: transfers 4h (transfer_min_advance_hours),
+// passeios 30min. Passeio também respeita o cutoff (padrão meio-dia).
+const LEAD_MINUTES = { transfer: 240, tour: 30 }
 
 function dayLabel(iso) {
   if (!iso) return '—'
@@ -131,17 +132,27 @@ function EditSheet({ item, onSave, onClose }) {
     })
   }
 
+  // Alta temporada (cor no calendário) — mesmas regras das telas de seleção.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', item.region_id],
+    queryFn:  () => api.getSeasons(item.region_id ? { region_id: item.region_id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  })
+  const highSeasonMonths = highSeasonMonthSet(seasonsData || [])
+  const [showDate, setShowDate] = useState(false)
+
   // Regras de antecedência (mesmo relógio do servidor — America/Fortaleza):
-  // • Cutoff do serviço (booking_cutoff_time): passou do horário → só a
-  //   partir de amanhã.
-  // • Mesmo dia: horário precisa respeitar a antecedência mínima
-  //   (transfer 3h, passeio 30min).
+  // • Transfer: 4h de antecedência. • Passeio: cutoff do serviço (padrão
+  //   meio-dia) + 30min de folga. Se o mínimo passa da meia-noite, rola p/ amanhã.
   const { todayIso: fToday, minutes: nowMin } = fortalezaNow()
-  const cutoffMin  = toMin(item.booking_cutoff_time || null)
-  const afterCutoff = cutoffMin != null && nowMin >= cutoffMin
-  const minDateIso = afterCutoff ? nextDayIso(fToday) : fToday
+  const cutoffMin  = toMin(item.booking_cutoff_time || null) ?? (isTransfer ? null : 720)
   const lead       = LEAD_MINUTES[isTransfer ? 'transfer' : 'tour']
   const earliestTodayMin = nowMin + lead
+  const afterCutoff = cutoffMin != null && nowMin >= cutoffMin
+  const rollsToTomorrow = afterCutoff || earliestTodayMin >= 1440
+  const minDateIso = rollsToTomorrow ? nextDayIso(fToday) : fToday
+  const minDate    = startOfDay(new Date(`${minDateIso}T12:00:00`))
 
   const dateOk = !!dateIso && dateIso >= minDateIso
   const sameDay = dateIso === fToday
@@ -151,7 +162,7 @@ function EditSheet({ item, onSave, onClose }) {
   if (dateIso && !dateOk && afterCutoff) {
     timeHint = `Este serviço aceita solicitações para o mesmo dia só até ${item.booking_cutoff_time.slice(0, 5)} — escolha a partir de ${dayLabel(minDateIso)}.`
   } else if (time && sameDay && !timeOk && earliestTodayMin < 1440) {
-    timeHint = `Para hoje, escolha a partir de ${fromMin(earliestTodayMin)} (antecedência mínima de ${isTransfer ? '3h' : '30min'}).`
+    timeHint = `Para hoje, escolha a partir de ${fromMin(earliestTodayMin)} (antecedência mínima de ${isTransfer ? '4h' : '30min'}).`
   } else if (time && sameDay && !timeOk) {
     timeHint = `Não há mais horários para hoje — escolha a partir de ${dayLabel(nextDayIso(fToday))}.`
   }
@@ -219,21 +230,30 @@ function EditSheet({ item, onSave, onClose }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Data *</label>
-              <input
-                type="date" value={dateIso} min={minDateIso}
-                onChange={(e) => setDateIso(e.target.value)}
-                className="mt-1 w-full bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30"
-              />
+              <button type="button" onClick={() => setShowDate(true)}
+                className="mt-1 w-full text-left bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30">
+                {dateIso ? dayLabel(dateIso) : 'Escolher data'}
+              </button>
             </div>
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Horário *</label>
               <input
-                type="time" value={time}
+                type="time" value={time} min={sameDay ? fromMin(earliestTodayMin) : undefined}
                 onChange={(e) => setTime(e.target.value)}
                 className="mt-1 w-full bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30"
               />
             </div>
           </div>
+
+          {showDate && (
+            <DateSheet
+              value={dateIso ? new Date(`${dateIso}T12:00:00`) : minDate}
+              onChange={(d) => setDateIso(format(d, 'yyyy-MM-dd'))}
+              onClose={() => setShowDate(false)}
+              minDate={minDate}
+              highSeasonMonths={highSeasonMonths}
+            />
+          )}
 
           {timeHint && (
             <p className="text-[11.5px] font-semibold text-amber-600 flex items-start gap-1.5 -mt-1">

@@ -28,6 +28,15 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-08 · Agente B (datas unificadas em todas as telas)** — Criado
+  `components/DateSheet.jsx` (calendário compartilhado, portalado, com minDate +
+  alta temporada). Aplicado em: transfer personalizado (faltava minDate/regra
+  4h) e edição do carrinho (era `<input type=date>` nativo — não coloria nem
+  bloqueava direito). Regras alinhadas em todo lugar: transfer 4h, passeio
+  meio-dia (cutoff), alta temporada em laranja. Transfers passou a usar o
+  DateSheet compartilhado (removido o local). ⚠️ A cor de alta temporada só
+  aparece após o `/api/seasons` ir pra prod (PR #37).
+
 - **2026-07-08 · Agente B (feed Instagram + publicação admin)** — Descubra: post
   redesenhado estilo Instagram (mídia full-bleed 4:5 com fundo desfocado, sem
   corte; cabeçalho perfil/nome/tag SOBRE a imagem; ações curtir·comentar·

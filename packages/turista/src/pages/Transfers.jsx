@@ -6,6 +6,7 @@ import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { useCart }     from '../contexts/CartContext'
 import { highSeasonMonthSet } from '../lib/season'
+import DateSheet from '../components/DateSheet'
 import { api }         from '../lib/api'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
@@ -192,70 +193,6 @@ function PresetCard({ route, bg, active, onSelect }) {
   )
 }
 
-/* ── Date picker (bottom sheet) ─────────────────────────────── */
-function DateSheet({ value, onChange, onClose, minDate, highSeasonMonths }) {
-  const today  = minDate || startOfDay(new Date())
-  const [view, setView] = useState(startOfMonth(value))
-  const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
-  const offset = getDay(startOfMonth(view))
-  const canPrev = !isBefore(subMonths(view, 1), startOfMonth(today))
-  return createPortal(
-    <>
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
-        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
-        <div className="flex items-center justify-between px-5 py-3">
-          <p className="text-[16px] font-bold text-gray-900">Escolha a data</p>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"><X size={14} className="text-gray-500" /></button>
-        </div>
-        <div className="flex items-center justify-between px-5 mb-3">
-          <button disabled={!canPrev} onClick={() => setView(m => subMonths(m, 1))}
-            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center disabled:opacity-30 active:scale-95">
-            <ChevronLeft size={16} className="text-gray-600" />
-          </button>
-          <p className="text-[14px] font-semibold text-gray-900 capitalize">{format(view, 'MMMM yyyy', { locale: ptBR })}</p>
-          <button onClick={() => setView(m => addMonths(m, 1))} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95">
-            <ChevronRight size={16} className="text-gray-600" />
-          </button>
-        </div>
-        <div className="grid grid-cols-7 px-4 mb-1">
-          {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>)}
-        </div>
-        <div className="grid grid-cols-7 px-4 gap-y-0.5 mb-4">
-          {Array.from({ length: offset }).map((_, i) => <div key={`e${i}`} />)}
-          {days.map(day => {
-            const past = isBefore(day, today)
-            const sel  = isSameDay(day, value)
-            const hs   = !!highSeasonMonths?.has(day.getMonth() + 1)
-            return (
-              <button key={day.toISOString()} disabled={past} onClick={() => { onChange(day); onClose() }}
-                className={`relative aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
-                  ${sel ? 'bg-brand text-white font-bold' : ''}
-                  ${!sel && past ? 'text-gray-300 cursor-not-allowed' : ''}
-                  ${!sel && !past && hs ? 'text-amber-600 font-bold' : ''}
-                  ${!sel && !past && !hs && isToday(day) ? 'text-brand font-bold' : ''}
-                  ${!sel && !past && !hs && !isToday(day) ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}`}
-              >
-                {format(day, 'd')}
-                {!sel && !past && hs && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500" />}
-              </button>
-            )
-          })}
-        </div>
-        {highSeasonMonths?.size > 0 && (
-          <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
-            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-            Datas em laranja: alta temporada (pode ter acréscimo no valor)
-          </div>
-        )}
-        <div className="px-4 pb-8">
-          <button onClick={onClose} className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">Confirmar</button>
-        </div>
-      </div>
-    </>,
-    document.body,
-  )
-}
 
 /* ── Route picker (bottom sheet) ────────────────────────────── */
 function RouteSheet({ title, options, selected, onSelect, onClose }) {
@@ -433,7 +370,12 @@ export default function Transfers() {
     : isSameDay(customDate, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
     : format(customDate, 'd MMM', { locale: ptBR })
 
-  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime
+  const customChosen = (() => {
+    const [th, tm] = String(customTime || '00:00').split(':').map(Number)
+    const d = new Date(customDate); d.setHours(th || 0, tm || 0, 0, 0); return d
+  })()
+  const customAdvanceOk = customChosen >= minBookable
+  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime && customAdvanceOk
 
   /* ── Queries ── */
   const { data: routesData } = useQuery({
@@ -492,6 +434,17 @@ export default function Transfers() {
     if (isSameDay(date, minDate) && time && time < minTime) setTime(minTime)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, minTime])
+
+  // Mesma regra de 4h para o TRANSFER PERSONALIZADO (customDate/customTime).
+  const customMinTime = isSameDay(customDate, minDate) ? format(minBookable, 'HH:mm') : '00:00'
+  useEffect(() => {
+    if (isBefore(customDate, minDate)) setCustomDate(minDate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minDate])
+  useEffect(() => {
+    if (isSameDay(customDate, minDate) && customTime && customTime < customMinTime) setCustomTime(customMinTime)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customDate, customMinTime])
 
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
 
@@ -725,6 +678,7 @@ export default function Transfers() {
                       ref={customTimeRef}
                       type="time"
                       value={customTime}
+                      min={customMinTime}
                       onChange={e => setCustomTime(e.target.value)}
                       className="absolute inset-0 opacity-0 w-full cursor-pointer"
                     />
@@ -782,7 +736,7 @@ export default function Transfers() {
           )}
 
           {showCustomDate && (
-            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} highSeasonMonths={highSeasonMonths} />
+            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} minDate={minDate} highSeasonMonths={highSeasonMonths} />
           )}
         </div>
       )}
