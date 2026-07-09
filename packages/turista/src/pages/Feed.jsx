@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
@@ -97,8 +98,7 @@ function StarRating({ value, onChange, size = 18 }) {
 }
 
 /* ── Comments Section ──────────────────────────────────── */
-function CommentsSection({ postId, commentCount, user }) {
-  const [open, setOpen] = useState(false)
+function CommentsSection({ postId, commentCount, user, open, setOpen }) {
   const [text, setText] = useState('')
   const qc = useQueryClient()
 
@@ -227,7 +227,7 @@ function ReviewModal({ place, onClose, user }) {
     addMut.mutate({ rating, comment: comment.trim() || null })
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl max-h-[85vh] overflow-y-auto">
@@ -302,12 +302,14 @@ function ReviewModal({ place, onClose, user }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
 /* ── feed card (evento / promoção) ─────────────────────── */
 function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
+  const [commentsOpen, setCommentsOpen] = useState(false)
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
@@ -377,9 +379,9 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
         <button onClick={onLike} className="active:scale-90 transition-transform" aria-label="Curtir">
           <Heart size={24} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-800'} />
         </button>
-        <a href={`#comments-${post.id}`} className="active:scale-90 transition-transform" aria-label="Comentar">
+        <button onClick={() => setCommentsOpen((v) => !v)} className="active:scale-90 transition-transform" aria-label="Comentar">
           <MessageCircle size={23} className="text-gray-800" />
-        </a>
+        </button>
         <button onClick={share} className="active:scale-90 transition-transform" aria-label="Compartilhar">
           <Share2 size={22} className="text-gray-800" />
         </button>
@@ -412,8 +414,9 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
           {validLabel && isPromo && <span className="flex items-center gap-1"><Calendar size={12} className="text-emerald-500" />Válido até {validLabel}</span>}
           {post.location && <span className="flex items-center gap-1"><MapPin size={12} className="text-brand" />{post.location}</span>}
         </div>
-        <div id={`comments-${post.id}`} className="pt-1">
-          <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user} />
+        <div className="pt-1">
+          <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user}
+            open={commentsOpen} setOpen={setCommentsOpen} />
         </div>
       </div>
     </article>

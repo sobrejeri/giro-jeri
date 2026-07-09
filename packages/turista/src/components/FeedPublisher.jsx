@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation } from '@tanstack/react-query'
 import { X, ImagePlus, Loader2, CalendarDays, BadgePercent } from 'lucide-react'
 import { api } from '../lib/api'
@@ -93,7 +94,9 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
 
   const canSave = title.trim().length > 0 && !uploading && !save.isPending
 
-  return (
+  // Portal p/ document.body: escapa do wrapper do PullToRefresh (transform),
+  // que prenderia o position:fixed e abriria o compositor no fim da página.
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-black/50 z-[70]" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[92vh] overflow-y-auto">
@@ -184,6 +187,7 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
