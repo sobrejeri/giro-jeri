@@ -166,7 +166,7 @@ router.put('/preferences/:type/:entityId', async (req, res, next) => {
 const BOOKING_COLUMNS = `
   id, booking_code, service_type, service_id, booking_mode, user_id,
   service_date, service_time, people_count, total_amount, created_at,
-  origin_text, destination_text, status_commercial, status_operational
+  origin_text, destination_text, status_commercial, status_operational, order_group_id
 `
 
 async function attachCustomers(bookings) {
@@ -240,7 +240,7 @@ async function attachLegContext(legs) {
   const bookingIds = [...new Set(legs.map((l) => l.booking_id))];
   const { data: bookings, error } = await supabase
     .from('bookings')
-    .select('id, booking_code, service_type, service_date, service_time, origin_text, destination_text, user_id')
+    .select('id, booking_code, service_type, service_date, service_time, origin_text, destination_text, user_id, order_group_id')
     .in('id', bookingIds);
   if (error) throw error;
   const bookingById = new Map((bookings || []).map((b) => [b.id, b]));
@@ -261,6 +261,7 @@ async function attachLegContext(legs) {
       leg_id:                l.id,
       leg_number:            l.leg_number,
       booking_id:            l.booking_id,
+      order_group_id:        b?.order_group_id || null,
       booking_code:          b?.booking_code || null,
       service_type:          b?.service_type || null,
       service_date:          b?.service_date || null,

@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  CalendarCheck, Users, MapPin, Car, CheckCircle2,
+  CalendarCheck, Users, MapPin, Car, CheckCircle2, Compass,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
-  DollarSign, Send, Clock, ShieldAlert,
+  DollarSign, Send, Clock, ShieldAlert, Package,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -170,6 +170,83 @@ function PendingCard({ booking, onAccept, accepting }) {
             <AlertCircle size={11} className="shrink-0" /> O cliente paga depois que você aceitar.
           </p>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Combo do carrinho: solicitações do mesmo pedido, do mesmo cliente ──
+// Agrupa os serviços/pernas do mesmo order_group_id num bloco só, com "Aceitar
+// todos". A coop só vê os itens que pode operar (o filtro de frota já removeu
+// veículos de uso exclusivo antes de chegar aqui), então o combo pode vir
+// parcial — e tudo bem.
+function comboItemId(it) { return it.kind === 'leg' ? it.leg_id : it.id }
+function comboItemPrice(it) { return Number(it.kind === 'leg' ? it.leg_price : it.total_amount) || 0 }
+
+function ComboCard({ items, onAccept, onAcceptAll, accepting, acceptingCombo }) {
+  const withName = items.find((i) => i.customer?.full_name || i.users?.full_name)
+  const name  = withName?.customer?.full_name || withName?.users?.full_name || 'Cliente'
+  const total = items.reduce((s, i) => s + comboItemPrice(i), 0)
+  const gid   = items[0]?.order_group_id
+  const busy  = acceptingCombo === gid
+
+  return (
+    <div className="bg-white rounded-2xl border-2 border-brand/20 shadow-sm overflow-hidden">
+      <div className="bg-brand/5 px-4 py-2.5 flex items-center justify-between border-b border-brand/10">
+        <div className="flex items-center gap-2">
+          <Package size={15} className="text-brand shrink-0" />
+          <span className="text-[12px] font-bold text-brand uppercase tracking-wide">Combo · {items.length} serviços</span>
+        </div>
+        <span className="text-[11px] text-gray-500 font-semibold truncate max-w-[45%]">{name}</span>
+      </div>
+
+      <div className="p-4 space-y-2.5">
+        {items.map((it) => {
+          const rowId  = comboItemId(it)
+          const isTour = it.service_type === 'tour'
+          const dateStr = it.service_date
+            ? new Date(it.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            : '—'
+          return (
+            <div key={rowId} className="flex items-center gap-2">
+              {isTour ? <Compass size={15} className="text-gray-400 shrink-0" /> : <Car size={15} className="text-gray-400 shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-gray-800 truncate">
+                  {isTour ? 'Passeio' : 'Transfer'}{it.vehicle_name ? ` · ${it.vehicle_name}` : ''}
+                </p>
+                <p className="text-[11px] text-gray-400">
+                  {dateStr}{it.service_time ? ` ${it.service_time.slice(0, 5)}` : ''} · {fmt(comboItemPrice(it))}
+                </p>
+              </div>
+              <button
+                onClick={() => onAccept(it)}
+                disabled={busy || !!accepting}
+                className="text-[12px] font-bold text-brand border border-brand/30 rounded-lg px-3 py-1.5 active:scale-95 transition-transform disabled:opacity-50"
+              >
+                {accepting === rowId ? '…' : 'Aceitar'}
+              </button>
+            </div>
+          )
+        })}
+
+        <div className="flex items-center justify-between pt-2 border-t border-gray-100 gap-3">
+          <div>
+            <p className="text-[11px] text-gray-400">Total do combo</p>
+            <p className="text-[18px] font-extrabold text-brand">{fmt(total)}</p>
+          </div>
+          <button
+            onClick={() => onAcceptAll(items)}
+            disabled={busy || !!accepting}
+            className="flex items-center gap-2 bg-brand text-white font-bold px-5 py-3 rounded-2xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-brand/30"
+          >
+            {busy
+              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aceitando…</>
+              : <><Zap size={15} /> Aceitar todos</>}
+          </button>
+        </div>
+        <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+          <AlertCircle size={11} className="shrink-0" /> O cliente paga tudo junto depois que você aceitar.
+        </p>
       </div>
     </div>
   )
@@ -401,6 +478,7 @@ export default function Reservas() {
   const [tab,        setTab]       = useState('pending')
   const [toast,      setToast]     = useState(null)
   const [accepting,  setAccepting] = useState(null)
+  const [acceptingCombo, setAcceptingCombo] = useState(null)
   const [confirming, setConfirming]= useState(null)
   const [quoteModal, setQuoteModal]= useState(null)
   const [price,      setPrice]     = useState('')
@@ -478,6 +556,51 @@ export default function Reservas() {
       setAccepting(null)
     }
   }
+
+  // Aceita TODOS os itens do combo (um pedido do carrinho), em sequência.
+  // Itens que já foram aceitos/expiraram são pulados sem derrubar o resto.
+  async function handleAcceptCombo(items) {
+    if (accepting || acceptingCombo) return
+    const gid = items[0]?.order_group_id
+    setAcceptingCombo(gid)
+    let ok = 0
+    for (const it of items) {
+      try {
+        if (it.kind === 'leg') await api.acceptLeg(it.leg_id)
+        else                   await api.acceptBooking(it.id)
+        ok++
+      } catch { /* já aceita/expirada — segue para o próximo */ }
+    }
+    queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+    setAcceptingCombo(null)
+    setToast({
+      message: ok === items.length
+        ? `Combo aceito (${ok} serviços)! Aguardando o cliente pagar.`
+        : `${ok} de ${items.length} aceitos — alguns já haviam sido pegos.`,
+      type: ok > 0 ? 'success' : 'error',
+    })
+    if (ok > 0) setTab('mine')
+  }
+
+  // Agrupa as solicitações disponíveis por pedido (order_group_id): 2+ itens do
+  // mesmo pedido viram um combo; o resto fica avulso.
+  const pendingGroups = (() => {
+    const groups = new Map()
+    const singles = []
+    for (const it of pending) {
+      if (it.order_group_id) {
+        if (!groups.has(it.order_group_id)) groups.set(it.order_group_id, [])
+        groups.get(it.order_group_id).push(it)
+      } else singles.push(it)
+    }
+    const out = []
+    for (const [gid, items] of groups.entries()) {
+      if (items.length >= 2) out.push({ type: 'combo', gid, items })
+      else out.push({ type: 'single', item: items[0] })
+    }
+    for (const it of singles) out.push({ type: 'single', item: it })
+    return out
+  })()
 
   async function handleConfirm(booking) {
     if (confirming) return
@@ -631,17 +754,23 @@ export default function Reservas() {
           // Mantém os dois tipos de card lado a lado pra cooperativa não precisar
           // pular de aba pra ver tudo que tem em aberto.
           <div className="space-y-4">
-            {pending.map((b) => {
-              const rowId = b.kind === 'leg' ? b.leg_id : b.id
-              return (
-                <PendingCard
-                  key={rowId}
-                  booking={b}
-                  onAccept={handleAccept}
-                  accepting={accepting === rowId}
-                />
-              )
-            })}
+            {pendingGroups.map((g) => g.type === 'combo' ? (
+              <ComboCard
+                key={`combo-${g.gid}`}
+                items={g.items}
+                onAccept={handleAccept}
+                onAcceptAll={handleAcceptCombo}
+                accepting={accepting}
+                acceptingCombo={acceptingCombo}
+              />
+            ) : (
+              <PendingCard
+                key={g.item.kind === 'leg' ? g.item.leg_id : g.item.id}
+                booking={g.item}
+                onAccept={handleAccept}
+                accepting={accepting === (g.item.kind === 'leg' ? g.item.leg_id : g.item.id)}
+              />
+            ))}
             {pendingQuotes.map((q) => (
               <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
             ))}
