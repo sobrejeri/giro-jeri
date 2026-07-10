@@ -8,6 +8,7 @@ import {
   Calendar, Clock, Users, Car, Search, Compass, MapPin,
   Star, RefreshCw, AlertTriangle, Loader2, Zap, Sun, Waves, Anchor,
   ChevronLeft, ChevronRight, CalendarCheck, Check, X, MessageSquare, Package,
+  CheckCircle2, XCircle,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -17,6 +18,7 @@ function resolveStatus(b) {
   const c = b.status_commercial
   const o = b.status_operational
   if (c === 'cancelled' || o === 'cancelled') return 'cancelled'
+  if (c === 'expired'   || o === 'expired')   return 'expired'
   if (o === 'completed')                       return 'completed'
   if (o === 'in_progress')                     return 'in_progress'
   // Fluxo solicitar → aceitar → pagar:
@@ -37,6 +39,7 @@ function getStatusCfg(t) {
     in_progress:        { label: t('bookings.status.in_progress'),        bg: 'bg-blue-500',   text: 'text-white' },
     completed:          { label: t('bookings.status.completed'),          bg: 'bg-gray-500',   text: 'text-white' },
     cancelled:          { label: t('bookings.status.cancelled'),          bg: 'bg-red-500',    text: 'text-white' },
+    expired:            { label: 'Expirada',                              bg: 'bg-gray-400',   text: 'text-white' },
   }
 }
 
@@ -214,6 +217,20 @@ function BookingCard({ booking, onCancel, onDetail, onPay, groupSize = 0 }) {
   )
 }
 
+/* ── Ícone de status por serviço (perna) — em frente ao nome ───── */
+const SERVICE_STATUS = {
+  waiting_acceptance: { Icon: Clock,        color: 'text-amber-500',   label: 'Aguardando' },
+  waiting_payment:    { Icon: CheckCircle2, color: 'text-emerald-500', label: 'Aceito'      },
+  confirmed:          { Icon: CheckCircle2, color: 'text-green-600',    label: 'Confirmado'  },
+  in_progress:        { Icon: CheckCircle2, color: 'text-blue-500',     label: 'Em andamento'},
+  completed:          { Icon: CheckCircle2, color: 'text-gray-400',     label: 'Concluído'   },
+  cancelled:          { Icon: XCircle,      color: 'text-red-500',      label: 'Cancelado'   },
+  expired:            { Icon: XCircle,      color: 'text-gray-400',     label: 'Expirado'    },
+}
+function serviceStatusOf(b) {
+  return SERVICE_STATUS[resolveStatus(b)] || SERVICE_STATUS.waiting_acceptance
+}
+
 /* ── Resumo de um pedido (grupo de reservas do carrinho) ───────── */
 function groupSummary(bookings) {
   const statuses = bookings.map(resolveStatus)
@@ -244,13 +261,15 @@ function GroupCard({ bookings, onOpen }) {
       <div className="px-4 py-3 space-y-2">
         {bookings.slice(0, 3).map((b) => {
           const isTour = b.service_type === 'tour'
+          const st = serviceStatusOf(b)
           let d = ''
           if (b.service_date) { try { d = format(new Date(b.service_date + 'T00:00:00'), 'd MMM', { locale: ptBR }) } catch {} }
           return (
             <div key={b.id} className="flex items-center gap-2 text-[12px] text-gray-600">
-              {isTour ? <Compass size={12} className="text-gray-400 shrink-0" /> : <Car size={12} className="text-gray-400 shrink-0" />}
+              <st.Icon size={14} className={`${st.color} shrink-0`} title={st.label} />
               <span className="truncate flex-1">{b.service_name || (isTour ? 'Passeio' : 'Transfer')} · {b.booking_code}</span>
-              <span className="text-gray-400 shrink-0">{d}</span>
+              <span className={`text-[10px] font-bold shrink-0 ${st.color}`}>{st.label}</span>
+              <span className="text-gray-400 shrink-0 w-12 text-right">{d}</span>
             </div>
           )
         })}
