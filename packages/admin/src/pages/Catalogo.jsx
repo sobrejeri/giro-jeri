@@ -59,6 +59,7 @@ const TOUR_EMPTY = {
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', region_ids: [], is_featured: false, display_order: 0,
+  is_exclusive: false,
 }
 const TRANSFER_EMPTY = {
   name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
@@ -768,6 +769,21 @@ export default function Catalogo() {
                 onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
               />
               <span className="text-sm text-gray-300">Destaque na home (carrossel "Passeios em destaque")</span>
+            </label>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand mt-0.5"
+                checked={!!form.is_exclusive}
+                onChange={(e) => setForm({ ...form, is_exclusive: e.target.checked })}
+              />
+              <span className="text-sm text-gray-300">
+                Passeio exclusivo (venda direta)
+                <span className="block text-[11px] text-gray-500">
+                  Não vai ao carrinho nem forma combo — o cliente solicita direto no "Resumo da reserva", um por vez.
+                </span>
+              </span>
             </label>
 
             <Input

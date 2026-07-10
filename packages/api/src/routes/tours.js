@@ -21,7 +21,7 @@ router.get('/', async (req, res, next) => {
         id, name, slug, short_description, duration_hours,
         is_private_enabled, is_shared_enabled, shared_price_per_person,
         cover_image_url, tags, rating_average, rating_count,
-        is_featured, display_order, booking_cutoff_time, min_advance_hours,
+        is_featured, display_order, booking_cutoff_time, min_advance_hours, is_exclusive,
         latitude, longitude, service_radius_km,
         regions ( id, name, center_latitude, center_longitude, service_radius_km ),
         categories ( id, name, slug )
