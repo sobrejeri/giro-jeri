@@ -328,7 +328,9 @@ export default function Tours() {
   // venda direta (carrossel próprio → tela de detalhes, sem carrinho).
   const tradTours      = tours.filter((t) => !t.is_exclusive)
   const exclusiveTours = tours.filter((t) => t.is_exclusive)
-  const selectedTour = tradTours.find((t) => t.id === selectedId) || tradTours[0]
+  // Nada vem pré-selecionado: o cliente escolhe um passeio (tradicional OU
+  // exclusivo) e só então os veículos aparecem. Clicar no selecionado desmarca.
+  const selectedTour = [...tradTours, ...exclusiveTours].find((t) => t.id === selectedId) || null
 
   // R6: horário limite de solicitação — se já passou do cutoff do passeio,
   // a data mínima selecionável passa a ser amanhã (bloqueia "hoje").
@@ -432,6 +434,36 @@ export default function Tours() {
       })),
       total: cartTotal,
     }
+  }
+
+  // Passeio EXCLUSIVO (privativo): venda direta — vai direto ao Resumo da
+  // reserva com os veículos escolhidos, sem passar pelo carrinho.
+  const continueExclusivePrivate = () => {
+    navigate('/checkout/resumo', {
+      state: {
+        service_name:        selectedTour.name,
+        short_description:   selectedTour.short_description || null,
+        service_type:        'tour',
+        booking_mode:        'private',
+        service_date:        'A confirmar',
+        service_date_iso:    format(date, 'yyyy-MM-dd'),
+        service_time:        'A confirmar',
+        people_count:        people,
+        origin_text:         origin?.name || null,
+        origin_latitude:     origin?.latitude,
+        origin_longitude:    origin?.longitude,
+        vehicle_name:        cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
+        total_price:         cartTotal,
+        breakdown:           { 'Veículos selecionados': cartTotal },
+        cover_image_url:     selectedTour.cover_image_url || null,
+        region_id:           selectedTour.regions?.id,
+        service_id:          selectedTour.id,
+        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(vehicle.base_price) || 0 })),
+        booking_cutoff_time: selectedTour.booking_cutoff_time || null,
+        min_advance_hours:   selectedTour.min_advance_hours ?? null,
+        open_editing:        true,
+      },
+    })
   }
 
   const applySuggestion = () => {
@@ -573,7 +605,7 @@ export default function Tours() {
                   key={tour.id}
                   tour={tour}
                   selected={selectedTour?.id === tour.id}
-                  onSelect={() => { setSelectedId(tour.id); setCart({}) }}
+                  onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
                   isFav={favs.has(tour.id)}
                   onFav={() => toggleFav(tour.id)}
                 />
@@ -582,28 +614,8 @@ export default function Tours() {
           )}
         </section>
 
-        {/* ── Passeios exclusivos (venda direta, sem carrinho) ── */}
-        {!toursLoading && exclusiveTours.length > 0 && (
-          <section>
-            <p className="text-[14px] font-bold text-gray-900 mb-0.5">Passeios exclusivos</p>
-            <p className="text-[11px] text-gray-400 mb-2.5">Venda direta — toque para reservar (um por vez).</p>
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
-              {exclusiveTours.map((tour) => (
-                <TourPickCard
-                  key={tour.id}
-                  tour={tour}
-                  selected={false}
-                  onSelect={() => navigate(`/passeios/${tour.id}`)}
-                  isFav={favs.has(tour.id)}
-                  onFav={() => toggleFav(tour.id)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Modo PRIVATIVO ────────────────────────────────── */}
-        {mode === 'private' && (
+        {/* ── Modo PRIVATIVO (só quando um passeio está selecionado) ── */}
+        {selectedTour && mode === 'private' && (
           <>
             {/* Sugestões */}
             {suggestion && (
@@ -768,6 +780,28 @@ export default function Tours() {
           )
         })()}
 
+        {/* ── Passeios exclusivos (venda direta) — fica abaixo; ao selecionar,
+            os veículos aparecem acima (mesma seleção dos tradicionais) e o
+            botão vira "Continuar" → Resumo da reserva (sem carrinho). ── */}
+        {!toursLoading && exclusiveTours.length > 0 && (
+          <section>
+            <p className="text-[14px] font-bold text-gray-900 mb-0.5">Passeios exclusivos</p>
+            <p className="text-[11px] text-gray-400 mb-2.5">Venda direta — um serviço por vez (sem combo).</p>
+            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
+              {exclusiveTours.map((tour) => (
+                <TourPickCard
+                  key={tour.id}
+                  tour={tour}
+                  selected={selectedTour?.id === tour.id}
+                  onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
+                  isFav={favs.has(tour.id)}
+                  onFav={() => toggleFav(tour.id)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
       </div>
 
       {/* ── Calendário ──────────────────────────────────────────── */}
@@ -817,10 +851,12 @@ export default function Tours() {
                   <p className="text-[13px] text-gray-400">Selecione um veículo abaixo</p>
                 )}
               </div>
-              {/* Botão */}
+              {/* Botão: exclusivo vai direto ao Resumo; tradicional vai ao carrinho */}
               <button
                 onClick={canContinue
-                  ? () => { saveCartItem(buildCartDraft()); navigate('/carrinho') }
+                  ? (selectedTour?.is_exclusive
+                      ? continueExclusivePrivate
+                      : () => { saveCartItem(buildCartDraft()); navigate('/carrinho') })
                   : undefined}
                 className={`shrink-0 font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
                   canContinue
@@ -828,7 +864,7 @@ export default function Tours() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                Adicionar ao carrinho
+                {selectedTour?.is_exclusive ? 'Continuar' : 'Adicionar ao carrinho'}
               </button>
             </div>
           </div>
