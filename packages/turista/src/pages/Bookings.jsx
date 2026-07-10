@@ -214,6 +214,95 @@ function BookingCard({ booking, onCancel, onDetail, onPay, groupSize = 0 }) {
   )
 }
 
+/* ── Resumo de um pedido (grupo de reservas do carrinho) ───────── */
+function groupSummary(bookings) {
+  const statuses = bookings.map(resolveStatus)
+  const total = bookings.reduce((s, b) => s + Number(b.total_amount || 0), 0)
+  const allPay       = statuses.length > 0 && statuses.every((s) => s === 'waiting_payment')
+  const allDone      = statuses.length > 0 && statuses.every((s) => ['confirmed', 'completed'].includes(s))
+  const anyWaitAcc   = statuses.some((s) => s === 'waiting_acceptance')
+  const payableCount = statuses.filter((s) => s === 'waiting_payment').length
+  let label = 'Em andamento', bg = 'bg-blue-500'
+  if (allPay)          { label = 'Pronto para pagar';   bg = 'bg-amber-500'  }
+  else if (allDone)    { label = 'Confirmado';          bg = 'bg-green-500'  }
+  else if (anyWaitAcc) { label = 'Aguard. confirmação'; bg = 'bg-orange-400' }
+  return { total, label, bg, count: bookings.length, allPay, payableCount }
+}
+
+/* ── Card-resumo do pedido (grupo) — abre o detalhe ao tocar ───── */
+function GroupCard({ bookings, onOpen }) {
+  const { total, label, bg, count } = groupSummary(bookings)
+  return (
+    <div onClick={onOpen} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-brand/20 active:scale-[0.99] transition-transform cursor-pointer">
+      <div className="bg-brand/5 px-4 py-2.5 flex items-center justify-between border-b border-brand/10">
+        <div className="flex items-center gap-2">
+          <Package size={15} className="text-brand shrink-0" />
+          <span className="text-[13px] font-bold text-gray-900">Pedido · {count} serviços</span>
+        </div>
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full text-white ${bg}`}>{label}</span>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        {bookings.slice(0, 3).map((b) => {
+          const isTour = b.service_type === 'tour'
+          let d = ''
+          if (b.service_date) { try { d = format(new Date(b.service_date + 'T00:00:00'), 'd MMM', { locale: ptBR }) } catch {} }
+          return (
+            <div key={b.id} className="flex items-center gap-2 text-[12px] text-gray-600">
+              {isTour ? <Compass size={12} className="text-gray-400 shrink-0" /> : <Car size={12} className="text-gray-400 shrink-0" />}
+              <span className="truncate flex-1">{b.service_name || (isTour ? 'Passeio' : 'Transfer')} · {b.booking_code}</span>
+              <span className="text-gray-400 shrink-0">{d}</span>
+            </div>
+          )
+        })}
+        {count > 3 && <p className="text-[11px] text-gray-400">+{count - 3} serviço(s)</p>}
+        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+          <div>
+            <p className="text-[10px] text-gray-400 leading-none">Total do pedido</p>
+            <p className="text-[16px] font-extrabold text-gray-900 leading-none mt-0.5">{fmt(total)}</p>
+          </div>
+          <span className="flex items-center gap-1 text-[12px] font-bold text-brand">Ver detalhes <ChevronRight size={16} /></span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Painel com as reservas que compõem o pedido ───────────────── */
+function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDetail }) {
+  const { total, allPay, count, payableCount } = groupSummary(bookings)
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-gray-50 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[86vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 bg-white rounded-t-3xl border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Package size={16} className="text-brand" />
+            <h3 className="font-bold text-gray-900">Pedido · {count} serviços</h3>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95 transition-transform">
+            <X size={15} className="text-gray-500" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-4 py-4 space-y-3 flex-1">
+          {bookings.map((b) => (
+            <BookingCard key={b.id} booking={b} onCancel={onCancel} onDetail={onDetail} onPay={onPay} />
+          ))}
+        </div>
+        {allPay && payableCount >= 2 && (
+          <div className="px-4 py-4 bg-white border-t border-gray-100">
+            <button
+              onClick={onPayGroup}
+              className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
+            >
+              Pagar tudo · {fmt(total)}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Quote status → badge (mesmo visual das reservas) ──────────── */
 const QUOTE_BADGE = {
   pending_quote: { label: 'Aguardando preço',     bg: 'bg-amber-500', text: 'text-white', pulse: true  },
@@ -426,6 +515,7 @@ export default function Bookings() {
   const [cancelError,   setCancelError]   = useState(null)
   const [quoteActing,   setQuoteActing]   = useState(null) // quote id being accepted/rejected
   const [quoteDetail,   setQuoteDetail]   = useState(null) // cotação aberta em "Detalhes"
+  const [groupOpen,     setGroupOpen]     = useState(null) // pedido (grupo) aberto no painel
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-bookings'],
@@ -449,21 +539,6 @@ export default function Bookings() {
     Array.isArray(data?.data) ? data.data :
     Array.isArray(data) ? data : []
   ).map(b => ({ ...b, _status: resolveStatus(b) }))
-
-  // Carrinho universal: reservas do mesmo grupo (order_group_id) prontas para
-  // pagamento podem ser quitadas num pagamento único ("Pagar tudo").
-  const payableGroups = (() => {
-    const map = new Map()
-    for (const b of all) {
-      if (b._status === 'waiting_payment' && b.order_group_id) {
-        if (!map.has(b.order_group_id)) map.set(b.order_group_id, [])
-        map.get(b.order_group_id).push(b)
-      }
-    }
-    return [...map.entries()]
-      .filter(([, arr]) => arr.length >= 2)
-      .map(([gid, arr]) => ({ gid, bookings: arr, total: arr.reduce((s, b) => s + Number(b.total_amount || 0), 0) }))
-  })()
 
   // Quantas reservas cada pedido (order_group_id) tem — para o selo de grupo.
   const groupSizes = (() => {
@@ -584,14 +659,17 @@ export default function Bookings() {
   }
 
   // Carrinho universal: paga TODAS as reservas prontas do grupo num pagamento só.
+  // (Só entram as 'aguardando pagamento'; o servidor recalcula o total.)
   function handlePayGroup(group) {
+    const payable = group.bookings.filter((b) => resolveStatus(b) === 'waiting_payment')
+    const list = payable.length ? payable : group.bookings
     navigate('/checkout/pagamento', {
       state: {
-        service_name:   `${group.bookings.length} serviços`,
+        service_name:   `${list.length} serviços`,
         service_type:   'tour',
         booking_mode:   'private',
-        people_count:   group.bookings.reduce((s, b) => s + Number(b.people_count || 0), 0),
-        total_price:    group.total,
+        people_count:   list.reduce((s, b) => s + Number(b.people_count || 0), 0),
+        total_price:    list.reduce((s, b) => s + Number(b.total_amount || 0), 0),
         order_group_id: group.gid,
       },
     })
@@ -630,9 +708,34 @@ export default function Bookings() {
     return list
   })()
 
-  // Lista unificada: reservas + cotações (cada uma com seu card/rótulo)
+  // Reservas do mesmo pedido (order_group_id) viram UM card-resumo; ao tocar,
+  // abre o painel com as reservas que compõem o grupo. Grupo de 1 (visível na
+  // aba) cai como card normal.
+  const bookingItems = (() => {
+    const groups = new Map()
+    const singles = []
+    for (const b of filtered) {
+      if (b.order_group_id) {
+        if (!groups.has(b.order_group_id)) groups.set(b.order_group_id, [])
+        groups.get(b.order_group_id).push(b)
+      } else singles.push(b)
+    }
+    const items = []
+    for (const [gid, arr] of groups.entries()) {
+      if (arr.length >= 2) {
+        const ts = arr.map(b => b.created_at || '').sort().slice(-1)[0] || ''
+        items.push({ kind: 'group', id: `g-${gid}`, gid, data: arr, ts })
+      } else {
+        items.push({ kind: 'booking', id: arr[0].id, data: arr[0], ts: arr[0].created_at || arr[0].service_date || '' })
+      }
+    }
+    for (const b of singles) items.push({ kind: 'booking', id: b.id, data: b, ts: b.created_at || b.service_date || '' })
+    return items
+  })()
+
+  // Lista unificada: reservas/grupos + cotações (cada uma com seu card/rótulo)
   const listItems = [
-    ...filtered.map(b => ({ kind: 'booking', id: b.id, data: b, ts: b.created_at || b.service_date || '' })),
+    ...bookingItems,
     ...quotesForTab.map(qq => ({ kind: 'quote', id: `q-${qq.id}`, data: qq, ts: qq.created_at || qq.service_date || '' })),
   ].sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
 
@@ -701,25 +804,6 @@ export default function Bookings() {
         </div>
       </header>
 
-      {/* Pagar tudo — grupos do carrinho universal prontos para pagamento */}
-      {payableGroups.length > 0 && (tab === 'todos' || tab === 'ativos') && (
-        <div className="px-4 pt-4 lg:max-w-5xl lg:mx-auto space-y-2">
-          {payableGroups.map((g) => (
-            <div key={g.gid} className="flex items-center justify-between gap-3 bg-brand/5 border border-brand/20 rounded-2xl px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-[13px] font-bold text-gray-900">Pague suas {g.bookings.length} reservas juntas</p>
-                <p className="text-[11px] text-gray-500">Aceitas e prontas — um único pagamento de {fmt(g.total)}.</p>
-              </div>
-              <button
-                onClick={() => handlePayGroup(g)}
-                className="shrink-0 bg-brand text-white text-[12px] font-bold px-4 py-2.5 rounded-xl active:scale-95 transition-transform shadow-sm shadow-brand/20"
-              >
-                Pagar tudo
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* List */}
       <main className="px-4 pt-4 space-y-3 lg:max-w-5xl lg:mx-auto">
@@ -750,6 +834,12 @@ export default function Bookings() {
                 acceptLoading={quoteActing === it.data.id}
                 rejectLoading={quoteActing === it.data.id}
               />
+            ) : it.kind === 'group' ? (
+              <GroupCard
+                key={it.id}
+                bookings={it.data}
+                onOpen={() => setGroupOpen({ gid: it.gid, bookings: it.data })}
+              />
             ) : (
               <BookingCard
                 key={it.id}
@@ -776,6 +866,17 @@ export default function Bookings() {
 
       {quoteDetail && (
         <QuoteDetailDialog quote={quoteDetail} onClose={() => setQuoteDetail(null)} />
+      )}
+
+      {groupOpen && (
+        <GroupDetailSheet
+          bookings={groupOpen.bookings}
+          onClose={() => setGroupOpen(null)}
+          onPay={(b) => { setGroupOpen(null); handlePay(b) }}
+          onPayGroup={() => { setGroupOpen(null); handlePayGroup(groupOpen) }}
+          onCancel={(b) => { setGroupOpen(null); setCancelTarget(b) }}
+          onDetail={(id) => { setGroupOpen(null); navigate(`/minhas-reservas/${id}`) }}
+        />
       )}
     </div>
   )
