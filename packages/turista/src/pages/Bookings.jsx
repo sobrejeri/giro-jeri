@@ -7,7 +7,7 @@ import { PageSpinner } from '../components/ui/Spinner'
 import {
   Calendar, Clock, Users, Car, Search, Compass, MapPin,
   Star, RefreshCw, AlertTriangle, Loader2, Zap, Sun, Waves, Anchor,
-  ChevronLeft, ChevronRight, CalendarCheck, Check, X, MessageSquare,
+  ChevronLeft, ChevronRight, CalendarCheck, Check, X, MessageSquare, Package,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -89,7 +89,7 @@ function CancelDialog({ booking, onConfirm, onClose, loading, error }) {
 }
 
 /* ── Booking Card ───────────────────────────────────────────── */
-function BookingCard({ booking, onCancel, onDetail, onPay }) {
+function BookingCard({ booking, onCancel, onDetail, onPay, groupSize = 0 }) {
   const { t } = useTranslation()
   const STATUS_CFG = getStatusCfg(t)
   const status  = resolveStatus(booking)
@@ -147,6 +147,14 @@ function BookingCard({ booking, onCancel, onDetail, onPay }) {
 
       {/* ── Body ── */}
       <div className="px-4 pt-3 pb-4 space-y-3">
+        {/* Selo de pedido (carrinho): deixa claro que faz parte de um grupo */}
+        {groupSize >= 2 && (
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-brand bg-brand/5 rounded-lg px-2.5 py-1.5">
+            <Package size={12} className="shrink-0" />
+            Faz parte de um pedido com {groupSize} serviços — dá pra pagar todos juntos.
+          </div>
+        )}
+
         {/* Date / Time / People */}
         <div className="flex items-center gap-4">
           {[
@@ -457,6 +465,13 @@ export default function Bookings() {
       .map(([gid, arr]) => ({ gid, bookings: arr, total: arr.reduce((s, b) => s + Number(b.total_amount || 0), 0) }))
   })()
 
+  // Quantas reservas cada pedido (order_group_id) tem — para o selo de grupo.
+  const groupSizes = (() => {
+    const m = new Map()
+    for (const b of all) if (b.order_group_id) m.set(b.order_group_id, (m.get(b.order_group_id) || 0) + 1)
+    return m
+  })()
+
   const q = searchTerm.trim().toLowerCase()
   const filtered = all.filter(b => {
     if (q) {
@@ -742,6 +757,7 @@ export default function Bookings() {
                 onCancel={setCancelTarget}
                 onDetail={(id) => navigate(`/minhas-reservas/${id}`)}
                 onPay={handlePay}
+                groupSize={it.data.order_group_id ? (groupSizes.get(it.data.order_group_id) || 0) : 0}
               />
             ))}
           </div>
