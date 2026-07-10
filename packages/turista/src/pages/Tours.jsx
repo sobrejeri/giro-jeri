@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -331,6 +331,16 @@ export default function Tours() {
   // Nada vem pré-selecionado: o cliente escolhe um passeio (tradicional OU
   // exclusivo) e só então os veículos aparecem. Clicar no selecionado desmarca.
   const selectedTour = [...tradTours, ...exclusiveTours].find((t) => t.id === selectedId) || null
+  const vehiclesRef = useRef(null)
+
+  // Ao selecionar um passeio, rola até os veículos (eles aparecem entre os
+  // carrosseis — sem isto, um clique no carrossel exclusivo lá embaixo faz os
+  // veículos surgirem fora da tela e parece que nada aconteceu).
+  useEffect(() => {
+    if (selectedId && vehiclesRef.current) {
+      vehiclesRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [selectedId])
 
   // R6: horário limite de solicitação — se já passou do cutoff do passeio,
   // a data mínima selecionável passa a ser amanhã (bloqueia "hoje").
@@ -613,6 +623,9 @@ export default function Tours() {
             </div>
           )}
         </section>
+
+        {/* âncora p/ rolar até os veículos ao selecionar um passeio */}
+        <div ref={vehiclesRef} className="scroll-mt-4" />
 
         {/* ── Modo PRIVATIVO (só quando um passeio está selecionado) ── */}
         {selectedTour && mode === 'private' && (
