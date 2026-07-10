@@ -72,7 +72,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       name, short_description, duration_hours, max_people,
       is_private_enabled, is_shared_enabled, shared_price_per_person,
       cover_image_url, category_id, region_ids, is_featured, display_order,
-      booking_cutoff_time, min_advance_hours,
+      booking_cutoff_time, min_advance_hours, is_exclusive,
     } = req.body;
 
     const slug = `${slugify(name)}-${Date.now().toString(36)}`;
@@ -94,6 +94,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       display_order:           display_order ? Number(display_order) : 0,
       booking_cutoff_time:     booking_cutoff_time || null,
       min_advance_hours:       min_advance_hours ? Number(min_advance_hours) : null,
+      is_exclusive:            !!is_exclusive,
     }).select().single();
 
     if (error) throw error;
@@ -108,12 +109,13 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
       is_private_enabled, is_shared_enabled, shared_price_per_person,
       cover_image_url, category_id, is_active, display_order, is_featured,
       latitude, longitude, service_radius_km, region_ids,
-      booking_cutoff_time, min_advance_hours,
+      booking_cutoff_time, min_advance_hours, is_exclusive,
     } = req.body;
 
     const update = {};
     if (booking_cutoff_time !== undefined) update.booking_cutoff_time = booking_cutoff_time || null;
     if (min_advance_hours   !== undefined) update.min_advance_hours   = min_advance_hours ? Number(min_advance_hours) : null;
+    if (is_exclusive        !== undefined) update.is_exclusive        = !!is_exclusive;
     if (name               !== undefined) update.name                    = name;
     if (short_description  !== undefined) update.short_description       = short_description;
     if (duration_hours     !== undefined) update.duration_hours          = duration_hours ? Number(duration_hours) : null;

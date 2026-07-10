@@ -324,7 +324,11 @@ export default function Tours() {
   const tours = searchTerm.trim()
     ? allTours.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
     : allTours
-  const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
+  // Tradicionais entram no carrinho/combo (fluxo desta tela); exclusivos são
+  // venda direta (carrossel próprio → tela de detalhes, sem carrinho).
+  const tradTours      = tours.filter((t) => !t.is_exclusive)
+  const exclusiveTours = tours.filter((t) => t.is_exclusive)
+  const selectedTour = tradTours.find((t) => t.id === selectedId) || tradTours[0]
 
   // R6: horário limite de solicitação — se já passou do cutoff do passeio,
   // a data mínima selecionável passa a ser amanhã (bloqueia "hoje").
@@ -552,16 +556,19 @@ export default function Tours() {
           </div>
         </div>
 
-        {/* ── Escolha o passeio ─────────────────────────────── */}
+        {/* ── Passeios tradicionais (carrinho/combo) ────────── */}
         <section>
-          <p className="text-[14px] font-bold text-gray-900 mb-2.5">Escolha o passeio</p>
+          <p className="text-[14px] font-bold text-gray-900 mb-0.5">Passeios tradicionais</p>
+          <p className="text-[11px] text-gray-400 mb-2.5">Monte um combo e pague tudo junto.</p>
           {toursLoading ? (
             <div className="h-[130px] flex items-center justify-center">
               <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
             </div>
+          ) : tradTours.length === 0 ? (
+            <p className="text-[12px] text-gray-400 py-4">Nenhum passeio tradicional disponível.</p>
           ) : (
             <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
-              {tours.map((tour) => (
+              {tradTours.map((tour) => (
                 <TourPickCard
                   key={tour.id}
                   tour={tour}
@@ -574,6 +581,26 @@ export default function Tours() {
             </div>
           )}
         </section>
+
+        {/* ── Passeios exclusivos (venda direta, sem carrinho) ── */}
+        {!toursLoading && exclusiveTours.length > 0 && (
+          <section>
+            <p className="text-[14px] font-bold text-gray-900 mb-0.5">Passeios exclusivos</p>
+            <p className="text-[11px] text-gray-400 mb-2.5">Venda direta — toque para reservar (um por vez).</p>
+            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
+              {exclusiveTours.map((tour) => (
+                <TourPickCard
+                  key={tour.id}
+                  tour={tour}
+                  selected={false}
+                  onSelect={() => navigate(`/passeios/${tour.id}`)}
+                  isFav={favs.has(tour.id)}
+                  onFav={() => toggleFav(tour.id)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Modo PRIVATIVO ────────────────────────────────── */}
         {mode === 'private' && (

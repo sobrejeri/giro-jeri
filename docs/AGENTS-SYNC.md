@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 051.**
+   registre aqui o número reservado. **Próximo número livre: 052.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,19 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-09 · Agente B (passeios: tradicionais vs exclusivos)** — Novo campo
+  `tours.is_exclusive` (migration **051**). **Tradicional** (padrão): carrinho/
+  combo, 1 pagamento, aceito como **reserva inteira por 1 cooperativa**.
+  **Exclusivo**: venda direta, 1 por vez, **sem carrinho** — o card leva direto
+  a `/passeios/:id` (TourDetail → Resumo da reserva). Turista `Tours.jsx`: dois
+  carrosseis ("Passeios tradicionais" + "Passeios exclusivos"). Admin: toggle
+  "Passeio exclusivo" no catálogo. Backend: `catalog.js` grava, `tours.js`
+  devolve o campo. **Decisão (1a): motor de pernas fica DESLIGADO** — reserva
+  inteira, 1 coop (o fluxo legado já existe; a cooperativa já entende itens
+  `kind:'booking'`). ⚠️ Rodar no Supabase: migration 051 **e**
+  `UPDATE system_settings SET setting_value='false' WHERE setting_key='booking_legs_engine_enabled';`
+  \+ limpar pernas de teste. Próx. migration livre: **052**.
 
 - **2026-07-09 · Agente B (carrinho universal — Fatia B: pagamento único · BACKEND)**
   — ⚠️ **NÃO DEPLOYADO** (muda fluxo de dinheiro; aguarda OK + validação com
