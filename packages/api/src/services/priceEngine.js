@@ -403,7 +403,9 @@ export async function validateTransferAdvance(serviceDate, serviceTime, opts = {
 // =============================================================================
 
 export async function suggestVehicles({ regionId, tourId, peopleCount }) {
-  // Busca veículos disponíveis com seus preços para este tour
+  // Só os veículos ATIVOS para ESTE passeio (regra específica ligada no Motor
+  // de Preços) — mesma regra do catálogo, para a sugestão não propor veículo
+  // que não aparece na lista.
   const { data: rules } = await supabase
     .from('vehicle_pricing_rules')
     .select(`
@@ -413,9 +415,8 @@ export async function suggestVehicles({ regionId, tourId, peopleCount }) {
       )
     `)
     .eq('service_type', 'tour')
-    .eq('is_active', true)
-    .or(`service_id.eq.${tourId},service_id.is.null`)
-    .order('service_id', { ascending: false, nullsFirst: false });
+    .eq('service_id', tourId)
+    .eq('is_active', true);
 
   if (!rules || rules.length === 0) return [];
 
