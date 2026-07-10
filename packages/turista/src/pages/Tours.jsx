@@ -487,6 +487,28 @@ export default function Tours() {
     { id: 'conforto',    label: 'Conforto',     emoji: '🛡️' },
   ]
 
+  // Carrossel de exclusivos — renderizado ANTES dos veículos quando um exclusivo
+  // está selecionado (aí os veículos ficam abaixo dele) e DEPOIS dos veículos nos
+  // demais casos. Assim os veículos sempre aparecem abaixo do carrossel escolhido.
+  const exclusiveCarousel = !toursLoading && exclusiveTours.length > 0 ? (
+    <section>
+      <p className="text-[14px] font-bold text-gray-900 mb-0.5">Passeios exclusivos</p>
+      <p className="text-[11px] text-gray-400 mb-2.5">Venda direta — um serviço por vez (sem combo).</p>
+      <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
+        {exclusiveTours.map((tour) => (
+          <TourPickCard
+            key={tour.id}
+            tour={tour}
+            selected={selectedTour?.id === tour.id}
+            onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
+            isFav={favs.has(tour.id)}
+            onFav={() => toggleFav(tour.id)}
+          />
+        ))}
+      </div>
+    </section>
+  ) : null
+
   return (
     <>
     <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
@@ -623,6 +645,9 @@ export default function Tours() {
             </div>
           )}
         </section>
+
+        {/* Exclusivo selecionado → carrossel exclusivo ACIMA dos veículos */}
+        {selectedTour?.is_exclusive && exclusiveCarousel}
 
         {/* âncora p/ rolar até os veículos ao selecionar um passeio */}
         <div ref={vehiclesRef} className="scroll-mt-4" />
@@ -793,27 +818,8 @@ export default function Tours() {
           )
         })()}
 
-        {/* ── Passeios exclusivos (venda direta) — fica abaixo; ao selecionar,
-            os veículos aparecem acima (mesma seleção dos tradicionais) e o
-            botão vira "Continuar" → Resumo da reserva (sem carrinho). ── */}
-        {!toursLoading && exclusiveTours.length > 0 && (
-          <section>
-            <p className="text-[14px] font-bold text-gray-900 mb-0.5">Passeios exclusivos</p>
-            <p className="text-[11px] text-gray-400 mb-2.5">Venda direta — um serviço por vez (sem combo).</p>
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
-              {exclusiveTours.map((tour) => (
-                <TourPickCard
-                  key={tour.id}
-                  tour={tour}
-                  selected={selectedTour?.id === tour.id}
-                  onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
-                  isFav={favs.has(tour.id)}
-                  onFav={() => toggleFav(tour.id)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Sem exclusivo selecionado → carrossel exclusivo ABAIXO dos veículos */}
+        {!selectedTour?.is_exclusive && exclusiveCarousel}
 
       </div>
 
