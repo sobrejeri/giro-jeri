@@ -212,8 +212,10 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Estado da plataforma (resumo p/ contexto rápido)
 
-- Flag `booking_legs_engine_enabled` = **ON** em produção (plataforma ainda
-  sem uso ativo — em desenvolvimento).
+- Flag `booking_legs_engine_enabled` = **OFF** (decisão de produto 2026-07-10:
+  reserva INTEIRA aceita por 1 cooperativa, sem divisão por pernas; passeios
+  exclusivos = venda direta). O motor de pernas continua no código, atrás da
+  flag, caso volte a ser necessário.
 - Última migration aplicada em prod: **048** (cancel_overdue_leg_bookings).
   Se PostgREST não enxergar a função: `NOTIFY pgrst, 'reload schema';`
 - Carrinho: localStorage `turiva_cart_v1`; item carrega `cap` por veículo
