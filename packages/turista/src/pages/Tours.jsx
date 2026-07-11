@@ -381,21 +381,13 @@ export default function Tours() {
     queryKey: ['tour-vehicles', selectedTour?.id],
     queryFn: () => api.getTourVehicles(selectedTour.id),
     enabled: !!selectedTour?.id && mode === 'private',
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   })
 
-  // Fallback: se o passeio não tiver regras de preço, usa todos os veículos ativos
-  const { data: allVehiclesData } = useQuery({
-    queryKey: ['vehicles', region?.id],
-    queryFn: () => api.getVehicles({ is_active: 'true', ...geo }),
-    enabled: vehiclesFetched && (vehiclesData || []).length === 0 && mode === 'private',
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const vehicles = useMemo(
-    () => (vehiclesData || []).length > 0 ? vehiclesData : (allVehiclesData || []),
-    [vehiclesData, allVehiclesData],
-  )
+  // SEM fallback de "todos os veículos": o app mostra exatamente os veículos
+  // ligados para o passeio no Motor de Preços. Se o passeio não tiver nenhum,
+  // a lista fica vazia (com aviso) — o admin controla isso.
+  const vehicles = useMemo(() => vehiclesData || [], [vehiclesData])
 
   /* ── Sugestão ─────────────────────────────────────────────── */
   const suggestion = useMemo(() => suggest(vehicles, people, filter), [vehicles, people, filter])
@@ -731,6 +723,16 @@ export default function Tours() {
                       onRemove={() => setCart((c) => ({ ...c, [v.id]: Math.max(0, (c[v.id] || 1) - 1) }))}
                     />
                   ))}
+                </div>
+              </section>
+            )}
+
+            {/* Nenhum veículo ligado para este passeio (Motor de Preços) */}
+            {vehiclesFetched && vehicles.length === 0 && (
+              <section className="pb-2">
+                <div className="bg-white rounded-2xl p-4 border border-gray-100 text-center">
+                  <p className="text-[13px] font-semibold text-gray-700">Nenhum veículo disponível para este passeio.</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Tente outro passeio ou fale com a gente.</p>
                 </div>
               </section>
             )}

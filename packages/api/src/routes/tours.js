@@ -70,19 +70,23 @@ router.get('/:id/vehicles', async (req, res, next) => {
     // Só os veículos ATIVOS para ESTE passeio (regra específica no Motor de
     // Preços, com o toggle ligado). Sem regras globais e sem fallback de
     // "todos os veículos" — assim o admin controla, por passeio, quais veículos
-    // aparecem no app.
+    // aparecem no app. O join !inner também exige o VEÍCULO ativo e permitido
+    // para passeios — senão uma regra órfã de veículo desativado (que nem
+    // aparece na matriz do admin) vazaria para o app.
     const { data, error } = await supabase
       .from('vehicle_pricing_rules')
       .select(`
         base_price,
-        vehicles (
+        vehicles!inner (
           id, name, vehicle_type, seat_capacity, luggage_capacity,
           image_url, description, display_order
         )
       `)
       .eq('service_type', 'tour')
       .eq('service_id', req.params.id)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .eq('vehicles.is_active', true)
+      .eq('vehicles.is_tour_allowed', true);
 
     if (error) throw error;
 
