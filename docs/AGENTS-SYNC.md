@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 053.**
+   registre aqui o número reservado. **Próximo número livre: 054.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,21 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-10 · Agente B (revisão completa de RLS — migration 053)** — Após o
+  incidente do "sumiço silencioso" das regras de alta temporada (RLS ligado sem
+  política de SELECT → leitura pública voltava []), revisão completa:
+  **RLS ligado em TODAS as tabelas** (deny-by-default). Conteúdo público
+  (seasons/holidays/feed_posts/establishments/comments/likes/est_reviews) ganhou
+  política de SELECT explícita; sensíveis (system_settings ⚠️ chaves PIX,
+  payment_events, financial_ledger, commissions, coupons, vehicle_pricing_rules
+  etc.) ficam SEM política — só a API (service_role) enxerga. `req.supabase`
+  (papel authenticated) só toca tabelas já cobertas por 001/029/030/033/034 —
+  nada quebra. Fatos apurados: o cliente global da API bypassa RLS (bookings/
+  payments RLS'd desde 001 e as gravações funcionam), e o [] persistente do
+  /api/seasons era **cache do Safari** + regras inativas no banco. Guarda de
+  boot: conferir no log do Render `[supabase] chave carregada: role=…` =
+  service_role/sb_secret. Próx. migration livre: **054**.
 
 - **2026-07-09 · Agente B (passeios: tradicionais vs exclusivos)** — Novo campo
   `tours.is_exclusive` (migration **051**). **Tradicional** (padrão): carrinho/
