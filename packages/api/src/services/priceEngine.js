@@ -410,13 +410,15 @@ export async function suggestVehicles({ regionId, tourId, peopleCount }) {
     .from('vehicle_pricing_rules')
     .select(`
       base_price,
-      vehicles (
+      vehicles!inner (
         id, name, seat_capacity, vehicle_type, image_url, display_order
       )
     `)
     .eq('service_type', 'tour')
     .eq('service_id', tourId)
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('vehicles.is_active', true)
+    .eq('vehicles.is_tour_allowed', true);
 
   if (!rules || rules.length === 0) return [];
 
