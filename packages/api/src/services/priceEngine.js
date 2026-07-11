@@ -406,7 +406,7 @@ export async function suggestVehicles({ regionId, tourId, peopleCount }) {
   // Só os veículos ATIVOS para ESTE passeio (regra específica ligada no Motor
   // de Preços) — mesma regra do catálogo, para a sugestão não propor veículo
   // que não aparece na lista.
-  const { data: rules } = await supabase
+  let q = supabase
     .from('vehicle_pricing_rules')
     .select(`
       base_price,
@@ -419,6 +419,9 @@ export async function suggestVehicles({ regionId, tourId, peopleCount }) {
     .eq('is_active', true)
     .eq('vehicles.is_active', true)
     .eq('vehicles.is_tour_allowed', true);
+  // Mesma visão da matriz: só regras da região (ou sem região).
+  if (regionId) q = q.or(`region_id.eq.${regionId},region_id.is.null`);
+  const { data: rules } = await q;
 
   if (!rules || rules.length === 0) return [];
 
