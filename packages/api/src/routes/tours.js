@@ -73,7 +73,12 @@ router.get('/:id/vehicles', async (req, res, next) => {
     // aparecem no app. O join !inner também exige o VEÍCULO ativo e permitido
     // para passeios — senão uma regra órfã de veículo desativado (que nem
     // aparece na matriz do admin) vazaria para o app.
-    const { data, error } = await supabase
+    // REGIÃO: mesma visão da matriz — só regras da região do passeio (ou sem
+    // região). Regra criada sob outra região não vaza para o app.
+    const { data: tourRow } = await supabase
+      .from('tours').select('region_id').eq('id', req.params.id).maybeSingle();
+
+    let q = supabase
       .from('vehicle_pricing_rules')
       .select(`
         base_price,
@@ -87,6 +92,10 @@ router.get('/:id/vehicles', async (req, res, next) => {
       .eq('is_active', true)
       .eq('vehicles.is_active', true)
       .eq('vehicles.is_tour_allowed', true);
+    if (tourRow?.region_id) {
+      q = q.or(`region_id.eq.${tourRow.region_id},region_id.is.null`);
+    }
+    const { data, error } = await q;
 
     if (error) throw error;
 
