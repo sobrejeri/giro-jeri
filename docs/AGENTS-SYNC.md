@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 056.**
+   registre aqui o número reservado. **Próximo número livre: 057.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,16 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-12 · Agente A (chave PIX do afiliado — migration 056)** — O turista
+  cadastra a chave PIX no painel do afiliado (card "Chave PIX para receber":
+  tipo CPF/celular/e-mail/aleatória + validação leve; alerta âmbar quando há
+  comissão pendente sem chave) e ela aparece direto para o admin na tela
+  Afiliados (chave copiável em verde + tipo; sem chave → aviso âmbar com
+  contato de fallback; confirm do "Marcar pago" mostra a chave). Migration
+  **056** (`users.affiliate_pix_key` + `affiliate_pix_key_type`). API:
+  `PUT /affiliate/pix`, `/me` devolve a chave, `GET /admin/commissions` inclui
+  — tudo com fallback 42703 enquanto a 056 não roda. ⚠️ Rodar 056 no Supabase.
 
 - **2026-07-12 · Agente A (painel do afiliado no perfil do turista)** — Menu
   "Divulgou, Ganhou · Afiliado" no Perfil → `/afiliado`, que virou um painel

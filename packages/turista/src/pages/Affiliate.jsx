@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Megaphone, Copy, Check, Loader2, Wallet, Clock, ChevronLeft, Sparkles, Share2, TrendingUp,
+  Megaphone, Copy, Check, Loader2, Wallet, Clock, ChevronLeft, Sparkles, Share2, TrendingUp, KeyRound, AlertTriangle,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -13,6 +13,102 @@ const fmtBRL = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFrac
 const fmtShort = (v) => Number(v) >= 1000
   ? `R$ ${(Number(v) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`
   : `R$ ${Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+
+/* ── Chave PIX de recebimento ───────────────────────────────────
+   O afiliado cadastra a chave aqui e ela aparece direto para o admin na
+   tela de repasses — o PIX sai sem ninguém precisar entrar em contato. */
+const PIX_TYPES = [
+  { id: 'cpf',    label: 'CPF' },
+  { id: 'phone',  label: 'Celular' },
+  { id: 'email',  label: 'E-mail' },
+  { id: 'random', label: 'Aleatória' },
+]
+
+function PixCard({ pixKey, pixType, hasPending, onSaved }) {
+  const [editing, setEditing] = useState(!pixKey)
+  const [type, setType] = useState(pixType || 'cpf')
+  const [key, setKey]   = useState(pixKey || '')
+  const [err, setErr]   = useState('')
+
+  const save = useMutation({
+    mutationFn: () => api.affiliateSavePix({ pix_key: key.trim(), pix_key_type: type }),
+    onSuccess:  () => { setErr(''); setEditing(false); onSaved() },
+    onError:    (e) => setErr(e?.message || 'Não foi possível salvar — tente de novo.'),
+  })
+
+  const typeLabel = PIX_TYPES.find((t) => t.id === (pixType || type))?.label || ''
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <KeyRound size={14} className="text-brand" />
+        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide flex-1">Chave PIX para receber</p>
+        {pixKey && !editing && (
+          <button onClick={() => { setEditing(true); setKey(pixKey); setType(pixType || 'cpf') }}
+            className="text-[12px] font-bold text-brand underline">Alterar</button>
+        )}
+      </div>
+
+      {!pixKey && hasPending && !editing && null}
+      {hasPending && !pixKey && (
+        <p className="text-[11.5px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex items-start gap-1.5">
+          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+          Você tem comissão a receber — cadastre sua chave para o repasse sair sem atraso.
+        </p>
+      )}
+
+      {!editing && pixKey ? (
+        <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
+          <p className="flex-1 text-[13px] font-semibold text-gray-800 truncate">{pixKey}</p>
+          <span className="text-[10px] font-bold text-gray-400 uppercase bg-white border border-gray-200 rounded-md px-1.5 py-0.5 shrink-0">{typeLabel}</span>
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-1.5">
+            {PIX_TYPES.map((t) => (
+              <button key={t.id} onClick={() => { setType(t.id); setErr('') }}
+                className={`flex-1 py-1.5 rounded-lg text-[11.5px] font-bold transition-colors ${
+                  type === t.id ? 'bg-brand text-white' : 'bg-gray-100 text-gray-500'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <input
+            value={key}
+            onChange={(e) => { setKey(e.target.value); setErr('') }}
+            inputMode={type === 'cpf' || type === 'phone' ? 'numeric' : 'text'}
+            placeholder={
+              type === 'cpf'   ? 'Seu CPF (só números)'
+              : type === 'phone' ? 'DDD + celular'
+              : type === 'email' ? 'seu@email.com'
+              : 'Chave aleatória do seu banco'}
+            className="w-full bg-gray-50 rounded-xl px-3 py-2.5 text-[13px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30"
+          />
+          {err && <p className="text-[11px] text-red-500">{err}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={() => save.mutate()}
+              disabled={!key.trim() || save.isPending}
+              className="flex-1 bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform disabled:opacity-50"
+            >
+              {save.isPending ? 'Salvando…' : 'Salvar chave'}
+            </button>
+            {pixKey && (
+              <button onClick={() => { setEditing(false); setErr('') }}
+                className="px-4 border border-gray-200 text-gray-500 font-bold rounded-xl text-[13px]">
+                Cancelar
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      <p className="text-[10.5px] text-gray-400">
+        Sua chave fica visível só para a administração, para efetuar o repasse das comissões.
+      </p>
+    </div>
+  )
+}
 
 /* ── Gráfico "Comissões diárias" (15 dias) ──────────────────────
    Série única na cor da marca: barras finas com topo arredondado ancoradas
@@ -300,6 +396,14 @@ export default function Affiliate() {
                 <p className="text-[18px] font-extrabold text-gray-900">{fmtBRL(data?.totals?.paid)}</p>
               </div>
             </div>
+
+            {/* Chave PIX de recebimento */}
+            <PixCard
+              pixKey={data?.pix_key || null}
+              pixType={data?.pix_key_type || null}
+              hasPending={(data?.totals?.pending || 0) > 0}
+              onSaved={() => queryClient.invalidateQueries({ queryKey: ['affiliate-me'] })}
+            />
 
             {/* Comissões */}
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">

@@ -712,10 +712,16 @@ router.get('/commissions', requireAdmin, async (req, res, next) => {
     const ids = [...new Set((rows || []).map((r) => r.affiliate_id))];
     let byId = {};
     if (ids.length) {
-      const { data: users } = await supabase
+      // Chave PIX junto — fallback sem as colunas enquanto a 056 não roda
+      let { data: users, error: uErr } = await supabase
         .from('users')
-        .select('id, full_name, email, phone, affiliate_code')
+        .select('id, full_name, email, phone, affiliate_code, affiliate_pix_key, affiliate_pix_key_type')
         .in('id', ids);
+      if (uErr?.code === '42703') {
+        const retry = await supabase.from('users')
+          .select('id, full_name, email, phone, affiliate_code').in('id', ids);
+        users = retry.data;
+      }
       byId = Object.fromEntries((users || []).map((u) => [u.id, u]));
     }
     res.json((rows || []).map((r) => ({ ...r, affiliate: byId[r.affiliate_id] || null })));

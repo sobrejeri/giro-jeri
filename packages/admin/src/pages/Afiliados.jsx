@@ -53,13 +53,14 @@ export default function Afiliados() {
     .filter((c) => c.payout_status !== 'paid')
     .reduce((s, c) => s + Number(c.commission_amount || 0), 0)
 
-  function copyContact(c) {
-    const text = `${c.affiliate?.full_name || ''} · ${c.affiliate?.email || ''} · ${c.affiliate?.phone || ''}`.trim()
+  function copyText(id, text) {
     navigator.clipboard?.writeText(text).then(() => {
-      setCopied(c.id)
+      setCopied(id)
       setTimeout(() => setCopied(null), 1500)
     }).catch(() => {})
   }
+
+  const PIX_LABEL = { cpf: 'CPF', phone: 'Celular', email: 'E-mail', random: 'Aleatória' }
 
   if (isLoading) return <PageSpinner />
 
@@ -148,14 +149,28 @@ export default function Afiliados() {
                   <tr key={c.id} className="hover:bg-gray-800/40">
                     <td className="px-4 py-3">
                       <p className="font-semibold text-gray-100">{c.affiliate?.full_name || '—'}</p>
-                      <button
-                        onClick={() => copyContact(c)}
-                        title="Copiar contato (para o PIX)"
-                        className="text-xs text-gray-400 hover:text-orange-400 flex items-center gap-1"
-                      >
-                        {copied === c.id ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                        {c.affiliate?.email || c.affiliate?.phone || 'sem contato'}
-                      </button>
+                      {c.affiliate?.affiliate_pix_key ? (
+                        <button
+                          onClick={() => copyText(c.id, c.affiliate.affiliate_pix_key)}
+                          title="Copiar chave PIX"
+                          className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-mono"
+                        >
+                          {copied === c.id ? <Check size={11} /> : <Copy size={11} />}
+                          {c.affiliate.affiliate_pix_key}
+                          <span className="text-[10px] text-gray-500 uppercase border border-gray-700 rounded px-1 ml-0.5">
+                            {PIX_LABEL[c.affiliate.affiliate_pix_key_type] || 'PIX'}
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => copyText(c.id, `${c.affiliate?.full_name || ''} · ${c.affiliate?.email || ''} · ${c.affiliate?.phone || ''}`.trim())}
+                          title="Sem chave PIX cadastrada — copiar contato"
+                          className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                        >
+                          {copied === c.id ? <Check size={11} /> : <Copy size={11} />}
+                          ⚠ sem chave PIX · {c.affiliate?.email || c.affiliate?.phone || 'sem contato'}
+                        </button>
+                      )}
                       {c.affiliate?.affiliate_code && (
                         <p className="text-[11px] text-gray-500 tracking-wider">{c.affiliate.affiliate_code}</p>
                       )}
@@ -184,7 +199,7 @@ export default function Afiliados() {
                           size="sm"
                           disabled={payMut.isPending}
                           onClick={() => {
-                            if (window.confirm(`Confirmar que o PIX de ${fmtBRL(c.commission_amount)} para ${c.affiliate?.full_name || 'o afiliado'} já foi feito?`)) {
+                            if (window.confirm(`Confirmar que o PIX de ${fmtBRL(c.commission_amount)} para ${c.affiliate?.full_name || 'o afiliado'}${c.affiliate?.affiliate_pix_key ? ` (chave: ${c.affiliate.affiliate_pix_key})` : ''} já foi feito?`)) {
                               payMut.mutate(c.id)
                             }
                           }}
