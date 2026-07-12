@@ -4,6 +4,7 @@ import cors           from 'cors';
 import helmet         from 'helmet';
 import rateLimit      from 'express-rate-limit';
 
+import { supabase }   from './supabase.js';
 import authRoutes     from './routes/auth.js';
 import otpRoutes      from './routes/otp.js';
 import toursRoutes    from './routes/tours.js';
@@ -76,12 +77,36 @@ const otpLimiter = rateLimit({
 app.use('/api/auth/otp', otpLimiter);
 
 // ── Health check ───────────────────────────────────────
-app.get('/health', (_req, res) => {
+// Além do status, verifica a CHAVE do Supabase de duas formas (sem expor nada
+// sensível): o papel declarado na chave e um teste REAL de bypass de RLS
+// (lê a contagem de `users`, tabela protegida — anon enxerga 0; service_role
+// enxerga tudo). rls_bypass=true = chave certa; false = chave anon no deploy.
+app.get('/health', async (_req, res) => {
+  let keyRole = 'desconhecido';
+  try {
+    const k = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (k.startsWith('sb_secret_')) keyRole = 'sb_secret (service)';
+    else if (k.startsWith('sb_publishable_')) keyRole = 'sb_publishable (ANON — errada)';
+    else if (k.split('.').length === 3) {
+      keyRole = JSON.parse(Buffer.from(k.split('.')[1], 'base64').toString()).role || 'jwt sem role';
+    }
+  } catch { /* mantém desconhecido */ }
+
+  let rlsBypass = null;
+  try {
+    const { count, error } = await supabase
+      .from('users')
+      .select('id', { count: 'exact', head: true });
+    if (!error) rlsBypass = (count ?? 0) > 0;
+  } catch { /* deixa null = não conseguiu testar */ }
+
   res.json({
-    status:    'ok',
-    version:   '2.0.0',
-    commit:    process.env.RENDER_GIT_COMMIT || null,
-    timestamp: new Date().toISOString(),
+    status:       'ok',
+    version:      '2.0.0',
+    commit:       process.env.RENDER_GIT_COMMIT || null,
+    timestamp:    new Date().toISOString(),
+    supabase_key: keyRole,
+    rls_bypass:   rlsBypass,
   });
 });
 
