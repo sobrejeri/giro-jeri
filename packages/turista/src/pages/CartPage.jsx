@@ -10,6 +10,7 @@ import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { itemMissing, requestPayloadFor } from '../lib/cartCheckout'
+import { getPartner as getPartnerAttribution } from '../lib/partner'
 import { PlaceInput } from './Transfers'
 import { format, startOfDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -425,7 +426,12 @@ export default function CartPage() {
     setResults({ ...res })
     try {
       // Carrinho universal: 1 chamada → N reservas no MESMO grupo (atômico).
-      const created = await api.cartRequest(snapshot.map(requestPayloadFor))
+      // Com link de cooperativa ativo, o grupo inteiro nasce atribuído a ela.
+      const partner = getPartnerAttribution()
+      const created = await api.cartRequest(
+        snapshot.map(requestPayloadFor),
+        partner?.slug ? { partner_slug: partner.slug } : {},
+      )
       // Casa cada reserva ao item por service_id (permite repetição do mesmo
       // serviço no carrinho consumindo em ordem).
       const byService = new Map()

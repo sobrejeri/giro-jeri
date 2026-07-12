@@ -20,7 +20,7 @@ const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
 const PROFILE_FIELDS = `
   id, full_name, email, phone, document_type, document_number, birth_date,
-  profile_photo_url, address, cep,
+  profile_photo_url, address, cep, partner_slug,
   pix_key_type, pix_key,
   bank_name, bank_agency, bank_account_number, bank_account_type, bank_document
 `.trim();

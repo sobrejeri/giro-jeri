@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 054.**
+   registre aqui o número reservado. **Próximo número livre: 055.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,23 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-10 · Agente B (link de vendas direto por cooperativa — migration 054)**
+  — Cada coop ganha `users.partner_slug` (único; backfill p/ operadores ativos).
+  Novo `GET /api/partner/:slug` (público, só nome/foto). `/payments/request` e
+  `/cart-request` aceitam `partner_slug` (NUNCA operator_id cru): o servidor
+  resolve o slug e a(s) reserva(s) nascem **atribuídas** (`operator_id` +
+  `awaiting_payment` + `assigned` — mesmo estado do aceite), **sem fila** e sem
+  notificar as demais coops; só a dona do link é avisada. Turista: rota
+  `/c/:slug` (grava atribuição 7 dias em localStorage), selo verde "Reservando
+  com X" no Layout (X remove), Resumo → se nascer awaiting_payment vai DIRETO
+  pro pagamento; carrinho envia partner_slug (grupo inteiro atribuído).
+  Cooperativa: card "Meu link de vendas" no Perfil (copiar + WhatsApp);
+  `GET /operator/profile` devolve partner_slug (⚠️ exige migration 054 ANTES do
+  deploy da API — senão o Perfil da coop quebra com 42703). BÔNUS: split de
+  pagamento de GRUPO com motor OFF agora reconhece grupo 100% de uma coop
+  (combo aceito/venda direta) e sela na conta dela — antes caía na plataforma.
+  Próx. migration livre: **055**.
 
 - **2026-07-10 · Agente B (revisão completa de RLS — migration 053)** — Após o
   incidente do "sumiço silencioso" das regras de alta temporada (RLS ligado sem

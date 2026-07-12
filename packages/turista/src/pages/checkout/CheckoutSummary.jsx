@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useCart } from '../../contexts/CartContext'
 import { checkoutStateFor } from '../../lib/cartCheckout'
+import { getPartner as getPartnerAttribution } from '../../lib/partner'
 import {
   ChevronLeft, ChevronRight, MapPin, Calendar, Clock, Users, Car,
   Shield, AlertCircle, Pen, Zap, Sun, Waves, Anchor, Plus, Minus, Check,
@@ -326,6 +327,9 @@ function CheckoutSummaryInner() {
     display_total:   displayTotal,
     service_name:    ls.service_name,
     cover_image_url: ls.cover_image_url || undefined,
+    // Venda direta (link /c/<slug>): a reserva nasce atribuída à cooperativa
+    // e pronta para pagar — o servidor valida o slug.
+    partner_slug:    getPartnerAttribution()?.slug || undefined,
   }
 
   // Solicita a reserva (SEM pagar). A reserva fica aguardando uma cooperativa
@@ -351,6 +355,21 @@ function CheckoutSummaryInner() {
           state: {
             ...checkoutStateFor(next),
             cartBatch: { ...cb, index: cb.index + 1, results: doneResults },
+          },
+        })
+        return
+      }
+
+      // Venda direta (link da cooperativa): a reserva já nasce aceita — vai
+      // direto para o pagamento, sem passar pela tela "aguardando aceite".
+      if (result.status_commercial === 'awaiting_payment' && !doneResults) {
+        navigate('/checkout/pagamento', {
+          replace: true,
+          state: {
+            ...paymentState,
+            total_price:         result.amount,
+            existing_booking_id: result.booking_id,
+            booking_code:        result.booking_code,
           },
         })
         return
