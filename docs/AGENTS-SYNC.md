@@ -28,6 +28,22 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-12 · Agente B (CAUSA RAIZ dos "sumiços" intermitentes + fix)** —
+  Os episódios de "dados sumindo" que saravam sozinhos (lista de usuários só
+  com o admin + '4 no Auth sem perfil', login CNPJ 'não encontrado', INSERT
+  barrado por RLS, /health alternando rls_bypass true/false) NÃO eram chave
+  errada no Render nem RLS mal configurado: `auth.js` chamava
+  `signInWithPassword`/`refreshSession` no client GLOBAL service_role — o
+  supabase-js guarda a sessão do usuário EM MEMÓRIA nesse client e todas as
+  queries seguintes passam a rodar como aquele usuário (authenticated+RLS) até
+  o próximo deploy limpar. O `refreshSession` (renovação automática dos apps)
+  re-envenenava o tempo todo. FIX: `freshAuthClient()` descartável para o
+  handshake de auth (3 call sites); client global nunca mais carrega sessão.
+  Guarda extra já ativa: boot recusa chave anon/publishable; `/health` expõe
+  `supabase_key` + `rls_bypass` (teste real). DESCOBERTA operacional: o Render
+  agora deploya DIRETO do branch (commit do branch rodando em prod sem merge) —
+  o protocolo item 5 está correto; merges p/ main viraram opcionais.
+
 - **2026-07-12 · Agente A (chave PIX do afiliado — migration 056)** — O turista
   cadastra a chave PIX no painel do afiliado (card "Chave PIX para receber":
   tipo CPF/celular/e-mail/aleatória + validação leve; alerta âmbar quando há

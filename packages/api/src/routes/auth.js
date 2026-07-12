@@ -19,6 +19,21 @@ function userScopedClient(token) {
   );
 }
 
+// Client DESCARTÁVEL só para o handshake de auth (signInWithPassword/
+// refreshSession). NUNCA use o client global `supabase` para isso: o
+// supabase-js guarda a sessão do usuário EM MEMÓRIA no client e passa a fazer
+// TODAS as queries seguintes como aquele usuário (authenticated + RLS) até o
+// restart — foi a causa dos "sumiços" intermitentes (lista de usuários só com
+// o admin, CNPJ 'não encontrado', INSERT barrado por RLS) que saravam sozinhos
+// a cada deploy.
+function freshAuthClient() {
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
 // ── Schemas ───────────────────────────────────────────────
 const registerSchema = z.object({
   full_name: z.string().min(2).max(200),
@@ -132,7 +147,7 @@ router.post('/register', async (req, res, next) => {
 
     // ── Cadastro direto (sem OTP): abre a sessão e já entra logado ──────
     if (!REQUIRE_SIGNUP_VERIFICATION) {
-      const { data: sess, error: sessErr } = await supabase.auth.signInWithPassword({
+      const { data: sess, error: sessErr } = await freshAuthClient().auth.signInWithPassword({
         email:    body.email,
         password: body.password,
       });
@@ -242,7 +257,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     // Autentica primeiro (valida senha antes de qualquer gate)
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await freshAuthClient().auth.signInWithPassword({
       email:    authEmail,
       phone:    authPhone,
       password: body.password,
@@ -387,7 +402,7 @@ router.post('/refresh', async (req, res, next) => {
       return res.status(400).json({ error: 'refresh_token obrigatório' });
     }
 
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+    const { data, error } = await freshAuthClient().auth.refreshSession({ refresh_token });
     if (error || !data.session) {
       return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
     }
