@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { setLang, LANGS } from '../i18n/index.js'
 import ProfileDesktop from './ProfileDesktop'
 import {
-  User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck,
+  User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
   Phone, Flag, AlertCircle, Globe, Loader2,
 } from 'lucide-react'
@@ -56,6 +56,7 @@ export default function Profile() {
 
   const MENU = [
     { icon: CalendarCheck, label: t('profile.menu.bookings'), to: '/minhas-reservas' },
+    { icon: Megaphone,     label: 'Divulgou, Ganhou · Afiliado', to: '/afiliado' },
   ]
 
   const DOC_TYPES = [

@@ -28,6 +28,15 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-12 · Agente A (painel do afiliado no perfil do turista)** — Menu
+  "Divulgou, Ganhou · Afiliado" no Perfil → `/afiliado`, que virou um painel
+  estilo dashboard (referência visual do usuário): hero laranja "Comissões em
+  15 dias" com chips dos 2 meses anteriores, tiles Indicações/A receber/Ticket
+  médio e gráfico "Comissões diárias" (SVG puro, série única na cor da marca,
+  rótulo no pico, tooltip por toque, grade recessiva — sem lib de gráfico).
+  Tudo derivado no cliente do extrato do `/affiliate/me`; hero de marketing só
+  aparece antes da ativação. Arquivos: `Profile.jsx`, `Affiliate.jsx`.
+
 - **2026-07-12 · Agente A (taxa de comissão editável + cupons ponta a ponta)** —
   (1) Admin ajusta a % dos afiliados na página Afiliados (upsert em
   `system_settings.affiliate_commission_percent`); `/affiliate/me` devolve
