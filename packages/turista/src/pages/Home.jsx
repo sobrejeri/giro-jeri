@@ -487,6 +487,22 @@ export default function Home() {
           )}
         </section>
 
+        {/* ── Divulgou, Ganhou (programa de afiliados) ──────────── */}
+        <button
+          onClick={() => navigate('/afiliado')}
+          className="w-full bg-gradient-to-r from-brand to-amber-400 rounded-2xl p-4 flex items-center gap-3 text-left active:scale-[0.98] transition-transform shadow-sm relative overflow-hidden"
+        >
+          <Sparkles size={56} className="absolute -right-2 -top-2 text-white/15" />
+          <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+            <span className="text-[20px]">🤑</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-extrabold text-white leading-tight">DIVULGOU, GANHOU</p>
+            <p className="text-[11.5px] text-white/85 mt-0.5">Indique amigos e ganhe 5% de cada reserva paga</p>
+          </div>
+          <ArrowRight size={16} className="text-white shrink-0" />
+        </button>
+
         {/* ── Como funciona ─────────────────────────────────────── */}
         <section className="pb-2">
           <p className="text-[15px] font-bold text-gray-900 mb-3">Como funciona?</p>

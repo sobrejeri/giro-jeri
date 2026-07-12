@@ -77,12 +77,17 @@ const requestSchema = z.object({
   // reserva nasce atribuída (sem fila, sem aceite). NUNCA aceitar operator_id
   // cru do cliente — só o slug, validado aqui.
   partner_slug:     z.string().max(80).optional(),
+  // Programa de afiliados (/a/<código> ou código digitado): o servidor resolve
+  // o código e grava bookings.affiliate_id — NUNCA aceita o id cru. A comissão
+  // só nasce quando a reserva é paga (onPaymentApproved).
+  affiliate_code:   z.string().max(24).optional(),
 })
 
 // Carrinho universal: array de itens, cada um no formato do requestSchema.
 const cartRequestSchema = z.object({
   items: z.array(requestSchema).min(1, 'Carrinho vazio').max(20, 'Muitos itens no carrinho'),
   partner_slug: z.string().max(80).optional(),
+  affiliate_code: z.string().max(24).optional(),
 })
 
 const router = Router()
@@ -858,6 +863,12 @@ router.post('/request', authenticate, async (req, res, next) => {
     const { resolvePartner } = await import('./partner.js')
     const partner = partner_slug ? await resolvePartner(partner_slug) : null
 
+    // Afiliado: resolve o código no servidor; autoindicação é ignorada em
+    // silêncio (o cliente comprando por si não gera comissão pra si mesmo).
+    const { resolveAffiliate } = await import('./affiliate.js')
+    const aff = parsed.data.affiliate_code ? await resolveAffiliate(parsed.data.affiliate_code) : null
+    const affiliateId = aff && aff.id !== req.user.id ? aff.id : null
+
     const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
@@ -874,6 +885,7 @@ router.post('/request', authenticate, async (req, res, next) => {
       origin_text:        origin_text || null,
       destination_text:   destination_text || null,
       total_amount:       chargedTotal,
+      ...(affiliateId ? { affiliate_id: affiliateId, source_channel: 'affiliate_link' } : {}),
       ...(partner ? {
         operator_id:        partner.id,
         status_commercial:  'awaiting_payment',
@@ -955,12 +967,17 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
     }
-    const { items, partner_slug } = parsed.data
+    const { items, partner_slug, affiliate_code } = parsed.data
 
     // Link direto de cooperativa: o grupo INTEIRO nasce atribuído e pronto
     // para pagar (sem fila, sem aceite) — mesmo estado do combo aceito.
     const { resolvePartner } = await import('./partner.js')
     const partner = partner_slug ? await resolvePartner(partner_slug) : null
+
+    // Afiliado: o grupo inteiro leva a indicação (anti-autoindicação).
+    const { resolveAffiliate } = await import('./affiliate.js')
+    const aff = affiliate_code ? await resolveAffiliate(affiliate_code) : null
+    const affiliateId = aff && aff.id !== req.user.id ? aff.id : null
 
     // 1) Valida TODOS os itens (antecedência, cutoff, total autoritativo) antes
     //    de criar qualquer reserva. Falha → índice + motivo, nada é inserido.
@@ -1003,6 +1020,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       origin_text:        it.origin_text || null,
       destination_text:   it.destination_text || null,
       total_amount:       chargedTotal,
+      ...(affiliateId ? { affiliate_id: affiliateId, source_channel: 'affiliate_link' } : {}),
       ...(partner ? {
         operator_id:        partner.id,
         status_commercial:  'awaiting_payment',
@@ -1570,6 +1588,11 @@ async function onPaymentApproved(payment) {
   await recordLegAccounting(booking, payment).catch((err) =>
     console.error('[ledger] contabilidade por perna falhou booking=%s err=%s', payment.booking_id, err.message))
 
+  // Comissão de afiliado — só quando a reserva foi INDICADA e está paga.
+  // Idempotente (índice único booking+affiliate, migration 055); best-effort.
+  await recordAffiliateCommission(booking).catch((err) =>
+    console.error('[afiliado] comissão falhou booking=%s err=%s', payment.booking_id, err.message))
+
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
   sendConfirmationEmail(booking).catch((err) =>
     console.error('[email] confirmação de reserva falhou:', err.message))
@@ -1695,10 +1718,70 @@ async function onGroupPaymentApproved(payment) {
   for (const b of list) {
     await recordLegAccounting(b, payment).catch((err) =>
       console.error('[ledger] contabilidade por perna (grupo) falhou booking=%s err=%s', b.id, err.message))
+    await recordAffiliateCommission(b).catch((err) =>
+      console.error('[afiliado] comissão (grupo) falhou booking=%s err=%s', b.id, err.message))
     sendConfirmationEmail(b).catch((err) =>
       console.error('[email] confirmação (grupo) falhou:', err.message))
     notifyBookingPaid(b)
   }
+}
+
+// ── Comissão do programa de afiliados ───────────────────
+// Gerada quando a reserva indicada é paga. % vem de system_settings
+// (affiliate_commission_percent, padrão 5). Repasse manual via PIX em até
+// 7 dias úteis (payout_due_date) — o admin marca como pago na tela Afiliados.
+// Idempotente: índice único (booking_id, affiliate_id) faz o INSERT duplicado
+// (webhook + polling) falhar com 23505, que é engolido em silêncio.
+function addBusinessDays(from, days) {
+  const d = new Date(from)
+  let left = days
+  while (left > 0) {
+    d.setDate(d.getDate() + 1)
+    const wd = d.getDay()
+    if (wd !== 0 && wd !== 6) left--
+  }
+  return d
+}
+
+async function recordAffiliateCommission(booking) {
+  if (!booking?.affiliate_id) return
+  // Trava anti-autoindicação (defesa em profundidade — a criação já ignora)
+  if (booking.affiliate_id === booking.user_id) return
+
+  const { data: st } = await supabase
+    .from('system_settings').select('setting_value')
+    .eq('setting_key', 'affiliate_commission_percent').maybeSingle()
+  const pct = Number(st?.setting_value ?? 5)
+  if (!(pct > 0)) return
+
+  const total  = Number(booking.total_amount || 0)
+  const amount = Math.round(total * pct) / 100 // total × pct% com 2 casas
+  if (!(amount > 0)) return
+
+  const { error } = await supabase.from('commissions').insert({
+    booking_id:         booking.id,
+    affiliate_id:       booking.affiliate_id,
+    commission_model:   'percentage',
+    commission_percent: pct,
+    commission_amount:  amount,
+    platform_amount:    Math.round((total - amount) * 100) / 100,
+    operator_amount:    0,
+    payout_status:      'pending',
+    payout_due_date:    addBusinessDays(new Date(), 7).toISOString().slice(0, 10),
+  })
+  if (error) {
+    if (error.code === '23505') return // já lançada (webhook+polling) — ok
+    throw error
+  }
+
+  const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+  notifyUser({
+    userId:      booking.affiliate_id,
+    bookingId:   booking.id,
+    templateKey: 'affiliate_commission',
+    title:       'Você ganhou uma comissão! 🤑',
+    body:        `Uma reserva indicada por você foi paga (${booking.booking_code}). Sua comissão de ${fmtBRL(amount)} será repassada via PIX em até 7 dias úteis.`,
+  })
 }
 
 function fmtDateBR(iso) {

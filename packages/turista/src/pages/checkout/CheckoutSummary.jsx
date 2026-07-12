@@ -5,6 +5,7 @@ import { api } from '../../lib/api'
 import { useCart } from '../../contexts/CartContext'
 import { checkoutStateFor } from '../../lib/cartCheckout'
 import { getPartner as getPartnerAttribution } from '../../lib/partner'
+import { getAffiliate as getAffiliateAttribution } from '../../lib/affiliate'
 import {
   ChevronLeft, ChevronRight, MapPin, Calendar, Clock, Users, Car,
   Shield, AlertCircle, Pen, Zap, Sun, Waves, Anchor, Plus, Minus, Check,
@@ -330,6 +331,9 @@ function CheckoutSummaryInner() {
     // Venda direta (link /c/<slug>): a reserva nasce atribuída à cooperativa
     // e pronta para pagar — o servidor valida o slug.
     partner_slug:    getPartnerAttribution()?.slug || undefined,
+    // Indicação de afiliado (/a/<código>): 5% de comissão quando a reserva
+    // indicada é paga — o servidor resolve o código e trava autoindicação.
+    affiliate_code:  getAffiliateAttribution()?.code || undefined,
   }
 
   // Solicita a reserva (SEM pagar). A reserva fica aguardando uma cooperativa

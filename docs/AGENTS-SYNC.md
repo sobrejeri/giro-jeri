@@ -28,6 +28,26 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-12 · Agente A (programa de afiliados "DIVULGOU, GANHOU")** — Retomei
+  o desenho que o Agente B fez no chat antes do limite. Migration **055**
+  (`users.affiliate_code` único; índices; unique `(booking_id, affiliate_id)`
+  p/ idempotência; setting `affiliate_commission_percent` = 5). API:
+  `routes/affiliate.js` (resolve público /a/<código>, activate 1 toque, me);
+  `/payments/request` e `/cart-request` aceitam `affiliate_code` (servidor
+  resolve, **anti-autoindicação**, grava `affiliate_id` + source_channel
+  `affiliate_link`); comissão nasce em `onPaymentApproved` (única e de grupo)
+  via `recordAffiliateCommission` — 5% do total pago, `payout_due_date` =
+  +7 dias ÚTEIS, INSERT com 23505 engolido (idempotente), notificação ao
+  afiliado. Admin: `GET /admin/commissions` (join manual users — affiliate_id
+  não tem FK) e `PUT /admin/commissions/:id/pay` (repasse manual via PIX →
+  notifica). Turista: `lib/affiliate.js` (atribuição 30 dias), rota `/a/:code`,
+  banner "DIVULGOU, GANHOU" na Home, página `/afiliado` (ativar, link+WhatsApp,
+  comissões, redirect login via `<Navigate>`); `CartPage` e `CheckoutSummary`
+  enviam `affiliate_code`. Admin UI: página **Afiliados** (filtro, contato p/
+  PIX, marcar pago). Builds turista/admin OK; fluxo testado no navegador.
+  ⚠️ Rodar **migration 055** no Supabase antes de usar. Convive com o
+  partner_slug (indicação ≠ venda direta; podem coexistir na mesma reserva).
+
 - **2026-07-10 · Agente B (link de vendas direto por cooperativa — migration 054)**
   — Cada coop ganha `users.partner_slug` (único; backfill p/ operadores ativos).
   Novo `GET /api/partner/:slug` (público, só nome/foto). `/payments/request` e

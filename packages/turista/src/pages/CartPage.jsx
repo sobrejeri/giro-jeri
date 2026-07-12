@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { itemMissing, requestPayloadFor } from '../lib/cartCheckout'
 import { getPartner as getPartnerAttribution } from '../lib/partner'
+import { getAffiliate as getAffiliateAttribution } from '../lib/affiliate'
 import { PlaceInput } from './Transfers'
 import { format, startOfDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -428,9 +429,13 @@ export default function CartPage() {
       // Carrinho universal: 1 chamada → N reservas no MESMO grupo (atômico).
       // Com link de cooperativa ativo, o grupo inteiro nasce atribuído a ela.
       const partner = getPartnerAttribution()
+      const affiliate = getAffiliateAttribution()
       const created = await api.cartRequest(
         snapshot.map(requestPayloadFor),
-        partner?.slug ? { partner_slug: partner.slug } : {},
+        {
+          ...(partner?.slug ? { partner_slug: partner.slug } : {}),
+          ...(affiliate?.code ? { affiliate_code: affiliate.code } : {}),
+        },
       )
       // Casa cada reserva ao item por service_id (permite repetição do mesmo
       // serviço no carrinho consumindo em ordem).

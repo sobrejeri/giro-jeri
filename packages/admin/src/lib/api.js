@@ -193,6 +193,8 @@ export const api = {
   updateRegion: (id, body) => request(`/api/regions/${id}`, { method: 'PUT', body }),
 
   // Cupons
+  getCommissions: (params = {}) => request(`/api/admin/commissions?${new URLSearchParams(params)}`),
+  payCommission:  (id)          => request(`/api/admin/commissions/${id}/pay`, { method: 'PUT' }),
   getCoupons:   (params = {}) => request(`/api/admin/coupons?${new URLSearchParams(params)}`),
   createCoupon: (body)        => request('/api/admin/coupons', { method: 'POST', body }),
   updateCoupon: (id, body)    => request(`/api/admin/coupons/${id}`, { method: 'PUT', body }),

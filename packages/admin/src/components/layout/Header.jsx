@@ -10,6 +10,7 @@ const TITLES = {
   '/precos':           'Motor de Preços',
   '/regioes':          'Regiões',
   '/cupons':           'Cupons',
+  '/afiliados':        'Afiliados',
   '/temporada':        'Alta Temporada',
   '/financeiro':       'Financeiro',
   '/auditoria':        'Auditoria',

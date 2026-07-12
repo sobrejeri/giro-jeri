@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
+import { notifyUser } from '../services/notify.js';
 import dayjs from 'dayjs';
 
 const router = Router();
@@ -689,6 +690,63 @@ router.post('/storage-sign', requireAdmin, async (req, res, next) => {
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
 
     res.json({ signed_url: data.signedUrl, path, public_url: publicUrl });
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/commissions ─────────────────────────
+// Comissões do programa de afiliados. affiliate_id não tem FK (schema 001
+// deixou "tabela futura"), então o join com users é manual.
+router.get('/commissions', requireAdmin, async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    let query = supabase
+      .from('commissions')
+      .select('id, booking_id, affiliate_id, commission_percent, commission_amount, payout_status, payout_due_date, payout_paid_at, created_at, bookings ( booking_code, service_type, service_date, total_amount )')
+      .not('affiliate_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(300);
+    if (status) query = query.eq('payout_status', status);
+    const { data: rows, error } = await query;
+    if (error) throw error;
+
+    const ids = [...new Set((rows || []).map((r) => r.affiliate_id))];
+    let byId = {};
+    if (ids.length) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, full_name, email, phone, affiliate_code')
+        .in('id', ids);
+      byId = Object.fromEntries((users || []).map((u) => [u.id, u]));
+    }
+    res.json((rows || []).map((r) => ({ ...r, affiliate: byId[r.affiliate_id] || null })));
+  } catch (err) { next(err); }
+});
+
+// ── PUT /api/admin/commissions/:id/pay ─────────────────
+// Repasse manual feito via PIX → marca como pago e avisa o afiliado.
+router.put('/commissions/:id/pay', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: row, error } = await supabase
+      .from('commissions')
+      .update({ payout_status: 'paid', payout_paid_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .neq('payout_status', 'paid')
+      .select('id, affiliate_id, commission_amount, booking_id, bookings ( booking_code )')
+      .maybeSingle();
+    if (error) throw error;
+    if (!row) return res.status(404).json({ error: 'Comissão não encontrada (ou já paga)' });
+
+    if (row.affiliate_id) {
+      const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      notifyUser({
+        userId:      row.affiliate_id,
+        bookingId:   row.booking_id,
+        templateKey: 'affiliate_payout',
+        title:       'Comissão paga 💸',
+        body:        `Sua comissão de ${fmtBRL(row.commission_amount)} (reserva ${row.bookings?.booking_code || ''}) foi repassada via PIX. Obrigado por divulgar!`,
+      });
+    }
+    res.json({ ok: true, id: row.id });
   } catch (err) { next(err); }
 });
 

@@ -20,6 +20,8 @@ import Auth            from './pages/Auth'
 import Legal           from './pages/Legal'
 import CartPage        from './pages/CartPage'
 import PartnerLink     from './pages/PartnerLink'
+import AffiliateLink   from './pages/AffiliateLink'
+import Affiliate       from './pages/Affiliate'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -56,6 +58,8 @@ export default function App() {
     <Routes>
       {/* Auth — full screen, sem layout */}
       <Route path="/c/:slug"  element={<PartnerLink />} />
+      <Route path="/a/:code"  element={<AffiliateLink />} />
+      <Route path="/afiliado" element={<Affiliate />} />
       <Route path="/login"    element={<Auth defaultTab="login" />} />
       <Route path="/cadastro" element={<Auth defaultTab="register" />} />
 
