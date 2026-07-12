@@ -229,7 +229,12 @@ router.post('/login', async (req, res, next) => {
         cnpjDigits, candidates?.length || 0, opUser ? opUser.email : 'NÃO',
         lookupErr ? `${lookupErr.code}:${lookupErr.message}` : 'null');
 
-      if (lookupErr || !opUser) {
+      // Erro de consulta (deploy/instabilidade) NÃO é "CNPJ não existe" —
+      // devolve 503 pedindo para tentar de novo, em vez de mensagem enganosa.
+      if (lookupErr) {
+        return res.status(503).json({ error: 'Instabilidade momentânea no servidor. Tente novamente em alguns segundos.' });
+      }
+      if (!opUser) {
         return res.status(401).json({ error: 'CNPJ não encontrado ou não autorizado' });
       }
       authEmail = opUser.email;

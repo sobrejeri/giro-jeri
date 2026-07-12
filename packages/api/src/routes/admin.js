@@ -67,8 +67,11 @@ router.get('/auth-orphans', requireAdmin, async (req, res, next) => {
       await supabase.auth.admin.listUsers({ perPage: 1000 });
     if (authErr) throw authErr;
 
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profErr } = await supabase
       .from('users').select('id, auth_id, full_name, email, user_type, created_at');
+    // Falha na leitura dos perfis NÃO pode virar "todo mundo é órfão" (a tela
+    // mostraria N usuários "sem perfil" + botão Importar que duplicaria).
+    if (profErr) throw profErr;
 
     const authIdSet  = new Set(authUsers.map((u) => u.id));
     const linkedSet  = new Set((profiles || []).map((r) => r.auth_id).filter(Boolean));
@@ -115,9 +118,24 @@ router.post('/import-auth-user', requireAdmin, async (req, res, next) => {
       await supabase.auth.admin.getUserById(body.auth_id);
     if (authErr || !authUser) return res.status(404).json({ error: 'Usuário Auth não encontrado' });
 
+    // Guarda anti-duplicata: se a checagem FALHAR (instabilidade), aborta —
+    // nunca insere às cegas. Checa por auth_id E por e-mail.
     const existing = await supabase
       .from('users').select('id').eq('auth_id', body.auth_id).maybeSingle();
+    if (existing.error) {
+      return res.status(503).json({ error: 'Instabilidade momentânea — tente novamente.' });
+    }
     if (existing.data) return res.status(409).json({ error: 'Este usuário já tem perfil' });
+    if (authUser.email) {
+      const byEmail = await supabase
+        .from('users').select('id').eq('email', authUser.email).maybeSingle();
+      if (byEmail.error) {
+        return res.status(503).json({ error: 'Instabilidade momentânea — tente novamente.' });
+      }
+      if (byEmail.data) {
+        return res.status(409).json({ error: 'Já existe perfil com este e-mail — use vincular, não importar.' });
+      }
+    }
 
     let docNumber = null;
     let docType   = null;
