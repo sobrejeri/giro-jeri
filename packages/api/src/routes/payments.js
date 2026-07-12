@@ -73,11 +73,16 @@ const requestSchema = z.object({
   service_name:     z.string().max(300).optional(),
   cover_image_url:  z.string().url().optional().nullable().or(z.literal('')),
   coupon_code:      z.string().max(50).optional(),
+  // Link direto de cooperativa (/c/<slug>): o servidor resolve o slug e a
+  // reserva nasce atribuída (sem fila, sem aceite). NUNCA aceitar operator_id
+  // cru do cliente — só o slug, validado aqui.
+  partner_slug:     z.string().max(80).optional(),
 })
 
 // Carrinho universal: array de itens, cada um no formato do requestSchema.
 const cartRequestSchema = z.object({
   items: z.array(requestSchema).min(1, 'Carrinho vazio').max(20, 'Muitos itens no carrinho'),
+  partner_slug: z.string().max(80).optional(),
 })
 
 const router = Router()
@@ -337,7 +342,18 @@ async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
     const m = await getAcceptedLegRecipients(b.id)
     for (const [op, val] of m) byOperator.set(op, (byOperator.get(op) || 0) + val)
   }
-  if (byOperator.size === 0) return { mode: 'single' }          // sem split → plataforma
+  if (byOperator.size === 0) {
+    // Sem pernas (motor OFF — reserva inteira): se TODAS as reservas do grupo
+    // estão com a MESMA cooperativa (combo aceito ou venda direta por link),
+    // o pagamento único cai na conta dela, como no fluxo de reserva única.
+    const ops = [...new Set(bookings.map((b) => b.operator_id).filter(Boolean))]
+    if (ops.length === 1 && bookings.every((b) => b.operator_id)) {
+      const legacy = await getSplitContext({ operator_id: ops[0] }, combinedTotal, cfg)
+      return legacy ? { ...legacy, mode: 'single' } : { mode: 'single' }
+    }
+    if (ops.length > 1) return { mode: 'multi' } // coops diferentes → bloqueia (Opção 2)
+    return { mode: 'single' }                    // nenhuma coop definida → plataforma
+  }
   if (byOperator.size === 1) {
     const [operatorId] = [...byOperator.keys()]
     const legacy = await getSplitContext({ operator_id: operatorId }, combinedTotal, cfg)
@@ -823,7 +839,7 @@ router.post('/request', authenticate, async (req, res, next) => {
     const {
       service_type, service_id, booking_mode,
       service_date_iso, service_time, people_count, region_id,
-      vehicles = [], origin_text, destination_text,
+      vehicles = [], origin_text, destination_text, partner_slug,
     } = parsed.data
 
     // Antecedência mínima para transfers (rota definida) — mesma regra do
@@ -835,6 +851,12 @@ router.post('/request', authenticate, async (req, res, next) => {
     // R6: respeita o horário limite de solicitação do serviço.
     const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
     if (cutoffErr) return res.status(400).json({ error: cutoffErr })
+
+    // Link direto de cooperativa: resolve o slug no SERVIDOR. Reserva nasce
+    // atribuída (operator_id) e pronta para pagar — mesmo estado que o aceite
+    // produz (awaiting_payment + assigned). Slug inválido/inativo → fluxo normal.
+    const { resolvePartner } = await import('./partner.js')
+    const partner = partner_slug ? await resolvePartner(partner_slug) : null
 
     const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
@@ -852,8 +874,14 @@ router.post('/request', authenticate, async (req, res, next) => {
       origin_text:        origin_text || null,
       destination_text:   destination_text || null,
       total_amount:       chargedTotal,
-      status_commercial:  'awaiting_acceptance',
-      status_operational: 'new',
+      ...(partner ? {
+        operator_id:        partner.id,
+        status_commercial:  'awaiting_payment',
+        status_operational: 'assigned',
+      } : {
+        status_commercial:  'awaiting_acceptance',
+        status_operational: 'new',
+      }),
       payment_status:     'pending',
     }
     // 24h para alguma cooperativa aceitar; depois passa só pro admin. Se a
@@ -878,21 +906,38 @@ router.post('/request', authenticate, async (req, res, next) => {
       await insertBookingVehicles(booking.id, vehicles)
     }
 
-    // Notifica as cooperativas da nova solicitação (ANTES do pagamento) —
-    // elas aceitam e só então o cliente paga.
-    notifyOperatorsNewBooking(supabase, booking).catch((err) =>
-      console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
-
     const isTransfer = service_type === 'transfer'
     const rota = [origin_text, destination_text].filter(Boolean).join(' → ')
-    notifyOperatorsAndAdmin({
-      bookingId:   booking.id,
-      templateKey: 'new_booking',
-      title:       'Nova solicitação disponível',
-      body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
-    })
 
-    res.json({ booking_id: booking.id, booking_code: bookingCode, amount: chargedTotal })
+    if (partner) {
+      // Venda direta: só a cooperativa dona do link é avisada — nada de fila.
+      notifyUser({
+        userId:      partner.id,
+        bookingId:   booking.id,
+        templateKey: 'new_booking',
+        title:       'Venda direta pelo seu link 🎉',
+        body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)} (${bookingCode}). O cliente já pode pagar.`,
+      })
+    } else {
+      // Notifica as cooperativas da nova solicitação (ANTES do pagamento) —
+      // elas aceitam e só então o cliente paga.
+      notifyOperatorsNewBooking(supabase, booking).catch((err) =>
+        console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+      notifyOperatorsAndAdmin({
+        bookingId:   booking.id,
+        templateKey: 'new_booking',
+        title:       'Nova solicitação disponível',
+        body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
+      })
+    }
+
+    res.json({
+      booking_id:        booking.id,
+      booking_code:      bookingCode,
+      amount:            chargedTotal,
+      status_commercial: booking.status_commercial,
+      partner_name:      partner?.full_name || null,
+    })
   } catch (err) { next(err) }
 })
 
@@ -904,13 +949,18 @@ router.post('/request', authenticate, async (req, res, next) => {
 router.post('/cart-request', authenticate, async (req, res, next) => {
   try {
     const body = req.body && Array.isArray(req.body.items)
-      ? { items: req.body.items.map(nullToUndefined) }
+      ? { ...nullToUndefined(req.body), items: req.body.items.map(nullToUndefined) }
       : req.body
     const parsed = cartRequestSchema.safeParse(body)
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
     }
-    const { items } = parsed.data
+    const { items, partner_slug } = parsed.data
+
+    // Link direto de cooperativa: o grupo INTEIRO nasce atribuído e pronto
+    // para pagar (sem fila, sem aceite) — mesmo estado do combo aceito.
+    const { resolvePartner } = await import('./partner.js')
+    const partner = partner_slug ? await resolvePartner(partner_slug) : null
 
     // 1) Valida TODOS os itens (antecedência, cutoff, total autoritativo) antes
     //    de criar qualquer reserva. Falha → índice + motivo, nada é inserido.
@@ -953,8 +1003,14 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       origin_text:        it.origin_text || null,
       destination_text:   it.destination_text || null,
       total_amount:       chargedTotal,
-      status_commercial:  'awaiting_acceptance',
-      status_operational: 'new',
+      ...(partner ? {
+        operator_id:        partner.id,
+        status_commercial:  'awaiting_payment',
+        status_operational: 'assigned',
+      } : {
+        status_commercial:  'awaiting_acceptance',
+        status_operational: 'new',
+      }),
       payment_status:     'pending',
     }))
     // Casa cada linha ao item de origem por booking_code (a ordem do RETURNING
@@ -988,6 +1044,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
         await insertBookingVehicles(b.id, vehicles).catch((err) =>
           console.error('[cart-request] veículos falharam:', err.message))
       }
+      if (partner) continue // venda direta: sem fila; um aviso único abaixo
       notifyOperatorsNewBooking(supabase, b).catch((err) =>
         console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
       const isTransfer = b.service_type === 'transfer'
@@ -1000,11 +1057,23 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       })
     }
 
+    if (partner) {
+      notifyUser({
+        userId:      partner.id,
+        bookingId:   bookings[0]?.id,
+        templateKey: 'new_booking',
+        title:       'Venda direta pelo seu link 🎉',
+        body:        `Pedido com ${bookings.length} serviço(s) pelo seu link. O cliente já pode pagar tudo junto.`,
+      })
+    }
+
     res.json({
       order_group_id: orderGroupId,
+      partner_name:   partner?.full_name || null,
       bookings: bookings.map((b) => ({
         booking_id: b.id, booking_code: b.booking_code,
         service_id: b.service_id, amount: b.total_amount,
+        status_commercial: b.status_commercial,
       })),
     })
   } catch (err) { next(err) }

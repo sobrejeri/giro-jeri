@@ -20,7 +20,7 @@ const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
 const PROFILE_FIELDS = `
   id, full_name, email, phone, document_type, document_number, birth_date,
-  profile_photo_url, address, cep,
+  profile_photo_url, address, cep, partner_slug,
   pix_key_type, pix_key,
   bank_name, bank_agency, bank_account_number, bank_account_type, bank_document
 `.trim();
@@ -67,11 +67,21 @@ router.use(authenticate, requireOperator);
 // GET /api/operator/profile
 router.get('/profile', async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('users')
       .select(PROFILE_FIELDS)
       .eq('id', req.user.id)
       .single();
+    if (error?.code === '42703') {
+      // Migration 054 (partner_slug) ainda não rodou — devolve o perfil sem o
+      // campo em vez de quebrar a tela da cooperativa.
+      const retry = await supabase
+        .from('users')
+        .select(PROFILE_FIELDS.replace(', partner_slug', ''))
+        .eq('id', req.user.id)
+        .single();
+      data = retry.data; error = retry.error;
+    }
     if (error) throw error;
     res.json(data);
   } catch (err) { next(err); }

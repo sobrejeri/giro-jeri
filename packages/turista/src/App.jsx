@@ -19,6 +19,7 @@ import Profile         from './pages/Profile'
 import Auth            from './pages/Auth'
 import Legal           from './pages/Legal'
 import CartPage        from './pages/CartPage'
+import PartnerLink     from './pages/PartnerLink'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -54,6 +55,7 @@ export default function App() {
     <SpaRedirectHandler />
     <Routes>
       {/* Auth — full screen, sem layout */}
+      <Route path="/c/:slug"  element={<PartnerLink />} />
       <Route path="/login"    element={<Auth defaultTab="login" />} />
       <Route path="/cadastro" element={<Auth defaultTab="register" />} />
 

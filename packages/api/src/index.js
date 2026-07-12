@@ -22,6 +22,7 @@ import establishmentsRoutes from './routes/establishments.js';
 import notificationsRoutes from './routes/notifications.js';
 import { regionsRouter } from './routes/regions.js';
 import { seasonsRouter } from './routes/seasons.js';
+import { partnerRouter } from './routes/partner.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const app  = express();
@@ -93,6 +94,7 @@ app.use('/api/bookings',  bookingsRoutes);
 app.use('/api/payments',  paymentsRoutes);
 app.use('/api/regions',   regionsRouter);
 app.use('/api/seasons',   seasonsRouter);
+app.use('/api/partner',   partnerRouter);
 app.use('/api/admin',     adminRoutes);
 app.use('/api/vehicles',  vehiclesRoutes);
 app.use('/api/catalog',   catalogRoutes);

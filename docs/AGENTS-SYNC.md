@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 053.**
+   registre aqui o número reservado. **Próximo número livre: 055.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,38 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-10 · Agente B (link de vendas direto por cooperativa — migration 054)**
+  — Cada coop ganha `users.partner_slug` (único; backfill p/ operadores ativos).
+  Novo `GET /api/partner/:slug` (público, só nome/foto). `/payments/request` e
+  `/cart-request` aceitam `partner_slug` (NUNCA operator_id cru): o servidor
+  resolve o slug e a(s) reserva(s) nascem **atribuídas** (`operator_id` +
+  `awaiting_payment` + `assigned` — mesmo estado do aceite), **sem fila** e sem
+  notificar as demais coops; só a dona do link é avisada. Turista: rota
+  `/c/:slug` (grava atribuição 7 dias em localStorage), selo verde "Reservando
+  com X" no Layout (X remove), Resumo → se nascer awaiting_payment vai DIRETO
+  pro pagamento; carrinho envia partner_slug (grupo inteiro atribuído).
+  Cooperativa: card "Meu link de vendas" no Perfil (copiar + WhatsApp);
+  `GET /operator/profile` devolve partner_slug (⚠️ exige migration 054 ANTES do
+  deploy da API — senão o Perfil da coop quebra com 42703). BÔNUS: split de
+  pagamento de GRUPO com motor OFF agora reconhece grupo 100% de uma coop
+  (combo aceito/venda direta) e sela na conta dela — antes caía na plataforma.
+  Próx. migration livre: **055**.
+
+- **2026-07-10 · Agente B (revisão completa de RLS — migration 053)** — Após o
+  incidente do "sumiço silencioso" das regras de alta temporada (RLS ligado sem
+  política de SELECT → leitura pública voltava []), revisão completa:
+  **RLS ligado em TODAS as tabelas** (deny-by-default). Conteúdo público
+  (seasons/holidays/feed_posts/establishments/comments/likes/est_reviews) ganhou
+  política de SELECT explícita; sensíveis (system_settings ⚠️ chaves PIX,
+  payment_events, financial_ledger, commissions, coupons, vehicle_pricing_rules
+  etc.) ficam SEM política — só a API (service_role) enxerga. `req.supabase`
+  (papel authenticated) só toca tabelas já cobertas por 001/029/030/033/034 —
+  nada quebra. Fatos apurados: o cliente global da API bypassa RLS (bookings/
+  payments RLS'd desde 001 e as gravações funcionam), e o [] persistente do
+  /api/seasons era **cache do Safari** + regras inativas no banco. Guarda de
+  boot: conferir no log do Render `[supabase] chave carregada: role=…` =
+  service_role/sb_secret. Próx. migration livre: **054**.
 
 - **2026-07-09 · Agente B (passeios: tradicionais vs exclusivos)** — Novo campo
   `tours.is_exclusive` (migration **051**). **Tradicional** (padrão): carrinho/
@@ -212,8 +244,10 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Estado da plataforma (resumo p/ contexto rápido)
 
-- Flag `booking_legs_engine_enabled` = **ON** em produção (plataforma ainda
-  sem uso ativo — em desenvolvimento).
+- Flag `booking_legs_engine_enabled` = **OFF** (decisão de produto 2026-07-10:
+  reserva INTEIRA aceita por 1 cooperativa, sem divisão por pernas; passeios
+  exclusivos = venda direta). O motor de pernas continua no código, atrás da
+  flag, caso volte a ser necessário.
 - Última migration aplicada em prod: **048** (cancel_overdue_leg_bookings).
   Se PostgREST não enxergar a função: `NOTIFY pgrst, 'reload schema';`
 - Carrinho: localStorage `turiva_cart_v1`; item carrega `cap` por veículo
