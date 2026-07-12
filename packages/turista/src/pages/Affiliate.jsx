@@ -36,6 +36,7 @@ export default function Affiliate() {
   if (!token) return <Navigate to="/login" state={{ from: '/afiliado' }} replace />
 
   const code = data?.code || null
+  const percent = Number(data?.percent) || 5
   const link = code ? `${window.location.origin}/a/${code}` : null
   const shareText = code
     ? `Bora conhecer Jericoacoara? 🌴 Reserve passeios e transfers pelo Turiva com o meu link: ${link}`
@@ -71,7 +72,7 @@ export default function Affiliate() {
           <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center mb-3">
             <Megaphone size={20} className="text-white" />
           </div>
-          <p className="text-[18px] font-extrabold leading-tight">Indique amigos e ganhe 5% de cada reserva paga 🤑</p>
+          <p className="text-[18px] font-extrabold leading-tight">Indique amigos e ganhe {percent}% de cada reserva paga 🤑</p>
           <p className="text-[12px] text-white/85 mt-1.5 leading-relaxed">
             Compartilhe seu link. Quem entrar por ele fica ligado a você por 30 dias —
             toda reserva paga vira comissão sua, repassada via PIX em até 7 dias.
@@ -177,7 +178,7 @@ export default function Affiliate() {
           <ol className="space-y-2 text-[12.5px] text-gray-600 leading-relaxed list-decimal list-inside">
             <li>Ative seu link e compartilhe com amigos e seguidores.</li>
             <li>Quem abrir o link (ou usar seu código) fica ligado a você por 30 dias.</li>
-            <li>Cada reserva paga gera <b>5% de comissão</b> para você.</li>
+            <li>Cada reserva paga gera <b>{percent}% de comissão</b> para você.</li>
             <li>O repasse é feito via <b>PIX em até 7 dias</b>.</li>
           </ol>
           <p className="text-[11px] text-gray-400 mt-2">

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Megaphone, Check, Copy } from 'lucide-react'
+import { Megaphone, Check, Copy, Percent } from 'lucide-react'
 import { format } from 'date-fns'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -22,6 +22,25 @@ export default function Afiliados() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin-commissions', status],
     queryFn:  () => api.getCommissions(status === 'all' ? {} : { status }),
+  })
+
+  // ── Taxa de comissão (ajuste manual do admin) ──────────
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.getSettings() })
+  const currentPct = settings?.find((x) => x.setting_key === 'affiliate_commission_percent')?.setting_value
+  const [pct, setPct] = useState('')
+  const [pctSaved, setPctSaved] = useState(false)
+  useEffect(() => { if (currentPct != null && pct === '') setPct(String(currentPct)) }, [currentPct]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const savePct = useMutation({
+    mutationFn: () => api.updateSetting('affiliate_commission_percent', {
+      setting_value: String(Math.max(0, Math.min(100, Number(pct) || 0))),
+      value_type:    'number',
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      setPctSaved(true)
+      setTimeout(() => setPctSaved(false), 2000)
+    },
   })
 
   const payMut = useMutation({
@@ -46,6 +65,36 @@ export default function Afiliados() {
 
   return (
     <div className="space-y-4">
+      {/* Taxa de comissão */}
+      <Card>
+        <CardBody className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2 text-gray-300">
+            <Percent size={16} className="text-orange-400" />
+            <p className="font-semibold">Taxa de comissão dos afiliados</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min="0" max="100" step="0.5"
+              value={pct}
+              onChange={(e) => setPct(e.target.value)}
+              className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-orange-500"
+            />
+            <span className="text-sm text-gray-400">%</span>
+            <Button
+              size="sm"
+              disabled={savePct.isPending || pct === '' || String(currentPct) === String(pct)}
+              onClick={() => savePct.mutate()}
+            >
+              {pctSaved ? 'Salvo ✓' : savePct.isPending ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500 basis-full">
+            Vale para as PRÓXIMAS reservas pagas — comissões já geradas não mudam.
+            O app do turista mostra a taxa vigente automaticamente.
+          </p>
+        </CardBody>
+      </Card>
+
       {/* Filtro + resumo */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2">

@@ -168,6 +168,7 @@ export const api = {
   resolveAffiliate:       (code) => request(`/api/affiliate/resolve/${encodeURIComponent(code)}`),
   affiliateActivate:      ()     => request('/api/affiliate/activate', { method: 'POST' }),
   affiliateMe:            ()     => request('/api/affiliate/me'),
+  validateCoupon:         (body) => request('/api/payments/validate-coupon', { method: 'POST', body }),
   createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
   getCheckoutKey:         (id)   => request(`/api/payments/booking/${id}/checkout-key`),
   // Checkout parcial (R3): cancela as pernas ainda pendentes e libera o

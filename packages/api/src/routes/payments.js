@@ -6,7 +6,7 @@ import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
-import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance } from '../services/priceEngine.js'
+import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance, applyCoupon } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
 import { sweepExpiredLegBookings } from '../services/legFlow.js'
 
@@ -139,15 +139,18 @@ async function getPaymentSettings() {
   return Object.fromEntries(data.map((s) => [s.setting_key, s.setting_value]))
 }
 
-// Recalcula o valor autoritativo da reserva (alta temporada / feriado) a partir
-// do serviço, data e veículos. O cliente nunca define o valor cobrado.
-// Em caso de falha, mantém o total enviado pelo cliente como fallback.
+// Recalcula o valor autoritativo da reserva (alta temporada / feriado / cupom)
+// a partir do serviço, data e veículos. O cliente nunca define o valor cobrado.
+// Devolve { total, couponId, discountAmount } para a reserva gravar o cupom e
+// registrar o uso (coupon_redemptions). Falha → total do cliente, sem cupom.
 async function computeChargedTotal({ data, userId }) {
   const {
     service_type, service_id, booking_mode, service_date_iso,
     people_count, region_id, vehicles = [], coupon_code, total_price,
   } = data
-  let chargedTotal = Number(total_price)
+  let chargedTotal   = Number(total_price)
+  let couponId       = null
+  let discountAmount = 0
   try {
     if (service_type === 'tour' && service_id && region_id && service_date_iso) {
       let r = null
@@ -165,7 +168,11 @@ async function computeChargedTotal({ data, userId }) {
           })
         }
       }
-      if (r && typeof r.totalAmount === 'number') chargedTotal = r.totalAmount
+      if (r && typeof r.totalAmount === 'number') {
+        chargedTotal   = r.totalAmount
+        couponId       = r.couponId || null
+        discountAmount = Number(r.discountAmount) || 0
+      }
     } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
       // Rota tabelada: recalcula a partir do preço da rota × veículos + acréscimo
       // de data. Cotações (translado personalizado) têm preço fechado pela
@@ -177,13 +184,22 @@ async function computeChargedTotal({ data, userId }) {
         const baseSubtotal = Math.round(Number(route.default_price) * vehicleCount * 100) / 100
         const surcharge    = await getDateSurcharge(region_id, service_date_iso, baseSubtotal)
         chargedTotal       = Math.round((baseSubtotal + surcharge) * 100) / 100
+        // Cupom em transfer tabelado (os calculate* de passeio já aplicam)
+        if (coupon_code) {
+          const c = await applyCoupon(coupon_code, userId, region_id, 'transfer', chargedTotal)
+          couponId       = c.couponId || null
+          discountAmount = Number(c.discount) || 0
+          chargedTotal   = Math.round((chargedTotal - discountAmount) * 100) / 100
+        }
       }
     }
   } catch (e) {
     console.error('[payments] recálculo de preço falhou, usando total do cliente:', e.message)
-    chargedTotal = Number(total_price)
+    chargedTotal   = Number(total_price)
+    couponId       = null
+    discountAmount = 0
   }
-  return chargedTotal
+  return { total: chargedTotal, couponId, discountAmount }
 }
 
 // Credenciais Mercado Pago da cooperativa (com refresh automático se o token
@@ -442,7 +458,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
     //    dos totais já gravados das reservas do grupo (definido abaixo). ───────
     let chargedTotal = existing_booking_id
       ? Number(total_price)
-      : isGroup ? 0 : await computeChargedTotal({ data: parsed.data, userId: req.user.id })
+      : isGroup ? 0 : (await computeChargedTotal({ data: parsed.data, userId: req.user.id })).total
 
     // ── 1. Lê configurações do gateway ─────────────────
     const cfg     = await getPaymentSettings()
@@ -834,6 +850,32 @@ router.post('/intent', authenticate, async (req, res, next) => {
 // Cria a reserva SEM pagamento (fluxo solicitar → aceitar → pagar). A reserva
 // nasce em 'awaiting_acceptance' e as cooperativas são notificadas para aceitar.
 // O pagamento acontece depois, via POST /intent com existing_booking_id.
+// ── POST /api/payments/validate-coupon ──────────────────
+// Valida um cupom ANTES da solicitação, para o app mostrar o desconto na
+// hora (Resumo e Carrinho). A aplicação autoritativa continua no servidor
+// na criação da reserva — isto aqui é só feedback.
+router.post('/validate-coupon', authenticate, async (req, res, next) => {
+  try {
+    const { coupon_code, service_type, region_id, subtotal } = req.body || {}
+    if (!coupon_code || typeof coupon_code !== 'string') {
+      return res.status(400).json({ error: 'Informe o código do cupom' })
+    }
+    const sub = Number(subtotal) || 0
+    const { discount, couponId } = await applyCoupon(
+      coupon_code.trim(), req.user.id, region_id || null, service_type || null, sub,
+    )
+    const { data: c } = await supabase
+      .from('coupons')
+      .select('code, title, discount_type, discount_value, applicable_service_type')
+      .eq('id', couponId)
+      .single()
+    res.json({ valid: true, discount, coupon: c })
+  } catch (err) {
+    if (err?.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
+})
+
 router.post('/request', authenticate, async (req, res, next) => {
   try {
     const parsed = requestSchema.safeParse(nullToUndefined(req.body))
@@ -869,7 +911,8 @@ router.post('/request', authenticate, async (req, res, next) => {
     const aff = parsed.data.affiliate_code ? await resolveAffiliate(parsed.data.affiliate_code) : null
     const affiliateId = aff && aff.id !== req.user.id ? aff.id : null
 
-    const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
+    const { total: chargedTotal, couponId, discountAmount } =
+      await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
     const baseBooking = {
@@ -885,6 +928,7 @@ router.post('/request', authenticate, async (req, res, next) => {
       origin_text:        origin_text || null,
       destination_text:   destination_text || null,
       total_amount:       chargedTotal,
+      ...(couponId ? { coupon_id: couponId, discount_amount: discountAmount } : {}),
       ...(affiliateId ? { affiliate_id: affiliateId, source_channel: 'affiliate_link' } : {}),
       ...(partner ? {
         operator_id:        partner.id,
@@ -916,6 +960,16 @@ router.post('/request', authenticate, async (req, res, next) => {
 
     if (vehicles.length > 0) {
       await insertBookingVehicles(booking.id, vehicles)
+    }
+
+    // Registra o uso do cupom (limites total/por usuário contam sobre isto)
+    if (couponId) {
+      await supabase.from('coupon_redemptions').insert({
+        coupon_id:               couponId,
+        user_id:                 req.user.id,
+        booking_id:              booking.id,
+        discount_applied_amount: discountAmount,
+      })
     }
 
     const isTransfer = service_type === 'transfer'
@@ -979,9 +1033,20 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     const aff = affiliate_code ? await resolveAffiliate(affiliate_code) : null
     const affiliateId = aff && aff.id !== req.user.id ? aff.id : null
 
+    // Cupom de valor FIXO desconta uma vez só (no 1º item elegível) — o
+    // percentual vale para todos os itens elegíveis. Detecta o tipo antes.
+    const cartCouponCode = items.find((it) => it.coupon_code)?.coupon_code || null
+    let couponIsFixed = false
+    if (cartCouponCode) {
+      const { data: cRow } = await supabase
+        .from('coupons').select('discount_type').ilike('code', cartCouponCode).maybeSingle()
+      couponIsFixed = cRow?.discount_type && cRow.discount_type !== 'percentage'
+    }
+
     // 1) Valida TODOS os itens (antecedência, cutoff, total autoritativo) antes
     //    de criar qualquer reserva. Falha → índice + motivo, nada é inserido.
     const prepared = []
+    let couponApplied = false
     for (let i = 0; i < items.length; i++) {
       const it = items[i]
       try {
@@ -992,8 +1057,11 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
           service_type: it.service_type, service_id: it.service_id, service_date_iso: it.service_date_iso,
         })
         if (cutoffErr) throw { status: 400, message: cutoffErr }
-        const chargedTotal = await computeChargedTotal({ data: it, userId: req.user.id })
-        prepared.push({ it, chargedTotal })
+        const itemData = (couponIsFixed && couponApplied) ? { ...it, coupon_code: undefined } : it
+        const { total: chargedTotal, couponId, discountAmount } =
+          await computeChargedTotal({ data: itemData, userId: req.user.id })
+        if (couponId) couponApplied = true
+        prepared.push({ it, chargedTotal, couponId, discountAmount })
       } catch (err) {
         return res.status(err?.status || 400).json({
           error: err?.message || 'Item inválido no carrinho', item_index: i, service_id: it.service_id,
@@ -1006,7 +1074,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     const orderGroupId = crypto.randomUUID()
     const now = Date.now()
     const acceptanceExpiresAt = new Date(now + 24 * 60 * 60 * 1000).toISOString()
-    const rows = prepared.map(({ it, chargedTotal }, i) => ({
+    const rows = prepared.map(({ it, chargedTotal, couponId, discountAmount }, i) => ({
       booking_code:       `GJ${(now + i).toString(36).toUpperCase().slice(-6)}`,
       user_id:            req.user.id,
       order_group_id:     orderGroupId,
@@ -1020,6 +1088,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       origin_text:        it.origin_text || null,
       destination_text:   it.destination_text || null,
       total_amount:       chargedTotal,
+      ...(couponId ? { coupon_id: couponId, discount_amount: discountAmount } : {}),
       ...(affiliateId ? { affiliate_id: affiliateId, source_channel: 'affiliate_link' } : {}),
       ...(partner ? {
         operator_id:        partner.id,
@@ -1033,7 +1102,8 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     }))
     // Casa cada linha ao item de origem por booking_code (a ordem do RETURNING
     // não é garantida pelo SQL — não confiar no índice do array).
-    const bySrc = new Map(rows.map((r, i) => [r.booking_code, prepared[i].it]))
+    const bySrc     = new Map(rows.map((r, i) => [r.booking_code, prepared[i].it]))
+    const prepByCode = new Map(rows.map((r, i) => [r.booking_code, prepared[i]]))
 
     let { data: bookings, error: bErr } = await supabase
       .from('bookings')
@@ -1061,6 +1131,18 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       if (vehicles.length > 0) {
         await insertBookingVehicles(b.id, vehicles).catch((err) =>
           console.error('[cart-request] veículos falharam:', err.message))
+      }
+      // Registra o uso do cupom desta reserva (limites contam sobre isto)
+      const prep = prepByCode.get(b.booking_code)
+      if (prep?.couponId) {
+        await supabase.from('coupon_redemptions').insert({
+          coupon_id:               prep.couponId,
+          user_id:                 req.user.id,
+          booking_id:              b.id,
+          discount_applied_amount: prep.discountAmount,
+        }).then(({ error }) => {
+          if (error) console.error('[cart-request] redemption falhou:', error.message)
+        })
       }
       if (partner) continue // venda direta: sem fila; um aviso único abaixo
       notifyOperatorsNewBooking(supabase, b).catch((err) =>

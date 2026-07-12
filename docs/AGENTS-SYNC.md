@@ -28,6 +28,21 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-12 · Agente A (taxa de comissão editável + cupons ponta a ponta)** —
+  (1) Admin ajusta a % dos afiliados na página Afiliados (upsert em
+  `system_settings.affiliate_commission_percent`); `/affiliate/me` devolve
+  `percent` e o app do turista mostra a taxa vigente (banner da Home ficou
+  genérico). (2) Cupons validados de ponta a ponta — o motor (`applyCoupon`)
+  já validava, mas o fluxo novo descartava: `computeChargedTotal` agora devolve
+  `{total, couponId, discountAmount}`; `/request` e `/cart-request` gravam
+  `coupon_id`/`discount_amount` na reserva e registram `coupon_redemptions`
+  (limites passam a contar); cupom funciona também em transfer tabelado;
+  novo `POST /payments/validate-coupon` (feedback no app). Turista: campo
+  "Cupom de desconto" no Resumo (linha de desconto no total) e no Carrinho
+  (valida por tipo elegível, envia o código só nos itens que valem; cupom de
+  VALOR FIXO desconta uma vez — percentual vale em cada item elegível).
+  Caller `/intent` ajustado (`.total`). Sem migration nova (coupons é do 001).
+
 - **2026-07-12 · Agente A (afiliados — ajustes do usuário)** — Prazo do repasse
   virou **7 dias corridos** (era úteis) em todos os textos + `payout_due_date`.
   Reforço anti-autoindicação no CLIENTE: abrir o **próprio** link `/a/<código>`

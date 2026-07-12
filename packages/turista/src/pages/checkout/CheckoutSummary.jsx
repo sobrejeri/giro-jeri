@@ -239,6 +239,14 @@ function CheckoutSummaryInner() {
 
   const serverCalc = tourCalc || transferCalc
 
+  /* ── Cupom de desconto (criado pelo admin) ──────────────────
+     Valida no servidor para mostrar o desconto na hora; a aplicação
+     autoritativa acontece de novo na criação da reserva. */
+  const [couponInput,   setCouponInput]   = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState(null) // { code, discount }
+  const [couponErr,     setCouponErr]     = useState('')
+  const [couponBusy,    setCouponBusy]    = useState(false)
+
   /* ── Early return after hooks ────────────────────────────── */
   if (!ls) { navigate(-1); return null }
 
@@ -284,9 +292,31 @@ function CheckoutSummaryInner() {
   // Passeios trazem `totalAmount` já fechado; translado tabelado soma o
   // acréscimo ao subtotal exibido.
   const dateSurcharge = Number(serverCalc?.seasonAdditional) || 0
-  const displayTotal  = (serverCalc && typeof serverCalc.totalAmount === 'number')
+  const baseDisplayTotal = (serverCalc && typeof serverCalc.totalAmount === 'number')
     ? serverCalc.totalAmount
     : activeTotal + dateSurcharge
+  const couponDiscount = Math.min(Number(appliedCoupon?.discount) || 0, baseDisplayTotal)
+  const displayTotal   = Math.round((baseDisplayTotal - couponDiscount) * 100) / 100
+
+  async function applyCouponCode() {
+    const code = couponInput.trim()
+    if (!code || couponBusy) return
+    setCouponBusy(true); setCouponErr('')
+    try {
+      const r = await api.validateCoupon({
+        coupon_code:  code,
+        service_type: ls.service_type,
+        region_id:    ls.region_id || undefined,
+        subtotal:     baseDisplayTotal,
+      })
+      setAppliedCoupon({ code: code.toUpperCase(), discount: Number(r?.discount) || 0 })
+    } catch (err) {
+      setAppliedCoupon(null)
+      setCouponErr(err?.message || 'Cupom inválido')
+    } finally {
+      setCouponBusy(false)
+    }
+  }
 
   const capacityOk  = !hasVehicles || (cartHasItems && cartCapacity >= people)
   const canSave     = capacityOk
@@ -321,10 +351,12 @@ function CheckoutSummaryInner() {
     vehicles:        cartHasItems
       ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(unitPriceFor(vehicle)) || 0 }))
       : ls.vehicles,
+    // Cupom validado: o servidor reaplica e desconta do total autoritativo.
+    coupon_code:     appliedCoupon?.code || undefined,
     // `total_price` é a BASE que o servidor usa para cobrar. Em translado é o
     // subtotal CRU (sem acréscimo) — o servidor soma a alta temporada uma única
     // vez. `display_total` é só para exibição (já com o acréscimo).
-    total_price:     isTransfer ? activeTotal : displayTotal,
+    total_price:     isTransfer ? activeTotal : baseDisplayTotal,
     display_total:   displayTotal,
     service_name:    ls.service_name,
     cover_image_url: ls.cover_image_url || undefined,
@@ -735,6 +767,42 @@ function CheckoutSummaryInner() {
                 <span className="text-[13px] font-semibold text-amber-600">+ R$ {fmt(dateSurcharge)}</span>
               </div>
             )}
+
+            {/* Cupom de desconto */}
+            {appliedCoupon ? (
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-emerald-600 font-semibold">
+                  Cupom {appliedCoupon.code}
+                  <button
+                    onClick={() => { setAppliedCoupon(null); setCouponInput('') }}
+                    className="ml-2 text-[11px] text-gray-400 underline"
+                  >
+                    remover
+                  </button>
+                </span>
+                <span className="text-[13px] font-semibold text-emerald-600">− R$ {fmt(couponDiscount)}</span>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={couponInput}
+                    onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponErr('') }}
+                    placeholder="Cupom de desconto"
+                    className="flex-1 bg-gray-50 rounded-xl px-3 py-2 text-[13px] text-gray-800 uppercase tracking-wide outline-none focus:ring-2 focus:ring-brand/30 placeholder:normal-case placeholder:tracking-normal"
+                  />
+                  <button
+                    onClick={applyCouponCode}
+                    disabled={!couponInput.trim() || couponBusy}
+                    className="shrink-0 border border-brand/40 text-brand text-[12px] font-bold px-3.5 py-2 rounded-xl active:scale-95 disabled:opacity-40"
+                  >
+                    {couponBusy ? 'Validando…' : 'Aplicar'}
+                  </button>
+                </div>
+                {couponErr && <p className="text-[11px] text-red-500 mt-1">{couponErr}</p>}
+              </div>
+            )}
+
             <div className="border-t border-gray-100 pt-2 mt-1 flex items-center justify-between">
               <span className="text-[15px] font-bold text-gray-900">Total</span>
               {hasPricing

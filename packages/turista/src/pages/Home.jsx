@@ -498,7 +498,7 @@ export default function Home() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[14px] font-extrabold text-white leading-tight">DIVULGOU, GANHOU</p>
-            <p className="text-[11.5px] text-white/85 mt-0.5">Indique amigos e ganhe 5% de cada reserva paga</p>
+            <p className="text-[11.5px] text-white/85 mt-0.5">Indique amigos e ganhe comissão a cada reserva paga</p>
           </div>
           <ArrowRight size={16} className="text-white shrink-0" />
         </button>

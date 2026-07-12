@@ -410,6 +410,52 @@ export default function CartPage() {
     .filter((t) => t && !cartIds.has(t.id))
     .slice(0, 8)
 
+  /* ── Cupom de desconto no carrinho ──────────────────────
+     Valida contra os tipos presentes (passeio/transfer); no envio o código
+     vai só nos itens elegíveis — o servidor reaplica com autoridade
+     (percentual em cada item elegível; valor fixo desconta uma vez). */
+  const [couponInput,   setCouponInput]   = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState(null) // {code, discount, applicable}
+  const [couponErr,     setCouponErr]     = useState('')
+  const [couponBusy,    setCouponBusy]    = useState(false)
+
+  const couponEligible = (it) =>
+    !appliedCoupon?.applicable ||
+    (appliedCoupon.applicable === 'transfer' ? it.kind === 'transfer' : it.kind !== 'transfer')
+
+  async function applyCartCoupon() {
+    const code = couponInput.trim()
+    if (!code || couponBusy) return
+    if (!user) { navigate('/login', { state: { from: '/carrinho' } }); return }
+    setCouponBusy(true); setCouponErr('')
+    const subFor = (kind) => items.filter((i) => (kind === 'transfer') === (i.kind === 'transfer'))
+      .reduce((s, i) => s + (Number(i.total) || 0), 0)
+    // Tenta primeiro o tipo com maior subtotal; se o cupom for restrito ao
+    // outro tipo, tenta de novo com ele.
+    const kinds = [['tour', subFor('tour')], ['transfer', subFor('transfer')]]
+      .filter(([, sub]) => sub > 0).sort((a, b) => b[1] - a[1])
+    let lastErr = 'Cupom inválido'
+    for (const [kind, sub] of kinds) {
+      try {
+        const r = await api.validateCoupon({
+          coupon_code: code, service_type: kind,
+          region_id: items.find((i) => (kind === 'transfer') === (i.kind === 'transfer'))?.region_id || undefined,
+          subtotal: sub,
+        })
+        setAppliedCoupon({
+          code: code.toUpperCase(),
+          discount: Number(r?.discount) || 0,
+          applicable: r?.coupon?.applicable_service_type || null,
+        })
+        setCouponBusy(false)
+        return
+      } catch (err) { lastErr = err?.message || lastErr }
+    }
+    setAppliedCoupon(null)
+    setCouponErr(lastErr)
+    setCouponBusy(false)
+  }
+
   const list = batch || items
   const allComplete = items.length > 0 && items.every((i) => itemMissing(i).length === 0)
   const okCount  = Object.values(results).filter((r) => r.status === 'ok').length
@@ -431,7 +477,10 @@ export default function CartPage() {
       const partner = getPartnerAttribution()
       const affiliate = getAffiliateAttribution()
       const created = await api.cartRequest(
-        snapshot.map(requestPayloadFor),
+        snapshot.map((it) => ({
+          ...requestPayloadFor(it),
+          ...(appliedCoupon && couponEligible(it) ? { coupon_code: appliedCoupon.code } : {}),
+        })),
         {
           ...(partner?.slug ? { partner_slug: partner.slug } : {}),
           ...(affiliate?.code ? { affiliate_code: affiliate.code } : {}),
@@ -608,9 +657,54 @@ export default function CartPage() {
             </>
           ) : (
             <>
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between">
+                  <p className="text-[12px] text-emerald-600 font-bold">
+                    Cupom {appliedCoupon.code}
+                    {appliedCoupon.applicable && (
+                      <span className="text-gray-400 font-semibold"> · só {appliedCoupon.applicable === 'transfer' ? 'translados' : 'passeios'}</span>
+                    )}
+                    <button
+                      onClick={() => { setAppliedCoupon(null); setCouponInput('') }}
+                      className="ml-2 text-[11px] text-gray-400 underline"
+                    >
+                      remover
+                    </button>
+                  </p>
+                  <p className="text-[13px] font-bold text-emerald-600">− {fmt(appliedCoupon.discount)}</p>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={couponInput}
+                      onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponErr('') }}
+                      placeholder="Cupom de desconto"
+                      className="flex-1 bg-gray-50 rounded-xl px-3 py-2 text-[12.5px] text-gray-800 uppercase tracking-wide outline-none focus:ring-2 focus:ring-brand/30 placeholder:normal-case placeholder:tracking-normal"
+                    />
+                    <button
+                      onClick={applyCartCoupon}
+                      disabled={!couponInput.trim() || couponBusy || items.length === 0}
+                      className="shrink-0 border border-brand/40 text-brand text-[12px] font-bold px-3.5 py-2 rounded-xl active:scale-95 disabled:opacity-40"
+                    >
+                      {couponBusy ? '…' : 'Aplicar'}
+                    </button>
+                  </div>
+                  {couponErr && <p className="text-[11px] text-red-500 mt-1">{couponErr}</p>}
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <p className="text-[12px] text-gray-500 font-semibold">Total</p>
-                <p className="text-[19px] font-extrabold text-gray-900">{fmt(total)}</p>
+                <div className="text-right">
+                  {appliedCoupon && appliedCoupon.discount > 0 ? (
+                    <>
+                      <p className="text-[11px] text-gray-400 line-through">{fmt(total)}</p>
+                      <p className="text-[19px] font-extrabold text-gray-900">{fmt(Math.max(0, total - appliedCoupon.discount))}</p>
+                    </>
+                  ) : (
+                    <p className="text-[19px] font-extrabold text-gray-900">{fmt(total)}</p>
+                  )}
+                </div>
               </div>
               <button
                 onClick={submitAll}

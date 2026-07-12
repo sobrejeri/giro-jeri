@@ -78,9 +78,15 @@ affiliateRouter.post('/activate', authenticate, async (req, res, next) => {
 // Painel do afiliado: código + comissões (com código da reserva) + totais.
 affiliateRouter.get('/me', authenticate, async (req, res, next) => {
   try {
+    // Percentual vigente (admin ajusta em Configurações/Afiliados)
+    const { data: st } = await supabase
+      .from('system_settings').select('setting_value')
+      .eq('setting_key', 'affiliate_commission_percent').maybeSingle();
+    const percent = Number(st?.setting_value ?? 5) || 5;
+
     const { data: me } = await supabase
       .from('users').select('affiliate_code').eq('id', req.user.id).single();
-    if (!me?.affiliate_code) return res.json({ code: null, commissions: [], totals: { pending: 0, paid: 0 } });
+    if (!me?.affiliate_code) return res.json({ code: null, percent, commissions: [], totals: { pending: 0, paid: 0 } });
 
     const { data: commissions } = await supabase
       .from('commissions')
@@ -96,6 +102,7 @@ affiliateRouter.get('/me', authenticate, async (req, res, next) => {
 
     res.json({
       code: me.affiliate_code,
+      percent,
       commissions: list,
       totals: { pending: sum('pending') + sum('ready'), paid: sum('paid') },
     });
