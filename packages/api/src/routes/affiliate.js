@@ -31,7 +31,7 @@ export async function resolveAffiliate(code) {
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function generateCode(fullName = '') {
   const first = (fullName.trim().split(/\s+/)[0] || 'GIRO')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // remove acentos
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove acentos
     .replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 6) || 'GIRO';
   let rand = '';
   for (let i = 0; i < 4; i++) rand += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
@@ -68,6 +68,12 @@ affiliateRouter.post('/activate', authenticate, async (req, res, next) => {
         .from('users').update({ affiliate_code: code }).eq('id', req.user.id);
       if (!error) return res.json({ code, existing: false });
       lastErr = error; // 23505 = colisão do índice único → tenta outro código
+      // Coluna ausente = migration 055 não rodou — repetir não resolve.
+      if (error.code === '42703') break;
+    }
+    if (lastErr?.code === '42703') {
+      console.error('[affiliate] users.affiliate_code ausente — rodar migration 055.');
+      return res.status(503).json({ error: 'Programa de afiliados em ativação na plataforma — tente novamente em breve.' });
     }
     console.error('[affiliate] falha ao gerar código user=%s err=%s', req.user.id, lastErr?.message);
     res.status(500).json({ error: 'Não foi possível gerar seu código agora — tente de novo.' });

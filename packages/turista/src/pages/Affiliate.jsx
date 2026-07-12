@@ -193,15 +193,24 @@ export default function Affiliate() {
           <div className="flex justify-center py-10"><Loader2 size={22} className="text-brand animate-spin" /></div>
         ) : !code ? (
           /* Ainda não ativou */
-          <button
-            onClick={() => activate.mutate()}
-            disabled={activate.isPending}
-            className="w-full bg-brand text-white font-bold rounded-2xl py-4 text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60"
-          >
-            {activate.isPending
-              ? <><Loader2 size={16} className="animate-spin" /> Ativando…</>
-              : <>Ativar meu link de afiliado</>}
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => activate.mutate()}
+              disabled={activate.isPending}
+              className="w-full bg-brand text-white font-bold rounded-2xl py-4 text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60"
+            >
+              {activate.isPending
+                ? <><Loader2 size={16} className="animate-spin" /> Ativando…</>
+                : activate.isError
+                  ? <>Tentar de novo</>
+                  : <>Ativar meu link de afiliado</>}
+            </button>
+            {activate.isError && (
+              <p className="text-[12px] text-red-500 bg-red-50 rounded-xl px-3.5 py-2.5 text-center">
+                {activate.error?.message || 'Não foi possível ativar agora — tente novamente.'}
+              </p>
+            )}
+          </div>
         ) : (
           <>
             {/* ── Painel do afiliado ───────────────────────── */}
