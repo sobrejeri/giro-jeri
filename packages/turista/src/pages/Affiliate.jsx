@@ -241,7 +241,9 @@ export default function Affiliate() {
   })
   const allTotal   = commissions.reduce((s2, c) => s2 + Number(c.commission_amount || 0), 0)
   const ticketMedio = commissions.length ? allTotal / commissions.length : 0
-  const link = code ? `${window.location.origin}/a/${code}` : null
+  // BASE_URL cobre o deploy em subcaminho (GitHub Pages: /giro-jeri/) — sem
+  // ele o link cairia em sobrejeri.github.io/a/... (404 fora do app).
+  const link = code ? `${window.location.origin}${import.meta.env.BASE_URL}a/${code}` : null
   const shareText = code
     ? `Bora conhecer Jericoacoara? 🌴 Reserve passeios e transfers pelo Turiva com o meu link: ${link}`
     : ''
