@@ -2,7 +2,7 @@
 // Programa de afiliados "DIVULGOU, GANHOU": qualquer usuário logado ativa seu
 // código com 1 toque (/a/<CÓDIGO> no app do turista) e ganha comissão sobre
 // reservas pagas de quem indicou (% em system_settings, padrão 5%; repasse
-// manual via PIX em até 7 dias úteis — fora do split automático).
+// manual via PIX em até 7 dias — fora do split automático).
 //
 // Segurança: o resolve público expõe só o primeiro nome + foto (selo
 // "Indicado por X"). A atribuição real acontece no servidor, em

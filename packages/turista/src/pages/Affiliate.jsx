@@ -14,7 +14,7 @@ const fmtBRL = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFrac
 // Página do programa de afiliados "DIVULGOU, GANHOU": qualquer usuário logado
 // ativa o próprio link com 1 toque, compartilha no WhatsApp e acompanha as
 // comissões (5% sobre reservas pagas de quem ele indicou; repasse manual via
-// PIX em até 7 dias úteis).
+// PIX em até 7 dias). O próprio link/código não vale para o dono.
 export default function Affiliate() {
   const navigate = useNavigate()
   const { user, token } = useAuth()
@@ -74,7 +74,7 @@ export default function Affiliate() {
           <p className="text-[18px] font-extrabold leading-tight">Indique amigos e ganhe 5% de cada reserva paga 🤑</p>
           <p className="text-[12px] text-white/85 mt-1.5 leading-relaxed">
             Compartilhe seu link. Quem entrar por ele fica ligado a você por 30 dias —
-            toda reserva paga vira comissão sua, repassada via PIX em até 7 dias úteis.
+            toda reserva paga vira comissão sua, repassada via PIX em até 7 dias.
           </p>
         </div>
 
@@ -178,9 +178,12 @@ export default function Affiliate() {
             <li>Ative seu link e compartilhe com amigos e seguidores.</li>
             <li>Quem abrir o link (ou usar seu código) fica ligado a você por 30 dias.</li>
             <li>Cada reserva paga gera <b>5% de comissão</b> para você.</li>
-            <li>O repasse é feito via <b>PIX em até 7 dias úteis</b>.</li>
+            <li>O repasse é feito via <b>PIX em até 7 dias</b>.</li>
           </ol>
-          <p className="text-[11px] text-gray-400 mt-2">Reservas feitas por você mesmo não geram comissão.</p>
+          <p className="text-[11px] text-gray-400 mt-2">
+            ⚠️ Seu link e seu código valem só para <b>outras pessoas</b> — usar nas
+            suas próprias reservas não gera comissão.
+          </p>
         </div>
       </div>
     </div>

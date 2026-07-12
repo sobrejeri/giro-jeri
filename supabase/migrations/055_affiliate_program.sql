@@ -8,7 +8,7 @@
 --   • Identificação por código OU link — atribuição vale por 30 dias (cliente).
 --   • Comissão gerada automaticamente quando a reserva é paga (% configurável,
 --     padrão 5%), com trava anti-autoindicação (na API).
---   • Repasse MANUAL via PIX em até 7 dias úteis (fora do split automático —
+--   • Repasse MANUAL via PIX em até 7 dias (fora do split automático —
 --     zero risco no dinheiro da cooperativa). Admin marca como pago.
 --
 -- O schema 001 já previa o programa: user_type 'affiliate' no enum,
@@ -46,7 +46,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_commissions_booking_affiliate
 -- ── 4. Percentual configurável ───────────────────────────────────────────────
 INSERT INTO system_settings (setting_key, setting_value, value_type, description)
 VALUES ('affiliate_commission_percent', '5', 'number',
-        'Percentual de comissão do programa de afiliados sobre o total pago da reserva indicada (repasse manual em até 7 dias úteis).')
+        'Percentual de comissão do programa de afiliados sobre o total pago da reserva indicada (repasse manual em até 7 dias).')
 ON CONFLICT (setting_key) DO NOTHING;
 
 -- ── Verificação (manual) ─────────────────────────────────────────────────────

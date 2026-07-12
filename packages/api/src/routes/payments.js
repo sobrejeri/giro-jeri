@@ -1729,20 +1729,9 @@ async function onGroupPaymentApproved(payment) {
 // ── Comissão do programa de afiliados ───────────────────
 // Gerada quando a reserva indicada é paga. % vem de system_settings
 // (affiliate_commission_percent, padrão 5). Repasse manual via PIX em até
-// 7 dias úteis (payout_due_date) — o admin marca como pago na tela Afiliados.
-// Idempotente: índice único (booking_id, affiliate_id) faz o INSERT duplicado
-// (webhook + polling) falhar com 23505, que é engolido em silêncio.
-function addBusinessDays(from, days) {
-  const d = new Date(from)
-  let left = days
-  while (left > 0) {
-    d.setDate(d.getDate() + 1)
-    const wd = d.getDay()
-    if (wd !== 0 && wd !== 6) left--
-  }
-  return d
-}
-
+// 7 dias corridos (payout_due_date) — o admin marca como pago na tela
+// Afiliados. Idempotente: índice único (booking_id, affiliate_id) faz o
+// INSERT duplicado (webhook + polling) falhar com 23505, engolido em silêncio.
 async function recordAffiliateCommission(booking) {
   if (!booking?.affiliate_id) return
   // Trava anti-autoindicação (defesa em profundidade — a criação já ignora)
@@ -1767,7 +1756,7 @@ async function recordAffiliateCommission(booking) {
     platform_amount:    Math.round((total - amount) * 100) / 100,
     operator_amount:    0,
     payout_status:      'pending',
-    payout_due_date:    addBusinessDays(new Date(), 7).toISOString().slice(0, 10),
+    payout_due_date:    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
   })
   if (error) {
     if (error.code === '23505') return // já lançada (webhook+polling) — ok
@@ -1780,7 +1769,7 @@ async function recordAffiliateCommission(booking) {
     bookingId:   booking.id,
     templateKey: 'affiliate_commission',
     title:       'Você ganhou uma comissão! 🤑',
-    body:        `Uma reserva indicada por você foi paga (${booking.booking_code}). Sua comissão de ${fmtBRL(amount)} será repassada via PIX em até 7 dias úteis.`,
+    body:        `Uma reserva indicada por você foi paga (${booking.booking_code}). Sua comissão de ${fmtBRL(amount)} será repassada via PIX em até 7 dias.`,
   })
 }
 

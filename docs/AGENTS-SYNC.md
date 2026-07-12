@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 055.**
+   registre aqui o número reservado. **Próximo número livre: 056.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,13 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-12 · Agente A (afiliados — ajustes do usuário)** — Prazo do repasse
+  virou **7 dias corridos** (era úteis) em todos os textos + `payout_due_date`.
+  Reforço anti-autoindicação no CLIENTE: abrir o **próprio** link `/a/<código>`
+  não grava atribuição e mostra aviso ("vale para amigos, não para você") —
+  o servidor já travava; agora a UX também. Corrigido o contador de migrations
+  deste arquivo: a **055 já é do programa de afiliados** → próxima livre é 056.
 
 - **2026-07-12 · Agente A (programa de afiliados "DIVULGOU, GANHOU")** — Retomei
   o desenho que o Agente B fez no chat antes do limite. Migration **055**
