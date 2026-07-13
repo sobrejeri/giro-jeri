@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { MapPin } from 'lucide-react'
+import PhoneInput from '../components/PhoneInput'
 
 export default function Register() {
   const navigate  = useNavigate()
@@ -17,8 +18,6 @@ export default function Register() {
   function set(field) {
     return (e) => {
       let v = e.target.value
-      // Telefone: mantém o +55 fixo no início.
-      if (field === 'phone' && !v.startsWith('+55')) v = '+55 ' + v.replace(/^\+?5?5?\s?/, '')
       setForm((f) => ({ ...f, [field]: v }))
     }
   }
@@ -77,13 +76,14 @@ export default function Register() {
               placeholder="seu@email.com"
               required
             />
-            <Input
-              label="WhatsApp (opcional)"
-              type="tel"
-              value={form.phone}
-              onChange={set('phone')}
-              placeholder="(88) 9 9999-9999"
-            />
+            <div>
+              <label className="text-[12px] font-semibold text-gray-600 mb-1 block">WhatsApp (opcional)</label>
+              <PhoneInput
+                value={form.phone}
+                onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+                placeholder="(88) 9 9999-9999"
+              />
+            </div>
             <Input
               label="Senha"
               type="password"

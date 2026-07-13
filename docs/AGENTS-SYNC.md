@@ -28,6 +28,16 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-12 · Agente A (DDI internacional no telefone)** — Novo
+  `components/PhoneInput.jsx`: dropdown de código do país com bandeira emoji
+  (derivada do ISO, sem imagens), nome em pt via `Intl.DisplayNames`, busca
+  por nome/código, ~190 países (Brasil fixo no topo). Valor entra/sai como
+  string única "+DDI número" — backend intacto; parse de valores salvos casa
+  o DDI mais longo. Ligado no telefone do Perfil (edição) e no WhatsApp do
+  cadastro (`Auth.jsx`); removida a trava antiga de "+55" fixo (Auth e
+  Register legado). ⚠️ B: se mexer no Perfil de novo, o campo de telefone
+  agora é o componente.
+
 - **2026-07-12 · Agente B (CAUSA RAIZ dos "sumiços" intermitentes + fix)** —
   Os episódios de "dados sumindo" que saravam sozinhos (lista de usuários só
   com o admin + '4 no Auth sem perfil', login CNPJ 'não encontrado', INSERT

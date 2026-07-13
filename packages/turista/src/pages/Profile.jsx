@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
+import PhoneInput from '../components/PhoneInput'
 import { api } from '../lib/api'
 import { setLang, LANGS } from '../i18n/index.js'
 import { validateBrDoc } from '../lib/document'
@@ -403,14 +404,11 @@ export default function Profile() {
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.phone')}</label>
-                      <input type="tel" placeholder={t('profile.phonePlaceholder')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand"
-                        value={form.phone || '+55 '}
-                        onFocus={() => { if (!form.phone) setForm((f) => ({ ...f, phone: '+55 ' })) }}
-                        onChange={(e) => {
-                          let v = e.target.value
-                          if (!v.startsWith('+55')) v = '+55 ' + v.replace(/^\+?5?5?\s?/, '')
-                          setForm((f) => ({ ...f, phone: v }))
-                        }} />
+                      <PhoneInput
+                        value={form.phone}
+                        onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+                        placeholder={t('profile.phonePlaceholder')}
+                      />
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.birthDate')}</label>

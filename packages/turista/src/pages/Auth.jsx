@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { MapPin, Eye, EyeOff, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import PhoneInput from '../components/PhoneInput'
 
 function TextField({ label, type = 'text', value, onChange, placeholder, required, autoFocus, hint }) {
   const [show, setShow] = useState(false)
@@ -97,10 +98,7 @@ export default function Auth({ defaultTab = 'login' }) {
   function setReg(field) {
     return (e) => {
       setError('')
-      let v = e.target.value
-      // Telefone: mantém o +55 fixo no início — mesma regra dos perfis.
-      if (field === 'phone' && !v.startsWith('+55')) v = '+55 ' + v.replace(/^\+?5?5?\s?/, '')
-      setRegForm((f) => ({ ...f, [field]: v }))
+      setRegForm((f) => ({ ...f, [field]: e.target.value }))
     }
   }
 
@@ -283,14 +281,15 @@ export default function Auth({ defaultTab = 'login' }) {
               placeholder={t('auth.emailPlaceholder')}
               required
             />
-            <TextField
-              label={t('auth.whatsapp')}
-              type="tel"
-              value={regForm.phone}
-              onChange={setReg('phone')}
-              placeholder={t('auth.whatsappPlaceholder')}
-              hint={t('auth.whatsappHint')}
-            />
+            <div>
+              <label className="text-[12px] font-semibold text-gray-600 mb-1 block">{t('auth.whatsapp')}</label>
+              <PhoneInput
+                value={regForm.phone}
+                onChange={(v) => { setError(''); setRegForm((f) => ({ ...f, phone: v })) }}
+                placeholder={t('auth.whatsappPlaceholder')}
+              />
+              <p className="text-[11px] text-gray-400 mt-1">{t('auth.whatsappHint')}</p>
+            </div>
             <TextField
               label={t('auth.password')}
               type="password"
