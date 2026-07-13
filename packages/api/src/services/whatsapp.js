@@ -102,6 +102,33 @@ export async function sendTestMessage(phone) {
 }
 
 /**
+ * WhatsApp para o AFILIADO — comissão gerada (reserva indicada foi PAGA).
+ * Regra do produto: comissão só existe após o pagamento; este aviso sai no
+ * mesmo evento. Fire-and-forget: erros logados, nunca derrubam a aprovação.
+ */
+export async function notifyAffiliateCommission(supabase, { affiliateId, booking, amount }) {
+  if (!isWhatsappEnabled() || !affiliateId || !booking) return { skipped: true }
+
+  const phone = await userPhone(supabase, affiliateId)
+  if (!phone) return { skipped: true, reason: 'afiliado sem telefone' }
+
+  const { tipo, data } = bookingSummary(booking)
+  const message =
+    `*TURIVA* · Você ganhou uma comissão! 🤑\n` +
+    `\n` +
+    `Uma reserva indicada por você acabou de ser *paga*:\n` +
+    `${tipo} · 🗓 ${data} · 🔖 ${booking.booking_code || '-'}\n` +
+    `\n` +
+    `💰 Sua comissão: *${fmtBRL(amount)}*\n` +
+    `O repasse é feito via PIX em até *7 dias*.\n` +
+    `\n` +
+    `Acompanhe no app: ${TURISTA_APP}/perfil\n` +
+    `Continue divulgando — divulgou, ganhou! 🚀`
+
+  await sendToMany([phone], message)
+}
+
+/**
  * WhatsApp para TODAS as cooperativas ativas — solicitação nova.
  * Admin não recebe aqui; só após a expiração (notifyAdminExpiredBooking).
  * Fire-and-forget: erros logados, nunca derrubam o fluxo.

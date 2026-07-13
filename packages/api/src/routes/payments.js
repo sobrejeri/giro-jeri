@@ -1853,6 +1853,11 @@ async function recordAffiliateCommission(booking) {
     title:       'Você ganhou uma comissão! 🤑',
     body:        `Uma reserva indicada por você foi paga (${booking.booking_code}). Sua comissão de ${fmtBRL(amount)} será repassada via PIX em até 7 dias.`,
   })
+
+  // WhatsApp automático pro afiliado — mesmo evento (pagamento aprovado).
+  const { notifyAffiliateCommission } = await import('../services/whatsapp.js')
+  notifyAffiliateCommission(supabase, { affiliateId: booking.affiliate_id, booking, amount })
+    .catch((err) => console.error('[whatsapp] aviso de comissão falhou:', err.message))
 }
 
 function fmtDateBR(iso) {
