@@ -80,6 +80,28 @@ async function userPhone(supabase, userId) {
   return data?.phone || null
 }
 
+/**
+ * Checa se um número TEM WhatsApp (Z-API phone-exists) — sem enviar mensagem.
+ * Retorna { checked, exists }: checked=false quando o Z-API não está
+ * configurado ou a consulta falhou (aí não dá para afirmar nada).
+ */
+export async function checkPhoneExists(phone) {
+  if (!isWhatsappEnabled() || !phone) return { checked: false, exists: null }
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
+  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/phone-exists/${toZapiPhone(phone)}`
+  try {
+    const res = await fetch(url, { headers: { 'Client-Token': ZAPI_CLIENT_TOKEN } })
+    if (!res.ok) return { checked: false, exists: null }
+    const body = await res.json().catch(() => ({}))
+    // Z-API responde { exists: true|false }
+    if (typeof body.exists === 'boolean') return { checked: true, exists: body.exists }
+    return { checked: false, exists: null }
+  } catch (err) {
+    console.error('[whatsapp] phone-exists falhou:', err.message)
+    return { checked: false, exists: null }
+  }
+}
+
 // Envia pra 1 número e RETORNA o resultado da Z-API (usado no diagnóstico).
 export async function sendTestMessage(phone) {
   if (!isWhatsappEnabled()) return { skipped: true, reason: 'Z-API não configurada' }

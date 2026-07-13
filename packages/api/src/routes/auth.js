@@ -467,6 +467,14 @@ router.patch('/me', authenticate, async (req, res, next) => {
       .single();
 
     if (error) return res.status(400).json({ error: error.message });
+
+    // Telefone mudou → rechecagem automática do WhatsApp (fire-and-forget).
+    // A plataforma depende de mensagens automáticas; o status fica no perfil.
+    if (body.phone !== undefined) {
+      recheckWhatsapp(req.user.id, body.phone).catch((err) =>
+        console.error('[whatsapp] rechecagem pós-update falhou:', err.message));
+    }
+
     res.json({ user: updated });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -474,6 +482,56 @@ router.patch('/me', authenticate, async (req, res, next) => {
     }
     next(err);
   }
+});
+
+// Checa no Z-API se o telefone tem WhatsApp e persiste o resultado no perfil.
+// Erros de coluna (migration 057 pendente) são engolidos — nunca quebra fluxo.
+async function recheckWhatsapp(userId, phone) {
+  const { checkPhoneExists } = await import('../services/whatsapp.js');
+  const r = await checkPhoneExists(phone);
+  if (!r.checked) return r;
+  const { error } = await supabase
+    .from('users')
+    .update({ whatsapp_valid: r.exists, whatsapp_checked_at: new Date().toISOString() })
+    .eq('id', userId);
+  if (error && error.code !== '42703') throw error;
+  return r;
+}
+
+// ── POST /api/auth/me/verify-whatsapp ────────────────────
+// Botão "Verificar WhatsApp" do perfil: checa o número cadastrado (sem enviar
+// mensagem) e devolve o status. 200 sempre que a checagem rodou.
+router.post('/me/verify-whatsapp', authenticate, async (req, res, next) => {
+  try {
+    const { data: u } = await supabase
+      .from('users').select('phone').eq('id', req.user.id).maybeSingle();
+    if (!u?.phone) {
+      return res.status(400).json({ error: 'Cadastre um telefone no perfil antes de verificar.' });
+    }
+    const r = await recheckWhatsapp(req.user.id, u.phone);
+    if (!r.checked) {
+      return res.status(503).json({ error: 'Verificação indisponível no momento (canal WhatsApp não configurado). Tente mais tarde.' });
+    }
+    res.json({ phone: u.phone, whatsapp_valid: r.exists });
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/auth/me/whatsapp-status ─────────────────────
+// Status persistido (para o perfil exibir sem rechecar toda hora).
+router.get('/me/whatsapp-status', authenticate, async (req, res, next) => {
+  try {
+    let { data: u, error } = await supabase
+      .from('users')
+      .select('phone, whatsapp_valid, whatsapp_checked_at')
+      .eq('id', req.user.id)
+      .maybeSingle();
+    if (error?.code === '42703') {
+      // Migration 057 pendente — devolve só o telefone, sem status.
+      const retry = await supabase.from('users').select('phone').eq('id', req.user.id).maybeSingle();
+      u = { ...retry.data, whatsapp_valid: null, whatsapp_checked_at: null };
+    } else if (error) throw error;
+    res.json(u || {});
+  } catch (err) { next(err); }
 });
 
 // ── POST /api/auth/me/photo ───────────────────────────────

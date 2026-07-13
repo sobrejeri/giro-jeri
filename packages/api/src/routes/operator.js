@@ -98,6 +98,18 @@ router.patch('/profile', async (req, res, next) => {
       .select(PROFILE_FIELDS)
       .single();
     if (error) throw error;
+
+    // Telefone mudou → rechecagem automática do WhatsApp (as corridas chegam
+    // por lá; número inválido = coop sem aviso). Fire-and-forget.
+    if (body.phone !== undefined) {
+      import('../services/whatsapp.js')
+        .then(({ checkPhoneExists }) => checkPhoneExists(body.phone))
+        .then((r) => r.checked && supabase.from('users')
+          .update({ whatsapp_valid: r.exists, whatsapp_checked_at: new Date().toISOString() })
+          .eq('id', req.user.id))
+        .catch((err) => console.error('[whatsapp] rechecagem coop falhou:', err.message));
+    }
+
     res.json(data);
   } catch (err) {
     if (err instanceof z.ZodError) {

@@ -24,6 +24,52 @@ function Field({ label, value, children }) {
   )
 }
 
+// Status do WhatsApp do telefone cadastrado (a plataforma envia avisos
+// automáticos por lá). Checa sob demanda via Z-API, sem enviar mensagem.
+function WhatsappCheck() {
+  const [status, setStatus]     = useState(undefined) // undefined=carregando · null=nunca checado · true/false
+  const [checking, setChecking] = useState(false)
+  const [err, setErr]           = useState(null)
+
+  useEffect(() => {
+    api.whatsappStatus()
+      .then((s) => setStatus(s?.whatsapp_valid ?? null))
+      .catch(() => setStatus(null))
+  }, [])
+
+  async function verify() {
+    if (checking) return
+    setChecking(true); setErr(null)
+    try {
+      const r = await api.verifyWhatsapp()
+      setStatus(r?.whatsapp_valid ?? null)
+    } catch (e) {
+      setErr(e?.message || 'Não foi possível verificar agora.')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  if (status === undefined) return null
+  return (
+    <div className="flex items-center justify-between gap-2 bg-gray-50 rounded-xl px-3 py-2">
+      <div className="flex items-center gap-1.5 min-w-0">
+        {status === true  && <span className="text-[12px] font-semibold text-emerald-600">✓ WhatsApp verificado</span>}
+        {status === false && <span className="text-[12px] font-semibold text-red-500">⚠️ Este número não tem WhatsApp</span>}
+        {status === null  && <span className="text-[12px] text-gray-500">WhatsApp não verificado</span>}
+      </div>
+      <button
+        onClick={verify}
+        disabled={checking}
+        className="shrink-0 text-[11px] font-bold text-brand border border-brand/30 rounded-lg px-2.5 py-1 active:scale-95 transition-transform disabled:opacity-50"
+      >
+        {checking ? 'Verificando…' : status === null ? 'Verificar' : 'Reverificar'}
+      </button>
+      {err && <p className="w-full text-[10px] text-red-500">{err}</p>}
+    </div>
+  )
+}
+
 export default function Profile() {
   const { user, token, logout, updateUser } = useAuth()
   const navigate = useNavigate()
@@ -358,6 +404,7 @@ export default function Profile() {
                       <Field label={t('profile.phone')} value={user.phone && <span className="flex items-center gap-1"><Phone size={11} className="text-gray-400" />{user.phone}</span>} />
                       <Field label={t('profile.birthDate')} value={user.birth_date ? new Date(user.birth_date + 'T12:00:00').toLocaleDateString() : null} />
                     </div>
+                    {user.phone && <WhatsappCheck />}
                     <div className="grid grid-cols-2 gap-4">
                       <Field label={t('profile.docType')} value={docLabel && user.document_number ? `${docLabel}: ${user.document_number}` : (docLabel || user.document_number)} />
                       <Field label={t('profile.nationality')} value={user.nationality && <span className="flex items-center gap-1"><Flag size={11} className="text-gray-400" />{user.nationality}</span>} />
