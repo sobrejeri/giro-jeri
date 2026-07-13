@@ -8,7 +8,7 @@ import ProfileDesktop from './ProfileDesktop'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
-  Phone, Flag, AlertCircle, Globe, Loader2,
+  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard,
 } from 'lucide-react'
 
 function Field({ label, value, children }) {
@@ -22,6 +22,31 @@ function Field({ label, value, children }) {
       )}
     </div>
   )
+}
+
+// Linha de dado pessoal com ícone (só aparece quando o campo está preenchido —
+// nada de traços "—" espalhados pela tela).
+function InfoRow({ icon: Icon, label, value, children }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="w-9 h-9 rounded-xl bg-brand/10 flex items-center justify-center shrink-0">
+        <Icon size={15} className="text-brand" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">{label}</p>
+        <p className="text-[14px] font-semibold text-gray-800 mt-1 leading-tight break-words">{value}</p>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// Formata CPF/CNPJ para leitura (só exibição — o banco guarda dígitos).
+function formatDoc(type, num) {
+  const d = String(num || '').replace(/\D/g, '')
+  if (type === 'cpf'  && d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+  if (type === 'cnpj' && d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
+  return num
 }
 
 // Status do WhatsApp do telefone cadastrado (a plataforma envia avisos
@@ -272,7 +297,7 @@ export default function Profile() {
                 {coverUrl
                   ? <img src={coverUrl} alt="Capa do perfil" className="absolute inset-0 w-full h-full object-cover" />
                   : <div className="absolute inset-0 bg-gradient-to-r from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]" />}
-                <div className="absolute inset-0 bg-black/10" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
                 <button
                   onClick={() => !uploadingCover && coverRef.current?.click()}
                   className="absolute top-2 right-2 inline-flex items-center gap-1 bg-black/40 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg backdrop-blur-sm active:scale-95 transition-transform"
@@ -311,11 +336,18 @@ export default function Profile() {
                   <Mail size={12} />
                   <span className="text-[13px] break-all">{user.email}</span>
                 </div>
-                {user.role && (
-                  <span className="mt-3 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-orange-50 text-brand">
-                    {user.role === 'admin' ? t('profile.roleAdmin') : user.role === 'driver' ? t('profile.roleDriver') : t('profile.roleClient')}
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-orange-50 text-brand">
+                    {user.user_type === 'admin' ? 'Admin'
+                      : user.user_type === 'operator' ? 'Cooperativa'
+                      : user.affiliate_code ? 'Turista · Afiliado' : 'Turista'}
                   </span>
-                )}
+                  {user.whatsapp_valid === true && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-50 text-emerald-600">
+                      ✓ WhatsApp
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -398,27 +430,65 @@ export default function Profile() {
                       </div>
                     </div>
                   </>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Field label={t('profile.phone')} value={user.phone && <span className="flex items-center gap-1"><Phone size={11} className="text-gray-400" />{user.phone}</span>} />
-                      <Field label={t('profile.birthDate')} value={user.birth_date ? new Date(user.birth_date + 'T12:00:00').toLocaleDateString() : null} />
-                    </div>
-                    {user.phone && <WhatsappCheck />}
-                    <div className="grid grid-cols-2 gap-4">
-                      <Field label={t('profile.docType')} value={docLabel && user.document_number ? `${docLabel}: ${user.document_number}` : (docLabel || user.document_number)} />
-                      <Field label={t('profile.nationality')} value={user.nationality && <span className="flex items-center gap-1"><Flag size={11} className="text-gray-400" />{user.nationality}</span>} />
-                    </div>
-                    <Field label={t('profile.gender')} value={genderLabel} />
-                    {(user.emergency_contact_name || user.emergency_contact_phone) && (
-                      <div className="pt-2 border-t border-gray-50 space-y-1">
-                        <p className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500"><AlertCircle size={12} /> {t('profile.emergency')}</p>
-                        <Field label={t('profile.emergencyName')} value={user.emergency_contact_name} />
-                        <Field label={t('profile.emergencyPhone')} value={user.emergency_contact_phone} />
-                      </div>
-                    )}
-                  </>
-                )}
+                ) : (() => {
+                  // Só mostra o que está preenchido; o que falta vira a barra
+                  // de completude (CTA de editar), não um "—" perdido na tela.
+                  const filled = [
+                    user.phone, user.birth_date, user.document_number,
+                    user.nationality, user.gender,
+                  ].filter(Boolean).length
+                  const pct = Math.round((filled / 5) * 100)
+                  const hasAny = filled > 0
+
+                  return (
+                    <>
+                      {pct < 100 && (
+                        <button onClick={startEdit} className="w-full text-left bg-orange-50 rounded-xl px-3.5 py-3 active:scale-[0.99] transition-transform">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[12px] font-bold text-gray-800">Perfil {pct}% completo</span>
+                            <span className="text-[11px] font-bold text-brand">Completar →</span>
+                          </div>
+                          <div className="h-1.5 bg-orange-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${Math.max(pct, 6)}%` }} />
+                          </div>
+                          <p className="text-[10.5px] text-gray-500 mt-1.5">
+                            Perfil completo agiliza suas reservas e o contato da cooperativa.
+                          </p>
+                        </button>
+                      )}
+
+                      {!hasAny && pct >= 100 ? null : (
+                        <div className="space-y-3.5">
+                          {user.phone && (
+                            <InfoRow icon={Phone} label={t('profile.phone')} value={user.phone} />
+                          )}
+                          {user.phone && <WhatsappCheck />}
+                          {user.birth_date && (
+                            <InfoRow icon={Calendar} label={t('profile.birthDate')} value={new Date(user.birth_date + 'T12:00:00').toLocaleDateString()} />
+                          )}
+                          {user.document_number && (
+                            <InfoRow icon={CreditCard} label={docLabel || t('profile.docType')} value={formatDoc(user.document_type, user.document_number)} />
+                          )}
+                          {user.nationality && (
+                            <InfoRow icon={Flag} label={t('profile.nationality')} value={user.nationality} />
+                          )}
+                          {genderLabel && (
+                            <InfoRow icon={User} label={t('profile.gender')} value={genderLabel} />
+                          )}
+                        </div>
+                      )}
+
+                      {(user.emergency_contact_name || user.emergency_contact_phone) && (
+                        <div className="mt-1 bg-orange-50/60 rounded-xl px-3.5 py-3 space-y-1">
+                          <p className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500"><AlertCircle size={12} /> {t('profile.emergency')}</p>
+                          <p className="text-[13px] font-semibold text-gray-800">
+                            {[user.emergency_contact_name, user.emergency_contact_phone].filter(Boolean).join(' · ')}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             </div>
           </>
