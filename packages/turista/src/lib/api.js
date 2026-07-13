@@ -106,6 +106,7 @@ export const api = {
   uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),
   whatsappStatus: ()    => request('/api/auth/me/whatsapp-status'),
   verifyWhatsapp: ()    => request('/api/auth/me/verify-whatsapp', { method: 'POST', body: {} }),
+  checkWhatsapp:  (phone) => request('/api/auth/check-whatsapp', { method: 'POST', body: { phone } }),
   uploadCover:   (photoData) => request('/api/auth/me/cover', { method: 'POST',  body: { photo_data: photoData } }),
   logout:        ()     => request('/api/auth/logout', { method: 'POST' }),
 

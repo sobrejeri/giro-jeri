@@ -144,6 +144,9 @@ router.post('/import-auth-user', requireAdmin, async (req, res, next) => {
 
     if (body.user_type === 'operator' && body.cnpj) {
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const { validateBrDoc } = await import('../lib/document.js');
+      const docErr = validateBrDoc('cnpj', cnpjDigits);
+      if (docErr) return res.status(400).json({ error: docErr });
       docNumber = cnpjDigits;
       docType   = 'cnpj';
       if (!email || !email.endsWith('@op.girojeri.app')) {
@@ -231,6 +234,9 @@ router.post('/users', requireAdmin, async (req, res, next) => {
 
     if (body.user_type === 'operator' && body.cnpj) {
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const { validateBrDoc } = await import('../lib/document.js');
+      const docErr = validateBrDoc('cnpj', cnpjDigits);
+      if (docErr) return res.status(400).json({ error: docErr });
       authEmail = `${cnpjDigits}@op.girojeri.app`;
       authPhone = undefined;
       docNumber = cnpjDigits;

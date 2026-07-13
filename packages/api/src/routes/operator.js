@@ -91,6 +91,12 @@ router.get('/profile', async (req, res, next) => {
 router.patch('/profile', async (req, res, next) => {
   try {
     const body = profileSchema.parse(req.body);
+    if (body.document_number && (body.document_type === 'cpf' || body.document_type === 'cnpj')) {
+      body.document_number = String(body.document_number).replace(/\D/g, '');
+      const { validateBrDoc } = await import('../lib/document.js');
+      const docErr = validateBrDoc(body.document_type, body.document_number);
+      if (docErr) return res.status(400).json({ error: docErr });
+    }
     const { data, error } = await supabase
       .from('users')
       .update({ ...body, updated_at: new Date().toISOString() })

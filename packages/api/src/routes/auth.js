@@ -354,14 +354,22 @@ router.post('/login', async (req, res, next) => {
 // ── GET /api/auth/me ───────────────────────────────────────
 router.get('/me', authenticate, async (req, res, next) => {
   try {
-    const { data: profile, error } = await supabase
-      .from('users')
-      .select(`id, full_name, email, phone, user_type, profile_photo_url,
+    const ME_BASE = `id, full_name, email, phone, user_type, profile_photo_url,
                birth_date, document_type, document_number, preferred_region_id,
+               nationality, gender, language, affiliate_code,
+               emergency_contact_name, emergency_contact_phone,
                pix_key_type, pix_key, bank_name, bank_agency,
-               bank_account_number, bank_account_type, bank_document`)
+               bank_account_number, bank_account_type, bank_document`;
+    // Colunas de migrations recentes (057/058) — tolera banco desatualizado.
+    let { data: profile, error } = await supabase
+      .from('users')
+      .select(`${ME_BASE}, emergency_contact_email, whatsapp_valid`)
       .eq('id', req.user.id)
       .single();
+    if (error?.code === '42703') {
+      const retry = await supabase.from('users').select(ME_BASE).eq('id', req.user.id).single();
+      profile = retry.data; error = retry.error;
+    }
     if (error) return res.status(500).json({ error: error.message });
 
     const { data: cover } = await supabase
@@ -432,6 +440,7 @@ const updateProfileSchema = z.object({
   gender:                  z.enum(['male', 'female', 'non_binary', 'prefer_not_to_say']).optional().nullable(),
   emergency_contact_name:  z.string().max(200).optional().nullable(),
   emergency_contact_phone: z.string().max(30).optional().nullable(),
+  emergency_contact_email: z.string().email().max(200).optional().nullable().or(z.literal('')),
   language:                z.string().max(10).optional(),
   profile_photo_url:       z.string().max(3_000_000).optional().nullable(),
   pix_key_type:            z.enum(['cpf', 'cnpj', 'email', 'phone', 'random_key']).optional().nullable(),
@@ -451,7 +460,12 @@ router.patch('/me', authenticate, async (req, res, next) => {
     // Sem isso, salvar "86.981.608/0001-60" quebra o login por CNPJ.
     if (body.document_number && (body.document_type === 'cpf' || body.document_type === 'cnpj')) {
       body.document_number = body.document_number.replace(/\D/g, '');
+      // Dígitos verificadores (mod 11): barra CPF/CNPJ falso ou digitado errado.
+      const { validateBrDoc } = await import('../lib/document.js');
+      const docErr = validateBrDoc(body.document_type, body.document_number);
+      if (docErr) return res.status(400).json({ error: docErr });
     }
+    if (body.emergency_contact_email === '') body.emergency_contact_email = null;
     if (body.bank_document) {
       body.bank_document = body.bank_document.replace(/\D/g, '');
     }
@@ -497,6 +511,24 @@ async function recheckWhatsapp(userId, phone) {
   if (error && error.code !== '42703') throw error;
   return r;
 }
+
+// ── POST /api/auth/check-whatsapp ────────────────────────
+// Checagem avulsa (não persiste): usada p/ validar QUALQUER número no app —
+// ex.: telefone do contato de emergência — sem enviar mensagem.
+router.post('/check-whatsapp', authenticate, async (req, res, next) => {
+  try {
+    const phone = String(req.body?.phone || '').trim();
+    if (phone.replace(/\D/g, '').length < 10) {
+      return res.status(400).json({ error: 'Informe um telefone válido com DDD.' });
+    }
+    const { checkPhoneExists } = await import('../services/whatsapp.js');
+    const r = await checkPhoneExists(phone);
+    if (!r.checked) {
+      return res.status(503).json({ error: 'Verificação indisponível no momento. Tente mais tarde.' });
+    }
+    res.json({ phone, exists: r.exists });
+  } catch (err) { next(err); }
+});
 
 // ── POST /api/auth/me/verify-whatsapp ────────────────────
 // Botão "Verificar WhatsApp" do perfil: checa o número cadastrado (sem enviar

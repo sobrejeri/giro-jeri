@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { setLang, LANGS } from '../i18n/index.js'
+import { validateBrDoc } from '../lib/document'
 import ProfileDesktop from './ProfileDesktop'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
@@ -124,6 +125,8 @@ export default function Profile() {
   const [saving,    setSaving]    = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [form,      setForm]      = useState({})
+  const [emgCheck,    setEmgCheck]    = useState(null)  // WhatsApp do contato de emergência
+  const [emgChecking, setEmgChecking] = useState(false)
 
   const MENU = [
     { icon: CalendarCheck, label: t('profile.menu.bookings'), to: '/minhas-reservas' },
@@ -156,11 +159,26 @@ export default function Profile() {
       gender:                  user?.gender                  || '',
       emergency_contact_name:  user?.emergency_contact_name  || '',
       emergency_contact_phone: user?.emergency_contact_phone || '',
+      emergency_contact_email: user?.emergency_contact_email || '',
     })
     setEditing(true)
   }
 
+  async function checkEmergencyWhatsapp() {
+    if (emgChecking) return
+    setEmgChecking(true); setEmgCheck(null)
+    try {
+      const r = await api.checkWhatsapp(form.emergency_contact_phone)
+      setEmgCheck(!!r?.exists)
+    } catch { setEmgCheck(null) }
+    finally { setEmgChecking(false) }
+  }
+
   async function saveEdit() {
+    // CPF/CNPJ: valida os dígitos verificadores ANTES de enviar (o servidor
+    // também valida — dupla camada contra documento falso/digitado errado).
+    const docErr = validateBrDoc(form.document_type, form.document_number)
+    if (docErr) { setSaveError(docErr); return }
     setSaving(true)
     setSaveError(null)
     try {
@@ -409,6 +427,15 @@ export default function Profile() {
                       <div className="flex-1">
                         <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.docNumber')}</label>
                         <input placeholder={t('profile.docNumberPlaceholder')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} />
+                        {(() => {
+                          const digits = String(form.document_number || '').replace(/\D/g, '')
+                          const expected = form.document_type === 'cpf' ? 11 : form.document_type === 'cnpj' ? 14 : 0
+                          if (!expected || digits.length < expected) return null
+                          const err = validateBrDoc(form.document_type, form.document_number)
+                          return err
+                            ? <p className="text-[11px] text-red-500 mt-1">⚠️ {err}</p>
+                            : <p className="text-[11px] text-emerald-600 mt-1">✓ {form.document_type.toUpperCase()} válido</p>
+                        })()}
                       </div>
                     </div>
                     <div>
@@ -426,7 +453,18 @@ export default function Profile() {
                       <p className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500 mb-2"><AlertCircle size={12} /> {t('profile.emergency')}</p>
                       <div className="space-y-2">
                         <input placeholder={t('profile.emergencyName')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.emergency_contact_name} onChange={(e) => setForm((f) => ({ ...f, emergency_contact_name: e.target.value }))} />
-                        <input type="tel" placeholder={t('profile.emergencyPhone')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.emergency_contact_phone} onChange={(e) => setForm((f) => ({ ...f, emergency_contact_phone: e.target.value }))} />
+                        <div>
+                          <input type="tel" placeholder={t('profile.emergencyPhone')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.emergency_contact_phone} onChange={(e) => { setEmgCheck(null); setForm((f) => ({ ...f, emergency_contact_phone: e.target.value })) }} />
+                          {String(form.emergency_contact_phone || '').replace(/\D/g, '').length >= 10 && (
+                            <button type="button" onClick={checkEmergencyWhatsapp} disabled={emgChecking}
+                              className="mt-1.5 text-[11px] font-bold text-brand disabled:opacity-50">
+                              {emgChecking ? 'Verificando…' : 'Verificar WhatsApp deste contato'}
+                            </button>
+                          )}
+                          {emgCheck === true  && <p className="text-[11px] text-emerald-600 mt-1">✓ Este número tem WhatsApp</p>}
+                          {emgCheck === false && <p className="text-[11px] text-red-500 mt-1">⚠️ Este número não tem WhatsApp</p>}
+                        </div>
+                        <input type="email" placeholder="E-mail do contato (opcional)" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.emergency_contact_email} onChange={(e) => setForm((f) => ({ ...f, emergency_contact_email: e.target.value }))} />
                       </div>
                     </div>
                   </>
@@ -478,11 +516,11 @@ export default function Profile() {
                         </div>
                       )}
 
-                      {(user.emergency_contact_name || user.emergency_contact_phone) && (
+                      {(user.emergency_contact_name || user.emergency_contact_phone || user.emergency_contact_email) && (
                         <div className="mt-1 bg-orange-50/60 rounded-xl px-3.5 py-3 space-y-1">
                           <p className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500"><AlertCircle size={12} /> {t('profile.emergency')}</p>
                           <p className="text-[13px] font-semibold text-gray-800">
-                            {[user.emergency_contact_name, user.emergency_contact_phone].filter(Boolean).join(' · ')}
+                            {[user.emergency_contact_name, user.emergency_contact_phone, user.emergency_contact_email].filter(Boolean).join(' · ')}
                           </p>
                         </div>
                       )}
