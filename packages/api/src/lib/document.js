@@ -36,9 +36,18 @@ export function isValidCNPJ(raw) {
 }
 
 // Mensagem de erro pronta (null = ok / tipo não validável aqui).
+// Passaporte: sem dígito verificador universal — valida o FORMATO (5 a 12
+// caracteres alfanuméricos, ao menos 1 letra e 1 número na maioria dos países;
+// aceitamos letras puras também para não barrar exceções).
+export function isValidPassport(raw) {
+  const v = String(raw || '').trim().toUpperCase()
+  return /^[A-Z0-9]{5,12}$/.test(v)
+}
+
 export function validateBrDoc(type, number) {
   if (!number) return null;
   if (type === 'cpf'  && !isValidCPF(number))  return 'CPF inválido — confira os dígitos.';
   if (type === 'cnpj' && !isValidCNPJ(number)) return 'CNPJ inválido — confira os dígitos.';
+  if (type === 'passport' && !isValidPassport(number)) return 'Passaporte inválido — use 5 a 12 letras/números, sem espaços.';
   return null;
 }

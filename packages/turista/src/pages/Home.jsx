@@ -134,6 +134,34 @@ function TourCard({ tour, isFav, onToggleFav }) {
   )
 }
 
+// Card de rota de transfer em destaque — mesmo tamanho do TourCard.
+function RouteCard({ route }) {
+  const navigate = useNavigate()
+  const [from, to] = GRADIENTS[gi(route.id)]
+  const price = Number(route.default_price) || 0
+  return (
+    <div
+      onClick={() => navigate('/transfers', { state: { origin: route.origin_name, dest: route.destination_name } })}
+      className="shrink-0 w-[158px] lg:w-auto rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 transition-transform cursor-pointer active:scale-[0.96]"
+    >
+      <div className={`h-[108px] lg:h-44 relative overflow-hidden bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
+        <Plane size={36} className="text-white/25" />
+        <span className="absolute top-2 left-2 bg-black/35 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-[3px] rounded-full">
+          Transfer
+        </span>
+      </div>
+      <div className="p-2.5">
+        <p className="text-[12px] font-bold text-gray-900 leading-tight line-clamp-2 mb-1">
+          {route.origin_name} → {route.destination_name}
+        </p>
+        <p className="text-[11px] text-gray-400 leading-snug">
+          Privativo {price > 0 ? `· a partir de R$ ${price.toLocaleString('pt-BR')}` : ''}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 const QUICK = [
   { icon: Compass,  bg: 'bg-orange-50', ic: 'text-brand',      title: 'Passeio Privativo', desc: 'Exclusivo para seu grupo',   route: '/passeios'  },
   { icon: Users,    bg: 'bg-teal-50',   ic: 'text-teal-600',   title: 'Compartilhado',     desc: 'Divida com outros turistas', route: '/passeios', state: { mode: 'shared' } },
@@ -179,9 +207,11 @@ function FeaturedCarousel({ items, favs, onToggleFav }) {
   return (
     <div className="-mx-4">
       <div ref={scrollRef} className="flex gap-2 overflow-x-hidden px-4">
-        {slides.map((tour, i) => (
-          <div key={`${tour.id}-${i}`} className="shrink-0">
-            <TourCard tour={tour} isFav={favs.has(tour.id)} onToggleFav={onToggleFav} />
+        {slides.map((item, i) => (
+          <div key={`${item._kind || 't'}-${item.id}-${i}`} className="shrink-0">
+            {item._kind === 'route'
+              ? <RouteCard route={item} />
+              : <TourCard tour={item} isFav={favs.has(item.id)} onToggleFav={onToggleFav} />}
           </div>
         ))}
       </div>
@@ -226,6 +256,22 @@ export default function Home() {
   const tours    = toursData?.tours || toursData || []
   const featured = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
+
+  // Rotas de transfer destacadas pelo admin → entram no carrossel junto dos
+  // passeios ("Serviços em destaque").
+  const { data: routesData } = useQuery({
+    queryKey: ['transfer-routes', 'home'],
+    queryFn:  () => api.getTransferRoutes(),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  })
+  const allRoutes = Array.isArray(routesData?.routes) ? routesData.routes
+                  : Array.isArray(routesData) ? routesData : []
+  const featuredRoutes = allRoutes
+    .filter((r) => r.is_featured && r.is_active !== false)
+    .slice(0, 6)
+    .map((r) => ({ ...r, _kind: 'route' }))
+  const featuredItems = [...featured, ...featuredRoutes]
 
   // Cold start do Render free: avisa que o servidor está acordando
   const [slowLoad, setSlowLoad] = useState(false)
@@ -455,10 +501,10 @@ export default function Home() {
           </>
         )}
 
-        {/* ── Passeios em destaque ──────────────────────────────── */}
+        {/* ── Serviços em destaque (passeios + transfers) ───────── */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[15px] font-bold text-gray-900">Passeios em destaque</p>
+            <p className="text-[15px] font-bold text-gray-900">Serviços em destaque</p>
             <Link to="/passeios" className="flex items-center gap-0.5 text-[12px] font-semibold text-brand">
               Ver todos <ArrowRight size={13} />
             </Link>
@@ -469,17 +515,17 @@ export default function Home() {
               <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
               {slowLoad && <p className="text-[11px] text-gray-400 text-center px-6">Acordando o servidor… só um instante 🌅</p>}
             </div>
-          ) : featured.length === 0 ? (
+          ) : featuredItems.length === 0 ? (
             <p className="text-sm text-gray-400">Nenhum passeio disponível.</p>
           ) : (
             <>
               {/* Mobile: carousel com loop automático */}
               <div className="lg:hidden">
-                <FeaturedCarousel items={featured} favs={favs} onToggleFav={toggleFav} />
+                <FeaturedCarousel items={featuredItems} favs={favs} onToggleFav={toggleFav} />
               </div>
               {/* Desktop: grid estático */}
               <div className="hidden lg:grid lg:grid-cols-4 xl:grid-cols-5 lg:gap-4">
-                {featured.map((tour) => (
+                {featuredItems.map((tour) => (
                   <TourCard key={tour.id} tour={tour} isFav={favs.has(tour.id)} onToggleFav={toggleFav} />
                 ))}
               </div>

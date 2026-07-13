@@ -71,6 +71,7 @@
     "language": "Idioma",
     "docTypes": {
       "cpf": "CPF",
+      "cnpj": "CNPJ",
       "passport": "Pasaporte",
       "rg": "RG",
       "cnh": "Licencia de conducir",

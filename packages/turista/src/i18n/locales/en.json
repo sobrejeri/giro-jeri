@@ -71,6 +71,7 @@
     "language": "Language",
     "docTypes": {
       "cpf": "CPF",
+      "cnpj": "CNPJ",
       "passport": "Passport",
       "rg": "RG",
       "cnh": "Driver's license",

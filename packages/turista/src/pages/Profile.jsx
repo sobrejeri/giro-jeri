@@ -136,6 +136,7 @@ export default function Profile() {
 
   const DOC_TYPES = [
     { value: 'cpf',      label: t('profile.docTypes.cpf') },
+    { value: 'cnpj',     label: t('profile.docTypes.cnpj') },
     { value: 'passport', label: t('profile.docTypes.passport') },
     { value: 'rg',       label: t('profile.docTypes.rg') },
     { value: 'cnh',      label: t('profile.docTypes.cnh') },
@@ -424,15 +425,24 @@ export default function Profile() {
                       </div>
                       <div className="flex-1">
                         <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.docNumber')}</label>
-                        <input placeholder={t('profile.docNumberPlaceholder')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} />
+                        <input placeholder={
+                          form.document_type === 'cpf'      ? '000.000.000-00'
+                          : form.document_type === 'cnpj'   ? '00.000.000/0000-00'
+                          : form.document_type === 'passport' ? 'AB123456'
+                          : t('profile.docNumberPlaceholder')
+                        } className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} />
                         {(() => {
-                          const digits = String(form.document_number || '').replace(/\D/g, '')
-                          const expected = form.document_type === 'cpf' ? 11 : form.document_type === 'cnpj' ? 14 : 0
-                          if (!expected || digits.length < expected) return null
-                          const err = validateBrDoc(form.document_type, form.document_number)
+                          const val = String(form.document_number || '')
+                          const digits = val.replace(/\D/g, '')
+                          if (form.document_type === 'cpf'  && digits.length < 11) return null
+                          if (form.document_type === 'cnpj' && digits.length < 14) return null
+                          if (form.document_type === 'passport' && val.trim().length < 5) return null
+                          if (!['cpf', 'cnpj', 'passport'].includes(form.document_type)) return null
+                          const err = validateBrDoc(form.document_type, val)
+                          const label = form.document_type === 'passport' ? 'Passaporte' : form.document_type.toUpperCase()
                           return err
                             ? <p className="text-[11px] text-red-500 mt-1">⚠️ {err}</p>
-                            : <p className="text-[11px] text-emerald-600 mt-1">✓ {form.document_type.toUpperCase()} válido</p>
+                            : <p className="text-[11px] text-emerald-600 mt-1">✓ {label} válido</p>
                         })()}
                       </div>
                     </div>

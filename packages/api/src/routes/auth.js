@@ -458,9 +458,13 @@ router.patch('/me', authenticate, async (req, res, next) => {
 
     // CPF/CNPJ: guarda só os dígitos pra o login (que busca por dígitos) bater.
     // Sem isso, salvar "86.981.608/0001-60" quebra o login por CNPJ.
-    if (body.document_number && (body.document_type === 'cpf' || body.document_type === 'cnpj')) {
-      body.document_number = body.document_number.replace(/\D/g, '');
-      // Dígitos verificadores (mod 11): barra CPF/CNPJ falso ou digitado errado.
+    if (body.document_number) {
+      if (body.document_type === 'cpf' || body.document_type === 'cnpj') {
+        body.document_number = body.document_number.replace(/\D/g, '');
+      } else if (body.document_type === 'passport') {
+        body.document_number = body.document_number.trim().toUpperCase();
+      }
+      // CPF/CNPJ: dígitos verificadores (mod 11). Passaporte: formato.
       const { validateBrDoc } = await import('../lib/document.js');
       const docErr = validateBrDoc(body.document_type, body.document_number);
       if (docErr) return res.status(400).json({ error: docErr });

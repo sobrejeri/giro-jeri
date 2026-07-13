@@ -29,7 +29,7 @@ function pick(obj, keys) {
 const ROUTE_COLS = [
   'transfer_id', 'origin_name', 'destination_name',
   'origin_latitude', 'origin_longitude', 'destination_latitude', 'destination_longitude',
-  'default_price', 'extra_stop_price', 'night_fee', 'is_active',
+  'default_price', 'extra_stop_price', 'night_fee', 'is_active', 'is_featured',
 ]
 
 // Colunas graváveis de transfers (serviço-pai)

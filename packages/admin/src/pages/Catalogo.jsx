@@ -66,7 +66,7 @@ const TRANSFER_EMPTY = {
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', region_ids: [],
 }
-const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true }
+const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true, is_featured: false }
 const VEHICLE_EMPTY = {
   name: '', vehicle_type: 'buggy', description: '',
   seat_capacity: 4, luggage_capacity: 4,
@@ -807,6 +807,18 @@ export default function Catalogo() {
           <Input label="Destino" value={routeForm.destination_name || ''} onChange={(e) => setRouteForm({ ...routeForm, destination_name: e.target.value })} required />
           <Input label="Preço padrão (R$)" type="number" min={0} step={0.01}
             value={routeForm.default_price || ''} onChange={(e) => setRouteForm({ ...routeForm, default_price: e.target.value })} required />
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-brand mt-0.5"
+              checked={!!routeForm.is_featured}
+              onChange={(e) => setRouteForm({ ...routeForm, is_featured: e.target.checked })}
+            />
+            <span className="text-sm text-gray-300">
+              Destaque na home
+              <span className="block text-[11px] text-gray-500">Aparece no carrossel "Serviços em destaque" do app.</span>
+            </span>
+          </label>
           <Button type="submit" className="w-full" disabled={routeMut.isPending}>
             {routeMut.isPending ? 'Salvando…' : 'Salvar Rota'}
           </Button>
