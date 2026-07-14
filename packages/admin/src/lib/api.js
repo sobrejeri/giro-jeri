@@ -126,7 +126,6 @@ export const api = {
 
   // Catálogo — Tours
   getTours:   (params = {}) => request(`/api/catalog/tours?${new URLSearchParams(params)}`),
-  getTour:    (id)          => request(`/api/catalog/tours/${id}`),
   createTour: (body)        => request('/api/catalog/tours', { method: 'POST', body }),
   updateTour: (id, body)    => request(`/api/catalog/tours/${id}`, { method: 'PUT', body }),
   deleteTour: (id)          => request(`/api/catalog/tours/${id}`, { method: 'DELETE' }),

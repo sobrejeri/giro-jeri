@@ -88,7 +88,7 @@ router.get('/admin', authenticate, requireAdmin, async (req, res, next) => {
 router.use(authenticate, requireAdmin);
 
 // ── POST /api/stories/highlights — criar highlight ───────
-router.post('/highlights', async (req, res, next) => {
+router.post('/highlights', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const body = highlightSchema.parse(req.body);
     const { data, error } = await req.supabase
@@ -105,7 +105,7 @@ router.post('/highlights', async (req, res, next) => {
 });
 
 // ── PUT /api/stories/highlights/:id — atualizar highlight ─
-router.put('/highlights/:id', async (req, res, next) => {
+router.put('/highlights/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const body = highlightSchema.partial().parse(req.body);
     const { data, error } = await req.supabase
@@ -124,7 +124,7 @@ router.put('/highlights/:id', async (req, res, next) => {
 });
 
 // ── DELETE /api/stories/highlights/:id ──────────────────
-router.delete('/highlights/:id', async (req, res, next) => {
+router.delete('/highlights/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { error } = await req.supabase
       .from('story_highlights')
@@ -136,7 +136,7 @@ router.delete('/highlights/:id', async (req, res, next) => {
 });
 
 // ── POST /api/stories/highlights/:id/items — add item ───
-router.post('/highlights/:id/items', async (req, res, next) => {
+router.post('/highlights/:id/items', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const body = itemSchema.parse(req.body);
     const { data, error } = await req.supabase
@@ -153,7 +153,7 @@ router.post('/highlights/:id/items', async (req, res, next) => {
 });
 
 // ── PUT /api/stories/items/:id — atualizar item ──────────
-router.put('/items/:id', async (req, res, next) => {
+router.put('/items/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const body = itemSchema.partial().parse(req.body);
     const { data, error } = await req.supabase
@@ -172,7 +172,7 @@ router.put('/items/:id', async (req, res, next) => {
 });
 
 // ── DELETE /api/stories/items/:id ───────────────────────
-router.delete('/items/:id', async (req, res, next) => {
+router.delete('/items/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { error } = await req.supabase
       .from('stories')

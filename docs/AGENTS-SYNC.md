@@ -28,6 +28,18 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-12 · Agente A (auditoria do admin + checklist de lançamento)** —
+  Auditoria completa do admin: (1) cruzamento das 84 chamadas do cliente ×
+  rotas da API — único descasamento era `getTour` morto (removido);
+  (2) **SEGURANÇA: stories.js tinha POST/PUT/DELETE de destaques/itens SEM
+  auth** → agora exigem `authenticate, requireAdmin` (leitura pública intacta);
+  varredura nos demais routers: só ficam públicos login/OTP/webhook/
+  calculadoras (ok); (3) as 16 páginas do admin abertas no navegador com
+  mocks — zero crash; modais principais (passeio/cupom/usuário/temporada/
+  região) abrem sem erro. Criado **docs/CHECKLIST-LANCAMENTO.md** — mapa
+  único de teste/pendências por área com roteiro até agosto (Agente B: usar
+  e atualizar este arquivo).
+
 - **2026-07-12 · Agente A (DDI internacional no telefone)** — Novo
   `components/PhoneInput.jsx`: dropdown de código do país com bandeira emoji
   (derivada do ISO, sem imagens), nome em pt via `Intl.DisplayNames`, busca
