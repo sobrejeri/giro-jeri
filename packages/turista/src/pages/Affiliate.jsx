@@ -271,10 +271,10 @@ export default function Affiliate() {
         </div>
       </div>
 
-      <div className="px-4 pt-4 space-y-4 max-w-[430px] mx-auto">
+      <div className="px-4 pt-4 space-y-4 max-w-[430px] mx-auto lg:max-w-5xl lg:space-y-6">
         {/* Hero (marketing — some quando o painel assume) */}
         {(!code || isLoading) && (
-        <div className="bg-gradient-to-br from-brand to-amber-400 rounded-3xl p-5 text-white relative overflow-hidden">
+        <div className="bg-gradient-to-br from-brand to-amber-400 rounded-3xl p-5 text-white relative overflow-hidden lg:max-w-lg lg:mx-auto">
           <Sparkles size={72} className="absolute -right-3 -top-3 text-white/15" />
           <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center mb-3">
             <Megaphone size={20} className="text-white" />
@@ -291,7 +291,7 @@ export default function Affiliate() {
           <div className="flex justify-center py-10"><Loader2 size={22} className="text-brand animate-spin" /></div>
         ) : !code ? (
           /* Ainda não ativou */
-          <div className="space-y-2">
+          <div className="space-y-2 lg:max-w-lg lg:mx-auto">
             <button
               onClick={() => activate.mutate()}
               disabled={activate.isPending}
@@ -329,6 +329,12 @@ export default function Affiliate() {
               </div>
             </div>
 
+            {/* Desktop: 2 colunas lado a lado; no mobile os dois blocos
+                empilham na MESMA ordem de antes (esquerda = 3 primeiros,
+                direita = 3 últimos), então a versão mobile fica idêntica. */}
+            <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+            {/* Coluna esquerda: visão geral, gráfico e link */}
+            <div className="space-y-4">
             <div className="grid grid-cols-3 gap-2.5">
               <div className="bg-white rounded-2xl border border-gray-100 px-3 py-3 text-center">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Indicações</p>
@@ -386,7 +392,10 @@ export default function Affiliate() {
                 <Share2 size={15} /> Compartilhar no WhatsApp
               </a>
             </div>
+            </div>{/* fim coluna esquerda */}
 
+            {/* Coluna direita: financeiro (totais, PIX e comissões) */}
+            <div className="space-y-4">
             {/* Totais */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white rounded-2xl border border-gray-100 p-4">
@@ -441,11 +450,13 @@ export default function Affiliate() {
                 </div>
               )}
             </div>
+            </div>{/* fim coluna direita */}
+            </div>{/* fim grid desktop */}
           </>
         )}
 
         {/* Como funciona */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 lg:max-w-2xl lg:mx-auto">
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Como funciona</p>
           <ol className="space-y-2 text-[12.5px] text-gray-600 leading-relaxed list-decimal list-inside">
             <li>Ative seu link e compartilhe com amigos e seguidores.</li>
