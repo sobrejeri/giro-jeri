@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
@@ -53,6 +53,8 @@ export default function Auth({ defaultTab = 'login' }) {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
   const [success, setSuccess] = useState('')
+  // Ativação por código no WhatsApp: { signup_token, dest, email, password }
+  const [verif,   setVerif]   = useState(null)
 
   /* ── Login form ──────────────────────────────────────── */
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
@@ -67,7 +69,19 @@ export default function Auth({ defaultTab = 'login' }) {
       login(data.user, data.token, data.refresh_token)
       navigate(from, { replace: true })
     } catch (err) {
-      setError(err.message || t('auth.invalidCredentials'))
+      if (err?.payload?.status === 'verification_required') {
+        // Conta existe mas ainda não ativou o WhatsApp — retoma o wizard.
+        setVerif({
+          signup_token: err.payload.signup_token,
+          dest:         err.payload.channels?.whatsapp?.destination || 'seu WhatsApp',
+          email:        loginForm.email,
+          password:     loginForm.password,
+          resend:       true, // veio do login: ainda não há código recente
+        })
+        setError('')
+      } else {
+        setError(err.message || t('auth.invalidCredentials'))
+      }
     } finally {
       setLoading(false)
     }
@@ -107,6 +121,10 @@ export default function Auth({ defaultTab = 'login' }) {
     setError('')
     if (regForm.password.length < 8) { setError(t('auth.passwordTooShort')); return }
     if (regForm.password !== regForm.confirm) { setError(t('auth.passwordMismatch')); return }
+    if ((regForm.phone || '').replace(/\D/g, '').length < 10) {
+      setError('Informe seu WhatsApp com DDD — enviamos um código para ativar a conta.')
+      return
+    }
     setLoading(true)
     try {
       const data = await api.register({
@@ -118,6 +136,14 @@ export default function Auth({ defaultTab = 'login' }) {
       if (data.token) {
         login(data.user, data.token, data.refresh_token)
         navigate(from, { replace: true })
+      } else if (data.status === 'verification_required') {
+        // Código já foi enviado no WhatsApp pelo cadastro
+        setVerif({
+          signup_token: data.signup_token,
+          dest:         data.channels?.whatsapp?.destination || 'seu WhatsApp',
+          email:        regForm.email,
+          password:     regForm.password,
+        })
       } else {
         setSuccess(t('auth.accountCreated'))
         setTab('login')
@@ -172,6 +198,27 @@ export default function Auth({ defaultTab = 'login' }) {
         <p className="text-[13px] text-gray-400 mt-0.5">{t('auth.subtitle')}</p>
       </div>
 
+      {/* Ativação por código no WhatsApp */}
+      {verif ? (
+        <VerifyWhatsapp
+          verif={verif}
+          onDone={async () => {
+            // Conta ativada → entra direto com as credenciais do formulário
+            try {
+              const data = await api.login({ email: verif.email, password: verif.password })
+              login(data.user, data.token, data.refresh_token)
+              navigate(from, { replace: true })
+            } catch {
+              setVerif(null)
+              setTab('login')
+              setSuccess('Conta ativada! Entre com seu e-mail e senha.')
+              setLoginForm((f) => ({ ...f, email: verif.email }))
+            }
+          }}
+          onBack={() => { setVerif(null); setError(''); setTab('login') }}
+        />
+      ) : (
+      <>
       {/* Tabs */}
       <div className="bg-white px-6 pt-2 pb-0 lg:max-w-md lg:mx-auto lg:w-full">
         <div className="flex border-b border-gray-100">
@@ -328,6 +375,125 @@ export default function Auth({ defaultTab = 'login' }) {
           </form>
         )}
       </div>
+      </>
+      )}
+      </div>
+    </div>
+  )
+}
+
+/* ── Ativação da conta por código no WhatsApp ───────────────────
+   O cadastro (ou o login de conta pendente) envia um código de 6 dígitos
+   para o WhatsApp informado; a conta só entra depois de confirmar. */
+function VerifyWhatsapp({ verif, onDone, onBack }) {
+  const [code, setCode]         = useState('')
+  const [busy, setBusy]         = useState(false)
+  const [msg, setMsg]           = useState(null)   // { type: 'err'|'ok', text }
+  const [cooldown, setCooldown] = useState(0)
+  const [token, setToken]       = useState(verif.signup_token)
+  const sentOnce = useRef(false)
+
+  // Veio do login (sem código recente) → dispara o envio na entrada
+  useEffect(() => {
+    if (verif.resend && !sentOnce.current) { sentOnce.current = true; resend() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const id = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000)
+    return () => clearInterval(id)
+  }, [cooldown > 0]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function resend() {
+    if (busy || cooldown > 0) return
+    setBusy(true); setMsg(null)
+    try {
+      const r = await api.otpRequest({ signup_token: token, channel: 'whatsapp' })
+      setCooldown(Number(r?.retry_after) || 60)
+      setMsg({ type: 'ok', text: 'Código enviado no seu WhatsApp.' })
+    } catch (err) {
+      if (err?.status === 429 && err?.payload?.retry_after) setCooldown(Number(err.payload.retry_after))
+      setMsg({ type: 'err', text: err?.message || 'Não foi possível enviar agora — tente de novo.' })
+    } finally { setBusy(false) }
+  }
+
+  async function verify(e) {
+    e?.preventDefault?.()
+    if (busy || code.length !== 6) return
+    setBusy(true); setMsg(null)
+    try {
+      const r = await api.otpVerify({ signup_token: token, channel: 'whatsapp', code })
+      if (r?.status === 'verified') { await onDone(); return }
+      // Cenário raro: outro canal ainda pendente — renova o token e segue
+      if (r?.signup_token) setToken(r.signup_token)
+      setMsg({ type: 'err', text: 'Verificação incompleta — tente novamente.' })
+    } catch (err) {
+      const left = err?.payload?.attempts_left
+      setMsg({
+        type: 'err',
+        text: err?.message + (Number.isFinite(left) ? ` (${left} tentativa${left === 1 ? '' : 's'} restante${left === 1 ? '' : 's'})` : ''),
+      })
+      if (err?.status === 410) setCode('')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="flex-1 lg:flex-none px-6 pt-8 pb-10 max-w-sm mx-auto w-full lg:max-w-md">
+      <div className="text-center mb-6">
+        <div className="w-14 h-14 rounded-2xl bg-[#25D366]/10 flex items-center justify-center mx-auto mb-3">
+          <span className="text-[26px]">💬</span>
+        </div>
+        <h2 className="font-bold text-[19px] text-gray-900">Confirme seu WhatsApp</h2>
+        <p className="text-[13px] text-gray-500 mt-1.5 leading-relaxed">
+          Enviamos um código de 6 dígitos para <b>{verif.dest}</b>.
+          Digite abaixo para ativar sua conta.
+        </p>
+      </div>
+
+      {msg && (
+        <p className={`text-[13px] px-4 py-2.5 rounded-xl mb-4 border ${
+          msg.type === 'ok'
+            ? 'text-green-700 bg-green-50 border-green-200'
+            : 'text-red-600 bg-red-50 border-red-200'
+        }`}>
+          {msg.text}
+        </p>
+      )}
+
+      <form onSubmit={verify} className="space-y-4">
+        <input
+          autoFocus
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          value={code}
+          onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setMsg(null) }}
+          placeholder="••••••"
+          className="w-full h-14 text-center text-[26px] font-bold tracking-[0.5em] bg-white border border-gray-200 rounded-2xl outline-none focus:border-brand"
+        />
+        <button
+          type="submit"
+          disabled={busy || code.length !== 6}
+          className="w-full h-12 bg-brand text-white rounded-xl font-bold text-[15px] active:scale-[0.98] transition-transform disabled:opacity-50 shadow-sm shadow-brand/30"
+        >
+          {busy ? 'Verificando…' : 'Ativar conta'}
+        </button>
+      </form>
+
+      <div className="text-center mt-5 space-y-2">
+        <button
+          onClick={resend}
+          disabled={busy || cooldown > 0}
+          className="text-[13px] font-semibold text-brand disabled:text-gray-400"
+        >
+          {cooldown > 0 ? `Reenviar código em ${cooldown}s` : 'Reenviar código'}
+        </button>
+        <p>
+          <button onClick={onBack} className="text-[12px] text-gray-400 underline">
+            Voltar ao login
+          </button>
+        </p>
       </div>
     </div>
   )

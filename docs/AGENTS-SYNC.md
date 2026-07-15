@@ -28,6 +28,19 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-12 · Agente A (ativação do cadastro por código no WhatsApp)** —
+  Pedido do usuário: conta só ativa com código de 6 dígitos no WhatsApp.
+  Reaproveitei o wizard OTP dormente (signup_token/otp.js) INVERTENDO o canal:
+  com `SIGNUP_REQUIRE_VERIFICATION=true`, WhatsApp vira OBRIGATÓRIO no
+  cadastro, o e-mail nasce confirmado (não é gate) e o código vai pro
+  WhatsApp; `allDone` = phone_verified; gate do login reescrito (contas
+  antigas sem phone_e164 NÃO são travadas). Front (Auth.jsx): nova tela
+  VerifyWhatsapp (código 6 dígitos, reenvio c/ cooldown, auto-login pós
+  ativação); login 403 verification_required reabre o wizard; api.js expõe
+  err.payload/status + otpRequest/otpVerify; hint do campo atualizado
+  (pt/en/es). Flag OFF = comportamento atual intacto. ⚠️ Ligar exige
+  migration 023 + envio WhatsApp ok (checklist 0.6).
+
 - **2026-07-12 · Agente A (auditoria turista + cooperativa)** — Extensão da
   auditoria aos outros 2 apps: chamadas × rotas (turista 73, coop 41 — tudo
   casa) e varredura de crash: turista 14 páginas (logado/deslogado) e

@@ -172,11 +172,12 @@ router.post('/verify', async (req, res, next) => {
     // Recarrega perfil atualizado (verified flags acabam de mudar)
     const updatedProfile = await loadProfile(user_id);
 
-    // Decide próximo passo
+    // Decide próximo passo. Com phone_required (fluxo atual: ativação pelo
+    // WhatsApp), o código do WhatsApp é o que destrava — e-mail não gate.
     const emailVerified = body.channel === 'email' ? true : updatedProfile.email_verified;
     const phoneVerified = body.channel === 'whatsapp' ? true : updatedProfile.phone_verified;
 
-    const allDone = emailVerified && (!phone_required || phoneVerified);
+    const allDone = phone_required ? phoneVerified : emailVerified;
 
     if (allDone) {
       return res.json({ status: 'verified' });
@@ -203,16 +204,18 @@ router.post('/verify', async (req, res, next) => {
 
 // ── Helper: monta shape de channels para o front ─────────
 function buildChannels(profile, phone_required) {
+  // Ativação pelo WhatsApp: quando há telefone, ele é o canal obrigatório;
+  // e-mail entra só como informativo (já confirmado no cadastro).
   const channels = {
     email: {
-      required:    true,
+      required:    !phone_required,
       verified:    profile.email_verified || false,
       destination: maskDestination('email', profile.email || ''),
     },
   };
   if (phone_required && profile.phone_e164) {
     channels.whatsapp = {
-      required:    false,
+      required:    true,
       verified:    profile.phone_verified || false,
       destination: maskDestination('whatsapp', profile.phone_e164),
     };

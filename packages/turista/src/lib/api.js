@@ -92,7 +92,12 @@ async function request(path, options = {}, isRetry = false) {
 
   if (res.status === 204) return null
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
+  if (!res.ok) {
+    const err = new Error(data.error || `Erro ${res.status}`)
+    err.status  = res.status
+    err.payload = data // ex.: verification_required traz signup_token/channels
+    throw err
+  }
   return data
 }
 
@@ -100,6 +105,8 @@ export const api = {
   // Auth
   login:          (body) => request('/api/auth/login',           { method: 'POST', body }),
   register:       (body) => request('/api/auth/register',        { method: 'POST', body }),
+  otpRequest:     (body) => request('/api/auth/otp/request',      { method: 'POST', body }),
+  otpVerify:      (body) => request('/api/auth/otp/verify',       { method: 'POST', body }),
   forgotPassword: (body) => request('/api/auth/forgot-password', { method: 'POST', body }),
   me:            ()     => request('/api/auth/me'),
   updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),

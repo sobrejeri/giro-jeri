@@ -18,6 +18,7 @@ Legenda: ✅ pronto e validado · 🟡 pronto, falta validar em produção ·
 | 0.3 | **Motor de pernas OFF** (decisão: reserva inteira, 1 coop) | 🟡 | Confirmar `booking_legs_engine_enabled = 'false'` em system_settings + limpar pernas de teste |
 | 0.4 | **Rotacionar SUPABASE_SERVICE_ROLE_KEY** (exposta em chat) | 🔴 | Supabase → Settings → API → rotate; atualizar no Render (variável do serviço, não do env-group) e conferir no log `role=service_role` |
 | 0.5 | Deploy Render acompanha GFBFR | ✅ | Guard de boot valida a chave; /health checa Supabase |
+| 0.6 | **Ativação por código no WhatsApp** (cadastro) | 🟡 | Código pronto (12/07). Ligar: `SIGNUP_REQUIRE_VERIFICATION=true` no Render **+ migration 023 aplicada** (phone_e164/OTP) **+ envio de WhatsApp funcionando** (testar 1 cadastro real). Sem a env, cadastro segue direto como hoje |
 
 ## 1. DINHEIRO (o coração — validar com R$ 1,00 real)
 
@@ -54,7 +55,7 @@ Legenda: ✅ pronto e validado · 🟡 pronto, falta validar em produção ·
 
 | # | Item | Status | Nota |
 |---|------|--------|------|
-| 3.1 | Cadastro/login (e-mail + OTP) | 🟡 | Testar também recuperar senha |
+| 3.1 | Cadastro/login + ativação por código no WhatsApp | 🟡 | Ver 0.6; testar também recuperar senha |
 | 3.2 | Home dinâmica por região | ✅ | |
 | 3.3 | Passeios: pré-seleção → carrinho; tradicionais × exclusivos | 🟡 | |
 | 3.4 | Transfers: rota definida → carrinho; personalizado → cotação | 🟡 | |

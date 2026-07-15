@@ -55,8 +55,10 @@ const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url,
 
 // Verificação de contato (OTP) no cadastro de turista.
 // DESLIGADA por padrão: a conta é criada e já entra logada, sem código.
-// Para REATIVAR (exige migration 023 aplicada + RESEND_API_KEY no ambiente),
-// defina SIGNUP_REQUIRE_VERIFICATION=true.
+// LIGADA (SIGNUP_REQUIRE_VERIFICATION=true): o WhatsApp vira OBRIGATÓRIO e a
+// conta só ativa depois do código de 6 dígitos enviado no WhatsApp — decisão
+// do usuário (12/07). Exige migration 023 aplicada + envio de WhatsApp
+// configurado no ambiente.
 const REQUIRE_SIGNUP_VERIFICATION = process.env.SIGNUP_REQUIRE_VERIFICATION === 'true';
 
 // ── POST /api/auth/register ────────────────────────────────
@@ -71,6 +73,10 @@ router.post('/register', async (req, res, next) => {
       if (!phoneE164) {
         return res.status(400).json({ error: 'Número de telefone inválido.' });
       }
+    }
+    // Ativação por código no WhatsApp: número passa a ser obrigatório.
+    if (REQUIRE_SIGNUP_VERIFICATION && !phoneE164) {
+      return res.status(400).json({ error: 'Informe seu WhatsApp — enviamos um código para ativar a conta.' });
     }
     // Telefone a gravar na coluna `phone`: usa o E.164 normalizado quando válido.
     const phoneToStore = phoneE164 || body.phone || null;
@@ -103,12 +109,13 @@ router.post('/register', async (req, res, next) => {
       return res.status(409).json({ error: GENERIC_ERROR });
     }
 
-    // Cria usuário no Supabase Auth. Sem verificação, já confirmamos o e-mail
-    // para permitir o login imediato; com verificação, fica pendente (OTP).
+    // Cria usuário no Supabase Auth. O e-mail já nasce confirmado nos dois
+    // modos — com verificação ligada, quem ativa a conta é o CÓDIGO DO
+    // WHATSAPP (gate em users.phone_verified, aplicado no login).
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email:         body.email,
       password:      body.password,
-      email_confirm: !REQUIRE_SIGNUP_VERIFICATION,
+      email_confirm: true,
     });
 
     if (authError) {
@@ -126,7 +133,7 @@ router.post('/register', async (req, res, next) => {
       email:          body.email,
       phone:          phoneToStore,
       user_type:      'tourist',
-      email_verified: !REQUIRE_SIGNUP_VERIFICATION,
+      email_verified: true, // e-mail não é gate; a ativação é pelo WhatsApp
       phone_verified: false,
       language:       body.lang,
     };
@@ -163,45 +170,34 @@ router.post('/register', async (req, res, next) => {
       });
     }
 
-    // ── Fluxo legado com verificação por OTP (exige 023 + e-mail) ──────
+    // ── Verificação ligada: código de ativação vai pro WHATSAPP ─────────
     try {
       await requestOtp({
         userId:      profile.id,
-        channel:     'email',
-        destination: body.email,
+        channel:     'whatsapp',
+        destination: phoneE164,
         lang:        body.lang,
       });
     } catch (otpErr) {
-      // OTP falhou mas conta foi criada — não é fatal; o usuário pode re-solicitar
-      console.error('[register] OTP email falhou:', otpErr.message);
+      // OTP falhou mas conta foi criada — não é fatal; o wizard reenvia
+      console.error('[register] OTP whatsapp falhou:', otpErr.message);
     }
 
-    // Monta signup_token
-    const phone_required = !!phoneE164;
-    const signup_token   = signSignupToken({ user_id: profile.id, phone_required });
+    // Monta signup_token (phone_required=true: só o WhatsApp destrava)
+    const signup_token = signSignupToken({ user_id: profile.id, phone_required: true });
 
-    // Monta channels
-    const channels = {
-      email: {
-        required:    true,
-        verified:    false,
-        destination: maskDestination('email', body.email),
-      },
-    };
-    if (phone_required) {
-      channels.whatsapp = {
-        required:    false,
-        verified:    false,
-        destination: maskDestination('whatsapp', phoneE164),
-      };
-    }
-
-    // Retorna sem token de sessão — front usa signup_token para o wizard de verificação
+    // Retorna sem token de sessão — front usa signup_token para o wizard
     return res.status(201).json({
       status:       'verification_required',
       signup_token,
-      channels,
-      next:         'verify_email',
+      channels: {
+        whatsapp: {
+          required:    true,
+          verified:    false,
+          destination: maskDestination('whatsapp', phoneE164),
+        },
+      },
+      next: 'verify_whatsapp',
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -318,15 +314,17 @@ router.post('/login', async (req, res, next) => {
 
     // ── Gate de verificação (apenas tourists) ──────────────
     if (profile.user_type === 'tourist') {
-      const emailPending = !profile.email_verified;
+      // Ativação pelo WhatsApp: quem tem phone_e164 pendente precisa do código.
+      // Contas antigas (sem phone_e164) não são travadas retroativamente.
       const phonePending = profile.phone_e164 && !profile.phone_verified;
+      const emailPending = !profile.phone_e164 && !profile.email_verified;
 
       if (emailPending || phonePending) {
         // Senha já validada acima — pode emitir signup_token sem risco
         const phone_required = !!(profile.phone_e164);
         const signup_token   = signSignupToken({ user_id: profile.id, phone_required });
         const channels       = buildChannels(profile, phone_required);
-        const next           = emailPending ? 'verify_email' : 'verify_whatsapp';
+        const next           = phonePending ? 'verify_whatsapp' : 'verify_email';
 
         return res.status(403).json({
           status:       'verification_required',

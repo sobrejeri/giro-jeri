@@ -21,7 +21,7 @@
     "fullNamePlaceholder": "Seu nome completo",
     "whatsapp": "WhatsApp",
     "whatsappPlaceholder": "+55 88 99999-9999",
-    "whatsappHint": "Opcional — para receber confirmações de reserva",
+    "whatsappHint": "Enviamos um código por WhatsApp para ativar sua conta",
     "loginBtn": "Entrar",
     "loginLoading": "Entrando…",
     "registerBtn": "Criar conta",
