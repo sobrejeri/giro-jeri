@@ -28,6 +28,15 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-15 · Agente B (reputação no app da cooperativa)** — Complemento
+  das avaliações: a coop agora vê a própria reputação. API:
+  `GET /api/operator/reviews` (autenticado, `operator_id = req.user.id`) →
+  `{ summary: {rating_average, rating_count, distribution 1..5}, reviews[] }`
+  com autor + nome do serviço; tolerante à 060 ausente (42703 → vazio).
+  Front (cooperativa): nova página `/reputacao` (nota grande + barras de
+  distribuição + comentários), item "Reputação" na Sidebar, e faixa-resumo
+  clicável no Dashboard (aparece só com ≥1 avaliação). api.js: `getReviews`.
+
 - **2026-07-15 · Agente B (avaliações REAIS por cooperativa)** — Substituí os
   depoimentos fake da home por avaliações verificadas. **Migration 060**
   (`060_coop_reviews.sql`): adiciona `reviews.operator_id` (coop que executou,

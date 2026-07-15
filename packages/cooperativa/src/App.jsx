@@ -11,6 +11,7 @@ import Passeios from './pages/Passeios'
 import Rotas from './pages/Rotas'
 import Perfil from './pages/Perfil'
 import Reservas from './pages/Reservas'
+import Reputacao from './pages/Reputacao'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="passeios"   element={<Passeios />} />
         <Route path="rotas"      element={<Rotas />} />
+        <Route path="reputacao"  element={<Reputacao />} />
         <Route path="perfil"     element={<Perfil />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

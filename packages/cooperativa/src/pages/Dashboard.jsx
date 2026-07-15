@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -6,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, Search, SlidersHorizontal,
   Clock, Users, MapPin, Car, Phone, UserCheck, Pencil, FileText,
   MessageCircle, Send, Download, ShoppingBag, Hourglass, Loader2,
-  CheckCircle2, TrendingUp, TrendingDown,
+  CheckCircle2, TrendingUp, TrendingDown, Star,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { downloadOrderPDF, shareOrderPDF } from '../lib/orderPDF'
@@ -308,6 +309,13 @@ export default function Dashboard() {
     staleTime: 5 * 60_000,
   })
 
+  const { data: reputation } = useQuery({
+    queryKey: ['operator-reviews'],
+    queryFn:  () => api.getReviews(),
+    staleTime: 5 * 60_000,
+  })
+  const repSummary = reputation?.summary
+
   const cooperativa = profile ? {
     full_name:         profile.full_name,
     document_type:     profile.document_type,
@@ -446,6 +454,33 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {stats.map((s) => <StatCard key={s.label} {...s} />)}
       </div>
+
+      {/* ── Reputação (resumo) ──────────────────────────── */}
+      {repSummary?.rating_count > 0 && (
+        <Link
+          to="/reputacao"
+          className="flex items-center gap-4 bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 hover:border-amber-200 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-3xl font-extrabold text-gray-900 leading-none">{repSummary.rating_average}</span>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-0.5">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star key={s} size={13}
+                    className={s <= Math.round(repSummary.rating_average) ? 'fill-amber-400 text-amber-400' : 'text-gray-200'} />
+                ))}
+              </div>
+              <span className="text-[11px] text-gray-400 mt-0.5">
+                {repSummary.rating_count} avaliação{repSummary.rating_count > 1 ? 'ões' : ''}
+              </span>
+            </div>
+          </div>
+          <p className="text-[13px] text-gray-500 hidden sm:block">Reputação da sua cooperativa</p>
+          <span className="ml-auto text-[13px] font-semibold text-brand flex items-center gap-1">
+            Ver avaliações <ChevronRight size={15} />
+          </span>
+        </Link>
+      )}
 
       {/* ── Tabela de reservas ──────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

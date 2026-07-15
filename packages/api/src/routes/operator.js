@@ -88,6 +88,74 @@ router.get('/partners', async (_req, res, next) => {
 
 router.use(authenticate, requireOperator);
 
+// ── GET /api/operator/reviews ──────────────────────────
+// Reputação DESTA cooperativa: resumo (média, total, distribuição de estrelas)
+// + as avaliações recebidas, com autor e serviço. operator_id = req.user.id
+// (a coop só vê as próprias). Tolerante à migration 060 ausente.
+router.get('/reviews', async (req, res, next) => {
+  try {
+    const { data: rows, error } = await supabase
+      .from('reviews')
+      .select('id, rating, comment_text, service_type, service_id, user_id, created_at')
+      .eq('operator_id', req.user.id)
+      .eq('is_public', true)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) {
+      // Sem migration 060 (coluna operator_id): reputação ainda vazia.
+      if (error.code === '42703') return res.json({ summary: emptyReviewSummary(), reviews: [] });
+      throw error;
+    }
+    const list = rows || [];
+
+    // Enriquecimento em memória: autor + nome do serviço.
+    const userIds  = [...new Set(list.map((r) => r.user_id).filter(Boolean))];
+    const tourIds  = [...new Set(list.filter((r) => r.service_type === 'tour').map((r) => r.service_id))];
+    const routeIds = [...new Set(list.filter((r) => r.service_type === 'transfer').map((r) => r.service_id))];
+    const [usersRes, toursRes, routesRes] = await Promise.all([
+      userIds.length  ? supabase.from('users').select('id, full_name, profile_photo_url').in('id', userIds) : { data: [] },
+      tourIds.length  ? supabase.from('tours').select('id, name').in('id', tourIds) : { data: [] },
+      routeIds.length ? supabase.from('transfer_routes').select('id, origin_name, destination_name').in('id', routeIds) : { data: [] },
+    ]);
+    const userById  = new Map((usersRes.data  || []).map((u) => [u.id, u]));
+    const tourById  = new Map((toursRes.data  || []).map((t) => [t.id, t]));
+    const routeById = new Map((routesRes.data || []).map((r) => [r.id, r]));
+    const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || 'Turista';
+
+    // Resumo: média, total e distribuição 1..5.
+    const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let sum = 0;
+    for (const r of list) { dist[r.rating] = (dist[r.rating] || 0) + 1; sum += r.rating; }
+    const summary = list.length
+      ? { rating_average: Math.round((sum / list.length) * 10) / 10, rating_count: list.length, distribution: dist }
+      : emptyReviewSummary();
+
+    res.json({
+      summary,
+      reviews: list.map((r) => {
+        const author = userById.get(r.user_id);
+        const route  = routeById.get(r.service_id);
+        return {
+          id:           r.id,
+          rating:       r.rating,
+          comment:      r.comment_text,
+          created_at:   r.created_at,
+          service_type: r.service_type,
+          service_name: r.service_type === 'tour'
+            ? (tourById.get(r.service_id)?.name || 'Passeio')
+            : route ? `${route.origin_name} → ${route.destination_name}` : 'Translado',
+          author_name:  firstName(author?.full_name),
+          author_photo: author?.profile_photo_url || null,
+        };
+      }),
+    });
+  } catch (err) { next(err); }
+});
+
+function emptyReviewSummary() {
+  return { rating_average: null, rating_count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
+}
+
 // GET /api/operator/profile
 router.get('/profile', async (req, res, next) => {
   try {

@@ -158,6 +158,9 @@ export const api = {
   updateProfile: (body)       => request('/api/operator/profile', { method: 'PATCH', body }),
   uploadPhoto:   (photo_data) => request('/api/auth/me/photo', { method: 'POST', body: { photo_data } }),
 
+  // Reputação: avaliações verificadas recebidas por esta cooperativa
+  getReviews:    ()           => request('/api/operator/reviews'),
+
   // Preferências da cooperativa (opt-in por serviço)
   getPreferences: () => request('/api/operator/preferences'),
   setPreference:  (type, entityId, isActive) =>
