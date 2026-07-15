@@ -6,7 +6,7 @@ import { useRegion } from '../contexts/RegionContext'
 import {
   Star, Clock, Heart, ArrowRight, Compass, Car, Calendar, Users,
   ShieldCheck, MapPin, CalendarCheck, Headphones, Lock, RefreshCcw,
-  ChevronRight, ChevronDown, Instagram, Send, Sparkles, HeartHandshake,
+  ChevronRight, ChevronDown, Instagram, Send, Sparkles, HeartHandshake, Plane,
 } from 'lucide-react'
 
 const fmtPrice   = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -154,10 +154,44 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
   )
 }
 
+/* ── Card de rota de transfer em destaque (Serviços em destaque) ── */
+function RouteMiniCard({ route, gradient, onClick }) {
+  const price = Number(route.default_price) || 0
+  return (
+    <button
+      onClick={onClick}
+      className="group text-left bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
+    >
+      <div className={`relative h-36 overflow-hidden bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+        <Plane size={40} className="text-white/30" />
+        <span className="absolute top-2 left-2 bg-black/35 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+          Transfer
+        </span>
+      </div>
+      <div className="p-3.5">
+        <p className="font-bold text-gray-900 text-[13px] leading-tight line-clamp-2">
+          {route.origin_name} → {route.destination_name}
+        </p>
+        <div className="mt-2.5 pt-2.5 border-t border-gray-50 flex items-end justify-between gap-2">
+          {price > 0 ? (
+            <div>
+              <p className="text-[10px] text-gray-400 leading-none">Privativo a partir de</p>
+              <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(price)}</p>
+            </div>
+          ) : (
+            <p className="text-[12px] text-brand font-bold">Consultar valores</p>
+          )}
+          <span className="text-[11px] text-brand font-semibold">Reservar →</span>
+        </div>
+      </div>
+    </button>
+  )
+}
+
 export default function HomeDesktop({
   tours = [], featured = [], isLoading, favs, toggleFav,
   bannerImg = null, bannerTitle = null, bannerSubtitle = null,
-  partners = [],
+  partners = [], featuredRoutes = [],
 }) {
   const navigate = useNavigate()
   const { region, openPicker } = useRegion()
@@ -430,18 +464,18 @@ export default function HomeDesktop({
         )}
       </section>
 
-      {/* ── EXPERIÊNCIAS EM DESTAQUE ─────────────────────────── */}
+      {/* ── SERVIÇOS EM DESTAQUE (passeios + rotas de transfer) ── */}
       <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="flex items-end justify-between mb-5">
           <div>
-            <h2 className="text-[24px] font-extrabold text-gray-900">Experiências em destaque</h2>
-            <p className="text-[13px] text-gray-500 mt-1">Passeios exclusivos e clássicos da vila.</p>
+            <h2 className="text-[24px] font-extrabold text-gray-900">Serviços em destaque</h2>
+            <p className="text-[13px] text-gray-500 mt-1">Passeios e transfers escolhidos a dedo.</p>
           </div>
           <Link to="/passeios" className="inline-flex items-center gap-1 text-[14px] font-semibold text-brand hover:gap-1.5 transition-all">
             Ver todos os passeios <ArrowRight size={16} />
           </Link>
         </div>
-        {gridRest.length === 0 && !isLoading ? (
+        {gridRest.length === 0 && featuredRoutes.length === 0 && !isLoading ? (
           <div className="text-center text-gray-400 py-8 border border-dashed border-gray-200 rounded-2xl">
             Em breve, novos passeios por aqui.
           </div>
@@ -455,6 +489,14 @@ export default function HomeDesktop({
                 onToggleFav={toggleFav}
                 gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
                 onClick={() => navigate(`/passeios/${t.id}`)}
+              />
+            ))}
+            {featuredRoutes.map((r, i) => (
+              <RouteMiniCard
+                key={`route-${r.id}`}
+                route={r}
+                gradient={FALLBACK_GRADIENTS[(i + 1) % FALLBACK_GRADIENTS.length]}
+                onClick={() => navigate('/transfers', { state: { origin: r.origin_name, dest: r.destination_name } })}
               />
             ))}
           </div>
@@ -631,6 +673,7 @@ export default function HomeDesktop({
               <li><Link to="/transfers" className="hover:text-brand transition-colors">Transfers</Link></li>
               <li><Link to="/eventos"   className="hover:text-brand transition-colors">Descubra a Vila</Link></li>
               <li><Link to="/minhas-reservas" className="hover:text-brand transition-colors">Minhas reservas</Link></li>
+              <li><Link to="/afiliado"  className="hover:text-brand transition-colors">Divulgou, Ganhou · Afiliado</Link></li>
             </ul>
           </div>
 

@@ -142,6 +142,30 @@ export default function ToursDesktop() {
     ? byCategory.filter((t) => t.name.toLowerCase().includes(searchTerm.trim().toLowerCase()))
     : byCategory
 
+  // Tradicionais (carrinho/combo) × exclusivos (venda direta) — mesma divisão
+  // do mobile. Os dois abrem a página de detalhe no desktop.
+  const tradList      = list.filter((t) => !t.is_exclusive)
+  const exclusiveList = list.filter((t) => t.is_exclusive)
+
+  // R6: horário limite de solicitação (padrão 12:00, America/Fortaleza) —
+  // passou do cutoff, a data mínima do filtro passa a ser amanhã. O backend
+  // valida no mesmo fuso; sem isso um turista em outro fuso vê "hoje" e leva
+  // 400 no checkout (mesma regra do mobile).
+  const cutoffMinIso = useMemo(() => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date())
+    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)
+    const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
+    const d = new Date()
+    if (h * 60 + m >= 12 * 60) d.setDate(d.getDate() + 1)
+    return d.toLocaleDateString('en-CA')
+  }, [])
+  useEffect(() => {
+    if (date && date < cutoffMinIso) setDate(cutoffMinIso)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cutoffMinIso])
+
   function openDetails(tour) {
     navigate(`/passeios/${tour.id}`, { state: { people, date } })
   }
@@ -188,7 +212,7 @@ export default function ToursDesktop() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
+              min={cutoffMinIso}
               className="text-[13px] font-semibold text-gray-700 bg-transparent outline-none w-[118px]"
             />
           </label>
@@ -247,19 +271,47 @@ export default function ToursDesktop() {
             : 'Nenhum passeio encontrado nesta região.'}
         </p>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {list.map((t, i) => (
-            <TourCard
-              key={t.id}
-              tour={t}
-              badge={badgeFor(t, i)}
-              gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
-              isFav={favs.has(t.id)}
-              onToggleFav={toggleFav}
-              onDetails={openDetails}
-            />
-          ))}
-        </div>
+        <>
+          {tradList.length > 0 && (
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {tradList.map((t, i) => (
+                <TourCard
+                  key={t.id}
+                  tour={t}
+                  badge={badgeFor(t, i)}
+                  gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
+                  isFav={favs.has(t.id)}
+                  onToggleFav={toggleFav}
+                  onDetails={openDetails}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Exclusivos: venda direta, carrossel próprio no mobile — aqui em
+              seção separada com selo (mesma divisão do catálogo). */}
+          {exclusiveList.length > 0 && (
+            <>
+              <div className="mt-10 mb-4">
+                <h2 className="text-[20px] font-extrabold text-gray-900">Experiências exclusivas ✨</h2>
+                <p className="text-[13px] text-gray-500 mt-0.5">Passeios especiais com venda direta, sem combo.</p>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {exclusiveList.map((t, i) => (
+                  <TourCard
+                    key={t.id}
+                    tour={t}
+                    badge="Exclusivo"
+                    gradient={FALLBACK_GRADIENTS[(i + 2) % FALLBACK_GRADIENTS.length]}
+                    isFav={favs.has(t.id)}
+                    onToggleFav={toggleFav}
+                    onDetails={openDetails}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   )

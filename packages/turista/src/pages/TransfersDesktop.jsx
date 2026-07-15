@@ -9,6 +9,7 @@ import {
   Calendar, Plus, Minus, Send, CheckCircle2, Info, ChevronRight, Check,
 } from 'lucide-react'
 import { PlaceInput, suggestVehicles, VehicleRow } from './Transfers'
+import { highSeasonMonthSet } from '../lib/season'
 import { format, startOfDay, addDays, isToday, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -115,6 +116,16 @@ export default function TransfersDesktop() {
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
                     .filter(v => v.is_transfer_allowed && v.is_active !== false)
 
+  // Alta temporada: meses com acréscimo, p/ sinalizar junto da data.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: 3,
+  })
+  const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
+  const isHighSeasonIso  = (iso) => !!iso && highSeasonMonths.has(Number(String(iso).slice(5, 7)))
+
   // Origem padrão quando as rotas carregam (prefere Jericoacoara)
   useEffect(() => {
     if (origin || !routes.length) return
@@ -149,6 +160,52 @@ export default function TransfersDesktop() {
 
   const matched   = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
   const unitPrice = matched ? Number(matched.default_price) : null
+
+  // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
+  // anteriores a "agora + N horas". Padrão 4h; a rota pode definir a sua
+  // (transfers.min_advance_hours, via admin) — mesma regra do mobile.
+  const DEFAULT_MIN_ADVANCE_HOURS = 4
+  const bookableAfter = (hours) => {
+    const p = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Fortaleza',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a }, {})
+    const d = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), 0)
+    d.setHours(d.getHours() + hours)
+    return d
+  }
+
+  const MIN_ADVANCE_HOURS = matched?.transfers?.min_advance_hours ?? DEFAULT_MIN_ADVANCE_HOURS
+  const minBookable = useMemo(() => bookableAfter(MIN_ADVANCE_HOURS), [MIN_ADVANCE_HOURS])
+  const minDateIso  = format(minBookable, 'yyyy-MM-dd')
+  // Horário mínimo: só restringe quando a data escolhida é o 1º dia disponível.
+  const minTime = date === minDateIso ? format(minBookable, 'HH:mm') : '00:00'
+  useEffect(() => {
+    if (date && date < minDateIso) setDate(minDateIso)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minDateIso])
+  useEffect(() => {
+    if (date === minDateIso && time && time < minTime) setTime(minTime)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, minTime])
+  const advanceOk = date > minDateIso || (date === minDateIso && (time || '') >= minTime)
+
+  // Translado personalizado: sem rota, usa a antecedência padrão.
+  const customMinBookable = useMemo(() => bookableAfter(DEFAULT_MIN_ADVANCE_HOURS), [])
+  const customMinDateIso  = format(customMinBookable, 'yyyy-MM-dd')
+  const customMinTime = customDate === customMinDateIso ? format(customMinBookable, 'HH:mm') : '00:00'
+  useEffect(() => {
+    if (customDate && customDate < customMinDateIso) setCustomDate(customMinDateIso)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customMinDateIso])
+  useEffect(() => {
+    if (customDate === customMinDateIso && customTime && customTime < customMinTime) setCustomTime(customMinTime)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customDate, customMinTime])
+  const customAdvanceOk = customDate > customMinDateIso ||
+    (customDate === customMinDateIso && (customTime || '') >= customMinTime)
+
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
 
   // Auto-aplica a sugestão quando o carrinho está vazio ou ainda reflete a
@@ -176,7 +233,7 @@ export default function TransfersDesktop() {
     .filter(x => x.vehicle)
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
-  const canBook      = !!matched && cartItems.length > 0 && cartCapacity >= people && !!time
+  const canBook      = !!matched && cartItems.length > 0 && cartCapacity >= people && !!time && advanceOk
 
   // Sugestão já é o único item do carrinho na quantidade certa
   const suggestionIsApplied = !!(suggestion &&
@@ -199,7 +256,7 @@ export default function TransfersDesktop() {
   const seasonAddition = Number(surchargeData?.seasonAdditional) || 0
   const grandTotal     = Math.round((cartTotal + seasonAddition) * 100) / 100
 
-  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime
+  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime && customAdvanceOk
 
   function handleConfirm() {
     if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
@@ -224,6 +281,7 @@ export default function TransfersDesktop() {
         service_id:          matched?.id,
         vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: unitPrice })),
         booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
+        min_advance_hours:   matched?.transfers?.min_advance_hours ?? null,
       },
     })
   }
@@ -350,7 +408,7 @@ export default function TransfersDesktop() {
                       <input
                         type="date"
                         value={date}
-                        min={todayIso()}
+                        min={minDateIso}
                         onChange={e => setDate(e.target.value)}
                         className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none"
                       />
@@ -363,6 +421,7 @@ export default function TransfersDesktop() {
                       <input
                         type="time"
                         value={time}
+                        min={minTime}
                         onChange={e => setTime(e.target.value)}
                         className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none"
                       />
@@ -379,6 +438,19 @@ export default function TransfersDesktop() {
                     </div>
                   </div>
                 </div>
+
+                {!advanceOk && (
+                  <p className="mt-3 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    Transfers precisam de no mínimo {MIN_ADVANCE_HOURS}h de antecedência —
+                    escolha a partir de {format(minBookable, "d/MM 'às' HH:mm")}.
+                  </p>
+                )}
+                {advanceOk && isHighSeasonIso(date) && (
+                  <p className="mt-3 flex items-center gap-2 text-[12px] text-amber-600">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    Alta temporada — pode ter acréscimo no valor (já mostrado no resumo).
+                  </p>
+                )}
               </section>
 
               {/* Veículo */}
@@ -499,6 +571,7 @@ export default function TransfersDesktop() {
                   {!matched ? 'Selecione a rota'
                     : !cartItems.length ? 'Selecione o veículo'
                     : cartCapacity < people ? 'Capacidade insuficiente'
+                    : !advanceOk ? `Antecedência mínima de ${MIN_ADVANCE_HOURS}h`
                     : 'Confirmar Transfer'}
                 </button>
               </div>
@@ -565,14 +638,14 @@ export default function TransfersDesktop() {
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Data</label>
                   <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                     <Calendar size={15} className="text-brand shrink-0" />
-                    <input type="date" value={customDate} min={todayIso()} onChange={e => setCustomDate(e.target.value)} className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none" />
+                    <input type="date" value={customDate} min={customMinDateIso} onChange={e => setCustomDate(e.target.value)} className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none" />
                   </div>
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Horário</label>
                   <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                     <Clock size={15} className="text-brand shrink-0" />
-                    <input type="time" value={customTime} onChange={e => setCustomTime(e.target.value)} className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none" />
+                    <input type="time" value={customTime} min={customMinTime} onChange={e => setCustomTime(e.target.value)} className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none" />
                   </div>
                 </div>
                 <div>
@@ -597,6 +670,13 @@ export default function TransfersDesktop() {
                   className="mt-1 w-full text-[14px] text-gray-700 border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:border-brand placeholder-gray-400"
                 />
               </div>
+
+              {!customAdvanceOk && (
+                <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                  Transfers precisam de no mínimo {DEFAULT_MIN_ADVANCE_HOURS}h de antecedência —
+                  escolha a partir de {format(customMinBookable, "d/MM 'às' HH:mm")}.
+                </p>
+              )}
 
               {customError && (
                 <p className="text-[13px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">{customError}</p>
