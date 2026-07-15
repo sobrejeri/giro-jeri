@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import {
-  Star, Clock, Users, Heart, Calendar, Minus, Plus, Zap,
+  Star, Clock, Users, Heart, Calendar, Minus, Plus, Zap, Search, X,
 } from 'lucide-react'
 
 const fmtPrice = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -104,11 +104,25 @@ function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
 
 export default function ToursDesktop() {
   const navigate = useNavigate()
+  const { state: navState } = useLocation()
   const { region, getServiceQuery } = useRegion()
   const [category, setCategory] = useState('')
-  const [people, setPeople]     = useState(2)
-  const [date, setDate]         = useState('')
+  const [people, setPeople]     = useState(() => Number(navState?.people) >= 1 ? Number(navState.people) : 2)
+  const [date, setDate]         = useState(() => /^\d{4}-\d{2}-\d{2}$/.test(navState?.date || '') ? navState.date : '')
+  // Busca por nome — paridade com a lupa do mobile
+  const [searchTerm, setSearchTerm] = useState('')
   const { favs, toggleFav } = useFavorites()
+
+  // Passeio já escolhido na home (dropdown da busca ou card) → abre o detalhe.
+  // Só no viewport desktop: este componente fica montado (oculto) no mobile,
+  // onde o Tours trata o selectedId selecionando o passeio na própria lista.
+  useEffect(() => {
+    const isDesktop = window.matchMedia('(min-width: 1024px)').matches
+    if (isDesktop && navState?.selectedId && !navState?.restoreFromCart) {
+      navigate(`/passeios/${navState.selectedId}`, { replace: true, state: { people, date } })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navState?.selectedId])
 
   const geo = getServiceQuery()
   const { data, isLoading } = useQuery({
@@ -123,7 +137,10 @@ export default function ToursDesktop() {
     return [...m.entries()]
   }, [tours])
 
-  const list = category ? tours.filter((t) => t.categories?.id === category) : tours
+  const byCategory = category ? tours.filter((t) => t.categories?.id === category) : tours
+  const list = searchTerm.trim()
+    ? byCategory.filter((t) => t.name.toLowerCase().includes(searchTerm.trim().toLowerCase()))
+    : byCategory
 
   function openDetails(tour) {
     navigate(`/passeios/${tour.id}`, { state: { people, date } })
@@ -149,8 +166,22 @@ export default function ToursDesktop() {
           </p>
         </div>
 
-        {/* Data + pessoas (compactos, à direita) */}
+        {/* Busca + data + pessoas (compactos, à direita) */}
         <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-4 py-2 focus-within:border-brand transition-colors">
+            <Search size={14} className="text-brand shrink-0" />
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar passeio…"
+              className="text-[13px] font-semibold text-gray-700 bg-transparent outline-none w-[150px] placeholder-gray-400"
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} aria-label="Limpar busca">
+                <X size={13} className="text-gray-400" />
+              </button>
+            )}
+          </div>
           <label className="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-4 py-2 cursor-pointer hover:border-gray-300 transition-colors">
             <Calendar size={14} className="text-brand shrink-0" />
             <input
@@ -211,7 +242,9 @@ export default function ToursDesktop() {
         </div>
       ) : list.length === 0 ? (
         <p className="text-gray-400 py-16 text-center border border-dashed border-gray-200 rounded-2xl mt-2">
-          Nenhum passeio encontrado nesta região.
+          {searchTerm.trim()
+            ? <>Nenhum passeio encontrado para “{searchTerm.trim()}”.</>
+            : 'Nenhum passeio encontrado nesta região.'}
         </p>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">

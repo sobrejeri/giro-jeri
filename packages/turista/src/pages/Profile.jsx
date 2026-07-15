@@ -53,7 +53,8 @@ function formatDoc(type, num) {
 
 // Status do WhatsApp do telefone cadastrado (a plataforma envia avisos
 // automáticos por lá). Checa sob demanda via Z-API, sem enviar mensagem.
-function WhatsappCheck() {
+// Exportado para reuso no ProfileDesktop (mesmo padrão do PlaceInput).
+export function WhatsappCheck() {
   const [status, setStatus]     = useState(undefined) // undefined=carregando · null=nunca checado · true/false
   const [checking, setChecking] = useState(false)
   const [err, setErr]           = useState(null)

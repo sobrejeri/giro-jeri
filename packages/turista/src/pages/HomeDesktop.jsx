@@ -6,7 +6,7 @@ import { useRegion } from '../contexts/RegionContext'
 import {
   Star, Clock, Heart, ArrowRight, Compass, Car, Calendar, Users,
   ShieldCheck, MapPin, CalendarCheck, Headphones, Lock, RefreshCcw,
-  ChevronRight, ChevronDown, Instagram, Send, Sparkles,
+  ChevronRight, ChevronDown, Instagram, Send, Sparkles, HeartHandshake,
 } from 'lucide-react'
 
 const fmtPrice   = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -22,7 +22,7 @@ const HERO_BADGES = [
 
 // Benefícios — bloco de confiança
 const BENEFITS = [
-  { icon: Headphones,    title: 'Atendimento local',    desc: 'Fale com quem conhece Jericoacoara de verdade — sempre na plataforma.' },
+  { icon: Headphones,    title: 'Atendimento local',    desc: 'Fale com quem conhece a região de verdade — sempre na plataforma.' },
   { icon: Sparkles,      title: 'Reserva rápida',        desc: 'Escolha seu passeio e reserve em poucos cliques.' },
   { icon: Lock,          title: 'Pagamento seguro',       desc: 'Ambiente protegido e múltiplas formas de pagamento.' },
   { icon: RefreshCcw,    title: 'Cancelamento grátis',    desc: 'Cancele sem taxa até 24h antes do passeio.' },
@@ -80,9 +80,9 @@ function HeroTourCard({ tour, tag, gradient, onClick }) {
           </span>
         )}
         <div className="absolute bottom-3 left-4 right-4 text-white">
-          <p className="font-extrabold text-[17px] leading-tight drop-shadow-md line-clamp-1">{tour?.name || 'Passeio em Jericoacoara'}</p>
+          <p className="font-extrabold text-[17px] leading-tight drop-shadow-md line-clamp-1">{tour?.name || 'Passeio imperdível'}</p>
           <p className="text-[12px] text-white/85 line-clamp-1 mt-0.5 drop-shadow">
-            {tour?.short_description || 'Uma experiência inesquecível em Jeri'}
+            {tour?.short_description || 'Uma experiência inesquecível'}
           </p>
         </div>
       </div>
@@ -157,6 +157,7 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
 export default function HomeDesktop({
   tours = [], featured = [], isLoading, favs, toggleFav,
   bannerImg = null, bannerTitle = null, bannerSubtitle = null,
+  partners = [],
 }) {
   const navigate = useNavigate()
   const { region, openPicker } = useRegion()
@@ -422,7 +423,7 @@ export default function HomeDesktop({
                 tour={t}
                 tag={tagFor(t, ['Mais vendido', 'Aventura', 'Pôr do sol'][i])}
                 gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
-                onClick={() => navigate('/passeios', { state: { selectedId: t.id } })}
+                onClick={() => navigate(`/passeios/${t.id}`)}
               />
             ))}
           </div>
@@ -453,7 +454,7 @@ export default function HomeDesktop({
                 isFav={favs?.has?.(t.id)}
                 onToggleFav={toggleFav}
                 gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
-                onClick={() => navigate('/passeios', { state: { selectedId: t.id } })}
+                onClick={() => navigate(`/passeios/${t.id}`)}
               />
             ))}
           </div>
@@ -512,12 +513,41 @@ export default function HomeDesktop({
         </div>
       </section>
 
+      {/* ── COOPERATIVAS PARCEIRAS ───────────────────────────── */}
+      {partners.length > 0 && (
+        <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+                <HeartHandshake size={20} className="text-teal-600" />
+              </div>
+              <div>
+                <h2 className="text-[20px] font-extrabold text-gray-900 leading-tight">Cooperativas parceiras</h2>
+                <p className="text-[13px] text-gray-400">Operadores locais verificados que realizam seus passeios e transfers.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              {partners.map((p) => (
+                <div key={p.id} className="flex items-center gap-2.5 bg-gray-50 rounded-full pl-1.5 pr-4 py-1.5">
+                  <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden shrink-0">
+                    {p.profile_photo_url
+                      ? <img src={p.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-gray-500">{(p.full_name || '?')[0].toUpperCase()}</div>}
+                  </div>
+                  <span className="text-[13px] font-semibold text-gray-700">{p.full_name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ── DEPOIMENTOS ──────────────────────────────────────── */}
       <section className="mt-16 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="flex items-end justify-between mb-6">
           <div>
             <h2 className="text-[26px] font-extrabold text-gray-900">Quem visita, recomenda</h2>
-            <p className="text-[13px] text-gray-500 mt-1">Histórias reais de quem já viveu Jeri com a gente.</p>
+            <p className="text-[13px] text-gray-500 mt-1">Histórias reais de quem já viveu {placeShort} com a gente.</p>
           </div>
           <Link to="/eventos" className="text-[14px] font-semibold text-brand inline-flex items-center gap-1 hover:gap-1.5 transition-all">
             Ver mais avaliações <ArrowRight size={16} />
@@ -585,7 +615,7 @@ export default function HomeDesktop({
               <p className="font-giro font-bold text-[15px] text-gray-900 tracking-wide">TURIVA</p>
             </div>
             <p className="text-[12px] text-gray-500 leading-relaxed">
-              Plataforma local de passeios e transfers em Jericoacoara. Atendimento 100% dentro do app.
+              Plataforma de passeios e transfers com operadores locais. Atendimento 100% dentro do app.
             </p>
             <div className="flex items-center gap-3 mt-4">
               <a href="#" className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors" aria-label="Instagram">
@@ -634,8 +664,8 @@ export default function HomeDesktop({
         </div>
 
         <div className="border-t border-gray-100 pt-5 flex items-center justify-between text-[11px] text-gray-400">
-          <p>© {new Date().getFullYear()} Turiva · Passeios e transfers em Jericoacoara.</p>
-          <p>Feito com <span className="text-brand">♥</span> na vila.</p>
+          <p>© {new Date().getFullYear()} Turiva · Passeios, transfers e experiências.</p>
+          <p>Feito com <span className="text-brand">♥</span> por quem vive o destino.</p>
         </div>
         </div>
       </footer>

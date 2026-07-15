@@ -626,6 +626,7 @@ export default function Home() {
       <HomeDesktop
         tours={tours} featured={featured} isLoading={isLoading} favs={favs} toggleFav={toggleFav}
         bannerImg={bannerImg} bannerTitle={bannerTitle} bannerSubtitle={bannerSubtitle}
+        partners={partners}
       />
     </div>
     </>

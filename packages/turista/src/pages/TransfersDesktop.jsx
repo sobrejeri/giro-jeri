@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -6,7 +6,7 @@ import { useRegion } from '../contexts/RegionContext'
 import { api } from '../lib/api'
 import {
   Route, Zap, Clock, Users, Car, ShieldCheck, Timer, Headphones,
-  Calendar, Plus, Minus, Send, CheckCircle2, Info, ChevronRight,
+  Calendar, Plus, Minus, Send, CheckCircle2, Info, ChevronRight, Check,
 } from 'lucide-react'
 import { PlaceInput, suggestVehicles, VehicleRow } from './Transfers'
 import { format, startOfDay, addDays, isToday, isSameDay } from 'date-fns'
@@ -71,6 +71,9 @@ export default function TransfersDesktop() {
   const { region, userCoords, getServiceQuery } = useRegion()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
+  // Última sugestão auto-aplicada — permite seguir atualizações da sugestão
+  // sem sobrescrever escolhas manuais do usuário (mesma regra do mobile).
+  const autoAppliedRef = useRef(null)
 
   const [mode, setMode] = useState('rota')
 
@@ -85,6 +88,10 @@ export default function TransfersDesktop() {
   /* ── Corrida personalizada ── */
   const [customOrigin,  setCustomOrigin]  = useState('')
   const [customDest,    setCustomDest]    = useState('')
+  // Metadados do place escolhido na busca (place_id + coordenadas) — enviados
+  // à cooperativa junto da solicitação, igual ao mobile.
+  const [customOriginMeta, setCustomOriginMeta] = useState(null)
+  const [customDestMeta,   setCustomDestMeta]   = useState(null)
   const [customDate,    setCustomDate]    = useState(todayIso)
   const [customTime,    setCustomTime]    = useState('08:00')
   const [customPeople,  setCustomPeople]  = useState(2)
@@ -106,7 +113,7 @@ export default function TransfersDesktop() {
   const routes = Array.isArray(routesData?.routes) ? routesData.routes
                : Array.isArray(routesData) ? routesData : []
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
-                    .filter(v => v.is_transfer_allowed)
+                    .filter(v => v.is_transfer_allowed && v.is_active !== false)
 
   // Origem padrão quando as rotas carregam (prefere Jericoacoara)
   useEffect(() => {
@@ -144,6 +151,25 @@ export default function TransfersDesktop() {
   const unitPrice = matched ? Number(matched.default_price) : null
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
 
+  // Auto-aplica a sugestão quando o carrinho está vazio ou ainda reflete a
+  // sugestão anterior — escolhas manuais são preservadas (igual ao mobile).
+  useEffect(() => {
+    if (!suggestion) return
+    const key = `${suggestion.vehicle.id}:${suggestion.qty}`
+    if (key === autoAppliedRef.current) return
+    const entries = Object.entries(cart).filter(([, q]) => q > 0)
+    const isEmpty = entries.length === 0
+    const matchesPrevAuto = autoAppliedRef.current &&
+      entries.length === 1 &&
+      entries[0][0] === autoAppliedRef.current.split(':')[0] &&
+      Number(entries[0][1]) === Number(autoAppliedRef.current.split(':')[1])
+    if (isEmpty || matchesPrevAuto) {
+      setCart({ [suggestion.vehicle.id]: suggestion.qty })
+      autoAppliedRef.current = key
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestion?.vehicle?.id, suggestion?.qty])
+
   const cartItems = Object.entries(cart)
     .filter(([, q]) => q > 0)
     .map(([id, qty]) => ({ vehicle: vehicles.find(v => v.id === id), qty }))
@@ -151,6 +177,12 @@ export default function TransfersDesktop() {
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const canBook      = !!matched && cartItems.length > 0 && cartCapacity >= people && !!time
+
+  // Sugestão já é o único item do carrinho na quantidade certa
+  const suggestionIsApplied = !!(suggestion &&
+    cartItems.length === 1 &&
+    cartItems[0].vehicle.id === suggestion.vehicle.id &&
+    cartItems[0].qty === suggestion.qty)
 
   // Acréscimo de alta temporada / feriado já no resumo (antes de confirmar)
   const { data: surchargeData } = useQuery({
@@ -175,6 +207,7 @@ export default function TransfersDesktop() {
     navigate('/checkout/resumo', {
       state: {
         service_name:        `Transfer ${origin} → ${dest}`,
+        short_description:   matched?.transfers?.short_description || null,
         service_type:        'transfer',
         booking_mode:        'private',
         service_date:        dayLabel(date),
@@ -202,14 +235,22 @@ export default function TransfersDesktop() {
     setCustomError('')
     try {
       await api.requestQuote({
-        region_id:              region?.id || '',
-        origin_place_name:      customOrigin.trim(),
-        destination_place_name: customDest.trim(),
-        service_date:           customDate,
-        service_time:           customTime,
-        people_count:           customPeople,
-        luggage_count:          0,
-        special_notes:          customNotes.trim() || undefined,
+        region_id:                region?.id || '',
+        origin_place_name:        customOrigin.trim(),
+        origin_place_id:          customOriginMeta?.place_id || undefined,
+        origin_latitude:          customOriginMeta?.lat ?? undefined,
+        origin_longitude:         customOriginMeta?.lon ?? undefined,
+        origin_address_text:      customOriginMeta?.address || undefined,
+        destination_place_name:   customDest.trim(),
+        destination_place_id:     customDestMeta?.place_id || undefined,
+        destination_latitude:     customDestMeta?.lat ?? undefined,
+        destination_longitude:    customDestMeta?.lon ?? undefined,
+        destination_address_text: customDestMeta?.address || undefined,
+        service_date:             customDate,
+        service_time:             customTime,
+        people_count:             customPeople,
+        luggage_count:            0,
+        special_notes:            customNotes.trim() || undefined,
       })
       setCustomSuccess(true)
     } catch (err) {
@@ -362,12 +403,21 @@ export default function TransfersDesktop() {
                             R$ {(unitPrice * suggestion.qty).toLocaleString('pt-BR')}
                           </span>
                         )}
-                        <button
-                          onClick={() => setCart({ [suggestion.vehicle.id]: suggestion.qty })}
-                          className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full hover:bg-brand-600 transition-colors"
-                        >
-                          Aplicar
-                        </button>
+                        {suggestionIsApplied ? (
+                          <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
+                            <Check size={11} /> Selecionado
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setCart({ [suggestion.vehicle.id]: suggestion.qty })
+                              autoAppliedRef.current = `${suggestion.vehicle.id}:${suggestion.qty}`
+                            }}
+                            className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full hover:bg-brand-600 transition-colors"
+                          >
+                            Aplicar
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -478,7 +528,7 @@ export default function TransfersDesktop() {
                   Ver minhas cotações <ChevronRight size={16} />
                 </button>
                 <button
-                  onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomNotes('') }}
+                  onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes('') }}
                   className="text-[14px] text-gray-500 font-semibold hover:text-gray-700"
                 >
                   Solicitar outra corrida
@@ -499,13 +549,13 @@ export default function TransfersDesktop() {
                 <div>
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Embarque</label>
                   <div className="mt-1">
-                    <PlaceInput value={customOrigin} onChange={setCustomOrigin} placeholder="Ex: Hotel Jeri Beach" dotClass="bg-brand" />
+                    <PlaceInput value={customOrigin} onChange={setCustomOrigin} onPick={setCustomOriginMeta} placeholder="Buscar endereço, hotel, ponto..." dotClass="bg-brand" />
                   </div>
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Destino</label>
                   <div className="mt-1">
-                    <PlaceInput value={customDest} onChange={setCustomDest} placeholder="Ex: Aeroporto de Jericoacoara" dotClass="border-2 border-gray-400 bg-transparent" />
+                    <PlaceInput value={customDest} onChange={setCustomDest} onPick={setCustomDestMeta} placeholder="Buscar endereço, hotel, ponto..." dotClass="border-2 border-gray-400 bg-transparent" />
                   </div>
                 </div>
               </div>
