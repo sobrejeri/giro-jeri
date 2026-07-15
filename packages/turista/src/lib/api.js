@@ -123,6 +123,12 @@ export const api = {
   // Cooperativas parceiras (vitrine na home) — público
   getPartners: () => request('/api/operator/partners'),
 
+  // Avaliações REAIS por cooperativa (reputação) — públicas + criação autenticada
+  getCoopReviews:        (params = {}) => request(`/api/reviews?${new URLSearchParams(params)}`),
+  getCoopReviewsSummary: ()            => request('/api/reviews/summary'),
+  getMyCoopReviews:      ()            => request('/api/reviews/mine'),
+  createCoopReview:      (body)        => request('/api/reviews', { method: 'POST', body }),
+
   // Feed de eventos / promoções da vila
   getFeed: () => request('/api/feed'),
 

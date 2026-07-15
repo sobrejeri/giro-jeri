@@ -583,14 +583,24 @@ export default function Home() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {partners.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 bg-gray-50 rounded-full pl-1 pr-3 py-1">
+                    <Link
+                      key={p.id}
+                      to={`/avaliacoes?operator=${p.id}`}
+                      className="flex items-center gap-2 bg-gray-50 rounded-full pl-1 pr-3 py-1 active:scale-95 transition-transform"
+                    >
                       <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden shrink-0">
                         {p.profile_photo_url
                           ? <img src={p.profile_photo_url} alt="" className="w-full h-full object-cover" />
                           : <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-gray-500">{(p.full_name || '?')[0].toUpperCase()}</div>}
                       </div>
                       <span className="text-[12px] font-semibold text-gray-700">{p.full_name}</span>
-                    </div>
+                      {Number(p.rating_count) > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-amber-600">
+                          <Star size={10} className="fill-amber-400 text-amber-400" />
+                          {p.rating_average}
+                        </span>
+                      )}
+                    </Link>
                   ))}
                 </div>
               </section>

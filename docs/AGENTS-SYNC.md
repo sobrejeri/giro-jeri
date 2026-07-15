@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 060.**
+   registre aqui o número reservado. **Próximo número livre: 061.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,23 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-15 · Agente B (avaliações REAIS por cooperativa)** — Substituí os
+  depoimentos fake da home por avaliações verificadas. **Migration 060**
+  (`060_coop_reviews.sql`): adiciona `reviews.operator_id` (coop que executou,
+  desnormalizado da reserva), backfill, índices e policy `reviews_public_read`
+  (leitura pública das `is_public`). Backend: `routes/reviews.js` (`GET /` com
+  filtros operator_id/service_type/min_rating, `GET /summary` reputação por
+  coop, `GET /mine` reservas já avaliadas, `POST /` só p/ reserva PAGA e
+  realizada — 1 por reserva, recalcula média do passeio, notifica a coop);
+  registrado em `index.js`. `GET /operator/partners` agora devolve
+  `rating_average`/`rating_count`. Front (turista): `HomeDesktop` puxa reviews
+  reais (some se vazio), nova página `/avaliacoes` (filtro por coop + nota
+  mínima), chips de parceiras na `Home` mostram estrela e linkam p/ avaliações,
+  `Bookings` ganha botão "Avaliar" (reserva concluída, some se já avaliada) +
+  `ReviewSheet` (estrelas + comentário). api.js: `getCoopReviews`,
+  `getCoopReviewsSummary`, `getMyCoopReviews`, `createCoopReview`.
+  ⚠️ Exige rodar a **migration 060** no Supabase.
 
 - **2026-07-12 · Agente A (ativação do cadastro por código no WhatsApp)** —
   Pedido do usuário: conta só ativa com código de 6 dígitos no WhatsApp.

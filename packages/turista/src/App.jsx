@@ -19,6 +19,7 @@ import Profile         from './pages/Profile'
 import Auth            from './pages/Auth'
 import Legal           from './pages/Legal'
 import CartPage        from './pages/CartPage'
+import Avaliacoes      from './pages/Avaliacoes'
 import PartnerLink     from './pages/PartnerLink'
 import AffiliateLink   from './pages/AffiliateLink'
 import Affiliate       from './pages/Affiliate'
@@ -80,6 +81,7 @@ export default function App() {
         <Route path="passeios/:id"        element={<TourDetail />} />
         <Route path="transfers"           element={<Transfers />} />
         <Route path="carrinho"            element={<CartPage />} />
+        <Route path="avaliacoes"          element={<Avaliacoes />} />
         <Route path="minhas-reservas"     element={<PrivateRoute><Bookings /></PrivateRoute>} />
         <Route path="minhas-reservas/:id" element={<PrivateRoute><BookingDetail /></PrivateRoute>} />
         <Route path="perfil"              element={<Profile />} />

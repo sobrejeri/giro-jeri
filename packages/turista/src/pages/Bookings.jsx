@@ -43,6 +43,17 @@ function getStatusCfg(t) {
   }
 }
 
+// Pode avaliar? Espelha a regra do backend: reserva PAGA e já realizada
+// (concluída pela coop OU com a data do serviço já passada).
+function canReview(b) {
+  const paid = b.status_commercial === 'paid'
+  if (!paid) return false
+  if (b.status_operational === 'completed') return true
+  if (!b.service_date) return false
+  const today = new Date().toISOString().slice(0, 10)
+  return b.service_date <= today
+}
+
 const ACTIVE_STATUSES = ['waiting_payment', 'waiting_acceptance', 'confirmed', 'in_progress']
 // Cotações "ativas" (entram nas abas Todas/Ativas junto das reservas)
 const QUOTE_ACTIVE = ['pending_quote', 'quoted', 'accepted']
@@ -92,7 +103,7 @@ function CancelDialog({ booking, onConfirm, onClose, loading, error }) {
 }
 
 /* ── Booking Card ───────────────────────────────────────────── */
-function BookingCard({ booking, onCancel, onDetail, onPay, groupSize = 0 }) {
+function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = false, groupSize = 0 }) {
   const { t } = useTranslation()
   const STATUS_CFG = getStatusCfg(t)
   const status  = resolveStatus(booking)
@@ -209,6 +220,20 @@ function BookingCard({ booking, onCancel, onDetail, onPay, groupSize = 0 }) {
                 <X size={11} /> Cancelar
               </button>
             )}
+            {canReview(booking) && (
+              reviewed ? (
+                <span className="flex items-center gap-1 text-[12px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl">
+                  <Star size={11} className="fill-emerald-500 text-emerald-500" /> Avaliado
+                </span>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onReview?.(booking) }}
+                  className="flex items-center gap-1 border border-amber-200 bg-amber-50 text-amber-600 text-[12px] font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform"
+                >
+                  <Star size={11} className="fill-amber-400 text-amber-400" /> Avaliar
+                </button>
+              )
+            )}
             <ChevronRight size={18} className="text-gray-300" />
           </div>
         </div>
@@ -287,7 +312,7 @@ function GroupCard({ bookings, onOpen }) {
 }
 
 /* ── Painel com as reservas que compõem o pedido ───────────────── */
-function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDetail }) {
+function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDetail, onReview, reviewedIds }) {
   const { total, allPay, count, payableCount } = groupSummary(bookings)
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -304,7 +329,8 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
         </div>
         <div className="overflow-y-auto px-4 py-4 space-y-3 flex-1">
           {bookings.map((b) => (
-            <BookingCard key={b.id} booking={b} onCancel={onCancel} onDetail={onDetail} onPay={onPay} />
+            <BookingCard key={b.id} booking={b} onCancel={onCancel} onDetail={onDetail} onPay={onPay}
+              onReview={onReview} reviewed={reviewedIds?.has(b.id)} />
           ))}
         </div>
         {allPay && payableCount >= 2 && (
@@ -317,6 +343,87 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
             </button>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ── Avaliação (estrelas + comentário) de uma reserva realizada ── */
+function ReviewSheet({ booking, onClose, onDone }) {
+  const [rating,  setRating]  = useState(0)
+  const [hover,   setHover]   = useState(0)
+  const [comment, setComment] = useState('')
+  const [error,   setError]   = useState(null)
+
+  const mut = useMutation({
+    mutationFn: () => api.createCoopReview({ booking_id: booking.id, rating, comment: comment.trim() || null }),
+    onSuccess: () => onDone?.(),
+    onError:   (err) => setError(err?.message || 'Não foi possível enviar sua avaliação.'),
+  })
+
+  const serviceName = booking.service_name
+    || (booking.service_type === 'tour' ? 'Passeio' : 'Transfer') + ' · ' + booking.booking_code
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Star size={16} className="text-amber-400 fill-amber-400" />
+            <h3 className="font-bold text-gray-900">Avaliar serviço</h3>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95 transition-transform">
+            <X size={15} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="px-5 py-5">
+          <p className="text-[13px] text-gray-500 mb-1">Como foi sua experiência com</p>
+          <p className="font-bold text-gray-900 mb-4 truncate">{serviceName}</p>
+
+          {/* Estrelas */}
+          <div className="flex items-center justify-center gap-2 mb-2">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => { setRating(s); setError(null) }}
+                onMouseEnter={() => setHover(s)}
+                onMouseLeave={() => setHover(0)}
+                className="active:scale-90 transition-transform"
+                aria-label={`${s} estrela${s > 1 ? 's' : ''}`}
+              >
+                <Star size={38}
+                  className={(hover || rating) >= s ? 'fill-amber-400 text-amber-400' : 'text-gray-200'} />
+              </button>
+            ))}
+          </div>
+          <p className="text-center text-[12px] text-gray-400 mb-4 h-4">
+            {['', 'Péssimo', 'Ruim', 'Regular', 'Bom', 'Excelente'][hover || rating]}
+          </p>
+
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            maxLength={1000}
+            rows={4}
+            placeholder="Conte como foi o passeio, o atendimento da cooperativa, o motorista… (opcional)"
+            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-[14px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none"
+          />
+
+          {error && (
+            <p className="text-[12px] text-red-500 bg-red-50 rounded-xl px-3 py-2 mt-3">{error}</p>
+          )}
+
+          <button
+            onClick={() => { if (!rating) { setError('Escolha de 1 a 5 estrelas.'); return } mut.mutate() }}
+            disabled={mut.isPending}
+            className="w-full mt-4 bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60"
+          >
+            {mut.isPending ? <><Loader2 size={16} className="animate-spin" /> Enviando…</> : 'Enviar avaliação'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -553,6 +660,14 @@ export default function Bookings() {
   })
 
   const quotes = Array.isArray(quotesData) ? quotesData : []
+
+  // Reservas que EU já avaliei — some o botão "Avaliar" / vira "Avaliado".
+  const { data: myReviews } = useQuery({
+    queryKey: ['my-coop-reviews'],
+    queryFn:  () => api.getMyCoopReviews(),
+  })
+  const reviewedIds = new Set((Array.isArray(myReviews) ? myReviews : []).map((r) => r.booking_id))
+  const [reviewTarget, setReviewTarget] = useState(null) // reserva sendo avaliada
 
   const all = (
     Array.isArray(data?.data) ? data.data :
@@ -866,6 +981,8 @@ export default function Bookings() {
                 onCancel={setCancelTarget}
                 onDetail={(id) => navigate(`/minhas-reservas/${id}`)}
                 onPay={handlePay}
+                onReview={setReviewTarget}
+                reviewed={reviewedIds.has(it.data.id)}
                 groupSize={it.data.order_group_id ? (groupSizes.get(it.data.order_group_id) || 0) : 0}
               />
             ))}
@@ -895,6 +1012,19 @@ export default function Bookings() {
           onPayGroup={() => { setGroupOpen(null); handlePayGroup(groupOpen) }}
           onCancel={(b) => { setGroupOpen(null); setCancelTarget(b) }}
           onDetail={(id) => { setGroupOpen(null); navigate(`/minhas-reservas/${id}`) }}
+          onReview={(b) => { setGroupOpen(null); setReviewTarget(b) }}
+          reviewedIds={reviewedIds}
+        />
+      )}
+
+      {reviewTarget && (
+        <ReviewSheet
+          booking={reviewTarget}
+          onClose={() => setReviewTarget(null)}
+          onDone={() => {
+            setReviewTarget(null)
+            queryClient.invalidateQueries({ queryKey: ['my-coop-reviews'] })
+          }}
         />
       )}
     </div>

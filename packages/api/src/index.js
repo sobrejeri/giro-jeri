@@ -24,6 +24,7 @@ import notificationsRoutes from './routes/notifications.js';
 import { regionsRouter } from './routes/regions.js';
 import { seasonsRouter } from './routes/seasons.js';
 import { partnerRouter } from './routes/partner.js';
+import { reviewsRouter } from './routes/reviews.js';
 import { affiliateRouter } from './routes/affiliate.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
@@ -124,6 +125,7 @@ app.use('/api/payments',  paymentsRoutes);
 app.use('/api/regions',   regionsRouter);
 app.use('/api/seasons',   seasonsRouter);
 app.use('/api/partner',   partnerRouter);
+app.use('/api/reviews',   reviewsRouter);
 app.use('/api/affiliate', affiliateRouter);
 app.use('/api/admin',     adminRoutes);
 app.use('/api/vehicles',  vehiclesRoutes);

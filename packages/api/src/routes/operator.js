@@ -58,7 +58,31 @@ router.get('/partners', async (_req, res, next) => {
       .order('full_name', { ascending: true })
       .limit(24);
     if (error) throw error;
-    res.json(data || []);
+
+    // Reputação real por coop (avaliações verificadas — migration 060). Se a
+    // coluna ainda não existir, a vitrine segue sem estrelas.
+    let agg = new Map();
+    try {
+      const { data: revs } = await supabase
+        .from('reviews')
+        .select('operator_id, rating')
+        .eq('is_public', true)
+        .not('operator_id', 'is', null);
+      for (const r of revs || []) {
+        const a = agg.get(r.operator_id) || { sum: 0, count: 0 };
+        a.sum += r.rating; a.count += 1;
+        agg.set(r.operator_id, a);
+      }
+    } catch { /* sem migration 060 — sem estrelas */ }
+
+    res.json((data || []).map((c) => {
+      const a = agg.get(c.id);
+      return {
+        ...c,
+        rating_average: a ? Math.round((a.sum / a.count) * 10) / 10 : null,
+        rating_count:   a ? a.count : 0,
+      };
+    }));
   } catch (err) { next(err); }
 });
 

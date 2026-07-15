@@ -37,14 +37,6 @@ const TRANSFER_PERKS = [
   { icon: ShieldCheck,   label: 'Reserva 100% online' },
 ]
 
-// Depoimentos — usam nomes plausíveis; reais serão puxados quando o
-// módulo de reviews expor endpoint público de "melhores".
-const TESTIMONIALS = [
-  { text: 'Passeio incrível! Guia muito atencioso e roteiro perfeito. Super recomendo!', name: 'Camila R.',  place: 'São Paulo – SP' },
-  { text: 'Fizemos o Litoral Oeste e foi uma das melhores experiências da viagem.',       name: 'Rafael M.',  place: 'Curitiba – PR' },
-  { text: 'Transfer pontual, carro confortável e motorista muito educado.',                name: 'Juliana T.', place: 'Belo Horizonte – MG' },
-]
-
 // Gradientes de fallback quando um tour não tem foto de capa
 const FALLBACK_GRADIENTS = [
   'from-orange-400 via-orange-300 to-amber-200',
@@ -236,6 +228,15 @@ export default function HomeDesktop({
   })
   const routes = Array.isArray(routesData?.routes) ? routesData.routes
                : Array.isArray(routesData) ? routesData : []
+
+  // Avaliações REAIS (mais recentes) — reputação das cooperativas. Se ainda
+  // não houver nenhuma, a seção some (nada de depoimento inventado).
+  const { data: reviewsData } = useQuery({
+    queryKey: ['home-reviews'],
+    queryFn:  () => api.getCoopReviews({ limit: 6 }),
+    staleTime: 60_000,
+  })
+  const homeReviews = Array.isArray(reviewsData?.reviews) ? reviewsData.reviews : []
   const routeOrigins = useMemo(() => [...new Set(routes.map((r) => r.origin_name))], [routes])
   const routeDests   = useMemo(
     () => [...new Set(routes.filter((r) => r.origin_name === tOrigin).map((r) => r.destination_name))],
@@ -579,53 +580,69 @@ export default function HomeDesktop({
             </div>
             <div className="flex flex-wrap gap-2.5">
               {partners.map((p) => (
-                <div key={p.id} className="flex items-center gap-2.5 bg-gray-50 rounded-full pl-1.5 pr-4 py-1.5">
+                <Link key={p.id} to={`/avaliacoes?operator=${p.id}`}
+                  className="flex items-center gap-2.5 bg-gray-50 hover:bg-gray-100 rounded-full pl-1.5 pr-4 py-1.5 transition-colors">
                   <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden shrink-0">
                     {p.profile_photo_url
                       ? <img src={p.profile_photo_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-gray-500">{(p.full_name || '?')[0].toUpperCase()}</div>}
                   </div>
                   <span className="text-[13px] font-semibold text-gray-700">{p.full_name}</span>
-                </div>
+                  {Number(p.rating_count) > 0 && (
+                    <span className="inline-flex items-center gap-0.5 text-[12px] font-bold text-amber-600">
+                      <Star size={11} className="fill-amber-400 text-amber-400" />
+                      {p.rating_average}
+                    </span>
+                  )}
+                </Link>
               ))}
             </div>
           </div>
         </section>
       )}
 
-      {/* ── DEPOIMENTOS ──────────────────────────────────────── */}
-      <section className="mt-16 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
-        <div className="flex items-end justify-between mb-6">
-          <div>
-            <h2 className="text-[26px] font-extrabold text-gray-900">Quem visita, recomenda</h2>
-            <p className="text-[13px] text-gray-500 mt-1">Histórias reais de quem já viveu {placeShort} com a gente.</p>
-          </div>
-          <Link to="/eventos" className="text-[14px] font-semibold text-brand inline-flex items-center gap-1 hover:gap-1.5 transition-all">
-            Ver mais avaliações <ArrowRight size={16} />
-          </Link>
-        </div>
-        <div className="grid grid-cols-3 gap-5">
-          {TESTIMONIALS.map(({ text, name, place }) => (
-            <div key={name} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <div className="flex items-center gap-1 mb-3">
-                {[1,2,3,4,5].map((s) => (
-                  <Star key={s} size={16} className="fill-amber-400 text-amber-400" />
-                ))}
-              </div>
-              <p className="text-gray-700 text-[14px] leading-relaxed">"{text}"</p>
-              <div className="mt-4 pt-4 border-t border-gray-50 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-amber-300 flex items-center justify-center text-white font-bold text-[13px]">
-                  {name[0]}
-                </div>
-                <div>
-                  <p className="text-[13px] font-bold text-gray-900 leading-tight">{name}</p>
-                  <p className="text-[11px] text-gray-400">{place}</p>
-                </div>
-              </div>
+      {/* ── DEPOIMENTOS (REAIS) ──────────────────────────────── */}
+      {homeReviews.length > 0 && (
+        <section className="mt-16 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
+          <div className="flex items-end justify-between mb-6">
+            <div>
+              <h2 className="text-[26px] font-extrabold text-gray-900">Quem visita, recomenda</h2>
+              <p className="text-[13px] text-gray-500 mt-1">Avaliações verificadas de quem já viveu {placeShort} com a gente.</p>
             </div>
-          ))}
-        </div>
-      </section>
+            <Link to="/avaliacoes" className="text-[14px] font-semibold text-brand inline-flex items-center gap-1 hover:gap-1.5 transition-all">
+              Ver mais avaliações <ArrowRight size={16} />
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 gap-5">
+            {homeReviews.map((r) => (
+              <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col">
+                <div className="flex items-center gap-1 mb-3">
+                  {[1,2,3,4,5].map((s) => (
+                    <Star key={s} size={16}
+                      className={s <= r.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-200'} />
+                  ))}
+                </div>
+                {r.comment
+                  ? <p className="text-gray-700 text-[14px] leading-relaxed">"{r.comment}"</p>
+                  : <p className="text-gray-400 text-[14px] italic">Avaliou com {r.rating} estrela{r.rating > 1 ? 's' : ''}.</p>}
+                <div className="mt-4 pt-4 border-t border-gray-50 flex items-center gap-3">
+                  {r.author_photo
+                    ? <img src={r.author_photo} alt={r.author_name} className="w-9 h-9 rounded-full object-cover" />
+                    : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-amber-300 flex items-center justify-center text-white font-bold text-[13px]">
+                        {String(r.author_name || 'T')[0]}
+                      </div>}
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-gray-900 leading-tight truncate">{r.author_name}</p>
+                    <p className="text-[11px] text-gray-400 truncate">
+                      {r.service_name}{r.operator_name ? ` · ${r.operator_name}` : ''}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── CTA FINAL ────────────────────────────────────────── */}
       <section className="mt-16 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
