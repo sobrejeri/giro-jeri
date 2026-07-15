@@ -37,6 +37,7 @@ Legenda: ✅ pronto e validado · 🟡 pronto, falta validar em produção ·
 | # | Item | Status | Nota |
 |---|------|--------|------|
 | 2.1 | Todas as 16 páginas abrem sem crash | ✅ | Testado no navegador com dados vazios (12/07) |
+| 2.1b | **Turista (14 págs) e Cooperativa (9 págs) sem crash** | ✅ | Varredura 12/07, logado e deslogado; chamadas × rotas dos 3 apps conferidas |
 | 2.2 | Todas as chamadas têm rota na API | ✅ | Cruzamento cliente×servidor 12/07; `getTour` morto removido |
 | 2.3 | **Stories: escrita estava SEM auth** | ✅ | Corrigido 12/07 — criar/editar/apagar destaque agora exige admin |
 | 2.4 | Usuários: criar coop (CNPJ), liberar frota, reset senha | 🟡 | Testar em produção com usuário real |
@@ -81,9 +82,9 @@ Legenda: ✅ pronto e validado · 🟡 pronto, falta validar em produção ·
 
 | # | Item | Status |
 |---|------|--------|
-| 5.1 | Remover telas/fluxos mortos (Register.jsx legado, wizard antigo do carrinho) | ⚪ |
+| 5.1 | Telas mortas: Register.jsx legado REMOVIDO 12/07; falta avaliar wizard antigo do carrinho | 🟡 |
 | 5.2 | Varredura de auth nos routers: só público o que deve ser público | ✅ 12/07 |
-| 5.3 | Rate-limit em rotas sensíveis (login/OTP têm; conferir /affiliate/activate) | ⚪ |
+| 5.3 | Rate-limit em rotas sensíveis — /affiliate/activate limitado 12/07 | ✅ |
 | 5.4 | Notificações WhatsApp: templates aprovados e disparando | 🟡 |
 | 5.5 | E-mails transacionais (confirmação) chegando (spam?) | 🟡 |
 | 5.6 | Backup/retention do Supabase configurado | 🔴 |

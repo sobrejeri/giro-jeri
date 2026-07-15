@@ -28,6 +28,14 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-12 · Agente A (auditoria turista + cooperativa)** — Extensão da
+  auditoria aos outros 2 apps: chamadas × rotas (turista 73, coop 41 — tudo
+  casa) e varredura de crash: turista 14 páginas (logado/deslogado) e
+  cooperativa 9 páginas — **zero erro**. StoryPublisher do turista confere
+  com o guard novo (UI só admin, rota exige admin). Hardening:
+  `/affiliate/activate` com rate-limit (authLimiter); `Register.jsx` legado
+  removido (era órfão — o cadastro real é o `Auth.jsx`). Checklist atualizado.
+
 - **2026-07-12 · Agente A (auditoria do admin + checklist de lançamento)** —
   Auditoria completa do admin: (1) cruzamento das 84 chamadas do cliente ×
   rotas da API — único descasamento era `getTour` morto (removido);

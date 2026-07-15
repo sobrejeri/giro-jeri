@@ -68,6 +68,9 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login',           authLimiter);
 app.use('/api/auth/register',        authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
+// Ativação de afiliado gera escrita com índice único — sem limite, um bot
+// logado poderia martelar tentativas de colisão de código.
+app.use('/api/affiliate/activate',   authLimiter);
 
 // Rate limiting específico para OTP (mais restrito que authLimiter)
 const otpLimiter = rateLimit({
