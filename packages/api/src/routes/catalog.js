@@ -36,6 +36,7 @@ const ROUTE_COLS = [
 const TRANSFER_COLS = [
   'region_id', 'name', 'slug', 'short_description', 'pricing_mode',
   'is_active', 'display_order', 'booking_cutoff_time', 'min_advance_hours',
+  'region_ids',
 ]
 
 // ── Categorias ────────────────────────────────────────────
@@ -155,7 +156,7 @@ router.get('/transfers', async (req, res, next) => {
   try {
     const { data, error } = await req.supabase
       .from('transfers')
-      .select('id, name, is_active, short_description, pricing_mode, display_order, booking_cutoff_time, min_advance_hours, region_id')
+      .select('id, name, is_active, short_description, pricing_mode, display_order, booking_cutoff_time, min_advance_hours, region_id, region_ids')
       .order('name');
     if (error) throw error;
     res.json(data);
@@ -164,8 +165,22 @@ router.get('/transfers', async (req, res, next) => {
 
 router.post('/transfers', requireAdmin, async (req, res, next) => {
   try {
+    const body = pick(req.body, TRANSFER_COLS);
+    // slug e region_id são NOT NULL no banco, mas o formulário não os envia —
+    // mesmo tratamento do POST de tours (sem isto o INSERT falhava e o modal
+    // 'não salvava' em silêncio).
+    if (!body.name) return res.status(400).json({ error: 'Informe o nome do transfer.' });
+    if (!body.slug) body.slug = `${slugify(body.name)}-${Date.now().toString(36)}`;
+    if (!body.region_id) {
+      const { data: region } = await req.supabase
+        .from('regions').select('id').limit(1).single();
+      if (!region) return res.status(400).json({ error: 'Nenhuma região cadastrada — crie uma região antes.' });
+      body.region_id = Array.isArray(body.region_ids) && body.region_ids[0]
+        ? body.region_ids[0] : region.id;
+    }
+    if (body.region_ids !== undefined && !Array.isArray(body.region_ids)) body.region_ids = [];
     const { data, error } = await req.supabase
-      .from('transfers').insert(pick(req.body, TRANSFER_COLS)).select().single();
+      .from('transfers').insert(body).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }

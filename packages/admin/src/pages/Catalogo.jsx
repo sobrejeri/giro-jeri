@@ -164,11 +164,13 @@ export default function Catalogo() {
     mutationFn: (body) =>
       modal?.isNew ? api.createTransfer(body) : api.updateTransfer(modal.id, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-transfers'] }); setModal(null) },
+    onError:   (err) => alert(err?.message || 'Erro ao salvar o transfer.'),
   })
   const routeMut = useMutation({
     mutationFn: (body) =>
       routeModal?.isNew ? api.createTransferRoute(body) : api.updateTransferRoute(routeModal.id, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-routes'] }); setRouteModal(null) },
+    onError:   (err) => alert(err?.message || 'Erro ao salvar a rota.'),
   })
   const deleteRouteMut = useMutation({
     mutationFn: (id) => api.deleteTransferRoute(id),
