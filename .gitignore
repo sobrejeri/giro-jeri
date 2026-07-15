@@ -61,3 +61,5 @@ supabase/.temp/
 !.claude/TEAM.md
 !.claude/agents/
 !.claude/commands/
+crawl*.tmp.mjs
+*.tmp.mjs
