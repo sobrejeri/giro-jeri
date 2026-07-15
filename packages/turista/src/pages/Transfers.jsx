@@ -745,7 +745,7 @@ export default function Transfers() {
           )}
 
           {showCustomDate && (
-            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} minDate={customMinDate} highSeasonMonths={highSeasonMonths} />
+            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} minDate={customMinDate} seasons={seasonsData || []} highSeasonMonths={highSeasonMonths} />
           )}
         </div>
       )}
@@ -1010,7 +1010,7 @@ export default function Transfers() {
       )}
 
       {/* Sheets */}
-      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} highSeasonMonths={highSeasonMonths} />}
+      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} seasons={seasonsData || []} highSeasonMonths={highSeasonMonths} />}
       {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
       {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
     </> )} {/* end mode === 'rota' */}

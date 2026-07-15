@@ -199,7 +199,7 @@ function EditSheet({ item, onSave, onClose }) {
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl max-w-[430px] mx-auto max-h-[88vh] flex flex-col">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl max-w-[430px] mx-auto max-h-[88vh] flex flex-col lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:max-w-xl lg:shadow-2xl">
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
           <p className="font-bold text-gray-900 text-[15px] leading-tight flex-1 pr-2">{item.name}</p>
           <button onClick={onClose} aria-label="Fechar edição" className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95">
@@ -256,6 +256,7 @@ function EditSheet({ item, onSave, onClose }) {
               onChange={(d) => setDateIso(format(d, 'yyyy-MM-dd'))}
               onClose={() => setShowDate(false)}
               minDate={minDate}
+              seasons={seasonsData || []}
               highSeasonMonths={highSeasonMonths}
             />
           )}
@@ -528,7 +529,7 @@ export default function CartPage() {
           </button>
         </div>
       ) : (
-        <div className="px-4 pt-4 space-y-3">
+        <div className="px-4 pt-4 space-y-3 lg:max-w-2xl lg:mx-auto">
           {list.map((item) => {
             const miss = itemMissing(item)
             const st = results[item.id]
@@ -608,7 +609,7 @@ export default function CartPage() {
 
       {/* ── Sugestões: complete a viagem com passeios ── */}
       {items.length > 0 && !done && suggestedTours.length > 0 && (
-        <div className="mt-6">
+        <div className="mt-6 lg:max-w-2xl lg:mx-auto">
           <div className="px-4 flex items-center gap-2">
             <Sparkles size={15} className="text-brand" />
             <p className="text-[14px] font-extrabold text-gray-900">Complete sua viagem</p>
@@ -640,7 +641,7 @@ export default function CartPage() {
 
       {/* Rodapé fixo */}
       {(items.length > 0 || done) && (
-        <div className="fixed bottom-[64px] left-0 right-0 bg-white border-t border-gray-100 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] max-w-[430px] mx-auto space-y-2.5 z-30">
+        <div className="fixed bottom-[64px] left-0 right-0 bg-white border-t border-gray-100 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] max-w-[430px] mx-auto space-y-2.5 z-30 lg:bottom-0 lg:max-w-2xl lg:rounded-t-2xl lg:border lg:shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           {done ? (
             <>
               <p className="text-[13px] text-gray-600 text-center">

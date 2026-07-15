@@ -6,7 +6,7 @@ import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
-import { highSeasonMonthSet } from '../lib/season'
+import { highSeasonMonthSet, isHighSeasonIso } from '../lib/season'
 import OriginPicker from '../components/OriginPicker'
 import ToursDesktop from './ToursDesktop'
 import {
@@ -161,7 +161,7 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
 }
 
 /* ── Calendário (bottom sheet) ──────────────────────────────── */
-function DatePickerSheet({ value, onChange, onClose, minDate, highSeasonMonths }) {
+function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeasonMonths }) {
   // R6: 'today' aqui é a data mínima selecionável — se passou do cutoff do
   // passeio, minDate já vem como amanhã e o dia de hoje fica bloqueado.
   const today = minDate || startOfDay(new Date())
@@ -220,7 +220,9 @@ function DatePickerSheet({ value, onChange, onClose, minDate, highSeasonMonths }
             const past     = isBefore(day, today)
             const selected = isSameDay(day, value)
             const todayDay = isToday(day)
-            const highSeason = !!highSeasonMonths?.has(day.getMonth() + 1)
+            const highSeason = seasons?.length
+              ? isHighSeasonIso(format(day, 'yyyy-MM-dd'), seasons)
+              : !!highSeasonMonths?.has(day.getMonth() + 1)
             return (
               <button
                 key={day.toISOString()}
@@ -243,7 +245,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate, highSeasonMonths }
           })}
         </div>
 
-        {highSeasonMonths?.size > 0 && (
+        {(seasons?.length > 0 || highSeasonMonths?.size > 0) && (
           <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
             <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
             Datas em laranja: alta temporada (pode ter acréscimo no valor)
@@ -830,6 +832,7 @@ export default function Tours() {
         <DatePickerSheet
           value={date}
           minDate={cutoffMinDate}
+          seasons={seasonsData || []}
           highSeasonMonths={highSeasonMonths}
           onChange={setDate}
           onClose={() => setShowDatePicker(false)}

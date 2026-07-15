@@ -1,3 +1,18 @@
+// Um dia (ISO yyyy-MM-dd) cai dentro de alguma regra de alta temporada?
+// Compara com o intervalo EXATO configurado pelo admin (start_date..end_date),
+// não o mês inteiro — mostra no calendário só as datas personalizadas.
+export function isHighSeasonIso(iso, seasons = []) {
+  if (!iso) return false
+  const day = String(iso).slice(0, 10)
+  for (const s of seasons) {
+    if (!s?.start_date || !s?.end_date || s.is_active === false) continue
+    const start = String(s.start_date).slice(0, 10)
+    const end   = String(s.end_date).slice(0, 10)
+    if (day >= start && day <= end) return true
+  }
+  return false
+}
+
 // Conjunto de meses (1-12) cobertos por regras de alta temporada ativas.
 // As regras são definidas por mês (start_date/end_date, dia 01→último);
 // trata a virada de ano (ex.: Julho → Janeiro).

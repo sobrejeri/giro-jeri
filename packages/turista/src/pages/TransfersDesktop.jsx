@@ -9,7 +9,9 @@ import {
   Calendar, Plus, Minus, Send, CheckCircle2, Info, ChevronRight, Check,
 } from 'lucide-react'
 import { PlaceInput, suggestVehicles, VehicleRow } from './Transfers'
-import { highSeasonMonthSet } from '../lib/season'
+import { isHighSeasonIso } from '../lib/season'
+import { useCart } from '../contexts/CartContext'
+import DesktopDatePicker from '../components/DesktopDatePicker'
 import { format, startOfDay, addDays, isToday, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -69,6 +71,7 @@ function RouteCard({ route, bg, active, onSelect }) {
 export default function TransfersDesktop() {
   const navigate  = useNavigate()
   const { token } = useAuth()
+  const { upsertItem: saveCartItem } = useCart()
   const { region, userCoords, getServiceQuery } = useRegion()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
@@ -116,15 +119,15 @@ export default function TransfersDesktop() {
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
                     .filter(v => v.is_transfer_allowed && v.is_active !== false)
 
-  // Alta temporada: meses com acréscimo, p/ sinalizar junto da data.
+  // Alta temporada: regras (datas exatas) p/ colorir o calendário em laranja
+  // e avisar quando a data escolhida cai dentro de uma delas.
   const { data: seasonsData } = useQuery({
     queryKey: ['seasons', region?.id],
     queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
     staleTime: 10 * 60 * 1000,
     retry: 3,
   })
-  const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
-  const isHighSeasonIso  = (iso) => !!iso && highSeasonMonths.has(Number(String(iso).slice(5, 7)))
+  const seasons = useMemo(() => Array.isArray(seasonsData) ? seasonsData : [], [seasonsData])
 
   // Origem padrão quando as rotas carregam (prefere Jericoacoara)
   useEffect(() => {
@@ -261,29 +264,25 @@ export default function TransfersDesktop() {
   function handleConfirm() {
     if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canBook) return
-    navigate('/checkout/resumo', {
-      state: {
-        service_name:        `Transfer ${origin} → ${dest}`,
-        short_description:   matched?.transfers?.short_description || null,
-        service_type:        'transfer',
-        booking_mode:        'private',
-        service_date:        dayLabel(date),
-        service_date_iso:    date,
-        service_time:        time,
-        people_count:        people,
-        origin_text:         origin,
-        destination_text:    dest,
-        vehicle_name:        cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
-        total_price:         cartTotal,
-        transfer_unit_price: unitPrice,
-        breakdown:           { 'Veículos': cartTotal },
-        region_id:           region?.id || null,
-        service_id:          matched?.id,
-        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: unitPrice })),
-        booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
-        min_advance_hours:   matched?.transfers?.min_advance_hours ?? null,
-      },
+    // Pré-seleção → carrinho universal: mesma jornada do mobile (a data/hora
+    // pode ser refinada lá e vários serviços saem numa única solicitação).
+    saveCartItem({
+      id:      matched.id,
+      kind:    'transfer',
+      name:    `${origin} → ${dest}`,
+      origin, dest,
+      dateIso: date,
+      time, people,
+      region_id: region?.id || null,
+      booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
+      min_advance_hours:   matched?.transfers?.min_advance_hours ?? null,
+      vehicles: cartItems.map(({ vehicle, qty }) => ({
+        id: vehicle.id, name: vehicle.name, qty,
+        price: unitPrice || 0, cap: vehicle.seat_capacity || null,
+      })),
+      total: cartTotal,
     })
+    navigate('/carrinho')
   }
 
   async function handleRequestQuote() {
@@ -403,15 +402,8 @@ export default function TransfersDesktop() {
                 <div className="grid sm:grid-cols-3 gap-4">
                   <div>
                     <label className="text-[11px] text-gray-400 font-semibold">Data</label>
-                    <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
-                      <Calendar size={15} className="text-brand shrink-0" />
-                      <input
-                        type="date"
-                        value={date}
-                        min={minDateIso}
-                        onChange={e => setDate(e.target.value)}
-                        className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none"
-                      />
+                    <div className="mt-1 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
+                      <DesktopDatePicker valueIso={date} onChange={setDate} minIso={minDateIso} seasons={seasons} />
                     </div>
                   </div>
                   <div>
@@ -445,7 +437,7 @@ export default function TransfersDesktop() {
                     escolha a partir de {format(minBookable, "d/MM 'às' HH:mm")}.
                   </p>
                 )}
-                {advanceOk && isHighSeasonIso(date) && (
+                {advanceOk && isHighSeasonIso(date, seasons) && (
                   <p className="mt-3 flex items-center gap-2 text-[12px] text-amber-600">
                     <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
                     Alta temporada — pode ter acréscimo no valor (já mostrado no resumo).
@@ -572,7 +564,7 @@ export default function TransfersDesktop() {
                     : !cartItems.length ? 'Selecione o veículo'
                     : cartCapacity < people ? 'Capacidade insuficiente'
                     : !advanceOk ? `Antecedência mínima de ${MIN_ADVANCE_HOURS}h`
-                    : 'Confirmar Transfer'}
+                    : 'Continuar'}
                 </button>
               </div>
             </aside>
@@ -636,9 +628,8 @@ export default function TransfersDesktop() {
               <div className="grid sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Data</label>
-                  <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
-                    <Calendar size={15} className="text-brand shrink-0" />
-                    <input type="date" value={customDate} min={customMinDateIso} onChange={e => setCustomDate(e.target.value)} className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none" />
+                  <div className="mt-1 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
+                    <DesktopDatePicker valueIso={customDate} onChange={setCustomDate} minIso={customMinDateIso} seasons={seasons} />
                   </div>
                 </div>
                 <div>

@@ -6,6 +6,7 @@ import {
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { isHighSeasonIso } from '../lib/season'
 
 /**
  * DateSheet — calendário (bottom sheet) compartilhado.
@@ -13,10 +14,11 @@ import { X, ChevronLeft, ChevronRight } from 'lucide-react'
  *   onChange(Date)   — ao escolher um dia
  *   onClose          — fecha
  *   minDate          — 1º dia selecionável (bloqueia anteriores)
- *   highSeasonMonths — Set de meses (1-12) de alta temporada → dias em laranja
+ *   seasons          — regras de alta temporada (start/end) → dias EXATOS em laranja
+ *   highSeasonMonths — fallback: Set de meses (1-12) → mês inteiro em laranja
  * Renderizado via portal p/ não ser preso por ancestrais com transform.
  */
-export default function DateSheet({ value, onChange, onClose, minDate, highSeasonMonths }) {
+export default function DateSheet({ value, onChange, onClose, minDate, seasons, highSeasonMonths }) {
   const today = minDate || startOfDay(new Date())
   const [view, setView] = useState(startOfMonth(value || today))
   const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
@@ -50,7 +52,9 @@ export default function DateSheet({ value, onChange, onClose, minDate, highSeaso
           {days.map(day => {
             const past = isBefore(day, today)
             const sel  = isSameDay(day, value)
-            const hs   = !!highSeasonMonths?.has(day.getMonth() + 1)
+            const hs   = seasons?.length
+              ? isHighSeasonIso(format(day, 'yyyy-MM-dd'), seasons)
+              : !!highSeasonMonths?.has(day.getMonth() + 1)
             return (
               <button key={day.toISOString()} disabled={past} onClick={() => { onChange(day); onClose() }}
                 className={`relative aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
@@ -66,7 +70,7 @@ export default function DateSheet({ value, onChange, onClose, minDate, highSeaso
             )
           })}
         </div>
-        {highSeasonMonths?.size > 0 && (
+        {(seasons?.length > 0 || highSeasonMonths?.size > 0) && (
           <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
             <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
             Datas em laranja: alta temporada (pode ter acréscimo no valor)

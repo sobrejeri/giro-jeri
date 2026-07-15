@@ -4,8 +4,9 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
+import DesktopDatePicker from '../components/DesktopDatePicker'
 import {
-  Star, Clock, Users, Heart, Calendar, Minus, Plus, Zap, Search, X,
+  Star, Clock, Users, Heart, Minus, Plus, Zap, Search, X,
 } from 'lucide-react'
 
 const fmtPrice = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -131,6 +132,15 @@ export default function ToursDesktop() {
   })
   const tours = data?.tours || data || []
 
+  // Alta temporada: datas exatas em laranja no calendário do filtro.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: 3,
+  })
+  const seasons = Array.isArray(seasonsData) ? seasonsData : []
+
   const cats = useMemo(() => {
     const m = new Map()
     tours.forEach((t) => { if (t.categories) m.set(t.categories.id, t.categories.name) })
@@ -206,16 +216,15 @@ export default function ToursDesktop() {
               </button>
             )}
           </div>
-          <label className="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-4 py-2 cursor-pointer hover:border-gray-300 transition-colors">
-            <Calendar size={14} className="text-brand shrink-0" />
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              min={cutoffMinIso}
-              className="text-[13px] font-semibold text-gray-700 bg-transparent outline-none w-[118px]"
+          <div className="bg-white border border-gray-200 rounded-full px-4 py-2 hover:border-gray-300 transition-colors">
+            <DesktopDatePicker
+              valueIso={date || cutoffMinIso}
+              onChange={setDate}
+              minIso={cutoffMinIso}
+              seasons={seasons}
+              className="w-[150px]"
             />
-          </label>
+          </div>
           <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-full px-4 py-2">
             <Users size={14} className="text-brand shrink-0" />
             <button onClick={() => setPeople((p) => Math.max(1, p - 1))} className="w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50">
