@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import DesktopDatePicker from '../components/DesktopDatePicker'
 import {
   Star, Clock, Heart, ArrowRight, Compass, Car, Calendar, Users,
   ShieldCheck, MapPin, CalendarCheck, Headphones, Lock, RefreshCcw,
@@ -219,6 +220,15 @@ export default function HomeDesktop({
     return [...src].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
   }, [tours, list])
 
+  // Alta temporada: datas exatas em laranja no calendário da busca.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: 3,
+  })
+  const seasons = Array.isArray(seasonsData) ? seasonsData : []
+
   // Rotas predefinidas de transfer — alimentam os dropdowns "Saindo de" / "Para onde?"
   const { data: routesData } = useQuery({
     queryKey: ['transfer-routes'],
@@ -388,12 +398,11 @@ export default function HomeDesktop({
             </div>
             <div className="col-span-2 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Data</label>
-              <input
-                type="date"
-                value={date}
-                min={todayIso()}
-                onChange={(e) => setDate(e.target.value)}
-                className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none w-full min-w-0"
+              <DesktopDatePicker
+                valueIso={date}
+                onChange={setDate}
+                minIso={todayIso()}
+                seasons={seasons}
               />
             </div>
             <div className="col-span-2 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
