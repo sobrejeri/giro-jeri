@@ -88,20 +88,28 @@ export default function Reservas() {
             </select>
           </div>
 
-          {/* Período: nunca transborda — grid [1fr auto 1fr] no mobile */}
-          <div className="flex items-center gap-2 w-full lg:w-auto">
-            <CalendarDays size={15} className="text-gray-500 flex-shrink-0" />
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 flex-1 lg:flex lg:flex-none">
+          {/* Período — no mobile as duas datas EMPILHAM (cada uma na sua linha,
+              largura total, com rótulo De/Até). O iOS Safari não encolhe
+              <input type=date> lado a lado nem com min-w-0, então uma data por
+              linha é a única forma garantida de não transbordar. No desktop
+              (lg) volta a ficar inline, com "até" no meio. */}
+          <div className="w-full lg:w-auto grid grid-cols-1 gap-2 lg:flex lg:items-center lg:gap-2">
+            <CalendarDays size={15} className="hidden lg:block text-gray-500 flex-shrink-0" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-400 w-7 shrink-0 lg:hidden">De</span>
               <input
                 type="date" value={dateFrom}
                 onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-                className="w-full min-w-0 lg:w-40 h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+                className="flex-1 min-w-0 lg:w-40 lg:flex-none h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
               />
-              <span className="text-gray-500 text-sm text-center px-0.5">até</span>
+            </div>
+            <span className="hidden lg:inline text-gray-500 text-sm">até</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-400 w-7 shrink-0 lg:hidden">Até</span>
               <input
                 type="date" value={dateTo}
                 onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-                className="w-full min-w-0 lg:w-40 h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+                className="flex-1 min-w-0 lg:w-40 lg:flex-none h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
               />
             </div>
           </div>
