@@ -1,4 +1,5 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRegion } from '../../contexts/RegionContext'
 import { api } from '../../lib/api'
@@ -8,6 +9,7 @@ import NotificationBell from '../NotificationBell'
 export default function TopNav() {
   const { user, token, logout } = useAuth()
   const { region, openPicker } = useRegion()
+  const { t } = useTranslation()
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -33,12 +35,12 @@ export default function TopNav() {
         </Link>
 
         <nav className="flex items-center gap-6 flex-1">
-          <NavLink to="/passeios"          className={navLinkClass}>Passeios</NavLink>
-          <NavLink to="/transfers"         className={navLinkClass}>Transfers</NavLink>
-          <NavLink to="/eventos"           className={navLinkClass}>Descubra a Vila</NavLink>
-          {token && <NavLink to="/minhas-reservas" className={navLinkClass}>Reservas</NavLink>}
-          {token && <NavLink to="/perfil"          className={navLinkClass}>Perfil</NavLink>}
-          <a href="#sobre" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">Sobre nós</a>
+          <NavLink to="/passeios"          className={navLinkClass}>{t('nav.tours')}</NavLink>
+          <NavLink to="/transfers"         className={navLinkClass}>{t('nav.transfers')}</NavLink>
+          <NavLink to="/eventos"           className={navLinkClass}>{t('nav.discoverVillage')}</NavLink>
+          {token && <NavLink to="/minhas-reservas" className={navLinkClass}>{t('nav.bookings')}</NavLink>}
+          {token && <NavLink to="/perfil"          className={navLinkClass}>{t('nav.profile')}</NavLink>}
+          <a href="#sobre" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">{t('nav.about')}</a>
         </nav>
 
         {/* Chip de localização — desktop */}
@@ -48,7 +50,7 @@ export default function TopNav() {
         >
           <MapPin size={13} className="text-brand shrink-0" />
           <span className="text-[13px] font-semibold text-gray-700 max-w-[140px] truncate">
-            {region?.name ?? 'Selecionar região'}
+            {region?.name ?? t('nav.selectRegion')}
           </span>
           <ChevronDown size={12} className="text-gray-400" />
         </button>
@@ -62,16 +64,16 @@ export default function TopNav() {
                 onClick={handleLogout}
                 className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-red-500 transition-colors"
               >
-                <LogOut size={14} /> Sair
+                <LogOut size={14} /> {t('nav.logout')}
               </button>
             </>
           ) : (
             <>
               <Link to="/login" className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-700 hover:text-gray-900 h-8 px-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                <User size={13} /> Entrar
+                <User size={13} /> {t('nav.login')}
               </Link>
               <Link to="/passeios" className="inline-flex items-center gap-1.5 h-8 px-4 bg-brand text-white text-sm font-semibold rounded-lg hover:bg-brand-600 transition-colors shadow-sm shadow-brand/30">
-                Reservar agora
+                {t('nav.bookNow')}
               </Link>
             </>
           )}

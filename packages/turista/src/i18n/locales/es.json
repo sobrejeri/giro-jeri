@@ -5,7 +5,13 @@
     "tours": "Paseos",
     "transfers": "Traslados",
     "bookings": "Reservas",
-    "profile": "Perfil"
+    "profile": "Perfil",
+    "discoverVillage": "Descubre el Pueblo",
+    "about": "Sobre nosotros",
+    "login": "Ingresar",
+    "bookNow": "Reservar ahora",
+    "logout": "Salir",
+    "selectRegion": "Seleccionar región"
   },
   "auth": {
     "tabLogin": "Ingresar",
@@ -89,6 +95,37 @@
       "notifications": "Notificaciones",
       "privacy": "Privacidad y seguridad",
       "help": "Ayuda y soporte"
+    },
+    "editData": "Editar datos",
+    "whatsappUnverified": "WhatsApp no verificado",
+    "verify": "Verificar",
+    "stats": {
+      "bookings": "Reservas realizadas",
+      "completed": "Paseos completados",
+      "reviews": "Reseñas hechas",
+      "favorites": "Favoritos guardados"
+    },
+    "menuItems": {
+      "bookings": "Mis Reservas",
+      "bookingsDesc": "Sigue tus próximos viajes",
+      "personalData": "Datos Personales",
+      "personalDataDesc": "Gestiona tu información",
+      "history": "Historial de Paseos",
+      "historyDesc": "Ve todos los paseos realizados",
+      "payments": "Métodos de Pago",
+      "paymentsDesc": "Tarjetas y métodos guardados",
+      "favorites": "Favoritos",
+      "favoritesDesc": "Paseos que guardaste",
+      "affiliate": "Difundió, Ganó",
+      "affiliateDesc": "Programa de afiliados — recomienda y gana",
+      "help": "Centro de Ayuda",
+      "helpDesc": "Dudas y soporte"
+    },
+    "whatsapp": {
+      "verified": "WhatsApp verificado",
+      "noWhatsapp": "Este número no tiene WhatsApp",
+      "checking": "Verificando…",
+      "recheck": "Volver a verificar"
     }
   },
   "home": {

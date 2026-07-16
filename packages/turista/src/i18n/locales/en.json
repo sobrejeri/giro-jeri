@@ -5,7 +5,13 @@
     "tours": "Tours",
     "transfers": "Transfers",
     "bookings": "Bookings",
-    "profile": "Profile"
+    "profile": "Profile",
+    "discoverVillage": "Discover the Village",
+    "about": "About us",
+    "login": "Sign in",
+    "bookNow": "Book now",
+    "logout": "Log out",
+    "selectRegion": "Select region"
   },
   "auth": {
     "tabLogin": "Sign in",
@@ -89,6 +95,37 @@
       "notifications": "Notifications",
       "privacy": "Privacy & security",
       "help": "Help & support"
+    },
+    "editData": "Edit data",
+    "whatsappUnverified": "WhatsApp not verified",
+    "verify": "Verify",
+    "stats": {
+      "bookings": "Bookings made",
+      "completed": "Tours completed",
+      "reviews": "Reviews written",
+      "favorites": "Saved favorites"
+    },
+    "menuItems": {
+      "bookings": "My Bookings",
+      "bookingsDesc": "Track your upcoming trips",
+      "personalData": "Personal Data",
+      "personalDataDesc": "Manage your information",
+      "history": "Tour History",
+      "historyDesc": "See all completed tours",
+      "payments": "Payment Methods",
+      "paymentsDesc": "Saved cards and methods",
+      "favorites": "Favorites",
+      "favoritesDesc": "Tours you saved",
+      "affiliate": "Share & Earn",
+      "affiliateDesc": "Affiliate program — refer and earn",
+      "help": "Help Center",
+      "helpDesc": "Questions and support"
+    },
+    "whatsapp": {
+      "verified": "WhatsApp verified",
+      "noWhatsapp": "This number has no WhatsApp",
+      "checking": "Checking…",
+      "recheck": "Re-check"
     }
   },
   "home": {

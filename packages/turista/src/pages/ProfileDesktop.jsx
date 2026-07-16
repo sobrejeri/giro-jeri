@@ -33,7 +33,7 @@ export default function ProfileDesktop() {
   const { user, token, logout, updateUser } = useAuth()
   const { count: favsCount } = useFavorites()
   const navigate = useNavigate()
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const fileRef  = useRef(null)
   const coverRef = useRef(null)
 
@@ -65,20 +65,20 @@ export default function ProfileDesktop() {
   const initials  = user?.full_name?.split(' ').slice(0, 2).map((n) => n[0]?.toUpperCase()).join('') || 'U'
 
   const STATS = [
-    { icon: CalendarCheck, value: bookings.length, label: 'Reservas realizadas', tint: 'bg-blue-50 text-blue-600' },
-    { icon: CheckCircle2,  value: concluded,        label: 'Passeios concluídos', tint: 'bg-emerald-50 text-emerald-600' },
-    { icon: Star,          value: 0,                label: 'Avaliações feitas',   tint: 'bg-amber-50 text-amber-500' },
-    { icon: Heart,         value: favsCount,         label: 'Favoritos salvos',    tint: 'bg-rose-50 text-rose-500' },
+    { icon: CalendarCheck, value: bookings.length, label: t('profile.stats.bookings'),  tint: 'bg-blue-50 text-blue-600' },
+    { icon: CheckCircle2,  value: concluded,        label: t('profile.stats.completed'), tint: 'bg-emerald-50 text-emerald-600' },
+    { icon: Star,          value: 0,                label: t('profile.stats.reviews'),   tint: 'bg-amber-50 text-amber-500' },
+    { icon: Heart,         value: favsCount,         label: t('profile.stats.favorites'), tint: 'bg-rose-50 text-rose-500' },
   ]
 
   const MENU = [
-    { icon: CalendarCheck, title: 'Minhas Reservas',     desc: 'Acompanhe suas próximas viagens', onClick: () => navigate('/minhas-reservas') },
-    { icon: User,          title: 'Dados Pessoais',       desc: 'Gerencie suas informações',       onClick: () => { startEdit() } },
-    { icon: CalendarCheck, title: 'Histórico de Passeios', desc: 'Veja todos os passeios realizados', onClick: () => navigate('/minhas-reservas') },
-    { icon: CreditCard,    title: 'Formas de Pagamento',  desc: 'Cartões e métodos salvos',        onClick: () => helpWA('Quero gerenciar minhas formas de pagamento.') },
-    { icon: Heart,         title: 'Favoritos',            desc: 'Passeios que você salvou',        onClick: () => navigate('/passeios') },
-    { icon: Megaphone,     title: 'Divulgou, Ganhou',     desc: 'Programa de afiliados — indique e ganhe', onClick: () => navigate('/afiliado') },
-    { icon: LifeBuoy,      title: 'Central de Ajuda',     desc: 'Dúvidas e suporte',               onClick: () => helpWA('Olá! Preciso de ajuda no Turiva.') },
+    { icon: CalendarCheck, title: t('profile.menuItems.bookings'),     desc: t('profile.menuItems.bookingsDesc'),     onClick: () => navigate('/minhas-reservas') },
+    { icon: User,          title: t('profile.menuItems.personalData'), desc: t('profile.menuItems.personalDataDesc'), onClick: () => { startEdit() } },
+    { icon: CalendarCheck, title: t('profile.menuItems.history'),      desc: t('profile.menuItems.historyDesc'),      onClick: () => navigate('/minhas-reservas') },
+    { icon: CreditCard,    title: t('profile.menuItems.payments'),     desc: t('profile.menuItems.paymentsDesc'),     onClick: () => helpWA('Quero gerenciar minhas formas de pagamento.') },
+    { icon: Heart,         title: t('profile.menuItems.favorites'),    desc: t('profile.menuItems.favoritesDesc'),    onClick: () => navigate('/passeios') },
+    { icon: Megaphone,     title: t('profile.menuItems.affiliate'),    desc: t('profile.menuItems.affiliateDesc'),    onClick: () => navigate('/afiliado') },
+    { icon: LifeBuoy,      title: t('profile.menuItems.help'),         desc: t('profile.menuItems.helpDesc'),         onClick: () => helpWA('Olá! Preciso de ajuda no Turiva.') },
   ]
 
   function helpWA(text) {
@@ -409,7 +409,7 @@ export default function ProfileDesktop() {
       <div className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
           <Globe size={15} className="text-brand" />
-          <span className="font-semibold text-gray-800 text-[14px]">Idioma</span>
+          <span className="font-semibold text-gray-800 text-[14px]">{t('profile.language')}</span>
         </div>
         <div className="flex">
           {LANGS.map((lang, i) => {
@@ -431,13 +431,13 @@ export default function ProfileDesktop() {
       {/* ── Editar / Sair ────────────────────────────────── */}
       <div className="flex items-center justify-between mt-8">
         <button onClick={startEdit} className="inline-flex items-center gap-2 text-[14px] font-semibold text-gray-600 hover:text-brand">
-          <Pencil size={15} /> Editar dados
+          <Pencil size={15} /> {t('profile.editData')}
         </button>
         <button
           onClick={handleLogout}
           className="inline-flex items-center gap-2 text-[14px] font-bold text-red-500 hover:text-red-600 border border-red-200 hover:bg-red-50 px-5 py-2.5 rounded-xl transition-colors"
         >
-          <LogOut size={16} /> Sair da conta
+          <LogOut size={16} /> {t('profile.logout')}
         </button>
       </div>
 

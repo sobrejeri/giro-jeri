@@ -55,6 +55,7 @@ function formatDoc(type, num) {
 // automáticos por lá). Checa sob demanda via Z-API, sem enviar mensagem.
 // Exportado para reuso no ProfileDesktop (mesmo padrão do PlaceInput).
 export function WhatsappCheck() {
+  const { t } = useTranslation()
   const [status, setStatus]     = useState(undefined) // undefined=carregando · null=nunca checado · true/false
   const [checking, setChecking] = useState(false)
   const [err, setErr]           = useState(null)
@@ -82,16 +83,16 @@ export function WhatsappCheck() {
   return (
     <div className="flex items-center justify-between gap-2 bg-gray-50 rounded-xl px-3 py-2">
       <div className="flex items-center gap-1.5 min-w-0">
-        {status === true  && <span className="text-[12px] font-semibold text-emerald-600">✓ WhatsApp verificado</span>}
-        {status === false && <span className="text-[12px] font-semibold text-red-500">⚠️ Este número não tem WhatsApp</span>}
-        {status === null  && <span className="text-[12px] text-gray-500">WhatsApp não verificado</span>}
+        {status === true  && <span className="text-[12px] font-semibold text-emerald-600">✓ {t('profile.whatsapp.verified')}</span>}
+        {status === false && <span className="text-[12px] font-semibold text-red-500">⚠️ {t('profile.whatsapp.noWhatsapp')}</span>}
+        {status === null  && <span className="text-[12px] text-gray-500">{t('profile.whatsappUnverified')}</span>}
       </div>
       <button
         onClick={verify}
         disabled={checking}
         className="shrink-0 text-[11px] font-bold text-brand border border-brand/30 rounded-lg px-2.5 py-1 active:scale-95 transition-transform disabled:opacity-50"
       >
-        {checking ? 'Verificando…' : status === null ? 'Verificar' : 'Reverificar'}
+        {checking ? t('profile.whatsapp.checking') : status === null ? t('profile.verify') : t('profile.whatsapp.recheck')}
       </button>
       {err && <p className="w-full text-[10px] text-red-500">{err}</p>}
     </div>
