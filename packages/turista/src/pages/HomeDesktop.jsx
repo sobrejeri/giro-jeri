@@ -189,8 +189,11 @@ export default function HomeDesktop({
   const navigate = useNavigate()
   const { region, openPicker } = useRegion()
 
-  // Nome do lugar dinâmico — segue a região selecionada/detectada
-  const placeName  = bannerTitle || region?.name || 'Jericoacoara'
+  // Nome do lugar dinâmico — segue SEMPRE a região atual do app (localização
+  // selecionada/detectada). O título do banner do admin fica só como reserva
+  // quando ainda não há região, para o hero e "Mais procurados em…" baterem
+  // com o lugar escolhido (ex.: Cruz → "Viva o melhor de CRUZ").
+  const placeName  = region?.name || bannerTitle || 'Jericoacoara'
   const placeShort = /jericoacoara/i.test(placeName) ? 'Jeri' : placeName
 
   // Estado do box de busca
