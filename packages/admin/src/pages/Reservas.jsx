@@ -52,54 +52,61 @@ export default function Reservas() {
     <div className="space-y-4">
       {/* Filtros */}
       <Card className="p-4">
-        <div className="flex flex-wrap gap-3">
-          <div className="relative flex-1 min-w-52">
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+          {/* Busca */}
+          <div className="relative w-full lg:flex-1 lg:min-w-52">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
               placeholder="Buscar por código…"
-              className="w-full h-9 pl-9 pr-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-brand"
+              className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-brand"
             />
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatus(e.target.value); setPage(1) }}
-            className="h-9 pl-3 pr-8 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
-          >
-            <option value="">Todos os status</option>
-            {Object.entries(STATUS_LABELS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
+          {/* Status + Tipo: 2 colunas no mobile, automático no desktop */}
+          <div className="grid grid-cols-2 gap-3 lg:flex lg:gap-3">
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatus(e.target.value); setPage(1) }}
+              className="w-full lg:w-auto h-10 pl-3 pr-8 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+            >
+              <option value="">Todos os status</option>
+              {Object.entries(STATUS_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
 
-          <select
-            value={typeFilter}
-            onChange={(e) => { setType(e.target.value); setPage(1) }}
-            className="h-9 pl-3 pr-8 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
-          >
-            <option value="">Todos os tipos</option>
-            <option value="tour">Passeios</option>
-            <option value="transfer">Transfers</option>
-          </select>
+            <select
+              value={typeFilter}
+              onChange={(e) => { setType(e.target.value); setPage(1) }}
+              className="w-full lg:w-auto h-10 pl-3 pr-8 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+            >
+              <option value="">Todos os tipos</option>
+              <option value="tour">Passeios</option>
+              <option value="transfer">Transfers</option>
+            </select>
+          </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Período: nunca transborda — grid [1fr auto 1fr] no mobile */}
+          <div className="flex items-center gap-2 w-full lg:w-auto">
             <CalendarDays size={15} className="text-gray-500 flex-shrink-0" />
-            <input
-              type="date" value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand flex-1 min-w-0 sm:flex-none"
-            />
-            <span className="text-gray-600 text-sm">até</span>
-            <input
-              type="date" value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-              className="h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand flex-1 min-w-0 sm:flex-none"
-            />
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 flex-1 lg:flex lg:flex-none">
+              <input
+                type="date" value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                className="w-full min-w-0 lg:w-40 h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+              />
+              <span className="text-gray-500 text-sm text-center px-0.5">até</span>
+              <input
+                type="date" value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                className="w-full min-w-0 lg:w-40 h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+              />
+            </div>
           </div>
 
-          <span className="text-sm text-gray-500 ml-auto self-center">{total} reservas</span>
+          <span className="text-sm text-gray-500 lg:ml-auto lg:self-center">{total} reservas</span>
         </div>
       </Card>
 
