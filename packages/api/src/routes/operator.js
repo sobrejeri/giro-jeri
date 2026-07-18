@@ -580,9 +580,24 @@ router.get('/bookings', async (req, res, next) => {
 
     if (e2) throw e2
 
+    // Serviços JÁ CONCLUÍDOS que fazem parte de um PEDIDO (carrinho) ainda ativo
+    // — para o card do pedido mostrar cada serviço com seu status (inclusive
+    // "Concluído") até o pedido inteiro terminar. Escopo restrito aos grupos com
+    // trabalho em aberto (não traz todo o histórico de concluídas).
+    let mineAll = mineRaw || []
+    const activeGroupIds = [...new Set((mineRaw || []).map((b) => b.order_group_id).filter(Boolean))]
+    if (activeGroupIds.length > 0) {
+      const { data: doneInGroups } = await supabase
+        .from('bookings').select(BOOKING_COLUMNS)
+        .eq('operator_id', req.user.id)
+        .eq('status_operational', 'completed')
+        .in('order_group_id', activeGroupIds)
+      if (doneInGroups?.length) mineAll = [...mineAll, ...doneInGroups]
+    }
+
     const [pending, mine] = await Promise.all([
       attachCustomers(pendingRaw),
-      attachCustomers(mineRaw || []),
+      attachCustomers(mineAll),
     ])
 
     // ── Flag OFF: resposta idêntica à de hoje (zero regressão). ───────────

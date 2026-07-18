@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarCheck, Users, MapPin, Car, CheckCircle2, Compass,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
-  DollarSign, Send, Clock, ShieldAlert, Package,
+  DollarSign, Send, Clock, ShieldAlert, Package, ChevronRight, X,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -384,6 +384,100 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   )
 }
 
+// ── Status de um serviço do pedido (na visão da coop) ─────
+function myServiceStatus(b) {
+  const paid = b.status_commercial === 'paid'
+  const o = b.status_operational
+  if (o === 'completed')   return { Icon: CheckCircle2, color: 'text-gray-400',    label: 'Concluído' }
+  if (o === 'in_progress') return { Icon: Zap,          color: 'text-blue-500',    label: 'Em andamento' }
+  if (!paid)               return { Icon: Clock,        color: 'text-amber-500',   label: 'Aguard. pgto.' }
+  return { Icon: CheckCircle2, color: 'text-emerald-500', label: 'Pago' }
+}
+
+function myGroupSummary(bookings) {
+  const total = bookings.reduce((s, b) => s + Number(b.total_amount || 0), 0)
+  const anyUnpaid   = bookings.some((b) => b.status_commercial !== 'paid')
+  const anyProgress = bookings.some((b) => b.status_operational === 'in_progress')
+  let label = 'Pronto para atender', bg = 'bg-emerald-500'
+  if (anyUnpaid)        { label = 'Aguardando pagamento'; bg = 'bg-amber-500' }
+  else if (anyProgress) { label = 'Em andamento';         bg = 'bg-blue-500'  }
+  return { total, label, bg }
+}
+
+// ── Card-resumo do pedido (carrinho) — abre o detalhe ao tocar ────
+function MyGroupCard({ bookings, onOpen }) {
+  const count = bookings.length
+  const { total, label, bg } = myGroupSummary(bookings)
+  const client = bookings.find((b) => b.users?.full_name)?.users?.full_name || 'Cliente'
+  return (
+    <div onClick={onOpen} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-brand/20 active:scale-[0.99] transition-transform cursor-pointer">
+      <div className="bg-brand/5 px-4 py-2.5 flex items-center justify-between border-b border-brand/10">
+        <div className="flex items-center gap-2">
+          <Package size={15} className="text-brand shrink-0" />
+          <span className="text-[13px] font-bold text-gray-900">Pedido · {count} serviços</span>
+        </div>
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full text-white ${bg}`}>{label}</span>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        <p className="text-[11px] text-gray-400">Cliente: <span className="font-semibold text-gray-600">{client}</span></p>
+        {bookings.slice(0, 4).map((b) => {
+          const st = myServiceStatus(b)
+          const isTour = b.service_type === 'tour'
+          let d = ''
+          if (b.service_date) { try { d = format(new Date(b.service_date + 'T00:00:00'), 'd MMM', { locale: ptBR }) } catch {} }
+          return (
+            <div key={b.id} className="flex items-center gap-2 text-[12px] text-gray-600">
+              <st.Icon size={14} className={`${st.color} shrink-0`} title={st.label} />
+              <span className="truncate flex-1">{isTour ? 'Passeio' : 'Transfer'} · {b.booking_code}</span>
+              <span className={`text-[10px] font-bold shrink-0 ${st.color}`}>{st.label}</span>
+              <span className="text-gray-400 shrink-0 w-12 text-right">{d}</span>
+            </div>
+          )
+        })}
+        {count > 4 && <p className="text-[11px] text-gray-400">+{count - 4} serviço(s)</p>}
+        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+          <div>
+            <p className="text-[10px] text-gray-400 leading-none">Total do pedido</p>
+            <p className="text-[16px] font-extrabold text-gray-900 leading-none mt-0.5">{fmt(total)}</p>
+          </div>
+          <span className="flex items-center gap-1 text-[12px] font-bold text-brand">Ver detalhes <ChevronRight size={16} /></span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Folha com os serviços do pedido (cada um com suas ações) ──────
+function MyGroupSheet({ bookings, onClose, onConfirm, onStart, onComplete, busyId }) {
+  const count = bookings.length
+  const { total } = myGroupSummary(bookings)
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-gray-50 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[86vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 bg-white rounded-t-3xl border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Package size={16} className="text-brand" />
+            <h3 className="font-bold text-gray-900">Pedido · {count} serviços</h3>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95 transition-transform">
+            <X size={15} className="text-gray-500" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-4 py-4 space-y-3 flex-1">
+          {bookings.map((b) => (
+            <MyCard key={b.id} booking={b} onConfirm={onConfirm} onStart={onStart} onComplete={onComplete} busy={busyId === b.id} />
+          ))}
+        </div>
+        <div className="px-5 py-3 bg-white border-t border-gray-100 text-center">
+          <span className="text-[12px] text-gray-400">Total do pedido: </span>
+          <span className="text-[14px] font-extrabold text-gray-900">{fmt(total)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Card de cotação (rota personalizada) ──────────────────
 function QuoteRequestCard({ quote, onQuote }) {
   const name   = quote.client_name || quote.users?.full_name || quote.user_name || 'Cliente'
@@ -474,6 +568,7 @@ export default function Reservas() {
   const [accepting,  setAccepting] = useState(null)
   const [acceptingCombo, setAcceptingCombo] = useState(null)
   const [confirming, setConfirming]= useState(null)
+  const [myGroupGid, setMyGroupGid]= useState(null) // pedido (grupo) aberto em "Minhas corridas"
   const [quoteModal, setQuoteModal]= useState(null)
   const [price,      setPrice]     = useState('')
   const [notes,      setNotes]     = useState('')
@@ -594,6 +689,31 @@ export default function Reservas() {
     for (const it of singles) out.push({ type: 'single', item: it })
     return out
   })()
+
+  // "Minhas corridas": reservas do mesmo pedido (order_group_id) viram UM
+  // card-resumo; ao tocar, abre a folha com cada serviço e suas ações. Pedido
+  // de 1 serviço cai como card normal.
+  const mineItems = (() => {
+    const groups = new Map()
+    const singles = []
+    for (const b of mine) {
+      if (b.order_group_id) {
+        if (!groups.has(b.order_group_id)) groups.set(b.order_group_id, [])
+        groups.get(b.order_group_id).push(b)
+      } else singles.push(b)
+    }
+    const out = []
+    for (const [gid, arr] of groups.entries()) {
+      if (arr.length >= 2) out.push({ type: 'group', gid, bookings: arr })
+      else out.push({ type: 'single', booking: arr[0] })
+    }
+    for (const b of singles) out.push({ type: 'single', booking: b })
+    return out
+  })()
+
+  // Serviços do pedido aberto — derivados do `mine` vivo, para a folha
+  // refletir a mudança de status na hora (aceitar/iniciar/concluir).
+  const openGroupBookings = myGroupGid ? mine.filter((b) => b.order_group_id === myGroupGid) : []
 
   async function handleConfirm(booking) {
     if (confirming) return
@@ -802,14 +922,20 @@ export default function Reservas() {
           </div>
         ) : (
           <div className="space-y-4">
-            {mine.map((b) => (
+            {mineItems.map((it) => it.type === 'group' ? (
+              <MyGroupCard
+                key={it.gid}
+                bookings={it.bookings}
+                onOpen={() => setMyGroupGid(it.gid)}
+              />
+            ) : (
               <MyCard
-                key={b.id}
-                booking={b}
+                key={it.booking.id}
+                booking={it.booking}
                 onConfirm={handleConfirm}
                 onStart={handleStart}
                 onComplete={handleComplete}
-                busy={confirming === b.id}
+                busy={confirming === it.booking.id}
               />
             ))}
           </div>
@@ -822,6 +948,18 @@ export default function Reservas() {
           message={toast.message}
           type={toast.type}
           onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Folha de detalhe do pedido (carrinho) */}
+      {myGroupGid && openGroupBookings.length > 0 && (
+        <MyGroupSheet
+          bookings={openGroupBookings}
+          onClose={() => setMyGroupGid(null)}
+          onConfirm={handleConfirm}
+          onStart={handleStart}
+          onComplete={handleComplete}
+          busyId={confirming}
         />
       )}
 
