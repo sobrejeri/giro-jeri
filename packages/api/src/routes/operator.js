@@ -568,11 +568,14 @@ router.get('/bookings', async (req, res, next) => {
     const pendingRaw = [...acceptanceRows, ...(dispRes.data || [])]
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
-    // Minhas corridas: aceitas ou em andamento
+    // Minhas corridas: aceitas, confirmadas/despachadas ou em andamento.
+    // Inclui 'awaiting_dispatch' (estado após "Confirmar") e 'confirmed'/'en_route'
+    // para a reserva NÃO sumir da lista da coop no meio do atendimento — é onde
+    // ficam os botões Iniciar/Concluir.
     const { data: mineRaw, error: e2 } = await supabase
       .from('bookings').select(BOOKING_COLUMNS)
       .eq('operator_id', req.user.id)
-      .in('status_operational', ['assigned', 'in_progress'])
+      .in('status_operational', ['assigned', 'awaiting_dispatch', 'confirmed', 'en_route', 'in_progress'])
       .order('service_date', { ascending: true })
 
     if (e2) throw e2

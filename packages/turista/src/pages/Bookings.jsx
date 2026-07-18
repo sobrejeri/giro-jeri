@@ -24,10 +24,13 @@ function resolveStatus(b) {
   // Fluxo solicitar → aceitar → pagar:
   if (c === 'awaiting_acceptance')             return 'waiting_acceptance' // aguardando cooperativa aceitar
   if (c === 'awaiting_payment')                return 'waiting_payment'    // aceita → pague agora
-  // Pago: se já há cooperativa atribuída, está confirmado; senão (fluxo antigo)
-  // ainda aguarda uma cooperativa aceitar.
-  if (c === 'paid')                            return o === 'assigned' ? 'confirmed' : 'waiting_acceptance'
-  if (o === 'assigned')                        return 'confirmed'
+  // Pago: se a cooperativa já está cuidando (aceita/confirmada/despachada),
+  // está confirmado; senão (fluxo antigo, sem coop ainda) aguarda uma aceitar.
+  // 'awaiting_dispatch' é o estado após a coop clicar "Confirmar" — continua
+  // confirmado para o cliente (não é "aguardando aceite").
+  const HANDLED_OPS = ['assigned', 'awaiting_dispatch', 'confirmed', 'en_route', 'dispatched']
+  if (c === 'paid')                            return HANDLED_OPS.includes(o) ? 'confirmed' : 'waiting_acceptance'
+  if (HANDLED_OPS.includes(o))                 return 'confirmed'
   return 'waiting_payment'
 }
 
