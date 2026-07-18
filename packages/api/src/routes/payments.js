@@ -1741,7 +1741,11 @@ async function onGroupPaymentApproved(payment) {
 
   const { data: bookings } = await supabase
     .from('bookings').select('*').eq('order_group_id', payment.order_group_id)
-  const list = (bookings || []).filter((b) => b.status_commercial !== 'cancelled')
+  // Só processa o que foi efetivamente cobrado: reservas que estavam prontas
+  // para pagar (awaiting_payment) ou já pagas (idempotência do webhook+polling).
+  // Itens ainda em aceite (awaiting_acceptance) NÃO entram — não foram cobrados,
+  // então não podem virar 'paid' aqui.
+  const list = (bookings || []).filter((b) => ['awaiting_payment', 'paid'].includes(b.status_commercial))
   if (list.length === 0) return
 
   // 1) Marca cada reserva do grupo como paga (idempotente).
