@@ -788,7 +788,9 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
       })
     }
 
-    // Avisa o cliente UMA vez pelo pedido inteiro (não por serviço).
+    // Avisa o cliente UMA vez pelo pedido inteiro (não por serviço). Só o aviso
+    // in-app: o template de WhatsApp é de reserva ÚNICA (data/valor/rota) e não
+    // descreve um pedido de N serviços — evitamos mensagem com dados vazios.
     const anyB = accepted[0]
     if (anyB) {
       notifyUser({
@@ -798,7 +800,6 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
         title:       'Cooperativa aceitou seu pedido! 🎉',
         body:        `Uma cooperativa aceitou os ${accepted.length} serviço(s) do seu pedido. Pague tudo junto para confirmar.`,
       })
-      notifyClientBookingAccepted(supabase, { ...anyB }).catch(() => {})
     }
 
     res.json({ ok: true, accepted_count: accepted.length, total_items: alive.length })
