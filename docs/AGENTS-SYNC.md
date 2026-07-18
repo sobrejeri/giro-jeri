@@ -28,6 +28,16 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-18 · Agente B (carrinho = solicitação única atômica)** — Com o motor
+  de pernas OFF, um pedido do carrinho passa a ser UMA solicitação atômica para a
+  coop: aceita TODOS os serviços de uma vez (tudo-ou-nada), sem aceite por item,
+  sem parcial, sem parte pega por outra coop. Backend: novo
+  `POST /api/operator/bookings/group/:groupId/accept` (um único UPDATE atribui
+  todas as reservas awaiting_acceptance do grupo à coop; guard 409 se outra coop
+  já pegou parte). Cooperativa: `handleAcceptCombo` chama `acceptGroup` (não mais
+  loop item-a-item), removido o botão "Aceitar" por item do ComboCard, rótulos
+  "Combo"→"Pedido" e "Aceitar todos"→"Aceitar pedido". api.js coop: `acceptGroup`.
+
 - **2026-07-16 · Agente B (i18n completo do app turista)** — Tradução real
   pt/en/es. Antes só o seletor mudava `i18n.language`; as telas tinham texto
   fixo. Primeira leva manual: TopNav + Perfil (desktop/mobile) + WhatsappCheck.

@@ -195,7 +195,7 @@ function ComboCard({ items, onAccept, onAcceptAll, accepting, acceptingCombo }) 
       <div className="bg-brand/5 px-4 py-2.5 flex items-center justify-between border-b border-brand/10">
         <div className="flex items-center gap-2">
           <Package size={15} className="text-brand shrink-0" />
-          <span className="text-[12px] font-bold text-brand uppercase tracking-wide">Combo · {items.length} serviços</span>
+          <span className="text-[12px] font-bold text-brand uppercase tracking-wide">Pedido · {items.length} serviços</span>
         </div>
         <span className="text-[11px] text-gray-500 font-semibold truncate max-w-[45%]">{name}</span>
       </div>
@@ -218,20 +218,14 @@ function ComboCard({ items, onAccept, onAcceptAll, accepting, acceptingCombo }) 
                   {dateStr}{it.service_time ? ` ${it.service_time.slice(0, 5)}` : ''} · {fmt(comboItemPrice(it))}
                 </p>
               </div>
-              <button
-                onClick={() => onAccept(it)}
-                disabled={busy || !!accepting}
-                className="text-[12px] font-bold text-brand border border-brand/30 rounded-lg px-3 py-1.5 active:scale-95 transition-transform disabled:opacity-50"
-              >
-                {accepting === rowId ? '…' : 'Aceitar'}
-              </button>
+              {/* Sem aceite por item: o pedido é uma solicitação só (tudo-ou-nada) */}
             </div>
           )
         })}
 
         <div className="flex items-center justify-between pt-2 border-t border-gray-100 gap-3">
           <div>
-            <p className="text-[11px] text-gray-400">Total do combo</p>
+            <p className="text-[11px] text-gray-400">Total do pedido</p>
             <p className="text-[18px] font-extrabold text-brand">{fmt(total)}</p>
           </div>
           <button
@@ -241,7 +235,7 @@ function ComboCard({ items, onAccept, onAcceptAll, accepting, acceptingCombo }) 
           >
             {busy
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aceitando…</>
-              : <><Zap size={15} /> Aceitar todos</>}
+              : <><Zap size={15} /> Aceitar pedido</>}
           </button>
         </div>
         <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
@@ -557,29 +551,28 @@ export default function Reservas() {
     }
   }
 
-  // Aceita TODOS os itens do combo (um pedido do carrinho), em sequência.
-  // Itens que já foram aceitos/expiraram são pulados sem derrubar o resto.
+  // Aceita o PEDIDO inteiro do carrinho de uma vez (atômico, tudo-ou-nada): uma
+  // única chamada atribui todos os serviços do grupo a esta coop. Sem aceite
+  // parcial — o pedido é uma solicitação só, e a coop executa tudo.
   async function handleAcceptCombo(items) {
     if (accepting || acceptingCombo) return
     const gid = items[0]?.order_group_id
+    if (!gid) return
     setAcceptingCombo(gid)
-    let ok = 0
-    for (const it of items) {
-      try {
-        if (it.kind === 'leg') await api.acceptLeg(it.leg_id)
-        else                   await api.acceptBooking(it.id)
-        ok++
-      } catch { /* já aceita/expirada — segue para o próximo */ }
+    try {
+      const r = await api.acceptGroup(gid)
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setToast({
+        message: `Pedido aceito (${r?.accepted_count ?? items.length} serviços)! Aguardando o cliente pagar tudo.`,
+        type: 'success',
+      })
+      setTab('mine')
+    } catch (err) {
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setToast({ message: err.message || 'Não foi possível aceitar o pedido', type: 'error' })
+    } finally {
+      setAcceptingCombo(null)
     }
-    queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
-    setAcceptingCombo(null)
-    setToast({
-      message: ok === items.length
-        ? `Combo aceito (${ok} serviços)! Aguardando o cliente pagar.`
-        : `${ok} de ${items.length} aceitos — alguns já haviam sido pegos.`,
-      type: ok > 0 ? 'success' : 'error',
-    })
-    if (ok > 0) setTab('mine')
   }
 
   // Agrupa as solicitações disponíveis por pedido (order_group_id): 2+ itens do

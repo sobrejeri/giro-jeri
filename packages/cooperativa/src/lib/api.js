@@ -172,6 +172,8 @@ export const api = {
   // Corridas (modelo Uber — primeiro a aceitar)
   getOperatorBookings: ()   => request('/api/operator/bookings'),
   acceptBooking:       (id) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body: {} }),
+  // Carrinho universal: aceita o PEDIDO inteiro de uma vez (atômico, tudo-ou-nada).
+  acceptGroup:         (gid) => request(`/api/operator/bookings/group/${gid}/accept`, { method: 'POST', body: {} }),
   // Motor de pernas: aceite POR PERNA (item leg-shaped do feed, kind:'leg').
   acceptLeg:           (legId) => request(`/api/operator/legs/${legId}/accept`, { method: 'POST', body: {} }),
   startBooking:        (id) => request(`/api/operator/bookings/${id}/start`,    { method: 'POST', body: {} }),

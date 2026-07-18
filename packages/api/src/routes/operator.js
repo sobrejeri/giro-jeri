@@ -714,6 +714,82 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── POST /api/operator/bookings/group/:groupId/accept ──
+// Carrinho universal: o pedido inteiro é UMA solicitação. A cooperativa aceita
+// TODOS os serviços do grupo de uma vez (atômico, tudo-ou-nada) — nada de item
+// aceito solto, pendente, ou pego por outra coop. A coop que aceita executa o
+// pedido inteiro. Motor de pernas OFF: os itens são bookings (sem pernas).
+// Registrado ANTES de /bookings/:id/accept (rota mais específica).
+router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
+  try {
+    const gid     = req.params.groupId
+    const isAdmin = req.user?.user_type === 'admin'
+    const nowIso  = new Date().toISOString()
+
+    const { data: groupRows, error: gErr } = await supabase
+      .from('bookings')
+      .select('id, booking_code, user_id, service_type, operator_id, status_commercial, status_operational')
+      .eq('order_group_id', gid)
+    if (gErr) throw gErr
+    if (!groupRows || groupRows.length === 0) {
+      return res.status(404).json({ error: 'Pedido não encontrado.' })
+    }
+
+    // Itens vivos do pedido (ignora cancelados/expirados).
+    const alive = groupRows.filter(
+      (b) => !['cancelled', 'expired'].includes(b.status_commercial) && b.status_operational !== 'cancelled'
+    )
+
+    // Tudo-ou-nada: se qualquer parte já está com OUTRA cooperativa, ninguém
+    // mais pega — o pedido é uma unidade só.
+    if (alive.some((b) => b.operator_id && b.operator_id !== req.user.id)) {
+      return res.status(409).json({ error: 'Este pedido já foi aceito por outra cooperativa.' })
+    }
+
+    // Aceite atômico: um único UPDATE atribui TODAS as reservas aguardando
+    // aceite a esta coop e as deixa prontas para pagar.
+    let upd = supabase
+      .from('bookings')
+      .update({ operator_id: req.user.id, status_commercial: 'awaiting_payment', status_operational: 'assigned' })
+      .eq('order_group_id', gid)
+      .is('operator_id', null)
+      .eq('status_commercial', 'awaiting_acceptance')
+    if (!isAdmin) upd = upd.gt('acceptance_expires_at', nowIso)
+
+    let resAccept = await upd.select('id, booking_code, user_id, service_type')
+    if (resAccept.error?.code === '42703') {
+      resAccept = await supabase.from('bookings')
+        .update({ operator_id: req.user.id, status_commercial: 'awaiting_payment', status_operational: 'assigned' })
+        .eq('order_group_id', gid).is('operator_id', null).eq('status_commercial', 'awaiting_acceptance')
+        .select('id, booking_code, user_id, service_type')
+    }
+    if (resAccept.error) throw resAccept.error
+    const accepted    = resAccept.data || []
+    const mineAlready = alive.filter((b) => b.operator_id === req.user.id).length
+
+    if (accepted.length === 0 && mineAlready === 0) {
+      return res.status(409).json({
+        error: 'Nenhum serviço do pedido está disponível para aceite (pode ter expirado).',
+      })
+    }
+
+    // Avisa o cliente UMA vez pelo pedido inteiro (não por serviço).
+    const anyB = accepted[0]
+    if (anyB) {
+      notifyUser({
+        userId:      anyB.user_id,
+        bookingId:   anyB.id,
+        templateKey: 'booking_accepted',
+        title:       'Cooperativa aceitou seu pedido! 🎉',
+        body:        `Uma cooperativa aceitou os ${accepted.length} serviço(s) do seu pedido. Pague tudo junto para confirmar.`,
+      })
+      notifyClientBookingAccepted(supabase, { ...anyB }).catch(() => {})
+    }
+
+    res.json({ ok: true, accepted_count: accepted.length, total_items: alive.length })
+  } catch (err) { next(err) }
+})
+
 // ── POST /api/operator/bookings/:id/accept ─────────────
 // Aceite atômico: a primeira cooperativa a aceitar pega a solicitação (ANTES do
 // pagamento). A reserva passa para 'awaiting_payment' e o cliente é avisado para
