@@ -457,6 +457,7 @@ router.get('/operational', requireOperator, async (req, res, next) => {
       .from('bookings')
       .select(`
         id, booking_code, service_type, service_id, booking_mode, user_id, operator_id,
+        order_group_id,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
         pickup_place_name, destination_place_name, special_notes,
