@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { Star, Filter, MessageSquare, ShieldCheck } from 'lucide-react'
 import { api } from '../lib/api'
 
@@ -23,6 +24,7 @@ function Stars({ n, size = 15 }) {
 }
 
 export default function Avaliacoes() {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const [operatorId, setOperatorId] = useState(searchParams.get('operator') || '') // '' = todas
   const [minRating,  setMinRating]  = useState(0)     // 0 = qualquer nota
@@ -57,10 +59,10 @@ export default function Avaliacoes() {
       {/* Cabeçalho */}
       <div className="mb-6">
         <h1 className="text-2xl md:text-[28px] font-extrabold text-gray-900 flex items-center gap-2">
-          <ShieldCheck size={26} className="text-brand" /> Avaliações verificadas
+          <ShieldCheck size={26} className="text-brand" /> {t('reviewsPg.title')}
         </h1>
         <p className="text-[13px] text-gray-500 mt-1">
-          Só quem realizou o serviço avalia. As notas medem a reputação de cada cooperativa.
+          {t('reviewsPg.subtitle')}
         </p>
       </div>
 
@@ -68,7 +70,7 @@ export default function Avaliacoes() {
       {coops.length > 0 && (
         <div className="mb-4">
           <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2 flex items-center gap-1">
-            <Filter size={12} /> Cooperativa
+            <Filter size={12} /> {t('reviewsPg.filterByCoop')}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -77,7 +79,7 @@ export default function Avaliacoes() {
                 !operatorId ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200'
               }`}
             >
-              Todas
+              {t('reviewsPg.all')}
             </button>
             {coops.map((c) => (
               <button
@@ -102,7 +104,7 @@ export default function Avaliacoes() {
 
       {/* Filtro por nota mínima */}
       <div className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2">Nota mínima</p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2">{t('reviewsPg.minRating')}</p>
         <div className="flex flex-wrap gap-2">
           {[0, 5, 4, 3].map((n) => (
             <button
@@ -112,7 +114,7 @@ export default function Avaliacoes() {
                 minRating === n ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'
               }`}
             >
-              {n === 0 ? 'Todas' : <>{n}+ <Star size={11} className="fill-amber-400 text-amber-400" /></>}
+              {n === 0 ? t('reviewsPg.all') : <>{t('reviewsPg.ratingPlus', { n })} <Star size={11} className="fill-amber-400 text-amber-400" /></>}
             </button>
           ))}
         </div>
@@ -131,7 +133,7 @@ export default function Avaliacoes() {
             <div className="flex items-center gap-2 text-[13px] text-gray-500">
               <Stars n={Math.round(activeCoop.rating_average)} size={14} />
               <span className="font-semibold text-gray-700">{activeCoop.rating_average}</span>
-              <span>· {activeCoop.rating_count} avaliação{activeCoop.rating_count > 1 ? 'ões' : ''}</span>
+              <span>· {t('reviewsPg.reviewsCount', { count: activeCoop.rating_count })}</span>
             </div>
           </div>
         </div>
@@ -147,14 +149,14 @@ export default function Avaliacoes() {
       ) : reviews.length === 0 ? (
         <div className="text-center py-16">
           <MessageSquare size={40} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500 font-semibold">Ainda não há avaliações por aqui.</p>
+          <p className="text-gray-500 font-semibold">{t('reviewsPg.empty.title')}</p>
           <p className="text-[13px] text-gray-400 mt-1">
-            As avaliações aparecem após os clientes realizarem os serviços.
+            {t('reviewsPg.empty.subtitle')}
           </p>
         </div>
       ) : (
         <>
-          <p className="text-[12px] text-gray-400 mb-3">{total} avaliação{total > 1 ? 'ões' : ''}</p>
+          <p className="text-[12px] text-gray-400 mb-3">{t('reviewsPg.reviewsCount', { count: total })}</p>
           <div className="space-y-3">
             {reviews.map((r) => (
               <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">

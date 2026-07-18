@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -20,16 +21,17 @@ const FALLBACK_GRADIENTS = [
 
 /* ── Card vertical estilo GetYourGuide ─────────────────────── */
 function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
+  const { t } = useTranslation()
   const price   = Number(tour.shared_price_per_person || 0)
   const shared  = tour.is_shared_enabled && price > 0
   const private_ = tour.is_private_enabled
 
   const meta = [
-    tour.duration_hours ? `${tour.duration_hours} horas` : null,
-    private_ && shared ? 'Privativo ou compartilhado'
-      : private_ ? 'Grupos particulares'
-      : shared ? 'Compartilhado' : null,
-    tour.max_people ? `Até ${tour.max_people} pessoas` : null,
+    tour.duration_hours ? t('toursPg.card.durationHours', { count: tour.duration_hours }) : null,
+    private_ && shared ? t('toursPg.card.tourTypeBoth')
+      : private_ ? t('toursPg.card.tourTypePrivateGroups')
+      : shared ? t('toursPg.mode.shared') : null,
+    tour.max_people ? t('toursPg.vehicle.upToPeople', { count: tour.max_people }) : null,
   ].filter(Boolean).join(' · ')
 
   return (
@@ -51,14 +53,14 @@ function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
         )}
         {badge && (
           <span className={`absolute top-3 left-3 text-[11px] font-bold px-2.5 py-1 rounded-md shadow-sm ${
-            badge === 'Mais recomendado' ? 'bg-white text-gray-900' : 'bg-gray-900/85 text-white'
+            badge === t('toursPg.card.recommendedBadge') ? 'bg-white text-gray-900' : 'bg-gray-900/85 text-white'
           }`}>
             {badge}
           </span>
         )}
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFav(tour.id) }}
-          aria-label="Favoritar"
+          aria-label={t('toursPg.card.favoriteAria')}
           className="absolute top-2.5 right-2.5 w-8 h-8 bg-white/95 hover:bg-white rounded-full shadow-sm flex items-center justify-center transition-colors"
         >
           <Heart size={15} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-500'} />
@@ -78,20 +80,20 @@ function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
                 {tour.rating_count ? <span className="text-gray-400 font-normal">({tour.rating_count})</span> : null}
               </p>
             ) : (
-              <p className="text-[11px] text-gray-400">Novidade</p>
+              <p className="text-[11px] text-gray-400">{t('toursPg.card.newBadge')}</p>
             )}
           </div>
           <div className="text-right shrink-0">
             {shared ? (
               <>
-                <p className="text-[10px] text-gray-400 leading-none">A partir de</p>
+                <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.card.fromLabel')}</p>
                 <p className="text-gray-900 font-extrabold text-[17px] leading-tight">{fmtPrice(price)}</p>
-                <p className="text-[10px] text-gray-400 leading-none">por pessoa</p>
+                <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.card.perPersonSuffix')}</p>
               </>
             ) : private_ ? (
               <>
-                <p className="text-[10px] text-gray-400 leading-none">Privativo</p>
-                <p className="text-brand font-bold text-[13px] leading-tight mt-0.5">Ver opções →</p>
+                <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.mode.private')}</p>
+                <p className="text-brand font-bold text-[13px] leading-tight mt-0.5">{t('toursPg.card.viewOptions')}</p>
               </>
             ) : (
               <p className="text-gray-900 font-extrabold text-[17px]">{price > 0 ? fmtPrice(price) : '—'}</p>
@@ -104,6 +106,7 @@ function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
 }
 
 export default function ToursDesktop() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { state: navState } = useLocation()
   const { region, getServiceQuery } = useRegion()
@@ -182,7 +185,7 @@ export default function ToursDesktop() {
 
   // Selo estilo GYG: o 1º da lista é "Mais recomendado"; demais usam a 1ª tag.
   function badgeFor(tour, idx) {
-    if (idx === 0 && !category) return 'Mais recomendado'
+    if (idx === 0 && !category) return t('toursPg.card.recommendedBadge')
     if (Array.isArray(tour.tags) && tour.tags.length) return tour.tags[0]
     return null
   }
@@ -193,10 +196,10 @@ export default function ToursDesktop() {
       <div className="flex items-end justify-between gap-6 flex-wrap">
         <div>
           <h1 className="text-[28px] font-extrabold text-gray-900 leading-tight">
-            Passeios em {region?.name || 'Jericoacoara'}
+            {t('toursPg.page.title', { region: region?.name || 'Jericoacoara' })}
           </h1>
           <p className="text-[13px] text-gray-500 mt-1">
-            Experiências com atendimento local e reserva na plataforma.
+            {t('toursPg.page.subtitle')}
           </p>
         </div>
 
@@ -207,11 +210,11 @@ export default function ToursDesktop() {
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar passeio…"
+              placeholder={t('toursPg.searchPlaceholder')}
               className="text-[13px] font-semibold text-gray-700 bg-transparent outline-none w-[150px] placeholder-gray-400"
             />
             {searchTerm && (
-              <button onClick={() => setSearchTerm('')} aria-label="Limpar busca">
+              <button onClick={() => setSearchTerm('')} aria-label={t('toursPg.page.clearSearchAria')}>
                 <X size={13} className="text-gray-400" />
               </button>
             )}
@@ -246,7 +249,7 @@ export default function ToursDesktop() {
             !category ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:border-gray-400'
           }`}
         >
-          Todos
+          {t('toursPg.page.allCategories')}
         </button>
         {cats.map(([id, name]) => (
           <button
@@ -264,7 +267,7 @@ export default function ToursDesktop() {
       {/* ── Contagem ─────────────────────────────────────── */}
       {!isLoading && (
         <p className="text-[13px] text-gray-500 mt-4 mb-4">
-          <span className="font-bold text-gray-900">{list.length}</span> resultado{list.length !== 1 ? 's' : ''} · {region?.name || 'Jericoacoara'}
+          <span className="font-bold text-gray-900">{list.length}</span> {list.length === 1 ? t('toursPg.page.result') : t('toursPg.page.results')} · {region?.name || 'Jericoacoara'}
         </p>
       )}
 
@@ -276,8 +279,8 @@ export default function ToursDesktop() {
       ) : list.length === 0 ? (
         <p className="text-gray-400 py-16 text-center border border-dashed border-gray-200 rounded-2xl mt-2">
           {searchTerm.trim()
-            ? <>Nenhum passeio encontrado para “{searchTerm.trim()}”.</>
-            : 'Nenhum passeio encontrado nesta região.'}
+            ? t('toursPg.page.noResultsSearch', { term: searchTerm.trim() })
+            : t('toursPg.page.noResultsRegion')}
         </p>
       ) : (
         <>
@@ -302,17 +305,17 @@ export default function ToursDesktop() {
           {exclusiveList.length > 0 && (
             <>
               <div className="mt-10 mb-4">
-                <h2 className="text-[20px] font-extrabold text-gray-900">Experiências exclusivas ✨</h2>
-                <p className="text-[13px] text-gray-500 mt-0.5">Passeios especiais com venda direta, sem combo.</p>
+                <h2 className="text-[20px] font-extrabold text-gray-900">{t('toursPg.page.exclusiveSectionTitle')}</h2>
+                <p className="text-[13px] text-gray-500 mt-0.5">{t('toursPg.page.exclusiveSectionSubtitle')}</p>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {exclusiveList.map((t, i) => (
+                {exclusiveList.map((tour, i) => (
                   <TourCard
-                    key={t.id}
-                    tour={t}
-                    badge="Exclusivo"
+                    key={tour.id}
+                    tour={tour}
+                    badge={t('toursPg.page.exclusiveBadge')}
                     gradient={FALLBACK_GRADIENTS[(i + 2) % FALLBACK_GRADIENTS.length]}
-                    isFav={favs.has(t.id)}
+                    isFav={favs.has(tour.id)}
                     onToggleFav={toggleFav}
                     onDetails={openDetails}
                   />

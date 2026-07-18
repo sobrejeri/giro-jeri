@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDown, Search, Check } from 'lucide-react'
 
 /* ── Telefone com DDI internacional ─────────────────────────────
@@ -75,7 +76,9 @@ function parseValue(value) {
   return { country: preferred, number: digits.slice(match[1].length) }
 }
 
-export default function PhoneInput({ value, onChange, placeholder = 'DDD + número', inputClassName = '' }) {
+export default function PhoneInput({ value, onChange, placeholder, inputClassName = '' }) {
+  const { t } = useTranslation()
+  const resolvedPlaceholder = placeholder ?? t('phoneInputCmp.placeholder')
   const parsed = useMemo(() => parseValue(value), [value])
   const [country, setCountry] = useState(parsed.country)
   const [open, setOpen]       = useState(false)
@@ -110,7 +113,7 @@ export default function PhoneInput({ value, onChange, placeholder = 'DDD + núme
         type="button"
         onClick={() => { setOpen((o) => !o); setQuery('') }}
         className="shrink-0 flex items-center gap-1.5 border border-gray-200 rounded-xl px-2.5 py-2 text-[14px] text-gray-800 bg-white active:scale-95 transition-transform"
-        aria-label="Escolher código do país"
+        aria-label={t('phoneInputCmp.chooseCountry')}
       >
         <span className="text-[17px] leading-none">{flagOf(country[0])}</span>
         <span className="font-semibold text-[13px]">+{country[1]}</span>
@@ -120,7 +123,7 @@ export default function PhoneInput({ value, onChange, placeholder = 'DDD + núme
       <input
         type="tel"
         value={number}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         onChange={(e) => emit(country[0], country[1], e.target.value.replace(/[^\d]/g, ''))}
         className={inputClassName || 'flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand'}
       />
@@ -133,7 +136,7 @@ export default function PhoneInput({ value, onChange, placeholder = 'DDD + núme
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar país ou código…"
+              placeholder={t('phoneInputCmp.searchPlaceholder')}
               className="flex-1 text-[13px] text-gray-800 outline-none placeholder-gray-400"
             />
           </div>
@@ -152,7 +155,7 @@ export default function PhoneInput({ value, onChange, placeholder = 'DDD + núme
               </button>
             ))}
             {list.length === 0 && (
-              <p className="text-[12px] text-gray-400 px-3 py-4 text-center">Nenhum país encontrado</p>
+              <p className="text-[12px] text-gray-400 px-3 py-4 text-center">{t('phoneInputCmp.noCountryFound')}</p>
             )}
           </div>
         </div>

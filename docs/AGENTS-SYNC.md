@@ -28,6 +28,22 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-16 · Agente B (i18n completo do app turista)** — Tradução real
+  pt/en/es. Antes só o seletor mudava `i18n.language`; as telas tinham texto
+  fixo. Primeira leva manual: TopNav + Perfil (desktop/mobile) + WhatsappCheck.
+  Segunda leva via **workflow orquestrado** (17 agentes frontend-expert, um por
+  grupo de arquivos): cada agente externalizou as strings do(s) seu(s)
+  arquivo(s) com `t('<ns>.<chave>')` e devolveu as chaves pt/en/es; o merge nos
+  3 JSONs foi feito no processo principal (sem corrida de escrita). Cobertura:
+  Home/HomeDesktop, Tours/ToursDesktop, TourDetail, Transfers/TransfersDesktop,
+  Feed, CartPage, Checkout (Summary/Solicitado), BookingDetail, Affiliate,
+  Avaliacoes, Legal, Login/AffiliateLink/PartnerLink e componentes
+  (Region/Origin picker, PhoneInput, NotificationBell, Feed/StoryPublisher,
+  Install/UpdatePrompt). Namespaces novos por tela: `homePg`, `toursPg`,
+  `transfersPg`, `checkoutPg`, etc. **1138 chaves idênticas nos 3 idiomas**
+  (paridade total, sem fallback); build ok. Ainda em pt fixo: telas já
+  parcialmente traduzidas antes (Bookings, Auth) podem ter sobras pontuais.
+
 - **2026-07-15 · Agente B (reputação no app da cooperativa)** — Complemento
   das avaliações: a coop agora vê a própria reputação. API:
   `GET /api/operator/reviews` (autenticado, `operator_id = req.user.id`) →

@@ -317,7 +317,8 @@
       "step4": "Envía el comprobante por WhatsApp a nuestro equipo",
       "step5": "Espera la confirmación — generalmente en pocos minutos",
       "statusNote": "Tu reserva está creada y esperando confirmación de pago. Puedes seguirla en \"Mis Reservas\".",
-      "viewBookings": "Ver mis reservas"
+      "viewBookings": "Ver mis reservas",
+      "booking": "Reserva"
     },
     "pixKeyTypes": {
       "cpf": "CPF",
@@ -370,6 +371,1102 @@
       "followHint": "Sigue el estado de tu reserva en \"Mis Reservas\". Serás notificado cuando la cooperativa confirme.",
       "trackBtn": "Seguir reserva",
       "homeBtn": "Volver al inicio"
+    }
+  },
+  "toursPg": {
+    "header": {
+      "back": "Volver",
+      "title": "Paseos",
+      "search": "Buscar"
+    },
+    "searchPlaceholder": "Buscar paseo…",
+    "mode": {
+      "private": "Privado",
+      "shared": "Compartido"
+    },
+    "origin": {
+      "label": "Salida *",
+      "placeholder": "Seleccionar ubicación"
+    },
+    "date": {
+      "label": "Fecha",
+      "today": "Hoy",
+      "tomorrow": "Mañana"
+    },
+    "people": {
+      "label": "Personas"
+    },
+    "traditional": {
+      "title": "Paseos tradicionales",
+      "subtitle": "Arma un combo y paga todo junto.",
+      "empty": "No hay paseos tradicionales disponibles."
+    },
+    "exclusive": {
+      "title": "Paseos exclusivos",
+      "subtitle": "Venta directa: un servicio a la vez (sin combo)."
+    },
+    "suggestions": {
+      "for": "Sugerencias para"
+    },
+    "filters": {
+      "recommended": "Recomendado",
+      "economic": "Económico",
+      "comfort": "Confort"
+    },
+    "vehicle": {
+      "upToPeople": "Hasta {{count}} personas",
+      "perVehicle": "/vehículo"
+    },
+    "actions": {
+      "apply": "Aplicar",
+      "continue": "Continuar",
+      "addToCart": "Agregar al carrito"
+    },
+    "catalog": {
+      "title": "Catálogo de vehículos",
+      "subtitle": "Arma tu combinación ideal"
+    },
+    "noVehicles": {
+      "title": "No hay vehículos disponibles para este paseo.",
+      "subtitle": "Prueba otro paseo o habla con nosotros."
+    },
+    "sharedMode": {
+      "peopleTitle": "Número de personas",
+      "peopleSubtitle": "Precio calculado por persona",
+      "pricePerPerson": "Precio por persona",
+      "transport": "Transporte compartido con otros turistas",
+      "unavailable": "Paseo no disponible en modo compartido."
+    },
+    "howItWorks": {
+      "title": "¿Cómo funciona?",
+      "text": "El paseo se comparte con otros turistas en una Jardineira. Precio fijo por persona, con guía incluido."
+    },
+    "cart": {
+      "selectVehicle": "Selecciona un vehículo abajo",
+      "seats": "lugares"
+    },
+    "common": {
+      "person": "persona",
+      "peopleWord": "personas",
+      "passenger": "pasajero",
+      "passengersWord": "pasajeros",
+      "toBeConfirmed": "Por confirmar"
+    },
+    "breakdown": {
+      "vehicles": "Vehículos seleccionados",
+      "perPerson": "{{count}}x por persona"
+    },
+    "calendar": {
+      "chooseDate": "Elige la fecha",
+      "confirm": "Confirmar",
+      "highSeasonNote": "Fechas en naranja: temporada alta (puede tener un recargo)",
+      "weekdaySun": "D",
+      "weekdayMon": "L",
+      "weekdayTue": "M",
+      "weekdayWed": "X",
+      "weekdayThu": "J",
+      "weekdayFri": "V",
+      "weekdaySat": "S"
+    },
+    "card": {
+      "recommendedBadge": "Más recomendado",
+      "favoriteAria": "Favorito",
+      "newBadge": "Nuevo",
+      "fromLabel": "Desde",
+      "perPersonSuffix": "por persona",
+      "viewOptions": "Ver opciones →",
+      "durationHours": "{{count}} horas",
+      "tourTypeBoth": "Privado o compartido",
+      "tourTypePrivateGroups": "Grupos privados"
+    },
+    "page": {
+      "title": "Paseos en {{region}}",
+      "subtitle": "Experiencias con atención local y reserva en la plataforma.",
+      "clearSearchAria": "Borrar búsqueda",
+      "allCategories": "Todos",
+      "result": "resultado",
+      "results": "resultados",
+      "noResultsSearch": "No se encontraron paseos para “{{term}}”.",
+      "noResultsRegion": "No se encontraron paseos en esta región.",
+      "exclusiveSectionTitle": "Experiencias exclusivas ✨",
+      "exclusiveSectionSubtitle": "Paseos especiales con venta directa, sin combo.",
+      "exclusiveBadge": "Exclusivo"
+    }
+  },
+  "homePg": {
+    "today": "Hoy",
+    "toBeConfirmed": "Por confirmar",
+    "originCenter": "Centro de {{place}}",
+    "transferBadge": "Traslado",
+    "privateLabel": "Privado",
+    "fromPrice": "· desde R$ {{price}}",
+    "quickPrivateTitle": "Tour Privado",
+    "quickPrivateDesc": "Exclusivo para tu grupo",
+    "quickSharedTitle": "Compartido",
+    "quickSharedDesc": "Comparte con otros turistas",
+    "quickTransferDesc": "Aeropuerto y hotel",
+    "myBookingsTitle": "Mis Reservas",
+    "quickBookingsDesc": "Sigue tus tours",
+    "selectRegion": "Seleccionar región",
+    "greeting": "¡Hola, explorador! 👋",
+    "greetingSubtitle": "¿Qué quieres reservar hoy?",
+    "toursCardTitle": "Tours",
+    "toursCardDescClassico": "Buggy · UTV · Hilux",
+    "transfersCardTitle": "Traslados",
+    "transfersCardDescClassico": "Aeropuerto · Hotel",
+    "step1Title": "Elige tu tour",
+    "step1Desc": "Selecciona el destino y el tipo de reserva",
+    "step2Title": "Configura los detalles",
+    "step2Desc": "Indica fecha, hora y número de personas",
+    "step3Title": "Confirma y paga",
+    "step3Desc": "Reserva garantizada en pocos minutos",
+    "exploreHeading": "¿Vamos a explorar? 🌴",
+    "exploreHeadingWithRegion": "¿Vamos a explorar {{region}}? 🌴",
+    "exploreSubtitle": "Reserva tours y traslados con operadores locales.",
+    "serviceSectionLabel": "¿Qué estás buscando?",
+    "ariaViewTours": "Ver tours",
+    "toursNovoDesc": "Buggy · lagunas · atardecer",
+    "ariaViewTransfers": "Ver traslados",
+    "transfersNovoTitle": "Traslados",
+    "transfersNovoDesc": "Aeropuerto · hotel · rutas",
+    "loginToSee": "Inicia sesión para ver",
+    "upcomingCountSingular": "{{count}} próxima",
+    "upcomingCountPlural": "{{count}} próximas",
+    "noBookingsYet": "Aún sin reservas",
+    "discoverVillage": "Descubre el Pueblo",
+    "discoverVillageDesc": "Eventos, promociones y lugares",
+    "featuredServicesTitle": "Servicios destacados",
+    "viewAll": "Ver todos",
+    "serverWakingUp": "Despertando el servidor… un momento 🌅",
+    "noToursAvailable": "No hay tours disponibles.",
+    "affiliateTitle": "COMPARTE Y GANA",
+    "affiliateDesc": "Recomienda amigos y gana comisión en cada reserva pagada",
+    "howItWorksTitle": "¿Cómo funciona?",
+    "partnersTitle": "Cooperativas asociadas",
+    "partnersDescMobile": "Operadores locales que realizan tus tours",
+    "finalCtaTitle": "¿Vamos al paraíso? 🌅",
+    "finalCtaDesc": "Reserva tu tour en minutos",
+    "view": "Ver",
+    "dailyDepartures": "Salidas todos los días",
+    "freeCancellation": "Cancelación gratuita",
+    "platformSupport": "Atención por la plataforma",
+    "secureBooking": "Reserva segura",
+    "localSupportTitle": "Atención local",
+    "localSupportDesc": "Habla con quienes de verdad conocen la región — siempre en la plataforma.",
+    "quickBookingTitle": "Reserva rápida",
+    "quickBookingDesc": "Elige tu tour y reserva en pocos clics.",
+    "securePayment": "Pago seguro",
+    "securePaymentDesc": "Entorno protegido y múltiples formas de pago.",
+    "freeCancelDesc": "Cancela sin costo hasta 24h antes del tour.",
+    "comfortableVehicles": "Vehículos cómodos",
+    "experiencedDrivers": "Conductores experimentados",
+    "guaranteedPunctuality": "Puntualidad garantizada",
+    "onlineBooking": "Reserva 100% en línea",
+    "defaultTourName": "Tour imperdible",
+    "defaultTourDesc": "Una experiencia inolvidable",
+    "fromLabel": "Desde",
+    "perPerson": "por persona",
+    "checkPrices": "Consultar precios",
+    "viewDetails": "Ver detalles",
+    "reserveArrow": "Reservar →",
+    "privateFromLabel": "Privado desde",
+    "loadingRoutes": "Cargando rutas…",
+    "leavingFrom": "Saliendo de",
+    "whereTo": "¿A dónde?",
+    "chooseTour": "Elige el tour",
+    "selectDestination": "Selecciona el destino",
+    "chooseOriginFirst": "Elige primero el origen",
+    "allTours": "Todos los tours",
+    "dateLabel": "Fecha",
+    "peopleLabel": "Personas",
+    "personSingular": "persona",
+    "personPlural": "personas",
+    "searchNow": "Buscar ahora",
+    "bestPriceGuaranteed": "Mejor precio garantizado",
+    "heroPrefix": "Vive lo mejor de",
+    "heroDesc": "Tours, traslados y experiencias increíbles con atención local y reserva rápida.",
+    "mostSoughtTitle": "Los más buscados en {{place}} 🌴",
+    "mostSoughtSubtitle": "Los favoritos de quienes ya visitaron.",
+    "viewAllExperiences": "Ver todas las experiencias",
+    "tagBestSeller": "Más vendido",
+    "tagAdventure": "Aventura",
+    "tagSunset": "Atardecer",
+    "noToursInRegion": "No hay tours disponibles en esta región.",
+    "featuredServicesSubtitle": "Tours y traslados seleccionados especialmente.",
+    "viewAllTours": "Ver todos los tours",
+    "comingSoonTours": "Pronto, nuevos tours por aquí.",
+    "transferBannerTitle": "Llega a {{place}}",
+    "transferBannerSubtitle": "con tranquilidad",
+    "transferBannerDesc": "Traslados privados que salen de Fortaleza, Aeropuerto de Cruz, Jijoca, Preá, Parnaíba y Barreirinhas.",
+    "viewTransfers": "Ver traslados",
+    "partnersDescDesktop": "Operadores locales verificados que realizan tus tours y traslados.",
+    "testimonialsTitle": "Quien visita, recomienda",
+    "testimonialsSubtitle": "Reseñas verificadas de quienes ya vivieron {{place}} con nosotros.",
+    "viewMoreReviews": "Ver más reseñas",
+    "ratedWithStarsSingular": "Calificó con {{rating}} estrella.",
+    "ratedWithStarsPlural": "Calificó con {{rating}} estrellas.",
+    "ctaFinalTitle": "¿Listo para vivir momentos únicos en {{place}}?",
+    "ctaFinalDesc": "Haz tu reserva en línea con practicidad y seguridad. Sigue y gestiona todo — reservas, cotizaciones y estado — dentro de la misma plataforma.",
+    "startBooking": "Iniciar reserva",
+    "trackBookingPlatform": "Sigue tu reserva en la plataforma",
+    "footerDesc": "Plataforma de tours y traslados con operadores locales. Atención 100% dentro de la app.",
+    "footerExploreTitle": "Explorar",
+    "footerMyBookings": "Mis reservas",
+    "footerAffiliate": "Comparte y Gana · Afiliado",
+    "footerCategoriesTitle": "Categorías",
+    "categoryPrivateTours": "Tours privados",
+    "categorySharedTours": "Tours compartidos",
+    "categoryAirportTransfer": "Traslado aeropuerto",
+    "categoryCustomTransfer": "Traslado personalizado",
+    "footerSupportTitle": "Atención",
+    "bookingCenter": "Central de reservas",
+    "termsOfUse": "Términos de uso",
+    "privacyPolicy": "Política de privacidad",
+    "footerCopyright": "© {{year}} Turiva · Tours, traslados y experiencias.",
+    "footerMadeWithPrefix": "Hecho con",
+    "footerMadeWithSuffix": "por quienes viven el destino.",
+    "tagline": "Tours y Traslados"
+  },
+  "tourDetailPg": {
+    "backToTours": "Tours",
+    "notFound": "Tour no encontrado.",
+    "durationHours": "{{hours}}h de duración",
+    "maxPeople": "hasta {{count}} personas",
+    "included": "Incluido",
+    "notIncluded": "No incluido",
+    "cancellation": "Cancelación",
+    "schedulesTitle": "Horarios disponibles",
+    "bookTitle": "Reservar tour",
+    "shared": "Compartido",
+    "private": "Privado",
+    "sharedOnly": "Solo compartido",
+    "privateOnly": "Solo privado",
+    "originLabel": "Lugar de salida *",
+    "selectLocation": "Seleccionar lugar",
+    "peopleLabel": "Personas",
+    "pricePerPerson": "Precio por persona",
+    "peopleBadge_one": "{{count}} persona",
+    "peopleBadge_other": "{{count}} personas",
+    "sharedInfo": "Tour compartido con otros turistas en un vehículo colectivo. Precio fijo por persona, con guía incluido.",
+    "sharedUnavailable": "Tour no disponible en modo compartido.",
+    "suggestionFor_one": "Sugerencia para {{count}} persona",
+    "suggestionFor_other": "Sugerencia para {{count}} personas",
+    "filter": {
+      "recommended": "Recomendado",
+      "economico": "Económico",
+      "conforto": "Confort"
+    },
+    "capacityUpTo_one": "Hasta {{count}} persona",
+    "capacityUpTo_other": "Hasta {{count}} personas",
+    "perVehicle": "/vehículo",
+    "apply": "Aplicar",
+    "vehicleCatalog": "Catálogo de vehículos",
+    "buildCombo": "Arma tu combinación ideal",
+    "paxCount": "{{capacity}}/{{people}} pax",
+    "selectVehicles": "Selecciona vehículos",
+    "insufficientCapacity": "Capacidad insuficiente",
+    "continueLabel": "Continuar",
+    "toConfirm": "Por confirmar",
+    "breakdownPerPerson": "{{count}}x por persona",
+    "breakdownVehicles": "Vehículos seleccionados",
+    "capacityUpTo": "hasta {{count}} personas",
+    "peopleBadge": "{{count}} personas",
+    "suggestionFor": "Sugerencia para {{count}} personas"
+  },
+  "feedPg": {
+    "back": "Volver",
+    "title": "Descubre el Pueblo",
+    "searchPlaceholder": "Buscar eventos, lugares, promociones…",
+    "clearSearch": "Limpiar búsqueda",
+    "subtitle": "Eventos, promociones y recomendaciones en Jericoacoara",
+    "newPost": "Nueva publicación",
+    "sectionFeatured": "Destacados",
+    "sectionHappening": "Sucediendo en el pueblo",
+    "sectionPlaces": "Establecimientos",
+    "mapAttribution": "Lugares por OpenStreetMap · Geoapify",
+    "confirmDelete": "¿Eliminar \"{{title}}\"?",
+    "deleteError": "Error al eliminar",
+    "emptyEvents": {
+      "title": "Aún no hay eventos",
+      "sub": "¡Vuelve pronto para ver!"
+    },
+    "emptyPromos": {
+      "title": "No hay promociones activas",
+      "sub": "Mantente atento, ¡pronto aparecerán ofertas!"
+    },
+    "emptyCategory": {
+      "title": "Aún no hay nada aquí",
+      "sub": "Pronto nuevas recomendaciones en el pueblo."
+    },
+    "emptyAll": {
+      "title": "Descubre el Pueblo pronto",
+      "sub": "Eventos, promociones y recomendaciones del pueblo aparecerán aquí."
+    },
+    "catStay": "Dónde alojarse",
+    "catEat": "Dónde comer",
+    "catShop": "Tiendas",
+    "filterAll": "Todo",
+    "filterEvents": "Eventos",
+    "filterPromos": "Promociones",
+    "featured": "Destacado",
+    "rate": "Calificar",
+    "map": "Mapa",
+    "website": "Sitio web",
+    "like": "Me gusta",
+    "comment": "Comentar",
+    "share": "Compartir",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "likesCount": "{{count}} me gusta",
+    "validUntil": "Válido hasta {{date}}",
+    "eventLabel": "Evento",
+    "promoLabel": "Promoción",
+    "anonymousUser": "Usuario",
+    "yourReview": "Tu reseña",
+    "commentOptionalPlaceholder": "Comentario (opcional)",
+    "sending": "Enviando…",
+    "submitReview": "Enviar reseña",
+    "sendError": "No se pudo enviar. Inténtalo de nuevo.",
+    "loginToReview": "Inicia sesión para calificar",
+    "noReviews": "Aún no hay reseñas",
+    "reviewsCount": "{{count}} reseñas",
+    "noComments": "Aún no hay comentarios. ¡Sé el primero!",
+    "loginToComment": "Inicia sesión para comentar",
+    "commentPlaceholder": "Escribe un comentario…",
+    "commentsCount": "{{count}} comentarios",
+    "timeNow": "ahora",
+    "timeMinutes": "{{count}}min",
+    "timeHours": "{{count}}h",
+    "timeDays": "{{count}}d"
+  },
+  "transfersPg": {
+    "back": "Volver",
+    "searchReservation": "Buscar reserva",
+    "title": "Traslado",
+    "subtitle": "Transporte privado con chofer",
+    "subtitleDesktop": "Transporte privado con comodidad y seguridad",
+    "searchPlaceholder": "Buscar reserva por código…",
+    "modeRoute": "Ruta fija",
+    "modeCustom": "Traslado personalizado",
+    "quoteRequestedTitle": "¡Cotización solicitada!",
+    "quoteSuccessDesc": "La cooperativa analizará y enviará un valor para que confirmes.",
+    "quoteSuccessDescDesktop": "La cooperativa analizará tu ruta y enviará una propuesta de valor. Podrás aprobar y pagar, o rechazar, en \"Mis reservas\".",
+    "viewQuotes": "Ver mis cotizaciones",
+    "requestAnother": "Solicitar otro viaje",
+    "customIntro": "Indica los puntos de embarque y destino. La cooperativa confirma y te envía el valor del viaje.",
+    "customIntroDesktop": "Indica la ruta y la cooperativa enviará el valor para que lo apruebes.",
+    "routeSection": "Ruta",
+    "pickup": "Embarque",
+    "placeSearchPlaceholder": "Buscar dirección, hotel, punto...",
+    "destination": "Destino",
+    "dateTimeSection": "Fecha y hora",
+    "dateLabel": "Fecha",
+    "today": "Hoy",
+    "tomorrow": "Mañana",
+    "timeLabel": "Horario",
+    "select": "Seleccionar",
+    "passengersSection": "Pasajeros",
+    "passengersCount_one": "{{count}} pasajero",
+    "passengersCount_other": "{{count}} pasajeros",
+    "peopleCount_one": "{{count}} persona",
+    "peopleCount_other": "{{count}} personas",
+    "passengersNote": "Pasajeros adicionales a coordinar",
+    "notesSection": "Observaciones",
+    "notesPlaceholderCustom": "Ej.: 2 maletas grandes, vuelo a las 14h, necesitamos silla para bebé...",
+    "priceNoteCustom": "Valor a coordinar. La cooperativa confirmará el viaje y enviará el precio para tu aprobación.",
+    "priceNoteCustomDesktop": "Valor a coordinar. La cooperativa confirma el viaje y envía el precio para tu aprobación — el pago solo se realiza después de que aceptes la propuesta.",
+    "popularRoutes": "Rutas populares",
+    "privateBadge": "Privado",
+    "upTo4": "Hasta 4",
+    "upTo4Passengers": "Hasta 4 pasajeros",
+    "startingFrom": "Privado desde",
+    "perVehicle": "/vehículo",
+    "upToPeopleCapacity_one": "Hasta {{count}} persona",
+    "upToPeopleCapacity_other": "Hasta {{count}} personas",
+    "chooseOrigin": "Elige el origen",
+    "chooseDestination": "Elige el destino",
+    "selectOrigin": "Selecciona el punto de partida",
+    "selectOriginOption": "Selecciona el origen",
+    "selectDestination": "Selecciona el destino",
+    "chooseOriginFirst": "Elige primero el origen",
+    "minAdvanceNotice": "Los traslados requieren al menos {{hours}}h de anticipación — elige a partir de {{datetime}}.",
+    "highSeasonNotice": "Temporada alta — puede tener un recargo en el valor (ya mostrado en el resumen).",
+    "vehicleSection": "Vehículo",
+    "selected": "Seleccionado",
+    "apply": "Aplicar",
+    "notesBaggageSection": "Observaciones y equipaje",
+    "notesPlaceholderRoute": "Ej.: 2 maletas grandes, necesitamos silla para bebé...",
+    "summaryTitle": "Resumen del traslado",
+    "vehiclesTotal": "Total de vehículos",
+    "summaryFootnote": "La fecha, el horario y posibles recargos de temporada se definen al continuar, en el carrito.",
+    "driverInfoRoute": "El chofer estará en el punto de embarque con un cartel identificado. Cancelación gratuita hasta 24h antes.",
+    "driverInfoDesktop": "El chofer estará en el punto de embarque con un cartel identificado. Cancelación gratuita hasta 24h antes. Tu reserva será enviada a la cooperativa después del pago.",
+    "selectVehicle": "Selecciona un vehículo",
+    "selectVehicleOption": "Selecciona el vehículo",
+    "selectRoute": "Selecciona la ruta",
+    "insufficientCapacity": "Capacidad insuficiente",
+    "minAdvanceShort": "Anticipación mínima de {{hours}}h",
+    "continueCta": "Continuar",
+    "wait": "Espera…",
+    "addToCart": "Agregar al carrito",
+    "requesting": "Solicitando…",
+    "requestQuote": "Solicitar cotización",
+    "quoteError": "Error al solicitar cotización",
+    "dateTimeRow": "Fecha y hora",
+    "dateTimeValue": "{{date}} a las {{time}}",
+    "subtotal": "Subtotal",
+    "highSeasonFee": "Temporada alta / feriado",
+    "total": "Total",
+    "trust": {
+      "vehicles": {
+        "title": "Vehículos cómodos",
+        "desc": "Aire acondicionado"
+      },
+      "drivers": {
+        "title": "Choferes experimentados",
+        "desc": "Profesionales verificados"
+      },
+      "punctuality": {
+        "title": "Puntualidad",
+        "desc": "Llega a tiempo"
+      },
+      "support": {
+        "title": "Atención 24h",
+        "desc": "Soporte siempre disponible"
+      }
+    },
+    "origin": "Origen",
+    "upToPeopleCapacity": "hasta {{count}} personas",
+    "passengersCount": "{{count}} pasajeros",
+    "peopleCount": "{{count}} personas"
+  },
+  "cartPg": {
+    "editSheet": {
+      "closeAria": "Cerrar edición",
+      "originLabel": "Lugar de salida *",
+      "originPlaceholder": "Busca la posada o punto de encuentro",
+      "dateLabel": "Fecha *",
+      "chooseDate": "Elegir fecha",
+      "timeLabel": "Horario *",
+      "timeHintCutoff": "Este servicio acepta solicitudes para el mismo día solo hasta las {{cutoff}} — elige a partir de {{date}}.",
+      "timeHintLead": "Para hoy, elige a partir de las {{time}} (antelación mínima de {{lead}}).",
+      "timeHintNoMore": "Ya no hay horarios disponibles para hoy — elige a partir de {{date}}.",
+      "missingDate": "fecha válida",
+      "missingTime": "horario",
+      "missingTimeLead": "horario con antelación",
+      "missingPeople": "personas",
+      "missingVehicle": "vehículo",
+      "missingOrigin": "lugar de salida",
+      "peopleLabel": "Personas *",
+      "lessPeopleAria": "Menos personas",
+      "morePeopleAria": "Más personas",
+      "vehiclesLabel": "Vehículos *",
+      "perVehicle": "/vehículo",
+      "upToPeople": "hasta {{cap}} personas",
+      "lessVehicleAria": "Menos {{name}}",
+      "moreVehicleAria": "Más {{name}}",
+      "insufficientCapacity_one": "Capacidad insuficiente: {{count}} lugar para {{people}} personas — agrega vehículos.",
+      "insufficientCapacity_other": "Capacidad insuficiente: {{count}} lugares para {{people}} personas — agrega vehículos.",
+      "suggestionLabel": "Sugerencia:",
+      "suggestionCapacity": "(hasta {{cap}} personas)",
+      "hideOtherVehicles": "Ocultar otros vehículos",
+      "addOtherVehicle": "Agregar otro vehículo",
+      "addVehicleAria": "Agregar {{name}}",
+      "itemTotal": "Total del ítem",
+      "save": "Guardar",
+      "adjustVehicles": "Ajusta los vehículos para que quepa el grupo.",
+      "fillMissing": "Completa: {{missing}}.",
+      "insufficientCapacity": "Capacidad insuficiente: {{count}} plazas para {{people}} personas"
+    },
+    "add": "Agregar",
+    "invalidCoupon": "Cupón inválido",
+    "submitError": "No se pudo enviar el carrito. Intenta de nuevo.",
+    "titleCount": "Carrito ({{count}})",
+    "title": "Carrito",
+    "empty": {
+      "title": "Tu carrito está vacío",
+      "subtitle": "Arma un paseo o traslado y quedará guardado aquí.",
+      "cta": "Ver paseos"
+    },
+    "card": {
+      "removeAria": "Quitar del carrito",
+      "requestSent": "Solicitud {{code}} enviada ✓",
+      "complete": "Datos completos",
+      "missing": "Falta: {{missing}}",
+      "edit": "Editar"
+    },
+    "suggestions": {
+      "title": "Completa tu viaje",
+      "subtitle": "¿Qué tal agregar un paseo guiado?"
+    },
+    "footer": {
+      "requestsSent_one": "{{count}} solicitud enviada ✓",
+      "requestsSent_other": "{{count}} solicitudes enviadas ✓",
+      "errorsRemain": "{{count}} con error (sigue en el carrito)",
+      "trackOrders": "Seguir en Mis Reservas",
+      "couponApplied": "Cupón {{code}}",
+      "couponScope": "solo {{scope}}",
+      "scopeTransfers": "traslados",
+      "scopeTours": "paseos",
+      "remove": "quitar",
+      "couponPlaceholder": "Cupón de descuento",
+      "apply": "Aplicar",
+      "total": "Total",
+      "sending": "Enviando…",
+      "submitAll": "Solicitar todo ({{count}})",
+      "completeAllHint": "Completa los datos de todos los ítems (botón Editar) para solicitar.",
+      "requestsSent": "{{count}} solicitudes enviadas"
+    }
+  },
+  "bookingDetailPg": {
+    "cancelDialog": {
+      "title": "¿Cancelar la reserva?",
+      "reservationLabel": "Reserva",
+      "warning": "Esta acción no se puede deshacer. Revisa la política de cancelación antes de continuar.",
+      "cancelling": "Cancelando…",
+      "confirm": "Confirmar"
+    },
+    "actions": {
+      "back": "Volver",
+      "cancelReservation": "Cancelar reserva"
+    },
+    "timeline": {
+      "waitingAcceptance": "Esperando que una cooperativa acepte",
+      "payment": "Pago",
+      "confirmed": "Confirmada",
+      "inProgress": "En curso",
+      "completed": "Finalizada"
+    },
+    "statusMeta": {
+      "waitingPayment": "Esperando pago",
+      "waitingAcceptance": "Esperando aceptación",
+      "cancelled": "Cancelada"
+    },
+    "errors": {
+      "cancelFailed": "Error al cancelar",
+      "checkoutFailed": "No fue posible confirmar. Inténtalo de nuevo."
+    },
+    "service": {
+      "tour": "Paseo",
+      "transfer": "Transfer"
+    },
+    "notFound": {
+      "message": "Reserva no encontrada."
+    },
+    "mode": {
+      "private": "Privado",
+      "shared": "Compartido"
+    },
+    "details": {
+      "peopleCountOne": "{{count}} persona",
+      "peopleCountOther": "{{count}} personas",
+      "date": "Fecha",
+      "time": "Hora",
+      "people": "Personas",
+      "origin": "Origen",
+      "destination": "Destino"
+    },
+    "header": {
+      "title": "Detalles de la reserva",
+      "copied": "¡Copiado!"
+    },
+    "statusBanner": {
+      "waitingAcceptance": "En cuanto una cooperativa acepte, podrás pagar",
+      "waitingPayment": "La cooperativa aceptó — paga para confirmar",
+      "cancelled": "Esta reserva fue cancelada"
+    },
+    "partial": {
+      "acceptedCount": "{{accepted}} de {{total}} vehículos aceptados",
+      "confirmPrompt": "Confirma para pagar solo lo que fue aceptado.",
+      "pendingWarningPlural": "{{count}} vehículos sin cooperativa serán cancelados.",
+      "pendingWarningSingular": "{{count}} vehículo sin cooperativa será cancelado.",
+      "toConfirm": "para confirmar",
+      "expired": "Plazo vencido — actualiza la página.",
+      "confirming": "Confirmando…",
+      "confirmAndPay": "Confirmar y pagar · {{amount}}",
+      "cancelRide": "Cancelar viaje"
+    },
+    "payCta": {
+      "title": "¡La cooperativa aceptó! 🎉",
+      "subtitle": "Paga para confirmar tu reserva.",
+      "button": "Pagar ahora · {{amount}}"
+    },
+    "operatorCard": {
+      "title": "Cooperativa confirmada"
+    },
+    "waitingPulse": {
+      "title": "Esperando que la cooperativa acepte",
+      "subtitle": "Te notificaremos en cuanto una cooperativa acepte"
+    },
+    "timelineSection": {
+      "title": "Progreso de la reserva"
+    },
+    "detailsSection": {
+      "title": "Detalles"
+    },
+    "vehiclesSection": {
+      "title": "Vehículos",
+      "defaultName": "Vehículo",
+      "qtyPrice": "{{qty}}x · {{price}}"
+    },
+    "notes": {
+      "title": "Observaciones"
+    },
+    "support": {
+      "whatsappTitle": "Soporte por WhatsApp",
+      "whatsappSubtitle": "Estamos listos para ayudar",
+      "phoneTitle": "Llamar a soporte"
+    },
+    "policy": {
+      "title": "Política de cancelación",
+      "text": "Cancelación gratuita hasta 24h antes del paseo. Después de ese plazo, puede aplicarse una tarifa."
+    }
+  },
+  "checkoutPg": {
+    "datePicker": {
+      "title": "Elige la fecha",
+      "confirm": "Confirmar"
+    },
+    "weekday": {
+      "sun": "D",
+      "mon": "L",
+      "tue": "M",
+      "wed": "X",
+      "thu": "J",
+      "fri": "V",
+      "sat": "S"
+    },
+    "vehicleRow": {
+      "capacity": "Hasta {{count}} personas",
+      "perVehicle": "/vehículo"
+    },
+    "header": {
+      "editTitle": "Editar reserva",
+      "confirmProgress": "Confirmar {{current}} de {{total}}",
+      "summaryTitle": "Resumen de la reserva"
+    },
+    "cutoff": {
+      "title": "Reservas para hoy cerradas",
+      "description": "Este paseo solo acepta solicitudes hasta las {{time}}. La fecha mínima disponible es mañana."
+    },
+    "serviceType": {
+      "transfer": "Transfer",
+      "tour": "Paseo"
+    },
+    "bookingMode": {
+      "private": "Privado",
+      "shared": "Compartido"
+    },
+    "details": {
+      "title": "Detalles de la reserva"
+    },
+    "common": {
+      "edit": "Editar",
+      "cancel": "Cancelar",
+      "remove": "eliminar",
+      "sending": "Enviando…"
+    },
+    "labels": {
+      "origin": "Salida",
+      "destination": "Destino",
+      "date": "Fecha",
+      "time": "Hora",
+      "people": "Personas",
+      "vehicle": "Vehículo",
+      "vehicles": "Vehículos",
+      "passengers": "Pasajeros"
+    },
+    "time": {
+      "select": "Seleccionar horario"
+    },
+    "peopleCount_one": "{{count}} persona",
+    "peopleCount_other": "{{count}} personas",
+    "hint": {
+      "selectTime": "Selecciona un horario para continuar"
+    },
+    "editMode": {
+      "title": "Editar detalles",
+      "save": "Guardar cambios"
+    },
+    "capacityInsufficient_one": "Capacidad insuficiente para {{count}} persona. Agrega más vehículos.",
+    "capacityInsufficient_other": "Capacidad insuficiente para {{count}} personas. Agrega más vehículos.",
+    "vehicles": {
+      "empty": "No hay vehículos disponibles"
+    },
+    "price": {
+      "title": "Resumen de precios",
+      "notConfigured": "Precio no configurado para este paseo. Contacta a la cooperativa.",
+      "perPerson": "{{count}}x por persona",
+      "surcharge": "Temporada alta / feriado",
+      "total": "Total",
+      "toBeConfirmed": "Por confirmar"
+    },
+    "coupon": {
+      "applied": "Cupón {{code}}",
+      "placeholder": "Cupón de descuento",
+      "validating": "Validando…",
+      "apply": "Aplicar",
+      "invalid": "Cupón inválido"
+    },
+    "policy": {
+      "title": "Política de cancelación",
+      "description": "Cancelación gratuita hasta 24h antes. Después de ese plazo, puede haber un cargo."
+    },
+    "notice": {
+      "sentToCoops": "Tu reserva será enviada a las cooperativas. Solo pagas después de que una la acepte."
+    },
+    "footer": {
+      "estimatedTotal": "Total estimado · paga después de la aceptación",
+      "priceToConfirm": "Precio por confirmar",
+      "noPriceConfigured": "Sin precio configurado",
+      "selectTime": "Selecciona un horario",
+      "requestBooking": "Solicitar reserva",
+      "note": "Solo pagas después de que una cooperativa acepte. Sigue el progreso en Mis Reservas."
+    },
+    "error": {
+      "requestFailed": "Error al enviar la solicitud. Inténtalo de nuevo."
+    },
+    "date": {
+      "today": "Hoy",
+      "tomorrow": "Mañana"
+    },
+    "solicitado": {
+      "title": "¡Solicitud enviada!",
+      "subtitle": "Enviamos tu pedido a las cooperativas. En cuanto una lo acepte, recibirás un aviso para pagar y confirmar la reserva."
+    },
+    "step": {
+      "sent": "Pedido enviado",
+      "waiting": "Esperando que una cooperativa acepte",
+      "pay": "Pagar para confirmar"
+    },
+    "badge": {
+      "waitingAcceptance": "Esperando aceptación"
+    },
+    "booking": {
+      "code": "Código: {{code}}",
+      "dateAtTime": "{{date}} a las {{time}}"
+    },
+    "batch": {
+      "sentCount": "{{count}} solicitudes enviadas desde tu carrito ✓"
+    },
+    "value": {
+      "estimated": "Monto estimado"
+    },
+    "button": {
+      "track": "Seguir reserva",
+      "backHome": "Volver al inicio"
+    },
+    "peopleCount": "{{count}} personas",
+    "capacityInsufficient": "Capacidad insuficiente para {{count}} personas"
+  },
+  "reviewsPg": {
+    "title": "Reseñas verificadas",
+    "subtitle": "Solo quienes realizaron el servicio pueden calificar. Las notas miden la reputación de cada cooperativa.",
+    "filterByCoop": "Cooperativa",
+    "all": "Todas",
+    "minRating": "Calificación mínima",
+    "ratingPlus": "{{n}}+",
+    "reviewsCount_one": "{{count}} reseña",
+    "reviewsCount_other": "{{count}} reseñas",
+    "empty": {
+      "title": "Todavía no hay reseñas aquí.",
+      "subtitle": "Las reseñas aparecen después de que los clientes realizan los servicios."
+    },
+    "reviewsCount": "{{count}} reseñas"
+  },
+  "affiliatePg": {
+    "pixType": {
+      "cpf": "CPF (documento)",
+      "phone": "Celular",
+      "email": "Correo electrónico",
+      "random": "Clave aleatoria"
+    },
+    "pixSaveError": "No se pudo guardar — inténtalo de nuevo.",
+    "pixLabel": "Clave PIX para recibir",
+    "change": "Cambiar",
+    "pixPendingWarning": "Tienes una comisión por recibir — registra tu clave para que el pago salga sin demora.",
+    "pixPlaceholder": {
+      "cpf": "Tu CPF (solo números)",
+      "phone": "Código de área + celular",
+      "email": "tu@correo.com",
+      "random": "Clave aleatoria de tu banco"
+    },
+    "saving": "Guardando…",
+    "saveKey": "Guardar clave",
+    "cancel": "Cancelar",
+    "pixVisibilityNote": "Tu clave solo es visible para la administración, para efectuar el pago de las comisiones.",
+    "chartAriaLabel": "Comisiones por día en los últimos 15 días",
+    "back": "Volver",
+    "title": "Compartiste, Ganaste",
+    "heroTitle": "Recomienda amigos y gana {{percent}}% de cada reserva pagada 🤑",
+    "heroDesc": "Comparte tu link. Quien entre por él queda vinculado a ti durante 30 días — cada reserva pagada se convierte en tu comisión, transferida vía PIX en hasta 7 días.",
+    "activating": "Activando…",
+    "tryAgain": "Intentar de nuevo",
+    "activateButton": "Activar mi link de afiliado",
+    "activateError": "No se pudo activar en este momento — inténtalo de nuevo.",
+    "commissions15Days": "Comisiones en 15 días",
+    "referrals": "Referidos",
+    "pending": "Por recibir",
+    "avgTicket": "Ticket promedio",
+    "dailyCommissions": "Comisiones diarias",
+    "noCommissions15d": "Sin comisiones en los últimos 15 días — comparte tu link para mover el gráfico 📈",
+    "yourLink": "Tu link",
+    "copyLink": "Copiar link",
+    "yourCode": "Tu código",
+    "copy": "Copiar",
+    "shareWhatsapp": "Compartir en WhatsApp",
+    "received": "Ya recibido",
+    "yourCommissions": "Tus comisiones",
+    "noCommissionsYet": "Ninguna todavía — ¡comparte tu link! Cuando una reserva referida sea pagada, la comisión aparece aquí.",
+    "reservationFallback": "Reserva",
+    "serviceTransfer": "Traslado",
+    "serviceTour": "Paseo",
+    "payoutDueLabel": " · pago hasta {{date}}",
+    "paid": "Pagado",
+    "pendingStatus": "Pendiente",
+    "howItWorks": "Cómo funciona",
+    "step1": "Activa tu link y compártelo con amigos y seguidores.",
+    "step2": "Quien abra el link (o use tu código) queda vinculado a ti durante 30 días.",
+    "step3": {
+      "pre": "Cada reserva pagada genera ",
+      "bold": "{{percent}}% de comisión",
+      "post": " para ti."
+    },
+    "step4": {
+      "pre": "El pago se realiza vía ",
+      "bold": "PIX en hasta 7 días",
+      "post": "."
+    },
+    "ownerWarning": {
+      "pre": "⚠️ Tu link y tu código solo valen para ",
+      "bold": "otras personas",
+      "post": " — usarlo en tus propias reservas no genera comisión."
+    },
+    "shareText": "¿Vamos a conocer Jericoacoara? 🌴 Reserva paseos y transfers en Turiva con mi link: {{link}}"
+  },
+  "legalPg": {
+    "back": "Volver",
+    "termsTitle": "Términos de Uso",
+    "privacyTitle": "Política de Privacidad",
+    "privacyTab": "Privacidad",
+    "updatedAt": "Actualizado el {{date}}",
+    "updatedDate": "10 de junio de 2026",
+    "terms": {
+      "section1": {
+        "title": "1. Sobre Turiva",
+        "body": "Turiva es una plataforma de intermediación que conecta turistas con operadores locales de paseos y traslados en Jericoacoara y la región (Preá, Jijoca, Lagoa do Paraíso y alrededores). Los servicios son ejecutados por operadores y cooperativas asociadas debidamente registradas."
+      },
+      "section2": {
+        "title": "2. Registro y cuenta",
+        "body": "Para reservar, es necesario crear una cuenta con datos verdaderos y actualizados. Usted es responsable de mantener la confidencialidad de su contraseña y de toda actividad realizada en su cuenta."
+      },
+      "section3": {
+        "title": "3. Reservas y pagos",
+        "body": "Los precios mostrados incluyen el servicio descrito en la página de la reserva. El pago se procesa mediante pasarelas de pago asociadas (ej.: PIX). La reserva solo se confirma después de la aprobación del pago, cuando usted recibe un código de confirmación."
+      },
+      "section4": {
+        "title": "4. Cancelación y reembolso",
+        "body": "Paseos: cancelación gratuita hasta 24 horas antes del horario marcado. Traslados: cancelación gratuita hasta 72 horas antes. Después de esos plazos, el valor podrá ser retenido total o parcialmente. Las cancelaciones por condiciones climáticas o de seguridad, decididas por el operador, dan derecho a reprogramación o reembolso íntegro."
+      },
+      "section5": {
+        "title": "5. Conducta en la comunidad",
+        "body": "En los comentarios y reseñas de la pestaña \"Descubre el Pueblo\", no está permitido: contenido ofensivo, discriminatorio o difamatorio; spam o publicidad no autorizada; información falsa sobre establecimientos. Turiva puede eliminar contenido y suspender cuentas que violen estas reglas."
+      },
+      "section6": {
+        "title": "6. Responsabilidades",
+        "body": "Turiva intermedia la contratación, pero la ejecución de los paseos y traslados es responsabilidad de los operadores asociados, quienes mantienen las licencias y seguros exigidos por la legislación. Las recomendaciones de establecimientos en la pestaña \"Descubre el Pueblo\" son informativas y no constituyen garantía de calidad."
+      },
+      "section7": {
+        "title": "7. Cambios",
+        "body": "Estos términos pueden actualizarse en cualquier momento. Los cambios relevantes serán comunicados en la aplicación. El uso continuo de la plataforma después de la publicación implica la conformidad con la versión vigente."
+      }
+    },
+    "privacy": {
+      "section1": {
+        "title": "1. Datos que recopilamos",
+        "body1": "Recopilamos los datos que usted proporciona en el registro y en el uso de la plataforma: nombre, correo electrónico, teléfono/WhatsApp, documento (cuando sea necesario para la reserva), fotos de perfil y portada, idioma de preferencia, y los datos de sus reservas (fechas, lugares de embarque, cantidad de personas).",
+        "body2": "Con su autorización en el navegador, usamos su ubicación aproximada solo para mostrar establecimientos y servicios cercanos. No se almacena en nuestros servidores."
+      },
+      "section2": {
+        "title": "2. Para qué lo usamos",
+        "body": "Usamos sus datos para: procesar reservas y pagos; enviar confirmaciones y avisos sobre sus reservas (correo electrónico/WhatsApp); operar funciones sociales (los me gusta, comentarios y reseñas muestran su nombre y foto de perfil); mejorar la plataforma; y cumplir obligaciones legales."
+      },
+      "section3": {
+        "title": "3. Con quién compartimos",
+        "body": "Compartimos lo necesario con: el operador/cooperativa que ejecutará su paseo o traslado (nombre, contacto, punto de embarque); la pasarela de pago (datos de la transacción); y proveedores de infraestructura (alojamiento y base de datos). No vendemos sus datos a terceros."
+      },
+      "section4": {
+        "title": "4. Sus derechos (LGPD)",
+        "body": "De acuerdo con la Ley General de Protección de Datos de Brasil (Ley 13.709/2018), usted puede solicitar en cualquier momento: acceso a sus datos, corrección, eliminación de la cuenta, portabilidad e información sobre el uso compartido. Para ejercer sus derechos, contáctenos por correo electrónico"
+      },
+      "section5": {
+        "title": "5. Almacenamiento y seguridad",
+        "body": "Sus datos se almacenan en servidores seguros con acceso restringido y cifrado en tránsito. Conservamos los datos mientras su cuenta esté activa o durante el plazo exigido por la ley (ej.: registros fiscales de reservas)."
+      },
+      "section6": {
+        "title": "6. Cookies y almacenamiento local",
+        "body": "Usamos el almacenamiento local del navegador para mantenerlo conectado y recordar preferencias como el idioma. No usamos cookies de rastreo de terceros con fines publicitarios."
+      }
+    }
+  },
+  "miscPg": {
+    "login": {
+      "subtitle": "Accede a tu cuenta",
+      "emailLabel": "Correo electrónico",
+      "emailPlaceholder": "tu@email.com",
+      "passwordLabel": "Contraseña",
+      "submitting": "Ingresando…",
+      "submit": "Ingresar",
+      "forgotSending": "Enviando…",
+      "forgotPassword": "Olvidé mi contraseña",
+      "noAccount": "¿No tienes cuenta?",
+      "signUp": "Regístrate",
+      "invalidCredentials": "Credenciales inválidas",
+      "forgotEmailRequired": "Ingresa tu correo electrónico en el campo de arriba para recibir el enlace.",
+      "forgotSent": "Si este correo electrónico está registrado, recibirás un enlace de restablecimiento en breve."
+    },
+    "affiliateLink": {
+      "ownLink": "Este enlace es tuyo 😉 Funciona para amigos y seguidores, no para tus propias reservas.",
+      "opening": "Abriendo la app…"
+    },
+    "partnerLink": {
+      "openingReservation": "Abriendo tu reserva…"
+    },
+    "notFoundLinkOpening": "Enlace no encontrado — abriendo la app…"
+  },
+  "phoneInputCmp": {
+    "placeholder": "Código de área + número",
+    "chooseCountry": "Elegir código del país",
+    "searchPlaceholder": "Buscar país o código…",
+    "noCountryFound": "No se encontró ningún país"
+  },
+  "notifCmp": {
+    "pushUnsupported": "Tu navegador no admite notificaciones push. En iPhone, agrega la app a la pantalla de inicio (Compartir → Agregar a pantalla de inicio) e inténtalo de nuevo.",
+    "ariaLabel": "Notificaciones",
+    "title": "Notificaciones",
+    "unreadCount": "{{count}} nueva(s)",
+    "empty": "Aún no hay notificaciones",
+    "enabling": "Activando…",
+    "enablePush": "Activar notificaciones en el dispositivo",
+    "permissionDenied": "Permiso denegado — actívalo en la configuración del navegador."
+  },
+  "pickersCmp": {
+    "regionTitle": "¿Dónde estás?",
+    "regionSubtitle": "Busca tu ciudad o usa el GPS",
+    "regionSearchPlaceholder": "Ej: Jericoacoara, Fortaleza...",
+    "outsideCoverage": "Ubicación fuera de las áreas cubiertas. Selecciona una región abajo.",
+    "gpsDetecting": "Detectando...",
+    "gpsButton": "Usar mi ubicación (GPS)",
+    "gpsSubtitle": "Detecta tu municipio automáticamente",
+    "orChooseRegion": "o elige la región",
+    "loadingRegions": "Cargando regiones...",
+    "geoNotAvailable": "Geolocalización no disponible en este dispositivo.",
+    "myLocation": "Mi ubicación",
+    "permissionDenied": "Permiso de ubicación denegado. Actívalo en la configuración del navegador.",
+    "locationError": "No fue posible obtener tu ubicación. Verifica el GPS e intenta de nuevo.",
+    "title": "Lugar de salida",
+    "close": "Cerrar",
+    "useCurrentLocation": "Usar mi ubicación actual",
+    "originSearchPlaceholder": "Posada, hotel o dirección…",
+    "clear": "Limpiar",
+    "nearbyTitleUser": "Posadas y hoteles cerca de ti · {{radius}} km",
+    "nearbyTitleRegion": "Posadas y hoteles en {{region}} · {{radius}} km",
+    "defaultRegion": "tu región",
+    "noLodging": "No se encontró ningún alojamiento.",
+    "noResults": "Sin resultados.",
+    "orTypeToSearch": "O escribe arriba para buscar cualquier dirección.",
+    "minChars": "Escribe al menos 3 letras."
+  },
+  "promptsCmp": {
+    "install": {
+      "title": "Instalar la app Turiva",
+      "subtitle": "Acceso rápido desde la pantalla de inicio, como una app",
+      "sheetTitle": "Instalar la app",
+      "ios": {
+        "step1Pre": "Toca",
+        "step1Bold": "Compartir",
+        "step1Post": ", en la barra de Safari.",
+        "step2Pre": "Desplázate y elige",
+        "step2Bold": "Agregar a pantalla de inicio",
+        "step3Pre": "Toca",
+        "step3Bold": "Agregar",
+        "step3Post": "— listo, el ícono aparecerá en tu pantalla.",
+        "footnotePre": "En iPhone, instala desde",
+        "footnoteBold": "Safari",
+        "footnotePost": "(no desde Chrome)."
+      },
+      "android": {
+        "step1": "Abre el menú del navegador (⋮).",
+        "step2Pre": "Toca",
+        "step2Bold1": "Instalar app",
+        "step2Or": "o",
+        "step2Bold2": "Agregar a pantalla de inicio",
+        "step3": "Confirma — el ícono aparecerá en tu pantalla de inicio."
+      }
+    },
+    "update": {
+      "title": "Nueva versión disponible",
+      "subtitle": "Actualiza para ver las últimas mejoras.",
+      "button": "Actualizar",
+      "dismissAria": "Posponer"
+    }
+  },
+  "publisherCmp": {
+    "title": {
+      "editPost": "Editar publicación",
+      "createPost": "Nueva publicación",
+      "publishStory": "Publicar destacado"
+    },
+    "kind": {
+      "event": "Evento",
+      "promo": "Promoción"
+    },
+    "errors": {
+      "uploadImage": "Error al subir la imagen",
+      "sendImage": "Error al enviar la imagen",
+      "publish": "Error al publicar",
+      "videoTooLarge": "Video demasiado grande (máx. 50 MB).",
+      "uploadUrl": "No se pudo generar la URL de subida",
+      "uploadStatus": "Error {{status}} al enviar",
+      "network": "Fallo de red",
+      "sendMedia": "Error al enviar el contenido multimedia"
+    },
+    "image": {
+      "addPlaceholder": "Agregar imagen (4:5)"
+    },
+    "field": {
+      "titlePlaceholder": "Título*",
+      "descriptionPlaceholder": "Descripción (opcional)",
+      "eventDate": "Fecha del evento",
+      "eventTime": "Horario",
+      "eventTimePlaceholder": "ej: 20h",
+      "discountLabel": "Etiqueta de descuento",
+      "discountPlaceholder": "ej: -20%",
+      "validUntil": "Válido hasta",
+      "locationPlaceholder": "Ubicación (opcional)",
+      "highlightNamePlaceholder": "Nombre del destacado (ej: Paseos, Playas)",
+      "captionPlaceholder": "Leyenda (opcional)"
+    },
+    "action": {
+      "publishing": "Publicando…",
+      "saveChanges": "Guardar cambios",
+      "publish": "Publicar",
+      "change": "Cambiar",
+      "selectMedia": "Seleccionar foto o video"
+    },
+    "hint": {
+      "mediaFormats": "JPG, PNG o MP4 (hasta 50 MB)"
+    },
+    "label": {
+      "addToHighlight": "Agregar al destacado"
+    },
+    "option": {
+      "existing": "Existente",
+      "newHighlight": "Nuevo destacado"
+    },
+    "status": {
+      "uploading": "Enviando…",
+      "uploadingPercent": "Enviando {{pct}}%"
     }
   }
 }

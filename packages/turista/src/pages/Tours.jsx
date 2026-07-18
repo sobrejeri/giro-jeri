@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -110,6 +111,7 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
 
 /* ── Card de veículo no catálogo ────────────────────────────── */
 function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
+  const { t } = useTranslation()
   return (
     <div className={`bg-white rounded-2xl p-3 border flex items-center gap-3 transition-all ${qty > 0 ? 'border-brand shadow-sm shadow-brand/10' : 'border-gray-100'}`}>
       <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
@@ -123,12 +125,12 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
         <p className="text-[13px] font-bold text-gray-900 truncate">{vehicle.name}</p>
         <div className="flex items-center gap-1 mt-0.5">
           <Users size={10} className="text-gray-400" />
-          <span className="text-[11px] text-gray-500">Até {vehicle.seat_capacity} pessoas</span>
+          <span className="text-[11px] text-gray-500">{t('toursPg.vehicle.upToPeople', { count: vehicle.seat_capacity })}</span>
         </div>
         {vehicle.base_price && (
           <p className="text-[11px] text-gray-500 mt-0.5">
             R$ {Number(vehicle.base_price).toLocaleString('pt-BR')}
-            <span className="text-gray-400"> /veículo</span>
+            <span className="text-gray-400"> {t('toursPg.vehicle.perVehicle')}</span>
           </p>
         )}
       </div>
@@ -162,10 +164,20 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
 
 /* ── Calendário (bottom sheet) ──────────────────────────────── */
 function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeasonMonths }) {
+  const { t } = useTranslation()
   // R6: 'today' aqui é a data mínima selecionável — se passou do cutoff do
   // passeio, minDate já vem como amanhã e o dia de hoje fica bloqueado.
   const today = minDate || startOfDay(new Date())
   const [viewMonth, setViewMonth] = useState(startOfMonth(value))
+  const WEEKDAYS = [
+    t('toursPg.calendar.weekdaySun'),
+    t('toursPg.calendar.weekdayMon'),
+    t('toursPg.calendar.weekdayTue'),
+    t('toursPg.calendar.weekdayWed'),
+    t('toursPg.calendar.weekdayThu'),
+    t('toursPg.calendar.weekdayFri'),
+    t('toursPg.calendar.weekdaySat'),
+  ]
 
   const days = eachDayOfInterval({
     start: startOfMonth(viewMonth),
@@ -183,7 +195,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeaso
         </div>
 
         <div className="flex items-center justify-between px-5 py-3">
-          <p className="text-[16px] font-bold text-gray-900">Escolha a data</p>
+          <p className="text-[16px] font-bold text-gray-900">{t('toursPg.calendar.chooseDate')}</p>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
             <X size={16} className="text-gray-500" />
           </button>
@@ -209,7 +221,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeaso
         </div>
 
         <div className="grid grid-cols-7 px-4 mb-1">
-          {['D','S','T','Q','Q','S','S'].map((d, i) => (
+          {WEEKDAYS.map((d, i) => (
             <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>
           ))}
         </div>
@@ -248,7 +260,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeaso
         {(seasons?.length > 0 || highSeasonMonths?.size > 0) && (
           <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
             <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-            Datas em laranja: alta temporada (pode ter acréscimo no valor)
+            {t('toursPg.calendar.highSeasonNote')}
           </div>
         )}
 
@@ -257,7 +269,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeaso
             onClick={onClose}
             className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
           >
-            Confirmar
+            {t('toursPg.calendar.confirm')}
           </button>
         </div>
       </div>
@@ -268,6 +280,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeaso
 
 /* ── Main ───────────────────────────────────────────────────── */
 export default function Tours() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
@@ -449,16 +462,16 @@ export default function Tours() {
         short_description:   selectedTour.short_description || null,
         service_type:        'tour',
         booking_mode:        'private',
-        service_date:        'A confirmar',
+        service_date:        t('toursPg.common.toBeConfirmed'),
         service_date_iso:    format(date, 'yyyy-MM-dd'),
-        service_time:        'A confirmar',
+        service_time:        t('toursPg.common.toBeConfirmed'),
         people_count:        people,
         origin_text:         origin?.name || null,
         origin_latitude:     origin?.latitude,
         origin_longitude:    origin?.longitude,
         vehicle_name:        cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
         total_price:         cartTotal,
-        breakdown:           { 'Veículos selecionados': cartTotal },
+        breakdown:           { [t('toursPg.breakdown.vehicles')]: cartTotal },
         cover_image_url:     selectedTour.cover_image_url || null,
         region_id:           selectedTour.regions?.id,
         service_id:          selectedTour.id,
@@ -476,9 +489,9 @@ export default function Tours() {
   }
 
   const FILTERS = [
-    { id: 'recommended', label: 'Recomendado', emoji: '⭐' },
-    { id: 'economico',   label: 'Econômico',   emoji: '💰' },
-    { id: 'conforto',    label: 'Conforto',     emoji: '🛡️' },
+    { id: 'recommended', label: t('toursPg.filters.recommended'), emoji: '⭐' },
+    { id: 'economico',   label: t('toursPg.filters.economic'),   emoji: '💰' },
+    { id: 'conforto',    label: t('toursPg.filters.comfort'),     emoji: '🛡️' },
   ]
 
   // Carrossel de exclusivos — renderizado ANTES dos veículos quando um exclusivo
@@ -486,8 +499,8 @@ export default function Tours() {
   // demais casos. Assim os veículos sempre aparecem abaixo do carrossel escolhido.
   const exclusiveCarousel = !toursLoading && exclusiveTours.length > 0 ? (
     <section>
-      <p className="text-[14px] font-bold text-gray-900 mb-0.5">Passeios exclusivos</p>
-      <p className="text-[11px] text-gray-400 mb-2.5">Venda direta — um serviço por vez (sem combo).</p>
+      <p className="text-[14px] font-bold text-gray-900 mb-0.5">{t('toursPg.exclusive.title')}</p>
+      <p className="text-[11px] text-gray-400 mb-2.5">{t('toursPg.exclusive.subtitle')}</p>
       <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
         {exclusiveTours.map((tour) => (
           <TourPickCard
@@ -513,16 +526,16 @@ export default function Tours() {
           <button
             onClick={() => navigate(-1)}
             className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="Voltar"
+            aria-label={t('toursPg.header.back')}
           >
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
-          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Passeios</h1>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('toursPg.header.title')}</h1>
           <div className="absolute right-0 flex items-center gap-1.5">
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
               className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
-              aria-label="Buscar"
+              aria-label={t('toursPg.header.search')}
             >
               <Search size={15} />
             </button>
@@ -535,7 +548,7 @@ export default function Tours() {
               autoFocus
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar passeio…"
+              placeholder={t('toursPg.searchPlaceholder')}
               className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
             />
           </div>
@@ -546,7 +559,7 @@ export default function Tours() {
 
         {/* ── Toggle Privativo / Compartilhado ──────────────── */}
         <div className="flex bg-gray-100 rounded-full p-1 gap-1">
-          {[['private', 'Privativo'], ['shared', 'Compartilhado']].map(([id, label]) => (
+          {[['private', t('toursPg.mode.private')], ['shared', t('toursPg.mode.shared')]].map(([id, label]) => (
             <button
               key={id}
               onClick={() => setMode(id)}
@@ -569,11 +582,11 @@ export default function Tours() {
           >
             <MapPin size={11} className="text-brand shrink-0" />
             <div className="text-left min-w-0">
-              <p className="text-[9px] text-gray-400 leading-none">Saída *</p>
+              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.origin.label')}</p>
               <p className={`text-[11px] font-semibold mt-0.5 leading-tight truncate ${
                 origin ? 'text-gray-700' : 'text-brand'
               }`}>
-                {origin?.name || 'Selecionar local'}
+                {origin?.name || t('toursPg.origin.placeholder')}
               </p>
             </div>
           </button>
@@ -583,10 +596,10 @@ export default function Tours() {
           >
             <Calendar size={11} className="text-brand" />
             <div className="text-left">
-              <p className="text-[9px] text-gray-400 leading-none">Data</p>
+              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.date.label')}</p>
               <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">
-                {isToday(date) ? 'Hoje'
-                  : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                {isToday(date) ? t('toursPg.date.today')
+                  : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
                   : format(date, 'd MMM', { locale: ptBR })}
               </p>
             </div>
@@ -594,7 +607,7 @@ export default function Tours() {
           <div className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
             <Users size={11} className="text-brand" />
             <div className="text-left">
-              <p className="text-[9px] text-gray-400 leading-none">Pessoas</p>
+              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.people.label')}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <button
                   onClick={() => setPeople((p) => Math.max(1, p - 1))}
@@ -616,14 +629,14 @@ export default function Tours() {
 
         {/* ── Passeios tradicionais (carrinho/combo) ────────── */}
         <section>
-          <p className="text-[14px] font-bold text-gray-900 mb-0.5">Passeios tradicionais</p>
-          <p className="text-[11px] text-gray-400 mb-2.5">Monte um combo e pague tudo junto.</p>
+          <p className="text-[14px] font-bold text-gray-900 mb-0.5">{t('toursPg.traditional.title')}</p>
+          <p className="text-[11px] text-gray-400 mb-2.5">{t('toursPg.traditional.subtitle')}</p>
           {toursLoading ? (
             <div className="h-[130px] flex items-center justify-center">
               <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
             </div>
           ) : tradTours.length === 0 ? (
-            <p className="text-[12px] text-gray-400 py-4">Nenhum passeio tradicional disponível.</p>
+            <p className="text-[12px] text-gray-400 py-4">{t('toursPg.traditional.empty')}</p>
           ) : (
             <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
               {tradTours.map((tour) => (
@@ -653,7 +666,7 @@ export default function Tours() {
             {suggestion && (
               <section>
                 <p className="text-[14px] font-bold text-gray-900 mb-2">
-                  Sugestões para {people} {people === 1 ? 'pessoa' : 'pessoas'}
+                  {t('toursPg.suggestions.for')} {people} {people === 1 ? t('toursPg.common.person') : t('toursPg.common.peopleWord')}
                 </p>
 
                 {/* Filter chips */}
@@ -689,7 +702,7 @@ export default function Tours() {
                     <div className="flex items-center gap-1 mt-0.5">
                       <Users size={10} className="text-gray-400" />
                       <span className="text-[11px] text-gray-500">
-                        Até {suggestion.vehicle.seat_capacity * suggestion.qty} pessoas
+                        {t('toursPg.vehicle.upToPeople', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}
                       </span>
                     </div>
                   </div>
@@ -703,7 +716,7 @@ export default function Tours() {
                       onClick={applySuggestion}
                       className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
                     >
-                      Aplicar
+                      {t('toursPg.actions.apply')}
                     </button>
                   </div>
                 </div>
@@ -713,8 +726,8 @@ export default function Tours() {
             {/* Catálogo de veículos */}
             {vehicles.length > 0 && (
               <section className="pb-2">
-                <p className="text-[14px] font-bold text-gray-900">Catálogo de veículos</p>
-                <p className="text-[11px] text-brand mt-0.5 mb-3">Monte sua combinação ideal</p>
+                <p className="text-[14px] font-bold text-gray-900">{t('toursPg.catalog.title')}</p>
+                <p className="text-[11px] text-brand mt-0.5 mb-3">{t('toursPg.catalog.subtitle')}</p>
                 <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-3 xl:grid-cols-4 lg:gap-2.5">
                   {sortedVehicles.map((v) => (
                     <VehicleCard
@@ -733,8 +746,8 @@ export default function Tours() {
             {vehiclesFetched && vehicles.length === 0 && (
               <section className="pb-2">
                 <div className="bg-white rounded-2xl p-4 border border-gray-100 text-center">
-                  <p className="text-[13px] font-semibold text-gray-700">Nenhum veículo disponível para este passeio.</p>
-                  <p className="text-[11px] text-gray-400 mt-1">Tente outro passeio ou fale com a gente.</p>
+                  <p className="text-[13px] font-semibold text-gray-700">{t('toursPg.noVehicles.title')}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{t('toursPg.noVehicles.subtitle')}</p>
                 </div>
               </section>
             )}
@@ -751,8 +764,8 @@ export default function Tours() {
             <>
               {/* Número de pessoas */}
               <div className="bg-white rounded-2xl p-4 border border-gray-100">
-                <p className="text-[14px] font-bold text-gray-900">Número de pessoas</p>
-                <p className="text-[11px] text-gray-400 mt-0.5 mb-4">Preço calculado por pessoa</p>
+                <p className="text-[14px] font-bold text-gray-900">{t('toursPg.sharedMode.peopleTitle')}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5 mb-4">{t('toursPg.sharedMode.peopleSubtitle')}</p>
                 <div className="flex items-center justify-between px-4">
                   <button
                     onClick={() => setPeople((p) => Math.max(1, p - 1))}
@@ -773,7 +786,7 @@ export default function Tours() {
               {/* Card de preço */}
               {pricePerPerson ? (
                 <div className="bg-brand rounded-2xl p-4">
-                  <p className="text-white/70 text-[12px] font-medium">Preço por pessoa</p>
+                  <p className="text-white/70 text-[12px] font-medium">{t('toursPg.sharedMode.pricePerPerson')}</p>
                   <p className="text-white text-[30px] font-extrabold leading-tight mt-0.5">
                     R$ {pricePerPerson.toLocaleString('pt-BR')}
                   </p>
@@ -783,7 +796,7 @@ export default function Tours() {
 
                   <div className="flex items-center justify-between mt-4 bg-white/15 rounded-xl px-3 py-2.5">
                     <span className="text-white/80 text-[13px]">
-                      {people} {people === 1 ? 'pessoa' : 'pessoas'}
+                      {people} {people === 1 ? t('toursPg.common.person') : t('toursPg.common.peopleWord')}
                     </span>
                     <span className="text-white font-bold text-[15px]">
                       R$ {sharedTotal.toLocaleString('pt-BR')}
@@ -793,13 +806,13 @@ export default function Tours() {
                   <div className="flex items-center gap-2 mt-3 bg-white/10 rounded-xl px-3 py-2">
                     <Bus size={13} className="text-white/70 shrink-0" />
                     <span className="text-white/80 text-[11px]">
-                      Transporte em veículo coletivo com outros turistas
+                      {t('toursPg.sharedMode.transport')}
                     </span>
                   </div>
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl p-4 border border-gray-100">
-                  <p className="text-[13px] text-gray-400">Passeio não disponível em modo compartilhado.</p>
+                  <p className="text-[13px] text-gray-400">{t('toursPg.sharedMode.unavailable')}</p>
                 </div>
               )}
 
@@ -809,10 +822,9 @@ export default function Tours() {
                   <div className="flex items-start gap-2.5">
                     <Info size={14} className="text-blue-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[13px] font-bold text-blue-900">Como funciona?</p>
+                      <p className="text-[13px] font-bold text-blue-900">{t('toursPg.howItWorks.title')}</p>
                       <p className="text-[11px] text-blue-700 leading-relaxed mt-0.5">
-                        O passeio é compartilhado com outros turistas em uma Jardineira.
-                        Valor fixo por pessoa, com guia incluso.
+                        {t('toursPg.howItWorks.text')}
                       </p>
                     </div>
                   </div>
@@ -861,7 +873,7 @@ export default function Tours() {
                       <span className="inline-flex items-center gap-1">
                         <Users size={11} className={cartCapacity >= people ? 'text-gray-400' : 'text-red-400'} />
                         <span className={`text-[11px] font-medium ${cartCapacity >= people ? 'text-gray-500' : 'text-red-400'}`}>
-                          {cartCapacity}/{people} lugares
+                          {cartCapacity}/{people} {t('toursPg.cart.seats')}
                         </span>
                       </span>
                       {cartTotal > 0 && (
@@ -872,7 +884,7 @@ export default function Tours() {
                     </div>
                   </>
                 ) : (
-                  <p className="text-[13px] text-gray-400">Selecione um veículo abaixo</p>
+                  <p className="text-[13px] text-gray-400">{t('toursPg.cart.selectVehicle')}</p>
                 )}
               </div>
               {/* Botão: exclusivo vai direto ao Resumo; tradicional vai ao carrinho */}
@@ -888,7 +900,7 @@ export default function Tours() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {selectedTour?.is_exclusive ? 'Continuar' : 'Adicionar ao carrinho'}
+                {selectedTour?.is_exclusive ? t('toursPg.actions.continue') : t('toursPg.actions.addToCart')}
               </button>
             </div>
           </div>
@@ -906,7 +918,7 @@ export default function Tours() {
                 <div className="flex items-center gap-1">
                   <Users size={11} className="text-gray-400" />
                   <span className="text-[12px] text-gray-500">
-                    {people} {people === 1 ? 'passageiro' : 'passageiros'}
+                    {people} {people === 1 ? t('toursPg.common.passenger') : t('toursPg.common.passengersWord')}
                   </span>
                 </div>
                 <p className="text-[16px] font-extrabold text-brand mt-0.5">
@@ -922,18 +934,18 @@ export default function Tours() {
                       short_description: selectedTour.short_description || null,
                       service_type:     'tour',
                       booking_mode:     'shared',
-                      service_date:     isToday(date) ? 'Hoje'
-                                          : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                      service_date:     isToday(date) ? t('toursPg.date.today')
+                                          : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
                                           : format(date, "d 'de' MMMM", { locale: ptBR }),
                       service_date_iso: format(date, 'yyyy-MM-dd'),
-                      service_time:     'A confirmar',
+                      service_time:     t('toursPg.common.toBeConfirmed'),
                       people_count:     people,
                       price_per_person: pricePerPerson,
                       origin_text:      origin.name,
                       origin_latitude:  origin.latitude,
                       origin_longitude: origin.longitude,
                       total_price:      sharedTotal,
-                      breakdown:        { [`${people}x por pessoa`]: sharedTotal },
+                      breakdown:        { [t('toursPg.breakdown.perPerson', { count: people })]: sharedTotal },
                       cover_image_url:       selectedTour.cover_image_url || null,
                       region_id:             selectedTour.regions?.id,
                       service_id:            selectedTour.id,
@@ -947,7 +959,7 @@ export default function Tours() {
                   origin ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400'
                 }`}
               >
-                Continuar
+                {t('toursPg.actions.continue')}
               </button>
             </div>
           </div>

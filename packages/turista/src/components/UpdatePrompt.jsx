@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { RefreshCw, X } from 'lucide-react'
 
 // ID do build atual (injetado pelo Vite no build de produção)
@@ -18,6 +19,7 @@ const DISMISS_KEY = 'giro_update_dismissed'
  * relação ao que está rodando, oferecemos recarregar.
  */
 export default function UpdatePrompt() {
+  const { t } = useTranslation()
   const [latest, setLatest]       = useState(null)
   const [dismissed, setDismissed] = useState(false)
 
@@ -85,18 +87,18 @@ export default function UpdatePrompt() {
         <RefreshCw size={16} className="text-brand" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-bold leading-tight">Nova versão disponível</p>
-        <p className="text-[11px] text-gray-400 mt-0.5">Atualize para ver as últimas melhorias.</p>
+        <p className="text-[13px] font-bold leading-tight">{t('promptsCmp.update.title')}</p>
+        <p className="text-[11px] text-gray-400 mt-0.5">{t('promptsCmp.update.subtitle')}</p>
       </div>
       <button
         onClick={reload}
         className="bg-brand hover:bg-brand-600 text-white text-[12px] font-bold px-3 py-1.5 rounded-xl shrink-0"
       >
-        Atualizar
+        {t('promptsCmp.update.button')}
       </button>
       <button
         onClick={dismiss}
-        aria-label="Adiar"
+        aria-label={t('promptsCmp.update.dismissAria')}
         className="text-gray-500 hover:text-gray-300 shrink-0"
       >
         <X size={14} />

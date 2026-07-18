@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -15,13 +16,6 @@ import DesktopDatePicker from '../components/DesktopDatePicker'
 import { format, startOfDay, addDays, isToday, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-const TRUST = [
-  { icon: Car,         title: 'Veículos confortáveis',  desc: 'Ar-condicionado' },
-  { icon: ShieldCheck, title: 'Motoristas experientes', desc: 'Profissionais verificados' },
-  { icon: Timer,       title: 'Pontualidade',           desc: 'Chegue no horário' },
-  { icon: Headphones,  title: 'Atendimento 24h',        desc: 'Suporte sempre disponível' },
-]
-
 const GRADIENTS = [
   'from-orange-400 to-amber-300',
   'from-purple-400 to-violet-300',
@@ -35,15 +29,16 @@ const GRADIENTS = [
 
 const todayIso = () => format(new Date(), 'yyyy-MM-dd')
 
-function dayLabel(iso) {
+function dayLabel(iso, t) {
   if (!iso) return '—'
   const d = new Date(iso + 'T12:00:00')
-  if (isToday(d)) return 'Hoje'
-  if (isSameDay(d, addDays(startOfDay(new Date()), 1))) return 'Amanhã'
+  if (isToday(d)) return t('transfersPg.today')
+  if (isSameDay(d, addDays(startOfDay(new Date()), 1))) return t('transfersPg.tomorrow')
   return format(d, 'd MMM', { locale: ptBR })
 }
 
 function RouteCard({ route, bg, active, onSelect }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onSelect}
@@ -52,16 +47,16 @@ function RouteCard({ route, bg, active, onSelect }) {
       }`}
     >
       <div className={`bg-gradient-to-br ${bg} px-4 pt-3 pb-3.5`}>
-        <span className="inline-block text-[10px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-2">Privativo</span>
+        <span className="inline-block text-[10px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-2">{t('transfersPg.privateBadge')}</span>
         <p className="text-white font-bold text-[15px] leading-tight">
           {route.origin_name} → {route.destination_name}
         </p>
         <div className="flex items-center gap-1 mt-2 text-white/85 text-[11px]">
-          <Users size={11} /> Até 4 passageiros
+          <Users size={11} /> {t('transfersPg.upTo4Passengers')}
         </div>
       </div>
       <div className="p-4 flex flex-col gap-1 flex-1">
-        <p className="text-[11px] text-gray-400">Privativo a partir de</p>
+        <p className="text-[11px] text-gray-400">{t('transfersPg.startingFrom')}</p>
         <p className="text-[20px] font-extrabold text-gray-900">R$ {Number(route.default_price).toLocaleString('pt-BR')}</p>
       </div>
     </button>
@@ -69,6 +64,7 @@ function RouteCard({ route, bg, active, onSelect }) {
 }
 
 export default function TransfersDesktop() {
+  const { t } = useTranslation()
   const navigate  = useNavigate()
   const { token } = useAuth()
   const { upsertItem: saveCartItem } = useCart()
@@ -311,16 +307,23 @@ export default function TransfersDesktop() {
       })
       setCustomSuccess(true)
     } catch (err) {
-      setCustomError(err.message || 'Erro ao solicitar cotação')
+      setCustomError(err.message || t('transfersPg.quoteError'))
     } finally {
       setCustomLoading(false)
     }
   }
 
+  const TRUST = [
+    { icon: Car,         title: t('transfersPg.trust.vehicles.title'),    desc: t('transfersPg.trust.vehicles.desc') },
+    { icon: ShieldCheck, title: t('transfersPg.trust.drivers.title'),     desc: t('transfersPg.trust.drivers.desc') },
+    { icon: Timer,       title: t('transfersPg.trust.punctuality.title'), desc: t('transfersPg.trust.punctuality.desc') },
+    { icon: Headphones,  title: t('transfersPg.trust.support.title'),     desc: t('transfersPg.trust.support.desc') },
+  ]
+
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
-      <h1 className="text-3xl font-extrabold text-gray-900">Transfer</h1>
-      <p className="text-gray-500 mt-1">Transporte privativo com conforto e segurança</p>
+      <h1 className="text-3xl font-extrabold text-gray-900">{t('transfersPg.title')}</h1>
+      <p className="text-gray-500 mt-1">{t('transfersPg.subtitleDesktop')}</p>
 
       {/* Toggle */}
       <div className="grid grid-cols-2 gap-3 mt-6 max-w-2xl">
@@ -328,13 +331,13 @@ export default function TransfersDesktop() {
           onClick={() => setMode('rota')}
           className={`flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-bold transition-all ${mode === 'rota' ? 'bg-brand text-white shadow-sm shadow-brand/30' : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'}`}
         >
-          <Route size={16} /> Rota definida
+          <Route size={16} /> {t('transfersPg.modeRoute')}
         </button>
         <button
           onClick={() => { setMode('custom'); setCustomSuccess(false); setCustomError('') }}
           className={`flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-bold transition-all ${mode === 'custom' ? 'bg-brand text-white shadow-sm shadow-brand/30' : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'}`}
         >
-          <Zap size={16} /> Translado personalizado
+          <Zap size={16} /> {t('transfersPg.modeCustom')}
         </button>
       </div>
 
@@ -343,7 +346,7 @@ export default function TransfersDesktop() {
         <>
           {popularRoutes.length > 0 && (
             <>
-              <h2 className="text-lg font-bold text-gray-900 mt-8 mb-4">Rotas populares</h2>
+              <h2 className="text-lg font-bold text-gray-900 mt-8 mb-4">{t('transfersPg.popularRoutes')}</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
                 {popularRoutes.map((r, i) => (
                   <RouteCard
@@ -363,10 +366,10 @@ export default function TransfersDesktop() {
             <div className="lg:col-span-2 space-y-5">
               {/* Rota */}
               <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide mb-3">Rota</p>
+                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide mb-3">{t('transfersPg.routeSection')}</p>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[11px] text-gray-400 font-semibold">Origem</label>
+                    <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.origin')}</label>
                     <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                       <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
                       <select
@@ -374,13 +377,13 @@ export default function TransfersDesktop() {
                         onChange={e => { setOrigin(e.target.value); setDest(''); setCart({}) }}
                         className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none cursor-pointer"
                       >
-                        {!origin && <option value="">Selecione a origem</option>}
+                        {!origin && <option value="">{t('transfersPg.selectOriginOption')}</option>}
                         {origins.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </div>
                   </div>
                   <div>
-                    <label className="text-[11px] text-gray-400 font-semibold">Destino</label>
+                    <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.destination')}</label>
                     <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                       <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
                       <select
@@ -389,7 +392,7 @@ export default function TransfersDesktop() {
                         className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none cursor-pointer disabled:text-gray-400"
                         disabled={!dests.length}
                       >
-                        <option value="">{dests.length ? 'Selecione o destino' : 'Escolha a origem primeiro'}</option>
+                        <option value="">{dests.length ? t('transfersPg.selectDestination') : t('transfersPg.chooseOriginFirst')}</option>
                         {dests.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
@@ -401,13 +404,13 @@ export default function TransfersDesktop() {
               <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <div className="grid sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="text-[11px] text-gray-400 font-semibold">Data</label>
+                    <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.dateLabel')}</label>
                     <div className="mt-1 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                       <DesktopDatePicker valueIso={date} onChange={setDate} minIso={minDateIso} seasons={seasons} />
                     </div>
                   </div>
                   <div>
-                    <label className="text-[11px] text-gray-400 font-semibold">Horário</label>
+                    <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.timeLabel')}</label>
                     <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                       <Clock size={15} className="text-brand shrink-0" />
                       <input
@@ -420,7 +423,7 @@ export default function TransfersDesktop() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[11px] text-gray-400 font-semibold">Passageiros</label>
+                    <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.passengersSection')}</label>
                     <div className="mt-1 flex items-center justify-between border border-gray-200 rounded-xl px-3 py-2">
                       <span className="text-[14px] font-semibold text-gray-800">{people}</span>
                       <div className="flex items-center gap-2">
@@ -433,14 +436,13 @@ export default function TransfersDesktop() {
 
                 {!advanceOk && (
                   <p className="mt-3 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                    Transfers precisam de no mínimo {MIN_ADVANCE_HOURS}h de antecedência —
-                    escolha a partir de {format(minBookable, "d/MM 'às' HH:mm")}.
+                    {t('transfersPg.minAdvanceNotice', { hours: MIN_ADVANCE_HOURS, datetime: format(minBookable, "d/MM 'às' HH:mm") })}
                   </p>
                 )}
                 {advanceOk && isHighSeasonIso(date, seasons) && (
                   <p className="mt-3 flex items-center gap-2 text-[12px] text-amber-600">
                     <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                    Alta temporada — pode ter acréscimo no valor (já mostrado no resumo).
+                    {t('transfersPg.highSeasonNotice')}
                   </p>
                 )}
               </section>
@@ -448,7 +450,7 @@ export default function TransfersDesktop() {
               {/* Veículo */}
               {vehicles.length > 0 && (
                 <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide px-5 pt-5 pb-3">Veículo</p>
+                  <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide px-5 pt-5 pb-3">{t('transfersPg.vehicleSection')}</p>
 
                   {suggestion && (
                     <div className="mx-5 mb-3 bg-orange-50 rounded-2xl p-3 border border-orange-100 flex items-center gap-3">
@@ -459,7 +461,7 @@ export default function TransfersDesktop() {
                         <p className="text-[13px] font-bold text-gray-900">
                           {suggestion.qty > 1 ? `${suggestion.qty}x ` : ''}{suggestion.vehicle.name}
                         </p>
-                        <p className="text-[11px] text-gray-400">Até {suggestion.vehicle.seat_capacity * suggestion.qty} pessoas</p>
+                        <p className="text-[11px] text-gray-400">{t('transfersPg.upToPeopleCapacity', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                         {unitPrice && (
@@ -469,7 +471,7 @@ export default function TransfersDesktop() {
                         )}
                         {suggestionIsApplied ? (
                           <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
-                            <Check size={11} /> Selecionado
+                            <Check size={11} /> {t('transfersPg.selected')}
                           </span>
                         ) : (
                           <button
@@ -479,7 +481,7 @@ export default function TransfersDesktop() {
                             }}
                             className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full hover:bg-brand-600 transition-colors"
                           >
-                            Aplicar
+                            {t('transfersPg.apply')}
                           </button>
                         )}
                       </div>
@@ -504,8 +506,7 @@ export default function TransfersDesktop() {
               <div className="flex items-start gap-2 px-1">
                 <Info size={14} className="text-blue-400 shrink-0 mt-0.5" />
                 <p className="text-[12px] text-gray-400 leading-relaxed">
-                  Motorista aparecerá no local de embarque com placa identificada.
-                  Cancelamento gratuito até 24h antes. Sua reserva será enviada à cooperativa após o pagamento.
+                  {t('transfersPg.driverInfoDesktop')}
                 </p>
               </div>
             </div>
@@ -513,14 +514,14 @@ export default function TransfersDesktop() {
             {/* Resumo (sticky) */}
             <aside className="lg:sticky lg:top-20">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[15px] font-bold text-gray-900 mb-3">Resumo do transfer</p>
+                <p className="text-[15px] font-bold text-gray-900 mb-3">{t('transfersPg.summaryTitle')}</p>
                 <div className="space-y-2.5">
                   {[
-                    { dot: 'bg-brand',    label: 'Origem',      val: origin || '—' },
-                    { dot: 'bg-gray-400', label: 'Destino',     val: dest || '—' },
-                    { icon: Calendar,     label: 'Data & Hora', val: `${dayLabel(date)} às ${time || '—'}` },
-                    { icon: Users,        label: 'Passageiros', val: `${people} pessoa${people !== 1 ? 's' : ''}` },
-                    ...(cartItems.length ? [{ icon: Car, label: 'Veículo', val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
+                    { dot: 'bg-brand',    label: t('transfersPg.origin'),      val: origin || '—' },
+                    { dot: 'bg-gray-400', label: t('transfersPg.destination'), val: dest || '—' },
+                    { icon: Calendar,     label: t('transfersPg.dateTimeRow'), val: t('transfersPg.dateTimeValue', { date: dayLabel(date, t), time: time || '—' }) },
+                    { icon: Users,        label: t('transfersPg.passengersSection'), val: t('transfersPg.peopleCount', { count: people }) },
+                    ...(cartItems.length ? [{ icon: Car, label: t('transfersPg.vehicleSection'), val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
                   ].map((row, i) => (
                     <div key={i} className="flex items-center gap-3">
                       {row.dot
@@ -537,17 +538,17 @@ export default function TransfersDesktop() {
                 {seasonAddition > 0 && (
                   <div className="border-t border-gray-100 mt-4 pt-3 space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <p className="text-[12px] text-gray-400">Subtotal</p>
+                      <p className="text-[12px] text-gray-400">{t('transfersPg.subtotal')}</p>
                       <p className="text-[13px] font-semibold text-gray-800">R$ {cartTotal.toLocaleString('pt-BR')}</p>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="text-[12px] text-amber-600">Alta temporada / feriado</p>
+                      <p className="text-[12px] text-amber-600">{t('transfersPg.highSeasonFee')}</p>
                       <p className="text-[13px] font-semibold text-amber-600">+ R$ {seasonAddition.toLocaleString('pt-BR')}</p>
                     </div>
                   </div>
                 )}
                 <div className={`flex items-center justify-between ${seasonAddition > 0 ? 'mt-2' : 'border-t border-gray-100 mt-4 pt-3'}`}>
-                  <p className="text-[13px] font-bold text-gray-900">Total</p>
+                  <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.total')}</p>
                   <p className={`text-[20px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
                     {grandTotal ? `R$ ${grandTotal.toLocaleString('pt-BR')}` : '—'}
                   </p>
@@ -560,11 +561,11 @@ export default function TransfersDesktop() {
                     canBook ? 'bg-brand text-white hover:bg-brand-600 active:scale-[0.98]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {!matched ? 'Selecione a rota'
-                    : !cartItems.length ? 'Selecione o veículo'
-                    : cartCapacity < people ? 'Capacidade insuficiente'
-                    : !advanceOk ? `Antecedência mínima de ${MIN_ADVANCE_HOURS}h`
-                    : 'Continuar'}
+                  {!matched ? t('transfersPg.selectRoute')
+                    : !cartItems.length ? t('transfersPg.selectVehicleOption')
+                    : cartCapacity < people ? t('transfersPg.insufficientCapacity')
+                    : !advanceOk ? t('transfersPg.minAdvanceShort', { hours: MIN_ADVANCE_HOURS })
+                    : t('transfersPg.continueCta')}
                 </button>
               </div>
             </aside>
@@ -580,23 +581,22 @@ export default function TransfersDesktop() {
               <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 size={32} className="text-emerald-500" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Cotação solicitada!</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('transfersPg.quoteRequestedTitle')}</h3>
               <p className="text-[14px] text-gray-500 max-w-sm mx-auto mb-6">
-                A cooperativa vai analisar sua rota e enviar uma proposta de valor.
-                Você poderá aprovar e pagar, ou recusar, em "Minhas reservas".
+                {t('transfersPg.quoteSuccessDescDesktop')}
               </p>
               <div className="flex items-center justify-center gap-3">
                 <button
                   onClick={() => navigate('/minhas-reservas')}
                   className="inline-flex items-center gap-2 bg-brand text-white font-bold px-6 py-3 rounded-xl hover:bg-brand-600 transition-colors"
                 >
-                  Ver minhas cotações <ChevronRight size={16} />
+                  {t('transfersPg.viewQuotes')} <ChevronRight size={16} />
                 </button>
                 <button
                   onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes('') }}
                   className="text-[14px] text-gray-500 font-semibold hover:text-gray-700"
                 >
-                  Solicitar outra corrida
+                  {t('transfersPg.requestAnother')}
                 </button>
               </div>
             </div>
@@ -605,42 +605,42 @@ export default function TransfersDesktop() {
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center shrink-0"><Zap size={22} className="text-brand" /></div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Translado personalizado</h3>
-                  <p className="text-[13px] text-gray-500">Informe a rota e a cooperativa envia o valor para você aprovar.</p>
+                  <h3 className="text-lg font-bold text-gray-900">{t('transfersPg.modeCustom')}</h3>
+                  <p className="text-[13px] text-gray-500">{t('transfersPg.customIntroDesktop')}</p>
                 </div>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Embarque</label>
+                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.pickup')}</label>
                   <div className="mt-1">
-                    <PlaceInput value={customOrigin} onChange={setCustomOrigin} onPick={setCustomOriginMeta} placeholder="Buscar endereço, hotel, ponto..." dotClass="bg-brand" />
+                    <PlaceInput value={customOrigin} onChange={setCustomOrigin} onPick={setCustomOriginMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="bg-brand" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Destino</label>
+                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.destination')}</label>
                   <div className="mt-1">
-                    <PlaceInput value={customDest} onChange={setCustomDest} onPick={setCustomDestMeta} placeholder="Buscar endereço, hotel, ponto..." dotClass="border-2 border-gray-400 bg-transparent" />
+                    <PlaceInput value={customDest} onChange={setCustomDest} onPick={setCustomDestMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="border-2 border-gray-400 bg-transparent" />
                   </div>
                 </div>
               </div>
 
               <div className="grid sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Data</label>
+                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.dateLabel')}</label>
                   <div className="mt-1 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                     <DesktopDatePicker valueIso={customDate} onChange={setCustomDate} minIso={customMinDateIso} seasons={seasons} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Horário</label>
+                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.timeLabel')}</label>
                   <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                     <Clock size={15} className="text-brand shrink-0" />
                     <input type="time" value={customTime} min={customMinTime} onChange={e => setCustomTime(e.target.value)} className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Passageiros</label>
+                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.passengersSection')}</label>
                   <div className="mt-1 flex items-center justify-between border border-gray-200 rounded-xl px-3 py-2">
                     <span className="text-[14px] font-semibold text-gray-800">{customPeople}</span>
                     <div className="flex items-center gap-2">
@@ -652,20 +652,19 @@ export default function TransfersDesktop() {
               </div>
 
               <div>
-                <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Observações</label>
+                <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.notesSection')}</label>
                 <textarea
                   rows={3}
                   value={customNotes}
                   onChange={e => setCustomNotes(e.target.value)}
-                  placeholder="Ex: 2 malas grandes, voo às 14h, precisamos de cadeirinha…"
+                  placeholder={t('transfersPg.notesPlaceholderCustom')}
                   className="mt-1 w-full text-[14px] text-gray-700 border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:border-brand placeholder-gray-400"
                 />
               </div>
 
               {!customAdvanceOk && (
                 <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-                  Transfers precisam de no mínimo {DEFAULT_MIN_ADVANCE_HOURS}h de antecedência —
-                  escolha a partir de {format(customMinBookable, "d/MM 'às' HH:mm")}.
+                  {t('transfersPg.minAdvanceNotice', { hours: DEFAULT_MIN_ADVANCE_HOURS, datetime: format(customMinBookable, "d/MM 'às' HH:mm") })}
                 </p>
               )}
 
@@ -676,8 +675,7 @@ export default function TransfersDesktop() {
               <div className="flex items-start gap-2">
                 <Info size={14} className="text-blue-400 shrink-0 mt-0.5" />
                 <p className="text-[12px] text-gray-400 leading-relaxed">
-                  Valor a combinar. A cooperativa confirma a corrida e envia o preço para sua aprovação —
-                  o pagamento só acontece depois que você aceitar a proposta.
+                  {t('transfersPg.priceNoteCustomDesktop')}
                 </p>
               </div>
 
@@ -689,7 +687,7 @@ export default function TransfersDesktop() {
                 }`}
               >
                 <Send size={16} />
-                {customLoading ? 'Solicitando…' : 'Solicitar cotação'}
+                {customLoading ? t('transfersPg.requesting') : t('transfersPg.requestQuote')}
               </button>
             </div>
           )}

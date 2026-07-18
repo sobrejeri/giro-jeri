@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { X, ImagePlus, Loader2, CalendarDays, BadgePercent } from 'lucide-react'
 import { api } from '../lib/api'
 
@@ -31,6 +32,7 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
  * post = null  → criar;  post = objeto → editar.
  */
 export default function FeedPublisher({ post, onClose, onSaved }) {
+  const { t } = useTranslation()
   const editing = !!post?.id
   const fileRef = useRef(null)
 
@@ -60,10 +62,10 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
       const dataUrl = await fileToResizedDataUrl(file)
       const result  = await api.uploadSiteImage(dataUrl, 'feed')
       const url = result?.url || (typeof result === 'string' ? result : null)
-      if (!url) throw new Error('Falha no upload da imagem')
+      if (!url) throw new Error(t('publisherCmp.errors.uploadImage'))
       setImageUrl(url)
     } catch (err) {
-      setError(err?.message || 'Erro ao enviar imagem')
+      setError(err?.message || t('publisherCmp.errors.sendImage'))
       setPreview(post?.image_url || '')
       setImageUrl(post?.image_url || '')
     } finally {
@@ -89,7 +91,7 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
       return editing ? api.updatePost(post.id, payload) : api.createPost(payload)
     },
     onSuccess: () => { onSaved?.(); onClose() },
-    onError:   (err) => setError(err?.message || 'Erro ao publicar'),
+    onError:   (err) => setError(err?.message || t('publisherCmp.errors.publish')),
   })
 
   const canSave = title.trim().length > 0 && !uploading && !save.isPending
@@ -102,14 +104,14 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[92vh] overflow-y-auto">
         <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white">
-          <p className="text-[16px] font-bold text-gray-900">{editing ? 'Editar publicação' : 'Nova publicação'}</p>
+          <p className="text-[16px] font-bold text-gray-900">{editing ? t('publisherCmp.title.editPost') : t('publisherCmp.title.createPost')}</p>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"><X size={16} className="text-gray-500" /></button>
         </div>
 
         <div className="px-5 py-4 space-y-4">
           {/* Tipo */}
           <div className="grid grid-cols-2 gap-2">
-            {[{ k: 'event', label: 'Evento', Icon: CalendarDays }, { k: 'promo', label: 'Promoção', Icon: BadgePercent }].map(({ k, label, Icon }) => (
+            {[{ k: 'event', label: t('publisherCmp.kind.event'), Icon: CalendarDays }, { k: 'promo', label: t('publisherCmp.kind.promo'), Icon: BadgePercent }].map(({ k, label, Icon }) => (
               <button key={k} onClick={() => setKind(k)}
                 className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-bold border transition-colors ${
                   kind === k ? (k === 'promo' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-brand text-white border-brand') : 'bg-white text-gray-500 border-gray-200'
@@ -128,7 +130,7 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
               ) : (
                 <div className="text-center text-gray-400">
                   <ImagePlus size={28} className="mx-auto mb-1" />
-                  <p className="text-[12px]">Adicionar imagem (4:5)</p>
+                  <p className="text-[12px]">{t('publisherCmp.image.addPlaceholder')}</p>
                 </div>
               )}
               {uploading && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
@@ -137,36 +139,36 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
           </div>
 
           {/* Título */}
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título*"
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder={t('publisherCmp.field.titlePlaceholder')}
             className="w-full h-11 px-3.5 rounded-xl border border-gray-200 text-[14px] focus:outline-none focus:border-brand" />
 
           {/* Descrição */}
-          <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder="Descrição (opcional)"
+          <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder={t('publisherCmp.field.descriptionPlaceholder')}
             className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-[14px] resize-none focus:outline-none focus:border-brand" />
 
           {/* Campos por tipo */}
           {!isPromo ? (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[11px] text-gray-400 font-semibold">Data do evento</label>
+                <label className="text-[11px] text-gray-400 font-semibold">{t('publisherCmp.field.eventDate')}</label>
                 <input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
                   className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:border-brand" />
               </div>
               <div>
-                <label className="text-[11px] text-gray-400 font-semibold">Horário</label>
-                <input value={eventTime} onChange={e => setEventTime(e.target.value)} placeholder="ex: 20h"
+                <label className="text-[11px] text-gray-400 font-semibold">{t('publisherCmp.field.eventTime')}</label>
+                <input value={eventTime} onChange={e => setEventTime(e.target.value)} placeholder={t('publisherCmp.field.eventTimePlaceholder')}
                   className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:border-brand" />
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[11px] text-gray-400 font-semibold">Selo do desconto</label>
-                <input value={discountLabel} onChange={e => setDiscountLabel(e.target.value)} placeholder="ex: -20%"
+                <label className="text-[11px] text-gray-400 font-semibold">{t('publisherCmp.field.discountLabel')}</label>
+                <input value={discountLabel} onChange={e => setDiscountLabel(e.target.value)} placeholder={t('publisherCmp.field.discountPlaceholder')}
                   className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:border-brand" />
               </div>
               <div>
-                <label className="text-[11px] text-gray-400 font-semibold">Válido até</label>
+                <label className="text-[11px] text-gray-400 font-semibold">{t('publisherCmp.field.validUntil')}</label>
                 <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)}
                   className="w-full h-11 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:border-brand" />
               </div>
@@ -174,7 +176,7 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
           )}
 
           {/* Local */}
-          <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Local (opcional)"
+          <input value={location} onChange={e => setLocation(e.target.value)} placeholder={t('publisherCmp.field.locationPlaceholder')}
             className="w-full h-11 px-3.5 rounded-xl border border-gray-200 text-[14px] focus:outline-none focus:border-brand" />
 
           {error && <p className="text-[12px] text-red-500">{error}</p>}
@@ -183,7 +185,7 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
         <div className="px-5 pb-8 pt-1 sticky bottom-0 bg-white">
           <button onClick={() => save.mutate()} disabled={!canSave}
             className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2">
-            {save.isPending ? <><Loader2 size={16} className="animate-spin" /> Publicando…</> : (editing ? 'Salvar alterações' : 'Publicar')}
+            {save.isPending ? <><Loader2 size={16} className="animate-spin" /> {t('publisherCmp.action.publishing')}</> : (editing ? t('publisherCmp.action.saveChanges') : t('publisherCmp.action.publish'))}
           </button>
         </div>
       </div>

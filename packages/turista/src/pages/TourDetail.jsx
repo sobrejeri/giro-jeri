@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -54,6 +55,7 @@ function suggest(vehicles, people, filter = 'recommended') {
 }
 
 function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
+  const { t } = useTranslation()
   return (
     <div className={`bg-white rounded-xl p-3 border flex items-center gap-3 transition-all ${qty > 0 ? 'border-brand shadow-sm shadow-brand/10' : 'border-gray-100'}`}>
       <div className={`w-12 h-10 rounded-lg flex items-center justify-center overflow-hidden shrink-0 ${vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
@@ -67,12 +69,12 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
         <p className="text-[13px] font-bold text-gray-900 truncate">{vehicle.name}</p>
         <div className="flex items-center gap-1 mt-0.5">
           <Users size={10} className="text-gray-400" />
-          <span className="text-[11px] text-gray-500">Até {vehicle.seat_capacity} pessoas</span>
+          <span className="text-[11px] text-gray-500">{t('tourDetailPg.capacityUpTo', { count: vehicle.seat_capacity })}</span>
         </div>
         {vehicle.base_price && (
           <p className="text-[11px] text-gray-500 mt-0.5">
             R$ {Number(vehicle.base_price).toLocaleString('pt-BR')}
-            <span className="text-gray-400"> /veículo</span>
+            <span className="text-gray-400"> {t('tourDetailPg.perVehicle')}</span>
           </p>
         )}
       </div>
@@ -105,12 +107,13 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
 }
 
 const FILTERS = [
-  { id: 'recommended', label: 'Recomendado', emoji: '⭐' },
-  { id: 'economico',   label: 'Econômico',   emoji: '💰' },
-  { id: 'conforto',    label: 'Conforto',     emoji: '🛡️' },
+  { id: 'recommended', emoji: '⭐' },
+  { id: 'economico',   emoji: '💰' },
+  { id: 'conforto',    emoji: '🛡️' },
 ]
 
 export default function TourDetail() {
+  const { t } = useTranslation()
   const { id }    = useParams()
   const navigate  = useNavigate()
   const location  = useLocation()
@@ -194,16 +197,16 @@ export default function TourDetail() {
           short_description:     tour.short_description || null,
           service_type:          'tour',
           booking_mode:          'shared',
-          service_date:          'A confirmar',
+          service_date:          t('tourDetailPg.toConfirm'),
           service_date_iso:      new Date().toISOString().split('T')[0],
-          service_time:          'A confirmar',
+          service_time:          t('tourDetailPg.toConfirm'),
           people_count:          people,
           price_per_person:      pricePerPerson,
           origin_text:           origin.name,
           origin_latitude:       origin.latitude,
           origin_longitude:      origin.longitude,
           total_price:           total,
-          breakdown:             { [`${people}x por pessoa`]: total },
+          breakdown:             { [t('tourDetailPg.breakdownPerPerson', { count: people })]: total },
           cover_image_url:       tour.cover_image_url || null,
           region_id:             regionId,
           service_id:            tour.id,
@@ -219,16 +222,16 @@ export default function TourDetail() {
           short_description:     tour.short_description || null,
           service_type:          'tour',
           booking_mode:          'private',
-          service_date:          'A confirmar',
+          service_date:          t('tourDetailPg.toConfirm'),
           service_date_iso:      new Date().toISOString().split('T')[0],
-          service_time:          'A confirmar',
+          service_time:          t('tourDetailPg.toConfirm'),
           people_count:          people,
           origin_text:           origin.name,
           origin_latitude:       origin.latitude,
           origin_longitude:      origin.longitude,
           vehicle_name:          cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
           total_price:           cartTotal,
-          breakdown:             { 'Veículos selecionados': cartTotal },
+          breakdown:             { [t('tourDetailPg.breakdownVehicles')]: cartTotal },
           cover_image_url:       tour.cover_image_url || null,
           region_id:             regionId,
           service_id:            tour.id,
@@ -243,7 +246,7 @@ export default function TourDetail() {
   if (isLoading) return <PageSpinner />
   if (!tour) return (
     <div className="max-w-4xl mx-auto px-4 py-20 text-center text-gray-400">
-      Passeio não encontrado.
+      {t('tourDetailPg.notFound')}
     </div>
   )
 
@@ -256,7 +259,7 @@ export default function TourDetail() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <Link to="/passeios" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand mb-6 transition-colors">
         <ChevronLeft size={16} />
-        Passeios
+        {t('tourDetailPg.backToTours')}
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -284,10 +287,10 @@ export default function TourDetail() {
             </h1>
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 mb-4">
               {tour.duration_hours && (
-                <span className="flex items-center gap-1.5"><Clock size={15} /> {tour.duration_hours}h de duração</span>
+                <span className="flex items-center gap-1.5"><Clock size={15} /> {t('tourDetailPg.durationHours', { hours: tour.duration_hours })}</span>
               )}
               {tour.max_people && (
-                <span className="flex items-center gap-1.5"><Users size={15} /> até {tour.max_people} pessoas</span>
+                <span className="flex items-center gap-1.5"><Users size={15} /> {t('tourDetailPg.maxPeople', { count: tour.max_people })}</span>
               )}
               {tour.difficulty_level && (
                 <span className="flex items-center gap-1.5"><UserCheck size={15} /> {tour.difficulty_level}</span>
@@ -300,7 +303,7 @@ export default function TourDetail() {
             {tour.includes_text && (
               <Card className="p-5">
                 <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <CheckCircle size={16} className="text-green-500" /> Incluído
+                  <CheckCircle size={16} className="text-green-500" /> {t('tourDetailPg.included')}
                 </h4>
                 <ul className="space-y-1.5">
                   {tour.includes_text.split(',').map((item, i) => (
@@ -315,7 +318,7 @@ export default function TourDetail() {
             {tour.excludes_text && (
               <Card className="p-5">
                 <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <XCircle size={16} className="text-gray-400" /> Não incluído
+                  <XCircle size={16} className="text-gray-400" /> {t('tourDetailPg.notIncluded')}
                 </h4>
                 <ul className="space-y-1.5">
                   {tour.excludes_text.split(',').map((item, i) => (
@@ -330,7 +333,7 @@ export default function TourDetail() {
             {tour.cancellation_policy_text && (
               <Card className="p-5">
                 <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <XCircle size={16} className="text-red-400" /> Cancelamento
+                  <XCircle size={16} className="text-red-400" /> {t('tourDetailPg.cancellation')}
                 </h4>
                 <p className="text-sm text-gray-600">{tour.cancellation_policy_text}</p>
               </Card>
@@ -339,7 +342,7 @@ export default function TourDetail() {
 
           {tour.tour_schedules && tour.tour_schedules.length > 0 && (
             <Card className="p-5">
-              <h4 className="font-semibold text-gray-900 mb-3">Horários disponíveis</h4>
+              <h4 className="font-semibold text-gray-900 mb-3">{t('tourDetailPg.schedulesTitle')}</h4>
               <div className="flex flex-wrap gap-2">
                 {tour.tour_schedules.map((s) => (
                   <span key={s.id} className="inline-flex items-center gap-1.5 bg-orange-50 text-brand text-sm font-medium px-3 py-1.5 rounded-full">
@@ -354,7 +357,7 @@ export default function TourDetail() {
         {/* ── Booking sidebar ───────────────────────── */}
         <div className="lg:col-span-1">
           <Card className="p-5 sticky top-20 space-y-4">
-            <h3 className="font-semibold text-gray-900">Reservar passeio</h3>
+            <h3 className="font-semibold text-gray-900">{t('tourDetailPg.bookTitle')}</h3>
 
             {tour.is_shared_enabled && tour.is_private_enabled && (
               <div className="grid grid-cols-2 gap-2">
@@ -362,25 +365,25 @@ export default function TourDetail() {
                   onClick={() => setMode('shared')}
                   className={`h-9 rounded-xl text-sm font-medium transition-colors ${mode === 'shared' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                 >
-                  Compartilhado
+                  {t('tourDetailPg.shared')}
                 </button>
                 <button
                   onClick={() => setMode('private')}
                   className={`h-9 rounded-xl text-sm font-medium transition-colors ${mode === 'private' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                 >
-                  Privativo
+                  {t('tourDetailPg.private')}
                 </button>
               </div>
             )}
 
             {!tour.is_private_enabled && tour.is_shared_enabled && (
               <div className="bg-orange-50 text-brand text-xs font-medium px-3 py-2 rounded-lg text-center">
-                Apenas compartilhado
+                {t('tourDetailPg.sharedOnly')}
               </div>
             )}
             {tour.is_private_enabled && !tour.is_shared_enabled && (
               <div className="bg-orange-50 text-brand text-xs font-medium px-3 py-2 rounded-lg text-center">
-                Apenas privativo
+                {t('tourDetailPg.privateOnly')}
               </div>
             )}
 
@@ -393,18 +396,18 @@ export default function TourDetail() {
             >
               <MapPin size={15} className="text-brand shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-gray-400 leading-none">Local de saída *</p>
+                <p className="text-[10px] text-gray-400 leading-none">{t('tourDetailPg.originLabel')}</p>
                 <p className={`text-[13px] font-semibold mt-0.5 truncate ${
                   origin ? 'text-gray-700' : 'text-brand'
                 }`}>
-                  {origin?.name || 'Selecionar local'}
+                  {origin?.name || t('tourDetailPg.selectLocation')}
                 </p>
               </div>
             </button>
 
             {/* People */}
             <div>
-              <p className="text-[13px] font-semibold text-gray-700 mb-2">Pessoas</p>
+              <p className="text-[13px] font-semibold text-gray-700 mb-2">{t('tourDetailPg.peopleLabel')}</p>
               <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2.5">
                 <button
                   onClick={() => setPeople(p => Math.max(1, p - 1))}
@@ -428,7 +431,7 @@ export default function TourDetail() {
                 {sharedPrice ? (
                   <>
                     <div className="bg-brand rounded-xl p-4">
-                      <p className="text-white/70 text-[12px] font-medium">Preço por pessoa</p>
+                      <p className="text-white/70 text-[12px] font-medium">{t('tourDetailPg.pricePerPerson')}</p>
                       <p className="text-white text-[26px] font-extrabold leading-tight mt-0.5">
                         R$ {sharedPrice.toLocaleString('pt-BR')}
                       </p>
@@ -437,7 +440,7 @@ export default function TourDetail() {
                       </p>
                       <div className="flex items-center justify-between mt-3 bg-white/15 rounded-lg px-3 py-2">
                         <span className="text-white/80 text-[13px]">
-                          {people} {people === 1 ? 'pessoa' : 'pessoas'}
+                          {t('tourDetailPg.peopleBadge', { count: people })}
                         </span>
                         <span className="text-white font-bold text-[15px]">
                           R$ {sharedTotal.toLocaleString('pt-BR')}
@@ -448,14 +451,14 @@ export default function TourDetail() {
                       <div className="flex items-start gap-2">
                         <Bus size={13} className="text-blue-500 shrink-0 mt-0.5" />
                         <p className="text-[11px] text-blue-700 leading-relaxed">
-                          Passeio compartilhado com outros turistas em veículo coletivo. Valor fixo por pessoa, com guia incluso.
+                          {t('tourDetailPg.sharedInfo')}
                         </p>
                       </div>
                     </div>
                   </>
                 ) : (
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <p className="text-[13px] text-gray-400">Passeio não disponível em modo compartilhado.</p>
+                    <p className="text-[13px] text-gray-400">{t('tourDetailPg.sharedUnavailable')}</p>
                   </div>
                 )}
               </>
@@ -467,10 +470,10 @@ export default function TourDetail() {
                 {suggestion && (
                   <div>
                     <p className="text-[13px] font-semibold text-gray-700 mb-2">
-                      Sugestão para {people} {people === 1 ? 'pessoa' : 'pessoas'}
+                      {t('tourDetailPg.suggestionFor', { count: people })}
                     </p>
                     <div className="flex gap-1.5 mb-2">
-                      {FILTERS.map(({ id: fid, label, emoji }) => (
+                      {FILTERS.map(({ id: fid, emoji }) => (
                         <button
                           key={fid}
                           onClick={() => setFilter(fid)}
@@ -480,7 +483,7 @@ export default function TourDetail() {
                               : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                           }`}
                         >
-                          {emoji} {label}
+                          {emoji} {t(`tourDetailPg.filter.${fid}`)}
                         </button>
                       ))}
                     </div>
@@ -499,7 +502,7 @@ export default function TourDetail() {
                         <div className="flex items-center gap-1 mt-0.5">
                           <Users size={9} className="text-gray-400" />
                           <span className="text-[10px] text-gray-500">
-                            Até {suggestion.vehicle.seat_capacity * suggestion.qty} pessoas
+                            {t('tourDetailPg.capacityUpTo', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}
                           </span>
                         </div>
                       </div>
@@ -513,7 +516,7 @@ export default function TourDetail() {
                           onClick={() => setCart({ [suggestion.vehicle.id]: suggestion.qty })}
                           className="bg-brand text-white text-[10px] font-bold px-2.5 py-1 rounded-full active:scale-95 transition-transform"
                         >
-                          Aplicar
+                          {t('tourDetailPg.apply')}
                         </button>
                       </div>
                     </div>
@@ -522,8 +525,8 @@ export default function TourDetail() {
 
                 {sortedVehicles.length > 0 && (
                   <div>
-                    <p className="text-[13px] font-semibold text-gray-700">Catálogo de veículos</p>
-                    <p className="text-[11px] text-brand mt-0.5 mb-2">Monte sua combinação ideal</p>
+                    <p className="text-[13px] font-semibold text-gray-700">{t('tourDetailPg.vehicleCatalog')}</p>
+                    <p className="text-[11px] text-brand mt-0.5 mb-2">{t('tourDetailPg.buildCombo')}</p>
                     <div className="space-y-2">
                       {sortedVehicles.map(v => (
                         <VehicleCard
@@ -547,7 +550,7 @@ export default function TourDetail() {
                       <div className="flex items-center gap-1">
                         <Users size={11} className={cartCapacity >= people ? 'text-green-600' : 'text-red-500'} />
                         <span className={`text-[11px] font-medium ${cartCapacity >= people ? 'text-green-600' : 'text-red-500'}`}>
-                          {cartCapacity}/{people} pax
+                          {t('tourDetailPg.paxCount', { capacity: cartCapacity, people })}
                         </span>
                       </div>
                       <span className="text-[16px] font-extrabold text-brand">
@@ -569,10 +572,10 @@ export default function TourDetail() {
               }`}
             >
               {mode === 'private' && !cartHasItems
-                ? 'Selecione veículos'
+                ? t('tourDetailPg.selectVehicles')
                 : mode === 'private' && cartCapacity < people
-                  ? 'Capacidade insuficiente'
-                  : 'Continuar'}
+                  ? t('tourDetailPg.insufficientCapacity')
+                  : t('tourDetailPg.continueLabel')}
             </button>
           </Card>
         </div>

@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { X, ImagePlus, Loader2, Plus, Check, Film } from 'lucide-react'
 import { api } from '../lib/api'
 
@@ -39,6 +40,7 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
  *   onPublished  — chamado após publicar com sucesso (para refazer o fetch)
  */
 export default function StoryPublisher({ highlights = [], onClose, onPublished }) {
+  const { t } = useTranslation()
   const fileRef = useRef(null)
 
   const [mediaUrl,  setMediaUrl]  = useState('')
@@ -65,14 +67,14 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
     try {
       if (isVideo) {
         if (file.size > MAX_VIDEO_BYTES) {
-          throw new Error('Vídeo muito grande (máx. 50 MB).')
+          throw new Error(t('publisherCmp.errors.videoTooLarge'))
         }
         const ct  = (file.type || 'video/mp4').split(';')[0].trim()
         const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '')
         const { signed_url, public_url } = await api.getStorageSignedUrl({
           filename: `story.${ext}`, content_type: ct,
         })
-        if (!signed_url) throw new Error('Não foi possível gerar URL de upload')
+        if (!signed_url) throw new Error(t('publisherCmp.errors.uploadUrl'))
         await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest()
           xhr.open('PUT', signed_url)
@@ -80,8 +82,8 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
           xhr.upload.onprogress = (ev) => {
             if (ev.lengthComputable) setPct(Math.round((ev.loaded / ev.total) * 100))
           }
-          xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Erro ${xhr.status} ao enviar`)))
-          xhr.onerror = () => reject(new Error('Falha de rede'))
+          xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(t('publisherCmp.errors.uploadStatus', { status: xhr.status }))))
+          xhr.onerror = () => reject(new Error(t('publisherCmp.errors.network')))
           xhr.send(file)
         })
         setMediaUrl(public_url)
@@ -89,11 +91,11 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
         const dataUrl = await fileToResizedDataUrl(file)
         const result  = await api.uploadSiteImage(dataUrl, 'stories')
         const url = result?.url || (typeof result === 'string' ? result : null)
-        if (!url) throw new Error('Falha no upload da imagem')
+        if (!url) throw new Error(t('publisherCmp.errors.uploadImage'))
         setMediaUrl(url)
       }
     } catch (err) {
-      setError(err?.message || 'Erro ao enviar mídia')
+      setError(err?.message || t('publisherCmp.errors.sendMedia'))
       setPreview('')
       setMediaUrl('')
     } finally {
@@ -121,7 +123,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
       })
     },
     onSuccess: () => { onPublished?.(); onClose() },
-    onError:   (err) => setError(err?.message || 'Erro ao publicar'),
+    onError:   (err) => setError(err?.message || t('publisherCmp.errors.publish')),
   })
 
   const canPublish =
@@ -140,7 +142,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3">
-          <p className="text-[16px] font-bold text-gray-900">Publicar destaque</p>
+          <p className="text-[16px] font-bold text-gray-900">{t('publisherCmp.title.publishStory')}</p>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
             <X size={16} className="text-gray-500" />
           </button>
@@ -157,7 +159,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
               {uploading && (
                 <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2 text-white">
                   <Loader2 size={22} className="animate-spin" />
-                  <span className="text-[12px]">{pct > 0 ? `Enviando ${pct}%` : 'Enviando…'}</span>
+                  <span className="text-[12px]">{pct > 0 ? t('publisherCmp.status.uploadingPercent', { pct }) : t('publisherCmp.status.uploading')}</span>
                 </div>
               )}
               {!uploading && (
@@ -165,7 +167,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
                   onClick={() => fileRef.current?.click()}
                   className="absolute top-2 right-2 bg-black/60 text-white text-[11px] px-3 py-1.5 rounded-full"
                 >
-                  Trocar
+                  {t('publisherCmp.action.change')}
                 </button>
               )}
             </div>
@@ -175,8 +177,8 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
               className="w-full aspect-[4/5] border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center gap-2 text-gray-400 active:scale-[0.99] transition-transform"
             >
               <ImagePlus size={28} />
-              <span className="text-[13px] font-medium">Selecionar foto ou vídeo</span>
-              <span className="text-[11px] text-gray-400">JPG, PNG ou MP4 (até 50 MB)</span>
+              <span className="text-[13px] font-medium">{t('publisherCmp.action.selectMedia')}</span>
+              <span className="text-[11px] text-gray-400">{t('publisherCmp.hint.mediaFormats')}</span>
             </button>
           )}
 
@@ -184,7 +186,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
           {mediaUrl && (
             <>
               <div>
-                <p className="text-[13px] font-semibold text-gray-900 mb-2">Adicionar ao destaque</p>
+                <p className="text-[13px] font-semibold text-gray-900 mb-2">{t('publisherCmp.label.addToHighlight')}</p>
                 <div className="flex gap-2 mb-2">
                   {highlights.length > 0 && (
                     <button
@@ -193,7 +195,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
                         target === 'existing' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-500'
                       }`}
                     >
-                      Existente
+                      {t('publisherCmp.option.existing')}
                     </button>
                   )}
                   <button
@@ -202,7 +204,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
                       target === 'new' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-500'
                     }`}
                   >
-                    <span className="inline-flex items-center gap-1"><Plus size={12} /> Novo destaque</span>
+                    <span className="inline-flex items-center gap-1"><Plus size={12} /> {t('publisherCmp.option.newHighlight')}</span>
                   </button>
                 </div>
 
@@ -226,7 +228,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     maxLength={80}
-                    placeholder="Nome do destaque (ex: Passeios, Praias)"
+                    placeholder={t('publisherCmp.field.highlightNamePlaceholder')}
                     className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-[14px] text-gray-900 placeholder-gray-400 outline-none focus:border-brand/40 focus:bg-white"
                   />
                 )}
@@ -237,7 +239,7 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
                 maxLength={80}
-                placeholder="Legenda (opcional)"
+                placeholder={t('publisherCmp.field.captionPlaceholder')}
                 className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-[14px] text-gray-900 placeholder-gray-400 outline-none focus:border-brand/40 focus:bg-white"
               />
             </>
@@ -252,8 +254,8 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
             className="w-full flex items-center justify-center gap-2 bg-brand text-white font-semibold rounded-2xl py-3.5 active:scale-[0.98] transition-transform disabled:opacity-40 disabled:active:scale-100"
           >
             {publish.isPending
-              ? <><Loader2 size={16} className="animate-spin" /> Publicando…</>
-              : <><Film size={16} /> Publicar</>}
+              ? <><Loader2 size={16} className="animate-spin" /> {t('publisherCmp.action.publishing')}</>
+              : <><Film size={16} /> {t('publisherCmp.action.publish')}</>}
           </button>
         </div>
       </div>

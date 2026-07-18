@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Download, Share, X, Plus } from 'lucide-react'
 
 // Já está rodando como app instalado? (Android: display-mode standalone; iOS: navigator.standalone)
@@ -19,6 +20,7 @@ function isIOS() {
  * - Some quando o app já está instalado (modo standalone).
  */
 export default function InstallPrompt() {
+  const { t } = useTranslation()
   const [installed, setInstalled] = useState(isStandalone())
   const [deferred,  setDeferred]  = useState(() => window.deferredInstallPrompt || null)
   const [showHelp,  setShowHelp]  = useState(false)
@@ -60,8 +62,8 @@ export default function InstallPrompt() {
           <Download size={20} className="text-white" />
         </div>
         <div className="flex-1 text-left">
-          <p className="text-[14px] font-bold text-gray-900">Instalar o app Turiva</p>
-          <p className="text-[11px] text-gray-500">Acesso rápido na tela inicial, como um aplicativo</p>
+          <p className="text-[14px] font-bold text-gray-900">{t('promptsCmp.install.title')}</p>
+          <p className="text-[11px] text-gray-500">{t('promptsCmp.install.subtitle')}</p>
         </div>
       </button>
 
@@ -71,7 +73,7 @@ export default function InstallPrompt() {
           <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[60] pb-8">
             <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
             <div className="flex items-center justify-between px-5 py-3">
-              <p className="text-[16px] font-bold text-gray-900">Instalar o app</p>
+              <p className="text-[16px] font-bold text-gray-900">{t('promptsCmp.install.sheetTitle')}</p>
               <button onClick={() => setShowHelp(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
                 <X size={16} className="text-gray-500" />
               </button>
@@ -80,21 +82,21 @@ export default function InstallPrompt() {
               {ios ? (
                 <>
                   <p className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-bold text-brand">1.</span> Toque em
-                    <Share size={16} className="text-brand" /> <b>Compartilhar</b>, na barra do Safari.
+                    <span className="font-bold text-brand">1.</span> {t('promptsCmp.install.ios.step1Pre')}
+                    <Share size={16} className="text-brand" /> <b>{t('promptsCmp.install.ios.step1Bold')}</b>{t('promptsCmp.install.ios.step1Post')}
                   </p>
-                  <p><span className="font-bold text-brand">2.</span> Role e escolha <b>“Adicionar à Tela de Início”</b>.</p>
+                  <p><span className="font-bold text-brand">2.</span> {t('promptsCmp.install.ios.step2Pre')} <b>“{t('promptsCmp.install.ios.step2Bold')}”</b>.</p>
                   <p className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-bold text-brand">3.</span> Toque em <b>“Adicionar”</b>
-                    <Plus size={15} className="text-brand" /> — pronto, o ícone aparece na tela.
+                    <span className="font-bold text-brand">3.</span> {t('promptsCmp.install.ios.step3Pre')} <b>“{t('promptsCmp.install.ios.step3Bold')}”</b>
+                    <Plus size={15} className="text-brand" /> {t('promptsCmp.install.ios.step3Post')}
                   </p>
-                  <p className="text-[12px] text-gray-400 pt-1">No iPhone, instale pelo <b>Safari</b> (não pelo Chrome).</p>
+                  <p className="text-[12px] text-gray-400 pt-1">{t('promptsCmp.install.ios.footnotePre')} <b>{t('promptsCmp.install.ios.footnoteBold')}</b> {t('promptsCmp.install.ios.footnotePost')}</p>
                 </>
               ) : (
                 <>
-                  <p><span className="font-bold text-brand">1.</span> Abra o menu do navegador (⋮).</p>
-                  <p><span className="font-bold text-brand">2.</span> Toque em <b>“Instalar app”</b> ou <b>“Adicionar à tela inicial”</b>.</p>
-                  <p><span className="font-bold text-brand">3.</span> Confirme — o ícone aparece na tela inicial.</p>
+                  <p><span className="font-bold text-brand">1.</span> {t('promptsCmp.install.android.step1')}</p>
+                  <p><span className="font-bold text-brand">2.</span> {t('promptsCmp.install.android.step2Pre')} <b>“{t('promptsCmp.install.android.step2Bold1')}”</b> {t('promptsCmp.install.android.step2Or')} <b>“{t('promptsCmp.install.android.step2Bold2')}”</b>.</p>
+                  <p><span className="font-bold text-brand">3.</span> {t('promptsCmp.install.android.step3')}</p>
                 </>
               )}
             </div>

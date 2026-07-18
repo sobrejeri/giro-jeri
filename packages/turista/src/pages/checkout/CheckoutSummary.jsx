@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useCart } from '../../contexts/CartContext'
@@ -32,18 +33,24 @@ function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigi
 
 /* ── Date picker ────────────────────────────────────────────── */
 function DatePickerSheet({ value, onChange, onClose, minDate: minDateProp }) {
+  const { t } = useTranslation()
   const today = minDateProp || startOfDay(new Date())
   const [view, setView] = useState(startOfMonth(value))
   const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
   const offset = getDay(startOfMonth(view))
   const canPrev = !isBefore(subMonths(view, 1), startOfMonth(today))
+  const weekdayLabels = [
+    t('checkoutPg.weekday.sun'), t('checkoutPg.weekday.mon'), t('checkoutPg.weekday.tue'),
+    t('checkoutPg.weekday.wed'), t('checkoutPg.weekday.thu'), t('checkoutPg.weekday.fri'),
+    t('checkoutPg.weekday.sat'),
+  ]
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
         <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
         <div className="flex items-center justify-between px-5 py-3">
-          <p className="text-[16px] font-bold text-gray-900">Escolha a data</p>
+          <p className="text-[16px] font-bold text-gray-900">{t('checkoutPg.datePicker.title')}</p>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-lg leading-none">×</button>
         </div>
         <div className="flex items-center justify-between px-5 mb-3">
@@ -57,7 +64,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate: minDateProp }) {
           </button>
         </div>
         <div className="grid grid-cols-7 px-4 mb-1">
-          {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>)}
+          {weekdayLabels.map((d,i) => <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>)}
         </div>
         <div className="grid grid-cols-7 px-4 gap-y-0.5 mb-4">
           {Array.from({ length: offset }).map((_,i) => <div key={`e${i}`} />)}
@@ -78,7 +85,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate: minDateProp }) {
           })}
         </div>
         <div className="px-4 pb-8">
-          <button onClick={onClose} className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">Confirmar</button>
+          <button onClick={onClose} className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">{t('checkoutPg.datePicker.confirm')}</button>
         </div>
       </div>
     </>
@@ -87,6 +94,7 @@ function DatePickerSheet({ value, onChange, onClose, minDate: minDateProp }) {
 
 /* ── Vehicle row with +/- ───────────────────────────────────── */
 function VehicleRow({ vehicle, qty, unitPrice, onAdd, onRemove }) {
+  const { t } = useTranslation()
   return (
     <div className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
       qty > 0 ? 'border-brand bg-brand/5' : 'border-gray-100'
@@ -98,10 +106,10 @@ function VehicleRow({ vehicle, qty, unitPrice, onAdd, onRemove }) {
         <p className="text-[13px] font-bold text-gray-900 truncate">{vehicle.name}</p>
         <div className="flex items-center gap-1 mt-0.5">
           <Users size={10} className="text-gray-400" />
-          <span className="text-[11px] text-gray-400">Até {vehicle.seat_capacity} pessoas</span>
+          <span className="text-[11px] text-gray-400">{t('checkoutPg.vehicleRow.capacity', { count: vehicle.seat_capacity })}</span>
         </div>
         {unitPrice && (
-          <p className="text-[11px] text-gray-500 mt-0.5">R$ {Number(unitPrice).toLocaleString('pt-BR')}<span className="text-gray-400">/veículo</span></p>
+          <p className="text-[11px] text-gray-500 mt-0.5">R$ {Number(unitPrice).toLocaleString('pt-BR')}<span className="text-gray-400">{t('checkoutPg.vehicleRow.perVehicle')}</span></p>
         )}
       </div>
       {qty === 0 ? (
@@ -134,6 +142,7 @@ export default function CheckoutSummary() {
 }
 
 function CheckoutSummaryInner() {
+  const { t }          = useTranslation()
   const navigate       = useNavigate()
   const { state: ls }  = useLocation()
   const { removeItem: removeCartItem } = useCart()
@@ -312,7 +321,7 @@ function CheckoutSummaryInner() {
       setAppliedCoupon({ code: code.toUpperCase(), discount: Number(r?.discount) || 0 })
     } catch (err) {
       setAppliedCoupon(null)
-      setCouponErr(err?.message || 'Cupom inválido')
+      setCouponErr(err?.message || t('checkoutPg.coupon.invalid'))
     } finally {
       setCouponBusy(false)
     }
@@ -322,8 +331,8 @@ function CheckoutSummaryInner() {
   const canSave     = capacityOk
   const canProceed  = hasPricing && !!time
 
-  const dateLabel = isToday(date) ? 'Hoje'
-    : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+  const dateLabel = isToday(date) ? t('checkoutPg.date.today')
+    : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('checkoutPg.date.tomorrow')
     : format(date, "d 'de' MMMM", { locale: ptBR })
 
   const vehicleLabel = cartHasItems
@@ -331,12 +340,12 @@ function CheckoutSummaryInner() {
     : ls.vehicle_name
 
   const details = [
-    ...(ls.origin_text      ? [{ icon: MapPin,    label: 'Saída',    value: ls.origin_text }]      : []),
-    ...(ls.destination_text ? [{ icon: MapPin,    label: 'Destino',  value: ls.destination_text }] : []),
-    { icon: Calendar, label: 'Data',    value: dateLabel },
-    { icon: Clock,    label: 'Horário', value: time || 'A confirmar' },
-    { icon: Users,    label: 'Pessoas', value: `${people} ${people === 1 ? 'pessoa' : 'pessoas'}` },
-    ...(hasVehicles && vehicleLabel ? [{ icon: Car, label: 'Veículo', value: vehicleLabel }] : []),
+    ...(ls.origin_text      ? [{ icon: MapPin,    label: t('checkoutPg.labels.origin'),      value: ls.origin_text }]      : []),
+    ...(ls.destination_text ? [{ icon: MapPin,    label: t('checkoutPg.labels.destination'), value: ls.destination_text }] : []),
+    { icon: Calendar, label: t('checkoutPg.labels.date'), value: dateLabel },
+    { icon: Clock,    label: t('checkoutPg.labels.time'), value: time || 'A confirmar' },
+    { icon: Users,    label: t('checkoutPg.labels.people'), value: t('checkoutPg.peopleCount', { count: people }) },
+    ...(hasVehicles && vehicleLabel ? [{ icon: Car, label: t('checkoutPg.labels.vehicle'), value: vehicleLabel }] : []),
   ]
 
   const paymentState = {
@@ -421,7 +430,7 @@ function CheckoutSummaryInner() {
         },
       })
     } catch (err) {
-      setReqError(err?.message || 'Erro ao enviar solicitação. Tente novamente.')
+      setReqError(err?.message || t('checkoutPg.error.requestFailed'))
     } finally {
       setRequesting(false)
     }
@@ -443,7 +452,11 @@ function CheckoutSummaryInner() {
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
           <h1 className="text-lg font-bold text-gray-900">
-            {editing ? 'Editar reserva' : (ls?.cartBatch ? `Confirmar ${ls.cartBatch.index + 1} de ${ls.cartBatch.queue.length}` : 'Resumo da reserva')}
+            {editing
+              ? t('checkoutPg.header.editTitle')
+              : (ls?.cartBatch
+                  ? t('checkoutPg.header.confirmProgress', { current: ls.cartBatch.index + 1, total: ls.cartBatch.queue.length })
+                  : t('checkoutPg.header.summaryTitle'))}
           </h1>
         </div>
       </header>
@@ -455,9 +468,9 @@ function CheckoutSummaryInner() {
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
             <Clock size={15} className="text-amber-500 shrink-0 mt-0.5" />
             <div>
-              <p className="text-[13px] font-bold text-amber-800">Reservas para hoje encerradas</p>
+              <p className="text-[13px] font-bold text-amber-800">{t('checkoutPg.cutoff.title')}</p>
               <p className="text-[12px] text-amber-700 mt-0.5 leading-relaxed">
-                Este passeio só aceita solicitações até {cutoffLabel}. A data mínima disponível é amanhã.
+                {t('checkoutPg.cutoff.description', { time: cutoffLabel })}
               </p>
             </div>
           </div>
@@ -477,11 +490,11 @@ function CheckoutSummaryInner() {
             <div className="absolute bottom-3 left-4 right-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isTransfer ? 'bg-teal-500 text-white' : 'bg-brand text-white'}`}>
-                  {isTransfer ? 'Transfer' : 'Passeio'}
+                  {isTransfer ? t('checkoutPg.serviceType.transfer') : t('checkoutPg.serviceType.tour')}
                 </span>
                 {!isTransfer && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm">
-                    {isPrivateTour ? 'Privativo' : 'Compartilhado'}
+                    {isPrivateTour ? t('checkoutPg.bookingMode.private') : t('checkoutPg.bookingMode.shared')}
                   </span>
                 )}
               </div>
@@ -501,12 +514,12 @@ function CheckoutSummaryInner() {
         {!editing && (
           <div className="bg-white rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[15px] font-bold text-gray-900">Detalhes da reserva</h2>
+              <h2 className="text-[15px] font-bold text-gray-900">{t('checkoutPg.details.title')}</h2>
               <button
                 onClick={() => setEditing(true)}
                 className="flex items-center gap-1 text-[12px] font-semibold text-brand active:opacity-70"
               >
-                <Pen size={12} /> Editar
+                <Pen size={12} /> {t('checkoutPg.common.edit')}
               </button>
             </div>
             <div className="space-y-2">
@@ -518,7 +531,7 @@ function CheckoutSummaryInner() {
                     <MapPin size={15} className="text-brand" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-gray-400">Saída</p>
+                    <p className="text-[11px] text-gray-400">{t('checkoutPg.labels.origin')}</p>
                     <p className="text-[13px] font-semibold text-gray-900">{ls.origin_text}</p>
                   </div>
                 </div>
@@ -531,7 +544,7 @@ function CheckoutSummaryInner() {
                     <MapPin size={15} className="text-brand" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-gray-400">Destino</p>
+                    <p className="text-[11px] text-gray-400">{t('checkoutPg.labels.destination')}</p>
                     <p className="text-[13px] font-semibold text-gray-900">{ls.destination_text}</p>
                   </div>
                 </div>
@@ -546,7 +559,7 @@ function CheckoutSummaryInner() {
                   <Calendar size={15} className="text-brand" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-gray-400">Data</p>
+                  <p className="text-[11px] text-gray-400">{t('checkoutPg.labels.date')}</p>
                   <p className="text-[13px] font-semibold text-gray-900">{dateLabel}</p>
                 </div>
                 <ChevronRight size={14} className="text-gray-300 shrink-0" />
@@ -563,10 +576,10 @@ function CheckoutSummaryInner() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[11px] text-gray-400">
-                      Horário <span className="text-amber-500 font-bold">*</span>
+                      {t('checkoutPg.labels.time')} <span className="text-amber-500 font-bold">*</span>
                     </p>
                     <p className={`text-[13px] font-semibold ${time ? 'text-gray-900' : 'text-amber-500'}`}>
-                      {time || 'Selecionar horário'}
+                      {time || t('checkoutPg.time.select')}
                     </p>
                   </div>
                   <ChevronRight size={14} className="text-gray-300 shrink-0" />
@@ -586,8 +599,8 @@ function CheckoutSummaryInner() {
                   <Users size={15} className="text-brand" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-gray-400">Pessoas</p>
-                  <p className="text-[13px] font-semibold text-gray-900">{people} {people === 1 ? 'pessoa' : 'pessoas'}</p>
+                  <p className="text-[11px] text-gray-400">{t('checkoutPg.labels.people')}</p>
+                  <p className="text-[13px] font-semibold text-gray-900">{t('checkoutPg.peopleCount', { count: people })}</p>
                 </div>
               </div>
 
@@ -598,7 +611,7 @@ function CheckoutSummaryInner() {
                     <Car size={15} className="text-brand" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-gray-400">Veículo</p>
+                    <p className="text-[11px] text-gray-400">{t('checkoutPg.labels.vehicle')}</p>
                     <p className="text-[13px] font-semibold text-gray-900">{vehicleLabel}</p>
                   </div>
                 </div>
@@ -608,7 +621,7 @@ function CheckoutSummaryInner() {
               {!time && (
                 <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-1">
                   <AlertCircle size={12} className="text-amber-500 shrink-0" />
-                  <p className="text-[11px] text-amber-700 font-medium">Selecione o horário para continuar</p>
+                  <p className="text-[11px] text-amber-700 font-medium">{t('checkoutPg.hint.selectTime')}</p>
                 </div>
               )}
             </div>
@@ -618,11 +631,11 @@ function CheckoutSummaryInner() {
         {/* ── EDIT MODE ─────────────────────────────────────── */}
         {editing && (
           <div className="bg-white rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)] space-y-4">
-            <p className="text-[15px] font-bold text-gray-900">Editar detalhes</p>
+            <p className="text-[15px] font-bold text-gray-900">{t('checkoutPg.editMode.title')}</p>
 
             {/* Date */}
             <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Data</p>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">{t('checkoutPg.labels.date')}</p>
               <button
                 onClick={() => setShowDP(true)}
                 className="w-full flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 active:scale-[0.98] transition-transform"
@@ -635,7 +648,7 @@ function CheckoutSummaryInner() {
             {/* Time — todos os tipos */}
             <div>
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-                Horário <span className="text-amber-500">*</span>
+                {t('checkoutPg.labels.time')} <span className="text-amber-500">*</span>
               </p>
               <div className="relative">
                 <button
@@ -644,7 +657,7 @@ function CheckoutSummaryInner() {
                 >
                   <Clock size={15} className="text-brand shrink-0" />
                   <span className={`text-[14px] font-semibold ${time ? 'text-gray-800' : 'text-amber-500'}`}>
-                    {time || 'Selecionar horário'}
+                    {time || t('checkoutPg.time.select')}
                   </span>
                 </button>
                 <input
@@ -659,12 +672,12 @@ function CheckoutSummaryInner() {
 
             {/* People */}
             <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Passageiros</p>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">{t('checkoutPg.labels.passengers')}</p>
               <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
                 <div className="flex items-center gap-2">
                   <Users size={15} className="text-brand" />
                   <span className="text-[14px] font-semibold text-gray-800">
-                    {people} {people === 1 ? 'pessoa' : 'pessoas'}
+                    {t('checkoutPg.peopleCount', { count: people })}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -689,7 +702,7 @@ function CheckoutSummaryInner() {
             {hasVehicles && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Veículos</p>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">{t('checkoutPg.labels.vehicles')}</p>
                   <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
                     capacityOk ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-500'
                   }`}>
@@ -704,7 +717,7 @@ function CheckoutSummaryInner() {
                   <div className="flex items-center gap-2 bg-red-50 rounded-xl px-3 py-2 mb-2 border border-red-100">
                     <AlertCircle size={12} className="text-red-400 shrink-0" />
                     <p className="text-[11px] text-red-600">
-                      Capacidade insuficiente para {people} {people === 1 ? 'pessoa' : 'pessoas'}. Adicione mais veículos.
+                      {t('checkoutPg.capacityInsufficient', { count: people })}
                     </p>
                   </div>
                 )}
@@ -727,7 +740,7 @@ function CheckoutSummaryInner() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[12px] text-gray-400 text-center py-3">Nenhum veículo disponível</p>
+                  <p className="text-[12px] text-gray-400 text-center py-3">{t('checkoutPg.vehicles.empty')}</p>
                 )}
               </div>
             )}
@@ -736,11 +749,11 @@ function CheckoutSummaryInner() {
 
         {/* Price Breakdown */}
         <div className="bg-white rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
-          <h2 className="text-[15px] font-bold text-gray-900 mb-3">Resumo de preços</h2>
+          <h2 className="text-[15px] font-bold text-gray-900 mb-3">{t('checkoutPg.price.title')}</h2>
           {!hasPricing && (
             <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
               <AlertCircle size={13} className="text-amber-500 shrink-0" />
-              <p className="text-[11px] text-amber-700">Preço não configurado para este passeio. Contate a cooperativa.</p>
+              <p className="text-[11px] text-amber-700">{t('checkoutPg.price.notConfigured')}</p>
             </div>
           )}
           <div className="space-y-2">
@@ -756,14 +769,14 @@ function CheckoutSummaryInner() {
             ) : (
               <div className="flex items-center justify-between">
                 <span className="text-[13px] text-gray-500">
-                  {isSharedTour ? `${people}x por pessoa` : isTransfer ? 'Transfer' : 'Veículos'}
+                  {isSharedTour ? t('checkoutPg.price.perPerson', { count: people }) : isTransfer ? t('checkoutPg.serviceType.transfer') : t('checkoutPg.labels.vehicles')}
                 </span>
                 <span className="text-[13px] font-semibold text-gray-900">R$ {fmt(activeTotal)}</span>
               </div>
             )}
             {dateSurcharge > 0 && (
               <div className="flex items-center justify-between">
-                <span className="text-[13px] text-amber-600">Alta temporada / feriado</span>
+                <span className="text-[13px] text-amber-600">{t('checkoutPg.price.surcharge')}</span>
                 <span className="text-[13px] font-semibold text-amber-600">+ R$ {fmt(dateSurcharge)}</span>
               </div>
             )}
@@ -772,12 +785,12 @@ function CheckoutSummaryInner() {
             {appliedCoupon ? (
               <div className="flex items-center justify-between">
                 <span className="text-[13px] text-emerald-600 font-semibold">
-                  Cupom {appliedCoupon.code}
+                  {t('checkoutPg.coupon.applied', { code: appliedCoupon.code })}
                   <button
                     onClick={() => { setAppliedCoupon(null); setCouponInput('') }}
                     className="ml-2 text-[11px] text-gray-400 underline"
                   >
-                    remover
+                    {t('checkoutPg.common.remove')}
                   </button>
                 </span>
                 <span className="text-[13px] font-semibold text-emerald-600">− R$ {fmt(couponDiscount)}</span>
@@ -788,7 +801,7 @@ function CheckoutSummaryInner() {
                   <input
                     value={couponInput}
                     onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponErr('') }}
-                    placeholder="Cupom de desconto"
+                    placeholder={t('checkoutPg.coupon.placeholder')}
                     className="flex-1 bg-gray-50 rounded-xl px-3 py-2 text-[13px] text-gray-800 uppercase tracking-wide outline-none focus:ring-2 focus:ring-brand/30 placeholder:normal-case placeholder:tracking-normal"
                   />
                   <button
@@ -796,7 +809,7 @@ function CheckoutSummaryInner() {
                     disabled={!couponInput.trim() || couponBusy}
                     className="shrink-0 border border-brand/40 text-brand text-[12px] font-bold px-3.5 py-2 rounded-xl active:scale-95 disabled:opacity-40"
                   >
-                    {couponBusy ? 'Validando…' : 'Aplicar'}
+                    {couponBusy ? t('checkoutPg.coupon.validating') : t('checkoutPg.coupon.apply')}
                   </button>
                 </div>
                 {couponErr && <p className="text-[11px] text-red-500 mt-1">{couponErr}</p>}
@@ -804,10 +817,10 @@ function CheckoutSummaryInner() {
             )}
 
             <div className="border-t border-gray-100 pt-2 mt-1 flex items-center justify-between">
-              <span className="text-[15px] font-bold text-gray-900">Total</span>
+              <span className="text-[15px] font-bold text-gray-900">{t('checkoutPg.price.total')}</span>
               {hasPricing
                 ? <span className="text-[22px] font-bold text-brand">R$ {fmt(displayTotal)}</span>
-                : <span className="text-[14px] font-semibold text-amber-600">A confirmar</span>
+                : <span className="text-[14px] font-semibold text-amber-600">{t('checkoutPg.price.toBeConfirmed')}</span>
               }
             </div>
           </div>
@@ -818,9 +831,9 @@ function CheckoutSummaryInner() {
           <div className="flex items-start gap-2.5">
             <Shield size={15} className="text-blue-500 shrink-0 mt-0.5" />
             <div>
-              <p className="text-[13px] font-bold text-blue-900 mb-0.5">Política de cancelamento</p>
+              <p className="text-[13px] font-bold text-blue-900 mb-0.5">{t('checkoutPg.policy.title')}</p>
               <p className="text-[11px] text-blue-700 leading-relaxed">
-                Cancelamento gratuito até 24h antes. Após esse prazo, pode haver cobrança de taxa.
+                {t('checkoutPg.policy.description')}
               </p>
             </div>
           </div>
@@ -828,7 +841,7 @@ function CheckoutSummaryInner() {
 
         <div className="flex items-center gap-2 px-1">
           <AlertCircle size={13} className="text-gray-400 shrink-0" />
-          <p className="text-[11px] text-gray-400">Sua reserva será enviada às cooperativas. Você só paga depois que uma aceitar.</p>
+          <p className="text-[11px] text-gray-400">{t('checkoutPg.notice.sentToCoops')}</p>
         </div>
 
         {reqError && (
@@ -842,10 +855,10 @@ function CheckoutSummaryInner() {
       {/* Fixed Bottom */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 z-30 px-4 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
         <div className="mb-3">
-          <p className="text-[11px] text-gray-400">Total estimado · paga após o aceite</p>
+          <p className="text-[11px] text-gray-400">{t('checkoutPg.footer.estimatedTotal')}</p>
           {hasPricing
             ? <p className="text-[20px] font-bold text-brand">R$ {fmt(displayTotal)}</p>
-            : <p className="text-[14px] font-semibold text-amber-600">Preço a confirmar</p>
+            : <p className="text-[14px] font-semibold text-amber-600">{t('checkoutPg.footer.priceToConfirm')}</p>
           }
         </div>
         <div className="flex gap-2">
@@ -855,7 +868,7 @@ function CheckoutSummaryInner() {
                 onClick={() => setEditing(false)}
                 className="shrink-0 px-4 py-3 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 active:bg-gray-50 transition-colors"
               >
-                Cancelar
+                {t('checkoutPg.common.cancel')}
               </button>
               <button
                 onClick={canSave ? () => setEditing(false) : undefined}
@@ -865,7 +878,7 @@ function CheckoutSummaryInner() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                Salvar alterações
+                {t('checkoutPg.editMode.save')}
               </button>
             </>
           ) : (
@@ -874,7 +887,7 @@ function CheckoutSummaryInner() {
                 onClick={() => setEditing(true)}
                 className="shrink-0 px-4 py-3 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 active:bg-gray-50 transition-colors"
               >
-                Editar
+                {t('checkoutPg.common.edit')}
               </button>
               <button
                 onClick={canProceed ? handleRequest : undefined}
@@ -885,7 +898,7 @@ function CheckoutSummaryInner() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {requesting ? 'Enviando…' : !hasPricing ? 'Sem preço configurado' : !time ? 'Selecione o horário' : 'Solicitar reserva'}
+                {requesting ? t('checkoutPg.common.sending') : !hasPricing ? t('checkoutPg.footer.noPriceConfigured') : !time ? t('checkoutPg.footer.selectTime') : t('checkoutPg.footer.requestBooking')}
               </button>
             </>
           )}

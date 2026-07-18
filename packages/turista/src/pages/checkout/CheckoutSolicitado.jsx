@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Send, Clock, ArrowRight, Home, Calendar, Users, CheckCircle2 } from 'lucide-react'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
@@ -10,6 +11,7 @@ function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigi
  * é avisado para pagar (em Minhas Reservas).
  */
 export default function CheckoutSolicitado() {
+  const { t }     = useTranslation()
   const navigate  = useNavigate()
   const { state } = useLocation()
 
@@ -36,11 +38,10 @@ export default function CheckoutSolicitado() {
         </div>
 
         <h1 className="text-[22px] font-extrabold text-gray-900 text-center leading-tight mb-1">
-          Solicitação enviada!
+          {t('checkoutPg.solicitado.title')}
         </h1>
         <p className="text-[13px] text-gray-500 text-center mb-5 max-w-[300px]">
-          Enviamos seu pedido para as cooperativas. Assim que uma aceitar, você
-          recebe um aviso para pagar e confirmar a reserva.
+          {t('checkoutPg.solicitado.subtitle')}
         </p>
 
         {/* Passo a passo */}
@@ -49,7 +50,7 @@ export default function CheckoutSolicitado() {
             <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center shrink-0">
               <CheckCircle2 size={15} className="text-green-500" />
             </div>
-            <p className="text-[13px] font-semibold text-gray-800">Pedido enviado</p>
+            <p className="text-[13px] font-semibold text-gray-800">{t('checkoutPg.step.sent')}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative w-7 h-7 shrink-0">
@@ -58,13 +59,13 @@ export default function CheckoutSolicitado() {
                 <Clock size={14} className="text-white" />
               </div>
             </div>
-            <p className="text-[13px] font-semibold text-gray-800">Aguardando uma cooperativa aceitar</p>
+            <p className="text-[13px] font-semibold text-gray-800">{t('checkoutPg.step.waiting')}</p>
           </div>
           <div className="flex items-center gap-3 opacity-50">
             <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
               <span className="text-[11px] font-bold text-gray-500">$</span>
             </div>
-            <p className="text-[13px] font-semibold text-gray-600">Pagar para confirmar</p>
+            <p className="text-[13px] font-semibold text-gray-600">{t('checkoutPg.step.pay')}</p>
           </div>
         </div>
 
@@ -79,20 +80,20 @@ export default function CheckoutSolicitado() {
             <div className="flex items-start justify-between gap-2">
               <p className="text-[15px] font-bold text-gray-900 flex-1">{service_name}</p>
               <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-full shrink-0 whitespace-nowrap">
-                Aguardando aceite
+                {t('checkoutPg.badge.waitingAcceptance')}
               </span>
             </div>
 
             {booking_code && (
               <div className="text-[12px] font-mono font-bold text-brand bg-brand/5 rounded-lg px-3 py-2">
-                Código: {booking_code}
+                {t('checkoutPg.booking.code', { code: booking_code })}
               </div>
             )}
 
             {Array.isArray(batchResults) && batchResults.length > 1 && (
               <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2.5 space-y-1">
                 <p className="text-[11px] font-bold text-emerald-700">
-                  {batchResults.length} solicitações enviadas do seu carrinho ✓
+                  {t('checkoutPg.batch.sentCount', { count: batchResults.length })}
                 </p>
                 {batchResults.map((r) => (
                   <p key={r.booking_code} className="text-[11px] text-emerald-700">
@@ -106,20 +107,20 @@ export default function CheckoutSolicitado() {
               {service_date && (
                 <div className="flex items-center gap-2">
                   <Calendar size={13} className="text-gray-400 shrink-0" />
-                  <span>{service_date}{service_time ? ` às ${service_time}` : ''}</span>
+                  <span>{service_time ? t('checkoutPg.booking.dateAtTime', { date: service_date, time: service_time }) : service_date}</span>
                 </div>
               )}
               {people_count && (
                 <div className="flex items-center gap-2">
                   <Users size={13} className="text-gray-400 shrink-0" />
-                  <span>{people_count} {people_count === 1 ? 'pessoa' : 'pessoas'}</span>
+                  <span>{t('checkoutPg.peopleCount', { count: people_count })}</span>
                 </div>
               )}
             </div>
 
             {value > 0 && (
               <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
-                <span className="text-[13px] text-gray-500">Valor estimado</span>
+                <span className="text-[13px] text-gray-500">{t('checkoutPg.value.estimated')}</span>
                 <span className="text-[18px] font-bold text-gray-900">R$ {fmt(value)}</span>
               </div>
             )}
@@ -127,8 +128,7 @@ export default function CheckoutSolicitado() {
         </div>
 
         <p className="text-[11px] text-gray-400 text-center mb-6 leading-relaxed">
-          Você só paga depois que uma cooperativa aceitar. Acompanhe o andamento em
-          Minhas Reservas.
+          {t('checkoutPg.footer.note')}
         </p>
 
         <div className="w-full space-y-2.5">
@@ -136,14 +136,14 @@ export default function CheckoutSolicitado() {
             onClick={() => navigate(booking_id ? `/minhas-reservas/${booking_id}` : '/minhas-reservas')}
             className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform"
           >
-            Acompanhar reserva <ArrowRight size={16} />
+            {t('checkoutPg.button.track')} <ArrowRight size={16} />
           </button>
           <button
             onClick={() => navigate('/')}
             className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-semibold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
           >
             <Home size={15} />
-            Voltar ao início
+            {t('checkoutPg.button.backHome')}
           </button>
         </div>
       </main>

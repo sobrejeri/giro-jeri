@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
@@ -15,26 +16,26 @@ const todayIso   = () => new Date().toISOString().slice(0, 10)
 
 // Selos do hero — atendimento é 100% pela plataforma (sem WhatsApp)
 const HERO_BADGES = [
-  { icon: CalendarCheck, label: 'Saídas todos os dias' },
-  { icon: RefreshCcw,    label: 'Cancelamento grátis' },
-  { icon: Headphones,    label: 'Atendimento pela plataforma' },
-  { icon: Lock,          label: 'Reserva segura' },
+  { icon: CalendarCheck, key: 'dailyDepartures' },
+  { icon: RefreshCcw,    key: 'freeCancellation' },
+  { icon: Headphones,    key: 'platformSupport' },
+  { icon: Lock,          key: 'secureBooking' },
 ]
 
 // Benefícios — bloco de confiança
 const BENEFITS = [
-  { icon: Headphones,    title: 'Atendimento local',    desc: 'Fale com quem conhece a região de verdade — sempre na plataforma.' },
-  { icon: Sparkles,      title: 'Reserva rápida',        desc: 'Escolha seu passeio e reserve em poucos cliques.' },
-  { icon: Lock,          title: 'Pagamento seguro',       desc: 'Ambiente protegido e múltiplas formas de pagamento.' },
-  { icon: RefreshCcw,    title: 'Cancelamento grátis',    desc: 'Cancele sem taxa até 24h antes do passeio.' },
+  { icon: Headphones,    titleKey: 'localSupportTitle',  descKey: 'localSupportDesc' },
+  { icon: Sparkles,      titleKey: 'quickBookingTitle',   descKey: 'quickBookingDesc' },
+  { icon: Lock,          titleKey: 'securePayment',        descKey: 'securePaymentDesc' },
+  { icon: RefreshCcw,    titleKey: 'freeCancellation',     descKey: 'freeCancelDesc' },
 ]
 
 // Diferenciais do transfer
 const TRANSFER_PERKS = [
-  { icon: Car,           label: 'Veículos confortáveis' },
-  { icon: Users,         label: 'Motoristas experientes' },
-  { icon: Clock,         label: 'Pontualidade garantida' },
-  { icon: ShieldCheck,   label: 'Reserva 100% online' },
+  { icon: Car,           key: 'comfortableVehicles' },
+  { icon: Users,         key: 'experiencedDrivers' },
+  { icon: Clock,         key: 'guaranteedPunctuality' },
+  { icon: ShieldCheck,   key: 'onlineBooking' },
 ]
 
 // Gradientes de fallback quando um tour não tem foto de capa
@@ -55,6 +56,7 @@ function tagFor(tour, fallback) {
 
 /* ── Card grande "Mais procurados" ─────────────────────────── */
 function HeroTourCard({ tour, tag, gradient, onClick }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onClick}
@@ -73,9 +75,9 @@ function HeroTourCard({ tour, tag, gradient, onClick }) {
           </span>
         )}
         <div className="absolute bottom-3 left-4 right-4 text-white">
-          <p className="font-extrabold text-[17px] leading-tight drop-shadow-md line-clamp-1">{tour?.name || 'Passeio imperdível'}</p>
+          <p className="font-extrabold text-[17px] leading-tight drop-shadow-md line-clamp-1">{tour?.name || t('homePg.defaultTourName')}</p>
           <p className="text-[12px] text-white/85 line-clamp-1 mt-0.5 drop-shadow">
-            {tour?.short_description || 'Uma experiência inesquecível'}
+            {tour?.short_description || t('homePg.defaultTourDesc')}
           </p>
         </div>
       </div>
@@ -83,18 +85,18 @@ function HeroTourCard({ tour, tag, gradient, onClick }) {
         <div>
           {Number(tour?.shared_price_per_person) > 0 ? (
             <>
-              <p className="text-[11px] text-gray-400 leading-none">A partir de</p>
+              <p className="text-[11px] text-gray-400 leading-none">{t('homePg.fromLabel')}</p>
               <p className="text-brand font-extrabold text-[17px] leading-tight mt-0.5">
                 {fmtPrice(tour.shared_price_per_person)}
-                <span className="text-[11px] text-gray-400 font-medium"> por pessoa</span>
+                <span className="text-[11px] text-gray-400 font-medium"> {t('homePg.perPerson')}</span>
               </p>
             </>
           ) : (
-            <p className="text-brand font-bold text-[14px]">Consultar valores</p>
+            <p className="text-brand font-bold text-[14px]">{t('homePg.checkPrices')}</p>
           )}
         </div>
         <span className="inline-flex items-center gap-1 text-brand font-semibold text-[13px] border border-brand/20 bg-brand/5 hover:bg-brand/10 rounded-lg px-3 py-1.5 transition-colors">
-          Ver detalhes <ArrowRight size={13} />
+          {t('homePg.viewDetails')} <ArrowRight size={13} />
         </span>
       </div>
     </button>
@@ -103,6 +105,7 @@ function HeroTourCard({ tour, tag, gradient, onClick }) {
 
 /* ── Card menor "Experiências em destaque" ─────────────────── */
 function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onClick}
@@ -134,13 +137,13 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
         <div className="mt-2.5 pt-2.5 border-t border-gray-50 flex items-end justify-between gap-2">
           {Number(tour?.shared_price_per_person) > 0 ? (
             <div>
-              <p className="text-[10px] text-gray-400 leading-none">A partir de</p>
+              <p className="text-[10px] text-gray-400 leading-none">{t('homePg.fromLabel')}</p>
               <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(tour.shared_price_per_person)}</p>
             </div>
           ) : (
-            <p className="text-[12px] text-brand font-bold">Consultar valores</p>
+            <p className="text-[12px] text-brand font-bold">{t('homePg.checkPrices')}</p>
           )}
-          <span className="text-[11px] text-brand font-semibold">Reservar →</span>
+          <span className="text-[11px] text-brand font-semibold">{t('homePg.reserveArrow')}</span>
         </div>
       </div>
     </button>
@@ -149,6 +152,7 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
 
 /* ── Card de rota de transfer em destaque (Serviços em destaque) ── */
 function RouteMiniCard({ route, gradient, onClick }) {
+  const { t } = useTranslation()
   const price = Number(route.default_price) || 0
   return (
     <button
@@ -158,7 +162,7 @@ function RouteMiniCard({ route, gradient, onClick }) {
       <div className={`relative h-36 overflow-hidden bg-gradient-to-br ${gradient} flex items-center justify-center`}>
         <Plane size={40} className="text-white/30" />
         <span className="absolute top-2 left-2 bg-black/35 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-          Transfer
+          {t('homePg.transferBadge')}
         </span>
       </div>
       <div className="p-3.5">
@@ -168,13 +172,13 @@ function RouteMiniCard({ route, gradient, onClick }) {
         <div className="mt-2.5 pt-2.5 border-t border-gray-50 flex items-end justify-between gap-2">
           {price > 0 ? (
             <div>
-              <p className="text-[10px] text-gray-400 leading-none">Privativo a partir de</p>
+              <p className="text-[10px] text-gray-400 leading-none">{t('homePg.privateFromLabel')}</p>
               <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(price)}</p>
             </div>
           ) : (
-            <p className="text-[12px] text-brand font-bold">Consultar valores</p>
+            <p className="text-[12px] text-brand font-bold">{t('homePg.checkPrices')}</p>
           )}
-          <span className="text-[11px] text-brand font-semibold">Reservar →</span>
+          <span className="text-[11px] text-brand font-semibold">{t('homePg.reserveArrow')}</span>
         </div>
       </div>
     </button>
@@ -186,6 +190,7 @@ export default function HomeDesktop({
   bannerImg = null, bannerTitle = null, bannerSubtitle = null,
   partners = [], featuredRoutes = [],
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { region, openPicker } = useRegion()
 
@@ -289,22 +294,22 @@ export default function HomeDesktop({
 
         <div className="relative z-10 max-w-[1520px] mx-auto px-10 xl:px-16 pt-14 pb-44">
           <p className="text-orange-300 text-[19px] italic font-semibold tracking-wide drop-shadow-md">
-            Viva o melhor de
+            {t('homePg.heroPrefix')}
           </p>
           <h1 className="mt-1 text-white font-extrabold uppercase leading-[0.95] tracking-tight text-[54px] xl:text-[64px] drop-shadow-2xl break-words">
             {placeName}
           </h1>
           <p className="mt-4 text-white/90 text-[16px] leading-relaxed max-w-[440px] drop-shadow">
-            {bannerSubtitle || 'Passeios, transfers e experiências incríveis com atendimento local e reserva rápida.'}
+            {bannerSubtitle || t('homePg.heroDesc')}
           </p>
 
           <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2.5">
-            {HERO_BADGES.map(({ icon: Icon, label }) => (
-              <div key={label} className="inline-flex items-center gap-2 text-white/90 text-[13px] font-medium">
+            {HERO_BADGES.map(({ icon: Icon, key }) => (
+              <div key={key} className="inline-flex items-center gap-2 text-white/90 text-[13px] font-medium">
                 <span className="w-6 h-6 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center">
                   <Icon size={12} className="text-white" />
                 </span>
-                {label}
+                {t(`homePg.${key}`)}
               </div>
             ))}
           </div>
@@ -317,9 +322,9 @@ export default function HomeDesktop({
           {/* Abas */}
           <div className="flex items-center gap-1 px-3 pt-3">
             {[
-              { id: 'passeios',  icon: Compass, label: 'Passeios' },
-              { id: 'transfers', icon: Car,     label: 'Transfers' },
-            ].map(({ id, icon: Icon, label }) => {
+              { id: 'passeios',  icon: Compass, labelKey: 'toursCardTitle' },
+              { id: 'transfers', icon: Car,     labelKey: 'transfersCardTitle' },
+            ].map(({ id, icon: Icon, labelKey }) => {
               const active = tab === id
               return (
                 <button
@@ -330,7 +335,7 @@ export default function HomeDesktop({
                   }`}
                 >
                   <Icon size={16} className={active ? 'text-brand' : 'text-gray-400'} />
-                  {label}
+                  {t(`homePg.${labelKey}`)}
                 </button>
               )
             })}
@@ -340,14 +345,14 @@ export default function HomeDesktop({
           <div className="grid grid-cols-12 gap-3 p-4 pt-3 border-t border-gray-100">
             {tab === 'transfers' ? (
               <div className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Saindo de</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.leavingFrom')}</label>
                 <div className="relative w-full min-w-0">
                   <select
                     value={tOrigin}
                     onChange={(e) => setTOrigin(e.target.value)}
                     className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
                   >
-                    {routeOrigins.length === 0 && <option value="">Carregando rotas…</option>}
+                    {routeOrigins.length === 0 && <option value="">{t('homePg.loadingRoutes')}</option>}
                     {routeOrigins.map((o) => (
                       <option key={o} value={o}>{o}</option>
                     ))}
@@ -361,17 +366,17 @@ export default function HomeDesktop({
                 onClick={openPicker}
                 className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors text-left"
               >
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Saindo de</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.leavingFrom')}</span>
                 <span className="flex items-center gap-1.5 min-w-0">
                   <MapPin size={13} className="text-brand shrink-0" />
-                  <span className="text-[14px] font-semibold text-gray-800 truncate">{region?.name || 'Selecionar região'}</span>
+                  <span className="text-[14px] font-semibold text-gray-800 truncate">{region?.name || t('homePg.selectRegion')}</span>
                   <ChevronDown size={14} className="text-gray-400 shrink-0 ml-auto" />
                 </span>
               </button>
             )}
             <div className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
-                {tab === 'transfers' ? 'Para onde?' : 'Escolha o passeio'}
+                {tab === 'transfers' ? t('homePg.whereTo') : t('homePg.chooseTour')}
               </label>
               <div className="relative w-full min-w-0">
                 {tab === 'transfers' ? (
@@ -380,7 +385,7 @@ export default function HomeDesktop({
                     onChange={(e) => setTDest(e.target.value)}
                     className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
                   >
-                    <option value="">{routeDests.length ? 'Selecione o destino' : 'Escolha a origem primeiro'}</option>
+                    <option value="">{routeDests.length ? t('homePg.selectDestination') : t('homePg.chooseOriginFirst')}</option>
                     {routeDests.map((d) => (
                       <option key={d} value={d}>{d}</option>
                     ))}
@@ -391,9 +396,9 @@ export default function HomeDesktop({
                     onChange={(e) => setTourId(e.target.value)}
                     className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
                   >
-                    <option value="">Todos os passeios</option>
-                    {tourOptions.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
+                    <option value="">{t('homePg.allTours')}</option>
+                    {tourOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.name}</option>
                     ))}
                   </select>
                 )}
@@ -401,7 +406,7 @@ export default function HomeDesktop({
               </div>
             </div>
             <div className="col-span-2 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Data</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.dateLabel')}</label>
               <DesktopDatePicker
                 valueIso={date}
                 onChange={setDate}
@@ -410,7 +415,7 @@ export default function HomeDesktop({
               />
             </div>
             <div className="col-span-2 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Pessoas</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.peopleLabel')}</label>
               <div className="relative w-full min-w-0">
                 <select
                   value={people}
@@ -418,7 +423,7 @@ export default function HomeDesktop({
                   className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
                 >
                   {[1,2,3,4,5,6,7,8,9,10,12,15,20].map((n) => (
-                    <option key={n} value={n}>{n} pessoa{n !== 1 ? 's' : ''}</option>
+                    <option key={n} value={n}>{n} {t(n !== 1 ? 'homePg.personPlural' : 'homePg.personSingular')}</option>
                   ))}
                 </select>
                 <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -429,16 +434,16 @@ export default function HomeDesktop({
                 onClick={handleSearch}
                 className="w-full h-full inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold text-[14px] rounded-xl px-4 py-3 transition-colors shadow-md shadow-brand/30"
               >
-                <span className="truncate">Buscar agora</span> <ArrowRight size={16} className="shrink-0" />
+                <span className="truncate">{t('homePg.searchNow')}</span> <ArrowRight size={16} className="shrink-0" />
               </button>
             </div>
           </div>
 
           {/* Selinhos abaixo do box */}
           <div className="flex items-center justify-center gap-8 text-[12px] text-gray-500 px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-            <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} className="text-brand" /> Melhor preço garantido</span>
-            <span className="inline-flex items-center gap-1.5"><Lock size={13} className="text-brand" /> Pagamento seguro</span>
-            <span className="inline-flex items-center gap-1.5"><CalendarCheck size={13} className="text-brand" /> Reserva 100% online</span>
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} className="text-brand" /> {t('homePg.bestPriceGuaranteed')}</span>
+            <span className="inline-flex items-center gap-1.5"><Lock size={13} className="text-brand" /> {t('homePg.securePayment')}</span>
+            <span className="inline-flex items-center gap-1.5"><CalendarCheck size={13} className="text-brand" /> {t('homePg.onlineBooking')}</span>
           </div>
         </div>
       </div>
@@ -447,11 +452,11 @@ export default function HomeDesktop({
       <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="flex items-end justify-between mb-5">
           <div>
-            <h2 className="text-[28px] font-extrabold text-gray-900 leading-tight">Mais procurados em {placeShort} 🌴</h2>
-            <p className="text-[13px] text-gray-500 mt-1">Os favoritos de quem já visitou.</p>
+            <h2 className="text-[28px] font-extrabold text-gray-900 leading-tight">{t('homePg.mostSoughtTitle', { place: placeShort })}</h2>
+            <p className="text-[13px] text-gray-500 mt-1">{t('homePg.mostSoughtSubtitle')}</p>
           </div>
           <Link to="/passeios" className="hidden lg:inline-flex items-center gap-1 text-[14px] font-semibold text-brand hover:gap-1.5 transition-all">
-            Ver todas as experiências <ArrowRight size={16} />
+            {t('homePg.viewAllExperiences')} <ArrowRight size={16} />
           </Link>
         </div>
         {isLoading ? (
@@ -460,17 +465,17 @@ export default function HomeDesktop({
           </div>
         ) : topThree.length === 0 ? (
           <div className="text-center text-gray-400 py-12 border border-dashed border-gray-200 rounded-2xl">
-            Nenhum passeio disponível nesta região.
+            {t('homePg.noToursInRegion')}
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-5">
-            {topThree.map((t, i) => (
+            {topThree.map((tour, i) => (
               <HeroTourCard
-                key={t.id}
-                tour={t}
-                tag={tagFor(t, ['Mais vendido', 'Aventura', 'Pôr do sol'][i])}
+                key={tour.id}
+                tour={tour}
+                tag={tagFor(tour, [t('homePg.tagBestSeller'), t('homePg.tagAdventure'), t('homePg.tagSunset')][i])}
                 gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
-                onClick={() => navigate(`/passeios/${t.id}`)}
+                onClick={() => navigate(`/passeios/${tour.id}`)}
               />
             ))}
           </div>
@@ -481,27 +486,27 @@ export default function HomeDesktop({
       <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="flex items-end justify-between mb-5">
           <div>
-            <h2 className="text-[24px] font-extrabold text-gray-900">Serviços em destaque</h2>
-            <p className="text-[13px] text-gray-500 mt-1">Passeios e transfers escolhidos a dedo.</p>
+            <h2 className="text-[24px] font-extrabold text-gray-900">{t('homePg.featuredServicesTitle')}</h2>
+            <p className="text-[13px] text-gray-500 mt-1">{t('homePg.featuredServicesSubtitle')}</p>
           </div>
           <Link to="/passeios" className="inline-flex items-center gap-1 text-[14px] font-semibold text-brand hover:gap-1.5 transition-all">
-            Ver todos os passeios <ArrowRight size={16} />
+            {t('homePg.viewAllTours')} <ArrowRight size={16} />
           </Link>
         </div>
         {gridRest.length === 0 && featuredRoutes.length === 0 && !isLoading ? (
           <div className="text-center text-gray-400 py-8 border border-dashed border-gray-200 rounded-2xl">
-            Em breve, novos passeios por aqui.
+            {t('homePg.comingSoonTours')}
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-5">
-            {gridRest.map((t, i) => (
+            {gridRest.map((tour, i) => (
               <MiniTourCard
-                key={t.id}
-                tour={t}
-                isFav={favs?.has?.(t.id)}
+                key={tour.id}
+                tour={tour}
+                isFav={favs?.has?.(tour.id)}
                 onToggleFav={toggleFav}
                 gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
-                onClick={() => navigate(`/passeios/${t.id}`)}
+                onClick={() => navigate(`/passeios/${tour.id}`)}
               />
             ))}
             {featuredRoutes.map((r, i) => (
@@ -526,26 +531,26 @@ export default function HomeDesktop({
           <div className="relative grid grid-cols-2 gap-8 items-center">
             <div>
               <h2 className="text-white font-extrabold text-[32px] leading-tight">
-                Chegue em {placeName} <br /><span className="italic text-orange-300">com tranquilidade</span>
+                {t('homePg.transferBannerTitle', { place: placeName })} <br /><span className="italic text-orange-300">{t('homePg.transferBannerSubtitle')}</span>
               </h2>
               <p className="text-white/85 text-[15px] mt-4 leading-relaxed max-w-md">
-                Transfers privativos saindo de Fortaleza, Aeroporto de Cruz, Jijoca, Preá, Parnaíba e Barreirinhas.
+                {t('homePg.transferBannerDesc')}
               </p>
               <button
                 onClick={() => navigate('/transfers')}
                 className="mt-6 inline-flex items-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold text-[14px] px-6 py-3 rounded-xl transition-colors shadow-lg shadow-black/20"
               >
-                Ver transfers <ArrowRight size={16} />
+                {t('homePg.viewTransfers')} <ArrowRight size={16} />
               </button>
             </div>
 
             <div className="grid grid-cols-1 gap-2.5 relative z-10">
-              {TRANSFER_PERKS.map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/10">
+              {TRANSFER_PERKS.map(({ icon: Icon, key }) => (
+                <div key={key} className="flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/10">
                   <div className="w-9 h-9 rounded-lg bg-brand/90 flex items-center justify-center">
                     <Icon size={17} className="text-white" />
                   </div>
-                  <p className="text-white font-semibold text-[14px]">{label}</p>
+                  <p className="text-white font-semibold text-[14px]">{t(`homePg.${key}`)}</p>
                 </div>
               ))}
             </div>
@@ -556,13 +561,13 @@ export default function HomeDesktop({
       {/* ── BENEFÍCIOS ───────────────────────────────────────── */}
       <section id="sobre" className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="grid grid-cols-4 gap-4">
-          {BENEFITS.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          {BENEFITS.map(({ icon: Icon, titleKey, descKey }) => (
+            <div key={titleKey} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <div className="w-12 h-12 rounded-xl bg-brand/10 flex items-center justify-center mb-4">
                 <Icon size={22} className="text-brand" />
               </div>
-              <p className="font-extrabold text-gray-900 text-[15px]">{title}</p>
-              <p className="text-[12px] text-gray-500 mt-1 leading-relaxed">{desc}</p>
+              <p className="font-extrabold text-gray-900 text-[15px]">{t(`homePg.${titleKey}`)}</p>
+              <p className="text-[12px] text-gray-500 mt-1 leading-relaxed">{t(`homePg.${descKey}`)}</p>
             </div>
           ))}
         </div>
@@ -577,8 +582,8 @@ export default function HomeDesktop({
                 <HeartHandshake size={20} className="text-teal-600" />
               </div>
               <div>
-                <h2 className="text-[20px] font-extrabold text-gray-900 leading-tight">Cooperativas parceiras</h2>
-                <p className="text-[13px] text-gray-400">Operadores locais verificados que realizam seus passeios e transfers.</p>
+                <h2 className="text-[20px] font-extrabold text-gray-900 leading-tight">{t('homePg.partnersTitle')}</h2>
+                <p className="text-[13px] text-gray-400">{t('homePg.partnersDescDesktop')}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2.5">
@@ -609,11 +614,11 @@ export default function HomeDesktop({
         <section className="mt-16 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
           <div className="flex items-end justify-between mb-6">
             <div>
-              <h2 className="text-[26px] font-extrabold text-gray-900">Quem visita, recomenda</h2>
-              <p className="text-[13px] text-gray-500 mt-1">Avaliações verificadas de quem já viveu {placeShort} com a gente.</p>
+              <h2 className="text-[26px] font-extrabold text-gray-900">{t('homePg.testimonialsTitle')}</h2>
+              <p className="text-[13px] text-gray-500 mt-1">{t('homePg.testimonialsSubtitle', { place: placeShort })}</p>
             </div>
             <Link to="/avaliacoes" className="text-[14px] font-semibold text-brand inline-flex items-center gap-1 hover:gap-1.5 transition-all">
-              Ver mais avaliações <ArrowRight size={16} />
+              {t('homePg.viewMoreReviews')} <ArrowRight size={16} />
             </Link>
           </div>
           <div className="grid grid-cols-3 gap-5">
@@ -627,7 +632,7 @@ export default function HomeDesktop({
                 </div>
                 {r.comment
                   ? <p className="text-gray-700 text-[14px] leading-relaxed">"{r.comment}"</p>
-                  : <p className="text-gray-400 text-[14px] italic">Avaliou com {r.rating} estrela{r.rating > 1 ? 's' : ''}.</p>}
+                  : <p className="text-gray-400 text-[14px] italic">{t(r.rating > 1 ? 'homePg.ratedWithStarsPlural' : 'homePg.ratedWithStarsSingular', { rating: r.rating })}</p>}
                 <div className="mt-4 pt-4 border-t border-gray-50 flex items-center gap-3">
                   {r.author_photo
                     ? <img src={r.author_photo} alt={r.author_name} className="w-9 h-9 rounded-full object-cover" />
@@ -654,10 +659,10 @@ export default function HomeDesktop({
           <div className="relative flex items-center justify-between gap-8">
             <div className="max-w-2xl">
               <h2 className="text-white font-extrabold text-[28px] leading-tight">
-                Pronto para viver momentos únicos em {placeName}?
+                {t('homePg.ctaFinalTitle', { place: placeName })}
               </h2>
               <p className="text-white/85 text-[15px] mt-3">
-                Faça sua reserva online com praticidade e segurança. Acompanhe e gerencie tudo — reservas, cotações e status — dentro da própria plataforma.
+                {t('homePg.ctaFinalDesc')}
               </p>
             </div>
             <div className="flex items-center gap-4 shrink-0">
@@ -665,11 +670,11 @@ export default function HomeDesktop({
                 onClick={() => navigate('/passeios')}
                 className="inline-flex items-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold text-[15px] px-7 py-3.5 rounded-xl transition-colors shadow-lg shadow-black/30"
               >
-                Começar reserva <ArrowRight size={16} />
+                {t('homePg.startBooking')} <ArrowRight size={16} />
               </button>
               <div className="hidden xl:flex items-center gap-2 text-white/80 text-[12px] max-w-[180px] leading-snug">
                 <Lock size={16} className="text-brand shrink-0" />
-                Acompanhe sua reserva na plataforma
+                {t('homePg.trackBookingPlatform')}
               </div>
             </div>
           </div>
@@ -686,7 +691,7 @@ export default function HomeDesktop({
               <p className="font-giro font-bold text-[15px] text-gray-900 tracking-wide">TURIVA</p>
             </div>
             <p className="text-[12px] text-gray-500 leading-relaxed">
-              Plataforma de passeios e transfers com operadores locais. Atendimento 100% dentro do app.
+              {t('homePg.footerDesc')}
             </p>
             <div className="flex items-center gap-3 mt-4">
               <a href="#" className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors" aria-label="Instagram">
@@ -696,39 +701,39 @@ export default function HomeDesktop({
           </div>
 
           <div>
-            <p className="text-[13px] font-bold text-gray-900 mb-3">Explorar</p>
+            <p className="text-[13px] font-bold text-gray-900 mb-3">{t('homePg.footerExploreTitle')}</p>
             <ul className="space-y-2 text-[13px] text-gray-500">
-              <li><Link to="/passeios"  className="hover:text-brand transition-colors">Passeios</Link></li>
-              <li><Link to="/transfers" className="hover:text-brand transition-colors">Transfers</Link></li>
-              <li><Link to="/eventos"   className="hover:text-brand transition-colors">Descubra a Vila</Link></li>
-              <li><Link to="/minhas-reservas" className="hover:text-brand transition-colors">Minhas reservas</Link></li>
-              <li><Link to="/afiliado"  className="hover:text-brand transition-colors">Divulgou, Ganhou · Afiliado</Link></li>
+              <li><Link to="/passeios"  className="hover:text-brand transition-colors">{t('homePg.toursCardTitle')}</Link></li>
+              <li><Link to="/transfers" className="hover:text-brand transition-colors">{t('homePg.transfersCardTitle')}</Link></li>
+              <li><Link to="/eventos"   className="hover:text-brand transition-colors">{t('homePg.discoverVillage')}</Link></li>
+              <li><Link to="/minhas-reservas" className="hover:text-brand transition-colors">{t('homePg.footerMyBookings')}</Link></li>
+              <li><Link to="/afiliado"  className="hover:text-brand transition-colors">{t('homePg.footerAffiliate')}</Link></li>
             </ul>
           </div>
 
           <div>
-            <p className="text-[13px] font-bold text-gray-900 mb-3">Categorias</p>
+            <p className="text-[13px] font-bold text-gray-900 mb-3">{t('homePg.footerCategoriesTitle')}</p>
             <ul className="space-y-2 text-[13px] text-gray-500">
-              <li><span className="hover:text-brand transition-colors cursor-pointer">Passeios privativos</span></li>
-              <li><span className="hover:text-brand transition-colors cursor-pointer">Passeios compartilhados</span></li>
-              <li><span className="hover:text-brand transition-colors cursor-pointer">Transfer aeroporto</span></li>
-              <li><span className="hover:text-brand transition-colors cursor-pointer">Translado personalizado</span></li>
+              <li><span className="hover:text-brand transition-colors cursor-pointer">{t('homePg.categoryPrivateTours')}</span></li>
+              <li><span className="hover:text-brand transition-colors cursor-pointer">{t('homePg.categorySharedTours')}</span></li>
+              <li><span className="hover:text-brand transition-colors cursor-pointer">{t('homePg.categoryAirportTransfer')}</span></li>
+              <li><span className="hover:text-brand transition-colors cursor-pointer">{t('homePg.categoryCustomTransfer')}</span></li>
             </ul>
           </div>
 
           <div>
-            <p className="text-[13px] font-bold text-gray-900 mb-3">Atendimento</p>
+            <p className="text-[13px] font-bold text-gray-900 mb-3">{t('homePg.footerSupportTitle')}</p>
             <ul className="space-y-2 text-[13px] text-gray-500">
               <li>
                 <Link to="/minhas-reservas" className="hover:text-brand transition-colors inline-flex items-center gap-1.5">
-                  <Send size={12} /> Central da reserva
+                  <Send size={12} /> {t('homePg.bookingCenter')}
                 </Link>
               </li>
-              <li><Link to="/termos"     className="hover:text-brand transition-colors">Termos de uso</Link></li>
-              <li><Link to="/privacidade" className="hover:text-brand transition-colors">Política de privacidade</Link></li>
+              <li><Link to="/termos"     className="hover:text-brand transition-colors">{t('homePg.termsOfUse')}</Link></li>
+              <li><Link to="/privacidade" className="hover:text-brand transition-colors">{t('homePg.privacyPolicy')}</Link></li>
               <li>
                 <button onClick={openPicker} className="hover:text-brand transition-colors inline-flex items-center gap-1.5">
-                  <MapPin size={12} /> {region?.name || 'Selecionar região'}
+                  <MapPin size={12} /> {region?.name || t('homePg.selectRegion')}
                 </button>
               </li>
             </ul>
@@ -736,8 +741,8 @@ export default function HomeDesktop({
         </div>
 
         <div className="border-t border-gray-100 pt-5 flex items-center justify-between text-[11px] text-gray-400">
-          <p>© {new Date().getFullYear()} Turiva · Passeios, transfers e experiências.</p>
-          <p>Feito com <span className="text-brand">♥</span> por quem vive o destino.</p>
+          <p>{t('homePg.footerCopyright', { year: new Date().getFullYear() })}</p>
+          <p>{t('homePg.footerMadeWithPrefix')} <span className="text-brand">♥</span> {t('homePg.footerMadeWithSuffix')}</p>
         </div>
         </div>
       </footer>

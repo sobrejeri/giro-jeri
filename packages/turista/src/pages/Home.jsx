@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -44,6 +45,7 @@ const BADGE_COLORS = {
 }
 
 function TourCard({ tour, isFav, onToggleFav }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [from, to] = GRADIENTS[gi(tour.id)]
@@ -65,11 +67,11 @@ function TourCard({ tour, isFav, onToggleFav }) {
           short_description: tour.short_description || null,
           service_type:     'tour',
           booking_mode:     'private',
-          service_date:     'Hoje',
+          service_date:     t('homePg.today'),
           service_date_iso: format(today, 'yyyy-MM-dd'),
-          service_time:     'A confirmar',
+          service_time:     t('homePg.toBeConfirmed'),
           people_count:     2,
-          origin_text:      'Centro de Jericoacoara',
+          origin_text:      t('homePg.originCenter', { place: 'Jericoacoara' }),
           vehicle_name:     suggested ? `${suggested.qty}x ${suggested.vehicle.name}` : '',
           total_price:      totalPrice,
           breakdown:        suggested ? { [`${suggested.qty}x ${suggested.vehicle.name}`]: totalPrice } : {},
@@ -136,6 +138,7 @@ function TourCard({ tour, isFav, onToggleFav }) {
 
 // Card de rota de transfer em destaque — mesmo tamanho do TourCard.
 function RouteCard({ route }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [from, to] = GRADIENTS[gi(route.id)]
   const price = Number(route.default_price) || 0
@@ -147,7 +150,7 @@ function RouteCard({ route }) {
       <div className={`h-[108px] lg:h-44 relative overflow-hidden bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
         <Plane size={36} className="text-white/25" />
         <span className="absolute top-2 left-2 bg-black/35 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-[3px] rounded-full">
-          Transfer
+          {t('homePg.transferBadge')}
         </span>
       </div>
       <div className="p-2.5">
@@ -155,7 +158,7 @@ function RouteCard({ route }) {
           {route.origin_name} → {route.destination_name}
         </p>
         <p className="text-[11px] text-gray-400 leading-snug">
-          Privativo {price > 0 ? `· a partir de R$ ${price.toLocaleString('pt-BR')}` : ''}
+          {t('homePg.privateLabel')} {price > 0 ? t('homePg.fromPrice', { price: price.toLocaleString('pt-BR') }) : ''}
         </p>
       </div>
     </div>
@@ -163,10 +166,10 @@ function RouteCard({ route }) {
 }
 
 const QUICK = [
-  { icon: Compass,  bg: 'bg-orange-50', ic: 'text-brand',      title: 'Passeio Privativo', desc: 'Exclusivo para seu grupo',   route: '/passeios'  },
-  { icon: Users,    bg: 'bg-teal-50',   ic: 'text-teal-600',   title: 'Compartilhado',     desc: 'Divida com outros turistas', route: '/passeios', state: { mode: 'shared' } },
-  { icon: Plane,    bg: 'bg-blue-50',   ic: 'text-blue-600',   title: 'Transfer',           desc: 'Aeroporto & hotel',          route: '/transfers' },
-  { icon: Calendar, bg: 'bg-purple-50', ic: 'text-purple-600', title: 'Minhas Reservas',    desc: 'Acompanhe seus passeios',    route: '/minhas-reservas'  },
+  { icon: Compass,  bg: 'bg-orange-50', ic: 'text-brand',      titleKey: 'quickPrivateTitle', descKey: 'quickPrivateDesc', route: '/passeios'  },
+  { icon: Users,    bg: 'bg-teal-50',   ic: 'text-teal-600',   titleKey: 'quickSharedTitle',  descKey: 'quickSharedDesc',  route: '/passeios', state: { mode: 'shared' } },
+  { icon: Plane,    bg: 'bg-blue-50',   ic: 'text-blue-600',   titleKey: 'transferBadge',      descKey: 'quickTransferDesc', route: '/transfers' },
+  { icon: Calendar, bg: 'bg-purple-50', ic: 'text-purple-600', titleKey: 'myBookingsTitle',    descKey: 'quickBookingsDesc', route: '/minhas-reservas'  },
 ]
 
 function FeaturedCarousel({ items, favs, onToggleFav }) {
@@ -232,12 +235,13 @@ function FeaturedCarousel({ items, favs, onToggleFav }) {
 }
 
 const STEPS = [
-  { n: 1, color: 'bg-brand',        title: 'Escolha seu passeio',   desc: 'Selecione o destino e tipo de reserva'     },
-  { n: 2, color: 'bg-[#1A4D5F]',   title: 'Configure os detalhes', desc: 'Informe data, horário e número de pessoas' },
-  { n: 3, color: 'bg-emerald-500',  title: 'Confirme e pague',      desc: 'Reserva garantida em poucos minutos'       },
+  { n: 1, color: 'bg-brand',       titleKey: 'step1Title', descKey: 'step1Desc' },
+  { n: 2, color: 'bg-[#1A4D5F]',   titleKey: 'step2Title', descKey: 'step2Desc' },
+  { n: 3, color: 'bg-emerald-500', titleKey: 'step3Title', descKey: 'step3Desc' },
 ]
 
 export default function Home() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { region, openPicker, userCoords, getServiceQuery } = useRegion()
   const { user } = useAuth()
@@ -314,10 +318,10 @@ export default function Home() {
     (b) => (b.service_date || '') >= todayStr && b.status_commercial !== 'cancelled'
   ).length
   const reservasLabel = !user
-    ? 'Entre para ver'
+    ? t('homePg.loginToSee')
     : upcomingCnt > 0
-      ? `${upcomingCnt} próxima${upcomingCnt > 1 ? 's' : ''}`
-      : 'Sem reservas ainda'
+      ? t(upcomingCnt > 1 ? 'homePg.upcomingCountPlural' : 'homePg.upcomingCountSingular', { count: upcomingCnt })
+      : t('homePg.noBookingsYet')
 
   return (
     <>
@@ -330,7 +334,7 @@ export default function Home() {
             <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
             <div>
               <p className="font-giro font-semibold text-[17px] text-gray-900 leading-tight tracking-[0.09em]">TURIVA</p>
-              <p className="text-[10px] text-gray-400 leading-none mt-0.5">Passeios & Transfers</p>
+              <p className="text-[10px] text-gray-400 leading-none mt-0.5">{t('homePg.tagline')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -343,7 +347,7 @@ export default function Home() {
           className="mt-2.5 flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 active:scale-95 transition-transform"
         >
           <MapPin size={11} className="text-brand shrink-0" />
-          <span className="text-[12px] font-semibold text-gray-700">{region?.name ?? 'Selecionar região'}</span>
+          <span className="text-[12px] font-semibold text-gray-700">{region?.name ?? t('homePg.selectRegion')}</span>
           <ChevronRight size={11} className="text-gray-400 ml-0.5" />
         </button>
       </div>
@@ -354,8 +358,8 @@ export default function Home() {
           <>
             {/* ── Saudação ──────────────────────────────────────── */}
             <div>
-              <p className="text-[21px] lg:text-3xl font-extrabold text-gray-900 leading-tight">Olá, explorador! 👋</p>
-              <p className="text-[13px] lg:text-base text-gray-500 mt-1">O que você quer reservar hoje?</p>
+              <p className="text-[21px] lg:text-3xl font-extrabold text-gray-900 leading-tight">{t('homePg.greeting')}</p>
+              <p className="text-[13px] lg:text-base text-gray-500 mt-1">{t('homePg.greetingSubtitle')}</p>
             </div>
 
             {/* ── Cards principais ──────────────────────────────── */}
@@ -372,8 +376,8 @@ export default function Home() {
                     <Compass size={15} className="text-white" />
                   </div>
                   <div>
-                    <p className="text-white font-bold text-[14px] lg:text-2xl">Passeios</p>
-                    <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Buggy · UTV · Hilux</p>
+                    <p className="text-white font-bold text-[14px] lg:text-2xl">{t('homePg.toursCardTitle')}</p>
+                    <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">{t('homePg.toursCardDescClassico')}</p>
                   </div>
                 </div>
               </button>
@@ -390,8 +394,8 @@ export default function Home() {
                     <Car size={15} className="text-white" />
                   </div>
                   <div>
-                    <p className="text-white font-bold text-[14px] lg:text-2xl">Transfers</p>
-                    <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Aeroporto · Hotel</p>
+                    <p className="text-white font-bold text-[14px] lg:text-2xl">{t('homePg.transfersCardTitle')}</p>
+                    <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">{t('homePg.transfersCardDescClassico')}</p>
                   </div>
                 </div>
               </button>
@@ -399,9 +403,9 @@ export default function Home() {
 
             {/* ── Acesso rápido 2×2 ─────────────────────────────── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
+              {QUICK.map(({ icon: Icon, bg, ic, titleKey, descKey, route, state }) => (
                 <button
-                  key={title}
+                  key={titleKey}
                   onClick={() => navigate(route, state ? { state } : undefined)}
                   className="flex items-center gap-2.5 bg-white rounded-2xl p-3 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left"
                 >
@@ -409,8 +413,8 @@ export default function Home() {
                     <Icon size={17} className={ic} />
                   </div>
                   <div>
-                    <p className="text-[12px] font-bold text-gray-900 leading-tight">{title}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{desc}</p>
+                    <p className="text-[12px] font-bold text-gray-900 leading-tight">{t(`homePg.${titleKey}`)}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{t(`homePg.${descKey}`)}</p>
                   </div>
                 </button>
               ))}
@@ -421,18 +425,20 @@ export default function Home() {
             {/* ── Heading funcional ─────────────────────────────── */}
             <div>
               <p className="text-[21px] font-extrabold text-gray-900 leading-tight">
-                Vamos explorar{region?.name ? ` ${region.name}` : ''}? 🌴
+                {region?.name
+                  ? t('homePg.exploreHeadingWithRegion', { region: region.name })
+                  : t('homePg.exploreHeading')}
               </p>
-              <p className="text-[13px] text-gray-500 mt-1">Reserve passeios e translados com operadores locais.</p>
+              <p className="text-[13px] text-gray-500 mt-1">{t('homePg.exploreSubtitle')}</p>
             </div>
 
             {/* ── Serviço: escolha principal (contraste corrigido) ─ */}
             <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">O que você procura?</p>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('homePg.serviceSectionLabel')}</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => navigate('/passeios')}
-                  aria-label="Ver passeios"
+                  aria-label={t('homePg.ariaViewTours')}
                   className="relative rounded-2xl overflow-hidden h-[122px] active:scale-[0.97] transition-transform text-left"
                   style={{ background: 'linear-gradient(135deg,#D94E00,#FF7A1F)' }}
                 >
@@ -443,15 +449,15 @@ export default function Home() {
                       <Compass size={17} className="text-white" />
                     </div>
                     <div>
-                      <p className="text-white font-extrabold text-[15px] [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">Passeios</p>
-                      <p className="text-white text-[11px] font-medium mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">Buggy · lagoas · pôr do sol</p>
+                      <p className="text-white font-extrabold text-[15px] [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">{t('homePg.toursCardTitle')}</p>
+                      <p className="text-white text-[11px] font-medium mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">{t('homePg.toursNovoDesc')}</p>
                     </div>
                   </div>
                 </button>
 
                 <button
                   onClick={() => navigate('/transfers')}
-                  aria-label="Ver translados"
+                  aria-label={t('homePg.ariaViewTransfers')}
                   className="relative rounded-2xl overflow-hidden h-[122px] active:scale-[0.97] transition-transform text-left"
                   style={{ background: 'linear-gradient(135deg,#154457,#2E7D9A)' }}
                 >
@@ -462,8 +468,8 @@ export default function Home() {
                       <Car size={17} className="text-white" />
                     </div>
                     <div>
-                      <p className="text-white font-extrabold text-[15px] [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">Translados</p>
-                      <p className="text-white text-[11px] font-medium mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">Aeroporto · hotel · rotas</p>
+                      <p className="text-white font-extrabold text-[15px] [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">{t('homePg.transfersNovoTitle')}</p>
+                      <p className="text-white text-[11px] font-medium mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">{t('homePg.transfersNovoDesc')}</p>
                     </div>
                   </div>
                 </button>
@@ -480,7 +486,7 @@ export default function Home() {
                   <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
                     <CalendarCheck size={16} className="text-purple-600" />
                   </div>
-                  <p className="text-[13px] font-bold text-gray-900 leading-tight">Minhas Reservas</p>
+                  <p className="text-[13px] font-bold text-gray-900 leading-tight">{t('homePg.myBookingsTitle')}</p>
                 </div>
                 <p className="text-[11px] font-semibold text-gray-500">{reservasLabel}</p>
               </button>
@@ -493,9 +499,9 @@ export default function Home() {
                   <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
                     <Sparkles size={16} className="text-brand" />
                   </div>
-                  <p className="text-[13px] font-bold text-gray-900 leading-tight">Descubra a Vila</p>
+                  <p className="text-[13px] font-bold text-gray-900 leading-tight">{t('homePg.discoverVillage')}</p>
                 </div>
-                <p className="text-[11px] text-gray-400">Eventos, promoções e lugares</p>
+                <p className="text-[11px] text-gray-400">{t('homePg.discoverVillageDesc')}</p>
               </button>
             </div>
           </>
@@ -504,19 +510,19 @@ export default function Home() {
         {/* ── Serviços em destaque (passeios + transfers) ───────── */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[15px] font-bold text-gray-900">Serviços em destaque</p>
+            <p className="text-[15px] font-bold text-gray-900">{t('homePg.featuredServicesTitle')}</p>
             <Link to="/passeios" className="flex items-center gap-0.5 text-[12px] font-semibold text-brand">
-              Ver todos <ArrowRight size={13} />
+              {t('homePg.viewAll')} <ArrowRight size={13} />
             </Link>
           </div>
 
           {isLoading ? (
             <div className="h-[160px] flex flex-col items-center justify-center gap-2.5">
               <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-              {slowLoad && <p className="text-[11px] text-gray-400 text-center px-6">Acordando o servidor… só um instante 🌅</p>}
+              {slowLoad && <p className="text-[11px] text-gray-400 text-center px-6">{t('homePg.serverWakingUp')}</p>}
             </div>
           ) : featuredItems.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhum passeio disponível.</p>
+            <p className="text-sm text-gray-400">{t('homePg.noToursAvailable')}</p>
           ) : (
             <>
               {/* Mobile: carousel com loop automático */}
@@ -543,24 +549,24 @@ export default function Home() {
             <span className="text-[20px]">🤑</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-extrabold text-white leading-tight">DIVULGOU, GANHOU</p>
-            <p className="text-[11.5px] text-white/85 mt-0.5">Indique amigos e ganhe comissão a cada reserva paga</p>
+            <p className="text-[14px] font-extrabold text-white leading-tight">{t('homePg.affiliateTitle')}</p>
+            <p className="text-[11.5px] text-white/85 mt-0.5">{t('homePg.affiliateDesc')}</p>
           </div>
           <ArrowRight size={16} className="text-white shrink-0" />
         </button>
 
         {/* ── Como funciona ─────────────────────────────────────── */}
         <section className="pb-2">
-          <p className="text-[15px] font-bold text-gray-900 mb-3">Como funciona?</p>
+          <p className="text-[15px] font-bold text-gray-900 mb-3">{t('homePg.howItWorksTitle')}</p>
           <div className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0">
-            {STEPS.map(({ n, color, title, desc }) => (
+            {STEPS.map(({ n, color, titleKey, descKey }) => (
               <div key={n} className="flex items-start gap-3">
                 <div className={`w-7 h-7 rounded-full ${color} flex items-center justify-center shrink-0 mt-0.5`}>
                   <span className="text-white text-[12px] font-bold">{n}</span>
                 </div>
                 <div>
-                  <p className="text-[13px] font-bold text-gray-900">{title}</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">{desc}</p>
+                  <p className="text-[13px] font-bold text-gray-900">{t(`homePg.${titleKey}`)}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">{t(`homePg.${descKey}`)}</p>
                 </div>
               </div>
             ))}
@@ -577,8 +583,8 @@ export default function Home() {
                     <HeartHandshake size={17} className="text-teal-600" />
                   </div>
                   <div>
-                    <p className="text-[14px] font-bold text-gray-900 leading-tight">Cooperativas parceiras</p>
-                    <p className="text-[11px] text-gray-400 leading-tight">Operadores locais que realizam seus passeios</p>
+                    <p className="text-[14px] font-bold text-gray-900 leading-tight">{t('homePg.partnersTitle')}</p>
+                    <p className="text-[11px] text-gray-400 leading-tight">{t('homePg.partnersDescMobile')}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -616,11 +622,11 @@ export default function Home() {
               <div className="absolute -right-10 -bottom-8 w-28 h-28 rounded-full bg-white/10" />
               <div className="relative flex items-center justify-between gap-3 p-4">
                 <div>
-                  <p className="text-white font-extrabold text-[16px] [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">Bora pro paraíso? 🌅</p>
-                  <p className="text-white/95 text-[12px] mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">Reserve seu passeio em poucos minutos</p>
+                  <p className="text-white font-extrabold text-[16px] [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">{t('homePg.finalCtaTitle')}</p>
+                  <p className="text-white/95 text-[12px] mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">{t('homePg.finalCtaDesc')}</p>
                 </div>
                 <span className="shrink-0 inline-flex items-center gap-1 bg-white text-brand font-bold text-[12px] px-3 py-2 rounded-xl">
-                  Ver <ArrowRight size={14} />
+                  {t('homePg.view')} <ArrowRight size={14} />
                 </span>
               </div>
             </button>

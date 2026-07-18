@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Bell, BellRing } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -17,6 +18,7 @@ function timeAgo(iso) {
 // `dark` adapta a cor do ícone para fundos escuros. `bookingsPath` é o destino
 // ao tocar numa notificação ligada a uma reserva.
 export default function NotificationBell({ bookingsPath = '/minhas-reservas', dark = false }) {
+  const { t } = useTranslation()
   const { token }  = useAuth()
   const [open, setOpen] = useState(false)
   const ref      = useRef(null)
@@ -47,7 +49,7 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
     setBusy(false)
     setPerm(pushPermission())
     if (!r.ok && r.reason === 'unsupported') {
-      alert('Seu navegador não suporta notificações push. No iPhone, adicione o app à tela de início (Compartilhar → Adicionar à Tela de Início) e tente de novo.')
+      alert(t('notifCmp.pushUnsupported'))
     }
   }
 
@@ -82,7 +84,7 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
     <div ref={ref} className="relative">
       <button
         onClick={toggle}
-        aria-label="Notificações"
+        aria-label={t('notifCmp.ariaLabel')}
         className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-colors ${dark ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}
       >
         <Bell size={18} className={dark ? 'text-white' : 'text-gray-600'} />
@@ -96,14 +98,14 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
       {open && (
         <div className="absolute right-0 mt-2 w-[min(340px,calc(100vw-24px))] bg-white rounded-2xl shadow-2xl border border-gray-100 z-[200] overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-            <p className="text-[14px] font-bold text-gray-900">Notificações</p>
-            {unread > 0 && <span className="text-[11px] text-gray-400">{unread} nova(s)</span>}
+            <p className="text-[14px] font-bold text-gray-900">{t('notifCmp.title')}</p>
+            {unread > 0 && <span className="text-[11px] text-gray-400">{t('notifCmp.unreadCount', { count: unread })}</span>}
           </div>
           <div className="max-h-[60vh] overflow-y-auto">
             {items.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Bell size={22} className="text-gray-300 mx-auto mb-2" />
-                <p className="text-[13px] text-gray-400">Nenhuma notificação ainda</p>
+                <p className="text-[13px] text-gray-400">{t('notifCmp.empty')}</p>
               </div>
             ) : items.map((n) => (
               <button
@@ -129,10 +131,10 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
                 disabled={busy}
                 className="w-full text-[12px] font-semibold text-brand flex items-center justify-center gap-1.5 py-1.5 disabled:opacity-60"
               >
-                <BellRing size={13} /> {busy ? 'Ativando…' : 'Ativar notificações no aparelho'}
+                <BellRing size={13} /> {busy ? t('notifCmp.enabling') : t('notifCmp.enablePush')}
               </button>
               {perm === 'denied' && (
-                <p className="text-[10px] text-gray-400 text-center mt-1">Permissão negada — ative nas configurações do navegador.</p>
+                <p className="text-[10px] text-gray-400 text-center mt-1">{t('notifCmp.permissionDenied')}</p>
               )}
             </div>
           )}

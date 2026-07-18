@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MapPin, Navigation, X, Check, Search, AlertCircle, Loader } from 'lucide-react'
 import { useRegion, findRegionByCity } from '../contexts/RegionContext'
 import { getPlaceSuggestions, getPlaceDetails, reverseGeocodeMunicipality } from '../lib/geoServices'
 
 export default function RegionPicker() {
+  const { t } = useTranslation()
   const { regions, region, selectRegion, detectGPS, detecting, showPicker, setShowPicker, outsideError, setOutsideError } = useRegion()
 
   const [query, setQuery]         = useState('')
@@ -81,8 +83,8 @@ export default function RegionPicker() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3">
           <div>
-            <p className="text-[16px] font-bold text-gray-900">Onde você está?</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Busque sua cidade ou use o GPS</p>
+            <p className="text-[16px] font-bold text-gray-900">{t('pickersCmp.regionTitle')}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{t('pickersCmp.regionSubtitle')}</p>
           </div>
           {canClose && (
             <button
@@ -105,7 +107,7 @@ export default function RegionPicker() {
               type="text"
               value={query}
               onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Ex: Jericoacoara, Fortaleza..."
+              placeholder={t('pickersCmp.regionSearchPlaceholder')}
               className="flex-1 bg-transparent text-[14px] text-gray-900 placeholder-gray-400 outline-none"
             />
             {query && (
@@ -138,7 +140,7 @@ export default function RegionPicker() {
             <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
               <AlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
               <p className="text-[12px] text-amber-700">
-                Localização fora das áreas cobertas. Selecione uma região abaixo.
+                {t('pickersCmp.outsideCoverage')}
               </p>
             </div>
           )}
@@ -157,8 +159,8 @@ export default function RegionPicker() {
                 : <Navigation size={17} />}
             </div>
             <div className="text-left">
-              <p className="text-[13px] font-bold">{detecting ? 'Detectando...' : 'Usar minha localização (GPS)'}</p>
-              <p className="text-[11px] opacity-70">Detecta seu município automaticamente</p>
+              <p className="text-[13px] font-bold">{detecting ? t('pickersCmp.gpsDetecting') : t('pickersCmp.gpsButton')}</p>
+              <p className="text-[11px] opacity-70">{t('pickersCmp.gpsSubtitle')}</p>
             </div>
           </button>
         </div>
@@ -167,7 +169,7 @@ export default function RegionPicker() {
         <div className="px-5 mb-2">
           <div className="flex items-center gap-2">
             <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-[11px] text-gray-400">ou escolha a região</span>
+            <span className="text-[11px] text-gray-400">{t('pickersCmp.orChooseRegion')}</span>
             <div className="flex-1 h-px bg-gray-100" />
           </div>
         </div>
@@ -175,7 +177,7 @@ export default function RegionPicker() {
         {/* Region list */}
         <div className="px-5 pb-8 space-y-2 max-h-[30vh] overflow-y-auto">
           {regions.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">Carregando regiões...</p>
+            <p className="text-sm text-gray-400 text-center py-4">{t('pickersCmp.loadingRegions')}</p>
           )}
           {regions.map((r) => {
             const active = region?.id === r.id

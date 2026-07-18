@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import {
@@ -42,24 +43,6 @@ function resolveStatus(booking) {
   return 'waiting_acceptance'
 }
 
-// Ordem do fluxo: solicitar → (cooperativa aceita) → pagar → confirmada → ...
-const TIMELINE = [
-  { key: 'waiting_acceptance', label: 'Aguardando uma cooperativa aceitar' },
-  { key: 'waiting_payment',    label: 'Pagamento'                          },
-  { key: 'confirmed',          label: 'Confirmada'                         },
-  { key: 'in_progress',        label: 'Em andamento'                       },
-  { key: 'completed',          label: 'Finalizada'                         },
-]
-
-const STATUS_META = {
-  waiting_payment:    { label: 'Aguardando pagamento',   color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-100',   icon: Clock       },
-  waiting_acceptance: { label: 'Ag. aceitação',          color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-100',   icon: Clock       },
-  confirmed:          { label: 'Confirmada',              color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: CheckCircle },
-  in_progress:        { label: 'Em andamento',            color: 'text-blue-700',    bg: 'bg-blue-50',    border: 'border-blue-100',    icon: Car         },
-  completed:          { label: 'Finalizada',              color: 'text-gray-600',    bg: 'bg-gray-50',    border: 'border-gray-200',    icon: CheckCircle },
-  cancelled:          { label: 'Cancelada',               color: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-100',     icon: XCircle     },
-}
-
 const TOUR_GRADIENTS = [
   'from-orange-100 to-amber-50',
   'from-sky-100 to-blue-50',
@@ -74,6 +57,7 @@ function fmt(v) {
 
 // ── Cancel Dialog ────────────────────────────────────────────────
 function CancelDialog({ bookingCode, onConfirm, onClose, loading, error }) {
+  const { t } = useTranslation()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -81,12 +65,12 @@ function CancelDialog({ bookingCode, onConfirm, onClose, loading, error }) {
         <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <AlertTriangle size={28} className="text-red-500" />
         </div>
-        <h3 className="font-bold text-gray-900 text-lg text-center mb-2">Cancelar reserva?</h3>
+        <h3 className="font-bold text-gray-900 text-lg text-center mb-2">{t('bookingDetailPg.cancelDialog.title')}</h3>
         <p className="text-sm text-gray-500 text-center mb-1">
-          Reserva <span className="font-semibold text-gray-700">{bookingCode}</span>
+          {t('bookingDetailPg.cancelDialog.reservationLabel')} <span className="font-semibold text-gray-700">{bookingCode}</span>
         </p>
         <p className="text-xs text-gray-400 text-center mb-4">
-          Esta ação não pode ser desfeita. Verifique a política de cancelamento antes de prosseguir.
+          {t('bookingDetailPg.cancelDialog.warning')}
         </p>
         {error && (
           <p className="text-xs text-red-500 bg-red-50 rounded-xl px-3 py-2 text-center mb-4">{error}</p>
@@ -96,14 +80,14 @@ function CancelDialog({ bookingCode, onConfirm, onClose, loading, error }) {
             onClick={onClose}
             className="flex-1 h-12 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-600 active:scale-95 transition-transform"
           >
-            Voltar
+            {t('bookingDetailPg.actions.back')}
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
             className="flex-1 h-12 bg-red-500 text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-60"
           >
-            {loading ? <><Loader2 size={16} className="animate-spin" />Cancelando…</> : 'Confirmar'}
+            {loading ? <><Loader2 size={16} className="animate-spin" />{t('bookingDetailPg.cancelDialog.cancelling')}</> : t('bookingDetailPg.cancelDialog.confirm')}
           </button>
         </div>
       </div>
@@ -113,9 +97,28 @@ function CancelDialog({ bookingCode, onConfirm, onClose, loading, error }) {
 
 // ── Main Page ────────────────────────────────────────────────────
 export default function BookingDetail() {
+  const { t }        = useTranslation()
   const { id }       = useParams()
   const navigate     = useNavigate()
   const queryClient  = useQueryClient()
+
+  // Ordem do fluxo: solicitar → (cooperativa aceita) → pagar → confirmada → ...
+  const TIMELINE = [
+    { key: 'waiting_acceptance', label: t('bookingDetailPg.timeline.waitingAcceptance') },
+    { key: 'waiting_payment',    label: t('bookingDetailPg.timeline.payment')            },
+    { key: 'confirmed',          label: t('bookingDetailPg.timeline.confirmed')          },
+    { key: 'in_progress',        label: t('bookingDetailPg.timeline.inProgress')         },
+    { key: 'completed',          label: t('bookingDetailPg.timeline.completed')          },
+  ]
+
+  const STATUS_META = {
+    waiting_payment:    { label: t('bookingDetailPg.statusMeta.waitingPayment'),    color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-100',   icon: Clock       },
+    waiting_acceptance: { label: t('bookingDetailPg.statusMeta.waitingAcceptance'), color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-100',   icon: Clock       },
+    confirmed:          { label: t('bookingDetailPg.timeline.confirmed'),           color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: CheckCircle },
+    in_progress:        { label: t('bookingDetailPg.timeline.inProgress'),          color: 'text-blue-700',    bg: 'bg-blue-50',    border: 'border-blue-100',    icon: Car         },
+    completed:          { label: t('bookingDetailPg.timeline.completed'),           color: 'text-gray-600',    bg: 'bg-gray-50',    border: 'border-gray-200',    icon: CheckCircle },
+    cancelled:          { label: t('bookingDetailPg.statusMeta.cancelled'),         color: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-100',     icon: XCircle     },
+  }
 
   const [copied,          setCopied]          = useState(false)
   const [showCancel,      setShowCancel]      = useState(false)
@@ -152,7 +155,7 @@ export default function BookingDetail() {
       queryClient.invalidateQueries({ queryKey: ['booking', id] })
       setShowCancel(false)
     } catch (err) {
-      setCancelError(err.message || 'Erro ao cancelar')
+      setCancelError(err.message || t('bookingDetailPg.errors.cancelFailed'))
     } finally {
       setCancelLoading(false)
     }
@@ -176,7 +179,7 @@ export default function BookingDetail() {
     navigate('/checkout/pagamento', {
       state: {
         service_name:        booking.booking_items?.[0]?.title_snapshot
-          || `${booking.service_type === 'tour' ? 'Passeio' : 'Transfer'} · ${booking.booking_code}`,
+          || `${booking.service_type === 'tour' ? t('bookingDetailPg.service.tour') : t('bookingDetailPg.service.transfer')} · ${booking.booking_code}`,
         service_type:        booking.service_type,
         booking_mode:        booking.booking_mode || 'private',
         service_date:        dStr,
@@ -202,7 +205,7 @@ export default function BookingDetail() {
       await queryClient.invalidateQueries({ queryKey: ['booking', id] })
       handlePay(r?.dynamic_total)
     } catch (err) {
-      setCheckoutError(err.message || 'Não foi possível confirmar. Tente novamente.')
+      setCheckoutError(err.message || t('bookingDetailPg.errors.checkoutFailed'))
     } finally {
       setCheckoutLoading(false)
     }
@@ -217,9 +220,9 @@ export default function BookingDetail() {
   if (!booking) return (
     <div className="min-h-screen bg-[#F8F8F8] flex flex-col items-center justify-center gap-4 text-gray-400">
       <XCircle size={48} className="text-gray-200" />
-      <p className="text-sm">Reserva não encontrada.</p>
+      <p className="text-sm">{t('bookingDetailPg.notFound.message')}</p>
       <button onClick={() => navigate('/minhas-reservas')} className="text-brand text-sm font-semibold">
-        Voltar
+        {t('bookingDetailPg.actions.back')}
       </button>
     </div>
   )
@@ -251,17 +254,22 @@ export default function BookingDetail() {
   }
   const timeStr = booking.service_time ? booking.service_time.slice(0, 5) : '—'
   const isPrivate = booking.booking_mode === 'private'
-  const serviceLabel = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
+  const serviceLabel = booking.service_type === 'tour' ? t('bookingDetailPg.service.tour') : t('bookingDetailPg.service.transfer')
   const modeLabel    = booking.service_type === 'tour'
-    ? (isPrivate ? 'Privativo' : 'Compartilhado')
-    : 'Transfer'
+    ? (isPrivate ? t('bookingDetailPg.mode.private') : t('bookingDetailPg.mode.shared'))
+    : t('bookingDetailPg.service.transfer')
+
+  const peopleCount = booking.people_count || '—'
+  const peopleValue = booking.people_count === 1
+    ? t('bookingDetailPg.details.peopleCountOne', { count: peopleCount })
+    : t('bookingDetailPg.details.peopleCountOther', { count: peopleCount })
 
   const details = [
-    { icon: Calendar, label: 'Data',     value: dateStr },
-    { icon: Clock,    label: 'Horário',  value: timeStr },
-    { icon: Users,    label: 'Pessoas',  value: `${booking.people_count || '—'} ${booking.people_count === 1 ? 'pessoa' : 'pessoas'}` },
-    ...(booking.pickup_place_name      ? [{ icon: MapPin, label: 'Origem',  value: booking.pickup_place_name }]      : []),
-    ...(booking.destination_place_name ? [{ icon: MapPin, label: 'Destino', value: booking.destination_place_name }] : []),
+    { icon: Calendar, label: t('bookingDetailPg.details.date'),     value: dateStr },
+    { icon: Clock,    label: t('bookingDetailPg.details.time'),     value: timeStr },
+    { icon: Users,    label: t('bookingDetailPg.details.people'),   value: peopleValue },
+    ...(booking.pickup_place_name      ? [{ icon: MapPin, label: t('bookingDetailPg.details.origin'),      value: booking.pickup_place_name }]      : []),
+    ...(booking.destination_place_name ? [{ icon: MapPin, label: t('bookingDetailPg.details.destination'), value: booking.destination_place_name }] : []),
   ]
 
   return (
@@ -275,13 +283,13 @@ export default function BookingDetail() {
           >
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
-          <h1 className="flex-1 font-giro font-semibold text-[20px] text-gray-900 tracking-wide text-center">Detalhes da reserva</h1>
+          <h1 className="flex-1 font-giro font-semibold text-[20px] text-gray-900 tracking-wide text-center">{t('bookingDetailPg.header.title')}</h1>
           <button
             onClick={handleCopy}
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors active:scale-95"
           >
             <Copy size={12} />
-            {copied ? 'Copiado!' : booking.booking_code}
+            {copied ? t('bookingDetailPg.header.copied') : booking.booking_code}
           </button>
         </div>
       </header>
@@ -297,13 +305,13 @@ export default function BookingDetail() {
             <div>
               <p className={`text-sm font-bold ${meta.color}`}>{meta.label}</p>
               {status === 'waiting_acceptance' && (
-                <p className="text-xs text-amber-600 mt-0.5">Assim que uma cooperativa aceitar, você poderá pagar</p>
+                <p className="text-xs text-amber-600 mt-0.5">{t('bookingDetailPg.statusBanner.waitingAcceptance')}</p>
               )}
               {status === 'waiting_payment' && (
-                <p className="text-xs text-amber-600 mt-0.5">Cooperativa aceitou — pague para confirmar</p>
+                <p className="text-xs text-amber-600 mt-0.5">{t('bookingDetailPg.statusBanner.waitingPayment')}</p>
               )}
               {status === 'cancelled' && (
-                <p className="text-xs text-red-500 mt-0.5">Esta reserva foi cancelada</p>
+                <p className="text-xs text-red-500 mt-0.5">{t('bookingDetailPg.statusBanner.cancelled')}</p>
               )}
             </div>
           </div>
@@ -319,12 +327,14 @@ export default function BookingDetail() {
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-gray-900">
-                  {ls.accepted_count} de {ls.total_legs} veículos aceitos
+                  {t('bookingDetailPg.partial.acceptedCount', { accepted: ls.accepted_count, total: ls.total_legs })}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Confirme para pagar só o que foi aceito. {ls.pending_count > 0 && (
+                  {t('bookingDetailPg.partial.confirmPrompt')} {ls.pending_count > 0 && (
                     <span className="text-amber-700">
-                      {ls.pending_count} veículo{ls.pending_count > 1 ? 's' : ''} sem cooperativa {ls.pending_count > 1 ? 'serão cancelados' : 'será cancelado'}.
+                      {ls.pending_count > 1
+                        ? t('bookingDetailPg.partial.pendingWarningPlural', { count: ls.pending_count })
+                        : t('bookingDetailPg.partial.pendingWarningSingular', { count: ls.pending_count })}
                     </span>
                   )}
                 </p>
@@ -335,10 +345,10 @@ export default function BookingDetail() {
               <div className="flex items-center justify-center gap-1.5 mb-3 text-amber-700">
                 <Clock size={14} />
                 <span className="text-sm font-bold tabular-nums">{mmss}</span>
-                <span className="text-xs">para confirmar</span>
+                <span className="text-xs">{t('bookingDetailPg.partial.toConfirm')}</span>
               </div>
             ) : (
-              <p className="text-center text-xs text-red-500 mb-3">Prazo expirado — atualize a página.</p>
+              <p className="text-center text-xs text-red-500 mb-3">{t('bookingDetailPg.partial.expired')}</p>
             )}
 
             {checkoutError && (
@@ -351,15 +361,15 @@ export default function BookingDetail() {
               className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {checkoutLoading
-                ? <><Loader2 size={16} className="animate-spin" /> Confirmando…</>
-                : <>Confirmar e pagar · {fmt(acceptedTot)}</>}
+                ? <><Loader2 size={16} className="animate-spin" /> {t('bookingDetailPg.partial.confirming')}</>
+                : <>{t('bookingDetailPg.partial.confirmAndPay', { amount: fmt(acceptedTot) })}</>}
             </button>
             <button
               onClick={() => setShowCancel(true)}
               disabled={checkoutLoading}
               className="w-full mt-2 text-gray-500 font-semibold rounded-2xl py-2.5 text-sm active:scale-[0.98] transition-transform disabled:opacity-50"
             >
-              Cancelar corrida
+              {t('bookingDetailPg.partial.cancelRide')}
             </button>
           </div>
         )}
@@ -372,15 +382,15 @@ export default function BookingDetail() {
                 <CheckCircle size={20} className="text-brand" />
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-900">Cooperativa aceitou! 🎉</p>
-                <p className="text-xs text-gray-500 mt-0.5">Pague para confirmar sua reserva.</p>
+                <p className="text-sm font-bold text-gray-900">{t('bookingDetailPg.payCta.title')}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{t('bookingDetailPg.payCta.subtitle')}</p>
               </div>
             </div>
             <button
               onClick={handlePay}
               className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98] transition-transform"
             >
-              Pagar agora · {fmt(booking.total_amount)}
+              {t('bookingDetailPg.payCta.button', { amount: fmt(booking.total_amount) })}
             </button>
           </div>
         )}
@@ -388,7 +398,7 @@ export default function BookingDetail() {
         {/* Operator confirmed card */}
         {status === 'confirmed' && booking.operator && (
           <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
-            <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide mb-2">Cooperativa confirmada</p>
+            <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide mb-2">{t('bookingDetailPg.operatorCard.title')}</p>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-bold text-gray-900">{booking.operator.full_name}</p>
@@ -420,8 +430,8 @@ export default function BookingDetail() {
               </div>
             </div>
             <div>
-              <p className="text-sm font-bold text-amber-800">Aguardando cooperativa aceitar</p>
-              <p className="text-xs text-amber-600 mt-0.5">Você será notificado assim que uma cooperativa aceitar</p>
+              <p className="text-sm font-bold text-amber-800">{t('bookingDetailPg.waitingPulse.title')}</p>
+              <p className="text-xs text-amber-600 mt-0.5">{t('bookingDetailPg.waitingPulse.subtitle')}</p>
             </div>
           </div>
         )}
@@ -444,7 +454,7 @@ export default function BookingDetail() {
         {/* Progress Timeline */}
         {!isCancelled && (
           <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <h2 className="text-sm font-bold text-gray-900 mb-4">Progresso da reserva</h2>
+            <h2 className="text-sm font-bold text-gray-900 mb-4">{t('bookingDetailPg.timelineSection.title')}</h2>
             <div className="space-y-0">
               {TIMELINE.map((step, i) => {
                 const isPast    = i < currentIdx
@@ -492,7 +502,7 @@ export default function BookingDetail() {
 
         {/* Booking Details */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="text-sm font-bold text-gray-900 mb-3">Detalhes</h2>
+          <h2 className="text-sm font-bold text-gray-900 mb-3">{t('bookingDetailPg.detailsSection.title')}</h2>
           <div className="space-y-2.5">
             {details.map((item, i) => (
               <div key={i} className="flex items-center gap-3">
@@ -511,15 +521,15 @@ export default function BookingDetail() {
         {/* Vehicles */}
         {booking.booking_vehicles?.length > 0 && (
           <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <h2 className="text-sm font-bold text-gray-900 mb-3">Veículos</h2>
+            <h2 className="text-sm font-bold text-gray-900 mb-3">{t('bookingDetailPg.vehiclesSection.title')}</h2>
             <div className="space-y-2">
               {booking.booking_vehicles.map((bv, i) => (
                 <div key={i} className="flex items-center justify-between bg-brand/5 border border-brand/10 rounded-xl px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <Car size={14} className="text-brand" />
-                    <span className="text-sm font-medium text-gray-900">{bv.vehicle_name_snapshot || 'Veículo'}</span>
+                    <span className="text-sm font-medium text-gray-900">{bv.vehicle_name_snapshot || t('bookingDetailPg.vehiclesSection.defaultName')}</span>
                   </div>
-                  <span className="text-xs text-brand font-bold">{bv.quantity}x · {fmt(bv.unit_price)}</span>
+                  <span className="text-xs text-brand font-bold">{t('bookingDetailPg.vehiclesSection.qtyPrice', { qty: bv.quantity, price: fmt(bv.unit_price) })}</span>
                 </div>
               ))}
             </div>
@@ -529,7 +539,7 @@ export default function BookingDetail() {
         {/* Special Notes */}
         {booking.special_notes && (
           <div className="bg-amber-50 rounded-2xl px-4 py-3 border border-amber-100">
-            <p className="text-xs text-amber-700 font-semibold mb-0.5">Observações</p>
+            <p className="text-xs text-amber-700 font-semibold mb-0.5">{t('bookingDetailPg.notes.title')}</p>
             <p className="text-sm text-amber-800">{booking.special_notes}</p>
           </div>
         )}
@@ -544,8 +554,8 @@ export default function BookingDetail() {
             <WhatsAppIcon />
           </div>
           <div className="text-left flex-1">
-            <p className="text-sm font-bold text-gray-900">Suporte via WhatsApp</p>
-            <p className="text-xs text-gray-400">Estamos prontos para ajudar</p>
+            <p className="text-sm font-bold text-gray-900">{t('bookingDetailPg.support.whatsappTitle')}</p>
+            <p className="text-xs text-gray-400">{t('bookingDetailPg.support.whatsappSubtitle')}</p>
           </div>
           <MessageCircle size={16} className="text-gray-400" />
         </button>
@@ -559,7 +569,7 @@ export default function BookingDetail() {
             <Phone size={16} />
           </div>
           <div className="text-left flex-1">
-            <p className="text-sm font-bold text-gray-900">Ligar para suporte</p>
+            <p className="text-sm font-bold text-gray-900">{t('bookingDetailPg.support.phoneTitle')}</p>
             <p className="text-xs text-gray-400">{PHONE_NUMBER}</p>
           </div>
         </a>
@@ -570,9 +580,9 @@ export default function BookingDetail() {
           <div className="flex items-start gap-2.5">
             <Shield size={15} className="text-blue-500 shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-bold text-blue-900 mb-0.5">Política de cancelamento</p>
+              <p className="text-xs font-bold text-blue-900 mb-0.5">{t('bookingDetailPg.policy.title')}</p>
               <p className="text-xs text-blue-700 leading-relaxed">
-                Cancelamento gratuito até 24h antes do passeio. Após esse prazo, pode haver cobrança de taxa.
+                {t('bookingDetailPg.policy.text')}
               </p>
             </div>
           </div>
@@ -585,7 +595,7 @@ export default function BookingDetail() {
             className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold text-red-500 active:text-red-700 transition-colors"
           >
             <AlertTriangle size={15} />
-            Cancelar reserva
+            {t('bookingDetailPg.actions.cancelReservation')}
           </button>
         )}
       </main>

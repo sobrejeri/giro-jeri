@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery }    from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
@@ -166,6 +167,7 @@ function pickPopularRoutes(routes) {
 }
 
 function PresetCard({ route, bg, active, onSelect }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onSelect}
@@ -173,18 +175,18 @@ function PresetCard({ route, bg, active, onSelect }) {
     >
       <div className={`bg-gradient-to-br ${bg} px-3 pt-2.5 pb-2`}>
         <span className="inline-block text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-1.5">
-          Privativo
+          {t('transfersPg.privateBadge')}
         </span>
         <p className="text-white font-bold text-[12px] leading-tight">
           {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
         </p>
         <div className="flex items-center gap-1 mt-1">
           <Users size={9} className="text-white/70" />
-          <span className="text-[10px] text-white/80">Até 4</span>
+          <span className="text-[10px] text-white/80">{t('transfersPg.upTo4')}</span>
         </div>
       </div>
       <div className="bg-white px-3 py-2">
-        <p className="text-[9px] text-gray-400">Privativo a partir de</p>
+        <p className="text-[9px] text-gray-400">{t('transfersPg.startingFrom')}</p>
         <p className="text-[13px] font-extrabold text-gray-900">
           R$ {Number(route.default_price).toLocaleString('pt-BR')}
         </p>
@@ -237,6 +239,7 @@ export function suggestVehicles(vehicles, people) {
 
 /* ── Vehicle row with qty controls ──────────────────────────── */
 export function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
+  const { t } = useTranslation()
   return (
     <div className={`flex items-center gap-3 px-4 py-3 transition-all border-l-4 ${qty > 0 ? 'border-brand bg-brand/5' : 'border-transparent'}`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${qty > 0 ? 'bg-brand' : 'bg-gray-100'}`}>
@@ -246,11 +249,11 @@ export function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
         <p className="text-[13px] font-bold text-gray-900 truncate">{vehicle.name}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <Users size={10} className="text-gray-400" />
-          <span className="text-[11px] text-gray-400">Até {vehicle.seat_capacity} pessoas</span>
+          <span className="text-[11px] text-gray-400">{t('transfersPg.upToPeopleCapacity', { count: vehicle.seat_capacity })}</span>
         </div>
         {unitPrice && (
           <p className="text-[11px] text-gray-500 mt-0.5">
-            R$ {Number(unitPrice).toLocaleString('pt-BR')}<span className="text-gray-400"> /veículo</span>
+            R$ {Number(unitPrice).toLocaleString('pt-BR')}<span className="text-gray-400"> {t('transfersPg.perVehicle')}</span>
           </p>
         )}
       </div>
@@ -278,6 +281,7 @@ export function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
 
 /* ── Main ───────────────────────────────────────────────────── */
 export default function Transfers() {
+  const { t } = useTranslation()
   const navigate  = useNavigate()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
@@ -360,14 +364,14 @@ export default function Transfers() {
       })
       setCustomSuccess(true)
     } catch (err) {
-      setCustomError(err.message || 'Erro ao solicitar cotação')
+      setCustomError(err.message || t('transfersPg.quoteError'))
     } finally {
       setCustomLoading(false)
     }
   }
 
-  const customDateLabel = isToday(customDate) ? 'Hoje'
-    : isSameDay(customDate, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+  const customDateLabel = isToday(customDate) ? t('transfersPg.today')
+    : isSameDay(customDate, addDays(startOfDay(new Date()), 1)) ? t('transfersPg.tomorrow')
     : format(customDate, 'd MMM', { locale: ptBR })
 
   /* ── Queries ── */
@@ -522,8 +526,8 @@ export default function Transfers() {
   // final é definida no carrinho, então é lá que o total com temporada é
   // computado. Nesta pré-seleção mostra-se só o total dos veículos.
 
-  const dateLabel = isToday(date) ? 'Hoje'
-    : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+  const dateLabel = isToday(date) ? t('transfersPg.today')
+    : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('transfersPg.tomorrow')
     : format(date, 'd MMM', { locale: ptBR })
 
   async function handleConfirm() {
@@ -543,22 +547,22 @@ export default function Transfers() {
           <button
             onClick={() => navigate(-1)}
             className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="Voltar"
+            aria-label={t('transfersPg.back')}
           >
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
-          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">Transfer</h1>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('transfersPg.title')}</h1>
           <div className="absolute right-0 flex items-center gap-1.5">
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
               className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
-              aria-label="Buscar reserva"
+              aria-label={t('transfersPg.searchReservation')}
             >
               <Search size={15} />
             </button>
           </div>
         </div>
-        <p className="text-[12px] text-gray-400 text-center mt-1">Transporte privativo com motorista</p>
+        <p className="text-[12px] text-gray-400 text-center mt-1">{t('transfersPg.subtitle')}</p>
 
         {showSearch && (
           <form
@@ -570,7 +574,7 @@ export default function Transfers() {
               autoFocus
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar reserva por código…"
+              placeholder={t('transfersPg.searchPlaceholder')}
               className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
             />
           </form>
@@ -585,7 +589,7 @@ export default function Transfers() {
             }`}
           >
             <Route size={13} />
-            Rota definida
+            {t('transfersPg.modeRoute')}
           </button>
           <button
             onClick={() => { setMode('custom'); setCustomSuccess(false); setCustomError('') }}
@@ -594,7 +598,7 @@ export default function Transfers() {
             }`}
           >
             <Zap size={13} />
-            Translado personalizado
+            {t('transfersPg.modeCustom')}
           </button>
         </div>
       </div>
@@ -607,21 +611,21 @@ export default function Transfers() {
               <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
                 <CheckCircle2 size={32} className="text-emerald-500" />
               </div>
-              <p className="text-[18px] font-extrabold text-gray-900 mb-2">Cotação solicitada!</p>
+              <p className="text-[18px] font-extrabold text-gray-900 mb-2">{t('transfersPg.quoteRequestedTitle')}</p>
               <p className="text-[13px] text-gray-500 max-w-[240px] mb-6">
-                A cooperativa irá analisar e enviar um valor para você confirmar.
+                {t('transfersPg.quoteSuccessDesc')}
               </p>
               <button
                 onClick={() => navigate('/minhas-reservas')}
                 className="bg-brand text-white font-bold rounded-2xl px-6 py-3 text-[14px] active:scale-95 transition-transform"
               >
-                Ver minhas cotações
+                {t('transfersPg.viewQuotes')}
               </button>
               <button
                 onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes('') }}
                 className="mt-3 text-[13px] text-gray-400 underline"
               >
-                Solicitar outra corrida
+                {t('transfersPg.requestAnother')}
               </button>
             </div>
           ) : (
@@ -629,34 +633,34 @@ export default function Transfers() {
               <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
                 <Zap size={14} className="text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-[12px] text-amber-700 leading-relaxed">
-                  Informe os pontos de embarque e destino. A cooperativa confirma e envia o valor da corrida para você.
+                  {t('transfersPg.customIntro')}
                 </p>
               </div>
 
               {/* Origin / Dest */}
               <section className="bg-white rounded-2xl border border-gray-100 relative overflow-visible">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Rota</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.routeSection')}</p>
                 <div className="px-4 pb-4 space-y-3">
                   <div>
-                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Embarque</label>
+                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.pickup')}</label>
                     <div className="mt-1">
                       <PlaceInput
                         value={customOrigin}
                         onChange={setCustomOrigin}
                         onPick={setCustomOriginMeta}
-                        placeholder="Buscar endereço, hotel, ponto..."
+                        placeholder={t('transfersPg.placeSearchPlaceholder')}
                         dotClass="bg-brand"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Destino</label>
+                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.destination')}</label>
                     <div className="mt-1">
                       <PlaceInput
                         value={customDest}
                         onChange={setCustomDest}
                         onPick={setCustomDestMeta}
-                        placeholder="Buscar endereço, hotel, ponto..."
+                        placeholder={t('transfersPg.placeSearchPlaceholder')}
                         dotClass="border-2 border-gray-400 bg-transparent"
                       />
                     </div>
@@ -666,13 +670,13 @@ export default function Transfers() {
 
               {/* Data & Horário */}
               <section className="bg-white rounded-2xl border border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Data & Horário</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.dateTimeSection')}</p>
                 <div className="flex gap-2 px-4 pb-4">
                   <button onClick={() => setShowCustomDate(true)}
                     className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform">
                     <Calendar size={13} className="text-brand" />
                     <div className="text-left">
-                      <p className="text-[9px] text-gray-400 leading-none">Data</p>
+                      <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.dateLabel')}</p>
                       <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{customDateLabel}</p>
                     </div>
                   </button>
@@ -680,8 +684,8 @@ export default function Transfers() {
                     className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform relative">
                     <Clock size={13} className="text-brand" />
                     <div className="text-left flex-1">
-                      <p className="text-[9px] text-gray-400 leading-none">Horário</p>
-                      <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{customTime || 'Selecionar'}</p>
+                      <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.timeLabel')}</p>
+                      <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{customTime || t('transfersPg.select')}</p>
                     </div>
                     <input
                       ref={customTimeRef}
@@ -697,11 +701,11 @@ export default function Transfers() {
 
               {/* Passageiros */}
               <section className="bg-white rounded-2xl border border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Passageiros</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.passengersSection')}</p>
                 <div className="flex items-center justify-between px-4 pb-4">
                   <div className="flex items-center gap-2">
                     <Users size={16} className="text-brand" />
-                    <p className="text-[13px] font-bold text-gray-900">{customPeople} passageiro{customPeople !== 1 ? 's' : ''}</p>
+                    <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.passengersCount', { count: customPeople })}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCustomPeople(p => Math.max(1, p - 1))}
@@ -719,13 +723,13 @@ export default function Transfers() {
 
               {/* Observações */}
               <section className="bg-white rounded-2xl border border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Observações</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.notesSection')}</p>
                 <div className="px-4 pb-4">
                   <textarea
                     rows={3}
                     value={customNotes}
                     onChange={e => setCustomNotes(e.target.value)}
-                    placeholder="Ex: 2 malas grandes, voo às 14h, precisamos de cadeirinha..."
+                    placeholder={t('transfersPg.notesPlaceholderCustom')}
                     className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400"
                   />
                 </div>
@@ -738,7 +742,7 @@ export default function Transfers() {
               <div className="flex items-start gap-2 px-1">
                 <Info size={13} className="text-blue-400 shrink-0 mt-0.5" />
                 <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Valor a combinar. A cooperativa irá confirmar a corrida e enviar o preço para sua aprovação.
+                  {t('transfersPg.priceNoteCustom')}
                 </p>
               </div>
             </>
@@ -757,7 +761,7 @@ export default function Transfers() {
         {/* ROTAS POPULARES */}
         {popularRoutes.length > 0 && (
         <div>
-          <p className="text-[13px] font-bold text-gray-700 mb-2.5">Rotas populares</p>
+          <p className="text-[13px] font-bold text-gray-700 mb-2.5">{t('transfersPg.popularRoutes')}</p>
           <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
             {popularRoutes.map((r, i) => (
               <PresetCard
@@ -774,15 +778,15 @@ export default function Transfers() {
 
         {/* ROTA */}
         <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Rota</p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.routeSection')}</p>
 
           <button onClick={() => setShowOrigin(true)}
             className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-50 active:bg-gray-50">
             <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
             <div className="flex-1 text-left">
-              <p className="text-[10px] text-gray-400">Origem</p>
+              <p className="text-[10px] text-gray-400">{t('transfersPg.origin')}</p>
               <p className={`text-[13px] font-semibold ${origin ? 'text-gray-900' : 'text-gray-400'}`}>
-                {origin || 'Selecione o ponto de partida'}
+                {origin || t('transfersPg.selectOrigin')}
               </p>
             </div>
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
@@ -792,9 +796,9 @@ export default function Transfers() {
             className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-100 active:bg-gray-50">
             <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
             <div className="flex-1 text-left">
-              <p className="text-[10px] text-gray-400">Destino</p>
+              <p className="text-[10px] text-gray-400">{t('transfersPg.destination')}</p>
               <p className={`text-[13px] font-semibold ${dest ? 'text-gray-900' : 'text-gray-400'}`}>
-                {dest || (dests.length ? 'Selecione o destino' : 'Escolha a origem primeiro')}
+                {dest || (dests.length ? t('transfersPg.selectDestination') : t('transfersPg.chooseOriginFirst'))}
               </p>
             </div>
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
@@ -803,13 +807,13 @@ export default function Transfers() {
 
         {/* DATA & HORÁRIO */}
         <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Data & Horário</p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.dateTimeSection')}</p>
           <div className="flex gap-2 px-4 pb-4">
             <button onClick={() => setShowDate(true)}
               className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform">
               <Calendar size={13} className="text-brand" />
               <div className="text-left">
-                <p className="text-[9px] text-gray-400 leading-none">Data</p>
+                <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.dateLabel')}</p>
                 <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{dateLabel}</p>
               </div>
             </button>
@@ -817,8 +821,8 @@ export default function Transfers() {
               className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform relative">
               <Clock size={13} className="text-brand" />
               <div className="text-left flex-1">
-                <p className="text-[9px] text-gray-400 leading-none">Horário</p>
-                <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{time || 'Selecionar'}</p>
+                <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.timeLabel')}</p>
+                <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{time || t('transfersPg.select')}</p>
               </div>
               <input
                 ref={timeRef}
@@ -832,20 +836,20 @@ export default function Transfers() {
           </div>
           {!advanceOk && (
             <p className="px-4 pb-3 -mt-1 text-[11px] text-amber-600">
-              Transfers precisam de no mínimo {MIN_ADVANCE_HOURS}h de antecedência — escolha a partir de {format(minBookable, "d/MM 'às' HH:mm")}.
+              {t('transfersPg.minAdvanceNotice', { hours: MIN_ADVANCE_HOURS, datetime: format(minBookable, "d/MM 'às' HH:mm") })}
             </p>
           )}
         </section>
 
         {/* PASSAGEIROS */}
         <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Passageiros</p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.passengersSection')}</p>
           <div className="flex items-center justify-between px-4 pb-4">
             <div className="flex items-center gap-2">
               <Users size={16} className="text-brand" />
               <div>
-                <p className="text-[13px] font-bold text-gray-900">{people} passageiro{people !== 1 ? 's' : ''}</p>
-                <p className="text-[10px] text-gray-400">Passageiros adicionais a combinar</p>
+                <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.passengersCount', { count: people })}</p>
+                <p className="text-[10px] text-gray-400">{t('transfersPg.passengersNote')}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -865,7 +869,7 @@ export default function Transfers() {
         {/* VEÍCULO */}
         {vehicles.length > 0 && (
           <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Veículo</p>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.vehicleSection')}</p>
 
             {/* Sugestão */}
             {suggestion && (
@@ -880,7 +884,7 @@ export default function Transfers() {
                   <div className="flex items-center gap-1 mt-0.5">
                     <Users size={10} className="text-gray-400" />
                     <span className="text-[11px] text-gray-400">
-                      Até {suggestion.vehicle.seat_capacity * suggestion.qty} pessoas
+                      {t('transfersPg.upToPeopleCapacity', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}
                     </span>
                   </div>
                 </div>
@@ -892,7 +896,7 @@ export default function Transfers() {
                   )}
                   {suggestionIsApplied ? (
                     <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
-                      <Check size={11} /> Selecionado
+                      <Check size={11} /> {t('transfersPg.selected')}
                     </span>
                   ) : (
                     <button
@@ -902,7 +906,7 @@ export default function Transfers() {
                       }}
                       className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
                     >
-                      Aplicar
+                      {t('transfersPg.apply')}
                     </button>
                   )}
                 </div>
@@ -926,13 +930,13 @@ export default function Transfers() {
 
         {/* OBSERVAÇÕES */}
         <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Observações & Bagagens</p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.notesBaggageSection')}</p>
           <div className="px-4 pb-4">
             <textarea
               rows={3}
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="Ex: 2 malas grandes, precisamos de cadeirinha..."
+              placeholder={t('transfersPg.notesPlaceholderRoute')}
               className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400"
             />
           </div>
@@ -941,13 +945,13 @@ export default function Transfers() {
         {/* RESUMO */}
         {matched && (
           <section className="bg-white rounded-2xl border border-gray-100">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-3">Resumo do transfer</p>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-3">{t('transfersPg.summaryTitle')}</p>
             <div className="px-4 pb-4 space-y-2.5">
               {[
-                { dot: 'bg-brand',    label: 'Origem',      val: origin },
-                { dot: 'bg-gray-400', label: 'Destino',     val: dest   },
-                { icon: Users,        label: 'Passageiros', val: `${people} pessoa${people !== 1 ? 's' : ''}` },
-                ...(cartItems.length ? [{ icon: Car, label: 'Veículo', val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
+                { dot: 'bg-brand',    label: t('transfersPg.origin'),      val: origin },
+                { dot: 'bg-gray-400', label: t('transfersPg.destination'), val: dest   },
+                { icon: Users,        label: t('transfersPg.passengersSection'), val: t('transfersPg.peopleCount', { count: people }) },
+                ...(cartItems.length ? [{ icon: Car, label: t('transfersPg.vehicleSection'), val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
               ].map((row, i) => (
                 <div key={i} className="flex items-center gap-3">
                   {row.dot
@@ -960,11 +964,11 @@ export default function Transfers() {
                 </div>
               ))}
               <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
-                <p className="text-[13px] font-bold text-gray-900">Total dos veículos</p>
+                <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.vehiclesTotal')}</p>
                 <p className="text-[16px] font-extrabold text-brand">R$ {cartTotal ? cartTotal.toLocaleString('pt-BR') : '—'}</p>
               </div>
               <p className="text-[11px] text-gray-400 leading-snug">
-                Data, horário e eventuais acréscimos de temporada são definidos ao continuar, no carrinho.
+                {t('transfersPg.summaryFootnote')}
               </p>
             </div>
           </section>
@@ -974,8 +978,7 @@ export default function Transfers() {
         <div className="flex items-start gap-2 px-1">
           <Info size={13} className="text-blue-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-gray-400 leading-relaxed">
-            Motorista aparecerá no local de embarque com placa identificada.
-            Cancelamento gratuito até 24h antes.
+            {t('transfersPg.driverInfoRoute')}
           </p>
         </div>
       </div>
@@ -988,11 +991,11 @@ export default function Transfers() {
         <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] text-gray-400">Total dos veículos</p>
+            <p className="text-[10px] text-gray-400">{t('transfersPg.vehiclesTotal')}</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
               {cartTotal
                 ? `R$ ${cartTotal.toLocaleString('pt-BR')}`
-                : matched ? 'Selecione um veículo' : 'Selecione a rota'}
+                : matched ? t('transfersPg.selectVehicle') : t('transfersPg.selectRoute')}
             </p>
           </div>
           <button
@@ -1002,7 +1005,7 @@ export default function Transfers() {
               canBook ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {loading ? 'Aguarde…' : 'Adicionar ao carrinho'}
+            {loading ? t('transfersPg.wait') : t('transfersPg.addToCart')}
           </button>
         </div>
         </div>,
@@ -1011,8 +1014,8 @@ export default function Transfers() {
 
       {/* Sheets */}
       {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} seasons={seasonsData || []} highSeasonMonths={highSeasonMonths} />}
-      {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
-      {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
+      {showOrigin && <RouteSheet title={t('transfersPg.chooseOrigin')} options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
+      {showDest   && <RouteSheet title={t('transfersPg.chooseDestination')} options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
     </> )} {/* end mode === 'rota' */}
 
       {/* Bottom CTA — Custom ride */}
@@ -1026,7 +1029,7 @@ export default function Transfers() {
             }`}
           >
             <Send size={16} />
-            {customLoading ? 'Solicitando…' : 'Solicitar cotação'}
+            {customLoading ? t('transfersPg.requesting') : t('transfersPg.requestQuote')}
           </button>
         </div>
       )}

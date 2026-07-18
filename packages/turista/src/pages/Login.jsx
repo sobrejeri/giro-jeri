@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import Button from '../components/ui/Button'
@@ -7,6 +8,7 @@ import Input from '../components/ui/Input'
 import { MapPin } from 'lucide-react'
 
 export default function Login() {
+  const { t }     = useTranslation()
   const navigate  = useNavigate()
   const location  = useLocation()
   const { login } = useAuth()
@@ -27,7 +29,7 @@ export default function Login() {
       login(data.user, data.token, data.refresh_token)
       navigate(from, { replace: true })
     } catch (err) {
-      setError(err.message || 'Credenciais inválidas')
+      setError(err.message || t('miscPg.login.invalidCredentials'))
     } finally {
       setLoading(false)
     }
@@ -35,7 +37,7 @@ export default function Login() {
 
   async function handleForgot() {
     if (!form.email) {
-      setForgotMsg('Informe o e-mail no campo acima para receber o link.')
+      setForgotMsg(t('miscPg.login.forgotEmailRequired'))
       return
     }
     setForgotLoad(true)
@@ -45,9 +47,9 @@ export default function Login() {
         email: form.email,
         redirect_url: `${window.location.origin}${import.meta.env.BASE_URL || '/'}login`,
       })
-      setForgotMsg('Se este e-mail estiver cadastrado, você receberá um link de redefinição em instantes.')
+      setForgotMsg(t('miscPg.login.forgotSent'))
     } catch {
-      setForgotMsg('Se este e-mail estiver cadastrado, você receberá um link de redefinição em instantes.')
+      setForgotMsg(t('miscPg.login.forgotSent'))
     } finally {
       setForgotLoad(false)
     }
@@ -61,22 +63,22 @@ export default function Login() {
             <MapPin size={22} className="text-white" />
           </div>
           <h1 className="font-display font-bold text-2xl text-gray-900">Turiva</h1>
-          <p className="text-gray-500 mt-1 text-sm">Acesse sua conta</p>
+          <p className="text-gray-500 mt-1 text-sm">{t('miscPg.login.subtitle')}</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="E-mail"
+              label={t('miscPg.login.emailLabel')}
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="seu@email.com"
+              placeholder={t('miscPg.login.emailPlaceholder')}
               required
               autoFocus
             />
             <Input
-              label="Senha"
+              label={t('miscPg.login.passwordLabel')}
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -87,7 +89,7 @@ export default function Login() {
               <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
             )}
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
-              {loading ? 'Entrando…' : 'Entrar'}
+              {loading ? t('miscPg.login.submitting') : t('miscPg.login.submit')}
             </Button>
 
             <button
@@ -96,7 +98,7 @@ export default function Login() {
               disabled={forgotLoad}
               className="block w-full text-center text-xs text-gray-500 hover:text-brand"
             >
-              {forgotLoad ? 'Enviando…' : 'Esqueci minha senha'}
+              {forgotLoad ? t('miscPg.login.forgotSending') : t('miscPg.login.forgotPassword')}
             </button>
             {forgotMsg && (
               <p className="text-xs text-center text-gray-600 bg-amber-50 px-3 py-2 rounded-lg">
@@ -106,9 +108,9 @@ export default function Login() {
           </form>
 
           <p className="text-center text-sm text-gray-500 mt-6">
-            Não tem conta?{' '}
+            {t('miscPg.login.noAccount')}{' '}
             <Link to="/cadastro" className="text-brand font-medium hover:underline">
-              Cadastre-se
+              {t('miscPg.login.signUp')}
             </Link>
           </p>
         </div>

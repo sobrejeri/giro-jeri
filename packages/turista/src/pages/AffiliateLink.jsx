@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { setAffiliate } from '../lib/affiliate'
 import { useAuth } from '../contexts/AuthContext'
@@ -11,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext'
 //   usuário logado abrir o próprio link, nada é gravado e ele vê o aviso.
 //   (O servidor também ignora autoindicação — esta é só a camada de UX.)
 export default function AffiliateLink() {
+  const { t } = useTranslation()
   const { code } = useParams()
   const navigate = useNavigate()
   const { token } = useAuth()
@@ -30,7 +32,7 @@ export default function AffiliateLink() {
               const me = await api.affiliateMe()
               if (!active) return
               if (me?.code && me.code.toUpperCase() === String(a.code).toUpperCase()) {
-                setMsg('Este link é seu 😉 Ele vale para amigos e seguidores — não para as suas próprias reservas.')
+                setMsg(t('miscPg.affiliateLink.ownLink'))
                 setTimeout(() => navigate('/afiliado', { replace: true }), 2600)
                 return
               }
@@ -41,7 +43,7 @@ export default function AffiliateLink() {
         navigate('/', { replace: true })
       } catch {
         if (!active) return
-        setMsg('Link não encontrado — abrindo o app…')
+        setMsg(t('miscPg.notFoundLinkOpening'))
         setTimeout(() => navigate('/', { replace: true }), 1800)
       }
     }
@@ -52,7 +54,7 @@ export default function AffiliateLink() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-8 text-center">
       <div className="w-10 h-10 border-2 border-brand border-t-transparent rounded-full animate-spin mb-4" />
-      <p className="text-[14px] font-semibold text-gray-700">{msg || 'Abrindo o app…'}</p>
+      <p className="text-[14px] font-semibold text-gray-700">{msg || t('miscPg.affiliateLink.opening')}</p>
     </div>
   )
 }
