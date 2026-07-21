@@ -671,7 +671,8 @@
     "breakdownVehicles": "Selected vehicles",
     "capacityUpTo": "up to {{count}} people",
     "peopleBadge": "{{count}} people",
-    "suggestionFor": "Suggestion for {{count}} people"
+    "suggestionFor": "Suggestion for {{count}} people",
+    "noVehicles": "No vehicles available for this tour at the moment."
   },
   "feedPg": {
     "back": "Back",

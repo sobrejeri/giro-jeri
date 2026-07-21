@@ -132,24 +132,17 @@ export default function TourDetail() {
     queryFn:  () => api.getTour(id),
   })
 
-  const { data: vehiclesData, isFetched: vehiclesFetched } = useQuery({
+  const { data: vehiclesData, isFetched: vehiclesLoaded } = useQuery({
     queryKey: ['tour-vehicles', id],
     queryFn:  () => api.getTourVehicles(id),
     enabled:  !!id && mode === 'private',
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data: allVehiclesData } = useQuery({
-    queryKey: ['vehicles-fallback'],
-    queryFn:  () => api.getVehicles({ is_active: 'true' }),
-    enabled:  vehiclesFetched && (vehiclesData || []).length === 0 && mode === 'private',
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const vehicles = useMemo(
-    () => (vehiclesData || []).length > 0 ? vehiclesData : (allVehiclesData || []),
-    [vehiclesData, allVehiclesData],
-  )
+  // Matriz = app 1:1: só os veículos com regra ATIVA para este passeio no
+  // Motor de Preços. Sem fallback para o catálogo inteiro — se o admin não
+  // ativou o veículo para o passeio, ele não aparece aqui.
+  const vehicles = useMemo(() => vehiclesData || [], [vehiclesData])
 
   useEffect(() => {
     if (!tour) return
@@ -520,6 +513,12 @@ export default function TourDetail() {
                         </button>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {vehiclesLoaded && sortedVehicles.length === 0 && (
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-4 text-center">
+                    <p className="text-[12px] text-gray-500">{t('tourDetailPg.noVehicles')}</p>
                   </div>
                 )}
 

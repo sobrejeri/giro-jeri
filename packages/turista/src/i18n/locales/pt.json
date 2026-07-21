@@ -671,7 +671,8 @@
     "breakdownVehicles": "Veículos selecionados",
     "capacityUpTo": "até {{count}} pessoas",
     "peopleBadge": "{{count}} pessoas",
-    "suggestionFor": "Sugestão para {{count}} pessoas"
+    "suggestionFor": "Sugestão para {{count}} pessoas",
+    "noVehicles": "Nenhum veículo disponível para este passeio no momento."
   },
   "feedPg": {
     "back": "Voltar",
