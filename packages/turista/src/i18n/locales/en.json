@@ -917,6 +917,12 @@
       "submitAll": "Request all ({{count}})",
       "completeAllHint": "Complete the details for all items (Edit button) to submit your request.",
       "requestsSent": "{{count}} requests sent"
+    },
+    "details": {
+      "show": "View description",
+      "hide": "Hide",
+      "loading": "Loading description…",
+      "none": "No description available."
     }
   },
   "bookingDetailPg": {

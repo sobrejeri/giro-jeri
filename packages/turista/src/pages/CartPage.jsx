@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
   ShoppingCart, Trash2, Calendar, Clock, Users, Car, MapPin, Pencil,
-  CheckCircle2, AlertTriangle, Loader2, Send, X, Plus, Minus, ChevronRight, Sparkles,
+  CheckCircle2, AlertTriangle, Loader2, Send, X, Plus, Minus, ChevronRight, ChevronDown, Sparkles,
 } from 'lucide-react'
 import PageHeader from '../components/layout/PageHeader'
 import { useCart } from '../contexts/CartContext'
@@ -384,6 +384,72 @@ function EditSheet({ item, onSave, onClose }) {
   )
 }
 
+/* ── Descrição do serviço (expande ao clicar no card) ──────────
+   Passeio: busca o detalhe completo (full_description, duração, incluídos).
+   Transfer: mostra a rota e a descrição curta guardada no rascunho. */
+function CartItemDetails({ item }) {
+  const { t } = useTranslation()
+  const isTransfer = item.kind === 'transfer'
+  const { data: tour, isLoading } = useQuery({
+    queryKey: ['cart-item-detail', item.id],
+    queryFn:  () => api.getTour(item.id),
+    enabled:  !isTransfer,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const desc     = isTransfer
+    ? (item.short_description || null)
+    : (tour?.full_description || tour?.short_description || item.short_description || null)
+  const includes = !isTransfer ? tour?.includes_text : null
+  const excludes = !isTransfer ? tour?.excludes_text : null
+  const route    = isTransfer && (item.origin || item.dest)
+    ? `${item.origin || ''}${item.dest ? ` → ${item.dest}` : ''}` : null
+
+  return (
+    <div className="px-3 pb-3 border-t border-gray-50">
+      <div className="pt-3 space-y-2.5 text-[12.5px] text-gray-600 leading-relaxed">
+        {route && (
+          <p className="inline-flex items-center gap-1.5 font-semibold text-gray-700">
+            <MapPin size={12} className="text-brand shrink-0" /> {route}
+          </p>
+        )}
+        {!isTransfer && tour?.duration_hours && (
+          <p className="inline-flex items-center gap-1.5">
+            <Clock size={12} className="text-brand shrink-0" /> {t('tourDetailPg.durationHours', { hours: tour.duration_hours })}
+          </p>
+        )}
+        {isLoading && !isTransfer ? (
+          <p className="text-gray-400 inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> {t('cartPg.details.loading')}</p>
+        ) : desc ? (
+          <p>{desc}</p>
+        ) : (
+          <p className="text-gray-400 italic">{t('cartPg.details.none')}</p>
+        )}
+        {includes && (
+          <div>
+            <p className="font-bold text-gray-800 mb-1">{t('tourDetailPg.included')}</p>
+            <ul className="space-y-1">
+              {includes.split(',').map((x, i) => (
+                <li key={i} className="flex items-start gap-1.5"><CheckCircle2 size={12} className="text-emerald-500 mt-0.5 shrink-0" />{x.trim()}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {excludes && (
+          <div>
+            <p className="font-bold text-gray-800 mb-1">{t('tourDetailPg.notIncluded')}</p>
+            <ul className="space-y-1">
+              {excludes.split(',').map((x, i) => (
+                <li key={i} className="flex items-start gap-1.5"><X size={12} className="text-gray-300 mt-0.5 shrink-0" />{x.trim()}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Página do carrinho (estilo Mercado Livre) ─────────────────
    Prévia de todos os serviços (foto, valores, veículos) + Editar por item.
    "Solicitar tudo" só habilita quando TODOS os itens estão com os dados
@@ -395,6 +461,7 @@ export default function CartPage() {
   const navigate = useNavigate()
 
   const [editing, setEditing] = useState(null)     // item em edição
+  const [expandedId, setExpandedId] = useState(null) // item com descrição aberta
   const [results, setResults] = useState({})       // id → {status, code?, msg?}
   const [batch, setBatch] = useState(null)         // snapshot durante envio
   const [submitting, setSubmitting] = useState(false)
@@ -539,7 +606,11 @@ export default function CartPage() {
             const complete = miss.length === 0
             return (
               <div key={item.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${st?.status === 'ok' ? 'border-emerald-200' : st?.status === 'error' ? 'border-red-200' : 'border-gray-100'}`}>
-                <div className="flex gap-3 p-3">
+                {/* Toca no card → mostra/esconde a descrição do serviço */}
+                <div
+                  onClick={() => setExpandedId((cur) => cur === item.id ? null : item.id)}
+                  className="flex gap-3 p-3 cursor-pointer active:bg-gray-50/60 transition-colors"
+                >
                   {/* Foto */}
                   <div className="w-[86px] h-[86px] rounded-xl overflow-hidden shrink-0 bg-gray-100">
                     {item.cover_image_url ? (
@@ -556,7 +627,7 @@ export default function CartPage() {
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-[13.5px] font-bold text-gray-900 leading-tight">{item.name}</p>
                       {!batch && (
-                        <button onClick={() => removeItem(item.id)} aria-label={t('cartPg.card.removeAria')}
+                        <button onClick={(e) => { e.stopPropagation(); removeItem(item.id) }} aria-label={t('cartPg.card.removeAria')}
                           className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 active:scale-95">
                           <Trash2 size={13} className="text-gray-400" />
                         </button>
@@ -576,9 +647,18 @@ export default function CartPage() {
                         {item.vehicles.filter((v) => v.qty > 0).map((v) => `${v.qty}x ${v.name}`).join(' + ')}
                       </p>
                     )}
-                    <p className="text-[16px] font-extrabold text-gray-900 mt-1">{fmt(item.total)}</p>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <p className="text-[16px] font-extrabold text-gray-900">{fmt(item.total)}</p>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand shrink-0">
+                        {expandedId === item.id ? t('cartPg.details.hide') : t('cartPg.details.show')}
+                        <ChevronDown size={13} className={`transition-transform ${expandedId === item.id ? 'rotate-180' : ''}`} />
+                      </span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Descrição (expande/recolhe ao clicar no card) */}
+                {expandedId === item.id && <CartItemDetails item={item} />}
 
                 {/* Rodapé do card: status + editar */}
                 <div className="flex items-center justify-between px-3 pb-3">

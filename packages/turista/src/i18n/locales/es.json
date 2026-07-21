@@ -917,6 +917,12 @@
       "submitAll": "Solicitar todo ({{count}})",
       "completeAllHint": "Completa los datos de todos los ítems (botón Editar) para solicitar.",
       "requestsSent": "{{count}} solicitudes enviadas"
+    },
+    "details": {
+      "show": "Ver descripción",
+      "hide": "Ocultar",
+      "loading": "Cargando descripción…",
+      "none": "Sin descripción disponible."
     }
   },
   "bookingDetailPg": {
