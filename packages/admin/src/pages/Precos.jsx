@@ -13,6 +13,9 @@ const fmt = (v) =>
     ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
     : '—'
 
+// Sentinela do modo "Global" no seletor de região (preço sem região).
+const GLOBAL_REGION = '__global__'
+
 function getSeasonPct(seasons) {
   if (!seasons?.length) return null
   const today = new Date().toISOString().slice(0, 10)
@@ -44,7 +47,11 @@ export default function Precos() {
   const season = useMemo(() => getSeasonPct(seasons), [seasons])
 
   const multiRegion     = regions.length > 1
-  const effectiveRegion = (multiRegion ? (regionId || regions[0]?.id) : regions[0]?.id) || null
+  // "Global": preço sem região (region_id = null) que vale em TODAS as regiões,
+  // no PC e no mobile. effectiveRegion = null nesse modo → o save cria regra
+  // global e a matriz mostra só as regras globais.
+  const isGlobal        = regionId === GLOBAL_REGION
+  const effectiveRegion = isGlobal ? null : ((multiRegion ? (regionId || regions[0]?.id) : regions[0]?.id) || null)
 
   const toggleMut = useMutation({
     mutationFn: ({ id, is_active }) => api.updatePricingRule(id, { is_active }),
@@ -190,6 +197,12 @@ export default function Precos() {
             <span className="ml-2 text-amber-400">· Alta temporada: +{season.pct}% ({season.name})</span>
           )}
         </p>
+        {isGlobal && (
+          <p className="text-[11px] text-brand mt-1.5 inline-flex items-center gap-1.5 bg-brand/10 border border-brand/20 rounded-lg px-2.5 py-1">
+            🌐 Modo global: estes preços valem em <strong>todas as regiões</strong> (PC e mobile).
+            Onde existir um preço específico de região, ele tem preferência sobre o global.
+          </p>
+        )}
       </div>
 
       {/* Toolbar: busca · região · estatísticas */}
@@ -205,11 +218,12 @@ export default function Precos() {
         </div>
         {multiRegion && (
           <select
-            value={effectiveRegion || ''}
+            value={isGlobal ? GLOBAL_REGION : (effectiveRegion || '')}
             onChange={(e) => setRegionId(e.target.value)}
             className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-brand/60"
           >
             {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            <option value={GLOBAL_REGION}>🌐 Todas as regiões (global)</option>
           </select>
         )}
         <div className="flex items-center gap-2 ml-auto text-[11px]">
