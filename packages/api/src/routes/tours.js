@@ -76,14 +76,12 @@ router.get('/:id/vehicles', async (req, res, next) => {
     // REGIÃO: mesma visão da matriz — só regras da região do passeio (ou sem
     // região). Regra criada sob outra região não vaza para o app.
     const { data: tourRow } = await supabase
-      .from('tours').select('region_id').eq('id', req.params.id).maybeSingle();
+      .from('tours').select('region_id, region_ids').eq('id', req.params.id).maybeSingle();
     const userRegion = req.query.region_id || null;
-    const tourRegion = tourRow?.region_id || null;
+    const tourRegions = [tourRow?.region_id, ...(Array.isArray(tourRow?.region_ids) ? tourRow.region_ids : [])]
+      .filter(Boolean);
 
-    // "Matriz = app 1:1": qualquer veículo com REGRA ATIVA para este passeio
-    // aparece (igual ao cálculo autoritativo calculatePrivateTour, que também
-    // não esconde por região). A região vira apenas PREFERÊNCIA de preço quando
-    // há mais de uma regra para o mesmo veículo — nunca some o veículo.
+    // Todas as regras ATIVAS deste passeio (veículo ativo e permitido p/ passeios).
     const { data, error } = await supabase
       .from('vehicle_pricing_rules')
       .select(`
@@ -100,16 +98,21 @@ router.get('/:id/vehicles', async (req, res, next) => {
       .eq('vehicles.is_tour_allowed', true);
 
     if (error) throw error;
+    const all = (data || []).filter((r) => r.vehicles);
 
-    // Preferência de preço por região: região do usuário > região do passeio >
-    // sem região (global) > qualquer outra. Depois deduplica por veículo.
-    const rank = (r) =>
-      (userRegion && r.region_id === userRegion) ? 0
-      : (tourRegion && r.region_id === tourRegion) ? 1
-      : (r.region_id == null) ? 2 : 3;
+    // "Matriz = app 1:1" por região: usa só as regras da(s) região(ões) do
+    // passeio (ou globais, sem região). Assim uma regra criada sob OUTRA região
+    // (ex.: um veículo sem valor na região do passeio) não vaza. Fallback: se
+    // NENHUMA regra casar com a(s) região(ões) do passeio (dados antigos com
+    // região divergente), usa todas — para não esvaziar um passeio já precificado.
+    const inTourRegion = (r) => r.region_id == null || tourRegions.includes(r.region_id);
+    const scoped = tourRegions.length ? all.filter(inTourRegion) : all;
+    const use = scoped.length ? scoped : all;
+
+    // Deduplica por veículo, preferindo o preço da região do usuário > global.
+    const rank = (r) => (userRegion && r.region_id === userRegion) ? 0 : (r.region_id == null) ? 1 : 2;
     const map = new Map();
-    for (const r of (data || []).slice().sort((a, b) => rank(a) - rank(b))) {
-      if (!r.vehicles) continue;
+    for (const r of use.slice().sort((a, b) => rank(a) - rank(b))) {
       if (!map.has(r.vehicles.id)) {
         map.set(r.vehicles.id, { ...r.vehicles, base_price: r.base_price });
       }

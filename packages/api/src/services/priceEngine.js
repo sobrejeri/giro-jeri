@@ -420,15 +420,25 @@ export async function suggestVehicles({ regionId, tourId, peopleCount }) {
     .eq('vehicles.is_active', true)
     .eq('vehicles.is_tour_allowed', true);
 
-  if (!rules || rules.length === 0) return [];
+  const allRules = (rules || []).filter((r) => r.vehicles);
+  if (allRules.length === 0) return [];
 
-  // Preferência de preço por região (não esconde veículo com regra ativa —
-  // igual ao catálogo e ao cálculo autoritativo).
+  // Mesma visão do catálogo: só regras da(s) região(ões) do passeio (ou globais);
+  // fallback para todas se nada casar (dados antigos com região divergente).
+  const { data: tourRow } = await supabase
+    .from('tours').select('region_id, region_ids').eq('id', tourId).maybeSingle();
+  const tourRegions = [tourRow?.region_id, ...(Array.isArray(tourRow?.region_ids) ? tourRow.region_ids : [])]
+    .filter(Boolean);
+  const inTourRegion = (r) => r.region_id == null || tourRegions.includes(r.region_id);
+  const scoped = tourRegions.length ? allRules.filter(inTourRegion) : allRules;
+  const useRules = scoped.length ? scoped : allRules;
+
+  // Preferência de preço por região do usuário > global.
   const rank = (r) => (regionId && r.region_id === regionId) ? 0 : (r.region_id == null) ? 1 : 2;
 
   // Deduplica: para cada veículo, pega o preço da região preferida
   const vehicleMap = new Map();
-  for (const r of rules.slice().sort((a, b) => rank(a) - rank(b))) {
+  for (const r of useRules.slice().sort((a, b) => rank(a) - rank(b))) {
     if (!vehicleMap.has(r.vehicles.id)) {
       vehicleMap.set(r.vehicles.id, {
         id:        r.vehicles.id,
