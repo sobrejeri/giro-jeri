@@ -406,10 +406,10 @@ export async function suggestVehicles({ regionId, tourId, peopleCount }) {
   // Só os veículos ATIVOS para ESTE passeio (regra específica ligada no Motor
   // de Preços) — mesma regra do catálogo, para a sugestão não propor veículo
   // que não aparece na lista.
-  let q = supabase
+  const { data: rules } = await supabase
     .from('vehicle_pricing_rules')
     .select(`
-      base_price,
+      base_price, region_id,
       vehicles!inner (
         id, name, seat_capacity, vehicle_type, image_url, display_order
       )
@@ -419,15 +419,16 @@ export async function suggestVehicles({ regionId, tourId, peopleCount }) {
     .eq('is_active', true)
     .eq('vehicles.is_active', true)
     .eq('vehicles.is_tour_allowed', true);
-  // Mesma visão da matriz: só regras da região (ou sem região).
-  if (regionId) q = q.or(`region_id.eq.${regionId},region_id.is.null`);
-  const { data: rules } = await q;
 
   if (!rules || rules.length === 0) return [];
 
-  // Deduplica: para cada veículo, pega o preço mais específico
+  // Preferência de preço por região (não esconde veículo com regra ativa —
+  // igual ao catálogo e ao cálculo autoritativo).
+  const rank = (r) => (regionId && r.region_id === regionId) ? 0 : (r.region_id == null) ? 1 : 2;
+
+  // Deduplica: para cada veículo, pega o preço da região preferida
   const vehicleMap = new Map();
-  for (const r of rules) {
+  for (const r of rules.slice().sort((a, b) => rank(a) - rank(b))) {
     if (!vehicleMap.has(r.vehicles.id)) {
       vehicleMap.set(r.vehicles.id, {
         id:        r.vehicles.id,

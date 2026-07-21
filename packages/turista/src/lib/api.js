@@ -159,7 +159,7 @@ export const api = {
   // Passeios
   getTours:        (params = {}) => request(`/api/tours?${new URLSearchParams(params)}`),
   getTour:         (id)          => request(`/api/tours/${id}`),
-  getTourVehicles: (id)          => request(`/api/tours/${id}/vehicles`),
+  getTourVehicles: (id, regionId) => request(`/api/tours/${id}/vehicles${regionId ? `?region_id=${regionId}` : ''}`),
   calculateTour:   (id, body)    => request(`/api/tours/${id}/calculate`, { method: 'POST', body }),
 
   // Transfers

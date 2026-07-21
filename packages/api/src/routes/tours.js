@@ -77,11 +77,17 @@ router.get('/:id/vehicles', async (req, res, next) => {
     // região). Regra criada sob outra região não vaza para o app.
     const { data: tourRow } = await supabase
       .from('tours').select('region_id').eq('id', req.params.id).maybeSingle();
+    const userRegion = req.query.region_id || null;
+    const tourRegion = tourRow?.region_id || null;
 
-    let q = supabase
+    // "Matriz = app 1:1": qualquer veículo com REGRA ATIVA para este passeio
+    // aparece (igual ao cálculo autoritativo calculatePrivateTour, que também
+    // não esconde por região). A região vira apenas PREFERÊNCIA de preço quando
+    // há mais de uma regra para o mesmo veículo — nunca some o veículo.
+    const { data, error } = await supabase
       .from('vehicle_pricing_rules')
       .select(`
-        base_price,
+        base_price, region_id,
         vehicles!inner (
           id, name, vehicle_type, seat_capacity, luggage_capacity,
           image_url, description, display_order
@@ -92,16 +98,17 @@ router.get('/:id/vehicles', async (req, res, next) => {
       .eq('is_active', true)
       .eq('vehicles.is_active', true)
       .eq('vehicles.is_tour_allowed', true);
-    if (tourRow?.region_id) {
-      q = q.or(`region_id.eq.${tourRow.region_id},region_id.is.null`);
-    }
-    const { data, error } = await q;
 
     if (error) throw error;
 
-    // Deduplica por veículo (caso haja mais de uma regra ativa para o mesmo).
+    // Preferência de preço por região: região do usuário > região do passeio >
+    // sem região (global) > qualquer outra. Depois deduplica por veículo.
+    const rank = (r) =>
+      (userRegion && r.region_id === userRegion) ? 0
+      : (tourRegion && r.region_id === tourRegion) ? 1
+      : (r.region_id == null) ? 2 : 3;
     const map = new Map();
-    for (const r of data || []) {
+    for (const r of (data || []).slice().sort((a, b) => rank(a) - rank(b))) {
       if (!r.vehicles) continue;
       if (!map.has(r.vehicles.id)) {
         map.set(r.vehicles.id, { ...r.vehicles, base_price: r.base_price });

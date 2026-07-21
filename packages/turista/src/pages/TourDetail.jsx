@@ -133,8 +133,8 @@ export default function TourDetail() {
   })
 
   const { data: vehiclesData, isFetched: vehiclesLoaded } = useQuery({
-    queryKey: ['tour-vehicles', id],
-    queryFn:  () => api.getTourVehicles(id),
+    queryKey: ['tour-vehicles', id, region?.id],
+    queryFn:  () => api.getTourVehicles(id, region?.id),
     enabled:  !!id && mode === 'private',
     staleTime: 5 * 60 * 1000,
   })
