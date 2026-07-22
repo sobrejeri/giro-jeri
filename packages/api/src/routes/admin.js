@@ -471,7 +471,15 @@ router.get('/operational', requireOperator, async (req, res, next) => {
 
     if (targetDate)    query = query.eq('service_date', targetDate);
     if (service_type)  query = query.eq('service_type', service_type);
-    if (operator_id)   query = query.eq('operator_id', operator_id);
+
+    // Escopo por cooperativa: um operador (não-admin) só enxerga as PRÓPRIAS
+    // reservas no painel operacional/despacho — nunca solicitações que ele ainda
+    // não aceitou (operator_id nulo) nem reservas de outras cooperativas. Sem
+    // isso, uma corrida "sem cooperativa" aparecia com "Despachar" para todos.
+    // Admin vê tudo (ou filtra por operator_id quando quiser).
+    const isAdmin = req.user?.user_type === 'admin';
+    if (!isAdmin)         query = query.eq('operator_id', req.user.id);
+    else if (operator_id) query = query.eq('operator_id', operator_id);
 
     const { data, error } = await query;
     if (error) throw error;
