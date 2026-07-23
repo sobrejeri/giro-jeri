@@ -73,6 +73,27 @@ async function sendToMany(numbers, message) {
   )
 }
 
+// Envia uma mensagem com BOTÃO de link (Z-API send-button-actions). Se a conta
+// Z-API não suportar botões, cai para send-text com o link no corpo — ou seja,
+// nunca deixa de entregar a mensagem.
+async function sendButtonLink(phone, message, label, url) {
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
+  const base = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}`
+  try {
+    const res = await fetch(`${base}/send-button-actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
+      body: JSON.stringify({
+        phone: toZapiPhone(phone),
+        message,
+        buttonActions: [{ id: '1', type: 'URL', url, label }],
+      }),
+    })
+    if (res.ok) return
+  } catch { /* cai para texto abaixo */ }
+  await sendToMany([phone], `${message}\n\n👉 ${label}: ${url}`)
+}
+
 // Busca o telefone de um usuário (cliente ou operador) por id.
 async function userPhone(supabase, userId) {
   if (!userId) return null
@@ -313,9 +334,52 @@ export async function notifyClientBookingAccepted(supabase, booking) {
     `💰 *${fmtBRL(booking.total_amount)}*\n` +
     `🔖 ${booking.booking_code || '-'}\n` +
     `\n` +
-    `Falta só o pagamento para confirmar.\n` +
-    `👉 Pagar agora: ${linkBookingPay(booking.id)}`
+    `Falta só o pagamento para confirmar.`
+  // Item 1: botão de pagamento no WhatsApp (cai para link em texto se preciso).
+  await sendButtonLink(phone, message, 'Pagar agora', linkBookingPay(booking.id))
+}
+
+// ── CICLO DA CORRIDA (cooperativa) ─────────────────────
+// Item 3: ao INICIAR a corrida, avisa o cliente que o motorista está a caminho.
+export async function notifyClientRideStarted(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  const phone = await userPhone(supabase, booking.user_id)
+  if (!phone) return { skipped: true }
+  const { tipo } = bookingSummary(booking)
+  const embarque = booking.origin_text || booking.pickup_place_name || ''
+  const message =
+    `*TURIVA* · A caminho! 🚗💨\n\n` +
+    `Seu ${tipo.toLowerCase()} (${booking.booking_code || '-'}) começou e o motorista já está a caminho` +
+    `${embarque ? ` do ponto de embarque: ${embarque}` : ''}.\n\n` +
+    `Bom passeio! 🌴`
   await sendToMany([phone], message)
+}
+
+// Item 4: ao CONCLUIR, avisa o cliente que a corrida foi finalizada.
+export async function notifyClientRideCompleted(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  const phone = await userPhone(supabase, booking.user_id)
+  if (!phone) return { skipped: true }
+  const { tipo } = bookingSummary(booking)
+  const message =
+    `*TURIVA* · Serviço concluído ✅\n\n` +
+    `Seu ${tipo.toLowerCase()} (${booking.booking_code || '-'}) foi finalizado. ` +
+    `Esperamos que tenha sido incrível! 🌅\n\n` +
+    `Obrigado por escolher a Turiva.`
+  await sendToMany([phone], message)
+}
+
+// Item 5: ao CONCLUIR, convida o cliente a AVALIAR (botão para a reserva).
+export async function notifyClientReviewRequest(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  const phone = await userPhone(supabase, booking.user_id)
+  if (!phone) return { skipped: true }
+  const { tipo } = bookingSummary(booking)
+  const message =
+    `*TURIVA* · Conte como foi! ⭐\n\n` +
+    `Que tal avaliar seu ${tipo.toLowerCase()} (${booking.booking_code || '-'})? ` +
+    `Sua opinião ajuda a cooperativa e outros viajantes. Leva 1 minutinho. 🙏`
+  await sendButtonLink(phone, message, 'Avaliar agora', linkBookingPay(booking.id))
 }
 
 // Cotação personalizada precificada → cliente vê o valor e decide.

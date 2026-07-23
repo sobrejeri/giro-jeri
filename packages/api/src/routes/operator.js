@@ -11,7 +11,10 @@ import dayjs      from 'dayjs';
 import { supabase } from '../supabase.js';
 import { authenticate, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
-import { notifyAdminExpiredBooking, notifyClientBookingAccepted } from '../services/whatsapp.js';
+import {
+  notifyAdminExpiredBooking, notifyClientBookingAccepted,
+  notifyClientRideStarted, notifyClientRideCompleted, notifyClientReviewRequest,
+} from '../services/whatsapp.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
 import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
 
@@ -922,7 +925,7 @@ router.post('/bookings/:id/start', async (req, res, next) => {
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
       .eq('status_commercial', 'paid')
-      .select('id, user_id, service_type, booking_code')
+      .select('id, user_id, service_type, booking_code, service_date, service_time, origin_text, destination_text, pickup_place_name')
 
     if (error) throw error
     if (!data || data.length === 0) {
@@ -936,6 +939,9 @@ router.post('/bookings/:id/start', async (req, res, next) => {
       title:       'Seu serviço começou 🚀',
       body:        `Seu ${serviceLabel(b.service_type)} (${b.booking_code}) está em andamento. Bom passeio!`,
     })
+    // Item 3: WhatsApp "motorista a caminho" (best-effort).
+    if (b) notifyClientRideStarted(supabase, b).catch((err) =>
+      console.error('[whatsapp] aviso a caminho falhou:', err.message))
     res.json({ ok: true })
   } catch (err) { next(err) }
 })
@@ -973,7 +979,7 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
       .eq('status_commercial', 'paid')
-      .select('id, user_id, service_type, booking_code')
+      .select('id, user_id, service_type, booking_code, service_date, service_time, origin_text, destination_text, pickup_place_name')
 
     if (error) throw error
     if (!data || data.length === 0) {
@@ -987,6 +993,13 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
       title:       'Serviço finalizado ✅',
       body:        `Seu ${serviceLabel(b.service_type)} (${b.booking_code}) foi concluído. Conte como foi: avalie sua experiência!`,
     })
+    // Itens 4 e 5: WhatsApp de conclusão + convite para avaliar (best-effort).
+    if (b) {
+      notifyClientRideCompleted(supabase, b).catch((err) =>
+        console.error('[whatsapp] aviso concluída falhou:', err.message))
+      notifyClientReviewRequest(supabase, b).catch((err) =>
+        console.error('[whatsapp] convite de avaliação falhou:', err.message))
+    }
     res.json({ ok: true })
   } catch (err) { next(err) }
 })
