@@ -6,9 +6,10 @@ import { authenticate }                      from '../middleware/auth.js';
 import { normalizeToE164 }                   from '../lib/phone.js';
 import { signSignupToken }                   from '../lib/signupToken.js';
 import { signResetToken, verifyResetToken }  from '../lib/resetToken.js';
+import { signMfaToken, verifyMfaToken }       from '../lib/mfaToken.js';
 import { validateUsername, normalizeUsername } from '../lib/username.js';
-import { notifyPasswordReset }               from '../services/whatsapp.js';
-import { requestOtp, maskDestination }       from '../services/otp.js';
+import { notifyPasswordReset, isWhatsappEnabled } from '../services/whatsapp.js';
+import { requestOtp, verifyOtp, maskDestination } from '../services/otp.js';
 import { buildChannels }                     from './otp.js';
 
 const router = Router();
@@ -391,6 +392,29 @@ router.post('/login', async (req, res, next) => {
       }
     }
 
+    // ── 2º fator opcional (2FA por WhatsApp) ───────────────
+    // Só entra no gate se: a conta ligou o MFA, tem telefone, e o canal
+    // WhatsApp está configurado (sem canal não há como entregar o código —
+    // fail-open para não trancar ninguém fora num ambiente sem Z-API).
+    if (profile.phone && isWhatsappEnabled()) {
+      let mfaEnabled = false;
+      try {
+        const { data: mrow, error: mErr } = await supabase
+          .from('users').select('mfa_enabled').eq('id', profile.id).maybeSingle();
+        if (mErr && mErr.code !== '42703') throw mErr;   // 42703 = migration 063 pendente
+        mfaEnabled = !!mrow?.mfa_enabled;
+      } catch (e) {
+        console.error('[login] leitura de mfa_enabled falhou:', e.message);
+      }
+
+      if (mfaEnabled) {
+        const challenge = await startMfaChallenge(profile, data.session.refresh_token);
+        if (challenge) return res.status(200).json(challenge);
+        // startMfaChallenge devolve null se o desafio não pôde ser criado
+        // (envio/registro falhou) — segue com a sessão normal (fail-open).
+      }
+    }
+
     // Retorna sessão normal
     res.json({
       token:         data.session.access_token,
@@ -405,6 +429,130 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
+// ── 2FA: cria o desafio (envia código + guarda sessão pendente) ────────────
+// Retorna o corpo `mfa_required` para o cliente, ou null se não deu pra criar
+// o desafio (aí o login segue sem 2º fator — fail-open).
+async function startMfaChallenge(profile, refreshToken) {
+  try {
+    const e164 = normalizeToE164(profile.phone, 'BR') || profile.phone;
+    // Envia o código. Cooldown (429) significa que já há um código válido em
+    // trânsito — seguimos com o desafio mesmo assim.
+    try {
+      await requestOtp({ userId: profile.id, channel: 'whatsapp', destination: e164, lang: profile.language || 'pt' });
+    } catch (e) {
+      if (e.status !== 429) throw e;
+    }
+    const { data: ch, error: chErr } = await supabase
+      .from('mfa_challenges')
+      .insert({
+        user_id:       profile.id,
+        refresh_token: refreshToken,
+        expires_at:    new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      })
+      .select('id')
+      .single();
+    if (chErr) throw chErr;
+    const mfa_token = signMfaToken({ challenge_id: ch.id, user_id: profile.id });
+    return {
+      status:    'mfa_required',
+      mfa_token,
+      channel:   'whatsapp',
+      destination: maskDestination('whatsapp', e164),
+    };
+  } catch (e) {
+    console.error('[login] falha ao iniciar desafio 2FA (segue sem 2FA):', e.message);
+    return null;
+  }
+}
+
+// ── POST /api/auth/mfa/verify ──────────────────────────────
+// 2º passo do login com 2FA: confere o código do WhatsApp e, se ok, entrega a
+// sessão que ficou pendente (via refresh do token guardado no desafio).
+router.post('/mfa/verify', async (req, res, next) => {
+  try {
+    const { mfa_token, code } = req.body || {};
+    if (!mfa_token) return res.status(400).json({ error: 'Sessão de verificação inválida. Faça login novamente.' });
+    if (!/^\d{6}$/.test(String(code || ''))) return res.status(400).json({ error: 'Informe o código de 6 dígitos.' });
+
+    let claims;
+    try { claims = verifyMfaToken(mfa_token); }
+    catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+
+    // Desafio ainda válido (não consumido, não expirado)?
+    const nowIso = new Date().toISOString();
+    const { data: ch, error: chErr } = await supabase
+      .from('mfa_challenges')
+      .select('id, user_id, refresh_token, consumed_at, expires_at')
+      .eq('id', claims.challenge_id)
+      .maybeSingle();
+    if (chErr) return res.status(500).json({ error: chErr.message });
+    if (!ch || ch.user_id !== claims.user_id || ch.consumed_at || ch.expires_at < nowIso) {
+      return res.status(410).json({ error: 'Verificação expirada. Faça login novamente.' });
+    }
+
+    // Confere o código do WhatsApp.
+    const result = await verifyOtp({ userId: claims.user_id, channel: 'whatsapp', code: String(code) });
+    if (!result.ok) {
+      if (result.reason === 'expired') return res.status(410).json({ error: 'Código expirado. Solicite um novo.' });
+      return res.status(400).json({ error: 'Código incorreto.', attempts_left: result.attempts_left });
+    }
+
+    // Marca o desafio como consumido (uso único) ANTES de emitir a sessão.
+    await supabase.from('mfa_challenges')
+      .update({ consumed_at: new Date().toISOString() })
+      .eq('id', ch.id);
+
+    // Reidrata a sessão pendente a partir do refresh_token guardado.
+    const { data: sess, error: sErr } = await freshAuthClient().auth.refreshSession({ refresh_token: ch.refresh_token });
+    if (sErr || !sess?.session) {
+      return res.status(401).json({ error: 'Não foi possível concluir o login. Tente novamente.' });
+    }
+
+    const { data: profile } = await supabase
+      .from('users').select(PROFILE_COLS).eq('id', claims.user_id).maybeSingle();
+
+    return res.json({
+      token:         sess.session.access_token,
+      refresh_token: sess.session.refresh_token,
+      user:          profile,
+    });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/auth/mfa/resend ──────────────────────────────
+// Reenvia o código do 2º fator para o mesmo desafio em andamento.
+router.post('/mfa/resend', async (req, res, next) => {
+  try {
+    const { mfa_token } = req.body || {};
+    let claims;
+    try { claims = verifyMfaToken(mfa_token); }
+    catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+
+    const nowIso = new Date().toISOString();
+    const { data: ch } = await supabase
+      .from('mfa_challenges')
+      .select('id, user_id, consumed_at, expires_at')
+      .eq('id', claims.challenge_id)
+      .maybeSingle();
+    if (!ch || ch.user_id !== claims.user_id || ch.consumed_at || ch.expires_at < nowIso) {
+      return res.status(410).json({ error: 'Verificação expirada. Faça login novamente.' });
+    }
+
+    const { data: u } = await supabase
+      .from('users').select('phone, language').eq('id', claims.user_id).maybeSingle();
+    if (!u?.phone) return res.status(400).json({ error: 'Telefone não cadastrado.' });
+    const e164 = normalizeToE164(u.phone, 'BR') || u.phone;
+
+    try {
+      await requestOtp({ userId: claims.user_id, channel: 'whatsapp', destination: e164, lang: u.language || 'pt' });
+    } catch (e) {
+      if (e.status === 429) return res.status(429).json({ error: e.message, retry_after: e.retry_after });
+      throw e;
+    }
+    return res.json({ ok: true, destination: maskDestination('whatsapp', e164) });
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/auth/me ───────────────────────────────────────
 router.get('/me', authenticate, async (req, res, next) => {
   try {
@@ -417,11 +565,18 @@ router.get('/me', authenticate, async (req, res, next) => {
     // Colunas de migrations recentes (057/058/061) — tolera banco desatualizado.
     let { data: profile, error } = await supabase
       .from('users')
-      .select(`${ME_BASE}, emergency_contact_email, whatsapp_valid, username`)
+      .select(`${ME_BASE}, emergency_contact_email, whatsapp_valid, username, mfa_enabled`)
       .eq('id', req.user.id)
       .single();
     if (error?.code === '42703') {
-      const retry = await supabase.from('users').select(ME_BASE).eq('id', req.user.id).single();
+      // Alguma coluna recente ausente (057/061/063). Tenta um degrau abaixo
+      // (sem mfa_enabled) e, se ainda faltar, cai no conjunto base garantido.
+      let retry = await supabase.from('users')
+        .select(`${ME_BASE}, emergency_contact_email, whatsapp_valid, username`)
+        .eq('id', req.user.id).single();
+      if (retry.error?.code === '42703') {
+        retry = await supabase.from('users').select(ME_BASE).eq('id', req.user.id).single();
+      }
       profile = retry.data; error = retry.error;
     }
     if (error) return res.status(500).json({ error: error.message });
@@ -540,6 +695,7 @@ router.post('/refresh', async (req, res, next) => {
 const updateProfileSchema = z.object({
   full_name:               z.string().min(2).max(200).optional(),
   username:                z.string().max(30).optional().nullable(),
+  mfa_enabled:             z.boolean().optional(),
   phone:                   z.string().min(10).max(30).optional(),
   birth_date:              z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   document_type:           z.enum(['cpf', 'cnpj', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
@@ -587,6 +743,20 @@ router.patch('/me', authenticate, async (req, res, next) => {
       }
     }
 
+    // 2FA por WhatsApp: só pode ligar quem tem telefone (o código vai pra lá).
+    // Usa o telefone que está vindo no update ou o já cadastrado.
+    if (body.mfa_enabled === true) {
+      let phone = body.phone;
+      if (!phone) {
+        const { data: u } = await supabase
+          .from('users').select('phone').eq('id', req.user.id).maybeSingle();
+        phone = u?.phone;
+      }
+      if (!phone) {
+        return res.status(400).json({ error: 'Cadastre um telefone (WhatsApp) antes de ativar a verificação em duas etapas.' });
+      }
+    }
+
     // CPF/CNPJ: guarda só os dígitos pra o login (que busca por dígitos) bater.
     // Sem isso, salvar "86.981.608/0001-60" quebra o login por CNPJ.
     if (body.document_number) {
@@ -623,6 +793,10 @@ router.patch('/me', authenticate, async (req, res, next) => {
       // Coluna username ausente (migration 061 pendente) ao definir/limpar.
       if (error.code === '42703' && 'username' in body) {
         return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 061 (coluna username) no banco.' });
+      }
+      // Coluna mfa_enabled ausente (migration 063 pendente).
+      if (error.code === '42703' && 'mfa_enabled' in body) {
+        return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 063 (verificação em duas etapas) no banco.' });
       }
       return res.status(400).json({ error: error.message });
     }

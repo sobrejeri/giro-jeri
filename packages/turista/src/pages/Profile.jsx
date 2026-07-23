@@ -11,7 +11,7 @@ import ProfileDesktop from './ProfileDesktop'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
-  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard,
+  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard, ShieldCheck,
 } from 'lucide-react'
 
 function Field({ label, value, children }) {
@@ -96,6 +96,69 @@ export function WhatsappCheck() {
         {checking ? t('profile.whatsapp.checking') : status === null ? t('profile.verify') : t('profile.whatsapp.recheck')}
       </button>
       {err && <p className="w-full text-[10px] text-red-500">{err}</p>}
+    </div>
+  )
+}
+
+// Verificação em duas etapas (2FA) por WhatsApp — liga/desliga imediato.
+// Exige telefone cadastrado (o código vai pra lá). Exportado p/ o ProfileDesktop.
+export function MfaToggle() {
+  const { user, updateUser } = useAuth()
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState(null)
+  const enabled = !!user?.mfa_enabled
+  const hasPhone = !!(user?.phone && String(user.phone).replace(/\D/g, '').length >= 10)
+
+  async function toggle() {
+    if (saving) return
+    if (!enabled && !hasPhone) {
+      setErr('Cadastre um telefone (WhatsApp) no perfil antes de ativar.')
+      return
+    }
+    setSaving(true); setErr(null)
+    try {
+      await api.updateProfile({ mfa_enabled: !enabled })
+      // O PATCH devolve um shape reduzido do user; como updateUser faz merge,
+      // basta atualizar a flag (evita apagar username/affiliate_code do contexto).
+      updateUser({ mfa_enabled: !enabled })
+    } catch (e) {
+      setErr(e?.message || 'Não foi possível alterar agora.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
+        <ShieldCheck size={15} className="text-brand" />
+        <span className="font-semibold text-gray-800 text-[14px]">Verificação em duas etapas</span>
+      </div>
+      <div className="px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[13px] font-medium text-gray-800">Código no WhatsApp ao entrar</p>
+            <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">
+              Além da senha, pedimos um código de 6 dígitos enviado ao seu WhatsApp.
+            </p>
+          </div>
+          <button
+            onClick={toggle}
+            disabled={saving}
+            role="switch"
+            aria-checked={enabled}
+            className={`shrink-0 w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${enabled ? 'bg-brand' : 'bg-gray-200'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${enabled ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
+        {!hasPhone && !enabled && (
+          <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-1.5 mt-3">
+            Cadastre um telefone (WhatsApp) no perfil para poder ativar.
+          </p>
+        )}
+        {err && <p className="text-[11px] text-red-500 mt-2">{err}</p>}
+      </div>
     </div>
   )
 }
@@ -578,6 +641,9 @@ export default function Profile() {
             </button>
           </div>
         )}
+
+        {/* Segurança: verificação em duas etapas */}
+        <MfaToggle />
 
         {/* Language picker */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">

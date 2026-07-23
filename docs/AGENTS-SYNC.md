@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 063.**
+   registre aqui o número reservado. **Próximo número livre: 064.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,28 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-23 · Agente B (Etapa 4 #1 — 2FA por WhatsApp, opcional)** — Verificação
+  em duas etapas OPCIONAL por conta. **migration 063** (`063_mfa.sql`): coluna
+  `users.mfa_enabled` (default false) + tabela `mfa_challenges` (sessão pendente:
+  guarda o `refresh_token` do Supabase entre a senha validada e o código, com RLS
+  ligada e sem policies → só o backend acessa; vida 10 min, consumo único).
+  **API**: `lib/mfaToken.js` (JWT HS256 `purpose:'mfa'`, 10 min, carrega só
+  challenge_id+user_id — nenhum segredo de sessão). No `/login`, após validar a
+  senha e passar o gate de verificação, se `mfa_enabled` + telefone +
+  `isWhatsappEnabled()`: envia OTP (reaproveita `requestOtp`/`otp_codes` da 023),
+  cria o desafio guardando o `refresh_token` e responde `{status:'mfa_required',
+  mfa_token, channel, destination}` (NÃO devolve a sessão). Novos endpoints
+  `POST /auth/mfa/verify` (confere o código via `verifyOtp`, marca o desafio
+  consumido, reidrata a sessão com `refreshSession` do token guardado e devolve
+  token/refresh/user) e `POST /auth/mfa/resend`. `PATCH /me` aceita `mfa_enabled`
+  (exige telefone p/ ligar); `GET /me` devolve a flag; ambos toleram 42703
+  (migration pendente). **Fail-open** deliberado: se o canal WhatsApp não estiver
+  configurado ou o envio falhar, o login segue sem 2º fator (não tranca ninguém
+  fora num ambiente sem Z-API). **Turista**: Auth.jsx ganha o passo `VerifyMfa`
+  (tela de código no login) e trata `mfa_required`; Profile/ProfileDesktop ganham
+  o card `MfaToggle` (switch liga/desliga imediato, exige telefone). api.js:
+  `mfaVerify`, `mfaResend`. Build turista ok. **Rodar no Supabase: migration 063.**
 
 - **2026-07-18 · Agente B (carrinho = solicitação única atômica)** — Com o motor
   de pernas OFF, um pedido do carrinho passa a ser UMA solicitação atômica para a

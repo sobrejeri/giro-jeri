@@ -55,6 +55,8 @@ export default function Auth({ defaultTab = 'login' }) {
   const [success, setSuccess] = useState('')
   // Ativação por código no WhatsApp: { signup_token, dest, email, password }
   const [verif,   setVerif]   = useState(null)
+  // 2º fator (2FA) no login: { mfa_token, dest }
+  const [mfa,     setMfa]     = useState(null)
 
   /* ── Login form ──────────────────────────────────────── */
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
@@ -72,6 +74,12 @@ export default function Auth({ defaultTab = 'login' }) {
         ? { email: raw, password: loginForm.password }
         : { username: raw, password: loginForm.password }
       const data = await api.login(payload)
+      // 2º fator ligado: senha ok, mas falta o código do WhatsApp.
+      if (data.status === 'mfa_required') {
+        setMfa({ mfa_token: data.mfa_token, dest: data.destination || 'seu WhatsApp' })
+        setError('')
+        return
+      }
       login(data.user, data.token, data.refresh_token)
       navigate(from, { replace: true })
     } catch (err) {
@@ -205,8 +213,17 @@ export default function Auth({ defaultTab = 'login' }) {
         <p className="text-[13px] text-gray-400 mt-0.5">{t('auth.subtitle')}</p>
       </div>
 
-      {/* Ativação por código no WhatsApp */}
-      {verif ? (
+      {/* 2º fator (2FA) no login */}
+      {mfa ? (
+        <VerifyMfa
+          mfa={mfa}
+          onDone={(data) => {
+            login(data.user, data.token, data.refresh_token)
+            navigate(from, { replace: true })
+          }}
+          onBack={() => { setMfa(null); setError('') }}
+        />
+      ) : verif ? (
         <VerifyWhatsapp
           verif={verif}
           onDone={async () => {
@@ -495,6 +512,112 @@ function VerifyWhatsapp({ verif, onDone, onBack }) {
           className="w-full h-12 bg-brand text-white rounded-xl font-bold text-[15px] active:scale-[0.98] transition-transform disabled:opacity-50 shadow-sm shadow-brand/30"
         >
           {busy ? 'Verificando…' : 'Ativar conta'}
+        </button>
+      </form>
+
+      <div className="text-center mt-5 space-y-2">
+        <button
+          onClick={resend}
+          disabled={busy || cooldown > 0}
+          className="text-[13px] font-semibold text-brand disabled:text-gray-400"
+        >
+          {cooldown > 0 ? `Reenviar código em ${cooldown}s` : 'Reenviar código'}
+        </button>
+        <p>
+          <button onClick={onBack} className="text-[12px] text-gray-400 underline">
+            Voltar ao login
+          </button>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/* ── 2º fator (2FA) no login ─────────────────────────────────────
+   A senha já foi validada; falta o código de 6 dígitos do WhatsApp.
+   Ao confirmar, o backend entrega a sessão que ficou pendente. */
+function VerifyMfa({ mfa, onDone, onBack }) {
+  const [code, setCode]         = useState('')
+  const [busy, setBusy]         = useState(false)
+  const [msg, setMsg]           = useState(null)   // { type: 'err'|'ok', text }
+  const [cooldown, setCooldown] = useState(60)     // código já foi enviado no login
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const id = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000)
+    return () => clearInterval(id)
+  }, [cooldown > 0]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function resend() {
+    if (busy || cooldown > 0) return
+    setBusy(true); setMsg(null)
+    try {
+      await api.mfaResend({ mfa_token: mfa.mfa_token })
+      setCooldown(60)
+      setMsg({ type: 'ok', text: 'Código reenviado no seu WhatsApp.' })
+    } catch (err) {
+      if (err?.status === 429 && err?.payload?.retry_after) setCooldown(Number(err.payload.retry_after))
+      setMsg({ type: 'err', text: err?.message || 'Não foi possível reenviar agora — tente de novo.' })
+    } finally { setBusy(false) }
+  }
+
+  async function verify(e) {
+    e?.preventDefault?.()
+    if (busy || code.length !== 6) return
+    setBusy(true); setMsg(null)
+    try {
+      const data = await api.mfaVerify({ mfa_token: mfa.mfa_token, code })
+      onDone(data)
+    } catch (err) {
+      const left = err?.payload?.attempts_left
+      setMsg({
+        type: 'err',
+        text: (err?.message || 'Código incorreto.') + (Number.isFinite(left) ? ` (${left} tentativa${left === 1 ? '' : 's'} restante${left === 1 ? '' : 's'})` : ''),
+      })
+      if (err?.status === 410) setCode('')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="flex-1 lg:flex-none px-6 pt-8 pb-10 max-w-sm mx-auto w-full lg:max-w-md">
+      <div className="text-center mb-6">
+        <div className="w-14 h-14 rounded-2xl bg-brand/10 flex items-center justify-center mx-auto mb-3">
+          <span className="text-[26px]">🔐</span>
+        </div>
+        <h2 className="font-bold text-[19px] text-gray-900">Verificação em duas etapas</h2>
+        <p className="text-[13px] text-gray-500 mt-1.5 leading-relaxed">
+          Enviamos um código de 6 dígitos para <b>{mfa.dest}</b>.
+          Digite abaixo para concluir o login.
+        </p>
+      </div>
+
+      {msg && (
+        <p className={`text-[13px] px-4 py-2.5 rounded-xl mb-4 border ${
+          msg.type === 'ok'
+            ? 'text-green-700 bg-green-50 border-green-200'
+            : 'text-red-600 bg-red-50 border-red-200'
+        }`}>
+          {msg.text}
+        </p>
+      )}
+
+      <form onSubmit={verify} className="space-y-4">
+        <input
+          autoFocus
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          value={code}
+          onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setMsg(null) }}
+          placeholder="••••••"
+          className="w-full h-14 text-center text-[26px] font-bold tracking-[0.5em] bg-white border border-gray-200 rounded-2xl outline-none focus:border-brand"
+        />
+        <button
+          type="submit"
+          disabled={busy || code.length !== 6}
+          className="w-full h-12 bg-brand text-white rounded-xl font-bold text-[15px] active:scale-[0.98] transition-transform disabled:opacity-50 shadow-sm shadow-brand/30"
+        >
+          {busy ? 'Verificando…' : 'Entrar'}
         </button>
       </form>
 

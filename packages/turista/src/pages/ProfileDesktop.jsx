@@ -8,7 +8,7 @@ import { api } from '../lib/api'
 import { versionLabel } from '../lib/version'
 import { setLang, LANGS } from '../i18n/index.js'
 import { validateBrDoc } from '../lib/document'
-import { WhatsappCheck } from './Profile'
+import { WhatsappCheck, MfaToggle } from './Profile'
 import {
   Camera, Loader2, CalendarCheck, User, CreditCard, Heart, LifeBuoy,
   CheckCircle2, Star, ChevronRight, LogOut, Pencil, Check, X,
@@ -422,6 +422,11 @@ export default function ProfileDesktop() {
             <ChevronRight size={18} className="text-gray-300 group-hover:text-brand transition-colors" />
           </button>
         ))}
+      </div>
+
+      {/* ── Segurança: verificação em duas etapas ────────── */}
+      <div className="mt-6">
+        <MfaToggle />
       </div>
 
       {/* ── Idioma ───────────────────────────────────────── */}
