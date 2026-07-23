@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import PhoneInput from '../components/PhoneInput'
 import { api } from '../lib/api'
+import { versionLabel } from '../lib/version'
 import { setLang, LANGS } from '../i18n/index.js'
 import { validateBrDoc } from '../lib/document'
 import { WhatsappCheck } from './Profile'
@@ -446,7 +447,7 @@ export default function ProfileDesktop() {
         {' · '}
         <Link to="/privacidade" className="hover:text-brand">Privacidade</Link>
       </p>
-      <p className="text-center text-[12px] text-gray-300 mt-2">Turiva v2.0</p>
+      <p className="text-center text-[12px] text-gray-300 mt-2">{versionLabel()}</p>
     </div>
   )
 }

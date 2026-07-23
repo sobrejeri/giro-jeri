@@ -36,7 +36,7 @@ export function setLang(lang) {
 export const LANGS = [
   { code: 'pt', label: 'Português', flag: '🇧🇷' },
   { code: 'en', label: 'English',   flag: '🇺🇸' },
-  { code: 'es', label: 'Español',   flag: '🇦🇷' },
+  { code: 'es', label: 'Español',   flag: '🇪🇸' },
 ]
 
 export default i18n

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import PhoneInput from '../components/PhoneInput'
 import { api } from '../lib/api'
+import { versionLabel } from '../lib/version'
 import { setLang, LANGS } from '../i18n/index.js'
 import { validateBrDoc } from '../lib/document'
 import ProfileDesktop from './ProfileDesktop'
@@ -612,7 +613,7 @@ export default function Profile() {
           {' · '}
           <Link to="/privacidade" className="hover:text-brand">Privacidade</Link>
         </p>
-        <p className="text-center text-[11px] text-gray-300 pb-2">{t('profile.version')}</p>
+        <p className="text-center text-[11px] text-gray-300 pb-2">{versionLabel()}</p>
       </main>
     </div>
 
