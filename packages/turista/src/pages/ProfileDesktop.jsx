@@ -106,6 +106,7 @@ export default function ProfileDesktop() {
   function startEdit() {
     setForm({
       full_name:               user?.full_name               || '',
+      username:                user?.username                || '',
       phone:                   user?.phone                   || '',
       birth_date:              user?.birth_date              || '',
       document_type:           user?.document_type           || '',
@@ -130,6 +131,8 @@ export default function ProfileDesktop() {
     try {
       const payload = { ...form }
       Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null })
+      // Só envia username se mudou (evita username:null em banco sem migration 061).
+      if ((form.username || '') === (user?.username || '')) delete payload.username
       const data = await api.updateProfile(payload)
       if (data?.user) updateUser(data.user)
       setEditing(false)
@@ -306,6 +309,21 @@ export default function ProfileDesktop() {
                 />
               </label>
             ))}
+
+            {/* Nome de usuário (login sem e-mail) */}
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Nome de usuário</span>
+              <div className="flex items-center border border-gray-200 rounded-xl px-3 focus-within:border-brand">
+                <span className="text-[14px] text-gray-400">@</span>
+                <input
+                  value={form.username || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, '') }))}
+                  placeholder="seu_usuario"
+                  autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={30}
+                  className="flex-1 py-2 pl-1 text-[14px] focus:outline-none lowercase"
+                />
+              </div>
+            </label>
 
             {/* Telefone com DDI internacional (mesmo componente do mobile) */}
             <label className="flex flex-col gap-1">

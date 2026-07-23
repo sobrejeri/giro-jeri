@@ -156,6 +156,7 @@ export default function Profile() {
   function startEdit() {
     setForm({
       full_name:               user?.full_name               || '',
+      username:                user?.username                || '',
       phone:                   user?.phone                   || '',
       birth_date:              user?.birth_date              || '',
       document_type:           user?.document_type           || '',
@@ -189,6 +190,9 @@ export default function Profile() {
     try {
       const payload = { ...form }
       Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null })
+      // Só envia username se REALMENTE mudou — evita mandar username:null em
+      // todo save (que quebraria o perfil em banco sem a migration 061).
+      if ((form.username || '') === (user?.username || '')) delete payload.username
       const data = await api.updateProfile(payload)
       if (data?.user) updateUser(data.user)
       setEditing(false)
@@ -405,6 +409,23 @@ export default function Profile() {
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.fullName')}</label>
                       <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">Nome de usuário</label>
+                      <div className="flex items-center border border-gray-200 rounded-xl px-3 focus-within:border-brand">
+                        <span className="text-[14px] text-gray-400">@</span>
+                        <input
+                          className="flex-1 py-2 pl-1 text-[14px] text-gray-800 focus:outline-none lowercase"
+                          value={form.username}
+                          onChange={(e) => setForm((f) => ({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, '') }))}
+                          placeholder="seu_usuario"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          maxLength={30}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1">Para entrar sem o e-mail. Letras, números, ponto e sublinhado.</p>
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.phone')}</label>

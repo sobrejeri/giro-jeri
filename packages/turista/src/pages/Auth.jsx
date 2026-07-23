@@ -65,7 +65,13 @@ export default function Auth({ defaultTab = 'login' }) {
     setError('')
     setLoading(true)
     try {
-      const data = await api.login(loginForm)
+      // Campo único aceita e-mail OU nome de usuário: com "@" vai como email,
+      // senão vai como username (o backend resolve o e-mail da conta).
+      const raw = (loginForm.email || '').trim()
+      const payload = raw.includes('@')
+        ? { email: raw, password: loginForm.password }
+        : { username: raw, password: loginForm.password }
+      const data = await api.login(payload)
       login(data.user, data.token, data.refresh_token)
       navigate(from, { replace: true })
     } catch (err) {
@@ -248,11 +254,14 @@ export default function Auth({ defaultTab = 'login' }) {
         {tab === 'login' ? (
           <form onSubmit={handleLogin} className="space-y-4">
             <TextField
-              label={t('auth.email')}
-              type="email"
+              label="E-mail ou usuário"
+              type="text"
               value={loginForm.email}
               onChange={(e) => { setError(''); setLoginForm((f) => ({ ...f, email: e.target.value })) }}
-              placeholder={t('auth.emailPlaceholder')}
+              placeholder="seu@email.com ou seu_usuario"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               autoFocus
             />

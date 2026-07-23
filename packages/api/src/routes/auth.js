@@ -6,6 +6,7 @@ import { authenticate }                      from '../middleware/auth.js';
 import { normalizeToE164 }                   from '../lib/phone.js';
 import { signSignupToken }                   from '../lib/signupToken.js';
 import { signResetToken, verifyResetToken }  from '../lib/resetToken.js';
+import { validateUsername, normalizeUsername } from '../lib/username.js';
 import { notifyPasswordReset }               from '../services/whatsapp.js';
 import { requestOtp, maskDestination }       from '../services/otp.js';
 import { buildChannels }                     from './otp.js';
@@ -49,6 +50,7 @@ const loginSchema = z.object({
   email:    z.string().email().optional(),
   phone:    z.string().optional(),
   cnpj:     z.string().optional(),
+  username: z.string().optional(),
   password: z.string().min(1),
 });
 
@@ -218,6 +220,32 @@ router.post('/login', async (req, res, next) => {
     let authEmail = body.email;
     let authPhone = body.phone;
 
+    // Login por nome de usuário: resolve o e-mail da conta e autentica normal.
+    // Mensagem genérica (não revela se o usuário existe). Guardamos username
+    // em minúsculas, então .eq() com o valor normalizado basta.
+    if (body.username && !body.cnpj && !body.email) {
+      const uname = normalizeUsername(body.username);
+      if (uname) {
+        const { data: uRow, error: uErr } = await supabase
+          .from('users')
+          .select('email')
+          .eq('username', uname)
+          .maybeSingle();
+        // Coluna ausente (migration 061 pendente) → trata como "não existe".
+        if (uErr && uErr.code === '42703') {
+          return res.status(401).json({ error: 'Usuário ou senha incorretos' });
+        }
+        if (uErr) {
+          return res.status(503).json({ error: 'Instabilidade momentânea no servidor. Tente novamente em alguns segundos.' });
+        }
+        if (!uRow?.email) {
+          return res.status(401).json({ error: 'Usuário ou senha incorretos' });
+        }
+        authEmail = uRow.email;
+        authPhone = undefined;
+      }
+    }
+
     if (body.cnpj) {
       // CNPJ vale tanto para cooperativas (operator) quanto pro admin com
       // CNPJ cadastrado — o painel da cooperativa aceita os dois.
@@ -360,10 +388,10 @@ router.get('/me', authenticate, async (req, res, next) => {
                emergency_contact_name, emergency_contact_phone,
                pix_key_type, pix_key, bank_name, bank_agency,
                bank_account_number, bank_account_type, bank_document`;
-    // Colunas de migrations recentes (057/058) — tolera banco desatualizado.
+    // Colunas de migrations recentes (057/058/061) — tolera banco desatualizado.
     let { data: profile, error } = await supabase
       .from('users')
-      .select(`${ME_BASE}, emergency_contact_email, whatsapp_valid`)
+      .select(`${ME_BASE}, emergency_contact_email, whatsapp_valid, username`)
       .eq('id', req.user.id)
       .single();
     if (error?.code === '42703') {
@@ -485,6 +513,7 @@ router.post('/refresh', async (req, res, next) => {
 // ── PATCH /api/auth/me ─────────────────────────────────────
 const updateProfileSchema = z.object({
   full_name:               z.string().min(2).max(200).optional(),
+  username:                z.string().max(30).optional().nullable(),
   phone:                   z.string().min(10).max(30).optional(),
   birth_date:              z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   document_type:           z.enum(['cpf', 'cnpj', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
@@ -508,6 +537,29 @@ const updateProfileSchema = z.object({
 router.patch('/me', authenticate, async (req, res, next) => {
   try {
     const body = updateProfileSchema.parse(req.body);
+
+    // Nome de usuário: valida formato e unicidade (case-insensitive). String
+    // vazia → limpa (null). Guardado em minúsculas para o login por username.
+    if (body.username !== undefined) {
+      if (body.username === null || body.username.trim() === '') {
+        body.username = null;
+      } else {
+        const { username, error: uErr } = validateUsername(body.username);
+        if (uErr) return res.status(400).json({ error: uErr });
+        const { data: taken, error: tErr } = await supabase
+          .from('users')
+          .select('id')
+          .eq('username', username)
+          .neq('id', req.user.id)
+          .maybeSingle();
+        if (tErr?.code === '42703') {
+          return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 061 (coluna username) no banco.' });
+        }
+        if (tErr) return res.status(500).json({ error: tErr.message });
+        if (taken) return res.status(409).json({ error: 'Este nome de usuário já está em uso.' });
+        body.username = username;
+      }
+    }
 
     // CPF/CNPJ: guarda só os dígitos pra o login (que busca por dígitos) bater.
     // Sem isso, salvar "86.981.608/0001-60" quebra o login por CNPJ.
@@ -537,7 +589,17 @@ router.patch('/me', authenticate, async (req, res, next) => {
                bank_account_number, bank_account_type, bank_document`)
       .single();
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) {
+      // Corrida de unicidade do username (índice único) — mensagem amigável.
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'Este nome de usuário já está em uso.' });
+      }
+      // Coluna username ausente (migration 061 pendente) ao definir/limpar.
+      if (error.code === '42703' && 'username' in body) {
+        return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 061 (coluna username) no banco.' });
+      }
+      return res.status(400).json({ error: error.message });
+    }
 
     // Telefone mudou → rechecagem automática do WhatsApp (fire-and-forget).
     // A plataforma depende de mensagens automáticas; o status fica no perfil.
