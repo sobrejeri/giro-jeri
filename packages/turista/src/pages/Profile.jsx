@@ -100,33 +100,13 @@ export function WhatsappCheck() {
   )
 }
 
-// Verificação em duas etapas (2FA) por WhatsApp — liga/desliga imediato.
-// Exige telefone cadastrado (o código vai pra lá). Exportado p/ o ProfileDesktop.
+// Verificação em duas etapas (2FA) por WhatsApp — OBRIGATÓRIA no app (o fluxo é
+// quase todo por WhatsApp). Card só informativo: não há opt-out do usuário.
+// Exportado p/ o ProfileDesktop. Alerta se faltar telefone (sem ele o código
+// não tem para onde ir).
 export function MfaToggle() {
-  const { user, updateUser } = useAuth()
-  const [saving, setSaving] = useState(false)
-  const [err, setErr]       = useState(null)
-  const enabled = !!user?.mfa_enabled
+  const { user } = useAuth()
   const hasPhone = !!(user?.phone && String(user.phone).replace(/\D/g, '').length >= 10)
-
-  async function toggle() {
-    if (saving) return
-    if (!enabled && !hasPhone) {
-      setErr('Cadastre um telefone (WhatsApp) no perfil antes de ativar.')
-      return
-    }
-    setSaving(true); setErr(null)
-    try {
-      await api.updateProfile({ mfa_enabled: !enabled })
-      // O PATCH devolve um shape reduzido do user; como updateUser faz merge,
-      // basta atualizar a flag (evita apagar username/affiliate_code do contexto).
-      updateUser({ mfa_enabled: !enabled })
-    } catch (e) {
-      setErr(e?.message || 'Não foi possível alterar agora.')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -140,24 +120,18 @@ export function MfaToggle() {
             <p className="text-[13px] font-medium text-gray-800">Código no WhatsApp ao entrar</p>
             <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">
               Além da senha, pedimos um código de 6 dígitos enviado ao seu WhatsApp.
+              Proteção obrigatória neste app.
             </p>
           </div>
-          <button
-            onClick={toggle}
-            disabled={saving}
-            role="switch"
-            aria-checked={enabled}
-            className={`shrink-0 w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${enabled ? 'bg-brand' : 'bg-gray-200'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${enabled ? 'translate-x-5' : ''}`} />
-          </button>
+          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600">
+            ✓ Ativa
+          </span>
         </div>
-        {!hasPhone && !enabled && (
+        {!hasPhone && (
           <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-1.5 mt-3">
-            Cadastre um telefone (WhatsApp) no perfil para poder ativar.
+            Cadastre um telefone (WhatsApp) no perfil — é por lá que enviamos o código de acesso.
           </p>
         )}
-        {err && <p className="text-[11px] text-red-500 mt-2">{err}</p>}
       </div>
     </div>
   )

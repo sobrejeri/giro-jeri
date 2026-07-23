@@ -1,20 +1,26 @@
 -- =============================================================================
--- 063_mfa.sql — Verificação em duas etapas (2FA/MFA) opcional por WhatsApp
+-- 063_mfa.sql — Verificação em duas etapas (2FA/MFA) por WhatsApp (OBRIGATÓRIA)
 -- =============================================================================
--- Etapa 4 (item 1). Recurso OPCIONAL: cada usuário liga/desliga no perfil.
--- Quando ligado, o login exige um código de 6 dígitos enviado ao WhatsApp
--- (reaproveita a tabela otp_codes / migration 023) além da senha.
+-- Etapa 4 (item 1). Como o fluxo da plataforma é quase todo por WhatsApp, o 2º
+-- fator é OBRIGATÓRIO: todo login com telefone cadastrado exige, além da senha,
+-- um código de 6 dígitos enviado ao WhatsApp (reaproveita otp_codes / mig. 023).
 --
---   • users.mfa_enabled  — flag por conta (default false: ninguém é forçado).
+--   • users.mfa_enabled  — nasce TRUE (obrigatório p/ todos). NÃO é um opt-in do
+--                          usuário: serve só como VÁLVULA DE ESCAPE de operação
+--                          — pôr em false destrava uma conta específica (ex.: o
+--                          admin sem WhatsApp) sem tirar o 2FA de todo mundo.
 --   • mfa_challenges     — "sessão pendente" entre a senha validada e o código.
---                          Guarda o refresh_token do Supabase até o 2º fator
---                          ser confirmado; NUNCA vai ao cliente antes disso.
---                          Vida curta (10 min) e consumo único.
+--                          Guarda o refresh_token do Supabase até o 2º fator ser
+--                          confirmado; NUNCA vai ao cliente antes disso. Vida
+--                          curta (10 min) e consumo único.
 -- Idempotente.
 -- =============================================================================
 
--- ── Flag por conta ───────────────────────────────────────────────────────────
-ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled boolean NOT NULL DEFAULT false;
+-- ── Flag por conta (obrigatório por padrão) ──────────────────────────────────
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled boolean NOT NULL DEFAULT true;
+-- Garante o default/estado mesmo se a coluna já existia de uma execução parcial.
+ALTER TABLE users ALTER COLUMN mfa_enabled SET DEFAULT true;
+UPDATE users SET mfa_enabled = true WHERE mfa_enabled IS DISTINCT FROM true;
 
 -- ── Desafios de 2FA (sessão pendente) ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS mfa_challenges (
@@ -34,6 +40,5 @@ ALTER TABLE mfa_challenges ENABLE ROW LEVEL SECURITY;
 -- (sem policies para authenticated/anon → cliente não lê nem escreve)
 
 -- ── Verificação (manual) ─────────────────────────────────────────────────────
---   SELECT column_name FROM information_schema.columns
---     WHERE table_name='users' AND column_name='mfa_enabled';   -- 1 linha
---   SELECT count(*) FROM mfa_challenges;                          -- 0
+--   SELECT mfa_enabled, count(*) FROM users GROUP BY mfa_enabled;  -- todos true
+--   SELECT count(*) FROM mfa_challenges;                            -- 0

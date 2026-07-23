@@ -392,17 +392,21 @@ router.post('/login', async (req, res, next) => {
       }
     }
 
-    // ── 2º fator opcional (2FA por WhatsApp) ───────────────
-    // Só entra no gate se: a conta ligou o MFA, tem telefone, e o canal
-    // WhatsApp está configurado (sem canal não há como entregar o código —
-    // fail-open para não trancar ninguém fora num ambiente sem Z-API).
+    // ── 2º fator OBRIGATÓRIO (2FA por WhatsApp) ────────────
+    // Como o fluxo da plataforma é quase todo por WhatsApp, o 2FA é exigido de
+    // toda conta com telefone quando o canal está configurado. Não é opt-in:
+    // `mfa_enabled` (default true) só serve de válvula de escape de operação —
+    // uma conta específica em `false` (ex.: admin sem WhatsApp) pula o 2º fator.
+    // Sem telefone ou sem canal, não há como entregar o código → fail-open,
+    // para um eventual apagão do Z-API não trancar a plataforma inteira.
     if (profile.phone && isWhatsappEnabled()) {
-      let mfaEnabled = false;
+      let mfaEnabled = true; // obrigatório por padrão
       try {
         const { data: mrow, error: mErr } = await supabase
           .from('users').select('mfa_enabled').eq('id', profile.id).maybeSingle();
         if (mErr && mErr.code !== '42703') throw mErr;   // 42703 = migration 063 pendente
-        mfaEnabled = !!mrow?.mfa_enabled;
+        // Só desliga se a conta estiver EXPLICITAMENTE marcada como false.
+        if (mrow && mrow.mfa_enabled === false) mfaEnabled = false;
       } catch (e) {
         console.error('[login] leitura de mfa_enabled falhou:', e.message);
       }
@@ -411,7 +415,8 @@ router.post('/login', async (req, res, next) => {
         const challenge = await startMfaChallenge(profile, data.session.refresh_token);
         if (challenge) return res.status(200).json(challenge);
         // startMfaChallenge devolve null se o desafio não pôde ser criado
-        // (envio/registro falhou) — segue com a sessão normal (fail-open).
+        // (canal indisponível/envio falhou) — segue com a sessão normal
+        // (fail-open) para não trancar o acesso num apagão de WhatsApp.
       }
     }
 
