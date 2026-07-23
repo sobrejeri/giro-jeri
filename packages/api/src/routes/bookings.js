@@ -12,6 +12,58 @@ import dayjs from 'dayjs';
 
 const router = Router();
 
+async function reconcileNupayOnCancel(booking, free) {
+  const { data: payment } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('booking_id', booking.id)
+    .eq('gateway_name', 'nupay')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!payment) return null
+
+  if (payment.status === 'pending') {
+    const { cancelPayment, expireSession } = await import('../payments/nupay.js')
+    const result = payment.gateway_transaction_id
+      ? await cancelPayment(payment.gateway_transaction_id)
+      : (payment.provider_session_id ? await expireSession(payment.provider_session_id) : null)
+    await supabase.from('payments').update({
+      status: 'failed',
+      provider_status: 'CANCELLED_WITH_BOOKING',
+      failure_code: 'booking_cancelled',
+    }).eq('id', payment.id).eq('status', 'pending')
+    return { action: 'cancelled_pending_payment', result }
+  }
+
+  if (free && payment.status === 'approved' && payment.gateway_transaction_id) {
+    const { refundPayment } = await import('../payments/nupay.js')
+    const result = await refundPayment(
+      payment.gateway_transaction_id,
+      payment.amount_gross,
+      {},
+      `Cancelamento gratuito da reserva ${booking.booking_code}`,
+    )
+    await supabase.from('payment_events').insert({
+      payment_id:         payment.id,
+      gateway_name:       'nupay',
+      gateway_event_id:   `nupay-refund-request:${result.refundId}`,
+      event_name:         'nupay.refund.requested',
+      event_payload_json: {
+        refundId: result.refundId,
+        pspReferenceId: result.pspReferenceId,
+        status: result.status,
+      },
+      processing_status:  'completed',
+      processed_at:       new Date().toISOString(),
+    }).catch(() => {})
+    return { action: 'refund_requested', result }
+  }
+
+  return null
+}
+
 // ── Schema de criação de reserva ───────────────────────
 const createBookingSchema = z.object({
   region_id:         z.string().uuid(),
@@ -321,6 +373,14 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
     // Verifica política de cancelamento
     const { free, hoursLeft } = checkCancellationPolicy(booking);
 
+    let paymentAction = null
+    try {
+      paymentAction = await reconcileNupayOnCancel(booking, free)
+    } catch (err) {
+      console.error('[nupay] falha ao reconciliar cancelamento:', err.message)
+      paymentAction = { action: 'failed', error: err.message }
+    }
+
     const { data, error } = await supabase
       .from('bookings')
       .update({
@@ -340,6 +400,7 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
       cancellation: {
         free,
         hoursLeft: Math.round(hoursLeft),
+        paymentAction,
         message: free
           ? 'Cancelamento gratuito. Reembolso será processado em até 5 dias úteis.'
           : 'Cancelamento fora do prazo. Sujeito a análise de reembolso pela operação.',

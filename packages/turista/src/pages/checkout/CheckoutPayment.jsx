@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ChevronLeft, QrCode, CreditCard, Smartphone, ShieldCheck, Lock, Check, AlertCircle } from 'lucide-react'
+import { ChevronLeft, QrCode, CreditCard, Smartphone, ShieldCheck, Lock, Check, AlertCircle, BadgeCheck } from 'lucide-react'
 import { api } from '../../lib/api'
+import { useAuth } from '../../contexts/AuthContext'
+import { buildNupayProfilePayload, getNupayProfileMissingFields } from '../../lib/nupayProfile'
 
 const METHODS = [
   { id: 'pix',    label: 'Pix',              sub: 'Aprovação instantânea',     icon: QrCode,       badge: 'Recomendado', iconBg: 'bg-orange-100', iconColor: 'text-brand' },
+  { id: 'nupay',  label: 'NuPay / Nubank',   sub: 'Confirme no app Nubank',    icon: BadgeCheck,   badge: null,          iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
   { id: 'credit', label: 'Cartão de crédito', sub: 'Em breve',                  icon: CreditCard,   badge: null,          iconBg: 'bg-gray-100',   iconColor: 'text-gray-400', disabled: true },
   { id: 'debit',  label: 'Cartão de débito',  sub: 'Em breve',                  icon: Smartphone,   badge: null,          iconBg: 'bg-gray-100',   iconColor: 'text-gray-400', disabled: true },
 ]
@@ -14,9 +17,35 @@ function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigi
 export default function CheckoutPayment() {
   const navigate  = useNavigate()
   const { state } = useLocation()
+  const { user, updateUser } = useAuth()
   const [method, setMethod] = useState('pix')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const [nupayEnabled, setNupayEnabled] = useState(false)
+  const [pendingBookingId, setPendingBookingId] = useState(state?.existing_booking_id || '')
+  const idempotencyKey = useRef(globalThis.crypto?.randomUUID?.() || `nupay-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const [nupayForm, setNupayForm] = useState({
+    full_name:       user?.full_name || '',
+    email:           user?.email || '',
+    phone:           user?.phone || '',
+    document_number: user?.document_number || '',
+  })
+
+  useEffect(() => {
+    setNupayForm((prev) => ({
+      ...prev,
+      full_name:       prev.full_name       || user?.full_name       || '',
+      email:           prev.email           || user?.email           || '',
+      phone:           prev.phone           || user?.phone           || '',
+      document_number: prev.document_number || user?.document_number || '',
+    }))
+  }, [user])
+
+  useEffect(() => {
+    api.getPublicSettings()
+      .then((settings) => setNupayEnabled(settings?.payment_nupay_enabled === true))
+      .catch(() => setNupayEnabled(false))
+  }, [])
 
   if (!state) { navigate(-1); return null }
 
@@ -25,18 +54,32 @@ export default function CheckoutPayment() {
     service_date, service_date_iso, service_time,
     people_count, total_price: rawPrice, region_id, service_id,
     vehicles = [], origin_text, destination_text, cover_image_url,
-    existing_booking_id,
+    existing_booking_id, coupon_code,
   } = state
 
   const total_price = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
   const isPrivate    = booking_mode === 'private'
   const subtitleParts = [service_date, service_time, `${people_count} ${people_count === 1 ? 'pessoa' : 'pessoas'}`].filter(Boolean)
+  const needsNupayData = method === 'nupay' && getNupayProfileMissingFields(nupayForm, user).length > 0
+
+  function setNupayField(key, value) {
+    setNupayForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  async function ensureNupayProfile() {
+    if (method !== 'nupay') return
+
+    const body = buildNupayProfilePayload(nupayForm)
+    const result = await api.updateProfile(body)
+    updateUser?.({ ...(result.user || result || {}), ...body })
+  }
 
   async function handleConfirm() {
     if (loading) return
     setLoading(true)
     setError('')
     try {
+      await ensureNupayProfile()
       const result = await api.createPaymentIntent({
         service_type, service_id, booking_mode,
         service_date, service_date_iso, service_time,
@@ -44,8 +87,9 @@ export default function CheckoutPayment() {
         origin_text, destination_text,
         total_price, payment_method: method,
         service_name, cover_image_url,
-        existing_booking_id: existing_booking_id || undefined,
-      })
+        coupon_code,
+        existing_booking_id: pendingBookingId || existing_booking_id || undefined,
+      }, method === 'nupay' ? idempotencyKey.current : undefined)
 
       if (!result) throw new Error('Erro ao iniciar pagamento')
 
@@ -54,11 +98,14 @@ export default function CheckoutPayment() {
           ...state,
           payment_id:        result.payment_id,
           booking_id:        result.booking_id,
+          existing_booking_id: result.booking_id,
           booking_code:      result.booking_code,
           amount:            result.amount,
           pix_code:          result.pix_code,
           qr_base64:         result.qr_base64,
           expires_at:        result.expires_at,
+          provider:          result.provider,
+          payment_url:       result.payment_url,
           // manual payment fields
           manual_mode:       result.manual_mode,
           pix_key_type:      result.pix_key_type,
@@ -71,6 +118,7 @@ export default function CheckoutPayment() {
         },
       })
     } catch (err) {
+      if (err.booking_id) setPendingBookingId(err.booking_id)
       setError(err.message || 'Erro ao processar. Tente novamente.')
     } finally {
       setLoading(false)
@@ -109,7 +157,7 @@ export default function CheckoutPayment() {
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
           <p className="text-[14px] font-bold text-gray-900 px-4 pt-4 pb-3">Escolha como pagar</p>
           <div className="divide-y divide-gray-50">
-            {METHODS.map((m) => {
+            {METHODS.filter((m) => m.id !== 'nupay' || nupayEnabled).map((m) => {
               const selected = method === m.id
               return (
                 <button
@@ -144,6 +192,42 @@ export default function CheckoutPayment() {
           </div>
         )}
 
+        {method === 'nupay' && needsNupayData && (
+          <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4 space-y-3">
+            <div>
+              <p className="text-[14px] font-bold text-gray-900">Dados para pagar com NuPay</p>
+              <p className="text-[12px] text-gray-400 mt-0.5">O Nubank exige CPF, telefone, nome e e-mail para criar o pagamento.</p>
+            </div>
+            <input
+              value={nupayForm.full_name}
+              onChange={(e) => setNupayField('full_name', e.target.value)}
+              placeholder="Nome completo"
+              className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[14px] text-gray-800 focus:outline-none focus:border-brand"
+            />
+            <input
+              value={nupayForm.email}
+              onChange={(e) => setNupayField('email', e.target.value)}
+              placeholder="E-mail"
+              type="email"
+              className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[14px] text-gray-800 focus:outline-none focus:border-brand"
+            />
+            <input
+              value={nupayForm.phone}
+              onChange={(e) => setNupayField('phone', e.target.value)}
+              placeholder="Telefone / WhatsApp"
+              type="tel"
+              className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[14px] text-gray-800 focus:outline-none focus:border-brand"
+            />
+            <input
+              value={nupayForm.document_number}
+              onChange={(e) => setNupayField('document_number', e.target.value)}
+              placeholder="CPF"
+              inputMode="numeric"
+              className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[14px] text-gray-800 focus:outline-none focus:border-brand"
+            />
+          </div>
+        )}
+
         <div className="bg-green-50 rounded-2xl p-3.5 border border-green-100">
           <div className="flex items-start gap-2.5">
             <ShieldCheck size={16} className="text-green-500 shrink-0 mt-0.5" />
@@ -158,9 +242,13 @@ export default function CheckoutPayment() {
           disabled={loading}
           className="w-full bg-brand text-white font-bold rounded-2xl py-4 text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-70"
         >
-          {loading
-            ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            : <><Lock size={15} className="text-white/80" /> Gerar PIX · R$ {fmt(total_price)}</>}
+          {loading ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : method === 'nupay' ? (
+            <><Lock size={15} className="text-white/80" /> Pagar com Nubank · R$ {fmt(total_price)}</>
+          ) : (
+            <><Lock size={15} className="text-white/80" /> Gerar PIX · R$ {fmt(total_price)}</>
+          )}
         </button>
         <p className="text-[10px] text-gray-400 text-center mt-2">Ao confirmar, você concorda com os termos de uso do Giro Jeri</p>
       </div>

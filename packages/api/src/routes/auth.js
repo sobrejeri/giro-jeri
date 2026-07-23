@@ -246,6 +246,7 @@ router.post('/refresh', async (req, res, next) => {
 // ── PATCH /api/auth/me ────────────────────────────────
 const updateProfileSchema = z.object({
   full_name:               z.string().min(2).max(200).optional(),
+  email:                   z.string().email().max(200).optional(),
   phone:                   z.string().min(10).max(30).optional(),
   birth_date:              z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   document_type:           z.enum(['cpf', 'cnpj', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
@@ -274,7 +275,7 @@ router.patch('/me', authenticate, async (req, res, next) => {
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', req.user.id)
       .select(`id, full_name, email, phone, user_type, profile_photo_url,
-               document_number, birth_date, language, preferred_region_id,
+               document_type, document_number, birth_date, language, preferred_region_id,
                pix_key_type, pix_key, bank_name, bank_agency,
                bank_account_number, bank_account_type, bank_document`)
       .single();

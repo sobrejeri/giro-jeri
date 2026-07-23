@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node --test src/payments/*.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

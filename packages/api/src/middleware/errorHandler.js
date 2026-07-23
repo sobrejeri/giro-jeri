@@ -6,13 +6,19 @@ export function notFound(req, res) {
 
 export function errorHandler(err, req, res, _next) {
   const status  = err.status || err.statusCode || 500;
-  // Expõe a mensagem real do erro para facilitar debug
-  const message = err.message || 'Erro interno do servidor';
+  const message = status >= 500
+    ? 'Serviço temporariamente indisponível'
+    : (err.message || 'Não foi possível concluir a solicitação');
 
-  console.error('[ERROR]', err);
+  console.error('[ERROR]', {
+    name: err.name,
+    code: err.code,
+    status,
+    message: err.message,
+    path: req.originalUrl,
+  });
 
   res.status(status).json({
     error: message,
-    detail: err.details || err.hint || undefined,
   });
 }

@@ -15,6 +15,9 @@
     "build:coop":       "npm run build --workspace=packages/cooperativa",
     "build:admin":      "npm run build --workspace=packages/admin",
     "start":            "npm run start --workspace=packages/api",
+    "test":             "npm run test:api && npm run test:turista",
+    "test:api":         "npm run test --workspace=packages/api",
+    "test:turista":     "npm run test --workspace=packages/turista",
     "install:all":      "npm install"
   },
   "devDependencies": {

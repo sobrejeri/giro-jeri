@@ -12,7 +12,9 @@ services:
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: TURISTA_URL
-        value: https://sobrejeri.github.io
+        value: https://sobrejeri.github.io/giro-jeri
+      - key: API_PUBLIC_URL
+        sync: false
       - key: COOP_URL
         value: https://sobrejeri.github.io
       - key: ADMIN_URL
@@ -27,6 +29,19 @@ services:
       # Assinatura secreta do webhook (Suas integrações > Webhooks > Assinatura secreta)
       - key: MERCADO_PAGO_WEBHOOK_SECRET
         sync: false
+      # NuPay Sessions — habilitar somente depois da homologação em sandbox.
+      - key: NUPAY_ENABLED
+        value: "false"
+      - key: NUPAY_ENV
+        value: sandbox
+      - key: NUPAY_APP_KEY
+        sync: false
+      - key: NUPAY_APP_TOKEN
+        sync: false
+      - key: NUPAY_MERCHANT_NAME
+        value: Giro Jeri
+      - key: NUPAY_TIMEOUT_MS
+        value: "8000"
       # Resend — e-mails transacionais (confirmação de reserva). Chave em resend.com.
       - key: RESEND_API_KEY
         sync: false

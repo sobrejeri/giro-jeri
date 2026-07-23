@@ -3,9 +3,20 @@ import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
 import dayjs from 'dayjs';
+import { isNupayConfigured } from '../payments/nupay.js';
 
 const router = Router();
 router.use(authenticate);
+
+const SECRET_SETTING_KEYS = new Set([
+  'payment_nupay_app_key',
+  'payment_nupay_app_token',
+  'payment_nupay_env',
+  'payment_nupay_client_id',
+  'payment_nupay_client_secret',
+  'payment_nupay_merchant_id',
+  'payment_nupay_webhook_secret',
+]);
 
 // ── GET /api/admin/stats ───────────────────────────────
 router.get('/stats', requireAdmin, async (req, res, next) => {
@@ -440,7 +451,22 @@ router.get('/settings', requireAdmin, async (req, res, next) => {
       .select('setting_key, setting_value, value_type, description')
       .order('setting_key');
     if (error) throw error;
-    res.json(data);
+    const safeSettings = (data || []).filter((row) => !SECRET_SETTING_KEYS.has(row.setting_key));
+    safeSettings.push(
+      {
+        setting_key: 'payment_nupay_credentials_configured',
+        setting_value: String(isNupayConfigured()),
+        value_type: 'boolean',
+        description: 'Indica se NuPay está habilitado e configurado no ambiente do servidor.',
+      },
+      {
+        setting_key: 'payment_nupay_runtime_env',
+        setting_value: process.env.NUPAY_ENV || 'sandbox',
+        value_type: 'string',
+        description: 'Ambiente NuPay configurado no servidor.',
+      },
+    );
+    res.json(safeSettings);
   } catch (err) { next(err); }
 });
 
@@ -449,6 +475,11 @@ router.get('/settings', requireAdmin, async (req, res, next) => {
 // (necessário para chaves novas como home_banner_image_url sem depender de seed).
 router.put('/settings/:key', requireAdmin, async (req, res, next) => {
   try {
+    if (SECRET_SETTING_KEYS.has(req.params.key)) {
+      return res.status(400).json({
+        error: 'Credenciais NuPay devem ser configuradas no secret manager do servidor',
+      });
+    }
     const { setting_value, value_type, description } = req.body;
     const row = {
       setting_key:        req.params.key,

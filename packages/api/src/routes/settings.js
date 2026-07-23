@@ -2,6 +2,7 @@
 // Configurações públicas lidas pelo app do turista (sem autenticação).
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
+import { isNupayConfigured } from '../payments/nupay.js';
 
 const router = Router();
 
@@ -13,6 +14,7 @@ const PUBLIC_KEYS = [
   'whatsapp_support_number',
   'app_version',
   'default_currency',
+  'payment_nupay_enabled',
 ];
 
 // ── GET /api/settings/public ───────────────────────────
@@ -25,6 +27,10 @@ router.get('/public', async (_req, res, next) => {
     if (error) throw error;
 
     const map = Object.fromEntries((data || []).map((s) => [s.setting_key, s.setting_value]));
+    map.payment_nupay_enabled = (
+      map.payment_nupay_enabled === 'true'
+      && isNupayConfigured()
+    );
     res.json(map);
   } catch (err) { next(err); }
 });

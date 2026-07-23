@@ -49,6 +49,8 @@ const PAYMENT_KEYS = new Set([
   'payment_admin_bank_name', 'payment_admin_bank_agency',
   'payment_admin_bank_account', 'payment_admin_bank_account_type',
   'payment_admin_bank_document',
+  'payment_nupay_enabled', 'payment_nupay_fee_percent',
+  'payment_nupay_credentials_configured', 'payment_nupay_runtime_env',
 ])
 
 // ── Payment tab constants ─────────────────────────────────
@@ -90,6 +92,10 @@ const PAYMENT_DEFAULTS = {
   payment_admin_bank_account:     '',
   payment_admin_bank_account_type:'corrente',
   payment_admin_bank_document:    '',
+  payment_nupay_enabled:          'false',
+  payment_nupay_fee_percent:      '0',
+  payment_nupay_credentials_configured: 'false',
+  payment_nupay_runtime_env:      'sandbox',
 }
 
 function settingsToMap(list) {
@@ -462,6 +468,78 @@ function TabPagamentos({ settings, qc }) {
               )}
               pending={saveMut.isPending}
               saved={savedSection === 'gateway'}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* NuPay */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CreditCard size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">NuPay / Nubank</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-4">
+            <label className="flex items-center justify-between gap-4 rounded-lg bg-gray-900 border border-gray-800 px-3 py-3 cursor-pointer">
+              <div>
+                <p className="text-sm font-medium text-gray-200">Exibir NuPay no checkout</p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Permite que turistas escolham Nubank/NuPay como opção de pagamento.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={form.payment_nupay_enabled === 'true'}
+                onChange={(e) => set('payment_nupay_enabled', e.target.checked ? 'true' : 'false')}
+                className="w-4 h-4 rounded border-gray-600 bg-gray-900 text-brand focus:ring-brand/30"
+              />
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-gray-400 mb-1.5">Ambiente NuPay</p>
+                <div className="h-10 flex items-center rounded border border-gray-800 bg-gray-900 px-3 text-sm text-gray-300">
+                  {form.payment_nupay_runtime_env === 'production' ? 'Produção' : 'Sandbox'}
+                </div>
+              </div>
+              <Input
+                label="Taxa NuPay (%)"
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.payment_nupay_fee_percent}
+                onChange={(e) => set('payment_nupay_fee_percent', e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 rounded border border-gray-800 bg-gray-900 px-3 py-2.5">
+              <CheckCircle
+                size={16}
+                className={form.payment_nupay_credentials_configured === 'true' ? 'text-emerald-400' : 'text-gray-600'}
+              />
+              <p className="text-sm text-gray-300">
+                Credenciais no servidor: {form.payment_nupay_credentials_configured === 'true'
+                  ? 'configuradas e habilitadas'
+                  : 'não configuradas ou desabilitadas'}
+              </p>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 text-xs text-gray-500 space-y-1">
+              <p>Webhook NuPay: <span className="text-gray-300">/api/payments/nupay/webhook</span></p>
+              <p>Sandbox: <span className="text-gray-300">https://sandbox-api.spinpay.com.br/v1</span></p>
+              <p>Produção: <span className="text-gray-300">https://api.spinpay.com.br/v1</span></p>
+              <p>App Key e App Token são gerenciados apenas nas variáveis protegidas do servidor.</p>
+            </div>
+
+            <SaveRow
+              onSave={() => saveSection([
+                'payment_nupay_enabled', 'payment_nupay_fee_percent',
+              ], 'nupay')}
+              pending={saveMut.isPending}
+              saved={savedSection === 'nupay'}
             />
           </div>
         </CardBody>

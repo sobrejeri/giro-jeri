@@ -17,6 +17,9 @@ Abra o **SQL Editor** do Supabase e execute o **conteúdo** de cada arquivo abai
 | 3 | `supabase/migrations/018_establishments_seed.sql` | Os 90 estabelecimentos do guia |
 | 4 | `supabase/migrations/019_engagement.sql` | Curtidas, comentários e avaliações |
 | 5 | `supabase/migrations/020_catalogo_real_jericoacoara.sql` | Catálogo real: passeios, transfers e preços (requer a 005 já aplicada) |
+| 6 | `supabase/migrations/021_nupay_payments.sql` | NuPay como opção de pagamento + configurações |
+| 7 | `supabase/migrations/022_nupay_official_credentials.sql` | Compatibilidade com a configuração NuPay anterior |
+| 8 | `supabase/migrations/023_nupay_sessions_hardening.sql` | Sessões NuPay, idempotência e finalização atômica |
 
 > ⚠️ Cole o **conteúdo do arquivo** (o SQL), não o nome do arquivo.
 
@@ -45,6 +48,30 @@ Abra o **SQL Editor** do Supabase e execute o **conteúdo** de cada arquivo abai
 4. *(Depois, opcional)*: verifique seu domínio no Resend e troque `EMAIL_FROM` no Render para `Giro Jeri <noreply@seudominio.com.br>` — sai do remetente genérico.
 
 > Sem a chave, o app funciona normalmente — só não envia e-mails.
+
+---
+
+## 3.1. NuPay / Nubank — OPCIONAL
+
+A integração usa **Sessões NuPay** e começa oculta e desabilitada. Não existe
+aprovação mock em runtime. Consulte o roteiro completo em `docs/NUPAY.md`.
+
+Para usar NuPay real:
+
+1. Solicite no onboarding o contrato de **Sessões NuPay**.
+2. Configure no secret manager do Render:
+   - `API_PUBLIC_URL`
+   - `NUPAY_ENV=sandbox`
+   - `NUPAY_APP_KEY`
+   - `NUPAY_APP_TOKEN`
+   - `NUPAY_ENABLED=false`
+3. Cadastre as URLs HTTPS de retorno e callbacks indicadas em `docs/NUPAY.md`.
+4. Execute o roteiro completo de sandbox: aprovação, recusa, expiração,
+   cancelamento, concorrência de callbacks e estorno.
+5. Depois da homologação, altere `NUPAY_ENABLED=true` no Render e habilite NuPay
+   em **Configurações → Pagamentos** no painel admin.
+
+> App Key e App Token nunca devem ser gravados no banco ou no painel admin.
 
 ---
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
-import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark, FlaskConical, Zap } from 'lucide-react'
+import { useLocation, useNavigate, Link, useSearchParams } from 'react-router-dom'
+import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark, FlaskConical, Zap, Smartphone, ShieldCheck, ExternalLink } from 'lucide-react'
 import { api } from '../../lib/api'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
@@ -25,6 +25,234 @@ function useCountdown(expiresAt) {
   const m = Math.floor(secs / 60).toString().padStart(2, '0')
   const s = (secs % 60).toString().padStart(2, '0')
   return { secs, display: `${m}:${s}` }
+}
+
+function NupayPayment({ state }) {
+  const navigate  = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [status, setStatus] = useState('pending')
+  const [providerError, setProviderError] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+  const [paymentUrl, setPaymentUrl] = useState(state.payment_url || '')
+  const pollRef = useRef(null)
+  const completedRef = useRef(false)
+  const sessionId = searchParams.get('sessionId') || searchParams.get('session_id')
+  const returnState = String(searchParams.get('state') || '').toLowerCase()
+  const { payment_id, total_price } = state
+  const [bookingCode, setBookingCode] = useState(state.booking_code || '')
+  const [bookingId, setBookingId] = useState(state.booking_id || '')
+  const [amount, setAmount] = useState(state.amount || '')
+  const [expiresAt, setExpiresAt] = useState(state.expires_at || '')
+  const value = amount || total_price
+  const { secs, display: countdown } = useCountdown(expiresAt)
+
+  const openNupay = useCallback(() => {
+    if (paymentUrl) window.location.assign(paymentUrl)
+  }, [paymentUrl])
+
+  const applyStatus = useCallback((result) => {
+    if (!result) return
+    if (result.payment_url) setPaymentUrl(result.payment_url)
+    if (result.booking_code) setBookingCode(result.booking_code)
+    if (result.booking_id) setBookingId(result.booking_id)
+    if (result.amount) setAmount(result.amount)
+    if (result.expires_at) setExpiresAt(result.expires_at)
+
+    if (result.status === 'approved') {
+      setStatus('approved')
+      clearInterval(pollRef.current)
+      setTimeout(() => navigate('/checkout/sucesso', {
+        state: {
+          ...state,
+          booking_id: result.booking_id || bookingId,
+          booking_code: result.booking_code || bookingCode,
+        },
+      }), 800)
+    } else if (['expired', 'failed', 'cancelled'].includes(result.status)) {
+      setStatus(result.status === 'cancelled' ? 'failed' : result.status)
+      clearInterval(pollRef.current)
+    }
+  }, [bookingCode, bookingId, navigate, state])
+
+  const poll = useCallback(async () => {
+    if (!payment_id) return
+    try {
+      applyStatus(await api.getPaymentStatus(payment_id))
+      setProviderError('')
+    } catch {
+      setProviderError('Não foi possível atualizar o pagamento agora.')
+    }
+  }, [applyStatus, payment_id])
+
+  useEffect(() => {
+    if (!sessionId || !payment_id || completedRef.current) return
+    completedRef.current = true
+    api.completeNupayPayment(payment_id, sessionId)
+      .then(applyStatus)
+      .catch(() => setProviderError('Não foi possível confirmar o retorno do Nubank agora.'))
+  }, [applyStatus, payment_id, sessionId])
+
+  useEffect(() => {
+    if (returnState === 'canceled' || returnState === 'cancelled') setStatus('failed')
+  }, [returnState])
+
+  useEffect(() => {
+    pollRef.current = setInterval(poll, 30000)
+    poll()
+    return () => clearInterval(pollRef.current)
+  }, [poll])
+
+  useEffect(() => {
+    if (expiresAt && new Date(expiresAt).getTime() <= Date.now() && status === 'pending') {
+      clearInterval(pollRef.current)
+      setStatus('expired')
+    }
+  }, [secs, expiresAt, status])
+
+  async function cancelAttempt() {
+    if (!payment_id || cancelling) return
+    setCancelling(true)
+    setProviderError('')
+    try {
+      await api.cancelPayment(payment_id)
+      setStatus('failed')
+    } catch {
+      setProviderError('Não foi possível cancelar agora. Tente novamente.')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  function choosePix() {
+    navigate('/checkout/pagamento', {
+      state: {
+        ...state,
+        booking_id: bookingId,
+        existing_booking_id: bookingId,
+        booking_code: bookingCode,
+        amount,
+        total_price: value,
+        payment_method: 'pix',
+      },
+    })
+  }
+
+  if (status === 'approved') {
+    return (
+      <div className="min-h-screen max-w-[430px] mx-auto bg-[#F8F8F8] flex items-center justify-center p-6">
+        <div className="text-center">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+            <Check size={36} className="text-green-500" strokeWidth={2.5} />
+          </div>
+          <p className="text-[20px] font-bold text-gray-900">Pagamento confirmado!</p>
+          <p className="text-[14px] text-gray-500 mt-1">Redirecionando…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'expired' || status === 'failed') {
+    return (
+      <div className="min-h-screen max-w-[430px] mx-auto bg-[#F8F8F8] flex flex-col items-center justify-center p-6">
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Clock size={32} className="text-red-400" />
+        </div>
+        <p className="text-[20px] font-bold text-gray-900 mb-1">
+          {status === 'expired' ? 'Sessão NuPay expirada' : 'Pagamento NuPay cancelado'}
+        </p>
+        <p className="text-[13px] text-gray-500 mb-6 text-center">
+          Sua reserva continua aguardando pagamento. Você pode iniciar uma nova tentativa ou pagar via PIX.
+        </p>
+        <div className="w-full max-w-xs space-y-2">
+          <button
+            onClick={choosePix}
+            className="w-full bg-brand text-white font-bold rounded-lg px-8 py-3.5 text-[14px] active:scale-[0.98] transition-transform"
+          >
+            Pagar com PIX
+          </button>
+          <button
+            onClick={() => navigate('/minhas-reservas')}
+            className="w-full bg-white text-gray-700 border border-gray-200 font-bold rounded-lg px-8 py-3.5 text-[14px] active:scale-[0.98] transition-transform"
+          >
+            Ver minhas reservas
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen max-w-[430px] mx-auto bg-[#F8F8F8]">
+      <header className="bg-white px-4 pt-12 pb-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold text-gray-900">Pagar com Nubank</h1>
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold ${secs < 120 ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-purple-700'}`}>
+            <Clock size={12} />
+            {countdown}
+          </div>
+        </div>
+        <p className="text-[12px] text-gray-400 mt-1">
+          Reserva <span className="font-mono font-bold text-gray-600">{bookingCode || 'em processamento'}</span>
+          {value ? ` · R$ ${fmt(value)}` : ''}
+        </p>
+      </header>
+
+      <main className="px-4 pt-4 pb-10 space-y-4">
+        {providerError && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <p className="text-[12px] text-amber-700">{providerError}</p>
+          </div>
+        )}
+
+        <div className="bg-white rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 text-center">
+          <div className="w-20 h-20 rounded-lg bg-purple-100 flex items-center justify-center mx-auto mb-4">
+            <Smartphone size={34} className="text-purple-700" />
+          </div>
+          <p className="text-[18px] font-extrabold text-gray-900">Confirme no app Nubank</p>
+          <p className="text-[13px] text-gray-500 leading-relaxed mt-2">
+            Continue no ambiente seguro do Nubank para escolher as condições disponíveis e autorizar.
+          </p>
+          {paymentUrl && (
+            <button
+              onClick={openNupay}
+              className="mt-5 w-full bg-[#820AD1] text-white font-bold rounded-lg py-4 text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              Abrir app Nubank <ExternalLink size={16} />
+            </button>
+          )}
+          <div className="flex items-center justify-center gap-2 mt-4 text-[11px] text-gray-400">
+            <RefreshCw size={11} className="animate-spin" />
+            Verificando confirmação automaticamente…
+          </div>
+        </div>
+
+        <div className="bg-green-50 rounded-lg p-3.5 border border-green-100">
+          <div className="flex items-start gap-2.5">
+            <ShieldCheck size={15} className="text-green-500 shrink-0 mt-0.5" />
+            <p className="text-[12px] text-green-700 leading-relaxed">
+              Seus dados de cartão não são digitados no Giro Jeri; a autenticação acontece no Nubank.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={cancelAttempt}
+            disabled={cancelling}
+            className="flex-1 bg-white text-gray-600 border border-gray-200 font-bold rounded-lg py-3.5 text-[13px] disabled:opacity-60"
+          >
+            {cancelling ? 'Cancelando...' : 'Cancelar NuPay'}
+          </button>
+          <button
+            onClick={choosePix}
+            className="flex-1 bg-white text-brand border border-orange-200 font-bold rounded-lg py-3.5 text-[13px]"
+          >
+            Pagar com PIX
+          </button>
+        </div>
+      </main>
+    </div>
+  )
 }
 
 // ── Manual payment (no gateway) ───────────────────────────
@@ -204,7 +432,14 @@ function ManualPayment({ state }) {
 // ── Gateway payment (QR code polling) ────────────────────
 export default function CheckoutProcessando() {
   const navigate  = useNavigate()
-  const { state } = useLocation()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const queryPaymentId = searchParams.get('nupay_payment_id')
+  const state = location.state || (queryPaymentId ? {
+    provider: 'nupay',
+    payment_method: 'nupay',
+    payment_id: queryPaymentId,
+  } : null)
   const [copied, setCopied]   = useState(false)
   const [status, setStatus]   = useState('pending')
   const pollRef = useRef(null)
@@ -213,6 +448,7 @@ export default function CheckoutProcessando() {
 
   // Manual mode: delegate to static PIX display
   if (state.manual_mode) return <ManualPayment state={state} />
+  if (state.provider === 'nupay' || state.payment_method === 'nupay') return <NupayPayment state={state} />
 
   const { pix_code, qr_base64, expires_at, payment_id, booking_code, total_price, amount, test_mode } = state
   const value = amount || total_price
@@ -252,7 +488,7 @@ export default function CheckoutProcessando() {
   }, [poll, test_mode])
 
   useEffect(() => {
-    if (secs === 0 && expires_at) {
+    if (expires_at && new Date(expires_at).getTime() <= Date.now()) {
       clearInterval(pollRef.current)
       setStatus('expired')
     }

@@ -23,6 +23,7 @@ const app  = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Segurança ──────────────────────────────────────────
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({
   origin: [
@@ -35,6 +36,8 @@ app.use(cors({
 
 // Webhook do gateway: precisa do body raw, não parseado
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/payments/nupay/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/payments/nupay/payment-webhook', express.raw({ type: 'application/json' }));
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -56,6 +59,14 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login',           authLimiter);
 app.use('/api/auth/register',        authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
+
+const paymentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max:      30,
+  message:  { error: 'Muitas solicitações de pagamento. Aguarde um minuto.' },
+});
+app.use('/api/payments/intent', paymentLimiter);
+app.use('/api/payments/nupay', paymentLimiter);
 
 // ── Health check ───────────────────────────────────────
 app.get('/health', (_req, res) => {

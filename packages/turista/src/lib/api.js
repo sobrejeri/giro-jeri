@@ -36,12 +36,14 @@ function clearSession() {
 
 async function request(path, options = {}, isRetry = false) {
   const token = getToken()
+  const { headers: customHeaders = {}, ...requestOptions } = options
   const res = await fetch(`${BASE}${path}`, {
+    ...requestOptions,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...customHeaders,
     },
-    ...options,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   })
 
@@ -56,7 +58,11 @@ async function request(path, options = {}, isRetry = false) {
 
   if (res.status === 204) return null
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
+  if (!res.ok) {
+    const error = new Error(data.error || `Erro ${res.status}`)
+    Object.assign(error, data, { status: res.status })
+    throw error
+  }
   return data
 }
 
@@ -113,7 +119,16 @@ export const api = {
   rejectQuote:        (id, body)    => request(`/api/transfers/quotes/${id}/reject`, { method: 'POST', body }),
 
   // Pagamentos
-  createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
+  createPaymentIntent:    (body, idempotencyKey) => request('/api/payments/intent', {
+    method: 'POST',
+    body,
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+  }),
+  completeNupayPayment:   (paymentId, sessionId) => request('/api/payments/nupay/complete', {
+    method: 'POST',
+    body: { payment_id: paymentId, session_id: sessionId },
+  }),
+  cancelPayment:          (id)   => request(`/api/payments/${id}/cancel`, { method: 'POST', body: {} }),
   getPaymentStatus:       (id)   => request(`/api/payments/${id}/status`),
   simulatePaymentApprove: (id)   => request(`/api/payments/${id}/simulate`, { method: 'POST', body: {} }),
 
