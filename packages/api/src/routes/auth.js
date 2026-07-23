@@ -434,7 +434,14 @@ router.post('/login', async (req, res, next) => {
           console.warn('[login] MFA não provisionado (mfa_challenges ausente) — login sem 2º fator');
         } else {
           // send_failed / store_failed → FAIL-CLOSED: bloqueia o login.
-          return res.status(503).json({ error: 'Não foi possível enviar o código de verificação. Tente novamente em instantes.' });
+          // DIAGNÓSTICO TEMPORÁRIO: anexa o motivo cru (Z-API/banco) à mensagem
+          // para depurar o 2FA na fase de teste. REMOVER antes do lançamento —
+          // não expor detalhe interno de erro ao cliente em produção.
+          const diag = r.detail ? ` [diag: ${r.detail}]` : '';
+          return res.status(503).json({
+            error:  `Não foi possível enviar o código de verificação. Tente novamente em instantes.${diag}`,
+            detail: r.detail || null,
+          });
         }
       }
     }
@@ -475,8 +482,8 @@ async function startMfaChallenge(profile, refreshToken) {
     });
   } catch (e) {
     if (e.status !== 429) {
-      console.error('[login] envio do código 2FA falhou:', e.message);
-      return { status: 'send_failed' };
+      console.error('[login] envio do código 2FA falhou:', e.message, e.detail || '');
+      return { status: 'send_failed', detail: e.detail || e.message };
     }
   }
 
@@ -496,7 +503,7 @@ async function startMfaChallenge(profile, refreshToken) {
       return { status: 'not_provisioned' };
     }
     console.error('[login] gravação do desafio 2FA falhou:', chErr.message);
-    return { status: 'store_failed' };
+    return { status: 'store_failed', detail: `mfa_challenges insert: ${chErr.code || ''} ${chErr.message || ''}`.trim() };
   }
 
   const mfa_token = signMfaToken({ challenge_id: ch.id, user_id: profile.id });

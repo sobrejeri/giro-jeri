@@ -120,6 +120,7 @@ export async function requestOtp({ userId, channel, destination, lang = 'pt', re
   if (insertErr) {
     const err = new Error('Erro ao gerar código de verificação.');
     err.status = 500;
+    err.detail = `otp_codes insert: ${insertErr.code || ''} ${insertErr.message || ''}`.trim();
     throw err;
   }
 
@@ -135,6 +136,7 @@ export async function requestOtp({ userId, channel, destination, lang = 'pt', re
     const err = new Error('Não foi possível enviar o código de verificação.');
     err.status = 502;
     err.code   = 'otp_delivery_failed';
+    err.detail = sendResult.detail || (sendResult.skipped ? 'canal WhatsApp não configurado' : 'falha no envio');
     throw err;
   }
 
