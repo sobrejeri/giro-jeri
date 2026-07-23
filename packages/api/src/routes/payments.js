@@ -991,6 +991,7 @@ router.post('/request', authenticate, async (req, res, next) => {
         console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
       notifyOperatorsAndAdmin({
         bookingId:   booking.id,
+        fleetBookingId: booking.id,
         templateKey: 'new_booking',
         title:       'Nova solicitação disponível',
         body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
@@ -1151,6 +1152,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       const rota = [b.origin_text, b.destination_text].filter(Boolean).join(' → ')
       notifyOperatorsAndAdmin({
         bookingId:   b.id,
+        fleetBookingId: b.id,
         templateKey: 'new_booking',
         title:       'Nova solicitação disponível',
         body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(b.service_date)}. Abra para aceitar.`,
@@ -1723,6 +1725,7 @@ function notifyBookingPaid(booking) {
       console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
     notifyOperatorsAndAdmin({
       bookingId:   booking.id,
+      fleetBookingId: booking.id,
       templateKey: 'new_booking',
       title:       'Nova solicitação disponível',
       body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,

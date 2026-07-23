@@ -179,11 +179,10 @@ export async function notifyAffiliateCommission(supabase, { affiliateId, booking
 export async function notifyOperatorsNewBooking(supabase, booking) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
 
-  const { data: operators } = await supabase
-    .from('users')
-    .select('phone')
-    .eq('user_type', 'operator')
-    .eq('is_active', true)
+  // Item 17: só as cooperativas com a FROTA compatível (não desabilitaram os
+  // veículos da reserva). Ex.: helicóptero/UTV não notificam quem não opera.
+  const { eligibleOperatorsForBooking } = await import('./fleet.js')
+  const operators = await eligibleOperatorsForBooking(supabase, booking.id)
 
   if (!operators?.length) return { skipped: true }
 

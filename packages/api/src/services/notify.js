@@ -55,14 +55,26 @@ export async function notifyUser({ userId, bookingId = null, templateKey = null,
 }
 
 // Notifica TODAS as cooperativas ativas + admins (ex.: nova solicitação).
-export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = null, title, body }) {
+export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = null, title, body, fleetBookingId = null }) {
   if (!body) return
   try {
-    const { data: recipients } = await supabase
-      .from('users')
-      .select('id')
-      .in('user_type', ['operator', 'admin'])
-      .eq('is_active', true)
+    let recipients
+    if (fleetBookingId) {
+      // Item 17: solicitação nova → só as coops com frota compatível + admins.
+      const { eligibleOperatorsForBooking } = await import('./fleet.js')
+      const [ops, adminsRes] = await Promise.all([
+        eligibleOperatorsForBooking(supabase, fleetBookingId),
+        supabase.from('users').select('id').eq('user_type', 'admin').eq('is_active', true),
+      ])
+      recipients = [...(ops || []).map((o) => ({ id: o.id })), ...(adminsRes.data || [])]
+    } else {
+      const { data } = await supabase
+        .from('users')
+        .select('id')
+        .in('user_type', ['operator', 'admin'])
+        .eq('is_active', true)
+      recipients = data
+    }
 
     if (!recipients?.length) return
 
