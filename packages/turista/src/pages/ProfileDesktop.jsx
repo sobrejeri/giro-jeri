@@ -1,12 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
+import PhoneInput from '../components/PhoneInput'
 import { api } from '../lib/api'
+import { setLang, LANGS } from '../i18n/index.js'
+import { validateBrDoc } from '../lib/document'
+import { WhatsappCheck } from './Profile'
 import {
   Camera, Loader2, CalendarCheck, User, CreditCard, Heart, LifeBuoy,
   CheckCircle2, Star, ChevronRight, LogOut, Pencil, Check, X,
+  AlertCircle, Globe, Megaphone,
 } from 'lucide-react'
+import { useFavorites } from '../contexts/FavoritesContext'
 
 function StatCard({ icon: Icon, value, label, tint }) {
   return (
@@ -24,17 +31,21 @@ function StatCard({ icon: Icon, value, label, tint }) {
 
 export default function ProfileDesktop() {
   const { user, token, logout, updateUser } = useAuth()
+  const { count: favsCount } = useFavorites()
   const navigate = useNavigate()
+  const { t, i18n } = useTranslation()
   const fileRef  = useRef(null)
   const coverRef = useRef(null)
 
   const [avatarUrl, setAvatarUrl]         = useState(user?.profile_photo_url || null)
   const [uploading, setUploading]         = useState(false)
+  const [photoError, setPhotoError]       = useState('')
   const [coverUrl, setCoverUrl]           = useState(user?.cover_photo_url || null)
   const [uploadingCover, setUploadingCover] = useState(false)
   const [coverError, setCoverError]       = useState('')
   const [editing, setEditing]             = useState(false)
   const [saving, setSaving]               = useState(false)
+  const [saveError, setSaveError]         = useState('')
   const [form, setForm]                   = useState({})
 
   // Mantém o preview em sincronia quando o usuário do contexto muda
@@ -54,53 +65,96 @@ export default function ProfileDesktop() {
   const initials  = user?.full_name?.split(' ').slice(0, 2).map((n) => n[0]?.toUpperCase()).join('') || 'U'
 
   const STATS = [
-    { icon: CalendarCheck, value: bookings.length, label: 'Reservas realizadas', tint: 'bg-blue-50 text-blue-600' },
-    { icon: CheckCircle2,  value: concluded,        label: 'Passeios concluídos', tint: 'bg-emerald-50 text-emerald-600' },
-    { icon: Star,          value: 0,                label: 'Avaliações feitas',   tint: 'bg-amber-50 text-amber-500' },
-    { icon: Heart,         value: 0,                label: 'Favoritos salvos',    tint: 'bg-rose-50 text-rose-500' },
+    { icon: CalendarCheck, value: bookings.length, label: t('profile.stats.bookings'),  tint: 'bg-blue-50 text-blue-600' },
+    { icon: CheckCircle2,  value: concluded,        label: t('profile.stats.completed'), tint: 'bg-emerald-50 text-emerald-600' },
+    { icon: Star,          value: 0,                label: t('profile.stats.reviews'),   tint: 'bg-amber-50 text-amber-500' },
+    { icon: Heart,         value: favsCount,         label: t('profile.stats.favorites'), tint: 'bg-rose-50 text-rose-500' },
   ]
 
   const MENU = [
-    { icon: CalendarCheck, title: 'Minhas Reservas',     desc: 'Acompanhe suas próximas viagens', onClick: () => navigate('/minhas-reservas') },
-    { icon: User,          title: 'Dados Pessoais',       desc: 'Gerencie suas informações',       onClick: () => { startEdit() } },
-    { icon: CalendarCheck, title: 'Histórico de Passeios', desc: 'Veja todos os passeios realizados', onClick: () => navigate('/minhas-reservas') },
-    { icon: CreditCard,    title: 'Formas de Pagamento',  desc: 'Cartões e métodos salvos',        onClick: () => helpWA('Quero gerenciar minhas formas de pagamento.') },
-    { icon: Heart,         title: 'Favoritos',            desc: 'Passeios que você salvou',        onClick: () => navigate('/passeios') },
-    { icon: LifeBuoy,      title: 'Central de Ajuda',     desc: 'Dúvidas e suporte',               onClick: () => helpWA('Olá! Preciso de ajuda no Giro Jeri.') },
+    { icon: CalendarCheck, title: t('profile.menuItems.bookings'),     desc: t('profile.menuItems.bookingsDesc'),     onClick: () => navigate('/minhas-reservas') },
+    { icon: User,          title: t('profile.menuItems.personalData'), desc: t('profile.menuItems.personalDataDesc'), onClick: () => { startEdit() } },
+    { icon: CalendarCheck, title: t('profile.menuItems.history'),      desc: t('profile.menuItems.historyDesc'),      onClick: () => navigate('/minhas-reservas') },
+    { icon: CreditCard,    title: t('profile.menuItems.payments'),     desc: t('profile.menuItems.paymentsDesc'),     onClick: () => helpWA('Quero gerenciar minhas formas de pagamento.') },
+    { icon: Heart,         title: t('profile.menuItems.favorites'),    desc: t('profile.menuItems.favoritesDesc'),    onClick: () => navigate('/passeios') },
+    { icon: Megaphone,     title: t('profile.menuItems.affiliate'),    desc: t('profile.menuItems.affiliateDesc'),    onClick: () => navigate('/afiliado') },
+    { icon: LifeBuoy,      title: t('profile.menuItems.help'),         desc: t('profile.menuItems.helpDesc'),         onClick: () => helpWA('Olá! Preciso de ajuda no Turiva.') },
   ]
 
   function helpWA(text) {
-    window.open(`https://wa.me/5588999999999?text=${encodeURIComponent(text)}`, '_blank')
+    const phone = import.meta.env.VITE_ADMIN_WHATSAPP || '5588999999999'
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
   }
+
+  const DOC_TYPES = [
+    { value: 'cpf',      label: 'CPF' },
+    { value: 'cnpj',     label: 'CNPJ' },
+    { value: 'passport', label: 'Passaporte' },
+    { value: 'rg',       label: 'RG' },
+    { value: 'cnh',      label: 'CNH' },
+    { value: 'other',    label: 'Outro' },
+  ]
+
+  const GENDERS = [
+    { value: 'male',              label: 'Masculino' },
+    { value: 'female',            label: 'Feminino' },
+    { value: 'non_binary',        label: 'Não binário' },
+    { value: 'prefer_not_to_say', label: 'Prefiro não dizer' },
+  ]
 
   function startEdit() {
     setForm({
-      full_name:       user?.full_name       || '',
-      phone:           user?.phone           || '',
-      birth_date:      user?.birth_date      || '',
-      document_type:   user?.document_type   || '',
-      document_number: user?.document_number || '',
-      nationality:     user?.nationality     || '',
+      full_name:               user?.full_name               || '',
+      phone:                   user?.phone                   || '',
+      birth_date:              user?.birth_date              || '',
+      document_type:           user?.document_type           || '',
+      document_number:         user?.document_number         || '',
+      nationality:             user?.nationality             || '',
+      gender:                  user?.gender                  || '',
+      emergency_contact_name:  user?.emergency_contact_name  || '',
+      emergency_contact_phone: user?.emergency_contact_phone || '',
+      emergency_contact_email: user?.emergency_contact_email || '',
     })
+    setSaveError('')
     setEditing(true)
   }
 
   async function saveEdit() {
+    // CPF/CNPJ: valida os dígitos verificadores ANTES de enviar (o servidor
+    // também valida — mesma dupla camada do mobile).
+    const docErr = validateBrDoc(form.document_type, form.document_number)
+    if (docErr) { setSaveError(docErr); return }
     setSaving(true)
+    setSaveError('')
     try {
       const payload = { ...form }
       Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null })
       const data = await api.updateProfile(payload)
       if (data?.user) updateUser(data.user)
       setEditing(false)
+    } catch (err) {
+      setSaveError(err?.message || 'Erro ao salvar os dados.')
     } finally {
       setSaving(false)
     }
   }
 
+  async function handleLogout() {
+    await api.logout().catch(() => {})
+    logout()
+    navigate('/')
+  }
+
   function handlePhotoChange(e) {
     const file = e.target.files?.[0]
-    if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setPhotoError('Use uma imagem JPEG, PNG ou WebP.'); return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setPhotoError('Imagem muito grande. Máximo 2 MB.'); return
+    }
+    setPhotoError('')
     const reader = new FileReader()
     reader.onload = (ev) => {
       const img = new Image()
@@ -117,6 +171,8 @@ export default function ProfileDesktop() {
         try {
           const data = await api.uploadPhoto(dataUrl)
           if (data?.url) updateUser({ profile_photo_url: data.url })
+        } catch (err) {
+          setPhotoError(err?.message || 'Erro ao salvar foto no servidor.')
         } finally { setUploading(false) }
       }
       img.src = ev.target.result
@@ -189,8 +245,8 @@ export default function ProfileDesktop() {
         </button>
         <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleCoverChange} />
       </div>
-      {coverError && (
-        <p className="mt-2 text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">{coverError}</p>
+      {(coverError || photoError) && (
+        <p className="mt-2 text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">{coverError || photoError}</p>
       )}
       <div className="px-6 -mt-12 relative flex items-end gap-5">
         <div className="relative">
@@ -207,7 +263,7 @@ export default function ProfileDesktop() {
         </div>
         <div className="pb-2">
           <h1 className="text-2xl font-extrabold text-gray-900">Olá, {firstName}! 👋</h1>
-          <p className="text-gray-500 text-[14px]">Bem-vindo de volta ao Giro Jeri</p>
+          <p className="text-gray-500 text-[14px]">Bem-vindo de volta ao Turiva</p>
         </div>
       </div>
 
@@ -216,6 +272,13 @@ export default function ProfileDesktop() {
         {STATS.map((s) => <StatCard key={s.label} {...s} />)}
       </div>
 
+      {/* ── WhatsApp do telefone cadastrado (avisos automáticos) ── */}
+      {user?.phone && (
+        <div className="mt-4 max-w-md">
+          <WhatsappCheck />
+        </div>
+      )}
+
       {/* ── Edição de dados (inline) ─────────────────────── */}
       {editing && (
         <div className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -223,13 +286,14 @@ export default function ProfileDesktop() {
             <h3 className="font-bold text-gray-900 text-lg">Dados pessoais</h3>
             <button onClick={() => setEditing(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
           </div>
+          {saveError && (
+            <p className="mb-4 text-[13px] text-red-500 bg-red-50 rounded-xl px-4 py-2.5">{saveError}</p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { k: 'full_name', label: 'Nome completo', type: 'text' },
-              { k: 'phone', label: 'Telefone / WhatsApp', type: 'tel' },
               { k: 'birth_date', label: 'Nascimento', type: 'date' },
               { k: 'nationality', label: 'Nacionalidade', type: 'text' },
-              { k: 'document_number', label: 'Documento', type: 'text' },
             ].map(({ k, label, type }) => (
               <label key={k} className="flex flex-col gap-1">
                 <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
@@ -241,6 +305,78 @@ export default function ProfileDesktop() {
                 />
               </label>
             ))}
+
+            {/* Telefone com DDI internacional (mesmo componente do mobile) */}
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Telefone / WhatsApp</span>
+              <PhoneInput
+                value={form.phone || ''}
+                onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+              />
+            </label>
+
+            {/* Documento: tipo + número */}
+            <div className="flex gap-2">
+              <label className="flex flex-col gap-1 w-[130px] shrink-0">
+                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Tipo doc.</span>
+                <select
+                  value={form.document_type || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, document_type: e.target.value }))}
+                  className="border border-gray-200 rounded-xl px-3 py-2 text-[14px] focus:outline-none focus:border-brand bg-white"
+                >
+                  <option value="">—</option>
+                  {DOC_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 flex-1">
+                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Documento</span>
+                <input
+                  type="text"
+                  value={form.document_number || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))}
+                  className="border border-gray-200 rounded-xl px-3 py-2 text-[14px] focus:outline-none focus:border-brand"
+                />
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Gênero</span>
+              <select
+                value={form.gender || ''}
+                onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
+                className="border border-gray-200 rounded-xl px-3 py-2 text-[14px] focus:outline-none focus:border-brand bg-white"
+              >
+                <option value="">—</option>
+                {GENDERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+              </select>
+            </label>
+          </div>
+
+          {/* Contato de emergência */}
+          <div className="mt-5 pt-4 border-t border-gray-50">
+            <p className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500 mb-2">
+              <AlertCircle size={12} /> Contato de emergência
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <input
+                placeholder="Nome do contato"
+                value={form.emergency_contact_name || ''}
+                onChange={(e) => setForm((f) => ({ ...f, emergency_contact_name: e.target.value }))}
+                className="border border-gray-200 rounded-xl px-3 py-2 text-[14px] focus:outline-none focus:border-brand"
+              />
+              <PhoneInput
+                value={form.emergency_contact_phone || ''}
+                onChange={(v) => setForm((f) => ({ ...f, emergency_contact_phone: v }))}
+                placeholder="Telefone do contato"
+              />
+              <input
+                type="email"
+                placeholder="E-mail do contato"
+                value={form.emergency_contact_email || ''}
+                onChange={(e) => setForm((f) => ({ ...f, emergency_contact_email: e.target.value }))}
+                className="border border-gray-200 rounded-xl px-3 py-2 text-[14px] focus:outline-none focus:border-brand"
+              />
+            </div>
           </div>
           <div className="flex gap-3 mt-5">
             <button onClick={saveEdit} disabled={saving} className="inline-flex items-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold px-5 py-2.5 rounded-xl disabled:opacity-60">
@@ -269,20 +405,48 @@ export default function ProfileDesktop() {
         ))}
       </div>
 
+      {/* ── Idioma ───────────────────────────────────────── */}
+      <div className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
+          <Globe size={15} className="text-brand" />
+          <span className="font-semibold text-gray-800 text-[14px]">{t('profile.language')}</span>
+        </div>
+        <div className="flex">
+          {LANGS.map((lang, i) => {
+            const active = i18n.language === lang.code
+            return (
+              <button
+                key={lang.code}
+                onClick={() => setLang(lang.code)}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 text-[13px] font-semibold transition-colors ${i > 0 ? 'border-l border-gray-50' : ''} ${active ? 'bg-orange-50 text-brand' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                <span className="text-[18px]">{lang.flag}</span>
+                {lang.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {/* ── Editar / Sair ────────────────────────────────── */}
       <div className="flex items-center justify-between mt-8">
         <button onClick={startEdit} className="inline-flex items-center gap-2 text-[14px] font-semibold text-gray-600 hover:text-brand">
-          <Pencil size={15} /> Editar dados
+          <Pencil size={15} /> {t('profile.editData')}
         </button>
         <button
-          onClick={() => { logout(); navigate('/') }}
+          onClick={handleLogout}
           className="inline-flex items-center gap-2 text-[14px] font-bold text-red-500 hover:text-red-600 border border-red-200 hover:bg-red-50 px-5 py-2.5 rounded-xl transition-colors"
         >
-          <LogOut size={16} /> Sair da conta
+          <LogOut size={16} /> {t('profile.logout')}
         </button>
       </div>
 
-      <p className="text-center text-[12px] text-gray-300 mt-8">Giro Jeri v2.0</p>
+      <p className="text-center text-[12px] text-gray-400 mt-8">
+        <Link to="/termos" className="hover:text-brand">Termos de Uso</Link>
+        {' · '}
+        <Link to="/privacidade" className="hover:text-brand">Privacidade</Link>
+      </p>
+      <p className="text-center text-[12px] text-gray-300 mt-2">Turiva v2.0</p>
     </div>
   )
 }

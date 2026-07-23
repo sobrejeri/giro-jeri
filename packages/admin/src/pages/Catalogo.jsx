@@ -2,14 +2,24 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Route, ImagePlus, X, Car, Users } from 'lucide-react'
 import { api } from '../lib/api'
-import { supabase } from '../lib/supabase'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Select, Textarea } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
-import LocationPicker from '../components/LocationPicker'
+
+// Horários pré-definidos para o limite de solicitação (30 em 30 min, 06h–22h).
+const CUTOFF_TIME_OPTIONS = (() => {
+  const opts = []
+  for (let h = 6; h <= 22; h++) {
+    for (const m of ['00', '30']) {
+      if (h === 22 && m === '30') break
+      opts.push(`${String(h).padStart(2, '0')}:${m}`)
+    }
+  }
+  return opts
+})()
 
 function slugify(text) {
   return text.toString().toLowerCase()
@@ -18,19 +28,45 @@ function slugify(text) {
     + '-' + Date.now().toString(36)
 }
 
+// Redimensiona uma imagem no navegador. Mantém transparência para PNG/WEBP/GIF
+// (saída PNG); os demais formatos (JPEG, HEIC do iPhone…) viram JPEG.
+function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
+  const keepAlpha = /png|webp|gif/i.test(file.type || '')
+  const outType   = keepAlpha ? 'image/png' : 'image/jpeg'
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        const scale  = Math.min(1, max / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width  * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL(outType, quality))
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 const TOUR_EMPTY = {
   name: '', short_description: '', duration_hours: 2, max_people: 10,
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '',
+  booking_cutoff_time: '', min_advance_hours: '', region_ids: [], is_featured: false, display_order: 0,
+  is_exclusive: false,
 }
 const TRANSFER_EMPTY = {
-  name: '', description: '', pricing_mode: 'fixed_route', is_active: true,
+  name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '',
+  booking_cutoff_time: '', min_advance_hours: '', region_ids: [],
 }
-const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true }
+const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true, is_featured: false }
 const VEHICLE_EMPTY = {
   name: '', vehicle_type: 'buggy', description: '',
   seat_capacity: 4, luggage_capacity: 4,
@@ -38,6 +74,7 @@ const VEHICLE_EMPTY = {
   is_transfer_allowed: false, is_tour_allowed: true,
   is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
+  region_ids: [],
 }
 
 const VEHICLE_TYPES = [
@@ -70,6 +107,7 @@ export default function Catalogo() {
   const [vehicleImageFile, setVehicleImageFile]   = useState(null)
   const [vehicleImagePreview, setVehicleImagePreview] = useState(null)
   const [uploading, setUploading]   = useState(false)
+  const [filterRegion, setFilterRegion] = useState(null)
   const fileRef        = useRef(null)
   const vehicleFileRef = useRef(null)
   const qc = useQueryClient()
@@ -79,6 +117,7 @@ export default function Catalogo() {
     queryFn:  () => api.getRegions(),
   })
   const regionId = regionData?.[0]?.id
+  const allRegions = Array.isArray(regionData) ? regionData.filter((r) => r.is_active) : []
 
   const { data: tours = [], isLoading: l1 } = useQuery({
     queryKey: ['admin-tours'],
@@ -97,6 +136,18 @@ export default function Catalogo() {
     queryFn:  () => api.getVehicles(),
   })
 
+  const byRegion = (item) => !filterRegion || (item.region_ids || []).includes(filterRegion)
+  const filteredTours     = tours.filter(byRegion)
+  const filteredTransfers = transfers.filter(byRegion)
+  const filteredVehicles  = vehicles.filter(byRegion)
+
+  function RegionTags({ ids }) {
+    if (!ids?.length) return null
+    const names = ids.map((id) => allRegions.find((r) => r.id === id)?.name).filter(Boolean)
+    if (!names.length) return null
+    return <span className="text-[10px] text-brand/60 ml-1">{names.join(' · ')}</span>
+  }
+
   /* ── Tour mutations ──────────────────────────────────────── */
   const tourMut = useMutation({
     mutationFn: (body) =>
@@ -113,11 +164,13 @@ export default function Catalogo() {
     mutationFn: (body) =>
       modal?.isNew ? api.createTransfer(body) : api.updateTransfer(modal.id, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-transfers'] }); setModal(null) },
+    onError:   (err) => alert(err?.message || 'Erro ao salvar o transfer.'),
   })
   const routeMut = useMutation({
     mutationFn: (body) =>
       routeModal?.isNew ? api.createTransferRoute(body) : api.updateTransferRoute(routeModal.id, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-routes'] }); setRouteModal(null) },
+    onError:   (err) => alert(err?.message || 'Erro ao salvar a rota.'),
   })
   const deleteRouteMut = useMutation({
     mutationFn: (id) => api.deleteTransferRoute(id),
@@ -144,11 +197,11 @@ export default function Catalogo() {
     setModal({ isNew: true })
   }
   function openEditTour(t) {
-    setForm({ ...t }); setImageFile(null); setImagePreview(t.cover_image_url || null)
+    setForm({ ...t, region_ids: t.region_ids || [] }); setImageFile(null); setImagePreview(t.cover_image_url || null)
     setModal(t)
   }
   function openNewTransfer()   { setForm(TRANSFER_EMPTY); setModal({ isNew: true, _type: 'transfer' }) }
-  function openEditTransfer(t) { setForm({ ...t });        setModal({ ...t, _type: 'transfer' }) }
+  function openEditTransfer(t) { setForm({ ...t, region_ids: t.region_ids || [] }); setModal({ ...t, _type: 'transfer' }) }
   function openNewRoute()      { setRouteForm(ROUTE_EMPTY); setRouteModal({ isNew: true }) }
   function openEditRoute(r)    { setRouteForm({ ...r });    setRouteModal(r) }
 
@@ -158,7 +211,7 @@ export default function Catalogo() {
     setVehicleModal({ isNew: true })
   }
   function openEditVehicle(v) {
-    setVehicleForm({ ...v })
+    setVehicleForm({ ...v, region_ids: v.region_ids || [] })
     setVehicleImageFile(null); setVehicleImagePreview(v.image_url || null)
     setVehicleModal(v)
   }
@@ -179,11 +232,11 @@ export default function Catalogo() {
   }
 
   async function uploadImage(file, folder = 'tours') {
-    const ext  = file.name.split('.').pop()
-    const path = `${folder}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('tour-images').upload(path, file, { upsert: true })
-    if (error) throw error
-    return supabase.storage.from('tour-images').getPublicUrl(path).data.publicUrl
+    // Converte qualquer formato (inclui HEIC do iPhone) para JPEG redimensionado
+    // e envia em base64. Evita o bucket rejeitar formatos não suportados.
+    const dataUrl = await fileToResizedDataUrl(file, 1280)
+    const result  = await api.uploadSiteImage(dataUrl, folder)
+    return result?.url || (typeof result === 'string' ? result : null)
   }
 
   /* ── Submit handlers ─────────────────────────────────────── */
@@ -193,11 +246,14 @@ export default function Catalogo() {
       ...form,
       duration_hours: Number(form.duration_hours),
       max_people:     Number(form.max_people),
+      display_order:  Number(form.display_order) || 0,
+      is_featured:    !!form.is_featured,
     }
     if (modal?.isNew) {
       body.slug      = slugify(form.name)
       body.region_id = regionId
     }
+    body.region_ids = form.region_ids || []
     if (imageFile) {
       setUploading(true)
       try { body.cover_image_url = await uploadImage(imageFile, 'tours') }
@@ -209,7 +265,9 @@ export default function Catalogo() {
 
   function handleTransferSubmit(e) {
     e.preventDefault()
-    transferMut.mutate(form)
+    // Remove objetos de relação (joins) e campos read-only antes de salvar
+    const { transfer_routes: _tr, regions: _rg, id: _id, created_at: _ca, updated_at: _ua, ...clean } = form
+    transferMut.mutate(clean)
   }
 
   function handleRouteSubmit(e) {
@@ -225,11 +283,14 @@ export default function Catalogo() {
       return
     }
 
+    // Remove campos que não são colunas da tabela (joins, metadados auto)
+    const { regions: _r, id: _id, created_at: _ca, updated_at: _ua, ...cleanForm } = vehicleForm
     let body = {
-      ...vehicleForm,
+      ...cleanForm,
       seat_capacity:    Number(vehicleForm.seat_capacity),
       luggage_capacity: Number(vehicleForm.luggage_capacity) || 0,
       region_id:        regionId,
+      region_ids:       vehicleForm.region_ids || [],
     }
     if (vehicleModal?.isNew) {
       body.slug = slugify(vehicleForm.name)
@@ -245,6 +306,49 @@ export default function Catalogo() {
       setUploading(false)
     }
     vehicleMut.mutate(body)
+  }
+
+  function CidadesSelector({ value, onChange }) {
+    const selected  = value || []
+    const available = allRegions.filter((r) => !selected.includes(r.id))
+    return (
+      <div>
+        <p className="text-xs font-medium text-gray-400 mb-2">
+          Municípios de atuação
+          <span className="ml-1 font-normal text-gray-600">(onde o serviço aparece no app)</span>
+        </p>
+        {selected.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {selected.map((id) => {
+              const r = allRegions.find((r) => r.id === id)
+              if (!r) return null
+              return (
+                <span key={id} className="inline-flex items-center gap-1 bg-brand/20 text-brand text-xs font-medium px-2.5 py-1 rounded-full">
+                  {r.name}
+                  <button type="button" onClick={() => onChange(selected.filter((x) => x !== id))} className="ml-0.5 text-brand/60 hover:text-brand">
+                    <X size={11} />
+                  </button>
+                </span>
+              )
+            })}
+          </div>
+        )}
+        {available.length > 0 ? (
+          <select
+            className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-400 focus:outline-none focus:border-brand"
+            value=""
+            onChange={(e) => { if (e.target.value) onChange([...selected, e.target.value]) }}
+          >
+            <option value="">+ Adicionar município…</option>
+            {available.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        ) : selected.length > 0 ? (
+          <p className="text-xs text-gray-600">Todos os municípios adicionados</p>
+        ) : (
+          <p className="text-xs text-gray-600">Nenhum município disponível</p>
+        )}
+      </div>
+    )
   }
 
   const isTransferModal = modal?._type === 'transfer'
@@ -266,17 +370,42 @@ export default function Catalogo() {
         ))}
       </div>
 
+      {/* Filtro por município */}
+      {allRegions.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilterRegion(null)}
+            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              !filterRegion ? 'bg-brand text-white border-brand' : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
+            }`}
+          >
+            Todos
+          </button>
+          {allRegions.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => setFilterRegion(filterRegion === r.id ? null : r.id)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                filterRegion === r.id ? 'bg-brand text-white border-brand' : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
+              }`}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Tours ──────────────────────────────────────────────── */}
       {tab === 'tours' && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-300">Passeios ({tours.length})</h2>
+              <h2 className="text-sm font-semibold text-gray-300">Passeios ({filteredTours.length}{filterRegion ? `/${tours.length}` : ''})</h2>
               <Button size="sm" onClick={openNewTour}><Plus size={14} /> Novo Passeio</Button>
             </div>
           </CardHeader>
           <div className="divide-y divide-gray-800">
-            {tours.map((t) => (
+            {filteredTours.map((t) => (
               <div key={t.id} className="flex items-center gap-3 px-5 py-3">
                 {t.cover_image_url ? (
                   <img src={t.cover_image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
@@ -289,6 +418,7 @@ export default function Catalogo() {
                     {t.duration_hours}h · cap. {t.max_people}
                     {t.is_private_enabled && ' · Privativo'}
                     {t.is_shared_enabled && ' · Compartilhado'}
+                    <RegionTags ids={t.region_ids} />
                   </p>
                 </div>
                 <Badge value={String(t.is_active)} />
@@ -305,7 +435,7 @@ export default function Catalogo() {
                 </div>
               </div>
             ))}
-            {tours.length === 0 && <CardBody><p className="text-sm text-gray-600">Nenhum passeio</p></CardBody>}
+            {filteredTours.length === 0 && <CardBody><p className="text-sm text-gray-600">{filterRegion ? 'Nenhum passeio neste município' : 'Nenhum passeio'}</p></CardBody>}
           </div>
         </Card>
       )}
@@ -316,16 +446,16 @@ export default function Catalogo() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-300">Transfers ({transfers.length})</h2>
+                <h2 className="text-sm font-semibold text-gray-300">Transfers ({filteredTransfers.length}{filterRegion ? `/${transfers.length}` : ''})</h2>
                 <Button size="sm" onClick={openNewTransfer}><Plus size={14} /> Novo Transfer</Button>
               </div>
             </CardHeader>
             <div className="divide-y divide-gray-800">
-              {transfers.map((t) => (
+              {filteredTransfers.map((t) => (
                 <div key={t.id} className="flex items-center gap-4 px-5 py-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{t.name}</p>
-                    <p className="text-xs text-gray-500">{t.pricing_mode}</p>
+                    <p className="text-xs text-gray-500">{t.pricing_mode}<RegionTags ids={t.region_ids} /></p>
                   </div>
                   <Badge value={String(t.is_active)} />
                   <button onClick={() => openEditTransfer(t)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
@@ -333,7 +463,7 @@ export default function Catalogo() {
                   </button>
                 </div>
               ))}
-              {transfers.length === 0 && <CardBody><p className="text-sm text-gray-600">Nenhum transfer</p></CardBody>}
+              {filteredTransfers.length === 0 && <CardBody><p className="text-sm text-gray-600">{filterRegion ? 'Nenhum transfer neste município' : 'Nenhum transfer'}</p></CardBody>}
             </div>
           </Card>
 
@@ -383,7 +513,7 @@ export default function Catalogo() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Car size={16} className="text-gray-500" />
-                <h2 className="text-sm font-semibold text-gray-300">Veículos ({vehicles.length})</h2>
+                <h2 className="text-sm font-semibold text-gray-300">Veículos ({filteredVehicles.length}{filterRegion ? `/${vehicles.length}` : ''})</h2>
               </div>
               <Button size="sm" onClick={openNewVehicle}><Plus size={14} /> Novo Veículo</Button>
             </div>
@@ -392,7 +522,7 @@ export default function Catalogo() {
             <CardBody><p className="text-sm text-gray-500">Carregando…</p></CardBody>
           ) : (
             <div className="divide-y divide-gray-800">
-              {vehicles.map((v) => (
+              {filteredVehicles.map((v) => (
                 <div key={v.id} className="flex items-center gap-3 px-5 py-3">
                   {v.image_url ? (
                     <img src={v.image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
@@ -403,7 +533,7 @@ export default function Catalogo() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{v.name}</p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
                       <span>{VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type}</span>
                       <span>·</span>
                       <Users size={10} className="text-gray-500" />
@@ -411,6 +541,7 @@ export default function Catalogo() {
                       {v.is_tour_allowed && <span className="text-brand/70">· Passeios</span>}
                       {v.is_transfer_allowed && <span className="text-purple-400/70">· Transfer</span>}
                       {v.is_shared_allowed && <span className="text-amber-400/70">· Compartilhado</span>}
+                      <RegionTags ids={v.region_ids} />
                     </div>
                   </div>
                   <Badge value={String(v.is_active)} />
@@ -452,36 +583,59 @@ export default function Catalogo() {
         {isTransferModal ? (
           <form onSubmit={handleTransferSubmit} className="space-y-4">
             <Input label="Nome" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            <Textarea label="Descrição" rows={2} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <Textarea label="Descrição" rows={2} value={form.short_description || ''} onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
             <Select label="Modo de precificação" value={form.pricing_mode || 'fixed_route'} onChange={(e) => setForm({ ...form, pricing_mode: e.target.value })}>
               <option value="fixed_route">Rota tabelada</option>
               <option value="by_vehicle">Por veículo</option>
               <option value="manual_quote">Cotação manual</option>
             </Select>
-            <LocationPicker
-              value={{
-                latitude:          form.latitude,
-                longitude:         form.longitude,
-                service_radius_km: form.service_radius_km,
-              }}
-              onChange={(next) => setForm({ ...form, ...next })}
-            />
             {/* Horário limite */}
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">
                 Horário limite de solicitação
               </label>
-              <input
-                type="time"
-                value={form.booking_cutoff_time || ''}
+              <select
+                value={(form.booking_cutoff_time || '').slice(0, 5)}
                 onChange={(e) => setForm({ ...form, booking_cutoff_time: e.target.value || null })}
                 className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
-              />
+              >
+                <option value="">Sem restrição</option>
+                {(() => {
+                  const cur  = (form.booking_cutoff_time || '').slice(0, 5)
+                  const list = cur && !CUTOFF_TIME_OPTIONS.includes(cur)
+                    ? [cur, ...CUTOFF_TIME_OPTIONS] : CUTOFF_TIME_OPTIONS
+                  return list.map((t) => <option key={t} value={t}>{t}</option>)
+                })()}
+              </select>
               <p className="text-[11px] text-gray-500 mt-1">
                 Após este horário, só aceita reservas a partir do dia seguinte. Deixe em branco para não restringir.
               </p>
             </div>
 
+            {/* Antecedência mínima */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                Antecedência mínima (horas)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                placeholder="Padrão"
+                value={form.min_advance_hours ?? ''}
+                onChange={(e) => setForm({ ...form, min_advance_hours: e.target.value })}
+                className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Horas mínimas entre a reserva e o passeio. Deixe em branco para usar o padrão.
+              </p>
+            </div>
+
+            <CidadesSelector
+              value={form.region_ids}
+              onChange={(next) => setForm((f) => ({ ...f, region_ids: next }))}
+            />
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -523,7 +677,7 @@ export default function Catalogo() {
 
             <Input label="Nome" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <Textarea label="Descrição" rows={2} value={form.short_description || ''} onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Duração (horas)" type="number" min={0.5} step={0.5}
                 value={form.duration_hours || ''} onChange={(e) => setForm({ ...form, duration_hours: e.target.value })} />
               <Input label="Capacidade máx." type="number" min={1}
@@ -552,31 +706,53 @@ export default function Catalogo() {
                 onChange={(e) => setForm({ ...form, shared_price_per_person: e.target.value })} />
             )}
 
-            <LocationPicker
-              value={{
-                latitude:          form.latitude,
-                longitude:         form.longitude,
-                service_radius_km: form.service_radius_km,
-              }}
-              onChange={(next) => setForm({ ...form, ...next })}
-            />
-
             {/* Horário limite de solicitação */}
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">
                 Horário limite de solicitação
               </label>
-              <input
-                type="time"
-                value={form.booking_cutoff_time || ''}
+              <select
+                value={(form.booking_cutoff_time || '').slice(0, 5)}
                 onChange={(e) => setForm({ ...form, booking_cutoff_time: e.target.value || null })}
                 className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
-              />
+              >
+                <option value="">Sem restrição</option>
+                {(() => {
+                  const cur  = (form.booking_cutoff_time || '').slice(0, 5)
+                  const list = cur && !CUTOFF_TIME_OPTIONS.includes(cur)
+                    ? [cur, ...CUTOFF_TIME_OPTIONS] : CUTOFF_TIME_OPTIONS
+                  return list.map((t) => <option key={t} value={t}>{t}</option>)
+                })()}
+              </select>
               <p className="text-[11px] text-gray-500 mt-1">
                 Após este horário, o sistema só aceita reservas a partir do dia seguinte. Deixe em branco para não restringir.
               </p>
             </div>
 
+            {/* Antecedência mínima */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                Antecedência mínima (horas)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                placeholder="Padrão"
+                value={form.min_advance_hours ?? ''}
+                onChange={(e) => setForm({ ...form, min_advance_hours: e.target.value })}
+                className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Horas mínimas entre a reserva e o transfer. Deixe em branco para usar o padrão.
+              </p>
+            </div>
+
+            <CidadesSelector
+              value={form.region_ids}
+              onChange={(next) => setForm((f) => ({ ...f, region_ids: next }))}
+            />
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -586,6 +762,38 @@ export default function Catalogo() {
               />
               <span className="text-sm text-gray-300">Ativo (visível para turistas)</span>
             </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand"
+                checked={!!form.is_featured}
+                onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
+              />
+              <span className="text-sm text-gray-300">Destaque na home (carrossel "Passeios em destaque")</span>
+            </label>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand mt-0.5"
+                checked={!!form.is_exclusive}
+                onChange={(e) => setForm({ ...form, is_exclusive: e.target.checked })}
+              />
+              <span className="text-sm text-gray-300">
+                Passeio exclusivo (venda direta)
+                <span className="block text-[11px] text-gray-500">
+                  Não vai ao carrinho nem forma combo — o cliente solicita direto no "Resumo da reserva", um por vez.
+                </span>
+              </span>
+            </label>
+
+            <Input
+              label="Ordem de exibição (menor aparece primeiro)"
+              type="number" min={0}
+              value={form.display_order ?? 0}
+              onChange={(e) => setForm({ ...form, display_order: e.target.value })}
+            />
 
             <Button type="submit" className="w-full" disabled={tourMut.isPending || uploading}>
               {uploading ? 'Enviando imagem…' : tourMut.isPending ? 'Salvando…' : 'Salvar'}
@@ -601,6 +809,18 @@ export default function Catalogo() {
           <Input label="Destino" value={routeForm.destination_name || ''} onChange={(e) => setRouteForm({ ...routeForm, destination_name: e.target.value })} required />
           <Input label="Preço padrão (R$)" type="number" min={0} step={0.01}
             value={routeForm.default_price || ''} onChange={(e) => setRouteForm({ ...routeForm, default_price: e.target.value })} required />
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-brand mt-0.5"
+              checked={!!routeForm.is_featured}
+              onChange={(e) => setRouteForm({ ...routeForm, is_featured: e.target.checked })}
+            />
+            <span className="text-sm text-gray-300">
+              Destaque na home
+              <span className="block text-[11px] text-gray-500">Aparece no carrossel "Serviços em destaque" do app.</span>
+            </span>
+          </label>
           <Button type="submit" className="w-full" disabled={routeMut.isPending}>
             {routeMut.isPending ? 'Salvando…' : 'Salvar Rota'}
           </Button>
@@ -662,7 +882,7 @@ export default function Catalogo() {
             onChange={(e) => setVehicleForm({ ...vehicleForm, description: e.target.value })}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Capacidade (pax)"
               type="number" min={1}
@@ -698,15 +918,10 @@ export default function Catalogo() {
             ))}
           </div>
 
-          <LocationPicker
-            value={{
-              latitude:          vehicleForm.latitude,
-              longitude:         vehicleForm.longitude,
-              service_radius_km: vehicleForm.service_radius_km,
-            }}
-            onChange={(next) => setVehicleForm({ ...vehicleForm, ...next })}
+          <CidadesSelector
+            value={vehicleForm.region_ids}
+            onChange={(next) => setVehicleForm((f) => ({ ...f, region_ids: next }))}
           />
-
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"

@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle, KeyRound, Copy } from 'lucide-react'
+import {
+  Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle,
+  KeyRound, Copy, UserCheck, Settings2, ToggleRight, ToggleLeft, Car, Users,
+} from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
@@ -9,8 +12,20 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Select } from '../components/ui/Input'
 import Card from '../components/ui/Card'
+import { fleetCopy } from '../copy/fleet'
 
 const USER_TYPES = ['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']
+
+const VEHICLE_TYPE_LABEL = {
+  buggy:      'Buggy',
+  jardineira: 'Jardineira',
+  hilux_4x4:  'Hilux 4x4',
+  boat:       'Barco',
+  van:        'Van',
+  sedan:      'Sedan',
+  suv:        'SUV',
+  other:      'Outro',
+}
 
 const USER_TYPE_LABELS = {
   tourist:   'Turista',
@@ -22,6 +37,7 @@ const USER_TYPE_LABELS = {
 }
 
 const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist' }
+const IMPORT_EMPTY = { full_name: '', user_type: 'tourist', cnpj: '' }
 
 function genPassword(len = 10) {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKMNPQRSTUVWXYZ'
@@ -36,9 +52,10 @@ export default function Usuarios() {
   const [modal, setModal]         = useState(null)   // null | { mode: 'edit', user } | { mode: 'create' } | { mode: 'reset', user }
   const [form, setForm]           = useState({})
   const [createForm, setCreateForm] = useState(CREATE_EMPTY)
-  const [resetPwd, setResetPwd]   = useState('')
+  const [resetPwd, setResetPwd]     = useState('')
   const [resetCopied, setResetCopied] = useState(false)
-  const qc                        = useQueryClient()
+  const [importForm, setImportForm]   = useState(IMPORT_EMPTY)
+  const qc                            = useQueryClient()
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page, search, typeFilter, activeFilter],
@@ -87,9 +104,58 @@ export default function Usuarios() {
     },
   })
 
+  // Resumo da frota liberada — só busca quando o modal de edição está aberto
+  // para um operador (a mesma queryKey é reaproveitada pelo modal nível 2).
+  const fleetOperatorId = modal?.mode === 'edit' && modal.user.user_type === 'operator' ? modal.user.id : null
+  const {
+    data: fleetSummary = [],
+    isLoading: fleetSummaryLoading,
+    isError: fleetSummaryError,
+  } = useQuery({
+    queryKey: ['admin-operator-vehicles', fleetOperatorId],
+    queryFn:  () => api.getOperatorVehicles(fleetOperatorId),
+    enabled:  !!fleetOperatorId,
+  })
+
+  const { data: integrity } = useQuery({
+    queryKey: ['auth-orphans'],
+    queryFn:  () => api.getAuthOrphans(),
+  })
+  const orphans  = integrity?.orphans  ?? (Array.isArray(integrity) ? integrity : [])
+  const unlinked = integrity?.unlinked ?? []
+
+  const importMut = useMutation({
+    mutationFn: (body) => api.importAuthUser(body),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      qc.invalidateQueries({ queryKey: ['auth-orphans'] })
+      setModal(null)
+      setImportForm(IMPORT_EMPTY)
+    },
+  })
+
+  function openImport(orphan) {
+    setModal({ mode: 'import', orphan })
+    setImportForm({ full_name: orphan.email?.split('@')[0] || '', user_type: 'tourist', cnpj: '' })
+  }
+
+  function handleImport(e) {
+    e.preventDefault()
+    importMut.mutate({
+      auth_id:   modal.orphan.auth_id,
+      full_name: importForm.full_name,
+      user_type: importForm.user_type,
+      ...(importForm.user_type === 'operator' ? { cnpj: importForm.cnpj } : {}),
+    })
+  }
+
   function openEdit(u) {
     setModal({ mode: 'edit', user: u })
     setForm({ user_type: u.user_type, is_active: u.is_active })
+  }
+
+  function openFleet(u) {
+    setModal({ mode: 'fleet', user: u })
   }
 
   function openCreate() {
@@ -253,6 +319,147 @@ export default function Usuarios() {
         )}
       </Card>
 
+      {/* Usuários Auth sem perfil */}
+      {orphans.length > 0 && (
+        <Card className="border-amber-900/40">
+          <div className="px-5 py-3 border-b border-gray-700 flex items-center gap-2">
+            <AlertCircle size={16} className="text-amber-400 shrink-0" />
+            <h3 className="text-sm font-semibold text-amber-300">
+              {orphans.length} usuário{orphans.length > 1 ? 's' : ''} no Auth sem perfil
+            </h3>
+            <span className="text-xs text-gray-500 ml-1">
+              Criados via Supabase Dashboard — clique em "Importar" para vincular
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">E-mail / Telefone</th>
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Criado em</th>
+                  <th className="px-5 py-2 w-24" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {orphans.map((o) => (
+                  <tr key={o.auth_id} className="hover:bg-gray-750 transition-colors">
+                    <td className="px-5 py-2 text-gray-300">{o.email || o.phone || '—'}</td>
+                    <td className="px-5 py-2 text-xs text-gray-500">
+                      {o.created_at ? format(parseISO(o.created_at), 'dd/MM/yyyy') : '—'}
+                    </td>
+                    <td className="px-5 py-2">
+                      <button
+                        onClick={() => openImport(o)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-amber-900/30 text-amber-300 hover:bg-amber-900/50 transition-colors"
+                      >
+                        <UserCheck size={12} /> Importar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Perfis sem Auth válido */}
+      {unlinked.length > 0 && (
+        <Card className="border-red-900/40">
+          <div className="px-5 py-3 border-b border-gray-700 flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-400 shrink-0" />
+            <h3 className="text-sm font-semibold text-red-300">
+              {unlinked.length} perfil{unlinked.length > 1 ? 's' : ''} sem autenticação válida
+            </h3>
+            <span className="text-xs text-gray-500 ml-1">
+              auth_id ausente ou não existe no Supabase Auth — login impossível
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">E-mail</th>
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
+                  <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Problema</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {unlinked.map((u) => (
+                  <tr key={u.id} className="hover:bg-gray-750 transition-colors">
+                    <td className="px-5 py-2 text-gray-300">{u.full_name || '—'}</td>
+                    <td className="px-5 py-2 text-gray-400 text-xs">{u.email || '—'}</td>
+                    <td className="px-5 py-2"><Badge value={u.user_type} /></td>
+                    <td className="px-5 py-2 text-xs text-red-400">{u.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Todos ok */}
+      {orphans.length === 0 && unlinked.length === 0 && integrity && (
+        <Card className="border-green-900/40">
+          <div className="px-5 py-3 flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-green-400 shrink-0" />
+            <p className="text-sm text-green-300">
+              Todos os usuários estão corretamente vinculados entre Auth e perfil.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Modal importar usuário Auth */}
+      <Modal
+        open={modal?.mode === 'import'}
+        onClose={() => setModal(null)}
+        title="Importar Usuário do Auth"
+        size="sm"
+      >
+        {modal?.mode === 'import' && (
+          <form onSubmit={handleImport} className="space-y-4">
+            <div className="bg-gray-900 rounded-lg p-3 text-sm">
+              <p className="text-gray-400">Auth e-mail:</p>
+              <p className="font-medium text-gray-200">{modal.orphan.email || modal.orphan.phone || '—'}</p>
+            </div>
+            <Input
+              label="Nome completo"
+              value={importForm.full_name}
+              onChange={(e) => setImportForm({ ...importForm, full_name: e.target.value })}
+              required
+            />
+            <Select
+              label="Função na plataforma"
+              value={importForm.user_type}
+              onChange={(e) => setImportForm({ ...importForm, user_type: e.target.value, cnpj: '' })}
+            >
+              {USER_TYPES.map((t) => (
+                <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
+              ))}
+            </Select>
+            {importForm.user_type === 'operator' && (
+              <Input
+                label="CNPJ"
+                value={importForm.cnpj}
+                onChange={(e) => setImportForm({ ...importForm, cnpj: e.target.value })}
+                placeholder="00.000.000/0001-00"
+                inputMode="numeric"
+                required
+              />
+            )}
+            {importMut.isError && (
+              <p className="text-sm text-red-400">{importMut.error?.message || 'Erro ao importar'}</p>
+            )}
+            <Button type="submit" className="w-full" disabled={importMut.isPending}>
+              {importMut.isPending ? 'Importando…' : 'Criar Perfil e Vincular'}
+            </Button>
+          </form>
+        )}
+      </Modal>
+
       {/* Modal criar usuário */}
       <Modal
         open={modal?.mode === 'create'}
@@ -400,6 +607,40 @@ export default function Usuarios() {
               </div>
             )}
 
+            {/* Frota liberada — só para operadores */}
+            {modal?.mode === 'edit' && modal.user.user_type === 'operator' && (
+              <div className="border border-gray-700 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Settings2 size={14} className="text-gray-500" />
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{fleetCopy.sectionTitle}</p>
+                </div>
+
+                {fleetSummaryLoading ? (
+                  <p className="text-xs text-gray-500">{fleetCopy.loading}</p>
+                ) : fleetSummaryError ? (
+                  <p className="text-xs text-red-400">{fleetCopy.loadError}</p>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-gray-400">
+                      {fleetCopy.summary(
+                        fleetSummary.filter((v) => v.is_active !== false).length,
+                        fleetSummary.length,
+                      )}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="gap-1.5 shrink-0"
+                      onClick={() => openFleet(modal.user)}
+                    >
+                      <Settings2 size={13} /> {fleetCopy.manage}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {updateMut.isError && (
               <p className="text-sm text-red-400">{updateMut.error?.message || 'Erro ao salvar'}</p>
             )}
@@ -481,6 +722,149 @@ export default function Usuarios() {
           </form>
         )}
       </Modal>
+
+      {/* Modal nível 2: gerenciar frota liberada da cooperativa */}
+      <FleetManagerModal
+        open={modal?.mode === 'fleet'}
+        operatorId={modal?.mode === 'fleet' ? modal.user.id : null}
+        operatorName={modal?.mode === 'fleet' ? (modal.user.full_name || '—') : ''}
+        onClose={() => setModal(null)}
+      />
     </div>
+  )
+}
+
+// ── Modal nível 2: gerencia a frota liberada de uma cooperativa ───────────
+// Auto-save por linha (otimista): cada toggle dispara sua própria mutation;
+// erro reverte o cache e mostra mensagem na linha; sucesso mostra micro-texto
+// que some em ~1.5s. O contador do rodapé reflete o cache ao vivo.
+function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
+  const qc = useQueryClient()
+  const [search, setSearch]   = useState('')
+  const [savedId, setSavedId] = useState(null)
+  const [errorRow, setErrorRow] = useState(null) // { id, message }
+  const savedTimer = useRef(null)
+
+  const queryKey = ['admin-operator-vehicles', operatorId]
+
+  const { data: vehicles = [], isLoading, isError, refetch } = useQuery({
+    queryKey,
+    queryFn:  () => api.getOperatorVehicles(operatorId),
+    enabled:  open && !!operatorId,
+  })
+
+  const toggleMut = useMutation({
+    mutationFn: ({ vehicleId, is_active }) => api.setOperatorVehicle(operatorId, vehicleId, { is_active }),
+    onMutate: async ({ vehicleId, is_active }) => {
+      setErrorRow(null)
+      await qc.cancelQueries({ queryKey })
+      const previous = qc.getQueryData(queryKey)
+      qc.setQueryData(queryKey, (old = []) =>
+        old.map((v) => (v.vehicle_id === vehicleId ? { ...v, is_active } : v)))
+      return { previous }
+    },
+    onError: (err, variables, context) => {
+      if (context?.previous) qc.setQueryData(queryKey, context.previous)
+      setErrorRow({ id: variables.vehicleId, message: err.message || fleetCopy.saveError })
+    },
+    onSuccess: (_data, variables) => {
+      setSavedId(variables.vehicleId)
+      clearTimeout(savedTimer.current)
+      savedTimer.current = setTimeout(() => setSavedId(null), 1500)
+    },
+  })
+
+  useEffect(() => {
+    if (!open) { setSearch(''); setSavedId(null); setErrorRow(null) }
+  }, [open])
+  useEffect(() => () => clearTimeout(savedTimer.current), [])
+
+  const filtered = search
+    ? vehicles.filter((v) => v.name?.toLowerCase().includes(search.toLowerCase()))
+    : vehicles
+  const releasedCount = vehicles.filter((v) => v.is_active !== false).length
+
+  return (
+    <Modal open={open} onClose={onClose} title={fleetCopy.modalTitle(operatorName)} size="md">
+      <div className="space-y-3">
+        <p className="text-xs text-gray-500">{fleetCopy.modalHint}</p>
+
+        {vehicles.length > 8 && (
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={fleetCopy.search}
+              className="w-full h-9 pl-9 pr-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-brand"
+            />
+          </div>
+        )}
+
+        {isLoading ? (
+          <p className="text-sm text-gray-500 py-8 text-center">{fleetCopy.loading}</p>
+        ) : isError ? (
+          <div className="text-center py-8">
+            <AlertCircle size={20} className="mx-auto text-red-400 mb-2" />
+            <p className="text-sm text-red-400">{fleetCopy.loadError}</p>
+            <button onClick={() => refetch()} className="mt-2 text-xs font-semibold text-brand hover:underline">
+              {fleetCopy.retry}
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-gray-500 py-8 text-center">{fleetCopy.empty}</p>
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto divide-y divide-gray-800">
+            {filtered.map((v) => {
+              const pending    = toggleMut.isPending && toggleMut.variables?.vehicleId === v.vehicle_id
+              const isReleased = v.is_active !== false
+              return (
+                <div key={v.vehicle_id} className="flex items-center gap-3 py-3">
+                  <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center overflow-hidden shrink-0">
+                    {v.image_url
+                      ? <img src={v.image_url} alt={v.name} className="w-full h-full object-cover" />
+                      : <Car size={18} className="text-gray-600" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-200 truncate">{v.name}</p>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <span>{VEHICLE_TYPE_LABEL[v.vehicle_type] || v.vehicle_type}</span>
+                      <span>·</span>
+                      <Users size={10} />
+                      <span>{v.seat_capacity} pax</span>
+                    </div>
+                    {errorRow?.id === v.vehicle_id && (
+                      <p className="text-[11px] text-red-400 mt-0.5">{errorRow.message}</p>
+                    )}
+                    {savedId === v.vehicle_id && (
+                      <p className="text-[11px] text-green-400 mt-0.5">{fleetCopy.saved}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    aria-pressed={isReleased}
+                    disabled={pending}
+                    onClick={() => toggleMut.mutate({ vehicleId: v.vehicle_id, is_active: !isReleased })}
+                    title={isReleased ? fleetCopy.notRelease : fleetCopy.release}
+                    className="shrink-0 disabled:opacity-50"
+                  >
+                    {isReleased
+                      ? <ToggleRight size={26} className="text-brand" />
+                      : <ToggleLeft size={26} className="text-gray-600" />}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Rodapé — contador vivo */}
+        {!isLoading && !isError && vehicles.length > 0 && (
+          <div className="pt-2 border-t border-gray-700 text-xs text-gray-500 text-center">
+            {fleetCopy.summary(releasedCount, vehicles.length)}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }

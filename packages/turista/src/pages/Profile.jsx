@@ -2,13 +2,15 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
+import PhoneInput from '../components/PhoneInput'
 import { api } from '../lib/api'
 import { setLang, LANGS } from '../i18n/index.js'
+import { validateBrDoc } from '../lib/document'
 import ProfileDesktop from './ProfileDesktop'
 import {
-  User, Mail, LogOut, ChevronRight, CalendarCheck,
+  User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
-  Phone, Flag, AlertCircle, Globe, Loader2,
+  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard,
 } from 'lucide-react'
 
 function Field({ label, value, children }) {
@@ -20,6 +22,79 @@ function Field({ label, value, children }) {
           {value || <span className="text-gray-300 italic">—</span>}
         </span>
       )}
+    </div>
+  )
+}
+
+// Linha de dado pessoal com ícone (só aparece quando o campo está preenchido —
+// nada de traços "—" espalhados pela tela).
+function InfoRow({ icon: Icon, label, value, children }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="w-9 h-9 rounded-xl bg-brand/10 flex items-center justify-center shrink-0">
+        <Icon size={15} className="text-brand" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">{label}</p>
+        <p className="text-[14px] font-semibold text-gray-800 mt-1 leading-tight break-words">{value}</p>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// Formata CPF/CNPJ para leitura (só exibição — o banco guarda dígitos).
+function formatDoc(type, num) {
+  const d = String(num || '').replace(/\D/g, '')
+  if (type === 'cpf'  && d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+  if (type === 'cnpj' && d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
+  return num
+}
+
+// Status do WhatsApp do telefone cadastrado (a plataforma envia avisos
+// automáticos por lá). Checa sob demanda via Z-API, sem enviar mensagem.
+// Exportado para reuso no ProfileDesktop (mesmo padrão do PlaceInput).
+export function WhatsappCheck() {
+  const { t } = useTranslation()
+  const [status, setStatus]     = useState(undefined) // undefined=carregando · null=nunca checado · true/false
+  const [checking, setChecking] = useState(false)
+  const [err, setErr]           = useState(null)
+
+  useEffect(() => {
+    api.whatsappStatus()
+      .then((s) => setStatus(s?.whatsapp_valid ?? null))
+      .catch(() => setStatus(null))
+  }, [])
+
+  async function verify() {
+    if (checking) return
+    setChecking(true); setErr(null)
+    try {
+      const r = await api.verifyWhatsapp()
+      setStatus(r?.whatsapp_valid ?? null)
+    } catch (e) {
+      setErr(e?.message || 'Não foi possível verificar agora.')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  if (status === undefined) return null
+  return (
+    <div className="flex items-center justify-between gap-2 bg-gray-50 rounded-xl px-3 py-2">
+      <div className="flex items-center gap-1.5 min-w-0">
+        {status === true  && <span className="text-[12px] font-semibold text-emerald-600">✓ {t('profile.whatsapp.verified')}</span>}
+        {status === false && <span className="text-[12px] font-semibold text-red-500">⚠️ {t('profile.whatsapp.noWhatsapp')}</span>}
+        {status === null  && <span className="text-[12px] text-gray-500">{t('profile.whatsappUnverified')}</span>}
+      </div>
+      <button
+        onClick={verify}
+        disabled={checking}
+        className="shrink-0 text-[11px] font-bold text-brand border border-brand/30 rounded-lg px-2.5 py-1 active:scale-95 transition-transform disabled:opacity-50"
+      >
+        {checking ? t('profile.whatsapp.checking') : status === null ? t('profile.verify') : t('profile.whatsapp.recheck')}
+      </button>
+      {err && <p className="w-full text-[10px] text-red-500">{err}</p>}
     </div>
   )
 }
@@ -53,13 +128,17 @@ export default function Profile() {
   const [saving,    setSaving]    = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [form,      setForm]      = useState({})
+  const [emgCheck,    setEmgCheck]    = useState(null)  // WhatsApp do contato de emergência
+  const [emgChecking, setEmgChecking] = useState(false)
 
   const MENU = [
     { icon: CalendarCheck, label: t('profile.menu.bookings'), to: '/minhas-reservas' },
+    { icon: Megaphone,     label: 'Divulgou, Ganhou · Afiliado', to: '/afiliado' },
   ]
 
   const DOC_TYPES = [
     { value: 'cpf',      label: t('profile.docTypes.cpf') },
+    { value: 'cnpj',     label: t('profile.docTypes.cnpj') },
     { value: 'passport', label: t('profile.docTypes.passport') },
     { value: 'rg',       label: t('profile.docTypes.rg') },
     { value: 'cnh',      label: t('profile.docTypes.cnh') },
@@ -84,11 +163,26 @@ export default function Profile() {
       gender:                  user?.gender                  || '',
       emergency_contact_name:  user?.emergency_contact_name  || '',
       emergency_contact_phone: user?.emergency_contact_phone || '',
+      emergency_contact_email: user?.emergency_contact_email || '',
     })
     setEditing(true)
   }
 
+  async function checkEmergencyWhatsapp() {
+    if (emgChecking) return
+    setEmgChecking(true); setEmgCheck(null)
+    try {
+      const r = await api.checkWhatsapp(form.emergency_contact_phone)
+      setEmgCheck(!!r?.exists)
+    } catch { setEmgCheck(null) }
+    finally { setEmgChecking(false) }
+  }
+
   async function saveEdit() {
+    // CPF/CNPJ: valida os dígitos verificadores ANTES de enviar (o servidor
+    // também valida — dupla camada contra documento falso/digitado errado).
+    const docErr = validateBrDoc(form.document_type, form.document_number)
+    if (docErr) { setSaveError(docErr); return }
     setSaving(true)
     setSaveError(null)
     try {
@@ -201,8 +295,17 @@ export default function Profile() {
     <>
     <div className="lg:hidden min-h-full bg-[#F8F8F8] pb-24">
 
-      <header className="bg-white px-4 pt-6 pb-4 sticky top-0 lg:top-14 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
-        <h1 className="text-xl font-bold text-gray-900">{t('profile.title')}</h1>
+      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-14 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
+        <div className="relative flex items-center justify-center min-h-[32px]">
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="Voltar"
+          >
+            <ChevronLeft size={20} className="text-gray-700" />
+          </button>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('profile.title')}</h1>
+        </div>
       </header>
 
       <main className="px-4 pt-4 space-y-3 max-w-lg mx-auto">
@@ -216,7 +319,7 @@ export default function Profile() {
                 {coverUrl
                   ? <img src={coverUrl} alt="Capa do perfil" className="absolute inset-0 w-full h-full object-cover" />
                   : <div className="absolute inset-0 bg-gradient-to-r from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]" />}
-                <div className="absolute inset-0 bg-black/10" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
                 <button
                   onClick={() => !uploadingCover && coverRef.current?.click()}
                   className="absolute top-2 right-2 inline-flex items-center gap-1 bg-black/40 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg backdrop-blur-sm active:scale-95 transition-transform"
@@ -255,11 +358,18 @@ export default function Profile() {
                   <Mail size={12} />
                   <span className="text-[13px] break-all">{user.email}</span>
                 </div>
-                {user.role && (
-                  <span className="mt-3 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-orange-50 text-brand">
-                    {user.role === 'admin' ? t('profile.roleAdmin') : user.role === 'driver' ? t('profile.roleDriver') : t('profile.roleClient')}
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-orange-50 text-brand">
+                    {user.user_type === 'admin' ? 'Admin'
+                      : user.user_type === 'operator' ? 'Cooperativa'
+                      : user.affiliate_code ? 'Turista · Afiliado' : 'Turista'}
                   </span>
-                )}
+                  {user.whatsapp_valid === true && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-50 text-emerald-600">
+                      ✓ WhatsApp
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -297,7 +407,11 @@ export default function Profile() {
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.phone')}</label>
-                      <input type="tel" placeholder={t('profile.phonePlaceholder')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+                      <PhoneInput
+                        value={form.phone}
+                        onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+                        placeholder={t('profile.phonePlaceholder')}
+                      />
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.birthDate')}</label>
@@ -313,7 +427,25 @@ export default function Profile() {
                       </div>
                       <div className="flex-1">
                         <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.docNumber')}</label>
-                        <input placeholder={t('profile.docNumberPlaceholder')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} />
+                        <input placeholder={
+                          form.document_type === 'cpf'      ? '000.000.000-00'
+                          : form.document_type === 'cnpj'   ? '00.000.000/0000-00'
+                          : form.document_type === 'passport' ? 'AB123456'
+                          : t('profile.docNumberPlaceholder')
+                        } className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.document_number} onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))} />
+                        {(() => {
+                          const val = String(form.document_number || '')
+                          const digits = val.replace(/\D/g, '')
+                          if (form.document_type === 'cpf'  && digits.length < 11) return null
+                          if (form.document_type === 'cnpj' && digits.length < 14) return null
+                          if (form.document_type === 'passport' && val.trim().length < 5) return null
+                          if (!['cpf', 'cnpj', 'passport'].includes(form.document_type)) return null
+                          const err = validateBrDoc(form.document_type, val)
+                          const label = form.document_type === 'passport' ? 'Passaporte' : form.document_type.toUpperCase()
+                          return err
+                            ? <p className="text-[11px] text-red-500 mt-1">⚠️ {err}</p>
+                            : <p className="text-[11px] text-emerald-600 mt-1">✓ {label} válido</p>
+                        })()}
                       </div>
                     </div>
                     <div>
@@ -331,30 +463,80 @@ export default function Profile() {
                       <p className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500 mb-2"><AlertCircle size={12} /> {t('profile.emergency')}</p>
                       <div className="space-y-2">
                         <input placeholder={t('profile.emergencyName')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.emergency_contact_name} onChange={(e) => setForm((f) => ({ ...f, emergency_contact_name: e.target.value }))} />
-                        <input type="tel" placeholder={t('profile.emergencyPhone')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.emergency_contact_phone} onChange={(e) => setForm((f) => ({ ...f, emergency_contact_phone: e.target.value }))} />
+                        <div>
+                          <input type="tel" placeholder={t('profile.emergencyPhone')} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.emergency_contact_phone} onChange={(e) => { setEmgCheck(null); setForm((f) => ({ ...f, emergency_contact_phone: e.target.value })) }} />
+                          {String(form.emergency_contact_phone || '').replace(/\D/g, '').length >= 10 && (
+                            <button type="button" onClick={checkEmergencyWhatsapp} disabled={emgChecking}
+                              className="mt-1.5 text-[11px] font-bold text-brand disabled:opacity-50">
+                              {emgChecking ? 'Verificando…' : 'Verificar WhatsApp deste contato'}
+                            </button>
+                          )}
+                          {emgCheck === true  && <p className="text-[11px] text-emerald-600 mt-1">✓ Este número tem WhatsApp</p>}
+                          {emgCheck === false && <p className="text-[11px] text-red-500 mt-1">⚠️ Este número não tem WhatsApp</p>}
+                        </div>
+                        <input type="email" placeholder="E-mail do contato (opcional)" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] text-gray-800 focus:outline-none focus:border-brand" value={form.emergency_contact_email} onChange={(e) => setForm((f) => ({ ...f, emergency_contact_email: e.target.value }))} />
                       </div>
                     </div>
                   </>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Field label={t('profile.phone')} value={user.phone && <span className="flex items-center gap-1"><Phone size={11} className="text-gray-400" />{user.phone}</span>} />
-                      <Field label={t('profile.birthDate')} value={user.birth_date ? new Date(user.birth_date + 'T12:00:00').toLocaleDateString() : null} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Field label={t('profile.docType')} value={docLabel && user.document_number ? `${docLabel}: ${user.document_number}` : (docLabel || user.document_number)} />
-                      <Field label={t('profile.nationality')} value={user.nationality && <span className="flex items-center gap-1"><Flag size={11} className="text-gray-400" />{user.nationality}</span>} />
-                    </div>
-                    <Field label={t('profile.gender')} value={genderLabel} />
-                    {(user.emergency_contact_name || user.emergency_contact_phone) && (
-                      <div className="pt-2 border-t border-gray-50 space-y-1">
-                        <p className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500"><AlertCircle size={12} /> {t('profile.emergency')}</p>
-                        <Field label={t('profile.emergencyName')} value={user.emergency_contact_name} />
-                        <Field label={t('profile.emergencyPhone')} value={user.emergency_contact_phone} />
-                      </div>
-                    )}
-                  </>
-                )}
+                ) : (() => {
+                  // Só mostra o que está preenchido; o que falta vira a barra
+                  // de completude (CTA de editar), não um "—" perdido na tela.
+                  const filled = [
+                    user.phone, user.birth_date, user.document_number,
+                    user.nationality, user.gender,
+                  ].filter(Boolean).length
+                  const pct = Math.round((filled / 5) * 100)
+                  const hasAny = filled > 0
+
+                  return (
+                    <>
+                      {pct < 100 && (
+                        <button onClick={startEdit} className="w-full text-left bg-orange-50 rounded-xl px-3.5 py-3 active:scale-[0.99] transition-transform">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[12px] font-bold text-gray-800">Perfil {pct}% completo</span>
+                            <span className="text-[11px] font-bold text-brand">Completar →</span>
+                          </div>
+                          <div className="h-1.5 bg-orange-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${Math.max(pct, 6)}%` }} />
+                          </div>
+                          <p className="text-[10.5px] text-gray-500 mt-1.5">
+                            Perfil completo agiliza suas reservas e o contato da cooperativa.
+                          </p>
+                        </button>
+                      )}
+
+                      {!hasAny && pct >= 100 ? null : (
+                        <div className="space-y-3.5">
+                          {user.phone && (
+                            <InfoRow icon={Phone} label={t('profile.phone')} value={user.phone} />
+                          )}
+                          {user.phone && <WhatsappCheck />}
+                          {user.birth_date && (
+                            <InfoRow icon={Calendar} label={t('profile.birthDate')} value={new Date(user.birth_date + 'T12:00:00').toLocaleDateString()} />
+                          )}
+                          {user.document_number && (
+                            <InfoRow icon={CreditCard} label={docLabel || t('profile.docType')} value={formatDoc(user.document_type, user.document_number)} />
+                          )}
+                          {user.nationality && (
+                            <InfoRow icon={Flag} label={t('profile.nationality')} value={user.nationality} />
+                          )}
+                          {genderLabel && (
+                            <InfoRow icon={User} label={t('profile.gender')} value={genderLabel} />
+                          )}
+                        </div>
+                      )}
+
+                      {(user.emergency_contact_name || user.emergency_contact_phone || user.emergency_contact_email) && (
+                        <div className="mt-1 bg-orange-50/60 rounded-xl px-3.5 py-3 space-y-1">
+                          <p className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500"><AlertCircle size={12} /> {t('profile.emergency')}</p>
+                          <p className="text-[13px] font-semibold text-gray-800">
+                            {[user.emergency_contact_name, user.emergency_contact_phone, user.emergency_contact_email].filter(Boolean).join(' · ')}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             </div>
           </>

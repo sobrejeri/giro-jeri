@@ -84,7 +84,8 @@ credenciais do servidor.
 
 ## Dados e privacidade
 
-A migration `023_nupay_sessions_hardening.sql`:
+As migrations `061_nupay_payments.sql`, `062_nupay_official_credentials.sql` e
+`063_nupay_sessions_hardening.sql`:
 
 - adiciona IDs de sessão/transação, status do provedor, idempotência e falha;
 - cria índices únicos e limita uma tentativa NuPay pendente por reserva;
@@ -112,8 +113,14 @@ comercial terminal. O turista pode escolher PIX ou iniciar nova tentativa.
 
 ## Homologação
 
-Execute as migrations em ordem (`021`, `022`, `023`) em banco limpo e também
-valide a `023` sobre uma base onde `021/022` já tenham sido aplicadas.
+Execute as migrations em ordem (`061`, `062`, `063`) em banco limpo. Em uma
+base que recebeu a implementação NuPay anterior (`021/022/023`), valide também
+que a `062/063` remove as credenciais legadas e recria as funções com segurança.
+
+O primeiro release aceita somente uma reserva por tentativa NuPay. Pagamentos
+agrupados por `order_group_id` retornam `422`; PIX e cartão continuam disponíveis.
+Split nativo e beneficiários NuPay ficam fora desta entrega, enquanto os
+repasses permanecem no ledger interno já existente.
 
 No sandbox:
 

@@ -1,35 +1,119 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, X, Loader, MapPin, CircleDot } from 'lucide-react'
 
-async function nominatimSearch(q) {
+const ADMIN_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY
+
+// Carrega o Google Maps SDK de forma lazy (sem pacote npm)
+let _gmPromise = null
+function loadAdminMaps() {
+  if (!ADMIN_MAPS_KEY) return Promise.reject(new Error('no key'))
+  if (window.google?.maps) return Promise.resolve(window.google.maps)
+  if (_gmPromise) return _gmPromise
+  _gmPromise = new Promise((resolve, reject) => {
+    window.__giro_admin_gmcb = () => { delete window.__giro_admin_gmcb; resolve(window.google.maps) }
+    const s = document.createElement('script')
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${ADMIN_MAPS_KEY}&libraries=places&callback=__giro_admin_gmcb&loading=async`
+    s.onerror = () => { _gmPromise = null; reject() }
+    document.head.appendChild(s)
+  })
+  return _gmPromise
+}
+
+async function searchPlaces(q) {
+  if (ADMIN_MAPS_KEY) {
+    try {
+      const maps = await loadAdminMaps()
+      const svc = new maps.places.AutocompleteService()
+      return await new Promise((resolve) => {
+        svc.getPlacePredictions({
+          input: q,
+          componentRestrictions: { country: 'br' },
+        }, (predictions, status) => {
+          if (status !== 'OK' || !predictions) { resolve([]); return }
+          resolve(predictions.map(p => ({
+            place_id:     p.place_id,
+            display_name: p.description,
+            _google:      true,
+          })))
+        })
+      })
+    } catch {}
+  }
+  // Fallback Nominatim
   const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&countrycodes=br&accept-language=pt-BR`
-  const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri-Admin/1.0' } })
+  const res = await fetch(url, { headers: { 'User-Agent': 'Turiva-Admin/1.0' } })
   if (!res.ok) return []
   return res.json()
 }
 
-function MapPreview({ lat, lon, radius }) {
+async function getPlaceCoords(r) {
+  if (r._google && ADMIN_MAPS_KEY) {
+    try {
+      const maps = await loadAdminMaps()
+      const svc = new maps.places.PlacesService(document.createElement('div'))
+      return await new Promise((resolve) => {
+        svc.getDetails({ placeId: r.place_id, fields: ['geometry'] }, (place, status) => {
+          if (status !== 'OK' || !place?.geometry) { resolve(null); return }
+          resolve({ lat: place.geometry.location.lat(), lon: place.geometry.location.lng() })
+        })
+      })
+    } catch {}
+  }
+  return { lat: parseFloat(r.lat), lon: parseFloat(r.lon) }
+}
+
+// Preview com o Google Maps JS (mapa real, com marcador). Se a chave não
+// existir ou o SDK falhar, cai para o embed do OpenStreetMap. Evitamos o
+// Google Embed API: sem billing ele mostra o erro "não carregou o Google
+// Maps corretamente" dentro do iframe, sem como detectar.
+export function MapPreview({ lat, lon, radius = null, heightClass = 'h-[160px]' }) {
+  const mapRef = useRef(null)
+  const [fallback, setFallback] = useState(!ADMIN_MAPS_KEY)
+
+  useEffect(() => {
+    if (!ADMIN_MAPS_KEY || lat == null || lon == null) return
+    let alive = true
+    loadAdminMaps()
+      .then((maps) => {
+        if (!alive || !mapRef.current) return
+        // Zoom aproximado pela área de cobertura (raio em km) — sem raio, POI.
+        const zoom = radius
+          ? Math.max(7, Math.min(14, Math.round(13.5 - Math.log2(Math.max(radius, 2) / 2))))
+          : 15
+        const map = new maps.Map(mapRef.current, {
+          center: { lat: Number(lat), lng: Number(lon) },
+          zoom,
+          disableDefaultUI: true,
+          gestureHandling:  'cooperative',
+        })
+        new maps.Marker({ position: { lat: Number(lat), lng: Number(lon) }, map })
+      })
+      .catch(() => { if (alive) setFallback(true) })
+    return () => { alive = false }
+  }, [lat, lon, radius])
+
   if (!lat || !lon) return null
-  const delta = Math.min(radius / 111, 3)
-  const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
-  const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`
-  return (
-    <div className="rounded-xl overflow-hidden border border-gray-700 h-[160px] relative">
-      <iframe
-        title="mapa"
-        src={src}
-        className="w-full h-full"
-        style={{ filter: 'invert(0.85) hue-rotate(180deg) brightness(0.9)' }}
-        loading="lazy"
-      />
-      <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-lg">
-        © OpenStreetMap
+
+  if (fallback) {
+    const delta = radius ? Math.min(radius / 111, 3) : 0.05
+    const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`
+    const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`
+    return (
+      <div className={`rounded-xl overflow-hidden border border-gray-700 ${heightClass} relative`}>
+        <iframe title="mapa" src={src} className="w-full h-full" style={{ filter: 'invert(0.85) hue-rotate(180deg) brightness(0.9)' }} loading="lazy" />
+        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-lg">© OpenStreetMap</div>
       </div>
+    )
+  }
+
+  return (
+    <div className={`rounded-xl overflow-hidden border border-gray-700 ${heightClass}`}>
+      <div ref={mapRef} className="w-full h-full" />
     </div>
   )
 }
 
-function LocationSearch({ onSelect }) {
+export function LocationSearch({ onSelect }) {
   const [query, setQuery]     = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -52,7 +136,7 @@ function LocationSearch({ onSelect }) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
       try {
-        const data = await nominatimSearch(val)
+        const data = await searchPlaces(val)
         setResults(data)
         setOpen(data.length > 0)
       } catch { setResults([]) }
@@ -60,8 +144,9 @@ function LocationSearch({ onSelect }) {
     }, 500)
   }
 
-  function pick(r) {
-    onSelect(r)
+  async function pick(r) {
+    const coords = await getPlaceCoords(r)
+    if (coords) onSelect({ ...coords, display_name: r.display_name })
     setQuery(r.display_name.split(',')[0])
     setOpen(false)
   }
@@ -122,10 +207,10 @@ export default function LocationPicker({ value, onChange, defaultRadius = 50 }) 
   const radius = value?.service_radius_km != null ? Number(value.service_radius_km) : null
   const hasOverride = lat != null && lon != null
 
-  function handleLocationPick(result) {
+  function handleLocationPick(coords) {
     onChange({
-      latitude:          parseFloat(result.lat),
-      longitude:         parseFloat(result.lon),
+      latitude:          coords.lat,  // já é number
+      longitude:         coords.lon,  // já é number
       service_radius_km: radius ?? defaultRadius,
     })
   }
@@ -162,7 +247,7 @@ export default function LocationPicker({ value, onChange, defaultRadius = 50 }) 
       <LocationSearch onSelect={handleLocationPick} />
 
       {lat !== 0 && lon !== 0 && (
-        <MapPreview lat={lat} lon={lon} radius={radius || defaultRadius} />
+        <MapPreview lat={lat} lon={lon} />
       )}
 
       <div className="flex items-center gap-2 bg-gray-900 rounded-xl px-4 py-3">

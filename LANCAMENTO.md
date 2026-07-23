@@ -17,9 +17,9 @@ Abra o **SQL Editor** do Supabase e execute o **conteúdo** de cada arquivo abai
 | 3 | `supabase/migrations/018_establishments_seed.sql` | Os 90 estabelecimentos do guia |
 | 4 | `supabase/migrations/019_engagement.sql` | Curtidas, comentários e avaliações |
 | 5 | `supabase/migrations/020_catalogo_real_jericoacoara.sql` | Catálogo real: passeios, transfers e preços (requer a 005 já aplicada) |
-| 6 | `supabase/migrations/021_nupay_payments.sql` | NuPay como opção de pagamento + configurações |
-| 7 | `supabase/migrations/022_nupay_official_credentials.sql` | Compatibilidade com a configuração NuPay anterior |
-| 8 | `supabase/migrations/023_nupay_sessions_hardening.sql` | Sessões NuPay, idempotência e finalização atômica |
+| 6 | `supabase/migrations/061_nupay_payments.sql` | NuPay como opção de pagamento, inicialmente desabilitada |
+| 7 | `supabase/migrations/062_nupay_official_credentials.sql` | Remove credenciais NuPay legadas do banco |
+| 8 | `supabase/migrations/063_nupay_sessions_hardening.sql` | Sessões NuPay, idempotência e finalização atômica |
 
 > ⚠️ Cole o **conteúdo do arquivo** (o SQL), não o nome do arquivo.
 

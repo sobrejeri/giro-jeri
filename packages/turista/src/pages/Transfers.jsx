@@ -1,13 +1,19 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery }    from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
+import { useCart }     from '../contexts/CartContext'
+import { highSeasonMonthSet } from '../lib/season'
+import DateSheet from '../components/DateSheet'
 import { api }         from '../lib/api'
+import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
-  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2,
+  Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -15,49 +21,55 @@ import {
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-/* ── Place Autocomplete (Nominatim / OpenStreetMap) ─────────── */
+/* ── Place Autocomplete (Google Places no navegador → OSM fallback) ───── */
+// Google Places direto pelo SDK no browser: resultados detalhados e sem
+// depender do servidor acordar (Render free). Se o Google falhar (chave
+// sem billing, rede etc.), o geoServices cai sozinho para o OpenStreetMap.
 function usePlaceSuggestions(query) {
   const [results,  setResults]  = useState([])
   const [loading,  setLoading]  = useState(false)
   const timerRef = useRef(null)
+  const seqRef   = useRef(0)
 
   useEffect(() => {
-    if (!query || query.length < 3) { setResults([]); return }
+    if (!query || query.length < 1) { setResults([]); return }
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(async () => {
+      const seq = ++seqRef.current
       setLoading(true)
       try {
-        const params = new URLSearchParams({
-          q:               query,
-          format:          'json',
-          limit:           '6',
-          addressdetails:  '1',
-          countrycodes:    'br',
-          'accept-language': 'pt-BR',
-          viewbox:         '-41.5,-3.8,-39.5,-2.0', // bias around Jericoacoara
-          bounded:         '0',
-        })
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-          headers: { 'User-Agent': 'GiroJeri/1.0 (sobrejeri@gmail.com)' },
-        })
-        const data = await res.json()
-        setResults(data.map(p => ({
-          id:    p.place_id,
-          label: p.display_name.split(',').slice(0, 3).join(', '),
-          full:  p.display_name,
-          lat:   parseFloat(p.lat),
-          lon:   parseFloat(p.lon),
+        const list = await getPlaceSuggestions(query)
+        if (seq !== seqRef.current) return // digitação mais nova em andamento
+        setResults((list || []).map((p) => ({
+          id:       String(p.place_id),
+          label:    p.main_text || p.display_name.split(',')[0],
+          sublabel: p.secondary_text || '',
+          full:     p.display_name,
+          lat:      p.lat != null ? parseFloat(p.lat) : null,
+          lon:      p.lon != null ? parseFloat(p.lon) : null,
+          _source:  p._source,
         })))
-      } catch { setResults([]) }
-      finally  { setLoading(false) }
-    }, 350)
+      } catch {
+        if (seq === seqRef.current) setResults([])
+      }
+      if (seq === seqRef.current) setLoading(false)
+    }, 250)
     return () => clearTimeout(timerRef.current)
   }, [query])
 
   return { results, loading }
 }
 
-function PlaceInput({ value, onChange, placeholder, dotClass }) {
+// Coordenadas/endereço de um place_id do Google (SDK no navegador).
+async function resolvePlaceDetails(placeId) {
+  try {
+    const det = await getPlaceDetails(placeId)
+    if (!det) return null
+    return { lat: parseFloat(det.lat), lon: parseFloat(det.lon), address: det.address || det.name || null }
+  } catch { return null }
+}
+
+export function PlaceInput({ value, onChange, onPick, placeholder, dotClass }) {
   const [open, setOpen]  = useState(false)
   const wrapRef          = useRef(null)
   const { results, loading } = usePlaceSuggestions(open ? value : '')
@@ -70,6 +82,20 @@ function PlaceInput({ value, onChange, placeholder, dotClass }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  async function handlePick(r) {
+    onChange(r.label)
+    setOpen(false)
+    if (!onPick) return
+    // Para resultados do Google, busca lat/lon via Places Details.
+    // Para Nominatim, lat/lon já vem na própria resposta.
+    let lat = r.lat, lon = r.lon, address = r.full
+    if (r._source === 'google' && r.id) {
+      const det = await resolvePlaceDetails(r.id)
+      if (det) { lat = det.lat; lon = det.lon; address = det.address || r.full }
+    }
+    onPick({ place_id: r._source === 'google' ? r.id : null, label: r.label, address, lat, lon })
+  }
+
   return (
     <div ref={wrapRef} className="relative">
       <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
@@ -77,29 +103,31 @@ function PlaceInput({ value, onChange, placeholder, dotClass }) {
         <input
           type="text"
           value={value}
-          onChange={e => { onChange(e.target.value); setOpen(true) }}
+          onChange={e => { onChange(e.target.value); onPick?.(null); setOpen(true) }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
           className="flex-1 text-[13px] text-gray-800 bg-transparent outline-none placeholder-gray-400"
         />
-        {loading && <Loader2 size={13} className="animate-spin text-gray-400 shrink-0" />}
-        {value && !loading && (
-          <button onClick={() => { onChange(''); setOpen(false) }} className="shrink-0">
-            <X size={13} className="text-gray-400" />
-          </button>
-        )}
+        {loading
+          ? <Loader2 size={13} className="animate-spin text-gray-400 shrink-0" />
+          : value
+            ? <button onClick={() => { onChange(''); onPick?.(null); setOpen(false) }} className="shrink-0">
+                <X size={13} className="text-gray-400" />
+              </button>
+            : <Search size={13} className="text-gray-400 shrink-0" />}
       </div>
 
       {open && results.length > 0 && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
           {results.map(r => (
-            <button
-              key={r.id}
-              onClick={() => { onChange(r.label); setOpen(false) }}
+            <button key={r.id} onClick={() => handlePick(r)}
               className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0"
             >
               <MapPin size={13} className="text-brand shrink-0 mt-0.5" />
-              <span className="text-[12px] text-gray-700 leading-snug">{r.label}</span>
+              <div className="min-w-0">
+                <p className="text-[12px] text-gray-700 leading-snug truncate">{r.label}</p>
+                {r.sublabel && <p className="text-[10px] text-gray-400 leading-snug truncate">{r.sublabel}</p>}
+              </div>
             </button>
           ))}
         </div>
@@ -108,195 +136,69 @@ function PlaceInput({ value, onChange, placeholder, dotClass }) {
   )
 }
 
-/* ── Preset routes ──────────────────────────────────────────── */
-export const PRESET_ROUTES = [
-  {
-    id: 'aero-jeri',
-    label: 'Aeroporto → Jeri',
-    origin: 'Aeroporto de Jericoacoara (JJD)',
-    dest: 'Vila de Jericoacoara',
-    duration: '~1h',
-    priceFrom: 250,
-    badge: 'Mais vendido',
-    bg: 'from-orange-400 to-amber-300',
-  },
-  {
-    id: 'fortaleza-jeri',
-    label: 'Fortaleza → Jeri',
-    origin: 'Fortaleza',
-    dest: 'Vila de Jericoacoara',
-    duration: '5–6h',
-    priceFrom: 800,
-    badge: 'Premium',
-    bg: 'from-purple-400 to-violet-300',
-  },
-  {
-    id: 'jeri-fortaleza',
-    label: 'Jeri → Fortaleza',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Fortaleza',
-    duration: '~6h',
-    priceFrom: 900,
-    badge: null,
-    bg: 'from-blue-400 to-sky-300',
-  },
-  {
-    id: 'jijoca-jeri',
-    label: 'Jijoca → Jeri',
-    origin: 'Jijoca',
-    dest: 'Vila de Jericoacoara',
-    duration: '~1h',
-    priceFrom: 250,
-    badge: '4x4',
-    bg: 'from-teal-400 to-emerald-300',
-  },
-  {
-    id: 'jeri-jijoca',
-    label: 'Jeri → Jijoca',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Jijoca',
-    duration: '~1h',
-    priceFrom: 250,
-    badge: null,
-    bg: 'from-teal-400 to-emerald-300',
-  },
-  {
-    id: 'jeri-prea',
-    label: 'Jeri → Preá',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Preá',
-    duration: '~25min',
-    priceFrom: 80,
-    badge: 'Kitesurf',
-    bg: 'from-sky-400 to-cyan-300',
-  },
-  {
-    id: 'jeri-camocim',
-    label: 'Jeri → Camocim',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Camocim',
-    duration: '1h30',
-    priceFrom: 250,
-    badge: null,
-    bg: 'from-indigo-400 to-blue-300',
-  },
-  {
-    id: 'jeri-barra',
-    label: 'Jeri → Barra Grande',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Barra Grande (PI)',
-    duration: '~6h',
-    priceFrom: 800,
-    badge: 'Rota Emoções',
-    bg: 'from-rose-400 to-pink-300',
-  },
-  {
-    id: 'jeri-lencois',
-    label: 'Jeri → Lençóis',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Barreirinhas (MA)',
-    duration: '7–8h',
-    priceFrom: 1200,
-    badge: 'Multi-destino',
-    bg: 'from-emerald-400 to-green-300',
-  },
-  {
-    id: 'jeri-hotel',
-    label: 'Hotel → Passeio',
-    origin: 'Vila de Jericoacoara',
-    dest: 'Pontos de embarque',
-    duration: '10–30min',
-    priceFrom: 50,
-    badge: null,
-    bg: 'from-amber-400 to-yellow-300',
-  },
+/* ── Rotas populares (derivadas do catálogo real) ───────────── */
+const GRADIENTS = [
+  'from-orange-400 to-amber-300',
+  'from-purple-400 to-violet-300',
+  'from-blue-400 to-sky-300',
+  'from-teal-400 to-emerald-300',
+  'from-sky-400 to-cyan-300',
+  'from-indigo-400 to-blue-300',
+  'from-rose-400 to-pink-300',
+  'from-emerald-400 to-green-300',
 ]
 
-function PresetCard({ route, onSelect }) {
+const shortPlace = (s = '') =>
+  s.replace('Aeroporto de Jericoacoara (Cruz)', 'Aeroporto JJD')
+   .replace('Jericoacoara', 'Jeri')
+
+// Aeroporto e Fortaleza primeiro; depois por menor preço
+function pickPopularRoutes(routes) {
+  if (!routes.length) return []
+  const score = (r) => {
+    const s = `${r.origin_name} ${r.destination_name}`.toLowerCase()
+    if (s.includes('aeroporto')) return 0
+    if (s.includes('fortaleza')) return 1
+    return 2
+  }
+  return [...routes]
+    .sort((a, b) => score(a) - score(b) || Number(a.default_price) - Number(b.default_price))
+    .slice(0, 8)
+}
+
+function PresetCard({ route, bg, active, onSelect }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onSelect}
-      className="flex-none w-[150px] rounded-2xl overflow-hidden shadow-sm border border-black/5 active:scale-95 transition-transform text-left"
+      className={`flex-none w-[150px] rounded-2xl overflow-hidden shadow-sm border active:scale-95 transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
     >
-      <div className={`bg-gradient-to-br ${route.bg} px-3 pt-2.5 pb-2`}>
-        {route.badge && (
-          <span className="inline-block text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-1.5">
-            {route.badge}
-          </span>
-        )}
-        {!route.badge && <div className="mb-2.5" />}
-        <p className="text-white font-bold text-[13px] leading-tight">{route.label}</p>
+      <div className={`bg-gradient-to-br ${bg} px-3 pt-2.5 pb-2`}>
+        <span className="inline-block text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-1.5">
+          {t('transfersPg.privateBadge')}
+        </span>
+        <p className="text-white font-bold text-[12px] leading-tight">
+          {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
+        </p>
         <div className="flex items-center gap-1 mt-1">
-          <Clock size={9} className="text-white/70" />
-          <span className="text-[10px] text-white/80">{route.duration}</span>
+          <Users size={9} className="text-white/70" />
+          <span className="text-[10px] text-white/80">{t('transfersPg.upTo4')}</span>
         </div>
       </div>
       <div className="bg-white px-3 py-2">
-        <p className="text-[9px] text-gray-400">Privativo a partir de</p>
+        <p className="text-[9px] text-gray-400">{t('transfersPg.startingFrom')}</p>
         <p className="text-[13px] font-extrabold text-gray-900">
-          R$ {route.priceFrom.toLocaleString('pt-BR')}
+          R$ {Number(route.default_price).toLocaleString('pt-BR')}
         </p>
       </div>
     </button>
   )
 }
 
-/* ── Date picker (bottom sheet) ─────────────────────────────── */
-function DateSheet({ value, onChange, onClose }) {
-  const today  = startOfDay(new Date())
-  const [view, setView] = useState(startOfMonth(value))
-  const days   = eachDayOfInterval({ start: startOfMonth(view), end: endOfMonth(view) })
-  const offset = getDay(startOfMonth(view))
-  const canPrev = !isBefore(subMonths(view, 1), startOfMonth(today))
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
-        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
-        <div className="flex items-center justify-between px-5 py-3">
-          <p className="text-[16px] font-bold text-gray-900">Escolha a data</p>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"><X size={14} className="text-gray-500" /></button>
-        </div>
-        <div className="flex items-center justify-between px-5 mb-3">
-          <button disabled={!canPrev} onClick={() => setView(m => subMonths(m, 1))}
-            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center disabled:opacity-30 active:scale-95">
-            <ChevronLeft size={16} className="text-gray-600" />
-          </button>
-          <p className="text-[14px] font-semibold text-gray-900 capitalize">{format(view, 'MMMM yyyy', { locale: ptBR })}</p>
-          <button onClick={() => setView(m => addMonths(m, 1))} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95">
-            <ChevronRight size={16} className="text-gray-600" />
-          </button>
-        </div>
-        <div className="grid grid-cols-7 px-4 mb-1">
-          {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>)}
-        </div>
-        <div className="grid grid-cols-7 px-4 gap-y-0.5 mb-4">
-          {Array.from({ length: offset }).map((_, i) => <div key={`e${i}`} />)}
-          {days.map(day => {
-            const past = isBefore(day, today)
-            const sel  = isSameDay(day, value)
-            return (
-              <button key={day.toISOString()} disabled={past} onClick={() => { onChange(day); onClose() }}
-                className={`aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
-                  ${sel ? 'bg-brand text-white font-bold' : ''}
-                  ${!sel && isToday(day) ? 'text-brand font-bold' : ''}
-                  ${!sel && !isToday(day) && !past ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
-                  ${past ? 'text-gray-300 cursor-not-allowed' : ''}`}
-              >{format(day, 'd')}</button>
-            )
-          })}
-        </div>
-        <div className="px-4 pb-8">
-          <button onClick={onClose} className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">Confirmar</button>
-        </div>
-      </div>
-    </>
-  )
-}
 
 /* ── Route picker (bottom sheet) ────────────────────────────── */
 function RouteSheet({ title, options, selected, onSelect, onClose }) {
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
@@ -319,12 +221,13 @@ function RouteSheet({ title, options, selected, onSelect, onClose }) {
           ))}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
 /* ── Vehicle suggestion ─────────────────────────────────────── */
-function suggestVehicles(vehicles, people) {
+export function suggestVehicles(vehicles, people) {
   if (!vehicles.length) return null
   const single = vehicles.filter(v => v.seat_capacity >= people)
                          .sort((a, b) => a.seat_capacity - b.seat_capacity)[0]
@@ -335,7 +238,8 @@ function suggestVehicles(vehicles, people) {
 }
 
 /* ── Vehicle row with qty controls ──────────────────────────── */
-function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
+export function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
+  const { t } = useTranslation()
   return (
     <div className={`flex items-center gap-3 px-4 py-3 transition-all border-l-4 ${qty > 0 ? 'border-brand bg-brand/5' : 'border-transparent'}`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${qty > 0 ? 'bg-brand' : 'bg-gray-100'}`}>
@@ -345,11 +249,11 @@ function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
         <p className="text-[13px] font-bold text-gray-900 truncate">{vehicle.name}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <Users size={10} className="text-gray-400" />
-          <span className="text-[11px] text-gray-400">Até {vehicle.seat_capacity} pessoas</span>
+          <span className="text-[11px] text-gray-400">{t('transfersPg.upToPeopleCapacity', { count: vehicle.seat_capacity })}</span>
         </div>
         {unitPrice && (
           <p className="text-[11px] text-gray-500 mt-0.5">
-            R$ {Number(unitPrice).toLocaleString('pt-BR')}<span className="text-gray-400"> /veículo</span>
+            R$ {Number(unitPrice).toLocaleString('pt-BR')}<span className="text-gray-400"> {t('transfersPg.perVehicle')}</span>
           </p>
         )}
       </div>
@@ -377,21 +281,40 @@ function VehicleRow({ vehicle, unitPrice, qty, onAdd, onRemove }) {
 
 /* ── Main ───────────────────────────────────────────────────── */
 export default function Transfers() {
+  const { t } = useTranslation()
   const navigate  = useNavigate()
+  // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
+  const { state: navState } = useLocation()
+  const { upsertItem: saveCartItem } = useCart()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
   const customTimeRef = useRef(null)
+  // Tracks the last suggestion we auto-applied so we know when to follow updates
+  const autoAppliedRef = useRef(null) // "vehicleId:qty"
 
   // mode: 'rota' | 'custom'
   const [mode, setMode] = useState('rota')
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
-  const [origin,     setOrigin]     = useState('Jericoacoara')
-  const [dest,       setDest]       = useState('')
-  const [date,       setDate]       = useState(startOfDay(new Date()))
-  const [time,       setTime]       = useState('08:00')
-  const [people,     setPeople]     = useState(2)
-  const [cart,       setCart]       = useState({})   // vehicleId → qty
+  const [origin,     setOrigin]     = useState(navState?.origin || 'Jericoacoara')
+  const [dest,       setDest]       = useState(navState?.dest   || '')
+  const [date,       setDate]       = useState(() => {
+    const d = navState?.date ? new Date(`${navState.date}T12:00:00`) : new Date()
+    return startOfDay(Number.isNaN(d.getTime()) ? new Date() : d)
+  })
+  const [time,       setTime]       = useState(navState?.time || '08:00')
+  const [people,     setPeople]     = useState(Number(navState?.people) || 2)
+  const [cart,       setCart]       = useState(() => {  // vehicleId → qty
+    // "Retomar" do carrinho flutuante: restaura os veículos salvos da rota
+    if (navState?.restoreFromCart && Array.isArray(navState.cartVehicles)) {
+      const c = {}
+      for (const v of navState.cartVehicles) c[v.id] = v.qty
+      return c
+    }
+    return {}
+  })
   const [notes,      setNotes]      = useState('')
   const [showDate,   setShowDate]   = useState(false)
   const [showOrigin, setShowOrigin] = useState(false)
@@ -401,6 +324,11 @@ export default function Transfers() {
   // Custom ride state
   const [customOrigin,   setCustomOrigin]   = useState('')
   const [customDest,     setCustomDest]     = useState('')
+  // Metadados do place picado (place_id + coordenadas) — quando o usuário escolhe
+  // um item da busca do Maps, guardamos pra mandar para a cooperativa junto da
+  // solicitação. Se digitar livre sem selecionar, segue só com o texto mesmo.
+  const [customOriginMeta, setCustomOriginMeta] = useState(null)
+  const [customDestMeta,   setCustomDestMeta]   = useState(null)
   const [customDate,     setCustomDate]     = useState(startOfDay(new Date()))
   const [customTime,     setCustomTime]     = useState('08:00')
   const [customPeople,   setCustomPeople]   = useState(2)
@@ -411,34 +339,40 @@ export default function Transfers() {
   const [customError,    setCustomError]    = useState('')
 
   async function handleRequestQuote() {
-    if (!token) { navigate('/login'); return }
+    if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!customOrigin.trim() || !customDest.trim() || !customTime) return
     setCustomLoading(true)
     setCustomError('')
     try {
       await api.requestQuote({
-        region_id:              region?.id || '',
-        origin_place_name:      customOrigin.trim(),
-        destination_place_name: customDest.trim(),
-        service_date:           format(customDate, 'yyyy-MM-dd'),
-        service_time:           customTime,
-        people_count:           customPeople,
-        luggage_count:          0,
-        special_notes:          customNotes.trim() || undefined,
+        region_id:                region?.id || '',
+        origin_place_name:        customOrigin.trim(),
+        origin_place_id:          customOriginMeta?.place_id || undefined,
+        origin_latitude:          customOriginMeta?.lat ?? undefined,
+        origin_longitude:         customOriginMeta?.lon ?? undefined,
+        origin_address_text:      customOriginMeta?.address || undefined,
+        destination_place_name:   customDest.trim(),
+        destination_place_id:     customDestMeta?.place_id || undefined,
+        destination_latitude:     customDestMeta?.lat ?? undefined,
+        destination_longitude:    customDestMeta?.lon ?? undefined,
+        destination_address_text: customDestMeta?.address || undefined,
+        service_date:             format(customDate, 'yyyy-MM-dd'),
+        service_time:             customTime,
+        people_count:             customPeople,
+        luggage_count:            0,
+        special_notes:            customNotes.trim() || undefined,
       })
       setCustomSuccess(true)
     } catch (err) {
-      setCustomError(err.message || 'Erro ao solicitar cotação')
+      setCustomError(err.message || t('transfersPg.quoteError'))
     } finally {
       setCustomLoading(false)
     }
   }
 
-  const customDateLabel = isToday(customDate) ? 'Hoje'
-    : isSameDay(customDate, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+  const customDateLabel = isToday(customDate) ? t('transfersPg.today')
+    : isSameDay(customDate, addDays(startOfDay(new Date()), 1)) ? t('transfersPg.tomorrow')
     : format(customDate, 'd MMM', { locale: ptBR })
-
-  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime
 
   /* ── Queries ── */
   const { data: routesData } = useQuery({
@@ -446,21 +380,105 @@ export default function Transfers() {
     queryFn:  () => api.getTransferRoutes(),
   })
   const { data: vehiclesData } = useQuery({
-    queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
-    queryFn:  () => api.getVehicles ? api.getVehicles(getServiceQuery()) : Promise.resolve([]),
+    queryKey: ['vehicles', 'transfer', region?.id],
+    queryFn:  () => region?.id ? api.getVehicles({ region_id: region.id }) : Promise.resolve([]),
+    enabled:  !!region?.id,
   })
 
   const routes   = Array.isArray(routesData?.routes) ? routesData.routes
                  : Array.isArray(routesData) ? routesData : []
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
-                    .filter(v => v.is_transfer_allowed)
+                    .filter(v => v.is_transfer_allowed && v.is_active !== false)
+
+  // Alta temporada: meses com acréscimo, p/ sinalizar no calendário.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: 3,               // API pode estar “acordando” (Render) — não desistir na 1ª
+    refetchOnWindowFocus: true,
+  })
+  const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
 
   const origins    = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
   const dests      = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
   const matched    = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
   const unitPrice  = matched ? Number(matched.default_price) : null
+  const popularRoutes = useMemo(() => pickPopularRoutes(routes), [routes])
+
+  // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
+  // anteriores a "agora + N horas". Padrão 4h; a rota selecionada pode definir
+  // a sua própria antecedência (transfers.min_advance_hours, via admin).
+  const DEFAULT_MIN_ADVANCE_HOURS = 4
+  const bookableAfter = (hours) => {
+    const p = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Fortaleza',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a }, {})
+    const d = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), 0)
+    d.setHours(d.getHours() + hours)
+    return d
+  }
+
+  // Rota definida: usa a antecedência da rota (senão o padrão).
+  const MIN_ADVANCE_HOURS = matched?.transfers?.min_advance_hours ?? DEFAULT_MIN_ADVANCE_HOURS
+  const minBookable = useMemo(() => bookableAfter(MIN_ADVANCE_HOURS), [MIN_ADVANCE_HOURS])
+  const minDate = useMemo(() => startOfDay(minBookable), [minBookable])
+  // Horário mínimo: só restringe quando a data escolhida é o 1º dia disponível.
+  const minTime = isSameDay(date, minDate) ? format(minBookable, 'HH:mm') : '00:00'
+
+  useEffect(() => {
+    if (isBefore(date, minDate)) setDate(minDate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minDate])
+  // Se a data é o dia mínimo e o horário ficou antes do limite, empurra o horário.
+  useEffect(() => {
+    if (isSameDay(date, minDate) && time && time < minTime) setTime(minTime)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, minTime])
+
+  // TRANSFER PERSONALIZADO (customDate/customTime): sem rota, usa o padrão.
+  const customMinBookable = useMemo(() => bookableAfter(DEFAULT_MIN_ADVANCE_HOURS), [])
+  const customMinDate = useMemo(() => startOfDay(customMinBookable), [customMinBookable])
+  const customMinTime = isSameDay(customDate, customMinDate) ? format(customMinBookable, 'HH:mm') : '00:00'
+  useEffect(() => {
+    if (isBefore(customDate, customMinDate)) setCustomDate(customMinDate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customMinDate])
+  useEffect(() => {
+    if (isSameDay(customDate, customMinDate) && customTime && customTime < customMinTime) setCustomTime(customMinTime)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customDate, customMinTime])
+
+  const customChosen = (() => {
+    const [th, tm] = String(customTime || '00:00').split(':').map(Number)
+    const d = new Date(customDate); d.setHours(th || 0, tm || 0, 0, 0); return d
+  })()
+  const customAdvanceOk = customChosen >= customMinBookable
+  const canCustomBook = customOrigin.trim().length >= 2 && customDest.trim().length >= 2 && !!customTime && customAdvanceOk
 
   const suggestion = useMemo(() => suggestVehicles(vehicles, people), [vehicles, people])
+
+  // Auto-apply the suggestion when it first appears or changes (people/vehicle list update).
+  // Only overrides the cart if it's empty or still matches what we previously auto-applied
+  // — user's manual choices are preserved.
+  useEffect(() => {
+    if (!suggestion) return
+    const key = `${suggestion.vehicle.id}:${suggestion.qty}`
+    if (key === autoAppliedRef.current) return
+    const cartEntries = Object.entries(cart).filter(([, q]) => q > 0)
+    const isEmpty = cartEntries.length === 0
+    const matchesPrevAuto = autoAppliedRef.current &&
+      cartEntries.length === 1 &&
+      cartEntries[0][0] === autoAppliedRef.current.split(':')[0] &&
+      Number(cartEntries[0][1]) === Number(autoAppliedRef.current.split(':')[1])
+    if (isEmpty || matchesPrevAuto) {
+      setCart({ [suggestion.vehicle.id]: suggestion.qty })
+      autoAppliedRef.current = key
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestion?.vehicle?.id, suggestion?.qty])
 
   const cartItems    = Object.entries(cart)
     .filter(([, q]) => q > 0)
@@ -469,36 +487,55 @@ export default function Transfers() {
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const cartHasItems = cartItems.length > 0
-  const canBook      = !!matched && cartHasItems && cartCapacity >= people && !!time
 
-  const dateLabel = isToday(date) ? 'Hoje'
-    : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+  // Monta o rascunho do carrinho a partir da PRÉ-SELEÇÃO (rota definida +
+  // veículos + pessoas). NÃO é auto-salvo: só vai pro carrinho no "Continuar".
+  // Data/hora são refinadas depois, na edição dentro do carrinho.
+  const buildCartDraft = () => ({
+    id:      matched.id,
+    kind:    'transfer',
+    name:    `${shortPlace(origin)} → ${shortPlace(dest)}`,
+    origin, dest,
+    dateIso: format(date, 'yyyy-MM-dd'),
+    time, people,
+    region_id: region?.id || null,
+    booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
+    min_advance_hours: matched?.transfers?.min_advance_hours ?? null,
+    vehicles: cartItems.map(({ vehicle, qty }) => ({
+      id: vehicle.id, name: vehicle.name, qty,
+      price: unitPrice || 0, cap: vehicle.seat_capacity || null,
+    })),
+    total: cartTotal,
+  })
+  // Basta a rota + veículos cobrindo as pessoas; o horário é definido no carrinho.
+  // Data+hora escolhidas como wall-clock, p/ conferir a antecedência de 4h.
+  const chosenDateTime = useMemo(() => {
+    const [th, tm] = String(time || '00:00').split(':').map(Number)
+    const d = new Date(date); d.setHours(th || 0, tm || 0, 0, 0); return d
+  }, [date, time])
+  const advanceOk    = chosenDateTime >= minBookable
+  const canBook      = !!matched && cartHasItems && cartCapacity >= people && advanceOk
+
+  // True when suggestion is already the only item in cart at the right qty
+  const suggestionIsApplied = !!(suggestion &&
+    cartItems.length === 1 &&
+    cartItems[0].vehicle.id === suggestion.vehicle.id &&
+    cartItems[0].qty === suggestion.qty)
+
+  // Acréscimo de alta temporada / feriado NÃO é mais calculado aqui: a data
+  // final é definida no carrinho, então é lá que o total com temporada é
+  // computado. Nesta pré-seleção mostra-se só o total dos veículos.
+
+  const dateLabel = isToday(date) ? t('transfersPg.today')
+    : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('transfersPg.tomorrow')
     : format(date, 'd MMM', { locale: ptBR })
 
   async function handleConfirm() {
-    if (!token) { navigate('/login'); return }
+    if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
     if (!canBook) return
-    navigate('/checkout/resumo', {
-      state: {
-        service_name:        `Transfer ${origin} → ${dest}`,
-        service_type:        'transfer',
-        booking_mode:        'private',
-        service_date:        dateLabel,
-        service_date_iso:    format(date, 'yyyy-MM-dd'),
-        service_time:        time,
-        people_count:        people,
-        origin_text:         origin,
-        destination_text:    dest,
-        vehicle_name:        cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
-        total_price:         cartTotal,
-        transfer_unit_price: unitPrice,
-        breakdown:           { 'Veículos': cartTotal },
-        region_id:           region?.id || null,
-        service_id:          matched?.id,
-        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
-        booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
-      },
-    })
+    // Pré-seleção → carrinho: continua a solicitação (data/hora/edição) lá.
+    saveCartItem(buildCartDraft())
+    navigate('/carrinho')
   }
 
   return (
@@ -506,8 +543,42 @@ export default function Transfers() {
     <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
       {/* Header */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
-        <h1 className="text-[20px] font-extrabold text-gray-900">Transfer</h1>
-        <p className="text-[12px] text-gray-400 mt-0.5">Transporte privativo com motorista</p>
+        <div className="relative flex items-center justify-center min-h-[32px]">
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+            aria-label={t('transfersPg.back')}
+          >
+            <ChevronLeft size={20} className="text-gray-700" />
+          </button>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('transfersPg.title')}</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <button
+              onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+              aria-label={t('transfersPg.searchReservation')}
+            >
+              <Search size={15} />
+            </button>
+          </div>
+        </div>
+        <p className="text-[12px] text-gray-400 text-center mt-1">{t('transfersPg.subtitle')}</p>
+
+        {showSearch && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); const q = searchTerm.trim(); if (q) navigate('/minhas-reservas', { state: { q } }) }}
+            className="mt-2 relative"
+          >
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t('transfersPg.searchPlaceholder')}
+              className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
+            />
+          </form>
+        )}
 
         {/* Mode toggle */}
         <div className="flex gap-2 mt-3">
@@ -518,7 +589,7 @@ export default function Transfers() {
             }`}
           >
             <Route size={13} />
-            Rota definida
+            {t('transfersPg.modeRoute')}
           </button>
           <button
             onClick={() => { setMode('custom'); setCustomSuccess(false); setCustomError('') }}
@@ -527,7 +598,7 @@ export default function Transfers() {
             }`}
           >
             <Zap size={13} />
-            Corrida personalizada
+            {t('transfersPg.modeCustom')}
           </button>
         </div>
       </div>
@@ -540,21 +611,21 @@ export default function Transfers() {
               <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
                 <CheckCircle2 size={32} className="text-emerald-500" />
               </div>
-              <p className="text-[18px] font-extrabold text-gray-900 mb-2">Cotação solicitada!</p>
+              <p className="text-[18px] font-extrabold text-gray-900 mb-2">{t('transfersPg.quoteRequestedTitle')}</p>
               <p className="text-[13px] text-gray-500 max-w-[240px] mb-6">
-                A cooperativa irá analisar e enviar um valor para você confirmar.
+                {t('transfersPg.quoteSuccessDesc')}
               </p>
               <button
                 onClick={() => navigate('/minhas-reservas')}
                 className="bg-brand text-white font-bold rounded-2xl px-6 py-3 text-[14px] active:scale-95 transition-transform"
               >
-                Ver minhas cotações
+                {t('transfersPg.viewQuotes')}
               </button>
               <button
-                onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomNotes('') }}
+                onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes('') }}
                 className="mt-3 text-[13px] text-gray-400 underline"
               >
-                Solicitar outra corrida
+                {t('transfersPg.requestAnother')}
               </button>
             </div>
           ) : (
@@ -562,32 +633,34 @@ export default function Transfers() {
               <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
                 <Zap size={14} className="text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-[12px] text-amber-700 leading-relaxed">
-                  Informe os pontos de embarque e destino. A cooperativa confirma e envia o valor da corrida para você.
+                  {t('transfersPg.customIntro')}
                 </p>
               </div>
 
               {/* Origin / Dest */}
-              <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Rota</p>
+              <section className="bg-white rounded-2xl border border-gray-100 relative overflow-visible">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.routeSection')}</p>
                 <div className="px-4 pb-4 space-y-3">
                   <div>
-                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Embarque</label>
+                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.pickup')}</label>
                     <div className="mt-1">
                       <PlaceInput
                         value={customOrigin}
                         onChange={setCustomOrigin}
-                        placeholder="Ex: Hotel Jeri Beach"
+                        onPick={setCustomOriginMeta}
+                        placeholder={t('transfersPg.placeSearchPlaceholder')}
                         dotClass="bg-brand"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Destino</label>
+                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.destination')}</label>
                     <div className="mt-1">
                       <PlaceInput
                         value={customDest}
                         onChange={setCustomDest}
-                        placeholder="Ex: Aeroporto de Jericoacoara"
+                        onPick={setCustomDestMeta}
+                        placeholder={t('transfersPg.placeSearchPlaceholder')}
                         dotClass="border-2 border-gray-400 bg-transparent"
                       />
                     </div>
@@ -597,13 +670,13 @@ export default function Transfers() {
 
               {/* Data & Horário */}
               <section className="bg-white rounded-2xl border border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Data & Horário</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.dateTimeSection')}</p>
                 <div className="flex gap-2 px-4 pb-4">
                   <button onClick={() => setShowCustomDate(true)}
                     className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform">
                     <Calendar size={13} className="text-brand" />
                     <div className="text-left">
-                      <p className="text-[9px] text-gray-400 leading-none">Data</p>
+                      <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.dateLabel')}</p>
                       <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{customDateLabel}</p>
                     </div>
                   </button>
@@ -611,13 +684,14 @@ export default function Transfers() {
                     className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform relative">
                     <Clock size={13} className="text-brand" />
                     <div className="text-left flex-1">
-                      <p className="text-[9px] text-gray-400 leading-none">Horário</p>
-                      <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{customTime || 'Selecionar'}</p>
+                      <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.timeLabel')}</p>
+                      <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{customTime || t('transfersPg.select')}</p>
                     </div>
                     <input
                       ref={customTimeRef}
                       type="time"
                       value={customTime}
+                      min={customMinTime}
                       onChange={e => setCustomTime(e.target.value)}
                       className="absolute inset-0 opacity-0 w-full cursor-pointer"
                     />
@@ -627,11 +701,11 @@ export default function Transfers() {
 
               {/* Passageiros */}
               <section className="bg-white rounded-2xl border border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Passageiros</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.passengersSection')}</p>
                 <div className="flex items-center justify-between px-4 pb-4">
                   <div className="flex items-center gap-2">
                     <Users size={16} className="text-brand" />
-                    <p className="text-[13px] font-bold text-gray-900">{customPeople} passageiro{customPeople !== 1 ? 's' : ''}</p>
+                    <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.passengersCount', { count: customPeople })}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setCustomPeople(p => Math.max(1, p - 1))}
@@ -649,13 +723,13 @@ export default function Transfers() {
 
               {/* Observações */}
               <section className="bg-white rounded-2xl border border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Observações</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.notesSection')}</p>
                 <div className="px-4 pb-4">
                   <textarea
                     rows={3}
                     value={customNotes}
                     onChange={e => setCustomNotes(e.target.value)}
-                    placeholder="Ex: 2 malas grandes, voo às 14h, precisamos de cadeirinha..."
+                    placeholder={t('transfersPg.notesPlaceholderCustom')}
                     className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400"
                   />
                 </div>
@@ -668,14 +742,14 @@ export default function Transfers() {
               <div className="flex items-start gap-2 px-1">
                 <Info size={13} className="text-blue-400 shrink-0 mt-0.5" />
                 <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Valor a combinar. A cooperativa irá confirmar a corrida e enviar o preço para sua aprovação.
+                  {t('transfersPg.priceNoteCustom')}
                 </p>
               </div>
             </>
           )}
 
           {showCustomDate && (
-            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} />
+            <DateSheet value={customDate} onChange={setCustomDate} onClose={() => setShowCustomDate(false)} minDate={customMinDate} seasons={seasonsData || []} highSeasonMonths={highSeasonMonths} />
           )}
         </div>
       )}
@@ -685,30 +759,34 @@ export default function Transfers() {
       <><div className="px-4 pt-4 space-y-3 lg:max-w-3xl lg:mx-auto">
 
         {/* ROTAS POPULARES */}
+        {popularRoutes.length > 0 && (
         <div>
-          <p className="text-[13px] font-bold text-gray-700 mb-2.5">Rotas populares</p>
+          <p className="text-[13px] font-bold text-gray-700 mb-2.5">{t('transfersPg.popularRoutes')}</p>
           <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
-            {PRESET_ROUTES.map(r => (
+            {popularRoutes.map((r, i) => (
               <PresetCard
                 key={r.id}
                 route={r}
-                onSelect={() => { setOrigin(r.origin); setDest(r.dest); setCart({}) }}
+                bg={GRADIENTS[i % GRADIENTS.length]}
+                active={origin === r.origin_name && dest === r.destination_name}
+                onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
               />
             ))}
           </div>
         </div>
+        )}
 
         {/* ROTA */}
         <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Rota</p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.routeSection')}</p>
 
           <button onClick={() => setShowOrigin(true)}
             className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-50 active:bg-gray-50">
             <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
             <div className="flex-1 text-left">
-              <p className="text-[10px] text-gray-400">Origem</p>
+              <p className="text-[10px] text-gray-400">{t('transfersPg.origin')}</p>
               <p className={`text-[13px] font-semibold ${origin ? 'text-gray-900' : 'text-gray-400'}`}>
-                {origin || 'Selecione o ponto de partida'}
+                {origin || t('transfersPg.selectOrigin')}
               </p>
             </div>
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
@@ -718,9 +796,9 @@ export default function Transfers() {
             className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-100 active:bg-gray-50">
             <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
             <div className="flex-1 text-left">
-              <p className="text-[10px] text-gray-400">Destino</p>
+              <p className="text-[10px] text-gray-400">{t('transfersPg.destination')}</p>
               <p className={`text-[13px] font-semibold ${dest ? 'text-gray-900' : 'text-gray-400'}`}>
-                {dest || (dests.length ? 'Selecione o destino' : 'Escolha a origem primeiro')}
+                {dest || (dests.length ? t('transfersPg.selectDestination') : t('transfersPg.chooseOriginFirst'))}
               </p>
             </div>
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
@@ -729,13 +807,13 @@ export default function Transfers() {
 
         {/* DATA & HORÁRIO */}
         <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Data & Horário</p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.dateTimeSection')}</p>
           <div className="flex gap-2 px-4 pb-4">
             <button onClick={() => setShowDate(true)}
               className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform">
               <Calendar size={13} className="text-brand" />
               <div className="text-left">
-                <p className="text-[9px] text-gray-400 leading-none">Data</p>
+                <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.dateLabel')}</p>
                 <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{dateLabel}</p>
               </div>
             </button>
@@ -743,29 +821,35 @@ export default function Transfers() {
               className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform relative">
               <Clock size={13} className="text-brand" />
               <div className="text-left flex-1">
-                <p className="text-[9px] text-gray-400 leading-none">Horário</p>
-                <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{time || 'Selecionar'}</p>
+                <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.timeLabel')}</p>
+                <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{time || t('transfersPg.select')}</p>
               </div>
               <input
                 ref={timeRef}
                 type="time"
                 value={time}
+                min={minTime}
                 onChange={e => setTime(e.target.value)}
                 className="absolute inset-0 opacity-0 w-full cursor-pointer"
               />
             </button>
           </div>
+          {!advanceOk && (
+            <p className="px-4 pb-3 -mt-1 text-[11px] text-amber-600">
+              {t('transfersPg.minAdvanceNotice', { hours: MIN_ADVANCE_HOURS, datetime: format(minBookable, "d/MM 'às' HH:mm") })}
+            </p>
+          )}
         </section>
 
         {/* PASSAGEIROS */}
         <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Passageiros</p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.passengersSection')}</p>
           <div className="flex items-center justify-between px-4 pb-4">
             <div className="flex items-center gap-2">
               <Users size={16} className="text-brand" />
               <div>
-                <p className="text-[13px] font-bold text-gray-900">{people} passageiro{people !== 1 ? 's' : ''}</p>
-                <p className="text-[10px] text-gray-400">Passageiros adicionais a combinar</p>
+                <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.passengersCount', { count: people })}</p>
+                <p className="text-[10px] text-gray-400">{t('transfersPg.passengersNote')}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -785,7 +869,7 @@ export default function Transfers() {
         {/* VEÍCULO */}
         {vehicles.length > 0 && (
           <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Veículo</p>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.vehicleSection')}</p>
 
             {/* Sugestão */}
             {suggestion && (
@@ -800,7 +884,7 @@ export default function Transfers() {
                   <div className="flex items-center gap-1 mt-0.5">
                     <Users size={10} className="text-gray-400" />
                     <span className="text-[11px] text-gray-400">
-                      Até {suggestion.vehicle.seat_capacity * suggestion.qty} pessoas
+                      {t('transfersPg.upToPeopleCapacity', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}
                     </span>
                   </div>
                 </div>
@@ -810,12 +894,21 @@ export default function Transfers() {
                       R$ {(unitPrice * suggestion.qty).toLocaleString('pt-BR')}
                     </span>
                   )}
-                  <button
-                    onClick={() => setCart({ [suggestion.vehicle.id]: suggestion.qty })}
-                    className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
-                  >
-                    Aplicar
-                  </button>
+                  {suggestionIsApplied ? (
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
+                      <Check size={11} /> {t('transfersPg.selected')}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setCart({ [suggestion.vehicle.id]: suggestion.qty })
+                        autoAppliedRef.current = `${suggestion.vehicle.id}:${suggestion.qty}`
+                      }}
+                      className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
+                    >
+                      {t('transfersPg.apply')}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -837,13 +930,13 @@ export default function Transfers() {
 
         {/* OBSERVAÇÕES */}
         <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Observações & Bagagens</p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.notesBaggageSection')}</p>
           <div className="px-4 pb-4">
             <textarea
               rows={3}
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="Ex: 2 malas grandes, precisamos de cadeirinha..."
+              placeholder={t('transfersPg.notesPlaceholderRoute')}
               className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400"
             />
           </div>
@@ -852,14 +945,13 @@ export default function Transfers() {
         {/* RESUMO */}
         {matched && (
           <section className="bg-white rounded-2xl border border-gray-100">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-3">Resumo do transfer</p>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-3">{t('transfersPg.summaryTitle')}</p>
             <div className="px-4 pb-4 space-y-2.5">
               {[
-                { dot: 'bg-brand',    label: 'Origem',      val: origin },
-                { dot: 'bg-gray-400', label: 'Destino',     val: dest   },
-                { icon: Calendar,     label: 'Data & Hora', val: `${dateLabel} às ${time || '—'}` },
-                { icon: Users,        label: 'Passageiros', val: `${people} pessoa${people !== 1 ? 's' : ''}` },
-                ...(cartItems.length ? [{ icon: Car, label: 'Veículo', val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
+                { dot: 'bg-brand',    label: t('transfersPg.origin'),      val: origin },
+                { dot: 'bg-gray-400', label: t('transfersPg.destination'), val: dest   },
+                { icon: Users,        label: t('transfersPg.passengersSection'), val: t('transfersPg.peopleCount', { count: people }) },
+                ...(cartItems.length ? [{ icon: Car, label: t('transfersPg.vehicleSection'), val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
               ].map((row, i) => (
                 <div key={i} className="flex items-center gap-3">
                   {row.dot
@@ -872,9 +964,12 @@ export default function Transfers() {
                 </div>
               ))}
               <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
-                <p className="text-[13px] font-bold text-gray-900">Total</p>
+                <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.vehiclesTotal')}</p>
                 <p className="text-[16px] font-extrabold text-brand">R$ {cartTotal ? cartTotal.toLocaleString('pt-BR') : '—'}</p>
               </div>
+              <p className="text-[11px] text-gray-400 leading-snug">
+                {t('transfersPg.summaryFootnote')}
+              </p>
             </div>
           </section>
         )}
@@ -883,19 +978,24 @@ export default function Transfers() {
         <div className="flex items-start gap-2 px-1">
           <Info size={13} className="text-blue-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-gray-400 leading-relaxed">
-            Motorista aparecerá no local de embarque com placa identificada.
-            Cancelamento gratuito até 24h antes.
+            {t('transfersPg.driverInfoRoute')}
           </p>
         </div>
       </div>
 
-      {/* Bottom CTA */}
-      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
+      {/* Bottom CTA — resumo fixo no viewport, só quando há veículo selecionado.
+          Portal p/ document.body: o wrapper do PullToRefresh usa transform/
+          will-change e prenderia o position:fixed na página (a barra sumia no
+          fim do conteúdo). */}
+      {cartHasItems && createPortal(
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-          <div>
-            <p className="text-[10px] text-gray-400">Total estimado</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-gray-400">{t('transfersPg.vehiclesTotal')}</p>
             <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-              {cartTotal ? `R$ ${cartTotal.toLocaleString('pt-BR')}` : 'Selecione a rota'}
+              {cartTotal
+                ? `R$ ${cartTotal.toLocaleString('pt-BR')}`
+                : matched ? t('transfersPg.selectVehicle') : t('transfersPg.selectRoute')}
             </p>
           </div>
           <button
@@ -905,15 +1005,17 @@ export default function Transfers() {
               canBook ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {loading ? 'Aguarde…' : 'Confirmar Transfer'}
+            {loading ? t('transfersPg.wait') : t('transfersPg.addToCart')}
           </button>
         </div>
-      </div>
+        </div>,
+        document.body,
+      )}
 
       {/* Sheets */}
-      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} />}
-      {showOrigin && <RouteSheet title="Escolha a origem" options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
-      {showDest   && <RouteSheet title="Escolha o destino" options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
+      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} seasons={seasonsData || []} highSeasonMonths={highSeasonMonths} />}
+      {showOrigin && <RouteSheet title={t('transfersPg.chooseOrigin')} options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
+      {showDest   && <RouteSheet title={t('transfersPg.chooseDestination')} options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
     </> )} {/* end mode === 'rota' */}
 
       {/* Bottom CTA — Custom ride */}
@@ -927,7 +1029,7 @@ export default function Transfers() {
             }`}
           >
             <Send size={16} />
-            {customLoading ? 'Solicitando…' : 'Solicitar cotação'}
+            {customLoading ? t('transfersPg.requesting') : t('transfersPg.requestQuote')}
           </button>
         </div>
       )}

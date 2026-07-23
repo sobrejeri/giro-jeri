@@ -6,20 +6,13 @@
     <script>
       (function () {
         var path = location.pathname;
-        var dest;
-
-        // Roteia para o app correto com base no prefixo do caminho
         if (path.startsWith('/giro-jeri/admin')) {
-          dest = '/giro-jeri/admin/';
+          location.replace('/giro-jeri/admin/');
         } else if (path.startsWith('/giro-jeri/cooperativa')) {
-          dest = '/giro-jeri/cooperativa/';
+          location.replace('/giro-jeri/cooperativa/');
         } else {
-          dest = '/giro-jeri/';
+          location.replace('/giro-jeri/');
         }
-
-        // Salva o caminho completo para restaurar após o redirecionamento
-        sessionStorage.setItem('spa_redirect', path + location.search + location.hash);
-        location.replace(dest);
       })();
     </script>
   </head>

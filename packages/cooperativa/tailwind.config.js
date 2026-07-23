@@ -19,8 +19,19 @@ export default {
       fontFamily: {
         sans:    ['Plus Jakarta Sans', 'ui-sans-serif', 'system-ui'],
         display: ['Syne', 'ui-sans-serif', 'system-ui'],
+        giro:    ['Fredoka', 'ui-sans-serif', 'system-ui'],
       },
     },
   },
-  plugins: [],
+  plugins: [
+    function ({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-hide': {
+          '-ms-overflow-style': 'none',
+          'scrollbar-width': 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        },
+      })
+    },
+  ],
 }

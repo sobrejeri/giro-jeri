@@ -1,24 +1,13 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
+import { reverseGeocodeMunicipality } from '../lib/geoServices'
 
 const RegionContext = createContext(null)
 const STORAGE_KEY        = 'giro_region'
 const STORAGE_KEY_COORDS = 'giro_user_coords'
 const STORAGE_KEY_PLACE  = 'giro_user_place'
+const STORAGE_KEY_MANUAL = 'giro_region_manual'
 const DEFAULT_RADIUS_KM  = 100
-
-async function reverseGeocode(lat, lon) {
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=pt-BR`
-    const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
-    if (!res.ok) return null
-    const data = await res.json()
-    const a = data.address ?? {}
-    const locality = a.village || a.town || a.suburb || a.neighbourhood || a.city || a.municipality
-    const state    = a.state_code || a.state
-    return [locality, state].filter(Boolean).join(', ') || null
-  } catch { return null }
-}
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371
@@ -45,6 +34,24 @@ export function findRegionForCoords(lat, lon, regions) {
   return best
 }
 
+// Normaliza nomes para comparação (sem acento, minúsculo).
+function normalizeName(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim()
+}
+
+// Casa um município detectado com a região cadastrada de mesmo município.
+// Comparação EXATA (não "inclui") para não confundir "Jericoacoara" com
+// "Jijoca de Jericoacoara". Tenta primeiro region.city, depois region.name.
+export function findRegionByCity(city, regions) {
+  if (!city) return null
+  const target = normalizeName(city)
+  return regions.find((r) => r.city && normalizeName(r.city) === target)
+      || regions.find((r) => normalizeName(r.name) === target)
+      || null
+}
+
 export function RegionProvider({ children }) {
   const [region, setRegionState] = useState(() => {
     try {
@@ -65,6 +72,15 @@ export function RegionProvider({ children }) {
   const [userPlace, setUserPlace] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY_PLACE) || null } catch { return null }
   })
+  // Região escolhida manualmente tem prioridade sobre o GPS: enquanto ativa, o
+  // filtro usa só region_id (ignora lat/lon) e o GPS em segundo plano não a
+  // sobrescreve. Sem isso, ao escolher uma cidade distante da posição atual a
+  // lista vinha vazia (o backend filtra por proximidade quando recebe lat/lon).
+  const [manualRegion, setManualRegion] = useState(() => {
+    try { return localStorage.getItem(STORAGE_KEY_MANUAL) === '1' } catch { return false }
+  })
+  const manualRef = useRef(manualRegion)
+  useEffect(() => { manualRef.current = manualRegion }, [manualRegion])
 
   useEffect(() => {
     api.getRegions().then((data) => {
@@ -76,23 +92,39 @@ export function RegionProvider({ children }) {
     if (!region && regions.length > 0) setShowPicker(true)
   }, [region, regions])
 
-  const selectRegion = useCallback((r) => {
+  // Define a região. opts.manual=true (padrão) marca escolha explícita do
+  // usuário; o GPS chama com manual:false para não “travar” o seguimento.
+  const selectRegion = useCallback((r, opts = {}) => {
+    const manual = opts.manual !== false
     setRegionState(r)
+    setManualRegion(manual)
+    manualRef.current = manual
     setOutsideError(false)
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(r)) } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(r))
+      localStorage.setItem(STORAGE_KEY_MANUAL, manual ? '1' : '0')
+    } catch {}
     setShowPicker(false)
   }, [])
 
-  const applyCoords = useCallback(async (lat, lon) => {
+  const applyCoords = useCallback(async (lat, lon, opts = {}) => {
+    const auto = opts.auto === true
     const next = { lat, lon }
     setUserCoords(next)
     try { localStorage.setItem(STORAGE_KEY_COORDS, JSON.stringify(next)) } catch {}
-    const found = findRegionForCoords(lat, lon, regions)
-    if (found) selectRegion(found)
-    const place = await reverseGeocode(lat, lon)
-    if (place) {
-      setUserPlace(place)
-      try { localStorage.setItem(STORAGE_KEY_PLACE, place) } catch {}
+    // Detecção por MUNICÍPIO (sem raio): descobre a cidade real e casa com a
+    // região de mesmo município. Em Cruz mostra Cruz — não "puxa" pra Jijoca.
+    const info  = await reverseGeocodeMunicipality(lat, lon)
+    let   found = info?.city ? findRegionByCity(info.city, regions) : null
+    // Geocoder indisponível (Nominatim/Google fora do ar) → casa pelo RAIO das
+    // regiões cadastradas, senão o usuário em Jeri veria "fora da área" à toa.
+    if (!found && !info?.city) found = findRegionForCoords(lat, lon, regions)
+    // O GPS em segundo plano (auto) NÃO sobrescreve uma região escolhida à mão.
+    // Detecção explícita (botão “usar minha localização”) sempre vale.
+    if (found && !(auto && manualRef.current)) selectRegion(found, { manual: false })
+    if (info?.label) {
+      setUserPlace(info.label)
+      try { localStorage.setItem(STORAGE_KEY_PLACE, info.label) } catch {}
     }
     return found
   }, [regions, selectRegion])
@@ -101,49 +133,71 @@ export function RegionProvider({ children }) {
     if (!navigator.geolocation) return
     setDetecting(true)
     setOutsideError(false)
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
+
+    async function onSuccess({ coords }) {
+      setDetecting(false)
+      // Detecção explícita pelo usuário → assume o controle do GPS (não é auto).
+      const found = await applyCoords(coords.latitude, coords.longitude)
+      if (!found) setOutsideError(true)
+    }
+
+    function onError(err) {
+      if (err.code === 1) {
+        // Permissão negada — para imediatamente
         setDetecting(false)
-        const found = await applyCoords(coords.latitude, coords.longitude)
-        if (!found) setOutsideError(true)
-      },
-      () => { setDetecting(false) },
-      { timeout: 8000 }
-    )
+        setOutsideError(true)
+        return
+      }
+      // Timeout/indisponível — tenta sem alta precisão
+      navigator.geolocation.getCurrentPosition(
+        onSuccess,
+        () => { setDetecting(false); setOutsideError(true) },
+        { timeout: 20000 }
+      )
+    }
+
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+      timeout:            15000,
+      enableHighAccuracy: true,
+      maximumAge:         30000,
+    })
   }, [applyCoords])
 
   // Acompanha mudanças de localização em segundo plano, para manter
   // o header e o filtro sempre alinhados à posição real do turista.
+  // Ignora micro-variações do GPS (jitter, ~<165m) — sem isso o setUserCoords
+  // dispararia a cada leitura e recarregava as listas (tours) em loop.
   useEffect(() => {
     if (!navigator.geolocation || regions.length === 0) return
+    let last = null
     const id = navigator.geolocation.watchPosition(
-      ({ coords }) => { applyCoords(coords.latitude, coords.longitude) },
+      ({ coords }) => {
+        const lat = coords.latitude, lon = coords.longitude
+        if (last && Math.abs(last.lat - lat) < 0.0015 && Math.abs(last.lon - lon) < 0.0015) return
+        last = { lat, lon }
+        applyCoords(lat, lon, { auto: true })
+      },
       () => {},
-      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 },
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
     )
     return () => navigator.geolocation.clearWatch(id)
   }, [applyCoords, regions.length])
 
   const openPicker = useCallback(() => { setOutsideError(false); setShowPicker(true) }, [])
 
-  // Monta os parâmetros de filtro geográfico para chamadas à API.
-  // Quando há GPS real do usuário, prioriza lat/lon (raio cai pra cada
-  // serviço); caso contrário, cai no filtro categórico por região.
+  // Filtro de serviços é por MUNICÍPIO (region_id) — sem raio/lat-lon. A lista
+  // reflete a região escolhida/detectada, não a distância do GPS do usuário.
   const getServiceQuery = useCallback(() => {
-    if (userCoords?.lat != null && userCoords?.lon != null) {
-      return { lat: userCoords.lat, lon: userCoords.lon }
-    }
-    if (region?.id) return { region_id: region.id }
-    return {}
-  }, [userCoords, region])
+    return region?.id ? { region_id: region.id } : {}
+  }, [region])
 
   return (
     <RegionContext.Provider value={{
       region, regions, selectRegion,
       detectGPS, detecting, userCoords, userPlace,
       showPicker, setShowPicker, openPicker,
-      outsideError, setOutsideError,
-      findRegionForCoords, getServiceQuery,
+      outsideError, setOutsideError, manualRegion,
+      findRegionForCoords, findRegionByCity, getServiceQuery,
     }}>
       {children}
     </RegionContext.Provider>

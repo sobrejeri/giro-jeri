@@ -1,18 +1,31 @@
 name: Deploy to GitHub Pages
 
+# A fonte do GitHub Pages está como "GitHub Actions" (o actions/deploy-pages
+# só tem sucesso nesse modo — comprovado pelos deploys verdes da GFBFR).
+# O ambiente github-pages só autoriza a branch de produção (GFBFR); por isso
+# a main falhava em ~2s no portão. Publicamos apenas a partir da GFBFR.
 on:
   push:
     branches:
-      - main
       - claude/giro-jeri-platform-GFBFR
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+# Nunca duas publicações ao mesmo tempo; a mais nova cancela a anterior.
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +41,8 @@ jobs:
         env:
           NODE_ENV: production
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_MP_PUBLIC_KEY: ${{ secrets.VITE_MP_PUBLIC_KEY }}
+          VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
 
       - name: Build cooperativa
         run: npm run build --workspace=packages/cooperativa
@@ -44,6 +59,7 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
 
       - name: Merge builds
         run: |
@@ -59,7 +75,7 @@ jobs:
           cat > dist/404.html << 'EOF'
           <!DOCTYPE html>
           <html>
-          <head><meta charset="utf-8"><title>Giro Jeri</title></head>
+          <head><meta charset="utf-8"><title>Turiva</title></head>
           <script>
           (function(){
             var l = window.location;
@@ -73,8 +89,16 @@ jobs:
           </html>
           EOF
 
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: dist
+          enablement: true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

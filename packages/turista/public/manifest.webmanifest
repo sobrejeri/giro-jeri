@@ -1,0 +1,16 @@
+{
+  "name": "Turiva — Passeios e Transfers",
+  "short_name": "Turiva",
+  "description": "Viagens, passeios e mobilidade para viver momentos inesquecíveis. Reserve passeios e transfers com operadores locais.",
+  "lang": "pt-BR",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#FF6A00",
+  "icons": [
+    { "src": "logo-icon.jpeg", "sizes": "520x520",  "type": "image/jpeg", "purpose": "any" },
+    { "src": "logo.jpeg",      "sizes": "1280x1280", "type": "image/jpeg", "purpose": "any" }
+  ]
+}

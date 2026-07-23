@@ -1,16 +1,16 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, MessageSquare, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, X } from 'lucide-react'
+import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const NAV = [
   { to: '/dashboard',  icon: LayoutDashboard, label: 'Operações'  },
   { to: '/reservas',   icon: CalendarCheck,   label: 'Corridas'   },
-  { to: '/cotacoes',   icon: MessageSquare,   label: 'Cotações'   },
   { to: '/despacho',   icon: Truck,           label: 'Despacho'   },
   { to: '/veiculos',   icon: Car,             label: 'Veículos'   },
   { to: '/passeios',   icon: Compass,         label: 'Passeios'   },
   { to: '/rotas',      icon: MapPin,          label: 'Rotas'      },
   { to: '/financeiro', icon: BarChart3,       label: 'Financeiro' },
+  { to: '/reputacao',  icon: Star,            label: 'Reputação'  },
   { to: '/perfil',     icon: UserCircle,      label: 'Meu Perfil' },
 ]
 
@@ -28,9 +28,12 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         }`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-5 border-b border-gray-100">
-          <span className="font-display font-bold text-xl text-brand">Giro Jeri</span>
-          <span className="ml-2 text-xs font-semibold text-gray-400 uppercase tracking-widest">Coop</span>
+        <div className="h-16 flex items-center px-4 border-b border-gray-100 gap-2.5">
+          <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
+          <div>
+            <p className="font-giro font-semibold text-[14px] text-gray-900 leading-tight tracking-[0.09em]">TURIVA</p>
+            <p className="text-[9px] text-gray-400 leading-none">Cooperativa</p>
+          </div>
           <button
             onClick={onClose}
             className="ml-auto p-1 text-gray-400 hover:text-gray-600 lg:hidden"

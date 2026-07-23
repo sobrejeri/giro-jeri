@@ -1,5 +1,5 @@
 -- =============================================================================
--- 021 — NuPay como método de pagamento
+-- 061 — NuPay como método de pagamento
 -- =============================================================================
 
 DO $$
@@ -39,44 +39,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_events_gateway_event
 
 INSERT INTO system_settings (setting_key, setting_value, value_type, description) VALUES
   ('payment_nupay_enabled',
-   'true',
+   'false',
    'boolean',
-   'Exibe NuPay/Nubank como opção de pagamento no checkout do turista.'),
-
-  ('payment_nupay_env',
-   'mock',
-   'string',
-   'Ambiente NuPay: mock | sandbox | production.'),
-
-  ('payment_nupay_client_id',
-   '',
-   'string',
-   'LEGADO: use payment_nupay_app_key para NuPay 2FA.'),
-
-  ('payment_nupay_client_secret',
-   '',
-   'string',
-   'LEGADO: use payment_nupay_app_token para NuPay 2FA.'),
-
-  ('payment_nupay_app_key',
-   '',
-   'string',
-   'App Key NuPay for Business enviado no header X-Merchant-Key.'),
-
-  ('payment_nupay_app_token',
-   '',
-   'string',
-   'App Token NuPay for Business enviado no header X-Merchant-Token.'),
-
-  ('payment_nupay_merchant_id',
-   '',
-   'string',
-   'Merchant ID NuPay/Nubank.'),
-
-  ('payment_nupay_webhook_secret',
-   '',
-   'string',
-   'Secret para validar callbacks NuPay.'),
+   'Habilita NuPay somente com credenciais de ambiente e homologação concluída.'),
 
   ('payment_nupay_fee_percent',
    '0',

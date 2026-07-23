@@ -1,12 +1,19 @@
 import { useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
+import Stories from '../components/Stories'
+import VerifiedBadge from '../components/VerifiedBadge'
+import FeedPublisher from '../components/FeedPublisher'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
+  ChevronLeft, Search, Pencil, Plus,
 } from 'lucide-react'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
@@ -17,16 +24,16 @@ function fmtDate(d) {
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
 }
-function timeAgo(iso) {
+function timeAgo(iso, t) {
   if (!iso) return ''
   const diff = Date.now() - new Date(iso).getTime()
   const min = Math.floor(diff / 60000)
-  if (min < 1) return 'agora'
-  if (min < 60) return `${min}min`
+  if (min < 1) return t('feedPg.timeNow')
+  if (min < 60) return t('feedPg.timeMinutes', { count: min })
   const h = Math.floor(min / 60)
-  if (h < 24) return `${h}h`
+  if (h < 24) return t('feedPg.timeHours', { count: h })
   const d = Math.floor(h / 24)
-  return `${d}d`
+  return t('feedPg.timeDays', { count: d })
 }
 
 function WhatsAppIcon({ size = 16 }) {
@@ -38,20 +45,30 @@ function WhatsAppIcon({ size = 16 }) {
   )
 }
 
-const CATS = {
-  hospedagem:  { label: 'Onde ficar',  Icon: BedDouble },
-  gastronomia: { label: 'Onde comer',  Icon: UtensilsCrossed },
-  compras:     { label: 'Lojas',       Icon: ShoppingBag },
+const CAT_ICONS = {
+  hospedagem:  BedDouble,
+  gastronomia: UtensilsCrossed,
+  compras:     ShoppingBag,
 }
 
-const FILTERS = [
-  { id: 'tudo',        label: 'Tudo',        Icon: Sparkles },
-  { id: 'eventos',     label: 'Eventos',     Icon: CalendarDays },
-  { id: 'promocoes',   label: 'Promoções',   Icon: BadgePercent },
-  { id: 'hospedagem',  label: 'Onde ficar',  Icon: BedDouble },
-  { id: 'gastronomia', label: 'Onde comer',  Icon: UtensilsCrossed },
-  { id: 'compras',     label: 'Lojas',       Icon: ShoppingBag },
-]
+function getCats(t) {
+  return {
+    hospedagem:  { label: t('feedPg.catStay'), Icon: BedDouble },
+    gastronomia: { label: t('feedPg.catEat'),  Icon: UtensilsCrossed },
+    compras:     { label: t('feedPg.catShop'), Icon: ShoppingBag },
+  }
+}
+
+function getFilters(t) {
+  return [
+    { id: 'tudo',        label: t('feedPg.filterAll'),    Icon: Sparkles },
+    { id: 'eventos',     label: t('feedPg.filterEvents'), Icon: CalendarDays },
+    { id: 'promocoes',   label: t('feedPg.filterPromos'), Icon: BadgePercent },
+    { id: 'hospedagem',  label: t('feedPg.catStay'),      Icon: BedDouble },
+    { id: 'gastronomia', label: t('feedPg.catEat'),       Icon: UtensilsCrossed },
+    { id: 'compras',     label: t('feedPg.catShop'),      Icon: ShoppingBag },
+  ]
+}
 
 function waLink(num) {
   const d = (num || '').replace(/\D/g, '')
@@ -92,8 +109,8 @@ function StarRating({ value, onChange, size = 18 }) {
 }
 
 /* ── Comments Section ──────────────────────────────────── */
-function CommentsSection({ postId, commentCount, user }) {
-  const [open, setOpen] = useState(false)
+function CommentsSection({ postId, commentCount, user, open, setOpen }) {
+  const { t } = useTranslation()
   const [text, setText] = useState('')
   const qc = useQueryClient()
 
@@ -124,7 +141,7 @@ function CommentsSection({ postId, commentCount, user }) {
     <div>
       <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-gray-700">
         <MessageCircle size={15} />
-        {commentCount > 0 ? `${commentCount} comentário${commentCount > 1 ? 's' : ''}` : 'Comentar'}
+        {commentCount > 0 ? t('feedPg.commentsCount', { count: commentCount }) : t('feedPg.comment')}
       </button>
 
       {open && (
@@ -138,49 +155,56 @@ function CommentsSection({ postId, commentCount, user }) {
               {(comments || []).map((c) => (
                 <div key={c.id} className="flex gap-2.5">
                   <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0 overflow-hidden">
-                    {c.users?.photo_url
-                      ? <img src={c.users.photo_url} alt="" className="w-full h-full object-cover" />
+                    {c.users?.profile_photo_url
+                      ? <img src={c.users.profile_photo_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-500">{(c.users?.full_name || '?')[0]}</div>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[12px]">
-                      <span className="font-bold text-gray-900">{c.users?.full_name || 'Usuário'}</span>{' '}
+                      <span className="font-bold text-gray-900">{c.users?.full_name || t('feedPg.anonymousUser')}</span>{' '}
                       <span className="text-gray-600">{c.body}</span>
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-gray-400">{timeAgo(c.created_at)}</span>
+                      <span className="text-[10px] text-gray-400">{timeAgo(c.created_at, t)}</span>
                       {user && c.user_id === user.id && (
-                        <button onClick={() => delMut.mutate(c.id)} className="text-[10px] text-gray-400 hover:text-red-400">Excluir</button>
+                        <button onClick={() => delMut.mutate(c.id)} className="text-[10px] text-gray-400 hover:text-red-400">{t('feedPg.delete')}</button>
                       )}
                     </div>
                   </div>
                 </div>
               ))}
               {(comments || []).length === 0 && (
-                <p className="text-[12px] text-gray-400 text-center py-2">Nenhum comentário ainda. Seja o primeiro!</p>
+                <p className="text-[12px] text-gray-400 text-center py-2">{t('feedPg.noComments')}</p>
               )}
             </div>
           )}
 
           {user ? (
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <input
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Escreva um comentário…"
-                maxLength={500}
-                className="flex-1 h-9 px-3 rounded-full bg-gray-100 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30"
-              />
-              <button
-                type="submit"
-                disabled={!text.trim() || addMut.isPending}
-                className="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center shrink-0 disabled:opacity-40 active:scale-90 transition-transform"
-              >
-                <Send size={14} />
-              </button>
+            <form onSubmit={handleSubmit} className="space-y-1.5">
+              <div className="flex gap-2">
+                <input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={t('feedPg.commentPlaceholder')}
+                  maxLength={500}
+                  className="flex-1 h-9 px-3 rounded-full bg-gray-100 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30"
+                />
+                <button
+                  type="submit"
+                  disabled={!text.trim() || addMut.isPending}
+                  className="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center shrink-0 disabled:opacity-40 active:scale-90 transition-transform"
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+              {addMut.isError && (
+                <p className="text-[11px] text-red-500 px-1">
+                  {addMut.error?.message || t('feedPg.sendError')}
+                </p>
+              )}
             </form>
           ) : (
-            <p className="text-[12px] text-gray-400 text-center">Faça login para comentar</p>
+            <p className="text-[12px] text-gray-400 text-center">{t('feedPg.loginToComment')}</p>
           )}
         </div>
       )}
@@ -190,6 +214,7 @@ function CommentsSection({ postId, commentCount, user }) {
 
 /* ── Review Modal ──────────────────────────────────────── */
 function ReviewModal({ place, onClose, user }) {
+  const { t } = useTranslation()
   const [rating, setRating]   = useState(0)
   const [comment, setComment] = useState('')
   const qc = useQueryClient()
@@ -215,7 +240,7 @@ function ReviewModal({ place, onClose, user }) {
     addMut.mutate({ rating, comment: comment.trim() || null })
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl max-h-[85vh] overflow-y-auto">
@@ -227,12 +252,12 @@ function ReviewModal({ place, onClose, user }) {
         <div className="p-4 space-y-4">
           {user && (
             <form onSubmit={handleSubmit} className="space-y-3 pb-3 border-b border-gray-100">
-              <p className="text-[13px] font-semibold text-gray-700">Sua avaliação</p>
+              <p className="text-[13px] font-semibold text-gray-700">{t('feedPg.yourReview')}</p>
               <StarRating value={rating} onChange={setRating} size={28} />
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Comentário (opcional)"
+                placeholder={t('feedPg.commentOptionalPlaceholder')}
                 maxLength={500}
                 rows={2}
                 className="w-full rounded-xl border border-gray-200 px-3 py-2 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30 resize-none"
@@ -242,12 +267,17 @@ function ReviewModal({ place, onClose, user }) {
                 disabled={rating < 1 || addMut.isPending}
                 className="w-full h-10 rounded-xl bg-brand text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.98] transition-transform"
               >
-                {addMut.isPending ? 'Enviando…' : 'Enviar avaliação'}
+                {addMut.isPending ? t('feedPg.sending') : t('feedPg.submitReview')}
               </button>
+              {addMut.isError && (
+                <p className="text-[11px] text-red-500">
+                  {addMut.error?.message || t('feedPg.sendError')}
+                </p>
+              )}
             </form>
           )}
           {!user && (
-            <p className="text-[13px] text-gray-400 text-center py-2">Faça login para avaliar</p>
+            <p className="text-[13px] text-gray-400 text-center py-2">{t('feedPg.loginToReview')}</p>
           )}
 
           {isLoading ? (
@@ -256,24 +286,24 @@ function ReviewModal({ place, onClose, user }) {
             </div>
           ) : (reviews || []).length > 0 ? (
             <div className="space-y-3">
-              <p className="text-[13px] font-semibold text-gray-700">{reviews.length} avaliação{reviews.length > 1 ? 'ões' : ''}</p>
+              <p className="text-[13px] font-semibold text-gray-700">{t('feedPg.reviewsCount', { count: reviews.length })}</p>
               {reviews.map((r) => (
                 <div key={r.id} className="flex gap-2.5">
                   <div className="w-8 h-8 rounded-full bg-gray-200 shrink-0 overflow-hidden">
-                    {r.users?.photo_url
-                      ? <img src={r.users.photo_url} alt="" className="w-full h-full object-cover" />
+                    {r.users?.profile_photo_url
+                      ? <img src={r.users.profile_photo_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-gray-500">{(r.users?.full_name || '?')[0]}</div>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-bold text-gray-900">{r.users?.full_name || 'Usuário'}</span>
+                      <span className="text-[12px] font-bold text-gray-900">{r.users?.full_name || t('feedPg.anonymousUser')}</span>
                       <StarRating value={r.rating} size={11} />
                     </div>
                     {r.comment && <p className="text-[12px] text-gray-600 mt-0.5">{r.comment}</p>}
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-gray-400">{timeAgo(r.created_at)}</span>
+                      <span className="text-[10px] text-gray-400">{timeAgo(r.created_at, t)}</span>
                       {user && r.user_id === user.id && (
-                        <button onClick={() => delMut.mutate(r.id)} className="text-[10px] text-gray-400 hover:text-red-400">Excluir</button>
+                        <button onClick={() => delMut.mutate(r.id)} className="text-[10px] text-gray-400 hover:text-red-400">{t('feedPg.delete')}</button>
                       )}
                     </div>
                   </div>
@@ -281,16 +311,19 @@ function ReviewModal({ place, onClose, user }) {
               ))}
             </div>
           ) : (
-            <p className="text-[12px] text-gray-400 text-center py-4">Nenhuma avaliação ainda</p>
+            <p className="text-[12px] text-gray-400 text-center py-4">{t('feedPg.noReviews')}</p>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
 /* ── feed card (evento / promoção) ─────────────────────── */
-function PostCard({ post, liked, onLike, user }) {
+function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
+  const { t } = useTranslation()
+  const [commentsOpen, setCommentsOpen] = useState(false)
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
@@ -299,7 +332,7 @@ function PostCard({ post, liked, onLike, user }) {
     const parts = [post.title]
     if (isPromo && post.discount_label) parts.push(`🏷️ ${post.discount_label}`)
     if (dateLabel)     parts.push(`🗓️ ${dateLabel}${post.event_time ? ` · ${post.event_time}` : ''}`)
-    if (validLabel)    parts.push(`Válido até ${validLabel}`)
+    if (validLabel)    parts.push(t('feedPg.validUntil', { date: validLabel }))
     if (post.location) parts.push(`📍 ${post.location}`)
     const text = parts.join('\n')
     if (navigator.share) navigator.share({ title: post.title, text }).catch(() => {})
@@ -307,60 +340,97 @@ function PostCard({ post, liked, onLike, user }) {
   }
 
   return (
-    <article className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
-          {isPromo ? <BadgePercent size={16} className="text-white" /> : <MapPin size={16} className="text-white" />}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[13px] font-bold text-gray-900 leading-tight">Giro Jeri</p>
-          <p className="text-[11px] text-gray-400 leading-tight">{isPromo ? 'Promoção' : 'Evento'} · Jericoacoara</p>
-        </div>
-        {dateLabel && !isPromo && (
-          <span className="ml-auto inline-flex items-center gap-1 bg-orange-50 text-brand text-[11px] font-bold px-2.5 py-1 rounded-full">
-            <Calendar size={12} /> {dateLabel}
-          </span>
+    <article className="-mx-4 bg-white">
+      {/* ── Mídia full-bleed (estilo Instagram): preenche a largura toda; fundo
+          desfocado completa as laterais sem cortar/ampliar a imagem ── */}
+      <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-900">
+        {post.image_url ? (
+          <>
+            <img src={post.image_url} alt="" aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60" draggable={false} />
+            <img src={post.image_url} alt={post.title}
+              className="relative z-10 w-full h-full object-contain" draggable={false} />
+          </>
+        ) : (
+          <div className={`w-full h-full flex items-center justify-center p-6 ${isPromo ? 'bg-gradient-to-br from-emerald-500 to-teal-400' : 'bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]'}`}>
+            <p className="text-white font-extrabold text-2xl text-center leading-tight">{post.title}</p>
+          </div>
         )}
-        {isPromo && post.discount_label && (
-          <span className="ml-auto inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[11px] font-extrabold px-2.5 py-1 rounded-full">
-            {post.discount_label}
-          </span>
-        )}
+
+        {/* Gradiente + cabeçalho SOBRE a imagem */}
+        <div className="absolute top-0 inset-x-0 h-24 z-20 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
+        <div className="absolute top-3 inset-x-0 z-20 px-4 flex items-center gap-2.5">
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 border-white/70 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
+            {post.author_avatar ? (
+              <img src={post.author_avatar} alt="" className="w-full h-full object-cover" />
+            ) : isPromo ? (
+              <BadgePercent size={16} className="text-white" />
+            ) : (
+              <MapPin size={16} className="text-white" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold text-white leading-tight drop-shadow flex items-center gap-1">
+              Turiva <VerifiedBadge size={13} />
+            </p>
+            <p className="text-[11px] text-white/80 leading-tight drop-shadow">{isPromo ? t('feedPg.promoLabel') : t('feedPg.eventLabel')} · Jericoacoara</p>
+          </div>
+          {dateLabel && !isPromo && (
+            <span className="ml-auto inline-flex items-center gap-1 bg-white/90 backdrop-blur text-brand text-[11px] font-bold px-2.5 py-1 rounded-full shadow">
+              <Calendar size={12} /> {dateLabel}
+            </span>
+          )}
+          {isPromo && post.discount_label && (
+            <span className="ml-auto inline-flex items-center gap-1 bg-white/90 backdrop-blur text-emerald-600 text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow">
+              {post.discount_label}
+            </span>
+          )}
+        </div>
       </div>
 
-      {post.image_url ? (
-        <img src={post.image_url} alt={post.title} className="w-full h-auto max-h-[80vh] object-cover bg-gray-100" />
-      ) : (
-        <div className={`w-full aspect-[4/3] flex items-center justify-center p-6 ${isPromo ? 'bg-gradient-to-br from-emerald-500 to-teal-400' : 'bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]'}`}>
-          <p className="text-white font-extrabold text-2xl text-center leading-tight">{post.title}</p>
-        </div>
-      )}
-
-      <div className="flex items-center gap-4 px-4 pt-3">
-        <button onClick={onLike} className="active:scale-90 transition-transform" aria-label="Curtir">
-          <Heart size={22} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-700'} />
+      {/* ── Ações (curtir · comentar · compartilhar) ── */}
+      <div className="flex items-center gap-5 px-4 pt-3">
+        <button onClick={onLike} className="active:scale-90 transition-transform" aria-label={t('feedPg.like')}>
+          <Heart size={24} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-800'} />
         </button>
-        <button onClick={share} className="active:scale-90 transition-transform" aria-label="Compartilhar">
-          <Share2 size={21} className="text-gray-700" />
+        <button onClick={() => setCommentsOpen((v) => !v)} className="active:scale-90 transition-transform" aria-label={t('feedPg.comment')}>
+          <MessageCircle size={23} className="text-gray-800" />
         </button>
+        <button onClick={share} className="active:scale-90 transition-transform" aria-label={t('feedPg.share')}>
+          <Share2 size={22} className="text-gray-800" />
+        </button>
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-3">
+            <button onClick={() => onEdit?.(post)} className="active:scale-90 transition-transform" aria-label={t('feedPg.edit')}>
+              <Pencil size={19} className="text-gray-500" />
+            </button>
+            <button onClick={() => onDelete?.(post)} className="active:scale-90 transition-transform" aria-label={t('feedPg.delete')}>
+              <Trash2 size={19} className="text-red-400" />
+            </button>
+          </div>
+        )}
       </div>
 
       {post.like_count > 0 && (
         <p className="px-4 mt-1.5 text-[13px] font-bold text-gray-900">
-          {post.like_count} curtida{post.like_count > 1 ? 's' : ''}
+          {t('feedPg.likesCount', { count: post.like_count })}
         </p>
       )}
 
       <div className="px-4 py-3 space-y-1.5">
-        <p className="text-[15px] font-bold text-gray-900">{post.title}</p>
+        <p className="text-[14px] text-gray-900">
+          <span className="font-bold">Turiva</span>{' '}
+          <span className="font-semibold">{post.title}</span>
+        </p>
         {post.body && <p className="text-[13px] text-gray-600 whitespace-pre-line leading-relaxed">{post.body}</p>}
         <div className="flex flex-wrap items-center gap-3 pt-1 text-[12px] text-gray-500">
           {post.event_time && <span className="flex items-center gap-1"><Clock size={12} className="text-brand" />{post.event_time}</span>}
-          {validLabel && isPromo && <span className="flex items-center gap-1"><Calendar size={12} className="text-emerald-500" />Válido até {validLabel}</span>}
+          {validLabel && isPromo && <span className="flex items-center gap-1"><Calendar size={12} className="text-emerald-500" />{t('feedPg.validUntil', { date: validLabel })}</span>}
           {post.location && <span className="flex items-center gap-1"><MapPin size={12} className="text-brand" />{post.location}</span>}
         </div>
         <div className="pt-1">
-          <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user} />
+          <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user}
+            open={commentsOpen} setOpen={setCommentsOpen} />
         </div>
       </div>
     </article>
@@ -369,6 +439,8 @@ function PostCard({ post, liked, onLike, user }) {
 
 /* ── estabelecimento ───────────────────────────────────── */
 function PlaceCard({ place, compact = false, onReview }) {
+  const { t } = useTranslation()
+  const CATS = getCats(t)
   const cat = CATS[place.category] || CATS.gastronomia
   const wa  = waLink(place.whatsapp)
   const ig  = igLink(place.instagram)
@@ -383,7 +455,7 @@ function PlaceCard({ place, compact = false, onReview }) {
           : <div className="w-full h-full bg-gradient-to-br from-orange-300 to-amber-200 flex items-center justify-center"><cat.Icon size={30} className="text-white/60" /></div>}
         {place.is_featured && (
           <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-amber-400 text-amber-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow">
-            <Star size={11} className="fill-amber-950" /> Destaque
+            <Star size={11} className="fill-amber-950" /> {t('feedPg.featured')}
           </span>
         )}
         <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 bg-black/55 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full backdrop-blur-sm">
@@ -411,7 +483,7 @@ function PlaceCard({ place, compact = false, onReview }) {
         )}
         {!place.avg_rating && !place.review_count && place.id && (
           <button onClick={onReview} className="flex items-center gap-1 mt-1.5 text-[11px] text-gray-400 hover:text-brand">
-            <Star size={11} /> Avaliar
+            <Star size={11} /> {t('feedPg.rate')}
           </button>
         )}
 
@@ -427,7 +499,7 @@ function PlaceCard({ place, compact = false, onReview }) {
             </a>
           )}
           <a href={mapLink(place)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-             className="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-gray-100 text-gray-600 active:scale-95 transition-transform" aria-label="Mapa">
+             className="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-gray-100 text-gray-600 active:scale-95 transition-transform" aria-label={t('feedPg.map')}>
             <Navigation size={15} />
           </a>
           {ig && (
@@ -438,7 +510,7 @@ function PlaceCard({ place, compact = false, onReview }) {
           )}
           {web && (
             <a href={web} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-               className="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-gray-100 text-blue-500 active:scale-95 transition-transform" aria-label="Site">
+               className="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-gray-100 text-blue-500 active:scale-95 transition-transform" aria-label={t('feedPg.website')}>
               <Globe size={15} />
             </a>
           )}
@@ -464,11 +536,25 @@ function SectionTitle({ children }) {
 
 /* ── página ────────────────────────────────────────────── */
 export default function Feed() {
-  const [filter, setFilter] = useState('tudo')
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [filter, setFilter]       = useState('tudo')
   const [reviewPlace, setReviewPlace] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const { user } = useAuth()
-  const { userCoords, region } = useRegion()
+  const { userCoords, region, getServiceQuery } = useRegion()
   const qc = useQueryClient()
+  const FILTERS = useMemo(() => getFilters(t), [t])
+
+  // Publicação no feed (admin): compositor/editor. undefined = fechado,
+  // null = nova publicação, objeto = editar aquele post.
+  const isAdmin = user?.user_type === 'admin'
+  const [composerPost, setComposerPost] = useState(undefined)
+  async function handleDeletePost(post) {
+    if (!confirm(t('feedPg.confirmDelete', { title: post.title }))) return
+    try { await api.deletePost(post.id) } catch (err) { alert(err?.message || t('feedPg.deleteError')); return }
+    qc.invalidateQueries({ queryKey: ['feed'] })
+  }
 
   const center = (userCoords?.lat != null && userCoords?.lon != null)
     ? userCoords
@@ -477,7 +563,7 @@ export default function Feed() {
         : JERI_CENTER)
 
   const { data: feedData,   isLoading: loadingFeed }   = useQuery({ queryKey: ['feed'],           queryFn: () => api.getFeed() })
-  const { data: placeData,  isLoading: loadingPlaces } = useQuery({ queryKey: ['establishments'], queryFn: () => api.getEstablishments() })
+  const { data: placeData,  isLoading: loadingPlaces } = useQuery({ queryKey: ['establishments', region?.id], queryFn: () => api.getEstablishments(getServiceQuery()) })
   const { data: nearbyData, isLoading: loadingNearby } = useQuery({
     queryKey:  ['nearby', center.lat?.toFixed?.(3), center.lon?.toFixed?.(3)],
     queryFn:   () => api.getNearbyPlaces({ lat: center.lat, lon: center.lon }),
@@ -515,16 +601,22 @@ export default function Feed() {
     likeMut.mutate(postId)
   }, [user, likeMut])
 
-  const posts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
+  const allPosts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
   const manual  = Array.isArray(placeData) ? placeData : (placeData?.data || [])
   const organic = nearbyData?.results || []
   const usingNearby = !!nearbyData?.enabled && organic.length > 0
 
-  const places = useMemo(() => {
+  const allPlaces = useMemo(() => {
     const names = new Set(manual.map((p) => (p.name || '').toLowerCase().trim()))
     const extra = organic.filter((o) => !names.has((o.name || '').toLowerCase().trim()))
     return [...manual, ...extra]
   }, [manual, organic])
+
+  // Filtro de busca em memória — bate em title/name/location/locality/address.
+  const q = searchQuery.trim().toLowerCase()
+  const matches = (s) => !q || String(s || '').toLowerCase().includes(q)
+  const posts  = !q ? allPosts  : allPosts.filter((p) => matches(p.title) || matches(p.location) || matches(p.body))
+  const places = !q ? allPlaces : allPlaces.filter((p) => matches(p.name) || matches(p.locality) || matches(p.address))
 
   const loadingPlacesAll = loadingPlaces || loadingNearby
 
@@ -539,7 +631,8 @@ export default function Feed() {
   )
 
   const renderPost = (p) => (
-    <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user} />
+    <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user}
+      isAdmin={isAdmin} onEdit={(post) => setComposerPost(post)} onDelete={handleDeletePost} />
   )
   const renderPlace = (p) => (
     <PlaceCard key={p.id} place={p} onReview={p.id ? () => setReviewPlace(p) : undefined} />
@@ -552,22 +645,22 @@ export default function Feed() {
   if (filter === 'eventos') {
     content = loadingFeed ? Loader
       : events.length ? events.map(renderPost)
-      : <EmptyState icon={CalendarDays} title="Nenhum evento ainda" sub="Volte em breve para conferir!" />
+      : <EmptyState icon={CalendarDays} title={t('feedPg.emptyEvents.title')} sub={t('feedPg.emptyEvents.sub')} />
   } else if (filter === 'promocoes') {
     content = loadingFeed ? Loader
       : promos.length ? promos.map(renderPost)
-      : <EmptyState icon={BadgePercent} title="Nenhuma promoção ativa" sub="Fique de olho — logo aparecem ofertas!" />
+      : <EmptyState icon={BadgePercent} title={t('feedPg.emptyPromos.title')} sub={t('feedPg.emptyPromos.sub')} />
   } else if (filter === 'hospedagem' || filter === 'gastronomia' || filter === 'compras') {
     const list = places.filter((p) => p.category === filter)
     content = (loadingPlacesAll && !list.length) ? Loader
       : list.length ? <div className="grid grid-cols-2 gap-3">{list.map(renderPlace)}</div>
-      : <EmptyState icon={CATS[filter].Icon} title="Nada por aqui ainda" sub="Em breve novas recomendações na vila." />
+      : <EmptyState icon={CAT_ICONS[filter]} title={t('feedPg.emptyCategory.title')} sub={t('feedPg.emptyCategory.sub')} />
   } else {
     const blocks = []
     if (featured.length) {
       blocks.push(
         <section key="destaques" className="space-y-3">
-          <SectionTitle>⭐ Destaques</SectionTitle>
+          <SectionTitle>⭐ {t('feedPg.sectionFeatured')}</SectionTitle>
           <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
             {featured.map(renderPlaceCompact)}
           </div>
@@ -577,7 +670,7 @@ export default function Feed() {
     if (posts.length) {
       blocks.push(
         <section key="feed" className="space-y-4">
-          <SectionTitle>🎉 Acontecendo na vila</SectionTitle>
+          <SectionTitle>🎉 {t('feedPg.sectionHappening')}</SectionTitle>
           {posts.map(renderPost)}
         </section>
       )
@@ -585,31 +678,72 @@ export default function Feed() {
     if (places.length) {
       blocks.push(
         <section key="places" className="space-y-3">
-          <SectionTitle>📍 Estabelecimentos</SectionTitle>
+          <SectionTitle>📍 {t('feedPg.sectionPlaces')}</SectionTitle>
           <div className="grid grid-cols-2 gap-3">{places.map(renderPlace)}</div>
         </section>
       )
     }
     content = blocks.length ? blocks
       : (loadingFeed || loadingPlacesAll) ? Loader
-      : <EmptyState icon={Sparkles} title="Descubra a Vila em breve" sub="Eventos, promoções e recomendações da vila vão aparecer aqui." />
+      : <EmptyState icon={Sparkles} title={t('feedPg.emptyAll.title')} sub={t('feedPg.emptyAll.sub')} />
   }
 
   return (
     <div className="min-h-full bg-[#F8F8F8] lg:bg-transparent pb-24 lg:pb-10">
-      <header className="bg-white px-4 pt-6 pb-3 sticky top-0 lg:top-14 z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-14 z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="max-w-2xl mx-auto">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-              <PartyPopper size={18} className="text-brand" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 leading-tight">Descubra a Vila</h1>
-              <p className="text-[12px] text-gray-400">Eventos, promoções e recomendações em Jericoacoara</p>
-            </div>
+          <div className="relative flex items-center justify-center min-h-[32px]">
+            <button
+              onClick={() => navigate(-1)}
+              className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+              aria-label={t('feedPg.back')}
+            >
+              <ChevronLeft size={20} className="text-gray-700" />
+            </button>
+            <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('feedPg.title')}</h1>
           </div>
+        </div>
+      </header>
 
-          <div className="flex gap-2 overflow-x-auto -mx-4 px-4 mt-3 pb-1 scrollbar-hide">
+      {/* ── Destaques (highlights) — fixos na Descubra ───────────────────── */}
+      <Stories className="lg:max-w-2xl lg:mx-auto" />
+
+      {/* ── Buscador em destaque ──────────────────────────────────────────── */}
+      <div className="max-w-2xl mx-auto px-4 pt-3">
+        <div className="relative">
+          <Search size={19} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('feedPg.searchPlaceholder')}
+            className="w-full h-12 pl-12 pr-11 rounded-2xl bg-white border border-gray-200 shadow-sm text-[14px] text-gray-800 placeholder-gray-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform"
+              aria-label={t('feedPg.clearSearch')}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <p className="text-[12px] text-gray-400 text-center mt-2">{t('feedPg.subtitle')}</p>
+        {isAdmin && (
+          <button
+            onClick={() => setComposerPost(null)}
+            className="mt-3 w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform"
+          >
+            <Plus size={18} /> {t('feedPg.newPost')}
+          </button>
+        )}
+      </div>
+
+      {/* ── Filtros (cards) — abaixo do buscador ───────────────────────────── */}
+      <div className="bg-white border-b border-gray-100 mt-3">
+        <div className="max-w-2xl mx-auto px-4 py-2.5">
+          <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
             {FILTERS.map(({ id, label, Icon }) => {
               const active = filter === id
               return (
@@ -626,19 +760,29 @@ export default function Feed() {
             })}
           </div>
         </div>
-      </header>
+      </div>
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-6">
-        {content}
-        {usingNearby && (
-          <p className="text-center text-[10px] text-gray-300 pt-2 pb-1">
-            Locais por OpenStreetMap · Geoapify
-          </p>
-        )}
+        <>
+          {content}
+          {usingNearby && (
+            <p className="text-center text-[10px] text-gray-300 pt-2 pb-1">
+              {t('feedPg.mapAttribution')}
+            </p>
+          )}
+        </>
       </main>
 
       {reviewPlace && (
         <ReviewModal place={reviewPlace} onClose={() => setReviewPlace(null)} user={user} />
+      )}
+
+      {composerPost !== undefined && (
+        <FeedPublisher
+          post={composerPost}
+          onClose={() => setComposerPost(undefined)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['feed'] })}
+        />
       )}
     </div>
   )

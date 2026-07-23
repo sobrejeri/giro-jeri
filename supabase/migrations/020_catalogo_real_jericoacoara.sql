@@ -28,11 +28,9 @@ DELETE FROM tours WHERE slug IN (
 );
 -- (os horários caem junto via ON DELETE CASCADE)
 
--- ─── 1. Veículos novos / ajustes ─────────────────────────────
--- Habilita a jardineira também em modo privativo (passa a ter os dois)
-UPDATE vehicles SET is_private_allowed = TRUE
-WHERE slug = 'jardineira';
-
+-- ─── 1. Veículos (base + novos) ──────────────────────────────
+-- Cria os veículos que faltarem (não depende de ON CONFLICT, pois
+-- vehicles.slug não tem constraint único). Idempotente via NOT EXISTS.
 WITH reg AS (SELECT id FROM regions WHERE slug = 'jericoacoara')
 INSERT INTO vehicles
   (region_id, name, slug, vehicle_type, description,
@@ -43,19 +41,29 @@ SELECT
   reg.id, v.name, v.slug, v.vtype::vehicle_type, v.descr,
   v.seats, v.luggage, v.priv, v.shared, v.transfer_ok, TRUE, TRUE, v.ord
 FROM reg, (VALUES
-  ('Quadriciclo (2 pax)', 'quadriciclo-2', 'quadricycle',
+  ('Buggy Turístico (2 pax)', 'buggy-2',       'buggy',
+   'Buggy aberto ideal para casais. Perfeito para as dunas.',
+   2,  2, TRUE,  FALSE, FALSE, 1),
+  ('Buggy Familiar (4 pax)',  'buggy-4',       'buggy',
+   'Buggy 4 lugares — o mais solicitado em Jericoacoara.',
+   4,  4, TRUE,  FALSE, FALSE, 2),
+  ('Jardineira',              'jardineira',    'jardineira',
+   'Jardineira (caminhão-toldo) para passeios compartilhados ou privativos em grupo.',
+   16, 8, TRUE,  TRUE,  FALSE, 3),
+  ('Hilux 4x4 (5 pax)',       'hilux-4x4',     'hilux_4x4',
+   'Toyota Hilux 4x4 com ar-condicionado. Conforto nas trilhas.',
+   5,  5, TRUE,  FALSE, TRUE,  4),
+  ('Quadriciclo (2 pax)',     'quadriciclo-2', 'quadricycle',
    'Quadriciclo para até 2 pessoas. Você pilota seguindo o guia. Habilitação pode ser exigida.',
-   2, 1, TRUE, FALSE, TRUE, 6),
-  ('UTV (4 pax)', 'utv-4', 'utv_4',
+   2,  1, TRUE,  FALSE, TRUE,  6),
+  ('UTV (4 pax)',             'utv-4',         'utv_4',
    'UTV 4 lugares com acompanhamento de guia. Conforto e adrenalina nas dunas.',
-   4, 2, TRUE, FALSE, TRUE, 7)
+   4,  2, TRUE,  FALSE, TRUE,  7)
 ) AS v(name, slug, vtype, descr, seats, luggage, priv, shared, transfer_ok, ord)
-ON CONFLICT (slug) DO UPDATE SET
-  name             = EXCLUDED.name,
-  description      = EXCLUDED.description,
-  seat_capacity    = EXCLUDED.seat_capacity,
-  luggage_capacity = EXCLUDED.luggage_capacity,
-  is_active        = TRUE;
+WHERE NOT EXISTS (SELECT 1 FROM vehicles x WHERE x.slug = v.slug);
+
+-- Garante que a jardineira aceite modo privativo (caso já existisse)
+UPDATE vehicles SET is_private_allowed = TRUE WHERE slug = 'jardineira';
 
 -- ─── 2. Passeios (catálogo real) ─────────────────────────────
 WITH
@@ -194,14 +202,16 @@ WHERE service_type = 'tour'
     )
   );
 
-WITH reg AS (SELECT id FROM regions WHERE slug = 'jericoacoara')
+-- JOIN por slug: se um veículo ou passeio não existir, a linha é
+-- simplesmente ignorada (não quebra a migration). O CTE veh deduplica
+-- por slug (a tabela vehicles não tem constraint único em slug).
+WITH
+  reg AS (SELECT id FROM regions WHERE slug = 'jericoacoara'),
+  veh AS (SELECT DISTINCT ON (slug) id, slug FROM vehicles ORDER BY slug, created_at)
 INSERT INTO vehicle_pricing_rules
   (vehicle_id, region_id, service_type, service_id, pricing_mode, base_price, high_season_price, is_active)
 SELECT
-  (SELECT id FROM vehicles WHERE slug = p.vslug),
-  reg.id, 'tour',
-  (SELECT id FROM tours WHERE slug = p.tslug),
-  'per_vehicle', p.base, p.high, TRUE
+  veh.id, reg.id, 'tour', tur.id, 'per_vehicle', p.base, p.high, TRUE
 FROM reg, (VALUES
   -- Litoral Leste: buggy 450-700 · jardineira priv 500-750 · 4x4 550-850
   ('litoral-leste-tradicional', 'buggy-2',      420.00, 650.00),
@@ -236,7 +246,9 @@ FROM reg, (VALUES
   ('por-do-sol-duna-jericoacoara', 'buggy-2',       250.00, 450.00),
   ('por-do-sol-duna-jericoacoara', 'buggy-4',       280.00, 450.00),
   ('por-do-sol-duna-jericoacoara', 'quadriciclo-2', 220.00, 350.00)
-) AS p(tslug, vslug, base, high);
+) AS p(tslug, vslug, base, high)
+JOIN tours tur ON tur.slug = p.tslug
+JOIN veh        ON veh.slug = p.vslug;
 
 -- ─── 5. Transfers: descrição com modalidades ─────────────────
 UPDATE transfers SET

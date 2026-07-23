@@ -1,5 +1,5 @@
 -- =============================================================================
--- 023 - NuPay Sessions: idempotencia, estados e finalizacao atomica
+-- 063 - NuPay Sessions: idempotencia, estados e finalizacao atomica
 -- =============================================================================
 
 ALTER TABLE payments
@@ -51,8 +51,6 @@ DECLARE
   v_booking bookings%ROWTYPE;
   v_gross NUMERIC(10, 2);
   v_fee NUMERIC(10, 2);
-  v_platform_pct NUMERIC(5, 2) := 0;
-  v_platform_amount NUMERIC(10, 2) := 0;
 BEGIN
   SELECT *
   INTO v_payment
@@ -81,21 +79,12 @@ BEGIN
 
   v_gross := ROUND(v_payment.amount_gross, 2);
   v_fee := ROUND(COALESCE(v_payment.gateway_fee_amount, 0), 2);
-  SELECT LEAST(100, GREATEST(0,
-    CASE
-      WHEN setting_value ~ '^[0-9]+([.][0-9]+)?$' THEN setting_value::NUMERIC
-      ELSE 0
-    END
-  ))
-  INTO v_platform_pct
-  FROM system_settings
-  WHERE setting_key = 'payment_split_admin_pct';
-  v_platform_amount := ROUND(v_gross * COALESCE(v_platform_pct, 0) / 100, 2);
 
   UPDATE payments
   SET status = 'approved',
       provider_status = 'COMPLETED',
       paid_at = NOW(),
+      ledger_created = TRUE,
       failure_code = NULL,
       raw_response_json = jsonb_strip_nulls(jsonb_build_object(
         'pspReferenceId', p_provider_payload ->> 'pspReferenceId',
@@ -108,7 +97,10 @@ BEGIN
 
   UPDATE bookings
   SET status_commercial = 'paid',
-      status_operational = 'awaiting_dispatch',
+      status_operational = CASE
+        WHEN v_booking.operator_id IS NULL THEN 'awaiting_dispatch'::status_operational
+        ELSE status_operational
+      END,
       payment_status = 'approved'
   WHERE id = v_payment.booking_id;
 
@@ -120,32 +112,15 @@ BEGIN
   END IF;
 
   INSERT INTO financial_ledger (
-    booking_id, payment_id, entry_type, description, amount, direction, financial_status
+    booking_id, payment_id, entry_type, description, amount, direction,
+    financial_status, effective_date
   ) VALUES
     (v_payment.booking_id, p_payment_id, 'booking_gross',
-      'Receita bruta - ' || v_booking.booking_code, v_gross, 'inflow', 'pending'),
+      'Receita bruta - ' || v_booking.booking_code, v_gross, 'inflow', 'pending', CURRENT_DATE),
     (v_payment.booking_id, p_payment_id, 'gateway_fee',
-      'Taxa gateway - ' || v_booking.booking_code, v_fee, 'outflow', 'pending'),
+      'Taxa gateway - ' || v_booking.booking_code, v_fee, 'outflow', 'pending', CURRENT_DATE),
     (v_payment.booking_id, p_payment_id, 'booking_net',
-      'Receita liquida - ' || v_booking.booking_code, v_gross - v_fee, 'inflow', 'pending');
-
-  IF v_platform_amount > 0 THEN
-    INSERT INTO financial_ledger (
-      booking_id, payment_id, region_id, agency_id,
-      entry_type, category, description, amount, direction, financial_status
-    ) VALUES (
-      v_payment.booking_id,
-      p_payment_id,
-      v_booking.region_id,
-      v_booking.agency_id,
-      'commission_platform',
-      'platform_commission',
-      'Comissao da plataforma - ' || v_booking.booking_code,
-      v_platform_amount,
-      'outflow',
-      'pending'
-    );
-  END IF;
+      'Receita liquida - ' || v_booking.booking_code, v_gross - v_fee, 'inflow', 'pending', CURRENT_DATE);
 
   RETURN TRUE;
 END;

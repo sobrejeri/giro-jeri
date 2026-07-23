@@ -62,6 +62,15 @@ export function isNupayConfigured(overrides = {}) {
   }
 }
 
+export function hasNupayCredentials(overrides = {}) {
+  try {
+    const cfg = getConfig(overrides)
+    return Boolean(cfg.appKey && cfg.appToken)
+  } catch {
+    return false
+  }
+}
+
 function assertConfig(overrides = {}) {
   const cfg = getConfig(overrides)
   if (!cfg.enabled || !cfg.appKey || !cfg.appToken) {

@@ -1,17 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MapPin, Navigation, X, Check, Search, AlertCircle, Loader } from 'lucide-react'
-import { useRegion, findRegionForCoords } from '../contexts/RegionContext'
-
-async function geocode(query) {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&countrycodes=br&accept-language=pt-BR`
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'GiroJeri/1.0' },
-  })
-  if (!res.ok) return []
-  return res.json()
-}
+import { useRegion, findRegionByCity } from '../contexts/RegionContext'
+import { getPlaceSuggestions, getPlaceDetails, reverseGeocodeMunicipality } from '../lib/geoServices'
 
 export default function RegionPicker() {
+  const { t } = useTranslation()
   const { regions, region, selectRegion, detectGPS, detecting, showPicker, setShowPicker, outsideError, setOutsideError } = useRegion()
 
   const [query, setQuery]         = useState('')
@@ -40,17 +34,28 @@ export default function RegionPicker() {
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const data = await geocode(value)
+        const data = await getPlaceSuggestions(value)
         setResults(data)
       } catch { setResults([]) }
       setSearching(false)
     }, 500)
   }, [])
 
-  function handleResult(r) {
-    const lat = parseFloat(r.lat)
-    const lon = parseFloat(r.lon)
-    const found = findRegionForCoords(lat, lon, regions)
+  async function handleResult(r) {
+    let lat, lon
+    if (r._source === 'google' && !r.lat) {
+      const detail = await getPlaceDetails(r.place_id).catch(() => null)
+      if (!detail) { setNoMatch(true); setResults([]); return }
+      lat = parseFloat(detail.lat)
+      lon = parseFloat(detail.lon)
+    } else {
+      lat = parseFloat(r.lat)
+      lon = parseFloat(r.lon)
+    }
+    // Casa pelo MUNICÍPIO do local buscado (sem raio). Usa o nome do município
+    // detectado; se a geocodificação falhar, cai no texto principal do resultado.
+    const info  = await reverseGeocodeMunicipality(lat, lon).catch(() => null)
+    const found = findRegionByCity(info?.city || r.main_text, regions)
     if (found) {
       selectRegion(found)
       setResults([])
@@ -78,8 +83,8 @@ export default function RegionPicker() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3">
           <div>
-            <p className="text-[16px] font-bold text-gray-900">Onde você está?</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Busque sua cidade ou use o GPS</p>
+            <p className="text-[16px] font-bold text-gray-900">{t('pickersCmp.regionTitle')}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{t('pickersCmp.regionSubtitle')}</p>
           </div>
           {canClose && (
             <button
@@ -102,7 +107,7 @@ export default function RegionPicker() {
               type="text"
               value={query}
               onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Ex: Jericoacoara, Fortaleza..."
+              placeholder={t('pickersCmp.regionSearchPlaceholder')}
               className="flex-1 bg-transparent text-[14px] text-gray-900 placeholder-gray-400 outline-none"
             />
             {query && (
@@ -135,7 +140,7 @@ export default function RegionPicker() {
             <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
               <AlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
               <p className="text-[12px] text-amber-700">
-                Localização fora das áreas cobertas. Selecione uma região abaixo.
+                {t('pickersCmp.outsideCoverage')}
               </p>
             </div>
           )}
@@ -154,8 +159,8 @@ export default function RegionPicker() {
                 : <Navigation size={17} />}
             </div>
             <div className="text-left">
-              <p className="text-[13px] font-bold">{detecting ? 'Detectando...' : 'Usar minha localização (GPS)'}</p>
-              <p className="text-[11px] opacity-70">Detectar automaticamente dentro de 100 km</p>
+              <p className="text-[13px] font-bold">{detecting ? t('pickersCmp.gpsDetecting') : t('pickersCmp.gpsButton')}</p>
+              <p className="text-[11px] opacity-70">{t('pickersCmp.gpsSubtitle')}</p>
             </div>
           </button>
         </div>
@@ -164,7 +169,7 @@ export default function RegionPicker() {
         <div className="px-5 mb-2">
           <div className="flex items-center gap-2">
             <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-[11px] text-gray-400">ou escolha a região</span>
+            <span className="text-[11px] text-gray-400">{t('pickersCmp.orChooseRegion')}</span>
             <div className="flex-1 h-px bg-gray-100" />
           </div>
         </div>
@@ -172,7 +177,7 @@ export default function RegionPicker() {
         {/* Region list */}
         <div className="px-5 pb-8 space-y-2 max-h-[30vh] overflow-y-auto">
           {regions.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">Carregando regiões...</p>
+            <p className="text-sm text-gray-400 text-center py-4">{t('pickersCmp.loadingRegions')}</p>
           )}
           {regions.map((r) => {
             const active = region?.id === r.id
@@ -187,9 +192,9 @@ export default function RegionPicker() {
                 <MapPin size={16} className={active ? 'text-white' : 'text-brand'} />
                 <div className="flex-1 text-left">
                   <p className="text-[14px] font-semibold">{r.name}</p>
-                  {(r.radius_km || r.service_radius_km) && (
+                  {r.state && (
                     <p className={`text-[11px] ${active ? 'text-white/70' : 'text-gray-400'}`}>
-                      Cobertura: {r.radius_km ?? r.service_radius_km} km de raio
+                      {r.city && r.city !== r.name ? `${r.city} · ${r.state}` : r.state}
                     </p>
                   )}
                 </div>

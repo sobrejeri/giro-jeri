@@ -235,8 +235,8 @@ COMMENT ON FUNCTION validate_transfer_advance IS
 -- =============================================================================
 
 INSERT INTO system_settings (setting_key, setting_value, value_type, description) VALUES
-  -- Regra das 4h para transfers
-  ('transfer_min_advance_hours',    '4',    'number',
+  -- Regra das 3h para transfers
+  ('transfer_min_advance_hours',    '3',    'number',
    'Antecedência mínima em horas para reserva ou cotação de transfer'),
 
   -- Prazo para cliente responder a uma cotação

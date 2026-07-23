@@ -21,7 +21,7 @@ router.get('/', async (req, res, next) => {
         id, name, slug, short_description, duration_hours,
         is_private_enabled, is_shared_enabled, shared_price_per_person,
         cover_image_url, tags, rating_average, rating_count,
-        is_featured, display_order,
+        is_featured, display_order, booking_cutoff_time, min_advance_hours, is_exclusive,
         latitude, longitude, service_radius_km,
         regions ( id, name, center_latitude, center_longitude, service_radius_km ),
         categories ( id, name, slug )
@@ -29,7 +29,7 @@ router.get('/', async (req, res, next) => {
       .eq('is_active', true)
       .order('display_order');
 
-    if (region_id)   query = query.eq('region_id', region_id);
+    if (region_id)   query = query.or(`region_ids.cs.{${region_id}},region_id.eq.${region_id}`);
     if (category_id) query = query.eq('category_id', category_id);
     if (featured)    query = query.eq('is_featured', true);
     if (mode === 'private')  query = query.eq('is_private_enabled', true);
@@ -67,50 +67,55 @@ router.get('/:id', async (req, res, next) => {
 // ── GET /api/tours/:id/vehicles — veículos disponíveis ─
 router.get('/:id/vehicles', async (req, res, next) => {
   try {
+    // Só os veículos ATIVOS para ESTE passeio (regra específica no Motor de
+    // Preços, com o toggle ligado). Sem regras globais e sem fallback de
+    // "todos os veículos" — assim o admin controla, por passeio, quais veículos
+    // aparecem no app. O join !inner também exige o VEÍCULO ativo e permitido
+    // para passeios — senão uma regra órfã de veículo desativado (que nem
+    // aparece na matriz do admin) vazaria para o app.
+    // REGIÃO: mesma visão da matriz — só regras da região do passeio (ou sem
+    // região). Regra criada sob outra região não vaza para o app.
+    const { data: tourRow } = await supabase
+      .from('tours').select('region_id, region_ids').eq('id', req.params.id).maybeSingle();
+    const userRegion = req.query.region_id || null;
+    const tourRegions = [tourRow?.region_id, ...(Array.isArray(tourRow?.region_ids) ? tourRow.region_ids : [])]
+      .filter(Boolean);
+
+    // Todas as regras ATIVAS deste passeio (veículo ativo e permitido p/ passeios).
     const { data, error } = await supabase
       .from('vehicle_pricing_rules')
       .select(`
-        base_price,
-        vehicles (
+        base_price, region_id,
+        vehicles!inner (
           id, name, vehicle_type, seat_capacity, luggage_capacity,
           image_url, description, display_order
         )
       `)
       .eq('service_type', 'tour')
+      .eq('service_id', req.params.id)
       .eq('is_active', true)
-      .or(`service_id.eq.${req.params.id},service_id.is.null`)
-      .order('service_id', { ascending: false, nullsFirst: false });
+      .eq('vehicles.is_active', true)
+      .eq('vehicles.is_tour_allowed', true);
 
     if (error) throw error;
+    const all = (data || []).filter((r) => r.vehicles);
 
-    // Deduplica: para cada veículo, mantém o preço mais específico
+    // "Matriz = app 1:1" por região: usa só as regras da(s) região(ões) do
+    // passeio (ou globais, sem região). Assim uma regra criada sob OUTRA região
+    // (ex.: um veículo sem valor na região do passeio) não vaza. Fallback: se
+    // NENHUMA regra casar com a(s) região(ões) do passeio (dados antigos com
+    // região divergente), usa todas — para não esvaziar um passeio já precificado.
+    const inTourRegion = (r) => r.region_id == null || tourRegions.includes(r.region_id);
+    const scoped = tourRegions.length ? all.filter(inTourRegion) : all;
+    const use = scoped.length ? scoped : all;
+
+    // Deduplica por veículo, preferindo o preço da região do usuário > global.
+    const rank = (r) => (userRegion && r.region_id === userRegion) ? 0 : (r.region_id == null) ? 1 : 2;
     const map = new Map();
-    for (const r of data || []) {
-      if (!r.vehicles) continue;
+    for (const r of use.slice().sort((a, b) => rank(a) - rank(b))) {
       if (!map.has(r.vehicles.id)) {
         map.set(r.vehicles.id, { ...r.vehicles, base_price: r.base_price });
       }
-    }
-
-    // Fallback: sem regras de preço → retorna todos os veículos ativos permitidos para passeios
-    if (map.size === 0) {
-      const { data: tour } = await supabase
-        .from('tours')
-        .select('region_id')
-        .eq('id', req.params.id)
-        .single();
-
-      let q = supabase
-        .from('vehicles')
-        .select('id, name, vehicle_type, seat_capacity, luggage_capacity, image_url, description, display_order')
-        .eq('is_tour_allowed', true)
-        .eq('is_active', true)
-        .order('display_order');
-
-      if (tour?.region_id) q = q.eq('region_id', tour.region_id);
-
-      const { data: fallback } = await q;
-      return res.json((fallback || []).map(v => ({ ...v, base_price: null })));
     }
 
     res.json(

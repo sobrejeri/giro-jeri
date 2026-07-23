@@ -1,12 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  CalendarCheck, Users, MapPin, Car, CheckCircle2,
+  CalendarCheck, Users, MapPin, Car, CheckCircle2, Compass,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
+  DollarSign, Send, Clock, ShieldAlert, Package, ChevronRight, X,
 } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
+import Modal from '../components/ui/Modal'
+import Input, { Textarea } from '../components/ui/Input'
+import { elevatedModeCopy } from '../copy/fleet'
 
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }
+
+function fmtQuoteDate(s) {
+  try { return format(parseISO(s), "dd/MM 'às' HH:mm", { locale: ptBR }) } catch { return s }
+}
 
 function timeAgo(isoDate) {
   const diff = Math.floor((Date.now() - new Date(isoDate)) / 1000)
@@ -47,7 +58,7 @@ function buildConfirmMsg(b) {
     `💰 *Valor:* ${fmt(b.total_amount)} ✅ PAGO`,
     ``,
     `Em breve enviaremos os dados do veículo e motorista. Qualquer dúvida estamos à disposição! 😊`,
-    `_Giro Jeri — Passeios & Transfers_`,
+    `_Turiva — Passeios & Transfers_`,
   ].filter(Boolean).join('\n')
 
   return encodeURIComponent(lines)
@@ -76,9 +87,19 @@ function Toast({ message, type = 'info', onClose }) {
 }
 
 // ── Card de corrida disponível ────────────────────────────
+// Aceita tanto o item legado (kind:'booking') quanto a PERNA do motor de pernas
+// (kind:'leg') — a coop enxerga só a própria perna (veículo/pax/valor da perna).
 function PendingCard({ booking, onAccept, accepting }) {
-  const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
-  const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
+  const isLeg  = booking.kind === 'leg'
+  const type   = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
+  const mode   = isLeg
+    ? (booking.vehicle_name || 'Privativo')
+    : (booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado')
+  const people = isLeg ? booking.pax_count   : booking.people_count
+  const price  = isLeg ? booking.leg_price   : booking.total_amount
+  // Pernas sempre aguardam aceite (pagamento vem depois); só o item legado
+  // já-pago mostra "pagamento realizado".
+  const alreadyPaid = !isLeg && booking.status_commercial !== 'awaiting_acceptance'
 
   return (
     <div className="bg-white rounded-2xl border-2 border-brand/20 shadow-sm overflow-hidden">
@@ -111,7 +132,7 @@ function PendingCard({ booking, onAccept, accepting }) {
           </div>
           <div className="flex items-center gap-2 text-[13px] text-gray-700">
             <Users size={13} className="text-gray-400 shrink-0" />
-            <span>{booking.people_count} {booking.people_count === 1 ? 'pessoa' : 'pessoas'}</span>
+            <span>{people ?? '—'} {people === 1 ? 'pessoa' : 'pessoas'}</span>
           </div>
           {booking.origin_text && (
             <div className="flex items-start gap-2 text-[13px] text-gray-700">
@@ -127,11 +148,11 @@ function PendingCard({ booking, onAccept, accepting }) {
         {/* Valor + botão */}
         <div className="flex items-center justify-between pt-1 border-t border-gray-100 gap-3">
           <div>
-            <p className="text-[11px] text-gray-400">Valor da corrida</p>
-            <p className="text-[20px] font-extrabold text-brand">{fmt(booking.total_amount)}</p>
+            <p className="text-[11px] text-gray-400">{isLeg ? 'Valor da perna' : 'Valor da reserva'}</p>
+            <p className="text-[20px] font-extrabold text-brand">{fmt(price)}</p>
           </div>
           <button
-            onClick={() => onAccept(booking.id)}
+            onClick={() => onAccept(booking)}
             disabled={accepting}
             className="flex items-center gap-2 bg-brand text-white font-bold px-5 py-3 rounded-2xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-brand/30"
           >
@@ -140,6 +161,86 @@ function PendingCard({ booking, onAccept, accepting }) {
               : <><Zap size={15} /> Aceitar</>}
           </button>
         </div>
+        {alreadyPaid ? (
+          <p className="text-[11px] text-emerald-600 flex items-center gap-1.5">
+            <CheckCircle2 size={11} className="shrink-0" /> Pagamento já realizado pelo cliente.
+          </p>
+        ) : (
+          <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+            <AlertCircle size={11} className="shrink-0" /> O cliente paga depois que você aceitar.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Combo do carrinho: solicitações do mesmo pedido, do mesmo cliente ──
+// Agrupa os serviços/pernas do mesmo order_group_id num bloco só, com "Aceitar
+// todos". A coop só vê os itens que pode operar (o filtro de frota já removeu
+// veículos de uso exclusivo antes de chegar aqui), então o combo pode vir
+// parcial — e tudo bem.
+function comboItemId(it) { return it.kind === 'leg' ? it.leg_id : it.id }
+function comboItemPrice(it) { return Number(it.kind === 'leg' ? it.leg_price : it.total_amount) || 0 }
+
+function ComboCard({ items, onAccept, onAcceptAll, accepting, acceptingCombo }) {
+  const withName = items.find((i) => i.customer?.full_name || i.users?.full_name)
+  const name  = withName?.customer?.full_name || withName?.users?.full_name || 'Cliente'
+  const total = items.reduce((s, i) => s + comboItemPrice(i), 0)
+  const gid   = items[0]?.order_group_id
+  const busy  = acceptingCombo === gid
+
+  return (
+    <div className="bg-white rounded-2xl border-2 border-brand/20 shadow-sm overflow-hidden">
+      <div className="bg-brand/5 px-4 py-2.5 flex items-center justify-between border-b border-brand/10">
+        <div className="flex items-center gap-2">
+          <Package size={15} className="text-brand shrink-0" />
+          <span className="text-[12px] font-bold text-brand uppercase tracking-wide">Pedido · {items.length} serviços</span>
+        </div>
+        <span className="text-[11px] text-gray-500 font-semibold truncate max-w-[45%]">{name}</span>
+      </div>
+
+      <div className="p-4 space-y-2.5">
+        {items.map((it) => {
+          const rowId  = comboItemId(it)
+          const isTour = it.service_type === 'tour'
+          const dateStr = it.service_date
+            ? new Date(it.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            : '—'
+          return (
+            <div key={rowId} className="flex items-center gap-2">
+              {isTour ? <Compass size={15} className="text-gray-400 shrink-0" /> : <Car size={15} className="text-gray-400 shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-gray-800 truncate">
+                  {isTour ? 'Passeio' : 'Transfer'}{it.vehicle_name ? ` · ${it.vehicle_name}` : ''}
+                </p>
+                <p className="text-[11px] text-gray-400">
+                  {dateStr}{it.service_time ? ` ${it.service_time.slice(0, 5)}` : ''} · {fmt(comboItemPrice(it))}
+                </p>
+              </div>
+              {/* Sem aceite por item: o pedido é uma solicitação só (tudo-ou-nada) */}
+            </div>
+          )
+        })}
+
+        <div className="flex items-center justify-between pt-2 border-t border-gray-100 gap-3">
+          <div>
+            <p className="text-[11px] text-gray-400">Total do pedido</p>
+            <p className="text-[18px] font-extrabold text-brand">{fmt(total)}</p>
+          </div>
+          <button
+            onClick={() => onAcceptAll(items)}
+            disabled={busy || !!accepting}
+            className="flex items-center gap-2 bg-brand text-white font-bold px-5 py-3 rounded-2xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-brand/30"
+          >
+            {busy
+              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Aceitando…</>
+              : <><Zap size={15} /> Aceitar pedido</>}
+          </button>
+        </div>
+        <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+          <AlertCircle size={11} className="shrink-0" /> O cliente paga tudo junto depois que você aceitar.
+        </p>
       </div>
     </div>
   )
@@ -151,16 +252,23 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
   const clientPhone = booking.users?.phone
   const clientName  = booking.users?.full_name || 'Cliente'
-  const waNumber    = clientPhone ? `55${clientPhone.replace(/\D/g, '')}` : null
+  // Telefones novos já vêm com +55; só prefixa quando faltar (≤11 dígitos).
+  const waDigits    = clientPhone ? clientPhone.replace(/\D/g, '') : ''
+  const waNumber    = waDigits ? (waDigits.length <= 11 ? `55${waDigits}` : waDigits) : null
   const isSending   = busy
+  const isPaid      = booking.status_commercial === 'paid'
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       {/* Status badge */}
-      <div className="bg-emerald-50 px-4 py-2 flex items-center gap-2 border-b border-emerald-100">
-        <CheckCircle2 size={13} className="text-emerald-500" />
-        <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide">
-          {booking.status_operational === 'in_progress' ? 'Em andamento' : 'Aceita'}
+      <div className={`px-4 py-2 flex items-center gap-2 border-b ${isPaid ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+        {isPaid
+          ? <CheckCircle2 size={13} className="text-emerald-500" />
+          : <Clock size={13} className="text-amber-500" />}
+        <span className={`text-[11px] font-bold uppercase tracking-wide ${isPaid ? 'text-emerald-700' : 'text-amber-700'}`}>
+          {booking.status_operational === 'in_progress'
+            ? 'Em andamento'
+            : isPaid ? 'Aceita · paga' : 'Aguardando pagamento'}
         </span>
         <span className="ml-auto text-[11px] font-mono text-gray-400">{booking.booking_code}</span>
       </div>
@@ -223,7 +331,19 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
 
         {/* Ações da corrida */}
         <div className="pt-1 border-t border-gray-100 space-y-2">
-          {booking.status_operational === 'in_progress' ? (
+          {!isPaid ? (
+            <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
+              <div className="relative shrink-0">
+                <div className="w-5 h-5 rounded-full bg-amber-300 animate-ping absolute inset-0 opacity-50" />
+                <div className="relative w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center">
+                  <Clock size={11} className="text-white" />
+                </div>
+              </div>
+              <p className="text-[12px] font-semibold text-amber-700">
+                Aguardando o cliente pagar para liberar o atendimento.
+              </p>
+            </div>
+          ) : booking.status_operational === 'in_progress' ? (
             <button
               onClick={() => onComplete(booking)}
               disabled={isSending}
@@ -264,31 +384,255 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
   )
 }
 
+// ── Status de um serviço do pedido (na visão da coop) ─────
+function myServiceStatus(b) {
+  const paid = b.status_commercial === 'paid'
+  const o = b.status_operational
+  if (o === 'completed')   return { Icon: CheckCircle2, color: 'text-gray-400',    label: 'Concluído' }
+  if (o === 'in_progress') return { Icon: Zap,          color: 'text-blue-500',    label: 'Em andamento' }
+  if (!paid)               return { Icon: Clock,        color: 'text-amber-500',   label: 'Aguard. pgto.' }
+  return { Icon: CheckCircle2, color: 'text-emerald-500', label: 'Pago' }
+}
+
+function myGroupSummary(bookings) {
+  const total = bookings.reduce((s, b) => s + Number(b.total_amount || 0), 0)
+  const anyUnpaid   = bookings.some((b) => b.status_commercial !== 'paid')
+  const anyProgress = bookings.some((b) => b.status_operational === 'in_progress')
+  let label = 'Pronto para atender', bg = 'bg-emerald-500'
+  if (anyUnpaid)        { label = 'Aguardando pagamento'; bg = 'bg-amber-500' }
+  else if (anyProgress) { label = 'Em andamento';         bg = 'bg-blue-500'  }
+  return { total, label, bg }
+}
+
+// ── Card-resumo do pedido (carrinho) — abre o detalhe ao tocar ────
+function MyGroupCard({ bookings, onOpen }) {
+  const count = bookings.length
+  const { total, label, bg } = myGroupSummary(bookings)
+  const client = bookings.find((b) => b.users?.full_name)?.users?.full_name || 'Cliente'
+  return (
+    <div onClick={onOpen} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-brand/20 active:scale-[0.99] transition-transform cursor-pointer">
+      <div className="bg-brand/5 px-4 py-2.5 flex items-center justify-between border-b border-brand/10">
+        <div className="flex items-center gap-2">
+          <Package size={15} className="text-brand shrink-0" />
+          <span className="text-[13px] font-bold text-gray-900">Pedido · {count} serviços</span>
+        </div>
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full text-white ${bg}`}>{label}</span>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        <p className="text-[11px] text-gray-400">Cliente: <span className="font-semibold text-gray-600">{client}</span></p>
+        {bookings.slice(0, 4).map((b) => {
+          const st = myServiceStatus(b)
+          const isTour = b.service_type === 'tour'
+          let d = ''
+          if (b.service_date) { try { d = format(new Date(b.service_date + 'T00:00:00'), 'd MMM', { locale: ptBR }) } catch {} }
+          return (
+            <div key={b.id} className="flex items-center gap-2 text-[12px] text-gray-600">
+              <st.Icon size={14} className={`${st.color} shrink-0`} title={st.label} />
+              <span className="truncate flex-1">{isTour ? 'Passeio' : 'Transfer'} · {b.booking_code}</span>
+              <span className={`text-[10px] font-bold shrink-0 ${st.color}`}>{st.label}</span>
+              <span className="text-gray-400 shrink-0 w-12 text-right">{d}</span>
+            </div>
+          )
+        })}
+        {count > 4 && <p className="text-[11px] text-gray-400">+{count - 4} serviço(s)</p>}
+        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+          <div>
+            <p className="text-[10px] text-gray-400 leading-none">Total do pedido</p>
+            <p className="text-[16px] font-extrabold text-gray-900 leading-none mt-0.5">{fmt(total)}</p>
+          </div>
+          <span className="flex items-center gap-1 text-[12px] font-bold text-brand">Ver detalhes <ChevronRight size={16} /></span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Folha com os serviços do pedido (cada um com suas ações) ──────
+function MyGroupSheet({ bookings, onClose, onConfirm, onStart, onComplete, busyId }) {
+  const count = bookings.length
+  const { total } = myGroupSummary(bookings)
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-gray-50 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[86vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 bg-white rounded-t-3xl border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Package size={16} className="text-brand" />
+            <h3 className="font-bold text-gray-900">Pedido · {count} serviços</h3>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95 transition-transform">
+            <X size={15} className="text-gray-500" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-4 py-4 space-y-3 flex-1">
+          {bookings.map((b) => (
+            <MyCard key={b.id} booking={b} onConfirm={onConfirm} onStart={onStart} onComplete={onComplete} busy={busyId === b.id} />
+          ))}
+        </div>
+        <div className="px-5 py-3 bg-white border-t border-gray-100 text-center">
+          <span className="text-[12px] text-gray-400">Total do pedido: </span>
+          <span className="text-[14px] font-extrabold text-gray-900">{fmt(total)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Card de cotação (rota personalizada) ──────────────────
+function QuoteRequestCard({ quote, onQuote }) {
+  const name   = quote.client_name || quote.users?.full_name || quote.user_name || 'Cliente'
+  const origin = quote.origin_place_name || quote.origin_description || '—'
+  const dest   = quote.destination_place_name || quote.destination_description || '—'
+  const notes  = quote.special_notes || quote.client_notes
+  const ppl    = quote.people_count || quote.passengers
+  const isQuoted = quote.status === 'quoted'
+
+  return (
+    <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${isQuoted ? 'border-blue-100' : 'border-brand/20'}`}>
+      <div className={`px-4 py-2 flex items-center justify-between border-b ${isQuoted ? 'bg-blue-50 border-blue-100' : 'bg-brand/5 border-brand/10'}`}>
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${isQuoted ? 'bg-blue-400' : 'bg-brand animate-pulse'}`} />
+          <span className={`text-[11px] font-bold uppercase tracking-wide ${isQuoted ? 'text-blue-600' : 'text-brand'}`}>
+            {isQuoted ? 'Aguardando cliente' : 'Nova cotação'}
+          </span>
+        </div>
+        <span className="text-[11px] text-gray-400">{timeAgo(quote.created_at)}</span>
+      </div>
+
+      <div className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">Transfer</span>
+          <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Translado personalizado</span>
+        </div>
+
+        <div className="bg-gray-50 rounded-xl px-3 py-2">
+          <p className="text-[11px] text-gray-400">Cliente</p>
+          <p className="text-[14px] font-bold text-gray-900">{name}</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-start gap-2 text-[13px] text-gray-700">
+            <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
+            <span>{origin} → {dest}</span>
+          </div>
+          <div className="flex items-center gap-4 text-[13px] text-gray-700">
+            <span className="flex items-center gap-1.5">
+              <CalendarCheck size={13} className="text-gray-400" />
+              {quote.service_date}{quote.service_time ? ` ${quote.service_time.slice(0, 5)}` : ''}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Users size={13} className="text-gray-400" />
+              {ppl} pax
+            </span>
+          </div>
+        </div>
+
+        {notes && (
+          <p className="text-[12px] text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">“{notes}”</p>
+        )}
+
+        <div className="pt-1 border-t border-gray-100">
+          {isQuoted ? (
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] text-gray-400">Valor enviado</p>
+                <p className="text-[18px] font-extrabold text-blue-600">{fmt(quote.quoted_price)}</p>
+              </div>
+              {quote.expires_at && (
+                <div className="text-right text-[11px] text-gray-400">
+                  <p>Expira</p>
+                  <p>{fmtQuoteDate(quote.expires_at)}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => onQuote(quote)}
+              className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all shadow-md shadow-brand/30"
+            >
+              <DollarSign size={16} /> Enviar valor da corrida
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Página principal ──────────────────────────────────────
 export default function Reservas() {
+  const { user }    = useAuth()
+  const isElevated  = user?.user_type === 'admin'
   const [tab,        setTab]       = useState('pending')
   const [toast,      setToast]     = useState(null)
   const [accepting,  setAccepting] = useState(null)
+  const [acceptingCombo, setAcceptingCombo] = useState(null)
   const [confirming, setConfirming]= useState(null)
+  const [myGroupGid, setMyGroupGid]= useState(null) // pedido (grupo) aberto em "Minhas corridas"
+  const [quoteModal, setQuoteModal]= useState(null)
+  const [price,      setPrice]     = useState('')
+  const [notes,      setNotes]     = useState('')
   const queryClient = useQueryClient()
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey:        ['operator-bookings'],
     queryFn:         () => api.getOperatorBookings(),
     refetchInterval: 6000,
     staleTime:       3000,
   })
 
+  // Cotações de rota personalizada (mesma tela das corridas) —
+  // a view v_quotes_dashboard já traz todas as cotações ativas (não pagas/canceladas)
+  const { data: pendingQuotesRaw } = useQuery({
+    queryKey:        ['quotes-pending'],
+    queryFn:         () => api.getPendingQuotes(),
+    refetchInterval: 20000,
+  })
+  const { data: quotesHistoryRaw } = useQuery({
+    queryKey: ['quotes-history'],
+    queryFn:  () => api.getQuotesHistory(),
+  })
+
   const pending = data?.pending || []
   const mine    = data?.mine    || []
+  // A view /quotes/pending traz TODAS as cotações não-pagas (pending, quoted,
+  // accepted...). Aqui mantemos só as que a cooperativa ainda precisa cotar —
+  // senão as já respondidas/aceitas reaparecem com o botão (duplicando e dando
+  // erro "já respondida"). As 'quoted' vêm da seção de histórico abaixo.
+  const pendingQuotes = (Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || []))
+    .filter((q) => q.status === 'pending_quote')
+  const quotedQuotes  = (Array.isArray(quotesHistoryRaw) ? quotesHistoryRaw : (quotesHistoryRaw?.data || []))
+    .filter((q) => q.status === 'quoted')
 
-  async function handleAccept(bookingId) {
+  const setQuoteMut = useMutation({
+    mutationFn: ({ id, quoted_price, quote_notes }) =>
+      api.setQuotePrice(id, { quoted_price: Number(quoted_price), quote_notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
+      setQuoteModal(null); setPrice(''); setNotes('')
+      setToast({ message: 'Cotação enviada ao cliente!', type: 'success' })
+    },
+    onError: (err) => setToast({ message: err.message || 'Erro ao enviar cotação', type: 'error' }),
+  })
+
+  function openQuoteModal(quote) { setQuoteModal(quote); setPrice(''); setNotes('') }
+
+  function submitQuote(e) {
+    e.preventDefault()
+    if (!price || isNaN(Number(price)) || Number(price) <= 0) return
+    setQuoteMut.mutate({ id: quoteModal.id, quoted_price: price, quote_notes: notes })
+  }
+
+  async function handleAccept(item) {
     if (accepting) return
-    setAccepting(bookingId)
+    const isLeg = item.kind === 'leg'
+    const id    = isLeg ? item.leg_id : item.id
+    setAccepting(id)
     try {
-      await api.acceptBooking(bookingId)
+      if (isLeg) await api.acceptLeg(id)
+      else       await api.acceptBooking(id)
       queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
-      setToast({ message: 'Corrida aceita! Entre em contato com o cliente.', type: 'success' })
+      setToast({ message: 'Reserva aceita! Aguardando o cliente pagar.', type: 'success' })
       setTab('mine')
     } catch (err) {
       if (err.message?.includes('já foi aceita')) {
@@ -302,6 +646,75 @@ export default function Reservas() {
     }
   }
 
+  // Aceita o PEDIDO inteiro do carrinho de uma vez (atômico, tudo-ou-nada): uma
+  // única chamada atribui todos os serviços do grupo a esta coop. Sem aceite
+  // parcial — o pedido é uma solicitação só, e a coop executa tudo.
+  async function handleAcceptCombo(items) {
+    if (accepting || acceptingCombo) return
+    const gid = items[0]?.order_group_id
+    if (!gid) return
+    setAcceptingCombo(gid)
+    try {
+      const r = await api.acceptGroup(gid)
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setToast({
+        message: `Pedido aceito (${r?.accepted_count ?? items.length} serviços)! Aguardando o cliente pagar tudo.`,
+        type: 'success',
+      })
+      setTab('mine')
+    } catch (err) {
+      queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      setToast({ message: err.message || 'Não foi possível aceitar o pedido', type: 'error' })
+    } finally {
+      setAcceptingCombo(null)
+    }
+  }
+
+  // Agrupa as solicitações disponíveis por pedido (order_group_id): 2+ itens do
+  // mesmo pedido viram um combo; o resto fica avulso.
+  const pendingGroups = (() => {
+    const groups = new Map()
+    const singles = []
+    for (const it of pending) {
+      if (it.order_group_id) {
+        if (!groups.has(it.order_group_id)) groups.set(it.order_group_id, [])
+        groups.get(it.order_group_id).push(it)
+      } else singles.push(it)
+    }
+    const out = []
+    for (const [gid, items] of groups.entries()) {
+      if (items.length >= 2) out.push({ type: 'combo', gid, items })
+      else out.push({ type: 'single', item: items[0] })
+    }
+    for (const it of singles) out.push({ type: 'single', item: it })
+    return out
+  })()
+
+  // "Minhas corridas": reservas do mesmo pedido (order_group_id) viram UM
+  // card-resumo; ao tocar, abre a folha com cada serviço e suas ações. Pedido
+  // de 1 serviço cai como card normal.
+  const mineItems = (() => {
+    const groups = new Map()
+    const singles = []
+    for (const b of mine) {
+      if (b.order_group_id) {
+        if (!groups.has(b.order_group_id)) groups.set(b.order_group_id, [])
+        groups.get(b.order_group_id).push(b)
+      } else singles.push(b)
+    }
+    const out = []
+    for (const [gid, arr] of groups.entries()) {
+      if (arr.length >= 2) out.push({ type: 'group', gid, bookings: arr })
+      else out.push({ type: 'single', booking: arr[0] })
+    }
+    for (const b of singles) out.push({ type: 'single', booking: b })
+    return out
+  })()
+
+  // Serviços do pedido aberto — derivados do `mine` vivo, para a folha
+  // refletir a mudança de status na hora (aceitar/iniciar/concluir).
+  const openGroupBookings = myGroupGid ? mine.filter((b) => b.order_group_id === myGroupGid) : []
+
   async function handleConfirm(booking) {
     if (confirming) return
     setConfirming(booking.id)
@@ -313,7 +726,8 @@ export default function Reservas() {
       // 2. Abre WhatsApp com os dados da reserva (se cliente tem telefone)
       const phone = booking.users?.phone
       if (phone) {
-        const intl = `55${phone.replace(/\D/g, '')}`
+        const d = phone.replace(/\D/g, '')
+        const intl = d.length <= 11 ? `55${d}` : d
         window.open(`https://wa.me/${intl}?text=${buildConfirmMsg(booking)}`, '_blank')
       }
 
@@ -360,13 +774,19 @@ export default function Reservas() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Corridas</h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            {pending.length > 0
-              ? `${pending.length} nova${pending.length > 1 ? 's' : ''} solicitaç${pending.length > 1 ? 'ões' : 'ão'} disponível${pending.length > 1 ? 'is' : ''}`
-              : 'Nenhuma solicitação no momento'}
+            {pending.length === 0 && pendingQuotes.length === 0
+              ? 'Nenhuma solicitação no momento'
+              : [
+                  pending.length > 0 ? `${pending.length} corrida${pending.length > 1 ? 's' : ''} disponível${pending.length > 1 ? 'is' : ''}` : null,
+                  pendingQuotes.length > 0 ? `${pendingQuotes.length} cotaç${pendingQuotes.length > 1 ? 'ões' : 'ão'} a responder` : null,
+                ].filter(Boolean).join(' · ')}
           </p>
         </div>
         <button
-          onClick={() => refetch()}
+          onClick={() => {
+            refetch()
+            queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
+          }}
           disabled={isFetching}
           className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors active:scale-95"
         >
@@ -374,26 +794,44 @@ export default function Reservas() {
         </button>
       </div>
 
+      {/* Faixa modo administrador — visível só quando o usuário logado é admin */}
+      {isElevated && (
+        <div
+          role="status"
+          className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5"
+        >
+          <ShieldAlert size={16} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-bold text-amber-800">{elevatedModeCopy.badge}</p>
+            <p className="text-xs text-amber-700 mt-0.5">{elevatedModeCopy.desc}</p>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex bg-gray-100 rounded-xl p-1 mb-5">
         {[
-          { key: 'pending', label: 'Disponíveis', count: pending.length },
-          { key: 'mine',    label: 'Minhas corridas', count: mine.length },
+          // Disponíveis soma corridas (passeio/translado fixo) + cotações pendentes —
+          // qualquer solicitação nova, de qualquer serviço, conta como disponível.
+          { key: 'pending',  label: 'Disponíveis',     short: 'Disponíveis', count: pending.length + pendingQuotes.length },
+          { key: 'cotacoes', label: 'Cotações',        short: 'Cotações',    count: pendingQuotes.length },
+          { key: 'mine',     label: 'Minhas corridas', short: 'Minhas',      count: mine.length },
         ].map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[13px] font-semibold whitespace-nowrap transition-all ${
               tab === t.key
                 ? 'bg-white shadow-sm text-gray-900'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t.label}
+            <span className="sm:hidden">{t.short}</span>
+            <span className="hidden sm:inline">{t.label}</span>
             {t.count > 0 && (
               <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
                 tab === t.key
-                  ? t.key === 'pending' ? 'bg-brand text-white' : 'bg-emerald-500 text-white'
+                  ? t.key === 'mine' ? 'bg-emerald-500 text-white' : 'bg-brand text-white'
                   : 'bg-gray-300 text-gray-600'
               }`}>
                 {t.count}
@@ -404,27 +842,75 @@ export default function Reservas() {
       </div>
 
       {/* Conteúdo */}
-      {isLoading ? (
+      {isError ? (
+        <div className="text-center py-16 text-red-500">
+          <CalendarCheck size={40} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">Erro ao carregar corridas</p>
+          <p className="text-xs mt-1 text-red-400">{error?.message || 'Tente novamente em alguns segundos'}</p>
+          <button onClick={() => refetch()} className="mt-3 text-xs font-bold text-brand underline">
+            Tentar de novo
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center justify-center py-16 text-gray-400">
           <RefreshCw size={24} className="animate-spin" />
         </div>
       ) : tab === 'pending' ? (
-        pending.length === 0 ? (
+        pending.length === 0 && pendingQuotes.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <CalendarCheck size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium">Sem solicitações disponíveis</p>
             <p className="text-xs mt-1">Novas corridas aparecerão aqui automaticamente</p>
           </div>
         ) : (
+          // Disponíveis = corridas (passeio/translado fixo) + cotações pendentes.
+          // Mantém os dois tipos de card lado a lado pra cooperativa não precisar
+          // pular de aba pra ver tudo que tem em aberto.
           <div className="space-y-4">
-            {pending.map((b) => (
-              <PendingCard
-                key={b.id}
-                booking={b}
+            {pendingGroups.map((g) => g.type === 'combo' ? (
+              <ComboCard
+                key={`combo-${g.gid}`}
+                items={g.items}
                 onAccept={handleAccept}
-                accepting={accepting === b.id}
+                onAcceptAll={handleAcceptCombo}
+                accepting={accepting}
+                acceptingCombo={acceptingCombo}
+              />
+            ) : (
+              <PendingCard
+                key={g.item.kind === 'leg' ? g.item.leg_id : g.item.id}
+                booking={g.item}
+                onAccept={handleAccept}
+                accepting={accepting === (g.item.kind === 'leg' ? g.item.leg_id : g.item.id)}
               />
             ))}
+            {pendingQuotes.map((q) => (
+              <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
+            ))}
+          </div>
+        )
+      ) : tab === 'cotacoes' ? (
+        pendingQuotes.length === 0 && quotedQuotes.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <DollarSign size={40} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">Nenhuma cotação no momento</p>
+            <p className="text-xs mt-1">Pedidos de translado personalizado aparecerão aqui</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {pendingQuotes.map((q) => (
+              <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
+            ))}
+            {quotedQuotes.length > 0 && (
+              <>
+                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide pt-2">
+                  Aguardando resposta do cliente
+                </p>
+                {quotedQuotes.map((q) => (
+                  <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
+                ))}
+              </>
+            )}
           </div>
         )
       ) : (
@@ -436,14 +922,20 @@ export default function Reservas() {
           </div>
         ) : (
           <div className="space-y-4">
-            {mine.map((b) => (
+            {mineItems.map((it) => it.type === 'group' ? (
+              <MyGroupCard
+                key={it.gid}
+                bookings={it.bookings}
+                onOpen={() => setMyGroupGid(it.gid)}
+              />
+            ) : (
               <MyCard
-                key={b.id}
-                booking={b}
+                key={it.booking.id}
+                booking={it.booking}
                 onConfirm={handleConfirm}
                 onStart={handleStart}
                 onComplete={handleComplete}
-                busy={confirming === b.id}
+                busy={confirming === it.booking.id}
               />
             ))}
           </div>
@@ -458,6 +950,65 @@ export default function Reservas() {
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Folha de detalhe do pedido (carrinho) */}
+      {myGroupGid && openGroupBookings.length > 0 && (
+        <MyGroupSheet
+          bookings={openGroupBookings}
+          onClose={() => setMyGroupGid(null)}
+          onConfirm={handleConfirm}
+          onStart={handleStart}
+          onComplete={handleComplete}
+          busyId={confirming}
+        />
+      )}
+
+      {/* Modal: definir valor da cotação */}
+      <Modal open={!!quoteModal} onClose={() => setQuoteModal(null)} title="Definir valor da corrida" size="sm">
+        {quoteModal && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+              <p className="font-medium text-gray-900">
+                {quoteModal.client_name || quoteModal.users?.full_name || quoteModal.user_name || 'Cliente'}
+              </p>
+              <p className="text-gray-500">
+                {(quoteModal.origin_place_name || quoteModal.origin_description)} → {(quoteModal.destination_place_name || quoteModal.destination_description)}
+              </p>
+              <p className="text-gray-500">
+                {quoteModal.service_date}{quoteModal.service_time ? ` ${quoteModal.service_time.slice(0, 5)}` : ''} · {quoteModal.people_count || quoteModal.passengers} pax
+              </p>
+            </div>
+
+            <form onSubmit={submitQuote} className="space-y-3">
+              <Input
+                label="Valor da corrida (R$)"
+                type="number"
+                min="1"
+                step="0.01"
+                placeholder="0,00"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                required
+                autoFocus
+              />
+              <Textarea
+                label="Observações para o cliente"
+                rows={2}
+                placeholder="Inclui bagagem, ar-condicionado…"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+              <button
+                type="submit"
+                disabled={setQuoteMut.isPending}
+                className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60"
+              >
+                <Send size={16} /> {setQuoteMut.isPending ? 'Enviando…' : 'Enviar cotação ao cliente'}
+              </button>
+            </form>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

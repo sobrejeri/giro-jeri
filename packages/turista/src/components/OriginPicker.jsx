@@ -1,62 +1,28 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Search, X, Loader, MapPin, Navigation } from 'lucide-react'
+import {
+  getPlaceSuggestions,
+  getPlaceDetails,
+  getNearbyLodging,
+  reverseGeocode,
+} from '../lib/geoServices'
 
-const RADIUS_KM = 10
+const RADIUS_KM  = 10
+const JERI_CENTER = { lat: -2.7976, lng: -40.5147 }
 
-async function overpassNearby(lat, lon, radiusKm) {
-  const radiusM = Math.round(radiusKm * 1000)
-  const q = `[out:json][timeout:15];(node["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${radiusM},${lat},${lon});way["tourism"~"hotel|hostel|guest_house|motel|pousada"](around:${radiusM},${lat},${lon}););out center;`
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body: q,
-  })
-  if (!res.ok) return []
-  const data = await res.json()
-  return (data.elements ?? [])
-    .filter((e) => e.tags?.name)
-    .map((e) => ({
-      place_id: e.id,
-      display_name: e.tags.name,
-      lat: String(e.lat ?? e.center?.lat),
-      lon: String(e.lon ?? e.center?.lon),
-      _nearby: true,
-    }))
-}
-
-async function nominatimSearch(q, viewbox) {
-  const params = new URLSearchParams({
-    q,
-    format: 'json',
-    limit: '8',
-    countrycodes: 'br',
-    'accept-language': 'pt-BR',
-  })
-  if (viewbox) params.set('viewbox', viewbox)
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-    headers: { 'User-Agent': 'GiroJeri/1.0' },
-  })
-  if (!res.ok) return []
-  return res.json()
-}
-
-async function reverseGeocode(lat, lon) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&accept-language=pt-BR`
-  const res = await fetch(url, { headers: { 'User-Agent': 'GiroJeri/1.0' } })
-  if (!res.ok) return null
-  return res.json()
-}
-
-function shortName(displayName) {
-  return displayName.split(',').slice(0, 2).join(', ').trim()
+function shortName(r) {
+  return r.main_text || r.display_name.split(',')[0]
 }
 
 export default function OriginPicker({ open, onClose, onSelect, region, userCoords }) {
-  const [query, setQuery]           = useState('')
-  const [results, setResults]       = useState([])
-  const [nearby, setNearby]         = useState([])
+  const { t } = useTranslation()
+  const [query, setQuery]               = useState('')
+  const [results, setResults]           = useState([])
+  const [nearby, setNearby]             = useState([])
   const [loadingNearby, setLoadingNearby] = useState(false)
-  const [loading, setLoading]       = useState(false)
-  const [gpsLoading, setGpsLoading] = useState(false)
+  const [loading, setLoading]           = useState(false)
+  const [gpsLoading, setGpsLoading]     = useState(false)
   const debounceRef = useRef(null)
 
   useEffect(() => {
@@ -64,7 +30,6 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
   }, [open])
 
   // Centra no GPS do usuário quando disponível; fallback é o centro da região.
-  // Raio fixo de 10 km para todas as regiões — filtro mais preciso.
   const center = userCoords?.lat != null && userCoords?.lon != null
     ? { lat: userCoords.lat, lon: userCoords.lon }
     : region?.center_latitude != null && region?.center_longitude != null
@@ -74,17 +39,12 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
   useEffect(() => {
     if (!open || !center) return
     setLoadingNearby(true)
-    overpassNearby(center.lat, center.lon, RADIUS_KM)
+    getNearbyLodging(center.lat, center.lon, RADIUS_KM)
       .then(setNearby)
       .catch(() => setNearby([]))
       .finally(() => setLoadingNearby(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, center?.lat, center?.lon])
-
-  // Viewbox ~150 km around region to bias Nominatim results
-  const viewbox = region?.center_latitude != null && region?.center_longitude != null
-    ? `${Number(region.center_longitude) - 1.5},${Number(region.center_latitude) + 1.5},${Number(region.center_longitude) + 1.5},${Number(region.center_latitude) - 1.5}`
-    : null
 
   function handleChange(val) {
     setQuery(val)
@@ -92,41 +52,73 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
     if (val.trim().length < 3) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
-      try { setResults(await nominatimSearch(val, viewbox)) }
-      catch { setResults([]) }
+      try {
+        const geoCenter = center
+          ? { lat: center.lat, lng: center.lon }
+          : JERI_CENTER
+        setResults(await getPlaceSuggestions(val, geoCenter))
+      } catch { setResults([]) }
       setLoading(false)
     }, 400)
   }
 
-  function pick(r) {
+  async function pick(r) {
+    let lat, lon
+    if (r._source === 'google' && !r.lat) {
+      const detail = await getPlaceDetails(r.place_id).catch(() => null)
+      if (!detail) return
+      lat = parseFloat(detail.lat)
+      lon = parseFloat(detail.lon)
+    } else {
+      lat = parseFloat(r.lat)
+      lon = parseFloat(r.lon)
+    }
     onSelect({
-      name:      r._nearby ? r.display_name : shortName(r.display_name),
-      latitude:  parseFloat(r.lat),
-      longitude: parseFloat(r.lon),
+      name:      r._nearby ? r.display_name : shortName(r),
+      latitude:  lat,
+      longitude: lon,
     })
     onClose()
   }
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
-      alert('Geolocalização não disponível neste dispositivo.')
+      alert(t('pickersCmp.geoNotAvailable'))
       return
     }
     setGpsLoading(true)
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        const data = await reverseGeocode(coords.latitude, coords.longitude).catch(() => null)
-        onSelect({
-          name:      data?.display_name ? shortName(data.display_name) : 'Minha localização',
-          latitude:  coords.latitude,
-          longitude: coords.longitude,
+
+    function onSuccess({ coords }) {
+      reverseGeocode(coords.latitude, coords.longitude)
+        .catch(() => null)
+        .then((label) => {
+          onSelect({
+            name:      label || t('pickersCmp.myLocation'),
+            latitude:  coords.latitude,
+            longitude: coords.longitude,
+          })
+          setGpsLoading(false)
+          onClose()
         })
-        setGpsLoading(false)
-        onClose()
-      },
-      () => { setGpsLoading(false); alert('Não foi possível obter sua localização.') },
-      { timeout: 8000, enableHighAccuracy: true },
-    )
+    }
+
+    function onError(err) {
+      setGpsLoading(false)
+      if (err.code === 1) {
+        alert(t('pickersCmp.permissionDenied'))
+      } else {
+        // Timeout ou posição indisponível — tenta sem alta precisão
+        navigator.geolocation.getCurrentPosition(onSuccess, () => {
+          alert(t('pickersCmp.locationError'))
+        }, { timeout: 20000 })
+      }
+    }
+
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+      timeout: 15000,
+      enableHighAccuracy: true,
+      maximumAge: 30000,
+    })
   }
 
   if (!open) return null
@@ -142,8 +134,8 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">Local de saída</h2>
-          <button onClick={onClose} className="text-gray-500" aria-label="Fechar">
+          <h2 className="text-base font-bold text-gray-900">{t('pickersCmp.title')}</h2>
+          <button onClick={onClose} className="text-gray-500" aria-label={t('pickersCmp.close')}>
             <X size={20} />
           </button>
         </div>
@@ -157,7 +149,7 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
             {gpsLoading
               ? <Loader size={16} className="animate-spin" />
               : <Navigation size={16} />}
-            <span className="text-sm font-semibold">Usar minha localização atual</span>
+            <span className="text-sm font-semibold">{t('pickersCmp.useCurrentLocation')}</span>
           </button>
 
           <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-2.5">
@@ -169,11 +161,11 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
               autoFocus
               value={query}
               onChange={(e) => handleChange(e.target.value)}
-              placeholder="Pousada, hotel ou endereço…"
+              placeholder={t('pickersCmp.originSearchPlaceholder')}
               className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
             />
             {query && (
-              <button onClick={() => { setQuery(''); setResults([]) }} aria-label="Limpar">
+              <button onClick={() => { setQuery(''); setResults([]) }} aria-label={t('pickersCmp.clear')}>
                 <X size={14} className="text-gray-500" />
               </button>
             )}
@@ -183,7 +175,9 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
         <div className="flex-1 overflow-y-auto px-2 py-2 mt-1">
           {showNearby && (
             <p className="px-3 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
-              Pousadas e hotéis {userCoords ? 'próximos a você' : `em ${region?.name ?? 'sua região'}`} · {RADIUS_KM} km
+              {userCoords
+                ? t('pickersCmp.nearbyTitleUser', { radius: RADIUS_KM })
+                : t('pickersCmp.nearbyTitleRegion', { region: region?.name ?? t('pickersCmp.defaultRegion'), radius: RADIUS_KM })}
             </p>
           )}
 
@@ -205,21 +199,21 @@ export default function OriginPicker({ open, onClose, onSelect, region, userCoor
           ))}
 
           {showNearby && !loadingNearby && nearby.length === 0 && (
-            <p className="text-center text-sm text-gray-500 py-8">Nenhuma acomodação encontrada.</p>
+            <p className="text-center text-sm text-gray-500 py-8">{t('pickersCmp.noLodging')}</p>
           )}
 
           {!showNearby && !loading && results.length === 0 && (
-            <p className="text-center text-sm text-gray-500 py-8">Nenhum resultado.</p>
+            <p className="text-center text-sm text-gray-500 py-8">{t('pickersCmp.noResults')}</p>
           )}
 
           {showNearby && nearby.length > 0 && (
             <p className="text-center text-xs text-gray-400 py-3">
-              Ou digite para buscar qualquer endereço acima.
+              {t('pickersCmp.orTypeToSearch')}
             </p>
           )}
 
           {!showNearby && query.trim().length < 3 && (
-            <p className="text-center text-xs text-gray-400 py-6">Digite ao menos 3 letras.</p>
+            <p className="text-center text-xs text-gray-400 py-6">{t('pickersCmp.minChars')}</p>
           )}
         </div>
       </div>

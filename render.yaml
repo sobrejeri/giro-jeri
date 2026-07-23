@@ -16,20 +16,36 @@ services:
       - key: API_PUBLIC_URL
         sync: false
       - key: COOP_URL
-        value: https://sobrejeri.github.io
+        value: https://sobrejeri.github.io/giro-jeri/cooperativa
       - key: ADMIN_URL
-        value: https://sobrejeri.github.io
+        value: https://sobrejeri.github.io/giro-jeri/admin
       # Geoapify Places (OpenStreetMap) — diretório automático em "Descubra a Vila".
       # Gere a chave grátis em https://myprojects.geoapify.com e cole aqui no Render.
       - key: GEOAPIFY_API_KEY
         sync: false
+      # Google Maps (server-side) — autocomplete/detalhes de endereços nos
+      # transfers via Places API (New). Habilite "Places API (New)" no projeto.
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
       # Mercado Pago — produção. Token em mercadopago.com.br > Suas integrações.
-      - key: MERCADO_PAGO_ACCESS_TOKEN
+      # O código lê MP_ACCESS_TOKEN (services/mercadoPago.js).
+      - key: MP_ACCESS_TOKEN
         sync: false
       # Assinatura secreta do webhook (Suas integrações > Webhooks > Assinatura secreta)
       - key: MERCADO_PAGO_WEBHOOK_SECRET
         sync: false
-      # NuPay Sessions — habilitar somente depois da homologação em sandbox.
+      # ── Split / Marketplace ──
+      # Para dividir pagamentos entre plataforma e cooperativa.
+      # Crie um aplicativo tipo Marketplace em mercadopago.com.br > Suas integrações.
+      - key: MP_CLIENT_ID
+        sync: false
+      - key: MP_CLIENT_SECRET
+        sync: false
+      # URL da cooperativa para onde redirecionar após o OAuth do MP
+      - key: MP_OAUTH_RETURN_URL
+        sync: false
+      # NuPay Sessions — permanece desabilitado até a homologação em sandbox.
+      # Segredos vivem apenas no ambiente do Render, nunca em system_settings.
       - key: NUPAY_ENABLED
         value: "false"
       - key: NUPAY_ENV
@@ -47,4 +63,4 @@ services:
         sync: false
       # Remetente dos e-mails. Sem domínio verificado no Resend, use onboarding@resend.dev
       - key: EMAIL_FROM
-        value: Giro Jeri <onboarding@resend.dev>
+        value: Turiva <onboarding@resend.dev>

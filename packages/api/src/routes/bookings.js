@@ -8,7 +8,12 @@ import {
   calculateTabbedTransfer,
   validateTransferAdvance,
 } from '../services/priceEngine.js';
+import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
+import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
+import { sweepExpiredLegBookings } from '../services/legFlow.js';
 import dayjs from 'dayjs';
+
+const serviceLabelBk = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
 const router = Router();
 
@@ -58,6 +63,15 @@ async function reconcileNupayOnCancel(booking, free) {
       processing_status:  'completed',
       processed_at:       new Date().toISOString(),
     }).catch(() => {})
+    if (String(result.status || '').toUpperCase() === 'REFUNDED') {
+      const { error } = await supabase.rpc('finalize_nupay_refund', {
+        p_payment_id: payment.id,
+        p_refund_id: result.refundId,
+        p_provider_status: result.status,
+      })
+      if (error) throw error
+      return { action: 'refund_completed', result }
+    }
     return { action: 'refund_requested', result }
   }
 
@@ -282,13 +296,18 @@ router.get('/', authenticate, async (req, res, next) => {
     const { status_commercial, status_operational, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
+    // Varredura lazy (R3): cancela reservas com prazo de pagamento vencido antes
+    // de o cliente ver a lista. Best-effort e inerte com a flag off.
+    await sweepExpiredLegBookings().catch(() => {});
+
     let query = supabase
       .from('bookings')
       .select(`
-        id, booking_code, service_type, booking_mode,
+        id, booking_code, service_type, service_id, booking_mode,
         service_date, service_time, people_count,
         total_amount, status_commercial, status_operational,
         pickup_place_name, destination_place_name,
+        origin_text, destination_text, order_group_id,
         created_at,
         booking_vehicles ( vehicle_name_snapshot, quantity, unit_price ),
         payments ( status, paid_at )
@@ -314,12 +333,14 @@ router.get('/', authenticate, async (req, res, next) => {
 // ── GET /api/bookings/:id ──────────────────────────────
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
+    // Varredura lazy (R3): garante que uma reserva com prazo vencido apareça já
+    // cancelada quando o cliente abre o detalhe. Best-effort e inerte com flag off.
+    await sweepExpiredLegBookings().catch(() => {});
+
     const { data, error } = await supabase
       .from('bookings')
       .select(`
         *,
-        users!bookings_user_id_fkey ( full_name, phone, email ),
-        operator:users!bookings_operator_id_fkey ( full_name, phone ),
         regions ( name ),
         booking_vehicles ( * ),
         booking_items ( * ),
@@ -335,6 +356,16 @@ router.get('/:id', authenticate, async (req, res, next) => {
       return res.status(403).json({ error: 'Sem permissão' });
     }
 
+    // Sem embed por FK (frágil) — busca cliente/operador à parte e junta em memória.
+    const ids = [data.user_id, data.operator_id].filter(Boolean);
+    if (ids.length > 0) {
+      const { data: users } = await supabase
+        .from('users').select('id, full_name, phone, email').in('id', ids);
+      const byId = new Map((users || []).map((u) => [u.id, u]));
+      data.users    = byId.get(data.user_id) || null;
+      data.operator = data.operator_id ? (byId.get(data.operator_id) || null) : null;
+    }
+
     // Adiciona link do Maps se tiver coordenadas
     if (data.pickup_latitude && data.destination_latitude) {
       data.maps_route_url =
@@ -342,6 +373,45 @@ router.get('/:id', authenticate, async (req, res, next) => {
         `&origin=${data.pickup_latitude},${data.pickup_longitude}` +
         `&destination=${data.destination_latitude},${data.destination_longitude}` +
         `&travelmode=driving`;
+    }
+
+    // ── Motor de pernas (Etapa 2, Onda A) — atrás da flag ────────────────
+    // Quando ligado E o pedido tem pernas (privativo/transfer de rota), expõe
+    // legs[] + agregado + total dinâmico (soma das pernas aceitas). Pedidos
+    // sem pernas (compartilhado/cotação, Onda B) ficam exatamente como hoje.
+    if (await isBookingLegsEngineEnabled()) {
+      const { data: legs, error: legsErr } = await supabase
+        .from('booking_legs')
+        .select(`
+          id, leg_number, vehicle_id, vehicle_name_snapshot, vehicle_type_snapshot,
+          vehicle_capacity_snapshot, pax_count, leg_price, operator_id,
+          status_leg, acceptance_expires_at
+        `)
+        .eq('booking_id', data.id)
+        .order('leg_number', { ascending: true });
+
+      if (!legsErr && legs && legs.length > 0) {
+        const accepted  = legs.filter((l) => l.status_leg === 'accepted');
+        const pendingL  = legs.filter((l) => l.status_leg === 'awaiting_acceptance');
+        const cancelled = legs.filter((l) => l.status_leg === 'cancelled');
+        const expired   = legs.filter((l) => l.status_leg === 'expired');
+
+        data.legs = legs;
+        data.legs_summary = {
+          total_legs:      legs.length,
+          accepted_count:  accepted.length,
+          pending_count:   pendingL.length,
+          cancelled_count: cancelled.length,
+          expired_count:   expired.length,
+          // Combo fechado = nenhuma perna pendente/expirada e ao menos 1 aceita.
+          all_accepted:    accepted.length > 0 && pendingL.length === 0 && expired.length === 0,
+          // Total dinâmico (R3): soma só das pernas ACEITAS — é o valor que o
+          // cliente pagaria hoje via checkout parcial.
+          dynamic_total_accepted: Math.round(accepted.reduce((s, l) => s + Number(l.leg_price), 0) * 100) / 100,
+        };
+      } else if (legsErr) {
+        console.error('[bookings/:id] leitura de booking_legs falhou (segue sem legs[]):', legsErr.message);
+      }
     }
 
     res.json(data);
@@ -353,13 +423,13 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
   try {
     const { cancel_reason } = req.body;
 
-    const { data: booking } = await supabase
+    const { data: booking, error: findErr } = await supabase
       .from('bookings')
-      .select('*, users(full_name)')
+      .select('*')
       .eq('id', req.params.id)
       .single();
 
-    if (!booking) return res.status(404).json({ error: 'Reserva não encontrada' });
+    if (findErr || !booking) return res.status(404).json({ error: 'Reserva não encontrada' });
 
     // Turista só cancela a própria reserva
     if (req.user.user_type === 'tourist' && booking.user_id !== req.user.id) {
@@ -377,15 +447,16 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
     try {
       paymentAction = await reconcileNupayOnCancel(booking, free)
     } catch (err) {
-      console.error('[nupay] falha ao reconciliar cancelamento:', err.message)
-      paymentAction = { action: 'failed', error: err.message }
+      console.error('[nupay] falha ao reconciliar cancelamento code=%s', err.code || 'cancel_reconcile_error')
+      paymentAction = { action: 'failed' }
     }
 
     const { data, error } = await supabase
       .from('bookings')
       .update({
-        status_commercial:  'cancelled',
+        status_commercial:  paymentAction?.action === 'refund_completed' ? 'refunded' : 'cancelled',
         status_operational: 'cancelled',
+        ...(paymentAction?.action === 'refund_completed' ? { payment_status: 'refunded' } : {}),
         cancel_reason,
         cancelled_at: new Date().toISOString(),
       })
@@ -394,6 +465,30 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
       .single();
 
     if (error) throw error;
+
+    // Notifica a contraparte sobre o cancelamento
+    const canceledByTourist = req.user.user_type === 'tourist';
+    const tipo = serviceLabelBk(booking.service_type);
+    if (canceledByTourist) {
+      // Cliente cancelou → avisa cooperativas + admin (relevante se já estava paga)
+      if (booking.status_commercial === 'paid' || booking.operator_id) {
+        notifyOperatorsAndAdmin({
+          bookingId:   booking.id,
+          templateKey: 'booking_cancelled',
+          title:       'Reserva cancelada',
+          body:        `O cliente cancelou o ${tipo} ${booking.booking_code}.`,
+        });
+      }
+    } else {
+      // Operação cancelou → avisa o turista
+      notifyUser({
+        userId:      booking.user_id,
+        bookingId:   booking.id,
+        templateKey: 'booking_cancelled',
+        title:       'Reserva cancelada',
+        body:        `Seu ${tipo} (${booking.booking_code}) foi cancelado. Em caso de dúvida, fale com o suporte.`,
+      });
+    }
 
     res.json({
       booking: data,

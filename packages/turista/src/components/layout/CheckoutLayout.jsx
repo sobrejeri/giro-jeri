@@ -17,7 +17,7 @@ export default function CheckoutLayout() {
           <div className="w-8 h-8 rounded-xl bg-brand flex items-center justify-center">
             <MapPin size={16} className="text-white" />
           </div>
-          <span className="font-extrabold text-gray-900 text-[15px]">Giro Jeri</span>
+          <span className="font-extrabold text-gray-900 text-[15px]">Turiva</span>
         </div>
         <div className="flex items-center gap-2 text-gray-500">
           <ShieldCheck size={16} className="text-green-500" />

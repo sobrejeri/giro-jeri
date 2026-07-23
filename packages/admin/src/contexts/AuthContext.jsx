@@ -42,6 +42,10 @@ export function AuthProvider({ children }) {
     Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
   }, [])
 
+  // Sem onAuthStateChange: a renovação da sessão é 100% da api.js (via
+  // /api/auth/refresh), evitando o conflito de duas rotações do refresh token
+  // que causava o loop de login.
+
   return (
     <AuthContext.Provider value={{ user, token, refresh, login, logout, updateTokens }}>
       {children}

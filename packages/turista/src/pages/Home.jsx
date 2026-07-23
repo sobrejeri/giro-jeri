@@ -1,14 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import { useAuth } from '../contexts/AuthContext'
+import { useFavorites } from '../contexts/FavoritesContext'
+import InstallPrompt from '../components/InstallPrompt'
 import {
-  Bell, Star, Clock, Heart, ChevronRight, ArrowRight,
+  Bell, Star, Heart, ChevronRight, ArrowRight,
   MapPin, Compass, Car, Users, Calendar, Zap, Plane,
+  Sparkles, CalendarCheck, HeartHandshake,
 } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import HomeDesktop from './HomeDesktop'
+import NotificationBell from '../components/NotificationBell'
 
 function suggestVehicle(vehicles, people) {
   if (!vehicles.length) return null
@@ -18,15 +24,6 @@ function suggestVehicle(vehicles, people) {
   const biggest = [...vehicles].sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
   if (!biggest) return null
   return { vehicle: biggest, qty: Math.ceil(people / biggest.seat_capacity) }
-}
-
-function WhatsAppIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2.546 20.2A1 1 0 0 0 3.8 21.454l3.032-.892A9.957 9.957 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.966 7.966 0 0 1-4.229-1.206l-.294-.18-2.456.722.722-2.456-.18-.294A7.966 7.966 0 0 1 4.357 12c0-4.271 3.372-7.643 7.643-7.643S19.643 7.729 19.643 12 16.271 19.643 12 19.643z" />
-    </svg>
-  )
 }
 
 const GRADIENTS = [
@@ -48,6 +45,7 @@ const BADGE_COLORS = {
 }
 
 function TourCard({ tour, isFav, onToggleFav }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [from, to] = GRADIENTS[gi(tour.id)]
@@ -66,13 +64,14 @@ function TourCard({ tour, isFav, onToggleFav }) {
       navigate('/checkout/resumo', {
         state: {
           service_name:     tour.name,
+          short_description: tour.short_description || null,
           service_type:     'tour',
           booking_mode:     'private',
-          service_date:     'Hoje',
+          service_date:     t('homePg.today'),
           service_date_iso: format(today, 'yyyy-MM-dd'),
-          service_time:     'A confirmar',
+          service_time:     t('homePg.toBeConfirmed'),
           people_count:     2,
-          origin_text:      'Centro de Jericoacoara',
+          origin_text:      t('homePg.originCenter', { place: 'Jericoacoara' }),
           vehicle_name:     suggested ? `${suggested.qty}x ${suggested.vehicle.name}` : '',
           total_price:      totalPrice,
           breakdown:        suggested ? { [`${suggested.qty}x ${suggested.vehicle.name}`]: totalPrice } : {},
@@ -124,53 +123,167 @@ function TourCard({ tour, isFav, onToggleFav }) {
 
       <div className="p-2.5">
         <p className="text-[12px] font-bold text-gray-900 leading-tight line-clamp-1 mb-1">{tour.name}</p>
-        <div className="flex items-center gap-1.5">
-          {tour.rating_average > 0 && (
-            <div className="flex items-center gap-0.5">
-              <Star size={10} className="text-amber-400 fill-amber-400" />
-              <span className="text-[10px] font-semibold text-gray-600">{tour.rating_average}</span>
-            </div>
-          )}
-          {tour.duration_hours && (
-            <div className="flex items-center gap-0.5 text-[10px] text-gray-400">
-              <Clock size={9} />
-              <span>{tour.duration_hours}h</span>
-            </div>
-          )}
-        </div>
+        {tour.short_description ? (
+          <p className="text-[11px] text-gray-400 leading-snug line-clamp-2">{tour.short_description}</p>
+        ) : tour.rating_average > 0 ? (
+          <div className="flex items-center gap-0.5">
+            <Star size={10} className="text-amber-400 fill-amber-400" />
+            <span className="text-[10px] font-semibold text-gray-600">{tour.rating_average}</span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+// Card de rota de transfer em destaque — mesmo tamanho do TourCard.
+function RouteCard({ route }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [from, to] = GRADIENTS[gi(route.id)]
+  const price = Number(route.default_price) || 0
+  return (
+    <div
+      onClick={() => navigate('/transfers', { state: { origin: route.origin_name, dest: route.destination_name } })}
+      className="shrink-0 w-[158px] lg:w-auto rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 transition-transform cursor-pointer active:scale-[0.96]"
+    >
+      <div className={`h-[108px] lg:h-44 relative overflow-hidden bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
+        <Plane size={36} className="text-white/25" />
+        <span className="absolute top-2 left-2 bg-black/35 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-[3px] rounded-full">
+          {t('homePg.transferBadge')}
+        </span>
+      </div>
+      <div className="p-2.5">
+        <p className="text-[12px] font-bold text-gray-900 leading-tight line-clamp-2 mb-1">
+          {route.origin_name} → {route.destination_name}
+        </p>
+        <p className="text-[11px] text-gray-400 leading-snug">
+          {t('homePg.privateLabel')} {price > 0 ? t('homePg.fromPrice', { price: price.toLocaleString('pt-BR') }) : ''}
+        </p>
       </div>
     </div>
   )
 }
 
 const QUICK = [
-  { icon: Compass,  bg: 'bg-orange-50', ic: 'text-brand',      title: 'Passeio Privativo', desc: 'Exclusivo para seu grupo',   route: '/passeios'  },
-  { icon: Users,    bg: 'bg-teal-50',   ic: 'text-teal-600',   title: 'Compartilhado',     desc: 'Divida com outros turistas', route: '/passeios', state: { mode: 'shared' } },
-  { icon: Plane,    bg: 'bg-blue-50',   ic: 'text-blue-600',   title: 'Transfer',           desc: 'Aeroporto & hotel',          route: '/transfers' },
-  { icon: Calendar, bg: 'bg-purple-50', ic: 'text-purple-600', title: 'Minhas Reservas',    desc: 'Acompanhe seus passeios',    route: '/minhas-reservas'  },
+  { icon: Compass,  bg: 'bg-orange-50', ic: 'text-brand',      titleKey: 'quickPrivateTitle', descKey: 'quickPrivateDesc', route: '/passeios'  },
+  { icon: Users,    bg: 'bg-teal-50',   ic: 'text-teal-600',   titleKey: 'quickSharedTitle',  descKey: 'quickSharedDesc',  route: '/passeios', state: { mode: 'shared' } },
+  { icon: Plane,    bg: 'bg-blue-50',   ic: 'text-blue-600',   titleKey: 'transferBadge',      descKey: 'quickTransferDesc', route: '/transfers' },
+  { icon: Calendar, bg: 'bg-purple-50', ic: 'text-purple-600', titleKey: 'myBookingsTitle',    descKey: 'quickBookingsDesc', route: '/minhas-reservas'  },
 ]
 
+function FeaturedCarousel({ items, favs, onToggleFav }) {
+  const scrollRef = useRef(null)
+  const idxRef    = useRef(0)
+  const [dotIdx, setDotIdx]   = useState(0)
+  const n = items.length
+
+  // Duplicar slides para loop seamless
+  const slides = useMemo(() => (n > 1 ? [...items, ...items] : items), [items, n])
+
+  useEffect(() => {
+    if (n <= 1) return
+    const tick = () => {
+      const el = scrollRef.current
+      if (!el) return
+      const next = idxRef.current + 1
+      const child = el.children[next]
+      if (!child) return
+      el.scrollTo({ left: child.offsetLeft - 16, behavior: 'smooth' })
+      idxRef.current = next
+      setDotIdx(next % n)
+      // Chegou no clone → volta instantâneo para o original (sem animação visível)
+      if (next >= n) {
+        setTimeout(() => {
+          const orig = el.children[next - n]
+          if (orig) el.scrollTo({ left: orig.offsetLeft - 16, behavior: 'instant' })
+          idxRef.current = next - n
+        }, 420)
+      }
+    }
+    const t = setInterval(tick, 4000)
+    return () => clearInterval(t)
+  }, [n])
+
+  if (n === 0) return null
+
+  return (
+    <div className="-mx-4">
+      <div ref={scrollRef} className="flex gap-2 overflow-x-hidden px-4">
+        {slides.map((item, i) => (
+          <div key={`${item._kind || 't'}-${item.id}-${i}`} className="shrink-0">
+            {item._kind === 'route'
+              ? <RouteCard route={item} />
+              : <TourCard tour={item} isFav={favs.has(item.id)} onToggleFav={onToggleFav} />}
+          </div>
+        ))}
+      </div>
+      {n > 1 && (
+        <div className="flex justify-center gap-1.5 mt-3">
+          {items.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === dotIdx ? 'w-5 bg-brand' : 'w-1.5 bg-gray-200'
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const STEPS = [
-  { n: 1, color: 'bg-brand',        title: 'Escolha seu passeio',   desc: 'Selecione o destino e tipo de reserva'     },
-  { n: 2, color: 'bg-[#1A4D5F]',   title: 'Configure os detalhes', desc: 'Informe data, horário e número de pessoas' },
-  { n: 3, color: 'bg-emerald-500',  title: 'Confirme e pague',      desc: 'Reserva garantida em poucos minutos'       },
+  { n: 1, color: 'bg-brand',       titleKey: 'step1Title', descKey: 'step1Desc' },
+  { n: 2, color: 'bg-[#1A4D5F]',   titleKey: 'step2Title', descKey: 'step2Desc' },
+  { n: 3, color: 'bg-emerald-500', titleKey: 'step3Title', descKey: 'step3Desc' },
 ]
 
 export default function Home() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { region, openPicker, userCoords, getServiceQuery } = useRegion()
-  const [favs, setFavs] = useState(new Set())
-  const toggleFav = (id) =>
-    setFavs((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const { user } = useAuth()
+  const { favs, toggleFav } = useFavorites()
 
   const geo = getServiceQuery()
+  // Arredonda as coordenadas (~1 km) na chave para o GPS não recarregar a lista
+  // a cada micro-variação.
+  const coarseLat = userCoords?.lat != null ? Math.round(userCoords.lat * 100) / 100 : null
+  const coarseLon = userCoords?.lon != null ? Math.round(userCoords.lon * 100) / 100 : null
   const { data: toursData, isLoading } = useQuery({
-    queryKey: ['tours', 'home', region?.id, userCoords?.lat, userCoords?.lon],
+    queryKey: ['tours', 'home', region?.id, coarseLat, coarseLon],
     queryFn:  () => api.getTours({ limit: 12, ...geo }),
   })
+
   const tours    = toursData?.tours || toursData || []
   const featured = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
+
+  // Rotas de transfer destacadas pelo admin → entram no carrossel junto dos
+  // passeios ("Serviços em destaque").
+  const { data: routesData } = useQuery({
+    queryKey: ['transfer-routes', 'home'],
+    queryFn:  () => api.getTransferRoutes(),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  })
+  const allRoutes = Array.isArray(routesData?.routes) ? routesData.routes
+                  : Array.isArray(routesData) ? routesData : []
+  const featuredRoutes = allRoutes
+    .filter((r) => r.is_featured && r.is_active !== false)
+    .slice(0, 6)
+    .map((r) => ({ ...r, _kind: 'route' }))
+  const featuredItems = [...featured, ...featuredRoutes]
+
+  // Cold start do Render free: avisa que o servidor está acordando
+  const [slowLoad, setSlowLoad] = useState(false)
+  useEffect(() => {
+    if (!isLoading) { setSlowLoad(false); return }
+    const t = setTimeout(() => setSlowLoad(true), 5000)
+    return () => clearTimeout(t)
+  }, [isLoading])
 
   // Banner da home configurável pelo admin
   const { data: settings } = useQuery({
@@ -182,6 +295,34 @@ export default function Home() {
   const bannerTitle    = settings?.home_banner_title     || null
   const bannerSubtitle = settings?.home_banner_subtitle  || null
 
+  // Layout da home fixado no 'novo' (redesign UX) — definitivo.
+  const homeLayout = 'novo'
+
+  // Cooperativas parceiras (vitrine de confiança)
+  const { data: partners = [] } = useQuery({
+    queryKey: ['partners'],
+    queryFn:  () => api.getPartners(),
+    staleTime: 10 * 60 * 1000,
+  })
+
+  // Estado de "Minhas Reservas" na home (continuidade) — só se logado
+  const { data: myBookingsRaw } = useQuery({
+    queryKey: ['home-bookings'],
+    queryFn:  () => api.getMyBookings(),
+    enabled:  !!user,
+    staleTime: 60_000,
+  })
+  const todayStr    = format(startOfDay(new Date()), 'yyyy-MM-dd')
+  const myBookings  = Array.isArray(myBookingsRaw) ? myBookingsRaw : (myBookingsRaw?.data || [])
+  const upcomingCnt = myBookings.filter(
+    (b) => (b.service_date || '') >= todayStr && b.status_commercial !== 'cancelled'
+  ).length
+  const reservasLabel = !user
+    ? t('homePg.loginToSee')
+    : upcomingCnt > 0
+      ? t(upcomingCnt > 1 ? 'homePg.upcomingCountPlural' : 'homePg.upcomingCountSingular', { count: upcomingCnt })
+      : t('homePg.noBookingsYet')
+
   return (
     <>
     <div className="lg:hidden min-h-screen bg-gray-50 pb-24">
@@ -190,25 +331,14 @@ export default function Home() {
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-6 lg:rounded-2xl lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center shrink-0">
-              <Compass size={18} className="text-white" />
-            </div>
+            <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
             <div>
-              <p className="text-[15px] font-extrabold text-gray-900 leading-tight">Giro Jeri</p>
-              <p className="text-[10px] text-gray-400 leading-none mt-0.5">Passeios & Transfers</p>
+              <p className="font-giro font-semibold text-[17px] text-gray-900 leading-tight tracking-[0.09em]">TURIVA</p>
+              <p className="text-[10px] text-gray-400 leading-none mt-0.5">{t('homePg.tagline')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => window.open('https://wa.me/5588999999999', '_blank')}
-              className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white active:scale-95 transition-transform"
-            >
-              <WhatsAppIcon />
-            </button>
-            <button className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center relative active:scale-95 transition-transform">
-              <Bell size={15} className="text-gray-600" />
-              <span className="absolute top-1.5 right-1.5 w-[7px] h-[7px] bg-brand rounded-full" />
-            </button>
+            <NotificationBell />
           </div>
         </div>
 
@@ -217,141 +347,293 @@ export default function Home() {
           className="mt-2.5 flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 active:scale-95 transition-transform"
         >
           <MapPin size={11} className="text-brand shrink-0" />
-          <span className="text-[12px] font-semibold text-gray-700">{region?.name ?? 'Selecionar região'}</span>
+          <span className="text-[12px] font-semibold text-gray-700">{region?.name ?? t('homePg.selectRegion')}</span>
           <ChevronRight size={11} className="text-gray-400 ml-0.5" />
         </button>
       </div>
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto lg:space-y-6 lg:pt-6 lg:px-6">
 
-        {/* ── Saudação ──────────────────────────────────────────── */}
-        <div>
-          <p className="text-[21px] lg:text-3xl font-extrabold text-gray-900 leading-tight">Olá, explorador! 👋</p>
-          <p className="text-[13px] lg:text-base text-gray-500 mt-1">O que você quer reservar hoje?</p>
-        </div>
+        {homeLayout === 'classico' ? (
+          <>
+            {/* ── Saudação ──────────────────────────────────────── */}
+            <div>
+              <p className="text-[21px] lg:text-3xl font-extrabold text-gray-900 leading-tight">{t('homePg.greeting')}</p>
+              <p className="text-[13px] lg:text-base text-gray-500 mt-1">{t('homePg.greetingSubtitle')}</p>
+            </div>
 
-        {/* ── Cards principais ──────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => navigate('/passeios')}
-            className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
-            style={{ background: 'linear-gradient(135deg,#FF6A00,#FF9040)' }}
-          >
-            <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
-            <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
-            <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
-              <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
-                <Compass size={15} className="text-white" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-[14px] lg:text-2xl">Passeios</p>
-                <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Buggy · UTV · Hilux</p>
+            {/* ── Cards principais ──────────────────────────────── */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => navigate('/passeios')}
+                className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
+                style={{ background: 'linear-gradient(135deg,#FF6A00,#FF9040)' }}
+              >
+                <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+                <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
+                <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
+                  <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
+                    <Compass size={15} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-white font-bold text-[14px] lg:text-2xl">{t('homePg.toursCardTitle')}</p>
+                    <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">{t('homePg.toursCardDescClassico')}</p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate('/transfers')}
+                className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
+                style={{ background: 'linear-gradient(135deg,#1A4D5F,#2E7D9A)' }}
+              >
+                <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+                <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
+                <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
+                  <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
+                    <Car size={15} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-white font-bold text-[14px] lg:text-2xl">{t('homePg.transfersCardTitle')}</p>
+                    <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">{t('homePg.transfersCardDescClassico')}</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* ── Acesso rápido 2×2 ─────────────────────────────── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {QUICK.map(({ icon: Icon, bg, ic, titleKey, descKey, route, state }) => (
+                <button
+                  key={titleKey}
+                  onClick={() => navigate(route, state ? { state } : undefined)}
+                  className="flex items-center gap-2.5 bg-white rounded-2xl p-3 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left"
+                >
+                  <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+                    <Icon size={17} className={ic} />
+                  </div>
+                  <div>
+                    <p className="text-[12px] font-bold text-gray-900 leading-tight">{t(`homePg.${titleKey}`)}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{t(`homePg.${descKey}`)}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* ── Heading funcional ─────────────────────────────── */}
+            <div>
+              <p className="text-[21px] font-extrabold text-gray-900 leading-tight">
+                {region?.name
+                  ? t('homePg.exploreHeadingWithRegion', { region: region.name })
+                  : t('homePg.exploreHeading')}
+              </p>
+              <p className="text-[13px] text-gray-500 mt-1">{t('homePg.exploreSubtitle')}</p>
+            </div>
+
+            {/* ── Serviço: escolha principal (contraste corrigido) ─ */}
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('homePg.serviceSectionLabel')}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => navigate('/passeios')}
+                  aria-label={t('homePg.ariaViewTours')}
+                  className="relative rounded-2xl overflow-hidden h-[122px] active:scale-[0.97] transition-transform text-left"
+                  style={{ background: 'linear-gradient(135deg,#D94E00,#FF7A1F)' }}
+                >
+                  <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+                  <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
+                  <div className="absolute inset-0 flex flex-col justify-between p-3.5">
+                    <div className="w-9 h-9 rounded-xl bg-white/25 flex items-center justify-center">
+                      <Compass size={17} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-white font-extrabold text-[15px] [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">{t('homePg.toursCardTitle')}</p>
+                      <p className="text-white text-[11px] font-medium mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">{t('homePg.toursNovoDesc')}</p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => navigate('/transfers')}
+                  aria-label={t('homePg.ariaViewTransfers')}
+                  className="relative rounded-2xl overflow-hidden h-[122px] active:scale-[0.97] transition-transform text-left"
+                  style={{ background: 'linear-gradient(135deg,#154457,#2E7D9A)' }}
+                >
+                  <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+                  <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
+                  <div className="absolute inset-0 flex flex-col justify-between p-3.5">
+                    <div className="w-9 h-9 rounded-xl bg-white/25 flex items-center justify-center">
+                      <Car size={17} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-white font-extrabold text-[15px] [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">{t('homePg.transfersNovoTitle')}</p>
+                      <p className="text-white text-[11px] font-medium mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.28)]">{t('homePg.transfersNovoDesc')}</p>
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
-          </button>
 
-          <button
-            onClick={() => navigate('/transfers')}
-            className="relative rounded-2xl overflow-hidden h-[110px] lg:h-48 active:scale-[0.97] transition-transform"
-            style={{ background: 'linear-gradient(135deg,#1A4D5F,#2E7D9A)' }}
-          >
-            <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
-            <div className="absolute -right-1 top-0 w-10 h-10 rounded-full bg-white/10" />
-            <div className="absolute inset-0 flex flex-col justify-between p-3 lg:p-5">
-              <div className="w-8 h-8 rounded-xl bg-white/25 flex items-center justify-center">
-                <Car size={15} className="text-white" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-[14px] lg:text-2xl">Transfers</p>
-                <p className="text-white/70 text-[10px] lg:text-sm lg:mt-1">Aeroporto · Hotel</p>
-              </div>
+            {/* ── Continuidade + descoberta ─────────────────────── */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => navigate(user ? '/minhas-reservas' : '/login')}
+                className="flex flex-col justify-between bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left h-[88px]"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+                    <CalendarCheck size={16} className="text-purple-600" />
+                  </div>
+                  <p className="text-[13px] font-bold text-gray-900 leading-tight">{t('homePg.myBookingsTitle')}</p>
+                </div>
+                <p className="text-[11px] font-semibold text-gray-500">{reservasLabel}</p>
+              </button>
+
+              <button
+                onClick={() => navigate('/eventos')}
+                className="flex flex-col justify-between bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left h-[88px]"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+                    <Sparkles size={16} className="text-brand" />
+                  </div>
+                  <p className="text-[13px] font-bold text-gray-900 leading-tight">{t('homePg.discoverVillage')}</p>
+                </div>
+                <p className="text-[11px] text-gray-400">{t('homePg.discoverVillageDesc')}</p>
+              </button>
             </div>
-          </button>
-        </div>
+          </>
+        )}
 
-        {/* ── Banner promo ──────────────────────────────────────── */}
-        <button
-          onClick={() => navigate('/passeios')}
-          className="w-full relative rounded-2xl overflow-hidden h-[78px] lg:h-32 active:scale-[0.98] transition-transform bg-cover bg-center"
-          style={bannerImg
-            ? { backgroundImage: `linear-gradient(135deg, rgba(255,106,0,0.82), rgba(255,179,71,0.55)), url(${bannerImg})` }
-            : { background: 'linear-gradient(135deg,#FF6A00,#FFB347)' }}
-        >
-          {!bannerImg && <>
-            <div className="absolute right-4 top-2 w-14 h-14 rounded-full border-[3px] border-white/20" />
-            <div className="absolute right-10 bottom-1 w-9 h-9 rounded-full border-2 border-white/15" />
-            <div className="absolute right-2 top-6 w-7 h-7 rounded-full border border-white/20" />
-          </>}
-          <div className="absolute inset-0 flex flex-col justify-center px-4">
-            <span className="inline-flex items-center gap-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-full w-fit mb-1">
-              ⚡ OFERTA ESPECIAL
-            </span>
-            <p className="text-white font-extrabold text-[14px] lg:text-2xl leading-snug drop-shadow">
-              {bannerTitle || <>Garanta sua aventura<br />em Jericoacoara!</>}
-            </p>
-          </div>
-        </button>
-
-        {/* ── Acesso rápido 2×2 ─────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-          {QUICK.map(({ icon: Icon, bg, ic, title, desc, route, state }) => (
-            <button
-              key={title}
-              onClick={() => navigate(route, state ? { state } : undefined)}
-              className="flex items-center gap-2.5 bg-white rounded-2xl p-3 shadow-sm border border-gray-100 active:scale-[0.97] transition-transform text-left"
-            >
-              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
-                <Icon size={17} className={ic} />
-              </div>
-              <div>
-                <p className="text-[12px] font-bold text-gray-900 leading-tight">{title}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{desc}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* ── Passeios em destaque ──────────────────────────────── */}
+        {/* ── Serviços em destaque (passeios + transfers) ───────── */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[15px] font-bold text-gray-900">Passeios em destaque</p>
+            <p className="text-[15px] font-bold text-gray-900">{t('homePg.featuredServicesTitle')}</p>
             <Link to="/passeios" className="flex items-center gap-0.5 text-[12px] font-semibold text-brand">
-              Ver todos <ArrowRight size={13} />
+              {t('homePg.viewAll')} <ArrowRight size={13} />
             </Link>
           </div>
 
           {isLoading ? (
-            <div className="h-[160px] flex items-center justify-center">
+            <div className="h-[160px] flex flex-col items-center justify-center gap-2.5">
               <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+              {slowLoad && <p className="text-[11px] text-gray-400 text-center px-6">{t('homePg.serverWakingUp')}</p>}
             </div>
-          ) : featured.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhum passeio disponível.</p>
+          ) : featuredItems.length === 0 ? (
+            <p className="text-sm text-gray-400">{t('homePg.noToursAvailable')}</p>
           ) : (
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide lg:grid lg:grid-cols-4 xl:grid-cols-5 lg:gap-4 lg:mx-0 lg:px-0 lg:overflow-visible">
-              {featured.map((tour) => (
-                <TourCard key={tour.id} tour={tour} isFav={favs.has(tour.id)} onToggleFav={toggleFav} />
-              ))}
-            </div>
+            <>
+              {/* Mobile: carousel com loop automático */}
+              <div className="lg:hidden">
+                <FeaturedCarousel items={featuredItems} favs={favs} onToggleFav={toggleFav} />
+              </div>
+              {/* Desktop: grid estático */}
+              <div className="hidden lg:grid lg:grid-cols-4 xl:grid-cols-5 lg:gap-4">
+                {featuredItems.map((tour) => (
+                  <TourCard key={tour.id} tour={tour} isFav={favs.has(tour.id)} onToggleFav={toggleFav} />
+                ))}
+              </div>
+            </>
           )}
         </section>
 
+        {/* ── Divulgou, Ganhou (programa de afiliados) ──────────── */}
+        <button
+          onClick={() => navigate('/afiliado')}
+          className="w-full bg-gradient-to-r from-brand to-amber-400 rounded-2xl p-4 flex items-center gap-3 text-left active:scale-[0.98] transition-transform shadow-sm relative overflow-hidden"
+        >
+          <Sparkles size={56} className="absolute -right-2 -top-2 text-white/15" />
+          <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+            <span className="text-[20px]">🤑</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-extrabold text-white leading-tight">{t('homePg.affiliateTitle')}</p>
+            <p className="text-[11.5px] text-white/85 mt-0.5">{t('homePg.affiliateDesc')}</p>
+          </div>
+          <ArrowRight size={16} className="text-white shrink-0" />
+        </button>
+
         {/* ── Como funciona ─────────────────────────────────────── */}
         <section className="pb-2">
-          <p className="text-[15px] font-bold text-gray-900 mb-3">Como funciona?</p>
+          <p className="text-[15px] font-bold text-gray-900 mb-3">{t('homePg.howItWorksTitle')}</p>
           <div className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0">
-            {STEPS.map(({ n, color, title, desc }) => (
+            {STEPS.map(({ n, color, titleKey, descKey }) => (
               <div key={n} className="flex items-start gap-3">
                 <div className={`w-7 h-7 rounded-full ${color} flex items-center justify-center shrink-0 mt-0.5`}>
                   <span className="text-white text-[12px] font-bold">{n}</span>
                 </div>
                 <div>
-                  <p className="text-[13px] font-bold text-gray-900">{title}</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">{desc}</p>
+                  <p className="text-[13px] font-bold text-gray-900">{t(`homePg.${titleKey}`)}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">{t(`homePg.${descKey}`)}</p>
                 </div>
               </div>
             ))}
           </div>
         </section>
+
+        {homeLayout === 'novo' && (
+          <>
+            {/* ── Cooperativas parceiras ────────────────────────── */}
+            {partners.length > 0 && (
+              <section className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+                    <HeartHandshake size={17} className="text-teal-600" />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-bold text-gray-900 leading-tight">{t('homePg.partnersTitle')}</p>
+                    <p className="text-[11px] text-gray-400 leading-tight">{t('homePg.partnersDescMobile')}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {partners.map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/avaliacoes?operator=${p.id}`}
+                      className="flex items-center gap-2 bg-gray-50 rounded-full pl-1 pr-3 py-1 active:scale-95 transition-transform"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden shrink-0">
+                        {p.profile_photo_url
+                          ? <img src={p.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-gray-500">{(p.full_name || '?')[0].toUpperCase()}</div>}
+                      </div>
+                      <span className="text-[12px] font-semibold text-gray-700">{p.full_name}</span>
+                      {Number(p.rating_count) > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-amber-600">
+                          <Star size={10} className="fill-amber-400 text-amber-400" />
+                          {p.rating_average}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* ── CTA final ─────────────────────────────────────── */}
+            <button
+              onClick={() => navigate('/passeios')}
+              className="relative w-full overflow-hidden rounded-2xl active:scale-[0.98] transition-transform text-left"
+              style={{ background: 'linear-gradient(135deg,#D94E00,#FF7A1F)' }}
+            >
+              <div className="absolute -right-4 -top-6 w-24 h-24 rounded-full bg-white/10" />
+              <div className="absolute -right-10 -bottom-8 w-28 h-28 rounded-full bg-white/10" />
+              <div className="relative flex items-center justify-between gap-3 p-4">
+                <div>
+                  <p className="text-white font-extrabold text-[16px] [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">{t('homePg.finalCtaTitle')}</p>
+                  <p className="text-white/95 text-[12px] mt-0.5 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">{t('homePg.finalCtaDesc')}</p>
+                </div>
+                <span className="shrink-0 inline-flex items-center gap-1 bg-white text-brand font-bold text-[12px] px-3 py-2 rounded-xl">
+                  {t('homePg.view')} <ArrowRight size={14} />
+                </span>
+              </div>
+            </button>
+          </>
+        )}
+
+        <InstallPrompt />
 
       </div>
     </div>
@@ -360,6 +642,7 @@ export default function Home() {
       <HomeDesktop
         tours={tours} featured={featured} isLoading={isLoading} favs={favs} toggleFav={toggleFav}
         bannerImg={bannerImg} bannerTitle={bannerTitle} bannerSubtitle={bannerSubtitle}
+        partners={partners} featuredRoutes={featuredRoutes}
       />
     </div>
     </>

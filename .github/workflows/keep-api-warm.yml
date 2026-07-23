@@ -1,0 +1,29 @@
+name: Keep API Warm
+
+# O plano gratuito do Render hiberna a API após ~15 min de inatividade,
+# causando um "cold start" de ~50s na próxima visita. Este cron faz um
+# ping leve no /health a cada 14 min para manter o servidor acordado.
+#
+# Requer o secret VITE_API_URL (mesma URL base usada pelo front).
+# Para desligar: desative este workflow em Actions, ou apague o arquivo.
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'   # a cada 14 minutos
+  workflow_dispatch:          # permite rodar manualmente
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        env:
+          API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "VITE_API_URL não configurado — pulando ping."
+            exit 0
+          fi
+          echo "Pingando $API_URL/health"
+          # --max-time 90 dá tempo para o cold start responder; nunca falha o job
+          curl -fsS --max-time 90 "$API_URL/health" || echo "Ping falhou (servidor pode estar acordando)."

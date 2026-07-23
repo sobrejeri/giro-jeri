@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   ChevronLeft, ChevronRight, CheckCircle2, UserCheck, Car, Clock,
-  Users, MapPin, RefreshCw, MessageCircle, FileText,
+  Users, MapPin, RefreshCw, MessageCircle, FileText, Package,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
@@ -104,6 +104,56 @@ function BookingRow({ b, onDispatch, cooperativa }) {
         )}
       </CardBody>
     </Card>
+  )
+}
+
+// Agrupa uma lista de reservas por pedido (order_group_id), preservando a
+// ordem de aparição. Pedido com 2+ serviços vira um bloco; o resto fica avulso.
+function groupByOrder(list) {
+  const byGid = new Map()
+  const out = []
+  for (const b of list) {
+    if (b.order_group_id) {
+      if (!byGid.has(b.order_group_id)) {
+        const bucket = { type: 'group', gid: b.order_group_id, items: [] }
+        byGid.set(b.order_group_id, bucket)
+        out.push(bucket)
+      }
+      byGid.get(b.order_group_id).items.push(b)
+    } else {
+      out.push({ type: 'single', item: b })
+    }
+  }
+  // Pedido de 1 serviço cai como avulso.
+  return out.map((o) => (o.type === 'group' && o.items.length < 2) ? { type: 'single', item: o.items[0] } : o)
+}
+
+// Lista com os serviços do mesmo pedido agrupados sob um cabeçalho. O despacho
+// segue POR serviço (cada um pode ter veículo/motorista diferente).
+function GroupedList({ list, onDispatch, cooperativa }) {
+  return (
+    <div className="space-y-3">
+      {groupByOrder(list).map((it) => it.type === 'group' ? (
+        <div key={it.gid} className="rounded-2xl border border-brand/20 overflow-hidden">
+          <div className="bg-brand/5 px-4 py-2 flex items-center justify-between border-b border-brand/10">
+            <div className="flex items-center gap-2">
+              <Package size={14} className="text-brand shrink-0" />
+              <span className="text-[12px] font-bold text-gray-800">Pedido · {it.items.length} serviços</span>
+            </div>
+            <span className="text-[11px] text-gray-500 truncate max-w-[45%]">
+              {it.items.find((b) => b.users?.full_name)?.users?.full_name || ''}
+            </span>
+          </div>
+          <div className="p-2 space-y-2 bg-brand/[0.02]">
+            {it.items.map((b) => (
+              <BookingRow key={b.id} b={b} onDispatch={onDispatch} cooperativa={cooperativa} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <BookingRow key={it.item.id} b={it.item} onDispatch={onDispatch} cooperativa={cooperativa} />
+      ))}
+    </div>
   )
 }
 
@@ -232,11 +282,7 @@ export default function Despacho() {
             </CardBody>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {pending.map((b) => (
-              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} cooperativa={cooperativa} />
-            ))}
-          </div>
+          <GroupedList list={pending} onDispatch={handleDispatch} cooperativa={cooperativa} />
         )}
       </div>
 
@@ -246,11 +292,7 @@ export default function Despacho() {
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
             Despachados / Em andamento ({dispatched.length})
           </h3>
-          <div className="space-y-3">
-            {dispatched.map((b) => (
-              <BookingRow key={b.id} b={b} onDispatch={handleDispatch} cooperativa={cooperativa} />
-            ))}
-          </div>
+          <GroupedList list={dispatched} onDispatch={handleDispatch} cooperativa={cooperativa} />
         </div>
       )}
 

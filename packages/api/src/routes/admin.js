@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
+import { notifyUser } from '../services/notify.js';
 import dayjs from 'dayjs';
-import { isNupayConfigured } from '../payments/nupay.js';
+import { hasNupayCredentials } from '../payments/nupay.js';
 
 const router = Router();
 router.use(authenticate);
@@ -40,13 +41,15 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
       supabase.from('bookings').select('*', { count: 'exact', head: true })
         .eq('status_commercial', 'cancelled').eq('booking_date', today),
 
+      // effective_date = dia do recebimento (preenchida pela migration 039);
+      // fallback para created_at cobre lançamentos criados antes do reparo.
       supabase.from('financial_ledger').select('amount')
-        .eq('entry_type', 'booking_gross').eq('financial_status', 'pending')
-        .gte('created_at', today),
+        .eq('entry_type', 'booking_gross')
+        .or(`effective_date.gte.${today},and(effective_date.is.null,created_at.gte.${today})`),
 
       supabase.from('financial_ledger').select('amount')
         .eq('entry_type', 'booking_gross')
-        .gte('created_at', monthStart),
+        .or(`effective_date.gte.${monthStart},and(effective_date.is.null,created_at.gte.${monthStart})`),
     ]);
 
     const valorBrutoHoje = (financeiroHoje.data || [])
@@ -63,6 +66,136 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
       valor_bruto_mes:  valorBrutoMes,
     });
   } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/auth-orphans ────────────────────────
+// Diagnóstico de integridade auth ↔ perfil.
+// Retorna { orphans: [...], unlinked: [...] }
+//   orphans  = auth.users SEM perfil em public.users (criados pelo Dashboard)
+//   unlinked = public.users cujo auth_id é NULL ou não existe mais no Auth
+router.get('/auth-orphans', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: { users: authUsers }, error: authErr } =
+      await supabase.auth.admin.listUsers({ perPage: 1000 });
+    if (authErr) throw authErr;
+
+    const { data: profiles, error: profErr } = await supabase
+      .from('users').select('id, auth_id, full_name, email, user_type, created_at');
+    // Falha na leitura dos perfis NÃO pode virar "todo mundo é órfão" (a tela
+    // mostraria N usuários "sem perfil" + botão Importar que duplicaria).
+    if (profErr) throw profErr;
+
+    const authIdSet  = new Set(authUsers.map((u) => u.id));
+    const linkedSet  = new Set((profiles || []).map((r) => r.auth_id).filter(Boolean));
+
+    const orphans = authUsers
+      .filter((u) => !linkedSet.has(u.id))
+      .map((u) => ({
+        auth_id:    u.id,
+        email:      u.email,
+        phone:      u.phone,
+        created_at: u.created_at,
+      }));
+
+    const unlinked = (profiles || [])
+      .filter((p) => !p.auth_id || !authIdSet.has(p.auth_id))
+      .map((p) => ({
+        id:         p.id,
+        auth_id:    p.auth_id,
+        full_name:  p.full_name,
+        email:      p.email,
+        user_type:  p.user_type,
+        reason:     !p.auth_id ? 'auth_id nulo' : 'auth_id não existe no Auth',
+        created_at: p.created_at,
+      }));
+
+    res.json({ orphans, unlinked });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/import-auth-user ──────────────────
+// Cria perfil na tabela users para um usuário que só existe no Auth.
+const importAuthSchema = z.object({
+  auth_id:   z.string().uuid(),
+  full_name: z.string().min(2).max(200),
+  user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
+  cnpj:      z.string().optional(),
+});
+
+router.post('/import-auth-user', requireAdmin, async (req, res, next) => {
+  try {
+    const body = importAuthSchema.parse(req.body);
+
+    const { data: { user: authUser }, error: authErr } =
+      await supabase.auth.admin.getUserById(body.auth_id);
+    if (authErr || !authUser) return res.status(404).json({ error: 'Usuário Auth não encontrado' });
+
+    // Guarda anti-duplicata: se a checagem FALHAR (instabilidade), aborta —
+    // nunca insere às cegas. Checa por auth_id E por e-mail.
+    const existing = await supabase
+      .from('users').select('id').eq('auth_id', body.auth_id).maybeSingle();
+    if (existing.error) {
+      return res.status(503).json({ error: 'Instabilidade momentânea — tente novamente.' });
+    }
+    if (existing.data) return res.status(409).json({ error: 'Este usuário já tem perfil' });
+    if (authUser.email) {
+      const byEmail = await supabase
+        .from('users').select('id').eq('email', authUser.email).maybeSingle();
+      if (byEmail.error) {
+        return res.status(503).json({ error: 'Instabilidade momentânea — tente novamente.' });
+      }
+      if (byEmail.data) {
+        return res.status(409).json({ error: 'Já existe perfil com este e-mail — use vincular, não importar.' });
+      }
+    }
+
+    let docNumber = null;
+    let docType   = null;
+    let email     = authUser.email;
+
+    if (body.user_type === 'operator' && body.cnpj) {
+      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const { validateBrDoc } = await import('../lib/document.js');
+      const docErr = validateBrDoc('cnpj', cnpjDigits);
+      if (docErr) return res.status(400).json({ error: docErr });
+      docNumber = cnpjDigits;
+      docType   = 'cnpj';
+      if (!email || !email.endsWith('@op.girojeri.app')) {
+        const syntheticEmail = `${cnpjDigits}@op.girojeri.app`;
+        await supabase.auth.admin.updateUserById(body.auth_id, { email: syntheticEmail });
+        email = syntheticEmail;
+      }
+    }
+
+    const { data: profile, error: profileErr } = await supabase
+      .from('users')
+      .insert({
+        auth_id:         body.auth_id,
+        full_name:       body.full_name,
+        email,
+        phone:           authUser.phone || null,
+        user_type:       body.user_type,
+        document_number: docNumber,
+        document_type:   docType,
+      })
+      .select('id, full_name, email, phone, user_type, is_active, created_at, document_number')
+      .single();
+
+    if (profileErr) return res.status(400).json({ error: profileErr.message });
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'users',
+      entity_id:       profile.id,
+      action_type:     'import_auth_user',
+      new_values_json: { auth_id: body.auth_id, user_type: body.user_type },
+    });
+
+    res.status(201).json(profile);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    next(err);
+  }
 });
 
 // ── GET /api/admin/users ───────────────────────────────
@@ -112,6 +245,9 @@ router.post('/users', requireAdmin, async (req, res, next) => {
 
     if (body.user_type === 'operator' && body.cnpj) {
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const { validateBrDoc } = await import('../lib/document.js');
+      const docErr = validateBrDoc('cnpj', cnpjDigits);
+      if (docErr) return res.status(400).json({ error: docErr });
       authEmail = `${cnpjDigits}@op.girojeri.app`;
       authPhone = undefined;
       docNumber = cnpjDigits;
@@ -324,19 +460,19 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
 // Painel kanban da operação
 router.get('/operational', requireOperator, async (req, res, next) => {
   try {
-    const { date, service_type } = req.query;
+    const { date, service_type, operator_id } = req.query;
     const showAll    = !date || date === 'all';
     const targetDate = showAll ? null : date;
 
     let query = supabase
       .from('bookings')
       .select(`
-        id, booking_code, service_type, booking_mode,
+        id, booking_code, service_type, service_id, booking_mode, user_id, operator_id,
+        order_group_id,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
         pickup_place_name, destination_place_name, special_notes,
         origin_text, destination_text,
-        users!bookings_user_id_fkey ( full_name, phone ),
         booking_vehicles ( vehicle_name_snapshot, quantity ),
         operational_assignments ( real_vehicle_text, dispatch_notes, driver_name, driver_phone, assigned_driver_user_id, assigned_guide_user_id )
       `)
@@ -347,14 +483,38 @@ router.get('/operational', requireOperator, async (req, res, next) => {
     if (targetDate)    query = query.eq('service_date', targetDate);
     if (service_type)  query = query.eq('service_type', service_type);
 
+    // Escopo por cooperativa: um operador (não-admin) só enxerga as PRÓPRIAS
+    // reservas no painel operacional/despacho — nunca solicitações que ele ainda
+    // não aceitou (operator_id nulo) nem reservas de outras cooperativas. Sem
+    // isso, uma corrida "sem cooperativa" aparecia com "Despachar" para todos.
+    // Admin vê tudo (ou filtra por operator_id quando quiser).
+    const isAdmin = req.user?.user_type === 'admin';
+    if (!isAdmin)         query = query.eq('operator_id', req.user.id);
+    else if (operator_id) query = query.eq('operator_id', operator_id);
+
     const { data, error } = await query;
     if (error) throw error;
+
+    // Sem embed por FK (frágil) — busca clientes e operadores à parte e junta em memória.
+    const userIds = [...new Set((data || []).flatMap((b) => [b.user_id, b.operator_id]).filter(Boolean))];
+    let byId = new Map();
+    if (userIds.length > 0) {
+      const { data: users, error: uErr } = await supabase
+        .from('users').select('id, full_name, phone').in('id', userIds);
+      if (uErr) throw uErr;
+      byId = new Map((users || []).map((u) => [u.id, u]));
+    }
+    const enriched = (data || []).map((b) => ({
+      ...b,
+      users:    byId.get(b.user_id) || null,
+      operator: b.operator_id ? (byId.get(b.operator_id) || null) : null,
+    }));
 
     // Agrupa por status operacional
     const grouped = {};
     const statuses = ['new','awaiting_dispatch','confirmed','assigned','en_route','in_progress','completed','occurrence'];
     for (const s of statuses) grouped[s] = [];
-    for (const b of data || []) {
+    for (const b of enriched) {
       const key = b.status_operational || 'new';
       if (grouped[key]) grouped[key].push(b);
     }
@@ -455,7 +615,7 @@ router.get('/settings', requireAdmin, async (req, res, next) => {
     safeSettings.push(
       {
         setting_key: 'payment_nupay_credentials_configured',
-        setting_value: String(isNupayConfigured()),
+        setting_value: String(hasNupayCredentials()),
         value_type: 'boolean',
         description: 'Indica se NuPay está habilitado e configurado no ambiente do servidor.',
       },
@@ -541,6 +701,104 @@ router.post('/site-image', requireAdmin, async (req, res, next) => {
     });
 
     res.json({ url: publicUrl });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/storage-sign ───────────────────────
+// Gera uma URL assinada para upload direto do browser ao Supabase Storage.
+// Usado para vídeos (Stories) e imagens (catálogo) grandes, evitando rotear
+// os arquivos pelo servidor. Aceita `filename` (Stories) ou `path` (catálogo).
+router.post('/storage-sign', requireAdmin, async (req, res, next) => {
+  try {
+    const { filename, path: clientPath, content_type } = req.body;
+    const ref = filename || clientPath;
+    if (!ref || !content_type) {
+      return res.status(400).json({ error: 'filename (ou path) e content_type são obrigatórios' });
+    }
+
+    // Strip codec suffix (e.g. "video/webm;codecs=vp9" → "video/webm")
+    const base_type = content_type.split(';')[0].trim().toLowerCase();
+    if (!base_type.startsWith('video/') && !base_type.startsWith('image/')) {
+      return res.status(400).json({ error: 'Tipo de arquivo não suportado' });
+    }
+
+    const ext    = ref.split('.').pop().toLowerCase().slice(0, 5) || 'bin';
+    const slug   = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const folder = base_type.startsWith('video/') ? 'site/videos' : 'site/images';
+    const path   = `${folder}/${slug}.${ext}`;
+
+    const { data, error } = await supabase.storage
+      .from('avatars')
+      .createSignedUploadUrl(path, { upsert: true });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+
+    res.json({ signed_url: data.signedUrl, path, public_url: publicUrl });
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/commissions ─────────────────────────
+// Comissões do programa de afiliados. affiliate_id não tem FK (schema 001
+// deixou "tabela futura"), então o join com users é manual.
+router.get('/commissions', requireAdmin, async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    let query = supabase
+      .from('commissions')
+      .select('id, booking_id, affiliate_id, commission_percent, commission_amount, payout_status, payout_due_date, payout_paid_at, created_at, bookings ( booking_code, service_type, service_date, total_amount )')
+      .not('affiliate_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(300);
+    if (status) query = query.eq('payout_status', status);
+    const { data: rows, error } = await query;
+    if (error) throw error;
+
+    const ids = [...new Set((rows || []).map((r) => r.affiliate_id))];
+    let byId = {};
+    if (ids.length) {
+      // Chave PIX junto — fallback sem as colunas enquanto a 056 não roda
+      let { data: users, error: uErr } = await supabase
+        .from('users')
+        .select('id, full_name, email, phone, affiliate_code, affiliate_pix_key, affiliate_pix_key_type')
+        .in('id', ids);
+      if (uErr?.code === '42703') {
+        const retry = await supabase.from('users')
+          .select('id, full_name, email, phone, affiliate_code').in('id', ids);
+        users = retry.data;
+      }
+      byId = Object.fromEntries((users || []).map((u) => [u.id, u]));
+    }
+    res.json((rows || []).map((r) => ({ ...r, affiliate: byId[r.affiliate_id] || null })));
+  } catch (err) { next(err); }
+});
+
+// ── PUT /api/admin/commissions/:id/pay ─────────────────
+// Repasse manual feito via PIX → marca como pago e avisa o afiliado.
+router.put('/commissions/:id/pay', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: row, error } = await supabase
+      .from('commissions')
+      .update({ payout_status: 'paid', payout_paid_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .neq('payout_status', 'paid')
+      .select('id, affiliate_id, commission_amount, booking_id, bookings ( booking_code )')
+      .maybeSingle();
+    if (error) throw error;
+    if (!row) return res.status(404).json({ error: 'Comissão não encontrada (ou já paga)' });
+
+    if (row.affiliate_id) {
+      const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      notifyUser({
+        userId:      row.affiliate_id,
+        bookingId:   row.booking_id,
+        templateKey: 'affiliate_payout',
+        title:       'Comissão paga 💸',
+        body:        `Sua comissão de ${fmtBRL(row.commission_amount)} (reserva ${row.bookings?.booking_code || ''}) foi repassada via PIX. Obrigado por divulgar!`,
+      });
+    }
+    res.json({ ok: true, id: row.id });
   } catch (err) { next(err); }
 });
 
@@ -630,6 +888,223 @@ router.delete('/seasons/:id', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Feriados / datas especiais (dias específicos) ──────
+router.get('/holidays', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').select('*, regions(name)').order('holiday_date');
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.post('/holidays', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').insert(req.body).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+router.put('/holidays/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('holidays').update(req.body).eq('id', req.params.id).select().single();
+    if (error || !data) return res.status(404).json({ error: 'Feriado não encontrado' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.delete('/holidays/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { error } = await supabase.from('holidays').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/operator-performance ────────────────
+// Compara o desempenho de TODAS as cooperativas: receita gerada, nº de
+// passeios e transfers aceitos, total e concluídas. Filtro opcional por data.
+router.get('/operator-performance', requireAdmin, async (req, res, next) => {
+  try {
+    const { date_from, date_to } = req.query;
+
+    let query = supabase
+      .from('bookings')
+      .select(`
+        operator_id, service_type, total_amount,
+        status_commercial, status_operational,
+        operator:users!bookings_operator_id_fkey ( id, full_name )
+      `)
+      .not('operator_id', 'is', null)
+      .neq('status_commercial', 'cancelled')
+      .limit(10000);
+
+    if (date_from) query = query.gte('service_date', date_from);
+    if (date_to)   query = query.lte('service_date', date_to);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const map = new Map();
+    for (const b of data || []) {
+      const id = b.operator_id;
+      if (!map.has(id)) {
+        map.set(id, {
+          operator_id: id,
+          name:        b.operator?.full_name || '—',
+          revenue:     0, tours: 0, transfers: 0, total: 0, completed: 0,
+        });
+      }
+      const row    = map.get(id);
+      const amount = Number(b.total_amount) || 0;
+      row.total += 1;
+      if (b.service_type === 'transfer') row.transfers += 1; else row.tours += 1;
+      if (b.status_commercial === 'paid') row.revenue += amount;
+      if (b.status_operational === 'completed') row.completed += 1;
+    }
+
+    // Repasse líquido = bruto − comissão da plataforma (7%), mesma convenção
+    // do resto do admin (líquido = bruto × 0,93).
+    const PLATFORM_COMMISSION = 0.07;
+
+    const operators = [...map.values()]
+      .map((r) => ({
+        ...r,
+        revenue:    Math.round(r.revenue * 100) / 100,
+        net:        Math.round(r.revenue * (1 - PLATFORM_COMMISSION) * 100) / 100,
+        ticket_avg: r.total ? Math.round((r.revenue / r.total) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const totals = operators.reduce(
+      (t, o) => ({
+        revenue:   Math.round((t.revenue + o.revenue) * 100) / 100,
+        net:       Math.round((t.net + o.net) * 100) / 100,
+        tours:     t.tours + o.tours,
+        transfers: t.transfers + o.transfers,
+        total:     t.total + o.total,
+      }),
+      { revenue: 0, net: 0, tours: 0, transfers: 0, total: 0 },
+    );
+
+    res.json({ operators, totals });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// VEÍCULOS OPERADOS POR COOPERATIVA (Etapa 1 — roteamento do feed, Model B)
+// Catálogo de vehicles é global; cada operator pode ter linhas em
+// operator_service_preferences (entity_type='vehicle') desativando um
+// veículo específico. Sem linha = veículo operado (default opt-out).
+// Escrita é admin-only (ver migration 041 e o bloqueio 403 em operator.js).
+// =============================================================================
+
+// ── GET /api/admin/operators/:operatorId/vehicles ──────
+router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, next) => {
+  try {
+    const { operatorId } = req.params;
+
+    const { data: operator, error: opErr } = await supabase
+      .from('users')
+      .select('id, full_name, user_type')
+      .eq('id', operatorId)
+      .eq('user_type', 'operator')
+      .maybeSingle();
+    if (opErr) throw opErr;
+    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+
+    const { data: vehicles, error: vErr } = await supabase
+      .from('vehicles')
+      .select('id, name, vehicle_type, seat_capacity, image_url')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
+    if (vErr) throw vErr;
+
+    const { data: prefs, error: prefsErr } = await supabase
+      .from('operator_service_preferences')
+      .select('entity_id, is_active, notes')
+      .eq('operator_id', operatorId)
+      .eq('entity_type', 'vehicle');
+    if (prefsErr) throw prefsErr;
+
+    const prefsById = new Map((prefs || []).map((p) => [p.entity_id, p]));
+
+    const result = (vehicles || []).map((v) => {
+      const pref = prefsById.get(v.id);
+      return {
+        vehicle_id:    v.id,
+        name:          v.name,
+        vehicle_type:  v.vehicle_type,
+        seat_capacity: v.seat_capacity,
+        image_url:     v.image_url,
+        // Model B (opt-out): default é operado (true); só é false quando
+        // existe linha explícita is_active=false.
+        is_active:     pref ? pref.is_active !== false : true,
+        notes:         pref?.notes ?? null,
+      };
+    });
+
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+// ── PUT /api/admin/operators/:operatorId/vehicles/:vehicleId ──
+const operatorVehiclePrefSchema = z.object({
+  is_active: z.boolean(),
+  notes:     z.string().max(500).optional().nullable(),
+});
+
+router.put('/operators/:operatorId/vehicles/:vehicleId', requireAdmin, async (req, res, next) => {
+  try {
+    const { operatorId, vehicleId } = req.params;
+    const body = operatorVehiclePrefSchema.parse(req.body);
+
+    const { data: operator, error: opErr } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', operatorId)
+      .eq('user_type', 'operator')
+      .maybeSingle();
+    if (opErr) throw opErr;
+    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+
+    const { data: vehicle, error: vErr } = await supabase
+      .from('vehicles')
+      .select('id')
+      .eq('id', vehicleId)
+      .maybeSingle();
+    if (vErr) throw vErr;
+    if (!vehicle) return res.status(404).json({ error: 'Veículo não encontrado' });
+
+    const { data, error } = await supabase
+      .from('operator_service_preferences')
+      .upsert(
+        {
+          operator_id: operatorId,
+          entity_type: 'vehicle',
+          entity_id:   vehicleId,
+          is_active:   body.is_active,
+          notes:       body.notes ?? null,
+          updated_at:  new Date().toISOString(),
+        },
+        { onConflict: 'operator_id,entity_type,entity_id' },
+      )
+      .select()
+      .single();
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
+});
+
 // ── GET /api/admin/pricing-rules ───────────────────────
 router.get('/pricing-rules', requireAdmin, async (req, res, next) => {
   try {
@@ -701,20 +1176,23 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
     const { days = 30 } = req.query;
     const since = dayjs().subtract(Number(days), 'day').format('YYYY-MM-DD');
 
+    // Lançamentos antigos podem ter effective_date NULL — nesse caso vale
+    // a data de criação (senão o gráfico ignora a linha e fica "Sem dados").
     const { data, error } = await supabase
       .from('financial_ledger')
-      .select('amount, effective_date')
+      .select('amount, effective_date, created_at')
       .eq('entry_type', 'booking_gross')
       .eq('direction', 'inflow')
-      .gte('effective_date', since)
-      .order('effective_date');
+      .or(`effective_date.gte.${since},and(effective_date.is.null,created_at.gte.${since})`)
+      .order('created_at');
 
     if (error) throw error;
 
     // Agrupa por dia
     const byDay = {};
     for (const row of data || []) {
-      const d = row.effective_date?.slice(0, 10) || '';
+      const d = (row.effective_date || row.created_at || '').slice(0, 10);
+      if (!d) continue;
       byDay[d] = (byDay[d] || 0) + Number(row.amount);
     }
 
@@ -739,7 +1217,7 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
       .select(`
         id, booking_code, service_type, booking_mode, service_date, service_time,
         people_count, total_amount, status_commercial, status_operational, created_at,
-        users!bookings_user_id_fkey ( full_name, phone, email )
+        user_id, operator_id, region_id
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
@@ -752,7 +1230,19 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
 
     const { data, error, count } = await query;
     if (error) throw error;
-    res.json({ data: data || [], total: count || 0, page: Number(page) });
+
+    // Sem embed por FK (frágil) — busca clientes à parte e junta em memória.
+    const userIds = [...new Set((data || []).map((b) => b.user_id).filter(Boolean))];
+    let byId = new Map();
+    if (userIds.length > 0) {
+      const { data: users, error: uErr } = await supabase
+        .from('users').select('id, full_name, phone, email').in('id', userIds);
+      if (uErr) throw uErr;
+      byId = new Map((users || []).map((u) => [u.id, u]));
+    }
+    const enriched = (data || []).map((b) => ({ ...b, users: byId.get(b.user_id) || null }));
+
+    res.json({ data: enriched, total: count || 0, page: Number(page) });
   } catch (err) { next(err); }
 });
 

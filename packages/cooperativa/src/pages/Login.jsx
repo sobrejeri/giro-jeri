@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import Button from '../components/ui/Button'
@@ -16,7 +16,12 @@ function formatCNPJ(v) {
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
+  // Destino após login: state do PrivateRoute (deep link), ?next= (sessão
+  // expirada) ou o dashboard. Só aceita caminho interno (anti open-redirect).
+  const rawNext = location.state?.from || new URLSearchParams(location.search).get('next')
+  const from    = (rawNext && /^\/(?!\/)/.test(rawNext)) ? rawNext : '/dashboard'
   const [form, setForm]       = useState({ cnpj: '', password: '' })
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -42,7 +47,7 @@ export default function Login() {
       }
 
       login(user, data.token, data.refresh_token)
-      navigate('/dashboard', { replace: true })
+      navigate(from, { replace: true })
     } catch (err) {
       setError(err.message || 'Erro ao entrar')
     } finally {
@@ -53,9 +58,12 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="font-display font-bold text-3xl text-brand">Giro Jeri</h1>
-          <p className="text-gray-500 mt-1">Painel da Cooperativa</p>
+        <div className="flex flex-col items-center mb-8 gap-2">
+          <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-16 h-16 rounded-2xl" />
+          <div className="text-center">
+            <p className="font-giro font-semibold text-[24px] text-gray-900 leading-tight tracking-[0.09em]">TURIVA</p>
+            <p className="text-gray-500 text-sm mt-0.5">Painel da Cooperativa</p>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">

@@ -1,14 +1,19 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import { useFavorites } from '../contexts/FavoritesContext'
+import { useCart } from '../contexts/CartContext'
+import { highSeasonMonthSet, isHighSeasonIso } from '../lib/season'
 import OriginPicker from '../components/OriginPicker'
 import ToursDesktop from './ToursDesktop'
 import {
   MapPin, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
-  ChevronLeft, ChevronRight, X, Info, Bus,
+  ChevronLeft, ChevronRight, X, Info, Bus, Search,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth,
@@ -91,16 +96,14 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
       </div>
       <div className="p-2">
         <p className="text-[11px] font-bold text-gray-900 leading-tight line-clamp-1 mb-0.5">{tour.name}</p>
-        <div className="flex items-center gap-1">
-          {tour.rating_average > 0 && <>
+        {tour.short_description ? (
+          <p className="text-[10px] text-gray-400 leading-snug line-clamp-2">{tour.short_description}</p>
+        ) : tour.rating_average > 0 ? (
+          <div className="flex items-center gap-1">
             <Star size={9} className="text-amber-400 fill-amber-400" />
             <span className="text-[10px] text-gray-500">{tour.rating_average}</span>
-          </>}
-          {tour.duration_hours && <>
-            <Clock size={9} className="text-gray-400 ml-0.5" />
-            <span className="text-[10px] text-gray-400">{tour.duration_hours}h</span>
-          </>}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -108,11 +111,12 @@ function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
 
 /* ── Card de veículo no catálogo ────────────────────────────── */
 function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
+  const { t } = useTranslation()
   return (
     <div className={`bg-white rounded-2xl p-3 border flex items-center gap-3 transition-all ${qty > 0 ? 'border-brand shadow-sm shadow-brand/10' : 'border-gray-100'}`}>
-      <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+      <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
         {vehicle.image_url ? (
-          <img src={vehicle.image_url} alt={vehicle.name} className="w-full h-full object-cover" />
+          <img src={vehicle.image_url} alt={vehicle.name} className="w-full h-full object-contain p-0.5" />
         ) : (
           <Zap size={20} className="text-gray-400" />
         )}
@@ -121,12 +125,12 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
         <p className="text-[13px] font-bold text-gray-900 truncate">{vehicle.name}</p>
         <div className="flex items-center gap-1 mt-0.5">
           <Users size={10} className="text-gray-400" />
-          <span className="text-[11px] text-gray-500">Até {vehicle.seat_capacity} pessoas</span>
+          <span className="text-[11px] text-gray-500">{t('toursPg.vehicle.upToPeople', { count: vehicle.seat_capacity })}</span>
         </div>
         {vehicle.base_price && (
           <p className="text-[11px] text-gray-500 mt-0.5">
             R$ {Number(vehicle.base_price).toLocaleString('pt-BR')}
-            <span className="text-gray-400"> /veículo</span>
+            <span className="text-gray-400"> {t('toursPg.vehicle.perVehicle')}</span>
           </p>
         )}
       </div>
@@ -159,9 +163,21 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
 }
 
 /* ── Calendário (bottom sheet) ──────────────────────────────── */
-function DatePickerSheet({ value, onChange, onClose }) {
-  const today = startOfDay(new Date())
+function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeasonMonths }) {
+  const { t } = useTranslation()
+  // R6: 'today' aqui é a data mínima selecionável — se passou do cutoff do
+  // passeio, minDate já vem como amanhã e o dia de hoje fica bloqueado.
+  const today = minDate || startOfDay(new Date())
   const [viewMonth, setViewMonth] = useState(startOfMonth(value))
+  const WEEKDAYS = [
+    t('toursPg.calendar.weekdaySun'),
+    t('toursPg.calendar.weekdayMon'),
+    t('toursPg.calendar.weekdayTue'),
+    t('toursPg.calendar.weekdayWed'),
+    t('toursPg.calendar.weekdayThu'),
+    t('toursPg.calendar.weekdayFri'),
+    t('toursPg.calendar.weekdaySat'),
+  ]
 
   const days = eachDayOfInterval({
     start: startOfMonth(viewMonth),
@@ -170,7 +186,7 @@ function DatePickerSheet({ value, onChange, onClose }) {
   const offset = getDay(startOfMonth(viewMonth))
   const canGoPrev = !isBefore(subMonths(viewMonth, 1), startOfMonth(today))
 
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-50">
@@ -179,7 +195,7 @@ function DatePickerSheet({ value, onChange, onClose }) {
         </div>
 
         <div className="flex items-center justify-between px-5 py-3">
-          <p className="text-[16px] font-bold text-gray-900">Escolha a data</p>
+          <p className="text-[16px] font-bold text-gray-900">{t('toursPg.calendar.chooseDate')}</p>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
             <X size={16} className="text-gray-500" />
           </button>
@@ -205,7 +221,7 @@ function DatePickerSheet({ value, onChange, onClose }) {
         </div>
 
         <div className="grid grid-cols-7 px-4 mb-1">
-          {['D','S','T','Q','Q','S','S'].map((d, i) => (
+          {WEEKDAYS.map((d, i) => (
             <div key={i} className="text-center text-[11px] font-semibold text-gray-400 py-1">{d}</div>
           ))}
         </div>
@@ -216,56 +232,90 @@ function DatePickerSheet({ value, onChange, onClose }) {
             const past     = isBefore(day, today)
             const selected = isSameDay(day, value)
             const todayDay = isToday(day)
+            const highSeason = seasons?.length
+              ? isHighSeasonIso(format(day, 'yyyy-MM-dd'), seasons)
+              : !!highSeasonMonths?.has(day.getMonth() + 1)
             return (
               <button
                 key={day.toISOString()}
                 disabled={past}
                 onClick={() => { onChange(day); onClose() }}
-                className={`aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
+                className={`relative aspect-square flex items-center justify-center rounded-full text-[13px] transition-all
                   ${selected  ? 'bg-brand text-white font-bold' : ''}
-                  ${!selected && todayDay ? 'text-brand font-bold' : ''}
-                  ${!selected && !todayDay && !past ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
-                  ${past ? 'text-gray-300 cursor-not-allowed' : ''}
+                  ${!selected && past ? 'text-gray-300 cursor-not-allowed' : ''}
+                  ${!selected && !past && highSeason ? 'text-amber-600 font-bold' : ''}
+                  ${!selected && !past && !highSeason && todayDay ? 'text-brand font-bold' : ''}
+                  ${!selected && !past && !highSeason && !todayDay ? 'text-gray-800 active:bg-gray-100 font-medium' : ''}
                 `}
               >
                 {format(day, 'd')}
+                {!selected && !past && highSeason && (
+                  <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500" />
+                )}
               </button>
             )
           })}
         </div>
+
+        {(seasons?.length > 0 || highSeasonMonths?.size > 0) && (
+          <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
+            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+            {t('toursPg.calendar.highSeasonNote')}
+          </div>
+        )}
 
         <div className="px-4 pb-8">
           <button
             onClick={onClose}
             className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
           >
-            Confirmar
+            {t('toursPg.calendar.confirm')}
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
 /* ── Main ───────────────────────────────────────────────────── */
 export default function Tours() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
+  const { items: savedCartItems, upsertItem: saveCartItem } = useCart()
+
+  // "Retomar" do carrinho flutuante: restaura o rascunho salvo (data/pessoas/
+  // veículos) do passeio escolhido. Os dados vivem no localStorage (CartContext).
+  const restoredItem = locationState?.restoreFromCart
+    ? savedCartItems.find((i) => i.id === locationState?.selectedId)
+    : null
+
   const [mode, setMode] = useState(locationState?.mode || 'private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
-  const [people, setPeople] = useState(2)
-  const [date, setDate] = useState(startOfDay(new Date()))
+  const [people, setPeople] = useState(restoredItem?.people || 2)
+  const [date, setDate] = useState(() => {
+    if (restoredItem?.dateIso) {
+      const d = new Date(`${restoredItem.dateIso}T12:00:00`)
+      if (!Number.isNaN(d.getTime()) && !isBefore(d, startOfDay(new Date()))) return startOfDay(d)
+    }
+    return startOfDay(new Date())
+  })
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
-  const [cart, setCart] = useState({})
-  const [favs, setFavs] = useState(new Set())
+  const [cart, setCart] = useState(() => {
+    if (!restoredItem?.vehicles?.length) return {}
+    const c = {}
+    for (const v of restoredItem.vehicles) c[v.id] = v.qty
+    return c
+  })
+  const { favs, toggleFav } = useFavorites()
   const [origin, setOrigin] = useState(null) // { name, latitude, longitude }
   const [showOriginPicker, setShowOriginPicker] = useState(false)
-  const originLabel = origin?.name || 'Centro de Jericoacoara'
-  const toggleFav = (id) =>
-    setFavs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   /* ── Queries ──────────────────────────────────────────────── */
   const geo = getServiceQuery()
@@ -275,28 +325,84 @@ export default function Tours() {
     staleTime: 5 * 60 * 1000,
     retry: 2,
   })
-  const tours = toursData?.tours || toursData || []
-  const selectedTour = tours.find((t) => t.id === selectedId) || tours[0]
+  // Alta temporada: meses com acréscimo, p/ sinalizar no calendário.
+  const { data: seasonsData } = useQuery({
+    queryKey: ['seasons', region?.id],
+    queryFn:  () => api.getSeasons(region?.id ? { region_id: region.id } : {}),
+    staleTime: 10 * 60 * 1000,
+    retry: 3,               // API pode estar “acordando” (Render) — não desistir na 1ª
+    refetchOnWindowFocus: true,
+  })
+  const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
+
+  const allTours = toursData?.tours || toursData || []
+  const tours = searchTerm.trim()
+    ? allTours.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    : allTours
+  // Tradicionais entram no carrinho/combo (fluxo desta tela); exclusivos são
+  // venda direta (carrossel próprio → tela de detalhes, sem carrinho).
+  const tradTours      = tours.filter((t) => !t.is_exclusive)
+  const exclusiveTours = tours.filter((t) => t.is_exclusive)
+  // Nada vem pré-selecionado: o cliente escolhe um passeio (tradicional OU
+  // exclusivo) e só então os veículos aparecem. Clicar no selecionado desmarca.
+  const selectedTour = [...tradTours, ...exclusiveTours].find((t) => t.id === selectedId) || null
+  const vehiclesRef = useRef(null)
+
+  // Ao selecionar um passeio, rola até os veículos (eles aparecem entre os
+  // carrosseis — sem isto, um clique no carrossel exclusivo lá embaixo faz os
+  // veículos surgirem fora da tela e parece que nada aconteceu).
+  useEffect(() => {
+    if (selectedId && vehiclesRef.current) {
+      vehiclesRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [selectedId])
+
+  // R6: horário limite de solicitação — se já passou do cutoff do passeio,
+  // a data mínima selecionável passa a ser amanhã (bloqueia "hoje").
+  // O backend valida em America/Fortaleza (UTC-3); o cliente precisa usar o
+  // mesmo relógio, senão um turista em outro fuso vê "hoje" disponível e leva
+  // 400 no checkout.
+  const cutoffMinDate = useMemo(() => {
+    // Padrão: meio-dia. Passou de 12h (Fortaleza) → só a partir de amanhã.
+    // Se o passeio definir um booking_cutoff_time próprio, ele tem prioridade.
+    const c = selectedTour?.booking_cutoff_time || '12:00'
+    const todayStart = startOfDay(new Date())
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date())
+    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)
+    const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
+    const nowMin    = h * 60 + m
+    const cutoffMin = Number(c.slice(0, 2)) * 60 + Number(c.slice(3, 5))
+    let minDate = nowMin >= cutoffMin ? addDays(todayStart, 1) : todayStart
+
+    // Antecedência mínima por serviço (admin): se definida, a data mínima não
+    // pode cair dentro da janela de antecedência (agora + N horas, Fortaleza).
+    const adv = Number(selectedTour?.min_advance_hours)
+    if (Number.isFinite(adv) && adv > 0) {
+      const advStart = startOfDay(new Date(Date.now() + adv * 3600_000))
+      if (isBefore(minDate, advStart)) minDate = advStart
+    }
+    return minDate
+  }, [selectedTour?.booking_cutoff_time, selectedTour?.min_advance_hours])
+
+  // Se a data selecionada ficou antes do mínimo (ex.: hoje após o cutoff),
+  // empurra para a data mínima válida — evita levar "hoje" inválido ao checkout.
+  useEffect(() => {
+    if (isBefore(date, cutoffMinDate)) setDate(cutoffMinDate)
+  }, [cutoffMinDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: vehiclesData, isFetched: vehiclesFetched } = useQuery({
     queryKey: ['tour-vehicles', selectedTour?.id],
     queryFn: () => api.getTourVehicles(selectedTour.id),
     enabled: !!selectedTour?.id && mode === 'private',
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   })
 
-  // Fallback: se o passeio não tiver regras de preço, usa todos os veículos ativos
-  const { data: allVehiclesData } = useQuery({
-    queryKey: ['vehicles', region?.id],
-    queryFn: () => api.getVehicles({ is_active: 'true', ...geo }),
-    enabled: vehiclesFetched && (vehiclesData || []).length === 0 && mode === 'private',
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const vehicles = useMemo(
-    () => (vehiclesData || []).length > 0 ? vehiclesData : (allVehiclesData || []),
-    [vehiclesData, allVehiclesData],
-  )
+  // SEM fallback de "todos os veículos": o app mostra exatamente os veículos
+  // ligados para o passeio no Motor de Preços. Se o passeio não tiver nenhum,
+  // a lista fica vazia (com aviso) — o admin controla isso.
+  const vehicles = useMemo(() => vehiclesData || [], [vehiclesData])
 
   /* ── Sugestão ─────────────────────────────────────────────── */
   const suggestion = useMemo(() => suggest(vehicles, people, filter), [vehicles, people, filter])
@@ -321,16 +427,94 @@ export default function Tours() {
   const cartHasItems = cartItems.length > 0
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
 
+  // Monta o rascunho do carrinho a partir da PRÉ-SELEÇÃO atual (passeio +
+  // veículos + pessoas). NÃO é auto-salvo: só vai pro carrinho quando o cliente
+  // clica em "Continuar". Data/hora/saída são refinadas depois, no carrinho.
+  const buildCartDraft = () => {
+    const existing = savedCartItems.find((i) => i.id === selectedTour.id)
+    return {
+      id:      selectedTour.id,
+      kind:    'tour',
+      mode:    'private',
+      name:    selectedTour.name,
+      cover_image_url: selectedTour.cover_image_url || null,
+      booking_cutoff_time: selectedTour.booking_cutoff_time || null,
+      min_advance_hours: selectedTour.min_advance_hours ?? null,
+      dateIso: format(date, 'yyyy-MM-dd'),
+      time:    existing?.time || null,
+      people,
+      region_id:   selectedTour.regions?.id || null,
+      origin_text: origin?.name || existing?.origin_text || null,
+      vehicles: cartItems.map(({ vehicle, qty }) => ({
+        id: vehicle.id, name: vehicle.name, qty,
+        price: Number(vehicle.base_price) || 0, cap: vehicle.seat_capacity || null,
+      })),
+      total: cartTotal,
+    }
+  }
+
+  // Passeio EXCLUSIVO (privativo): venda direta — vai direto ao Resumo da
+  // reserva com os veículos escolhidos, sem passar pelo carrinho.
+  const continueExclusivePrivate = () => {
+    navigate('/checkout/resumo', {
+      state: {
+        service_name:        selectedTour.name,
+        short_description:   selectedTour.short_description || null,
+        service_type:        'tour',
+        booking_mode:        'private',
+        service_date:        t('toursPg.common.toBeConfirmed'),
+        service_date_iso:    format(date, 'yyyy-MM-dd'),
+        service_time:        t('toursPg.common.toBeConfirmed'),
+        people_count:        people,
+        origin_text:         origin?.name || null,
+        origin_latitude:     origin?.latitude,
+        origin_longitude:    origin?.longitude,
+        vehicle_name:        cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
+        total_price:         cartTotal,
+        breakdown:           { [t('toursPg.breakdown.vehicles')]: cartTotal },
+        cover_image_url:     selectedTour.cover_image_url || null,
+        region_id:           selectedTour.regions?.id,
+        service_id:          selectedTour.id,
+        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(vehicle.base_price) || 0 })),
+        booking_cutoff_time: selectedTour.booking_cutoff_time || null,
+        min_advance_hours:   selectedTour.min_advance_hours ?? null,
+        open_editing:        true,
+      },
+    })
+  }
+
   const applySuggestion = () => {
     if (!suggestion) return
     setCart({ [suggestion.vehicle.id]: suggestion.qty })
   }
 
   const FILTERS = [
-    { id: 'recommended', label: 'Recomendado', emoji: '⭐' },
-    { id: 'economico',   label: 'Econômico',   emoji: '💰' },
-    { id: 'conforto',    label: 'Conforto',     emoji: '🛡️' },
+    { id: 'recommended', label: t('toursPg.filters.recommended'), emoji: '⭐' },
+    { id: 'economico',   label: t('toursPg.filters.economic'),   emoji: '💰' },
+    { id: 'conforto',    label: t('toursPg.filters.comfort'),     emoji: '🛡️' },
   ]
+
+  // Carrossel de exclusivos — renderizado ANTES dos veículos quando um exclusivo
+  // está selecionado (aí os veículos ficam abaixo dele) e DEPOIS dos veículos nos
+  // demais casos. Assim os veículos sempre aparecem abaixo do carrossel escolhido.
+  const exclusiveCarousel = !toursLoading && exclusiveTours.length > 0 ? (
+    <section>
+      <p className="text-[14px] font-bold text-gray-900 mb-0.5">{t('toursPg.exclusive.title')}</p>
+      <p className="text-[11px] text-gray-400 mb-2.5">{t('toursPg.exclusive.subtitle')}</p>
+      <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
+        {exclusiveTours.map((tour) => (
+          <TourPickCard
+            key={tour.id}
+            tour={tour}
+            selected={selectedTour?.id === tour.id}
+            onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
+            isFav={favs.has(tour.id)}
+            onFav={() => toggleFav(tour.id)}
+          />
+        ))}
+      </div>
+    </section>
+  ) : null
 
   return (
     <>
@@ -338,16 +522,44 @@ export default function Tours() {
 
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
-        <div className="flex items-start justify-between">
-          <h1 className="text-[20px] font-extrabold text-gray-900">Passeios</h1>
+        <div className="relative flex items-center justify-center min-h-[32px]">
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+            aria-label={t('toursPg.header.back')}
+          >
+            <ChevronLeft size={20} className="text-gray-700" />
+          </button>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('toursPg.header.title')}</h1>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <button
+              onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+              aria-label={t('toursPg.header.search')}
+            >
+              <Search size={15} />
+            </button>
+          </div>
         </div>
+        {showSearch && (
+          <div className="mt-2 relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t('toursPg.searchPlaceholder')}
+              className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
+            />
+          </div>
+        )}
       </div>
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
 
         {/* ── Toggle Privativo / Compartilhado ──────────────── */}
         <div className="flex bg-gray-100 rounded-full p-1 gap-1">
-          {[['private', 'Privativo'], ['shared', 'Compartilhado']].map(([id, label]) => (
+          {[['private', t('toursPg.mode.private')], ['shared', t('toursPg.mode.shared')]].map(([id, label]) => (
             <button
               key={id}
               onClick={() => setMode(id)}
@@ -364,12 +576,18 @@ export default function Tours() {
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setShowOriginPicker(true)}
-            className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px]"
+            className={`shrink-0 flex items-center gap-2 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px] border ${
+              origin ? 'bg-white border-gray-200' : 'bg-brand/5 border-brand border-dashed'
+            }`}
           >
             <MapPin size={11} className="text-brand shrink-0" />
             <div className="text-left min-w-0">
-              <p className="text-[9px] text-gray-400 leading-none">Saída</p>
-              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight truncate">{originLabel}</p>
+              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.origin.label')}</p>
+              <p className={`text-[11px] font-semibold mt-0.5 leading-tight truncate ${
+                origin ? 'text-gray-700' : 'text-brand'
+              }`}>
+                {origin?.name || t('toursPg.origin.placeholder')}
+              </p>
             </div>
           </button>
           <button
@@ -378,10 +596,10 @@ export default function Tours() {
           >
             <Calendar size={11} className="text-brand" />
             <div className="text-left">
-              <p className="text-[9px] text-gray-400 leading-none">Data</p>
+              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.date.label')}</p>
               <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">
-                {isToday(date) ? 'Hoje'
-                  : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
+                {isToday(date) ? t('toursPg.date.today')
+                  : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
                   : format(date, 'd MMM', { locale: ptBR })}
               </p>
             </div>
@@ -389,7 +607,7 @@ export default function Tours() {
           <div className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
             <Users size={11} className="text-brand" />
             <div className="text-left">
-              <p className="text-[9px] text-gray-400 leading-none">Pessoas</p>
+              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.people.label')}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <button
                   onClick={() => setPeople((p) => Math.max(1, p - 1))}
@@ -409,21 +627,24 @@ export default function Tours() {
           </div>
         </div>
 
-        {/* ── Escolha o passeio ─────────────────────────────── */}
+        {/* ── Passeios tradicionais (carrinho/combo) ────────── */}
         <section>
-          <p className="text-[14px] font-bold text-gray-900 mb-2.5">Escolha o passeio</p>
+          <p className="text-[14px] font-bold text-gray-900 mb-0.5">{t('toursPg.traditional.title')}</p>
+          <p className="text-[11px] text-gray-400 mb-2.5">{t('toursPg.traditional.subtitle')}</p>
           {toursLoading ? (
             <div className="h-[130px] flex items-center justify-center">
               <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
             </div>
+          ) : tradTours.length === 0 ? (
+            <p className="text-[12px] text-gray-400 py-4">{t('toursPg.traditional.empty')}</p>
           ) : (
             <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
-              {tours.map((tour) => (
+              {tradTours.map((tour) => (
                 <TourPickCard
                   key={tour.id}
                   tour={tour}
                   selected={selectedTour?.id === tour.id}
-                  onSelect={() => { setSelectedId(tour.id); setCart({}) }}
+                  onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
                   isFav={favs.has(tour.id)}
                   onFav={() => toggleFav(tour.id)}
                 />
@@ -432,14 +653,20 @@ export default function Tours() {
           )}
         </section>
 
-        {/* ── Modo PRIVATIVO ────────────────────────────────── */}
-        {mode === 'private' && (
+        {/* Exclusivo selecionado → carrossel exclusivo ACIMA dos veículos */}
+        {selectedTour?.is_exclusive && exclusiveCarousel}
+
+        {/* âncora p/ rolar até os veículos ao selecionar um passeio */}
+        <div ref={vehiclesRef} className="scroll-mt-4" />
+
+        {/* ── Modo PRIVATIVO (só quando um passeio está selecionado) ── */}
+        {selectedTour && mode === 'private' && (
           <>
             {/* Sugestões */}
             {suggestion && (
               <section>
                 <p className="text-[14px] font-bold text-gray-900 mb-2">
-                  Sugestões para {people} {people === 1 ? 'pessoa' : 'pessoas'}
+                  {t('toursPg.suggestions.for')} {people} {people === 1 ? t('toursPg.common.person') : t('toursPg.common.peopleWord')}
                 </p>
 
                 {/* Filter chips */}
@@ -461,9 +688,9 @@ export default function Tours() {
 
                 {/* Suggestion card */}
                 <div className="bg-white rounded-2xl p-3 border border-gray-100 flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+                  <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${suggestion.vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
                     {suggestion.vehicle.image_url ? (
-                      <img src={suggestion.vehicle.image_url} alt={suggestion.vehicle.name} className="w-full h-full object-cover" />
+                      <img src={suggestion.vehicle.image_url} alt={suggestion.vehicle.name} className="w-full h-full object-contain p-0.5" />
                     ) : (
                       <Zap size={20} className="text-gray-400" />
                     )}
@@ -475,7 +702,7 @@ export default function Tours() {
                     <div className="flex items-center gap-1 mt-0.5">
                       <Users size={10} className="text-gray-400" />
                       <span className="text-[11px] text-gray-500">
-                        Até {suggestion.vehicle.seat_capacity * suggestion.qty} pessoas
+                        {t('toursPg.vehicle.upToPeople', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}
                       </span>
                     </div>
                   </div>
@@ -489,7 +716,7 @@ export default function Tours() {
                       onClick={applySuggestion}
                       className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
                     >
-                      Aplicar
+                      {t('toursPg.actions.apply')}
                     </button>
                   </div>
                 </div>
@@ -499,8 +726,8 @@ export default function Tours() {
             {/* Catálogo de veículos */}
             {vehicles.length > 0 && (
               <section className="pb-2">
-                <p className="text-[14px] font-bold text-gray-900">Catálogo de veículos</p>
-                <p className="text-[11px] text-brand mt-0.5 mb-3">Monte sua combinação ideal</p>
+                <p className="text-[14px] font-bold text-gray-900">{t('toursPg.catalog.title')}</p>
+                <p className="text-[11px] text-brand mt-0.5 mb-3">{t('toursPg.catalog.subtitle')}</p>
                 <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-3 xl:grid-cols-4 lg:gap-2.5">
                   {sortedVehicles.map((v) => (
                     <VehicleCard
@@ -511,6 +738,16 @@ export default function Tours() {
                       onRemove={() => setCart((c) => ({ ...c, [v.id]: Math.max(0, (c[v.id] || 1) - 1) }))}
                     />
                   ))}
+                </div>
+              </section>
+            )}
+
+            {/* Nenhum veículo ligado para este passeio (Motor de Preços) */}
+            {vehiclesFetched && vehicles.length === 0 && (
+              <section className="pb-2">
+                <div className="bg-white rounded-2xl p-4 border border-gray-100 text-center">
+                  <p className="text-[13px] font-semibold text-gray-700">{t('toursPg.noVehicles.title')}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{t('toursPg.noVehicles.subtitle')}</p>
                 </div>
               </section>
             )}
@@ -527,8 +764,8 @@ export default function Tours() {
             <>
               {/* Número de pessoas */}
               <div className="bg-white rounded-2xl p-4 border border-gray-100">
-                <p className="text-[14px] font-bold text-gray-900">Número de pessoas</p>
-                <p className="text-[11px] text-gray-400 mt-0.5 mb-4">Preço calculado por pessoa</p>
+                <p className="text-[14px] font-bold text-gray-900">{t('toursPg.sharedMode.peopleTitle')}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5 mb-4">{t('toursPg.sharedMode.peopleSubtitle')}</p>
                 <div className="flex items-center justify-between px-4">
                   <button
                     onClick={() => setPeople((p) => Math.max(1, p - 1))}
@@ -549,7 +786,7 @@ export default function Tours() {
               {/* Card de preço */}
               {pricePerPerson ? (
                 <div className="bg-brand rounded-2xl p-4">
-                  <p className="text-white/70 text-[12px] font-medium">Preço por pessoa</p>
+                  <p className="text-white/70 text-[12px] font-medium">{t('toursPg.sharedMode.pricePerPerson')}</p>
                   <p className="text-white text-[30px] font-extrabold leading-tight mt-0.5">
                     R$ {pricePerPerson.toLocaleString('pt-BR')}
                   </p>
@@ -559,7 +796,7 @@ export default function Tours() {
 
                   <div className="flex items-center justify-between mt-4 bg-white/15 rounded-xl px-3 py-2.5">
                     <span className="text-white/80 text-[13px]">
-                      {people} {people === 1 ? 'pessoa' : 'pessoas'}
+                      {people} {people === 1 ? t('toursPg.common.person') : t('toursPg.common.peopleWord')}
                     </span>
                     <span className="text-white font-bold text-[15px]">
                       R$ {sharedTotal.toLocaleString('pt-BR')}
@@ -569,13 +806,13 @@ export default function Tours() {
                   <div className="flex items-center gap-2 mt-3 bg-white/10 rounded-xl px-3 py-2">
                     <Bus size={13} className="text-white/70 shrink-0" />
                     <span className="text-white/80 text-[11px]">
-                      Transporte em veículo coletivo com outros turistas
+                      {t('toursPg.sharedMode.transport')}
                     </span>
                   </div>
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl p-4 border border-gray-100">
-                  <p className="text-[13px] text-gray-400">Passeio não disponível em modo compartilhado.</p>
+                  <p className="text-[13px] text-gray-400">{t('toursPg.sharedMode.unavailable')}</p>
                 </div>
               )}
 
@@ -585,10 +822,9 @@ export default function Tours() {
                   <div className="flex items-start gap-2.5">
                     <Info size={14} className="text-blue-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[13px] font-bold text-blue-900">Como funciona?</p>
+                      <p className="text-[13px] font-bold text-blue-900">{t('toursPg.howItWorks.title')}</p>
                       <p className="text-[11px] text-blue-700 leading-relaxed mt-0.5">
-                        O passeio é compartilhado com outros turistas em uma Jardineira.
-                        Valor fixo por pessoa, com guia incluso.
+                        {t('toursPg.howItWorks.text')}
                       </p>
                     </div>
                   </div>
@@ -598,85 +834,81 @@ export default function Tours() {
           )
         })()}
 
+        {/* Sem exclusivo selecionado → carrossel exclusivo ABAIXO dos veículos */}
+        {!selectedTour?.is_exclusive && exclusiveCarousel}
+
       </div>
 
       {/* ── Calendário ──────────────────────────────────────────── */}
       {showDatePicker && (
         <DatePickerSheet
           value={date}
+          minDate={cutoffMinDate}
+          seasons={seasonsData || []}
+          highSeasonMonths={highSeasonMonths}
           onChange={setDate}
           onClose={() => setShowDatePicker(false)}
         />
       )}
 
-      {/* ── CTA fixo (modo privativo com veículos no carrinho) ── */}
-      {mode === 'private' && cartHasItems && (() => {
+      {/* ── Resumo flutuante (modo privativo) — fixo no viewport, sempre visível.
+          Portal p/ document.body: o wrapper do PullToRefresh usa transform/
+          will-change e prenderia o position:fixed na página (a barra sumia no
+          fim do conteúdo ao rolar). Pelo portal ela cola no rodapé da tela. ── */}
+      {mode === 'private' && cartHasItems && createPortal((() => {
+        // Barra aparece só quando há veículo selecionado. Basta a pré-seleção
+        // cobrir as pessoas; data/hora/saída são definidas depois, no carrinho.
         const canContinue = cartCapacity >= people
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
             <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-              {/* Resumo */}
+              {/* Resumo do que está selecionado */}
               <div className="flex-1 min-w-0 mr-3">
-                <p className="text-[13px] font-bold text-gray-900 truncate">
-                  {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
-                </p>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Users size={11} className={canContinue ? 'text-gray-400' : 'text-red-400'} />
-                  <span className={`text-[11px] font-medium ${canContinue ? 'text-gray-500' : 'text-red-400'}`}>
-                    {cartCapacity}/{people}
-                  </span>
-                </div>
-              </div>
-              {/* Preço + botão */}
-              <div className="flex items-center gap-3 shrink-0">
-                {cartTotal > 0 && (
-                  <span className={`text-[15px] font-extrabold ${canContinue ? 'text-brand' : 'text-gray-400'}`}>
-                    R$ {cartTotal.toLocaleString('pt-BR')}
-                  </span>
+                {cartHasItems ? (
+                  <>
+                    <p className="text-[13px] font-bold text-gray-900 truncate">
+                      {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="inline-flex items-center gap-1">
+                        <Users size={11} className={cartCapacity >= people ? 'text-gray-400' : 'text-red-400'} />
+                        <span className={`text-[11px] font-medium ${cartCapacity >= people ? 'text-gray-500' : 'text-red-400'}`}>
+                          {cartCapacity}/{people} {t('toursPg.cart.seats')}
+                        </span>
+                      </span>
+                      {cartTotal > 0 && (
+                        <span className="text-[13px] font-extrabold text-brand">
+                          R$ {cartTotal.toLocaleString('pt-BR')}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-[13px] text-gray-400">{t('toursPg.cart.selectVehicle')}</p>
                 )}
-                <button
-                  onClick={canContinue
-                    ? () => navigate('/checkout/resumo', {
-                        state: {
-                          service_name:     selectedTour.name,
-                          service_type:     'tour',
-                          booking_mode:     'private',
-                          service_date:     isToday(date) ? 'Hoje'
-                                              : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
-                                              : format(date, "d 'de' MMMM", { locale: ptBR }),
-                          service_date_iso: format(date, 'yyyy-MM-dd'),
-                          service_time:     'A confirmar',
-                          people_count:     people,
-                          origin_text:      originLabel,
-                          origin_latitude:  origin?.latitude  ?? null,
-                          origin_longitude: origin?.longitude ?? null,
-                          vehicle_name:     cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
-                          total_price:      cartTotal,
-                          breakdown:        { 'Veículos selecionados': cartTotal },
-                          cover_image_url:       selectedTour.cover_image_url || null,
-                          region_id:             selectedTour.regions?.id,
-                          service_id:            selectedTour.id,
-                          vehicles:              cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty })),
-                          booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
-                        },
-                      })
-                    : undefined}
-                  className={`font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
-                    canContinue
-                      ? 'bg-brand text-white active:scale-95 cursor-pointer'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  Continuar
-                </button>
               </div>
+              {/* Botão: exclusivo vai direto ao Resumo; tradicional vai ao carrinho */}
+              <button
+                onClick={canContinue
+                  ? (selectedTour?.is_exclusive
+                      ? continueExclusivePrivate
+                      : () => { saveCartItem(buildCartDraft()); navigate('/carrinho') })
+                  : undefined}
+                className={`shrink-0 font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
+                  canContinue
+                    ? 'bg-brand text-white active:scale-95 cursor-pointer'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {selectedTour?.is_exclusive ? t('toursPg.actions.continue') : t('toursPg.actions.addToCart')}
+              </button>
             </div>
           </div>
         )
-      })()}
+      })(), document.body)}
 
       {/* ── CTA fixo (modo compartilhado) ───────────────────────── */}
-      {mode === 'shared' && selectedTour?.shared_price_per_person && (() => {
+      {mode === 'shared' && selectedTour?.shared_price_per_person && createPortal((() => {
         const pricePerPerson = Number(selectedTour.shared_price_per_person)
         const sharedTotal    = pricePerPerson * people
         return (
@@ -686,7 +918,7 @@ export default function Tours() {
                 <div className="flex items-center gap-1">
                   <Users size={11} className="text-gray-400" />
                   <span className="text-[12px] text-gray-500">
-                    {people} {people === 1 ? 'passageiro' : 'passageiros'}
+                    {people} {people === 1 ? t('toursPg.common.passenger') : t('toursPg.common.passengersWord')}
                   </span>
                 </div>
                 <p className="text-[16px] font-extrabold text-brand mt-0.5">
@@ -694,36 +926,45 @@ export default function Tours() {
                 </p>
               </div>
               <button
-                onClick={() => navigate('/checkout/resumo', {
-                  state: {
-                    service_name:     selectedTour.name,
-                    service_type:     'tour',
-                    booking_mode:     'shared',
-                    service_date:     isToday(date) ? 'Hoje'
-                                        : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
-                                        : format(date, "d 'de' MMMM", { locale: ptBR }),
-                    service_date_iso: format(date, 'yyyy-MM-dd'),
-                    service_time:     'A confirmar',
-                    people_count:     people,
-                    price_per_person: pricePerPerson,
-                    origin_text:      'Centro de Jericoacoara',
-                    total_price:      sharedTotal,
-                    breakdown:        { [`${people}x por pessoa`]: sharedTotal },
-                    cover_image_url:       selectedTour.cover_image_url || null,
-                    region_id:             selectedTour.regions?.id,
-                    service_id:            selectedTour.id,
-                    vehicles:              [],
-                    booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
-                  },
-                })}
-                className="bg-brand text-white font-bold rounded-xl px-5 py-2.5 text-[13px] active:scale-95 transition-transform shrink-0"
+                onClick={() => {
+                  if (!origin) { setShowOriginPicker(true); return }
+                  navigate('/checkout/resumo', {
+                    state: {
+                      service_name:     selectedTour.name,
+                      short_description: selectedTour.short_description || null,
+                      service_type:     'tour',
+                      booking_mode:     'shared',
+                      service_date:     isToday(date) ? t('toursPg.date.today')
+                                          : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
+                                          : format(date, "d 'de' MMMM", { locale: ptBR }),
+                      service_date_iso: format(date, 'yyyy-MM-dd'),
+                      service_time:     t('toursPg.common.toBeConfirmed'),
+                      people_count:     people,
+                      price_per_person: pricePerPerson,
+                      origin_text:      origin.name,
+                      origin_latitude:  origin.latitude,
+                      origin_longitude: origin.longitude,
+                      total_price:      sharedTotal,
+                      breakdown:        { [t('toursPg.breakdown.perPerson', { count: people })]: sharedTotal },
+                      cover_image_url:       selectedTour.cover_image_url || null,
+                      region_id:             selectedTour.regions?.id,
+                      service_id:            selectedTour.id,
+                      vehicles:              [],
+                      booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
+                      min_advance_hours:     selectedTour.min_advance_hours ?? null,
+                    },
+                  })
+                }}
+                className={`font-bold rounded-xl px-5 py-2.5 text-[13px] transition-transform shrink-0 ${
+                  origin ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400'
+                }`}
               >
-                Continuar
+                {t('toursPg.actions.continue')}
               </button>
             </div>
           </div>
         )
-      })()}
+      })(), document.body)}
 
       <OriginPicker
         open={showOriginPicker}

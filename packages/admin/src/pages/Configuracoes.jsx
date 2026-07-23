@@ -559,7 +559,7 @@ function TabPagamentos({ settings, qc }) {
               Define como cada pagamento é dividido entre a plataforma e a cooperativa.
               A cooperativa repassa seus motoristas manualmente.
             </p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Input
                   label="Plataforma (admin) %"
@@ -611,7 +611,7 @@ function TabPagamentos({ settings, qc }) {
               Utilizado para transferências manuais e exibido no painel financeiro.
             </p>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Select
                 label="Tipo de chave PIX"
                 value={form.payment_admin_pix_key_type}

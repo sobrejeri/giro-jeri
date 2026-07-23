@@ -2,6 +2,10 @@
 
 Plataforma digital de reservas para passeios e transfers em Jericoacoara.
 
+> 📘 **Onboarding técnico completo** (arquitetura, API, integrações, banco,
+> deploy e variáveis de ambiente): [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
+> Ideal para integrar um novo dev ou uma nova sessão de IA ao projeto.
+
 ---
 
 ## Apps em produção
@@ -208,6 +212,11 @@ GET    /api/bookings
 GET    /api/bookings/:id
 POST   /api/bookings/:id/cancel
 
+POST   /api/payments/intent
+POST   /api/payments/nupay/complete
+GET    /api/payments/:id/status
+POST   /api/payments/:id/cancel
+
 GET    /api/catalog/tours          (operator+)
 POST   /api/catalog/tours          (operator+)
 PUT    /api/catalog/tours/:id      (operator+)
@@ -218,6 +227,15 @@ GET    /api/admin/users            (admin)
 GET    /api/admin/financial        (admin)
 GET    /api/admin/operational      (operator+)
 ```
+
+---
+
+## Documentação operacional
+
+- `docs/CHECKLIST-LANCAMENTO.md` — bloqueios e validações para produção
+- `docs/AGENTS-SYNC.md` — coordenação de branches e migrations
+- `docs/NUPAY.md` — configuração, segurança e homologação do NuPay Sessions
+- `LANCAMENTO.md` — roteiro de infraestrutura e deploy
 
 ---
 

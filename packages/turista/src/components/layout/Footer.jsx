@@ -11,7 +11,7 @@ export default function Footer() {
               <div className="w-7 h-7 bg-brand rounded-lg flex items-center justify-center">
                 <MapPin size={14} className="text-white" />
               </div>
-              <span className="font-display font-bold text-white text-lg">Giro Jeri</span>
+              <span className="font-display font-bold text-white text-lg">Turiva</span>
             </div>
             <p className="text-sm leading-relaxed">
               Passeios e transfers em Jericoacoara. <br />
@@ -39,7 +39,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-gray-800 mt-10 pt-6 text-xs text-center">
-          © {new Date().getFullYear()} Giro Jeri. Todos os direitos reservados.
+          © {new Date().getFullYear()} Turiva. Todos os direitos reservados.
         </div>
       </div>
     </footer>

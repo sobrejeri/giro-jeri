@@ -21,13 +21,20 @@ const schema = z.object({
   locality:    z.string().max(80).optional().nullable(),
   price_range: z.string().max(10).optional().nullable(),
   price_note:  z.string().max(60).optional().nullable(),
+  latitude:    z.number().optional().nullable(),
+  longitude:   z.number().optional().nullable(),
   is_featured: z.boolean().optional(),
   is_active:   z.boolean().optional(),
   sort_order:  z.number().int().optional(),
+  region_id:   z.string().uuid().optional().nullable(),
+  region_ids:  z.array(z.string().uuid()).optional(),
 });
 
 function clean(payload) {
-  Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null; });
+  Object.keys(payload).forEach((k) => {
+    if (Array.isArray(payload[k])) return;  // não toca em arrays
+    if (payload[k] === '') payload[k] = null;
+  });
   return payload;
 }
 
@@ -42,7 +49,12 @@ router.get('/', async (req, res, next) => {
       .order('is_featured', { ascending: false })
       .order('sort_order',  { ascending: true })
       .order('created_at',  { ascending: false });
-    if (req.query.category) q = q.eq('category', req.query.category);
+    if (req.query.category)  q = q.eq('category',  req.query.category);
+    if (req.query.region_id) {
+      q = q.or(
+        `region_ids.cs.{${req.query.region_id}},region_id.eq.${req.query.region_id}`
+      );
+    }
     const { data, error } = await q;
     if (error) throw error;
     if (!data?.length) return res.json([]);
@@ -60,14 +72,27 @@ router.get('/', async (req, res, next) => {
       statsMap[r.establishment_id].count += 1;
     });
 
-    res.json(data.map((e) => {
+    const enriched = data.map((e) => {
       const s = statsMap[e.id];
       return {
         ...e,
         avg_rating:   s ? +(s.sum / s.count).toFixed(1) : null,
         review_count: s?.count || 0,
       };
-    }));
+    });
+
+    // Ordena por reputação: Destaques (patrocinados) primeiro, depois maior
+    // nota, depois mais avaliações. O sort do V8 é estável, então empates
+    // mantêm a ordem do SQL (sort_order / created_at).
+    enriched.sort((a, b) => {
+      if (!!b.is_featured !== !!a.is_featured) return b.is_featured ? 1 : -1;
+      const ar = a.avg_rating ?? -1;
+      const br = b.avg_rating ?? -1;
+      if (br !== ar) return br - ar;
+      return (b.review_count || 0) - (a.review_count || 0);
+    });
+
+    res.json(enriched);
   } catch (err) { next(err); }
 });
 
@@ -95,7 +120,7 @@ router.get('/:id/reviews', async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('establishment_reviews')
-      .select('id, rating, comment, created_at, user_id, users(full_name, photo_url)')
+      .select('id, rating, comment, created_at, user_id, users(full_name, profile_photo_url)')
       .eq('establishment_id', req.params.id)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -149,7 +174,7 @@ router.post('/:id/reviews', async (req, res, next) => {
         { establishment_id: req.params.id, user_id: req.user.id, rating, comment },
         { onConflict: 'establishment_id,user_id' }
       )
-      .select('id, rating, comment, created_at, user_id, users(full_name, photo_url)')
+      .select('id, rating, comment, created_at, user_id, users(full_name, profile_photo_url)')
       .single();
     if (error) throw error;
     res.status(201).json(data);

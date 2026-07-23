@@ -2,7 +2,7 @@ import { supabase } from '../supabase.js';
 import dayjs from 'dayjs';
 
 // =============================================================================
-// MOTOR DE PREÇOS — Giro Jeri
+// MOTOR DE PREÇOS — Turiva
 //
 // Responsável por calcular o valor correto de qualquer reserva.
 // O backend é a única fonte de verdade — o frontend só exibe o resultado.
@@ -20,22 +20,58 @@ async function getSetting(key, defaultValue) {
 
 // ── Verifica se a data está em alta temporada ─────────
 export async function getSeasonAddition(regionId, serviceDate, subtotal) {
-  const { data: rule } = await supabase
+  let q = supabase
     .from('high_season_rules')
-    .select('additional_type, additional_value')
-    .eq('region_id', regionId)
+    .select('additional_type, additional_value, region_id')
     .eq('is_active', true)
     .lte('start_date', serviceDate)
-    .gte('end_date', serviceDate)
-    .limit(1)
-    .single();
+    .gte('end_date', serviceDate);
+  // Regra da região específica + regra GLOBAL (region_id nulo → vale p/ todas
+  // as regiões). Mesmo tratamento dos feriados nacionais.
+  q = regionId ? q.or(`region_id.eq.${regionId},region_id.is.null`) : q.is('region_id', null);
 
+  const { data: rows } = await q
+    .order('region_id', { ascending: false, nullsFirst: false }) // específica antes da global
+    .limit(1);
+
+  const rule = rows?.[0];
   if (!rule) return 0;
 
   if (rule.additional_type === 'percentage') {
     return Math.round(subtotal * (rule.additional_value / 100) * 100) / 100;
   }
   return rule.additional_value;
+}
+
+// ── Acréscimo de feriado / data comemorativa (data EXATA) ──
+export async function getHolidayAddition(regionId, serviceDate, subtotal) {
+  let q = supabase
+    .from('holidays')
+    .select('additional_type, additional_value, region_id')
+    .eq('holiday_date', serviceDate)
+    .eq('is_active', true)
+    .eq('affects_pricing', true);
+  // Região específica + feriados nacionais (region_id nulo)
+  q = regionId ? q.or(`region_id.eq.${regionId},region_id.is.null`) : q.is('region_id', null);
+
+  const { data: rows } = await q
+    .order('region_id', { ascending: false, nullsFirst: false }) // específico antes do nacional
+    .limit(1);
+
+  const h = rows?.[0];
+  if (!h || h.additional_value == null) return 0;
+  if (h.additional_type === 'fixed') return Number(h.additional_value);
+  return Math.round(subtotal * (Number(h.additional_value) / 100) * 100) / 100;
+}
+
+// ── Acréscimo aplicável à data: o MAIOR entre alta temporada e feriado ──
+// (evita empilhar os dois sem querer quando um feriado cai dentro da temporada)
+export async function getDateSurcharge(regionId, serviceDate, subtotal) {
+  const [season, holiday] = await Promise.all([
+    getSeasonAddition(regionId, serviceDate, subtotal),
+    getHolidayAddition(regionId, serviceDate, subtotal),
+  ]);
+  return Math.max(season || 0, holiday || 0);
 }
 
 // ── Valida e calcula desconto de cupom ─────────────────
@@ -184,7 +220,7 @@ export async function calculatePrivateTour({
   subtotal = Math.round(subtotal * 100) / 100;
 
   // Alta temporada
-  const seasonAddition = await getSeasonAddition(regionId, serviceDate, subtotal);
+  const seasonAddition = await getDateSurcharge(regionId, serviceDate, subtotal);
 
   const subtotalWithSeason = subtotal + seasonAddition;
 
@@ -241,7 +277,7 @@ export async function calculateSharedTour({
 
   const subtotal = Math.round(tour.shared_price_per_person * peopleCount * 100) / 100;
 
-  const seasonAddition = await getSeasonAddition(regionId, serviceDate, subtotal);
+  const seasonAddition = await getDateSurcharge(regionId, serviceDate, subtotal);
   const subtotalWithSeason = subtotal + seasonAddition;
 
   const { discount, couponId } = await applyCoupon(
@@ -282,8 +318,8 @@ export async function calculateTabbedTransfer({
   couponCode,
   userId,
 }) {
-  // Valida antecedência mínima de 4h
-  await validateTransferAdvance(serviceDate, serviceTime);
+  // Valida antecedência mínima (por serviço, senão setting global)
+  await validateTransferAdvance(serviceDate, serviceTime, { serviceId: routeId });
 
   const { data: route } = await supabase
     .from('transfer_routes')
@@ -295,7 +331,7 @@ export async function calculateTabbedTransfer({
   if (!route) throw { status: 404, message: 'Rota não encontrada ou indisponível' };
 
   const subtotal = route.default_price;
-  const seasonAddition = await getSeasonAddition(regionId, serviceDate, subtotal);
+  const seasonAddition = await getDateSurcharge(regionId, serviceDate, subtotal);
   const subtotalWithSeason = subtotal + seasonAddition;
 
   const { discount, couponId } = await applyCoupon(
@@ -325,16 +361,38 @@ export async function calculateTabbedTransfer({
 // VALIDAÇÃO DE ANTECEDÊNCIA MÍNIMA PARA TRANSFER
 // =============================================================================
 
-export async function validateTransferAdvance(serviceDate, serviceTime) {
-  const minHours = parseInt(await getSetting('transfer_min_advance_hours', '4'));
+export async function validateTransferAdvance(serviceDate, serviceTime, opts = {}) {
+  // Antecedência por serviço (admin define no catálogo). service_id de transfer
+  // é um transfer_route → a regra mora no transfer pai. NULL = usa o padrão
+  // global (setting transfer_min_advance_hours, default 4h).
+  let minHours = null;
+  if (opts.serviceId) {
+    const { data } = await supabase
+      .from('transfer_routes')
+      .select('transfers ( min_advance_hours )')
+      .eq('id', opts.serviceId)
+      .maybeSingle();
+    const perService = data?.transfers?.min_advance_hours;
+    if (perService != null) minHours = Number(perService);
+  }
+  if (minHours == null) {
+    minHours = parseInt(await getSetting('transfer_min_advance_hours', '4'));
+  }
 
-  const serviceDateTime = dayjs(`${serviceDate}T${serviceTime}`);
+  // service_time é horário LOCAL de Jericoacoara/Fortaleza (UTC-3 o ano todo).
+  // Ancorar o offset -03:00 evita interpretar como UTC (dava 3h de erro e
+  // recusava agendamentos válidos). minAllowed = instante atual + minHours.
+  const serviceDateTime = dayjs(`${serviceDate}T${String(serviceTime).slice(0, 5)}:00-03:00`);
   const minAllowed      = dayjs().add(minHours, 'hour');
 
   if (serviceDateTime.isBefore(minAllowed)) {
+    const minLocal = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Fortaleza', day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(minAllowed.toDate());
     throw {
       status: 400,
-      message: `Transfers precisam ser agendados com pelo menos ${minHours} horas de antecedência. Horário mínimo: ${minAllowed.format('DD/MM [às] HH:mm')}.`,
+      message: `Transfers precisam ser agendados com pelo menos ${minHours} horas de antecedência. Horário mínimo: ${minLocal}.`,
     };
   }
 }
@@ -345,25 +403,42 @@ export async function validateTransferAdvance(serviceDate, serviceTime) {
 // =============================================================================
 
 export async function suggestVehicles({ regionId, tourId, peopleCount }) {
-  // Busca veículos disponíveis com seus preços para este tour
+  // Só os veículos ATIVOS para ESTE passeio (regra específica ligada no Motor
+  // de Preços) — mesma regra do catálogo, para a sugestão não propor veículo
+  // que não aparece na lista.
   const { data: rules } = await supabase
     .from('vehicle_pricing_rules')
     .select(`
-      base_price,
-      vehicles (
+      base_price, region_id,
+      vehicles!inner (
         id, name, seat_capacity, vehicle_type, image_url, display_order
       )
     `)
     .eq('service_type', 'tour')
+    .eq('service_id', tourId)
     .eq('is_active', true)
-    .or(`service_id.eq.${tourId},service_id.is.null`)
-    .order('service_id', { ascending: false, nullsFirst: false });
+    .eq('vehicles.is_active', true)
+    .eq('vehicles.is_tour_allowed', true);
 
-  if (!rules || rules.length === 0) return [];
+  const allRules = (rules || []).filter((r) => r.vehicles);
+  if (allRules.length === 0) return [];
 
-  // Deduplica: para cada veículo, pega o preço mais específico
+  // Mesma visão do catálogo: só regras da(s) região(ões) do passeio (ou globais);
+  // fallback para todas se nada casar (dados antigos com região divergente).
+  const { data: tourRow } = await supabase
+    .from('tours').select('region_id, region_ids').eq('id', tourId).maybeSingle();
+  const tourRegions = [tourRow?.region_id, ...(Array.isArray(tourRow?.region_ids) ? tourRow.region_ids : [])]
+    .filter(Boolean);
+  const inTourRegion = (r) => r.region_id == null || tourRegions.includes(r.region_id);
+  const scoped = tourRegions.length ? allRules.filter(inTourRegion) : allRules;
+  const useRules = scoped.length ? scoped : allRules;
+
+  // Preferência de preço por região do usuário > global.
+  const rank = (r) => (regionId && r.region_id === regionId) ? 0 : (r.region_id == null) ? 1 : 2;
+
+  // Deduplica: para cada veículo, pega o preço da região preferida
   const vehicleMap = new Map();
-  for (const r of rules) {
+  for (const r of useRules.slice().sort((a, b) => rank(a) - rank(b))) {
     if (!vehicleMap.has(r.vehicles.id)) {
       vehicleMap.set(r.vehicles.id, {
         id:        r.vehicles.id,
