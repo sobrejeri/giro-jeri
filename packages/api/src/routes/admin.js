@@ -3,6 +3,7 @@ import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
+import { notifyDispatchOS } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
 
 const router = Router();
@@ -570,6 +571,18 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       .from('bookings')
       .update({ status_operational: 'assigned' })
       .eq('id', bookingId);
+
+    // OS automática (item 12): envia para cliente e motorista via Z-API.
+    // Best-effort — nunca derruba a resposta do despacho.
+    try {
+      const { data: bk } = await supabase.from('bookings')
+        .select('id, booking_code, user_id, service_type, booking_mode, service_date, service_time, people_count, origin_text, destination_text, pickup_place_name, destination_place_name')
+        .eq('id', bookingId).maybeSingle();
+      if (bk) notifyDispatchOS(supabase, { booking: bk, assignment: result })
+        .catch((err) => console.error('[whatsapp] OS de despacho falhou:', err.message));
+    } catch (err) {
+      console.error('[whatsapp] OS de despacho: erro ao carregar reserva:', err.message);
+    }
 
     res.json(result);
   } catch (err) { next(err); }

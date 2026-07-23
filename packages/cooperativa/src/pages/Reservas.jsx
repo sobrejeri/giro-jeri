@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarCheck, Users, MapPin, Car, CheckCircle2, Compass,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
-  DollarSign, Send, Clock, ShieldAlert, Package, ChevronRight, X,
+  DollarSign, Send, Clock, ShieldAlert, Package, ChevronRight, X, Truck,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -66,6 +67,24 @@ function buildConfirmMsg(b) {
 
 function buildWhatsAppMsg(b) {
   return buildConfirmMsg(b)
+}
+
+// Mensagem de "Solicitar informações" (item 8): a coop pede ao cliente os
+// dados que faltam para organizar o despacho — sem mudar o status da reserva.
+function buildRequestInfoMsg(b) {
+  const name = b.users?.full_name?.split(' ')[0] || 'Cliente'
+  const type = b.service_type === 'tour' ? 'passeio' : 'transfer'
+  return encodeURIComponent([
+    `🌴 *Olá, ${name}!* Aqui é da cooperativa que vai realizar o seu ${type} (${b.booking_code}).`,
+    ``,
+    `Para deixar tudo certo, você poderia confirmar:`,
+    `📍 Local de embarque (hotel/pousada + ponto de referência)`,
+    `⏰ Horário de preferência`,
+    `📞 Um contato para o dia`,
+    ``,
+    `Assim já deixamos o veículo e o motorista prontos. Obrigado! 😊`,
+    `_Turiva — Passeios & Transfers_`,
+  ].join('\n'))
 }
 
 // ── Toast simples ─────────────────────────────────────────
@@ -247,7 +266,7 @@ function ComboCard({ items, onAccept, onAcceptAll, accepting, acceptingCombo }) 
 }
 
 // ── Card de corrida aceita (minhas) ───────────────────────
-function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
+function MyCard({ booking, onConfirm, onRequestInfo, onStart, onComplete, onDispatch, busy }) {
   const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
   const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
   const clientPhone = booking.users?.phone
@@ -356,26 +375,19 @@ function MyCard({ booking, onConfirm, onStart, onComplete, busy }) {
           ) : (
             <>
               <button
-                onClick={() => onConfirm(booking)}
-                disabled={isSending}
-                className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all disabled:opacity-60 shadow-md shadow-green-500/20"
+                onClick={() => onRequestInfo?.(booking)}
+                className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20BA5A] text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all shadow-md shadow-green-500/20"
               >
-                {isSending
-                  ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  : <><MessageCircle size={16} /> Confirmar e enviar WhatsApp</>}
+                <MessageCircle size={16} /> Solicitar informações
               </button>
+              {/* Item 7: quando pago, a ação é ir para o Despacho (preencher a OS
+                  com veículo/motorista); iniciar a corrida acontece lá. */}
               <button
-                onClick={() => onStart(booking)}
-                disabled={isSending}
-                className="w-full flex items-center justify-center gap-2 bg-brand/10 hover:bg-brand/20 text-brand font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-all disabled:opacity-60"
+                onClick={() => onDispatch?.(booking)}
+                className="w-full flex items-center justify-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-all shadow-md shadow-brand/20"
               >
-                <Zap size={15} /> Iniciar corrida
+                <Truck size={15} /> Despacho
               </button>
-              {!waNumber && (
-                <p className="text-[11px] text-center text-gray-400">
-                  Cliente sem WhatsApp cadastrado — a reserva será enviada para despacho mesmo assim
-                </p>
-              )}
             </>
           )}
         </div>
@@ -448,7 +460,7 @@ function MyGroupCard({ bookings, onOpen }) {
 }
 
 // ── Folha com os serviços do pedido (cada um com suas ações) ──────
-function MyGroupSheet({ bookings, onClose, onConfirm, onStart, onComplete, busyId }) {
+function MyGroupSheet({ bookings, onClose, onConfirm, onRequestInfo, onStart, onComplete, onDispatch, busyId }) {
   const count = bookings.length
   const { total } = myGroupSummary(bookings)
   return (
@@ -466,7 +478,7 @@ function MyGroupSheet({ bookings, onClose, onConfirm, onStart, onComplete, busyI
         </div>
         <div className="overflow-y-auto px-4 py-4 space-y-3 flex-1">
           {bookings.map((b) => (
-            <MyCard key={b.id} booking={b} onConfirm={onConfirm} onStart={onStart} onComplete={onComplete} busy={busyId === b.id} />
+            <MyCard key={b.id} booking={b} onConfirm={onConfirm} onRequestInfo={onRequestInfo} onStart={onStart} onComplete={onComplete} onDispatch={onDispatch} busy={busyId === b.id} />
           ))}
         </div>
         <div className="px-5 py-3 bg-white border-t border-gray-100 text-center">
@@ -562,6 +574,7 @@ function QuoteRequestCard({ quote, onQuote }) {
 // ── Página principal ──────────────────────────────────────
 export default function Reservas() {
   const { user }    = useAuth()
+  const navigate    = useNavigate()
   const isElevated  = user?.user_type === 'admin'
   const [tab,        setTab]       = useState('pending')
   const [toast,      setToast]     = useState(null)
@@ -714,6 +727,16 @@ export default function Reservas() {
   // Serviços do pedido aberto — derivados do `mine` vivo, para a folha
   // refletir a mudança de status na hora (aceitar/iniciar/concluir).
   const openGroupBookings = myGroupGid ? mine.filter((b) => b.order_group_id === myGroupGid) : []
+
+  // Item 8: abre o WhatsApp para PEDIR informações ao cliente (não confirma nem
+  // muda status). O despacho/confirmação de dados acontece na tela de Despacho.
+  function handleRequestInfo(booking) {
+    const phone = booking.users?.phone
+    if (!phone) { setToast({ message: 'Cliente sem WhatsApp cadastrado.', type: 'error' }); return }
+    const d = phone.replace(/\D/g, '')
+    const intl = d.length <= 11 ? `55${d}` : d
+    window.open(`https://wa.me/${intl}?text=${buildRequestInfoMsg(booking)}`, '_blank')
+  }
 
   async function handleConfirm(booking) {
     if (confirming) return
@@ -933,8 +956,10 @@ export default function Reservas() {
                 key={it.booking.id}
                 booking={it.booking}
                 onConfirm={handleConfirm}
+                onRequestInfo={handleRequestInfo}
                 onStart={handleStart}
                 onComplete={handleComplete}
+                onDispatch={() => navigate('/despacho')}
                 busy={confirming === it.booking.id}
               />
             ))}
@@ -957,8 +982,10 @@ export default function Reservas() {
           bookings={openGroupBookings}
           onClose={() => setMyGroupGid(null)}
           onConfirm={handleConfirm}
+          onRequestInfo={handleRequestInfo}
           onStart={handleStart}
           onComplete={handleComplete}
+          onDispatch={() => { setMyGroupGid(null); navigate('/despacho') }}
           busyId={confirming}
         />
       )}

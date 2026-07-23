@@ -245,6 +245,57 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
   await sendToMany(admins.map((a) => a.phone), message)
 }
 
+// ── ORDEM DE SERVIÇO (Despacho) ────────────────────────
+// Ao confirmar o despacho, envia a OS automaticamente via Z-API para o CLIENTE
+// (dados do veículo/motorista) e para o MOTORISTA (dados da corrida/cliente).
+export async function notifyDispatchOS(supabase, { booking, assignment }) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  const { tipo, data } = bookingSummary(booking)
+  const hora       = booking.service_time ? booking.service_time.slice(0, 5) : null
+  const quando     = `${data}${hora ? ` às ${hora}` : ''}`
+  const veiculo    = assignment?.real_vehicle_text || '—'
+  const motorista  = assignment?.driver_name || '—'
+  const motoFone   = assignment?.driver_phone || ''
+  const obs        = assignment?.dispatch_notes ? `\n📝 ${assignment.dispatch_notes}` : ''
+  const embarque   = booking.origin_text || booking.pickup_place_name || ''
+  const destino    = booking.destination_text || booking.destination_place_name || ''
+  const modo       = booking.booking_mode === 'private' ? ` Privativo` : booking.booking_mode === 'shared' ? ` Compartilhado` : ''
+
+  // Cliente
+  const clientePhone = await userPhone(supabase, booking.user_id)
+  if (clientePhone) {
+    const msg =
+      `*TURIVA* · Tudo pronto para o seu ${tipo.toLowerCase()}! 🎉\n\n` +
+      `📅 ${quando}\n` +
+      (embarque ? `📍 Embarque: ${embarque}\n` : '') +
+      (destino  ? `🏁 Destino: ${destino}\n` : '') +
+      `🚗 Veículo: ${veiculo}\n` +
+      `👤 Motorista: ${motorista}${motoFone ? ` — ${motoFone}` : ''}\n` +
+      `🔖 ${booking.booking_code}` + obs +
+      `\n\nQualquer dúvida, é só chamar. Boa viagem! 🌴`
+    await sendToMany([clientePhone], msg)
+  }
+
+  // Motorista (a OS)
+  if (motoFone) {
+    const { data: cli } = await supabase.from('users')
+      .select('full_name, phone').eq('id', booking.user_id).maybeSingle()
+    const msg =
+      `*TURIVA* · Ordem de Serviço 🚗\n\n` +
+      `🚙 ${tipo}${modo}\n` +
+      `📅 ${quando}\n` +
+      `👥 ${booking.people_count || '—'} pax\n` +
+      (embarque ? `📍 Embarque: ${embarque}\n` : '') +
+      (destino  ? `🏁 Destino: ${destino}\n` : '') +
+      `🚗 Veículo: ${veiculo}\n` +
+      `🙋 Cliente: ${cli?.full_name || '—'}${cli?.phone ? ` — ${cli.phone}` : ''}\n` +
+      `🔖 ${booking.booking_code}` + obs
+    await sendToMany([motoFone], msg)
+  }
+
+  return { sent: true }
+}
+
 // ── CLIENTE ────────────────────────────────────────────
 // Cooperativa aceitou → cliente precisa PAGAR pra confirmar. Gatilho de
 // conversão mais crítico: sem isso o cliente não sabe que pode pagar.

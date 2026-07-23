@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   ChevronLeft, ChevronRight, CheckCircle2, UserCheck, Car, Clock,
-  Users, MapPin, RefreshCw, MessageCircle, FileText, Package,
+  Users, MapPin, RefreshCw, MessageCircle, FileText, Package, Zap,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
@@ -26,7 +26,7 @@ function hasDispatch(b) {
   return !!(a && (a.real_vehicle_text || a.driver_name))
 }
 
-function BookingRow({ b, onDispatch, cooperativa }) {
+function BookingRow({ b, onDispatch, onStart, onComplete, cooperativa }) {
   const dateStr = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), "dd/MM", { locale: ptBR }) : ''
   const local        = b.pickup_place_name || b.origin_text || ''
@@ -50,9 +50,19 @@ function BookingRow({ b, onDispatch, cooperativa }) {
               <span className="font-mono text-xs font-bold text-gray-400">{b.booking_code}</span>
               <Badge value={b.service_type} />
               {isDispatched && (
-                <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  <CheckCircle2 size={9} /> Despachado
-                </span>
+                b.status_operational === 'in_progress' ? (
+                  <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    <Zap size={9} /> Em andamento
+                  </span>
+                ) : b.status_operational === 'completed' ? (
+                  <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    <CheckCircle2 size={9} /> Concluído
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    <CheckCircle2 size={9} /> Despachado
+                  </span>
+                )
               )}
             </div>
             <p className="text-sm font-semibold text-gray-900">{b.users?.full_name || '—'}</p>
@@ -105,6 +115,24 @@ function BookingRow({ b, onDispatch, cooperativa }) {
             >
               <MessageCircle size={12} /> WhatsApp Cliente
             </button>
+
+            {/* Ciclo da corrida (item 13): iniciar depois do despacho, depois concluir */}
+            {b.status_operational !== 'in_progress' && b.status_operational !== 'completed' && (
+              <button
+                onClick={() => onStart?.(b)}
+                className="flex items-center gap-1.5 text-xs font-bold bg-brand hover:bg-brand-600 text-white rounded-lg px-3 py-1.5 transition-colors ml-auto"
+              >
+                <Zap size={12} /> Iniciar corrida
+              </button>
+            )}
+            {b.status_operational === 'in_progress' && (
+              <button
+                onClick={() => onComplete?.(b)}
+                className="flex items-center gap-1.5 text-xs font-bold bg-gray-900 hover:bg-black text-white rounded-lg px-3 py-1.5 transition-colors ml-auto"
+              >
+                <CheckCircle2 size={12} /> Concluir corrida
+              </button>
+            )}
           </div>
         )}
       </CardBody>
@@ -135,7 +163,7 @@ function groupByOrder(list) {
 
 // Lista com os serviços do mesmo pedido agrupados sob um cabeçalho. O despacho
 // segue POR serviço (cada um pode ter veículo/motorista diferente).
-function GroupedList({ list, onDispatch, cooperativa }) {
+function GroupedList({ list, onDispatch, onStart, onComplete, cooperativa }) {
   return (
     <div className="space-y-3">
       {groupByOrder(list).map((it) => it.type === 'group' ? (
@@ -151,12 +179,12 @@ function GroupedList({ list, onDispatch, cooperativa }) {
           </div>
           <div className="p-2 space-y-2 bg-brand/[0.02]">
             {it.items.map((b) => (
-              <BookingRow key={b.id} b={b} onDispatch={onDispatch} cooperativa={cooperativa} />
+              <BookingRow key={b.id} b={b} onDispatch={onDispatch} onStart={onStart} onComplete={onComplete} cooperativa={cooperativa} />
             ))}
           </div>
         </div>
       ) : (
-        <BookingRow key={it.item.id} b={it.item} onDispatch={onDispatch} cooperativa={cooperativa} />
+        <BookingRow key={it.item.id} b={it.item} onDispatch={onDispatch} onStart={onStart} onComplete={onComplete} cooperativa={cooperativa} />
       ))}
     </div>
   )
@@ -198,6 +226,12 @@ export default function Despacho() {
       setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
     },
   })
+
+  // Ciclo da corrida no Despacho (item 13): iniciar após o despacho, depois concluir.
+  const startMut    = useMutation({ mutationFn: (id) => api.startBooking(id),    onSuccess: () => qc.invalidateQueries({ queryKey: ['dispatch'] }) })
+  const completeMut = useMutation({ mutationFn: (id) => api.completeBooking(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['dispatch'] }) })
+  function handleStart(b)    { if (!startMut.isPending) startMut.mutate(b.id) }
+  function handleComplete(b) { if (!completeMut.isPending) completeMut.mutate(b.id) }
 
   function changeDate(days) {
     const base = date === 'all' ? format(new Date(), 'yyyy-MM-dd') : date
@@ -298,7 +332,7 @@ export default function Despacho() {
             </CardBody>
           </Card>
         ) : (
-          <GroupedList list={pending} onDispatch={handleDispatch} cooperativa={cooperativa} />
+          <GroupedList list={pending} onDispatch={handleDispatch} onStart={handleStart} onComplete={handleComplete} cooperativa={cooperativa} />
         )}
       </div>
 
@@ -308,7 +342,7 @@ export default function Despacho() {
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
             Despachados / Em andamento ({dispatched.length})
           </h3>
-          <GroupedList list={dispatched} onDispatch={handleDispatch} cooperativa={cooperativa} />
+          <GroupedList list={dispatched} onDispatch={handleDispatch} onStart={handleStart} onComplete={handleComplete} cooperativa={cooperativa} />
         </div>
       )}
 
