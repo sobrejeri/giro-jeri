@@ -841,7 +841,7 @@ export default function Reservas() {
           // qualquer solicitação nova, de qualquer serviço, conta como disponível.
           { key: 'pending',  label: 'Disponíveis',     short: 'Disponíveis', count: pending.length + pendingQuotes.length },
           { key: 'cotacoes', label: 'Cotações',        short: 'Cotações',    count: pendingQuotes.length },
-          { key: 'mine',     label: 'Minhas corridas', short: 'Minhas',      count: mine.length },
+          { key: 'mine',     label: 'Minhas corridas', short: 'Minhas',      count: mine.length + quotedQuotes.length },
         ].map((t) => (
           <button
             key={t.key}
@@ -940,7 +940,7 @@ export default function Reservas() {
           </div>
         )
       ) : (
-        mine.length === 0 ? (
+        (mine.length === 0 && quotedQuotes.length === 0) ? (
           <div className="text-center py-16 text-gray-400">
             <Car size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium">Nenhuma corrida ativa</p>
@@ -948,6 +948,22 @@ export default function Reservas() {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Item 6: translados personalizados aguardando o cliente aceitar —
+                status sempre visível em Minhas Corridas (aguardando aceite →
+                aguardando pagamento → pago). */}
+            {quotedQuotes.length > 0 && (
+              <>
+                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide">
+                  Translados personalizados · aguardando aceite
+                </p>
+                {quotedQuotes.map((q) => (
+                  <QuoteRequestCard key={`mine-q-${q.id}`} quote={q} onQuote={openQuoteModal} />
+                ))}
+                {mineItems.length > 0 && (
+                  <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide pt-2">Corridas aceitas</p>
+                )}
+              </>
+            )}
             {mineItems.map((it) => it.type === 'group' ? (
               <MyGroupCard
                 key={it.gid}
