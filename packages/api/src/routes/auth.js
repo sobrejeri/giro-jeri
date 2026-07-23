@@ -393,15 +393,16 @@ router.post('/login', async (req, res, next) => {
     }
 
     // ── 2º fator OBRIGATÓRIO (2FA por WhatsApp) — FAIL-CLOSED ───────────────
-    // Como o fluxo da plataforma é quase todo por WhatsApp, o 2FA é exigido de
-    // toda conta com telefone. Não é opt-in: `mfa_enabled` (default true) só
-    // serve de válvula de escape de operação — uma conta em `false` (ex.: admin
-    // sem WhatsApp) pula o 2º fator. FAIL-CLOSED: se a conta exige 2FA e o
-    // código NÃO pôde ser entregue (canal fora do ar / envio falhou), o login é
-    // BLOQUEADO — não devolvemos sessão. A única exceção é a infra do 2FA ainda
-    // não estar provisionada (migration 063 pendente): aí seguimos sem 2FA para
-    // não brickar o acesso entre o deploy e o `migrate`.
-    if (profile.phone) {
+    // Só TURISTAS. Admin e cooperativa (operator) entram por CNPJ e não passam
+    // pelo 2º fator — o fluxo por WhatsApp é do lado do turista. Para o turista,
+    // o 2FA é exigido de toda conta com telefone; não é opt-in — `mfa_enabled`
+    // (default true) só serve de válvula de escape de operação (uma conta em
+    // `false` pula o 2º fator). FAIL-CLOSED: se a conta exige 2FA e o código NÃO
+    // pôde ser entregue (canal fora do ar / envio falhou), o login é BLOQUEADO —
+    // não devolvemos sessão. A única exceção é a infra do 2FA ainda não estar
+    // provisionada (migration 063 pendente): aí seguimos sem 2FA para não
+    // brickar o acesso entre o deploy e o `migrate`.
+    if (profile.user_type === 'tourist' && profile.phone) {
       let mfaRequired = true;             // obrigatório por padrão
       try {
         const { data: mrow, error: mErr } = await supabase

@@ -51,9 +51,10 @@ enxerga o trabalho do outro no próximo `git fetch`.
   `sendWhatsappOtp` volta `error`/`skipped`; cadastro segue com o default false,
   tolerante). ÚNICA exceção fail-open: 2FA ainda NÃO provisionado (coluna
   `mfa_enabled` 42703 ou tabela `mfa_challenges` 42P01) → segue sem 2º fator para
-  não brickar o acesso entre o deploy e o `migrate`. Escape de operação:
-  `UPDATE users SET mfa_enabled=false` destrava uma conta específica (ex.: admin
-  sem WhatsApp). Conta sem telefone continua passando (não há canal p/ o código).
+  não brickar o acesso entre o deploy e o `migrate`. **Só TURISTAS**: admin e
+  cooperativa (operator, login por CNPJ) NÃO passam pelo 2º fator. Escape de
+  operação: `UPDATE users SET mfa_enabled=false` destrava um turista específico.
+  Turista sem telefone continua passando (não há canal p/ o código).
   **Turista**: Auth.jsx ganha o passo `VerifyMfa` (tela de código no login) e
   trata `mfa_required`; o bloqueio 503 aparece como erro no login.
   Profile/ProfileDesktop mostram o card `MfaToggle` (informativo: "Ativa /
