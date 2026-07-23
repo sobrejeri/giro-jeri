@@ -45,10 +45,17 @@ enxerga o trabalho do outro no próximo `git fetch`.
   consumido, reidrata a sessão com `refreshSession` do token guardado e devolve
   token/refresh/user) e `POST /auth/mfa/resend`. `GET /me` devolve a flag;
   `PATCH /me` ainda aceita `mfa_enabled` (uso de ops); ambos toleram 42703
-  (migration pendente). **Fail-open** deliberado: sem telefone, sem canal
-  configurado ou se o envio falhar, o login segue sem 2º fator — um apagão do
-  Z-API não pode trancar a plataforma inteira. **Turista**: Auth.jsx ganha o
-  passo `VerifyMfa` (tela de código no login) e trata `mfa_required`;
+  (migration pendente). **FAIL-CLOSED**: se a conta exige 2FA e o código NÃO
+  pôde ser entregue (canal fora / envio falhou), o login é BLOQUEADO (503) — não
+  devolve sessão. `requestOtp` ganhou `requireDelivery` (lança 502 quando o
+  `sendWhatsappOtp` volta `error`/`skipped`; cadastro segue com o default false,
+  tolerante). ÚNICA exceção fail-open: 2FA ainda NÃO provisionado (coluna
+  `mfa_enabled` 42703 ou tabela `mfa_challenges` 42P01) → segue sem 2º fator para
+  não brickar o acesso entre o deploy e o `migrate`. Escape de operação:
+  `UPDATE users SET mfa_enabled=false` destrava uma conta específica (ex.: admin
+  sem WhatsApp). Conta sem telefone continua passando (não há canal p/ o código).
+  **Turista**: Auth.jsx ganha o passo `VerifyMfa` (tela de código no login) e
+  trata `mfa_required`; o bloqueio 503 aparece como erro no login.
   Profile/ProfileDesktop mostram o card `MfaToggle` (informativo: "Ativa /
   obrigatória", alerta se faltar telefone). api.js: `mfaVerify`, `mfaResend`.
   Build turista ok. **Rodar no Supabase: migration 063.**

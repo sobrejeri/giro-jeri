@@ -392,31 +392,49 @@ router.post('/login', async (req, res, next) => {
       }
     }
 
-    // ── 2º fator OBRIGATÓRIO (2FA por WhatsApp) ────────────
+    // ── 2º fator OBRIGATÓRIO (2FA por WhatsApp) — FAIL-CLOSED ───────────────
     // Como o fluxo da plataforma é quase todo por WhatsApp, o 2FA é exigido de
-    // toda conta com telefone quando o canal está configurado. Não é opt-in:
-    // `mfa_enabled` (default true) só serve de válvula de escape de operação —
-    // uma conta específica em `false` (ex.: admin sem WhatsApp) pula o 2º fator.
-    // Sem telefone ou sem canal, não há como entregar o código → fail-open,
-    // para um eventual apagão do Z-API não trancar a plataforma inteira.
-    if (profile.phone && isWhatsappEnabled()) {
-      let mfaEnabled = true; // obrigatório por padrão
+    // toda conta com telefone. Não é opt-in: `mfa_enabled` (default true) só
+    // serve de válvula de escape de operação — uma conta em `false` (ex.: admin
+    // sem WhatsApp) pula o 2º fator. FAIL-CLOSED: se a conta exige 2FA e o
+    // código NÃO pôde ser entregue (canal fora do ar / envio falhou), o login é
+    // BLOQUEADO — não devolvemos sessão. A única exceção é a infra do 2FA ainda
+    // não estar provisionada (migration 063 pendente): aí seguimos sem 2FA para
+    // não brickar o acesso entre o deploy e o `migrate`.
+    if (profile.phone) {
+      let mfaRequired = true;             // obrigatório por padrão
       try {
         const { data: mrow, error: mErr } = await supabase
           .from('users').select('mfa_enabled').eq('id', profile.id).maybeSingle();
-        if (mErr && mErr.code !== '42703') throw mErr;   // 42703 = migration 063 pendente
-        // Só desliga se a conta estiver EXPLICITAMENTE marcada como false.
-        if (mrow && mrow.mfa_enabled === false) mfaEnabled = false;
+        if (mErr) {
+          // 42703 = coluna ausente → migration 063 pendente → 2FA ainda não
+          // provisionado; não exige (evita trancar antes de aplicar a migration).
+          if (mErr.code === '42703') mfaRequired = false;
+          else throw mErr;
+        } else if (mrow && mrow.mfa_enabled === false) {
+          mfaRequired = false;            // válvula de escape de operação
+        }
       } catch (e) {
+        // Hiccup ao ler a flag: mantém a exigência (fail-closed).
         console.error('[login] leitura de mfa_enabled falhou:', e.message);
       }
 
-      if (mfaEnabled) {
-        const challenge = await startMfaChallenge(profile, data.session.refresh_token);
-        if (challenge) return res.status(200).json(challenge);
-        // startMfaChallenge devolve null se o desafio não pôde ser criado
-        // (canal indisponível/envio falhou) — segue com a sessão normal
-        // (fail-open) para não trancar o acesso num apagão de WhatsApp.
+      if (mfaRequired) {
+        // Canal indisponível e a conta exige 2FA → não há como entregar o
+        // código → bloqueia (fail-closed).
+        if (!isWhatsappEnabled()) {
+          return res.status(503).json({ error: 'Verificação em duas etapas indisponível no momento. Tente novamente em instantes.' });
+        }
+        const r = await startMfaChallenge(profile, data.session.refresh_token);
+        if (r.status === 'ok') return res.status(200).json(r.body);
+        if (r.status === 'not_provisioned') {
+          // Coluna existe mas a tabela mfa_challenges não (migration 063 aplicada
+          // pela metade) — segue sem 2FA para não brickar; loga em alto nível.
+          console.warn('[login] MFA não provisionado (mfa_challenges ausente) — login sem 2º fator');
+        } else {
+          // send_failed / store_failed → FAIL-CLOSED: bloqueia o login.
+          return res.status(503).json({ error: 'Não foi possível enviar o código de verificação. Tente novamente em instantes.' });
+        }
       }
     }
 
@@ -435,39 +453,61 @@ router.post('/login', async (req, res, next) => {
 });
 
 // ── 2FA: cria o desafio (envia código + guarda sessão pendente) ────────────
-// Retorna o corpo `mfa_required` para o cliente, ou null se não deu pra criar
-// o desafio (aí o login segue sem 2º fator — fail-open).
+// Retorna um dos status:
+//   { status: 'ok', body }        → corpo `mfa_required` para o cliente
+//   { status: 'send_failed' }     → o código NÃO saiu (canal fora) → fail-closed
+//   { status: 'store_failed' }    → não gravou o desafio (erro de banco) → fail-closed
+//   { status: 'not_provisioned' } → tabela mfa_challenges ausente (migration 063
+//                                    pendente) → o chamador segue sem 2FA
 async function startMfaChallenge(profile, refreshToken) {
+  const e164 = normalizeToE164(profile.phone, 'BR') || profile.phone;
+
+  // 1. Envia o código — com requireDelivery (fail-closed). Cooldown (429)
+  //    significa que já há um código válido em trânsito → seguimos.
   try {
-    const e164 = normalizeToE164(profile.phone, 'BR') || profile.phone;
-    // Envia o código. Cooldown (429) significa que já há um código válido em
-    // trânsito — seguimos com o desafio mesmo assim.
-    try {
-      await requestOtp({ userId: profile.id, channel: 'whatsapp', destination: e164, lang: profile.language || 'pt' });
-    } catch (e) {
-      if (e.status !== 429) throw e;
-    }
-    const { data: ch, error: chErr } = await supabase
-      .from('mfa_challenges')
-      .insert({
-        user_id:       profile.id,
-        refresh_token: refreshToken,
-        expires_at:    new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-      })
-      .select('id')
-      .single();
-    if (chErr) throw chErr;
-    const mfa_token = signMfaToken({ challenge_id: ch.id, user_id: profile.id });
-    return {
-      status:    'mfa_required',
-      mfa_token,
-      channel:   'whatsapp',
-      destination: maskDestination('whatsapp', e164),
-    };
+    await requestOtp({
+      userId:          profile.id,
+      channel:         'whatsapp',
+      destination:     e164,
+      lang:            profile.language || 'pt',
+      requireDelivery: true,
+    });
   } catch (e) {
-    console.error('[login] falha ao iniciar desafio 2FA (segue sem 2FA):', e.message);
-    return null;
+    if (e.status !== 429) {
+      console.error('[login] envio do código 2FA falhou:', e.message);
+      return { status: 'send_failed' };
+    }
   }
+
+  // 2. Grava a "sessão pendente".
+  const { data: ch, error: chErr } = await supabase
+    .from('mfa_challenges')
+    .insert({
+      user_id:       profile.id,
+      refresh_token: refreshToken,
+      expires_at:    new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    })
+    .select('id')
+    .single();
+  if (chErr) {
+    // 42P01 = tabela ausente · 42703 = coluna ausente → 2FA não provisionado.
+    if (chErr.code === '42P01' || chErr.code === '42703') {
+      return { status: 'not_provisioned' };
+    }
+    console.error('[login] gravação do desafio 2FA falhou:', chErr.message);
+    return { status: 'store_failed' };
+  }
+
+  const mfa_token = signMfaToken({ challenge_id: ch.id, user_id: profile.id });
+  return {
+    status: 'ok',
+    body: {
+      status:      'mfa_required',
+      mfa_token,
+      channel:     'whatsapp',
+      destination: maskDestination('whatsapp', e164),
+    },
+  };
 }
 
 // ── POST /api/auth/mfa/verify ──────────────────────────────
@@ -549,9 +589,10 @@ router.post('/mfa/resend', async (req, res, next) => {
     const e164 = normalizeToE164(u.phone, 'BR') || u.phone;
 
     try {
-      await requestOtp({ userId: claims.user_id, channel: 'whatsapp', destination: e164, lang: u.language || 'pt' });
+      await requestOtp({ userId: claims.user_id, channel: 'whatsapp', destination: e164, lang: u.language || 'pt', requireDelivery: true });
     } catch (e) {
       if (e.status === 429) return res.status(429).json({ error: e.message, retry_after: e.retry_after });
+      if (e.status === 502) return res.status(503).json({ error: 'Não foi possível reenviar o código agora. Tente novamente em instantes.' });
       throw e;
     }
     return res.json({ ok: true, destination: maskDestination('whatsapp', e164) });
