@@ -18,15 +18,20 @@ import { downloadOrderPDF, shareOrderPDF } from '../lib/orderPDF'
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
-const PENDING_STATUSES    = ['new', 'awaiting_dispatch', 'confirmed']
-const DISPATCHED_STATUSES = ['assigned', 'en_route', 'in_progress']
+// "Despachado" = a OS já foi preenchida (veículo/motorista atribuído). O status
+// 'assigned' NÃO basta, pois também é setado no aceite — por isso uma reserva
+// paga (mas sem OS) fica em "Aguardando despacho", não em "Despachados".
+function hasDispatch(b) {
+  const a = b.operational_assignments?.[0]
+  return !!(a && (a.real_vehicle_text || a.driver_name))
+}
 
 function BookingRow({ b, onDispatch, cooperativa }) {
   const dateStr = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), "dd/MM", { locale: ptBR }) : ''
   const local        = b.pickup_place_name || b.origin_text || ''
   const dest         = b.destination_place_name || b.destination_text || ''
-  const isDispatched = DISPATCHED_STATUSES.includes(b.status_operational)
+  const isDispatched = hasDispatch(b)
   const assign       = b.operational_assignments?.[0]
   const formForOS    = {
     real_vehicle_text: assign?.real_vehicle_text || '',
@@ -203,9 +208,15 @@ export default function Despacho() {
 
   function handleDispatch(booking) {
     const assign = booking.operational_assignments?.[0]
+    // Puxa o veículo escolhido pelo cliente na solicitação como sugestão inicial
+    // (item 10) — a coop confirma/ajusta com o modelo/placa reais.
+    const selectedVehicle = (booking.booking_vehicles || [])
+      .map((v) => `${v.quantity > 1 ? v.quantity + 'x ' : ''}${v.vehicle_name_snapshot || ''}`.trim())
+      .filter(Boolean)
+      .join(' + ')
     setModal(booking)
     setForm({
-      real_vehicle_text: assign?.real_vehicle_text || '',
+      real_vehicle_text: assign?.real_vehicle_text || selectedVehicle || '',
       driver_name:       assign?.driver_name       || '',
       dispatch_notes:    assign?.dispatch_notes    || '',
       driver_phone:      assign?.driver_phone      || '',
@@ -214,13 +225,18 @@ export default function Despacho() {
 
   function handleSubmit(e) {
     e.preventDefault()
+    // Obrigatórios (item 9): veículo, motorista e WhatsApp do motorista.
+    if (!form.real_vehicle_text.trim() || !form.driver_name.trim() || !form.driver_phone.trim()) return
     assignMut.mutate({ id: modal.id, ...form })
   }
 
+  // Só reservas PAGAS entram no despacho (não se despacha antes do pagamento);
+  // concluídas saem. "Aguardando despacho" = paga sem OS; "Despachadas" = com OS.
   const columns    = data?.columns || {}
-  const allBooks   = Object.values(columns).flat()
-  const pending    = PENDING_STATUSES.flatMap((s) => columns[s] || [])
-  const dispatched = DISPATCHED_STATUSES.flatMap((s) => columns[s] || [])
+  const paidActive = Object.values(columns).flat()
+    .filter((b) => b.status_commercial === 'paid' && b.status_operational !== 'completed')
+  const pending    = paidActive.filter((b) => !hasDispatch(b))
+  const dispatched = paidActive.filter((b) => hasDispatch(b))
 
   if (isLoading) return <PageSpinner />
 
@@ -313,26 +329,36 @@ export default function Despacho() {
               <p className="font-bold text-brand">{fmt(modal.total_amount)}</p>
             </div>
           )}
-          <Input label="Veículo (modelo / placa / cor)" placeholder="Ex: Hilux Branca · GKR-1234"
-            value={form.real_vehicle_text}
+          <Input label="Veículo (modelo / placa / cor) *" placeholder="Ex: Hilux Branca · GKR-1234"
+            value={form.real_vehicle_text} required
             onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })} />
-          <Input label="Nome do motorista" placeholder="Ex: João da Silva"
-            value={form.driver_name}
+          <Input label="Nome do motorista *" placeholder="Ex: João da Silva"
+            value={form.driver_name} required
             onChange={(e) => setForm({ ...form, driver_name: e.target.value })} />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp do motorista</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp do motorista *</label>
             <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-brand/30 focus-within:border-brand bg-white">
               <MessageCircle size={14} className="text-green-500 shrink-0" />
-              <input type="tel" placeholder="(88) 99999-9999" value={form.driver_phone}
+              <input type="tel" placeholder="(88) 99999-9999" value={form.driver_phone} required
                 onChange={(e) => setForm({ ...form, driver_phone: e.target.value })}
                 className="flex-1 text-sm text-gray-900 bg-transparent outline-none placeholder-gray-400" />
             </div>
           </div>
           <Textarea label="Observações para o motorista" rows={2} value={form.dispatch_notes}
             onChange={(e) => setForm({ ...form, dispatch_notes: e.target.value })} />
-          <Button type="submit" className="w-full" disabled={assignMut.isPending}>
-            {assignMut.isPending ? 'Salvando…' : 'Confirmar Despacho'}
-          </Button>
+          {(() => {
+            const canDispatch = form.real_vehicle_text.trim() && form.driver_name.trim() && form.driver_phone.trim()
+            return (
+              <>
+                {!canDispatch && (
+                  <p className="text-[11px] text-amber-600">Preencha veículo, motorista e WhatsApp para confirmar o despacho.</p>
+                )}
+                <Button type="submit" className="w-full" disabled={assignMut.isPending || !canDispatch}>
+                  {assignMut.isPending ? 'Salvando…' : 'Confirmar Despacho'}
+                </Button>
+              </>
+            )
+          })()}
         </form>
       </Modal>
 
