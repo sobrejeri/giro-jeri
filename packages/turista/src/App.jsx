@@ -17,6 +17,7 @@ import Bookings        from './pages/Bookings'
 import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
 import Auth            from './pages/Auth'
+import ResetPassword   from './pages/ResetPassword'
 import Legal           from './pages/Legal'
 import CartPage        from './pages/CartPage'
 import Avaliacoes      from './pages/Avaliacoes'
@@ -63,6 +64,7 @@ export default function App() {
       <Route path="/afiliado" element={<Affiliate />} />
       <Route path="/login"    element={<Auth defaultTab="login" />} />
       <Route path="/cadastro" element={<Auth defaultTab="register" />} />
+      <Route path="/redefinir-senha" element={<ResetPassword />} />
 
       {/* Checkout — frame 430px, sem nav bars */}
       <Route path="/checkout" element={<PrivateRoute><CheckoutLayout /></PrivateRoute>}>

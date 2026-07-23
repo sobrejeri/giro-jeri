@@ -108,6 +108,7 @@ export const api = {
   otpRequest:     (body) => request('/api/auth/otp/request',      { method: 'POST', body }),
   otpVerify:      (body) => request('/api/auth/otp/verify',       { method: 'POST', body }),
   forgotPassword: (body) => request('/api/auth/forgot-password', { method: 'POST', body }),
+  resetPassword:  (body) => request('/api/auth/reset-password',  { method: 'POST', body }),
   me:            ()     => request('/api/auth/me'),
   updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),
   uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),

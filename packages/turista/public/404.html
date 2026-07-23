@@ -2,13 +2,18 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Giro Jeri</title>
+    <title>Turiva</title>
     <script>
       (function () {
+        // Deep link (ex.: link de reset por WhatsApp, /minhas-reservas/:id): o
+        // GitHub Pages 404 aqui. Guardamos o destino COMPLETO (caminho + query +
+        // hash) e o SPA restaura via SpaRedirectHandler, sem perder o ?token=.
+        var full = location.pathname + location.search + location.hash;
+        try { sessionStorage.setItem('spa_redirect', full); } catch (e) {}
         var path = location.pathname;
-        if (path.startsWith('/giro-jeri/admin')) {
+        if (path.indexOf('/giro-jeri/admin') === 0) {
           location.replace('/giro-jeri/admin/');
-        } else if (path.startsWith('/giro-jeri/cooperativa')) {
+        } else if (path.indexOf('/giro-jeri/cooperativa') === 0) {
           location.replace('/giro-jeri/cooperativa/');
         } else {
           location.replace('/giro-jeri/');

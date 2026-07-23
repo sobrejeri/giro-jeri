@@ -5,6 +5,8 @@ import { supabase }                          from '../supabase.js';
 import { authenticate }                      from '../middleware/auth.js';
 import { normalizeToE164 }                   from '../lib/phone.js';
 import { signSignupToken }                   from '../lib/signupToken.js';
+import { signResetToken, verifyResetToken }  from '../lib/resetToken.js';
+import { notifyPasswordReset }               from '../services/whatsapp.js';
 import { requestOtp, maskDestination }       from '../services/otp.js';
 import { buildChannels }                     from './otp.js';
 
@@ -379,25 +381,78 @@ router.get('/me', authenticate, async (req, res, next) => {
 });
 
 // ── POST /api/auth/forgot-password ────────────────────────
+// Item 3: identifica o usuário por e-mail OU telefone e envia o link de reset
+// por WhatsApp (com fallback para e-mail se não houver telefone). Resposta
+// SEMPRE genérica (não revela se a conta existe).
 const forgotSchema = z.object({
-  email:        z.string().email(),
+  email:        z.string().optional(),
+  phone:        z.string().optional(),
+  identifier:   z.string().optional(),   // e-mail ou telefone num campo só
   redirect_url: z.string().url().optional(),
 });
 
 router.post('/forgot-password', async (req, res, next) => {
   try {
-    const { email, redirect_url } = forgotSchema.parse(req.body);
+    const { email, phone, identifier, redirect_url } = forgotSchema.parse(req.body);
+    const raw = (identifier || email || phone || '').trim();
+    if (!raw) return res.status(400).json({ error: 'Informe seu e-mail ou telefone.' });
 
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: redirect_url,
-    });
-    res.json({ ok: true });
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'E-mail inválido' });
+    const isEmail = raw.includes('@');
+    let user = null;
+    if (isEmail) {
+      const { data } = await supabase.from('users')
+        .select('id, email, phone').ilike('email', raw).maybeSingle();
+      user = data;
+    } else {
+      const e164 = normalizeToE164(raw) || raw;
+      const digits = raw.replace(/\D/g, '');
+      const { data } = await supabase.from('users')
+        .select('id, email, phone')
+        .or(`phone.eq.${e164},phone.eq.${digits}`)
+        .limit(1).maybeSingle();
+      user = data;
     }
+
+    // Envia se achou; senão, responde ok mesmo assim (anti-enumeração).
+    if (user) {
+      const token = signResetToken(user.id);
+      if (user.phone) {
+        notifyPasswordReset(user.phone, token).catch((err) =>
+          console.error('[reset] whatsapp falhou:', err.message));
+      } else if (user.email) {
+        // Sem telefone → mantém o reset por e-mail do Supabase.
+        supabase.auth.resetPasswordForEmail(user.email, { redirectTo: redirect_url })
+          .catch((err) => console.error('[reset] email falhou:', err?.message));
+      }
+    }
+    res.json({ ok: true, channel: user?.phone ? 'whatsapp' : 'email' });
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos' });
     next(err);
   }
+});
+
+// ── POST /api/auth/reset-password ─────────────────────────
+// Valida o token do link (WhatsApp) e troca a senha via admin.
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { token, new_password } = req.body || {};
+    if (!token) return res.status(400).json({ error: 'Link inválido.' });
+    if (!new_password || String(new_password).length < 8) {
+      return res.status(400).json({ error: 'A senha deve ter pelo menos 8 caracteres.' });
+    }
+    let claims;
+    try { claims = verifyResetToken(token); }
+    catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+
+    const { data: profile } = await supabase.from('users')
+      .select('id, auth_id, email').eq('id', claims.user_id).maybeSingle();
+    if (!profile?.auth_id) return res.status(404).json({ error: 'Conta não encontrada.' });
+
+    const { error } = await supabase.auth.admin.updateUserById(profile.auth_id, { password: new_password });
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 // ── POST /api/auth/refresh ─────────────────────────────────

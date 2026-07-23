@@ -316,6 +316,23 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
   return { sent: true }
 }
 
+// ── RESET DE SENHA ─────────────────────────────────────
+// Item 3: envia o link de redefinição de senha por WhatsApp (botão + fallback
+// para link em texto). O token vem do endpoint /forgot-password.
+const linkPasswordReset = (token) => `${TURISTA_APP}/redefinir-senha?token=${encodeURIComponent(token)}`;
+
+export async function notifyPasswordReset(phone, token) {
+  if (!isWhatsappEnabled() || !phone) return { skipped: true }
+  const url = linkPasswordReset(token)
+  const message =
+    `*TURIVA* · Redefinição de senha 🔐\n\n` +
+    `Recebemos um pedido para redefinir a sua senha. Toque no botão para criar ` +
+    `uma nova (o link vale por 30 minutos).\n\n` +
+    `Se não foi você, é só ignorar esta mensagem.`
+  await sendButtonLink(phone, message, 'Redefinir senha', url)
+  return { sent: true }
+}
+
 // ── CLIENTE ────────────────────────────────────────────
 // Cooperativa aceitou → cliente precisa PAGAR pra confirmar. Gatilho de
 // conversão mais crítico: sem isso o cliente não sabe que pode pagar.

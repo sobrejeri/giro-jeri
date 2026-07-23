@@ -94,10 +94,10 @@ export default function Auth({ defaultTab = 'login' }) {
     setLoading(true)
     try {
       await api.forgotPassword({
-        email:        forgotEmail,
+        identifier:   forgotEmail,
         redirect_url: window.location.origin + (import.meta.env.BASE_URL || '/'),
       })
-      setSuccess('Se este e-mail estiver cadastrado, enviamos um link para redefinir a senha.')
+      setSuccess('Se a conta existir, enviamos um link para redefinir a senha (WhatsApp ou e-mail).')
       setTab('login')
     } catch (err) {
       setError(err.message || 'Não foi possível enviar o e-mail. Tente novamente.')
@@ -286,14 +286,14 @@ export default function Auth({ defaultTab = 'login' }) {
         ) : tab === 'forgot' ? (
           <form onSubmit={handleForgot} className="space-y-4">
             <p className="text-[13px] text-gray-500 leading-relaxed">
-              Digite o e-mail da sua conta e enviaremos um link para você redefinir a senha.
+              Digite seu e-mail ou telefone (WhatsApp) e enviaremos um link para redefinir a senha.
             </p>
             <TextField
-              label="E-mail"
-              type="email"
+              label="E-mail ou telefone (WhatsApp)"
+              type="text"
               value={forgotEmail}
               onChange={(e) => { setError(''); setForgotEmail(e.target.value) }}
-              placeholder="seu@email.com"
+              placeholder="seu@email.com ou +55 88 99999-9999"
               required
               autoFocus
             />
