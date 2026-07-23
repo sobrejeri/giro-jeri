@@ -132,10 +132,13 @@ function PendingCard({ booking, onAccept, accepting }) {
       </div>
 
       <div className="p-4 space-y-3">
-        {/* Tipo + modo */}
-        <div className="flex items-center gap-2">
+        {/* Tipo + modo + código (item 16) */}
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">{type}</span>
           <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">{mode}</span>
+          {booking.booking_code && (
+            <span className="ml-auto font-mono text-[11px] font-bold text-gray-400">{booking.booking_code}</span>
+          )}
         </div>
 
         {/* Detalhes */}

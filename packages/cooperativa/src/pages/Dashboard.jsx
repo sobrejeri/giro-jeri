@@ -37,6 +37,10 @@ const STATUS = {
 const PENDING_SET    = ['new', 'awaiting_dispatch', 'confirmed']
 const DISPATCHED_SET = ['assigned', 'en_route', 'in_progress']
 
+// "Despachado" = OS preenchida (veículo/motorista atribuído) — não o status
+// 'assigned' (que também vem do aceite). Alinha o painel com a tela de Despacho.
+const hasOS = (b) => !!(b.operational_assignments?.[0]?.real_vehicle_text || b.operational_assignments?.[0]?.driver_name)
+
 const AVATAR_COLORS = [
   'bg-blue-100 text-blue-600', 'bg-purple-100 text-purple-600',
   'bg-emerald-100 text-emerald-600', 'bg-orange-100 text-orange-600',
@@ -104,7 +108,7 @@ function BookingRow({ b, onAssign, cooperativa }) {
     ? format(new Date(b.service_date + 'T12:00:00'), 'dd MMM yyyy', { locale: ptBR }) : '—'
   const timeStr  = b.service_time ? b.service_time.slice(0, 5) : null
   const local    = b.pickup_place_name || b.origin_text
-  const dispatched = DISPATCHED_SET.includes(b.status_operational) || b.status_operational === 'completed'
+  const dispatched = hasOS(b) || b.status_operational === 'completed'
   const assign     = b.operational_assignments?.[0]
   const formForOS  = {
     real_vehicle_text: assign?.real_vehicle_text || b.booking_vehicles?.[0]?.vehicle_name_snapshot || '',
@@ -213,7 +217,7 @@ function BookingCardMobile({ b, onAssign, cooperativa }) {
     ? format(new Date(b.service_date + 'T12:00:00'), 'dd MMM', { locale: ptBR }) : '—'
   const timeStr  = b.service_time ? b.service_time.slice(0, 5) : null
   const local    = b.pickup_place_name || b.origin_text
-  const dispatched = DISPATCHED_SET.includes(b.status_operational) || b.status_operational === 'completed'
+  const dispatched = hasOS(b) || b.status_operational === 'completed'
   const assign     = b.operational_assignments?.[0]
   const formForOS  = {
     real_vehicle_text: assign?.real_vehicle_text || b.booking_vehicles?.[0]?.vehicle_name_snapshot || '',
@@ -345,28 +349,30 @@ export default function Dashboard() {
   const columns  = data?.columns || {}
   const allBooks = useMemo(() => Object.values(columns).flat(), [columns])
 
-  // Stats
-  const cNew       = columns['new']?.length || 0
-  const cAwaiting  = columns['awaiting_dispatch']?.length || 0
-  const cConfirmed = columns['confirmed']?.length || 0
-  const cActive    = (columns['assigned']?.length || 0) + (columns['en_route']?.length || 0) + (columns['in_progress']?.length || 0)
-  const cDone      = columns['completed']?.length || 0
-  const total      = allBooks.length || 1
-  const revenue    = allBooks.reduce((s, b) => s + Number(b.total_amount || 0), 0)
+  // Stats por estado REAL (paga + OS): sem contar solicitações não aceitas nem
+  // reservas de outras coops (item 14). Aguardando despacho = paga sem OS;
+  // Despachadas = com OS (ou em andamento); Concluídas = completed.
+  const paidBooks        = allBooks.filter((b) => b.status_commercial === 'paid')
+  const awaitingDispatch = paidBooks.filter((b) => !hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
+  const dispatchedActive = paidBooks.filter((b) => (hasOS(b) || b.status_operational === 'in_progress') && b.status_operational !== 'completed')
+  const inProgress       = paidBooks.filter((b) => b.status_operational === 'in_progress')
+  const done             = paidBooks.filter((b) => b.status_operational === 'completed')
+  const total            = paidBooks.length || 1
+  const revenue          = paidBooks.reduce((s, b) => s + Number(b.total_amount || 0), 0)
 
   const stats = [
-    { icon: ShoppingBag, iconBg: 'bg-blue-500',   value: cNew + cAwaiting + cConfirmed, label: 'Novas / aguardando', pct: ((cNew + cAwaiting + cConfirmed) / total) * 100, ringColor: '#3b82f6' },
-    { icon: Hourglass,   iconBg: 'bg-amber-500',  value: cAwaiting,                      label: 'Aguardando despacho', pct: (cAwaiting / total) * 100, ringColor: '#f59e0b' },
-    { icon: Loader2,     iconBg: 'bg-brand',      value: cActive,                        label: 'Em andamento',        pct: (cActive / total) * 100,   ringColor: '#ff6a00' },
-    { icon: CheckCircle2,iconBg: 'bg-green-500',  value: cDone,                          label: 'Concluídas',          pct: (cDone / total) * 100,     ringColor: '#22c55e' },
+    { icon: Hourglass,   iconBg: 'bg-amber-500',  value: awaitingDispatch.length, label: 'Aguardando despacho', pct: (awaitingDispatch.length / total) * 100, ringColor: '#f59e0b' },
+    { icon: ShoppingBag, iconBg: 'bg-blue-500',   value: dispatchedActive.length, label: 'Despachadas',         pct: (dispatchedActive.length / total) * 100, ringColor: '#3b82f6' },
+    { icon: Loader2,     iconBg: 'bg-brand',      value: inProgress.length,       label: 'Em andamento',        pct: (inProgress.length / total) * 100,       ringColor: '#ff6a00' },
+    { icon: CheckCircle2,iconBg: 'bg-green-500',  value: done.length,             label: 'Concluídas',          pct: (done.length / total) * 100,             ringColor: '#22c55e' },
   ]
 
   // Filtro de aba + busca
   const filtered = useMemo(() => {
     let list = allBooks
-    if (tab === 'pending')    list = list.filter((b) => PENDING_SET.includes(b.status_operational))
-    if (tab === 'dispatched') list = list.filter((b) => DISPATCHED_SET.includes(b.status_operational))
-    if (tab === 'done')       list = list.filter((b) => b.status_operational === 'completed')
+    if (tab === 'pending')    list = paidBooks.filter((b) => !hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
+    if (tab === 'dispatched') list = paidBooks.filter((b) => (hasOS(b) || b.status_operational === 'in_progress') && b.status_operational !== 'completed')
+    if (tab === 'done')       list = paidBooks.filter((b) => b.status_operational === 'completed')
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter((b) =>
@@ -387,9 +393,9 @@ export default function Dashboard() {
 
   const TABS = [
     { key: 'all',        label: 'Todas',       count: allBooks.length },
-    { key: 'pending',    label: 'Pendentes',   count: cNew + cAwaiting + cConfirmed },
-    { key: 'dispatched', label: 'Despachadas', count: cActive },
-    { key: 'done',       label: 'Concluídas',  count: cDone },
+    { key: 'pending',    label: 'Aguardando',  count: awaitingDispatch.length },
+    { key: 'dispatched', label: 'Despachadas', count: dispatchedActive.length },
+    { key: 'done',       label: 'Concluídas',  count: done.length },
   ]
 
   function changeDate(days) {
