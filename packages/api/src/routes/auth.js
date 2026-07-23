@@ -40,7 +40,8 @@ function freshAuthClient() {
 // ── Schemas ───────────────────────────────────────────────
 const registerSchema = z.object({
   full_name: z.string().min(2).max(200),
-  email:     z.string().email(),                          // obrigatório
+  username:  z.string().min(1),                           // obrigatório (login "só usuário")
+  email:     z.string().email(),                          // obrigatório (conta/recibos)
   phone:     z.string().min(7).max(30).optional(),        // opcional, normalizado → E.164
   password:  z.string().min(6),                          // front valida min 8
   lang:      z.enum(['pt', 'en', 'es']).optional().default('pt'),
@@ -69,6 +70,10 @@ const REQUIRE_SIGNUP_VERIFICATION = process.env.SIGNUP_REQUIRE_VERIFICATION === 
 router.post('/register', async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body);
+
+    // Valida o nome de usuário (obrigatório) com as mesmas regras do perfil.
+    const { username: usernameLc, error: unameErr } = validateUsername(body.username);
+    if (unameErr) return res.status(400).json({ error: unameErr });
 
     // Normaliza phone → E.164 se fornecido
     let phoneE164 = null;
@@ -113,6 +118,17 @@ router.post('/register', async (req, res, next) => {
       return res.status(409).json({ error: GENERIC_ERROR });
     }
 
+    // Usuário já em uso? (case-insensitive). 42703 = coluna ausente (migration
+    // 061 pendente) → segue sem checar, para não travar o cadastro.
+    try {
+      const { data: dupUser, error: uErr } = await supabase
+        .from('users').select('id').eq('username', usernameLc).maybeSingle();
+      if (uErr && uErr.code !== '42703') throw uErr;
+      if (dupUser) return res.status(409).json({ error: 'Este nome de usuário já está em uso.' });
+    } catch (e) {
+      if (e?.code !== '42703') throw e;
+    }
+
     // Cria usuário no Supabase Auth. O e-mail já nasce confirmado nos dois
     // modos — com verificação ligada, quem ativa a conta é o CÓDIGO DO
     // WHATSAPP (gate em users.phone_verified, aplicado no login).
@@ -134,6 +150,7 @@ router.post('/register', async (req, res, next) => {
     const insertRow = {
       auth_id:        authData.user.id,
       full_name:      body.full_name,
+      username:       usernameLc,
       email:          body.email,
       phone:          phoneToStore,
       user_type:      'tourist',
@@ -143,11 +160,20 @@ router.post('/register', async (req, res, next) => {
     };
     if (REQUIRE_SIGNUP_VERIFICATION) insertRow.phone_e164 = phoneE164;
 
-    const { data: profile, error: profileError } = await supabase
+    let { data: profile, error: profileError } = await supabase
       .from('users')
       .insert(insertRow)
-      .select('id, full_name, email, phone, user_type, profile_photo_url, document_number, email_verified, phone_verified, lang:language')
+      .select('id, full_name, username, email, phone, user_type, profile_photo_url, document_number, email_verified, phone_verified, lang:language')
       .single();
+
+    // Migration 061 (coluna username) ainda não rodou → insere sem ela.
+    if (profileError?.code === '42703') {
+      const { username, ...rowNoUser } = insertRow;
+      const retry = await supabase.from('users').insert(rowNoUser)
+        .select('id, full_name, email, phone, user_type, profile_photo_url, document_number, email_verified, phone_verified, lang:language')
+        .single();
+      profile = retry.data; profileError = retry.error;
+    }
 
     if (profileError) {
       // Rollback: apaga o Auth user criado

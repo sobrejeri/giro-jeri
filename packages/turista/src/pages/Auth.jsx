@@ -113,7 +113,7 @@ export default function Auth({ defaultTab = 'login' }) {
   }
 
   /* ── Register form ───────────────────────────────────── */
-  const [regForm, setRegForm] = useState({ full_name: '', email: '', phone: '+55 ', password: '', confirm: '' })
+  const [regForm, setRegForm] = useState({ full_name: '', username: '', email: '', phone: '+55 ', password: '', confirm: '' })
 
   function setReg(field) {
     return (e) => {
@@ -135,6 +135,7 @@ export default function Auth({ defaultTab = 'login' }) {
     try {
       const data = await api.register({
         full_name: regForm.full_name,
+        username:  regForm.username,
         email:     regForm.email,
         password:  regForm.password,
         phone:     regForm.phone || undefined,
@@ -254,11 +255,11 @@ export default function Auth({ defaultTab = 'login' }) {
         {tab === 'login' ? (
           <form onSubmit={handleLogin} className="space-y-4">
             <TextField
-              label="E-mail ou usuário"
+              label="Usuário"
               type="text"
               value={loginForm.email}
               onChange={(e) => { setError(''); setLoginForm((f) => ({ ...f, email: e.target.value })) }}
-              placeholder="seu@email.com ou seu_usuario"
+              placeholder="seu_usuario"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -328,6 +329,13 @@ export default function Auth({ defaultTab = 'login' }) {
               placeholder={t('auth.fullNamePlaceholder')}
               required
               autoFocus
+            />
+            <TextField
+              label="Usuário"
+              value={regForm.username}
+              onChange={setReg('username')}
+              placeholder="ex.: joao.silva (será seu login)"
+              required
             />
             <TextField
               label={t('auth.email')}
