@@ -481,12 +481,12 @@ export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       console.error('[whatsapp] Z-API respondeu', res.status, body.slice(0, 300));
-      return { error: true, status: res.status, detail: `z-api ${res.status}: ${body.slice(0, 200)}` };
+      return { error: true };
     }
 
     return await res.json();
   } catch (err) {
     console.error('[whatsapp] falha ao enviar:', err.message);
-    return { error: true, detail: `envio: ${err.message}` };
+    return { error: true };
   }
 }

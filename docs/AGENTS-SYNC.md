@@ -28,6 +28,23 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-23 · Agente B (OTP só no cadastro — 2FA de login removido)** —
+  Decisão do usuário: OTP serve APENAS para validar a criação da conta; o login
+  NÃO pede código (usuário + senha entra direto). **Revertido todo o 2FA de
+  login** que havia sido montado: removidos o gate MFA no `/login`,
+  `startMfaChallenge`, `POST /auth/mfa/verify`, `POST /auth/mfa/resend`,
+  `lib/mfaToken.js`, o `requireDelivery` do `requestOtp`/`sendWhatsappOtp` e o
+  diagnóstico temporário `[diag]`. Frontend: removidos o passo `VerifyMfa` do
+  Auth.jsx, o card `MfaToggle` do Profile/ProfileDesktop e `mfaVerify`/`mfaResend`
+  do api.js. **Cadastro passa a exigir OTP por padrão**: `REQUIRE_SIGNUP_VERIFICATION`
+  agora é `!== 'false'` (ligado salvo se `SIGNUP_REQUIRE_VERIFICATION=false`).
+  O wizard `VerifyWhatsapp` (que já existia) é o fluxo de ativação. **Depende do
+  envio do Z-API funcionar** (mesma entrega que estávamos depurando) — se o envio
+  falhar, o cadastro fica pendente; escape: `SIGNUP_REQUIRE_VERIFICATION=false`.
+  **migration 063 (mfa_enabled + mfa_challenges) ficou ÓRFÃ** — nada mais usa
+  esses objetos; podem ser removidos do banco quando conveniente (drop opcional,
+  não incluído para não ser destrutivo). Build turista ok.
+
 - **2026-07-23 · Agente B (Etapa 4 #1 — 2FA por WhatsApp, OBRIGATÓRIA)** — Verificação
   em duas etapas exigida de toda conta com telefone (o fluxo é quase todo por
   WhatsApp). **migration 063** (`063_mfa.sql`): `users.mfa_enabled` nasce **true**

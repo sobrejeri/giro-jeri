@@ -46,14 +46,11 @@ export function maskDestination(channel, destination) {
 
 /**
  * Solicita um novo OTP para o usuário.
- * @param {{ userId: string, channel: 'email'|'whatsapp', destination: string, lang?: string, requireDelivery?: boolean }} opts
- *   requireDelivery: se true, LANÇA erro (status 502) quando o canal não
- *   conseguiu entregar a mensagem (usado no 2FA fail-closed do login; o fluxo
- *   de cadastro segue com o default false, tolerante a falha de envio).
+ * @param {{ userId: string, channel: 'email'|'whatsapp', destination: string, lang?: string }} opts
  * @returns {{ destination_masked: string, expires_in: number, retry_after: number }}
- * @throws Error com .status para cooldown (429), limite (429) ou entrega (502)
+ * @throws Error com .status para cooldown (429) ou limite (429)
  */
-export async function requestOtp({ userId, channel, destination, lang = 'pt', requireDelivery = false }) {
+export async function requestOtp({ userId, channel, destination, lang = 'pt' }) {
   // 1. Verificar cooldown: último OTP (ativo ou consumido) do mesmo canal
   const { data: lastOtp } = await supabase
     .from('otp_codes')
@@ -120,24 +117,14 @@ export async function requestOtp({ userId, channel, destination, lang = 'pt', re
   if (insertErr) {
     const err = new Error('Erro ao gerar código de verificação.');
     err.status = 500;
-    err.detail = `otp_codes insert: ${insertErr.code || ''} ${insertErr.message || ''}`.trim();
     throw err;
   }
 
-  // 5. Disparar envio. Por padrão não bloqueia em caso de falha do canal; com
-  //    requireDelivery, um envio que não saiu (error/skipped) vira erro 502.
-  let sendResult;
+  // 5. Disparar envio (não bloqueia em caso de falha do canal)
   if (channel === 'email') {
-    sendResult = await sendEmailOtp({ to: destination, code, lang });
+    await sendEmailOtp({ to: destination, code, lang });
   } else if (channel === 'whatsapp') {
-    sendResult = await sendWhatsappOtp({ phone: destination, code, lang });
-  }
-  if (requireDelivery && sendResult && (sendResult.error || sendResult.skipped)) {
-    const err = new Error('Não foi possível enviar o código de verificação.');
-    err.status = 502;
-    err.code   = 'otp_delivery_failed';
-    err.detail = sendResult.detail || (sendResult.skipped ? 'canal WhatsApp não configurado' : 'falha no envio');
-    throw err;
+    await sendWhatsappOtp({ phone: destination, code, lang });
   }
 
   return {

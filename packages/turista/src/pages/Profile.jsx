@@ -11,7 +11,7 @@ import ProfileDesktop from './ProfileDesktop'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
-  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard, ShieldCheck,
+  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard,
 } from 'lucide-react'
 
 function Field({ label, value, children }) {
@@ -96,43 +96,6 @@ export function WhatsappCheck() {
         {checking ? t('profile.whatsapp.checking') : status === null ? t('profile.verify') : t('profile.whatsapp.recheck')}
       </button>
       {err && <p className="w-full text-[10px] text-red-500">{err}</p>}
-    </div>
-  )
-}
-
-// Verificação em duas etapas (2FA) por WhatsApp — OBRIGATÓRIA no app (o fluxo é
-// quase todo por WhatsApp). Card só informativo: não há opt-out do usuário.
-// Exportado p/ o ProfileDesktop. Alerta se faltar telefone (sem ele o código
-// não tem para onde ir).
-export function MfaToggle() {
-  const { user } = useAuth()
-  const hasPhone = !!(user?.phone && String(user.phone).replace(/\D/g, '').length >= 10)
-
-  return (
-    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
-        <ShieldCheck size={15} className="text-brand" />
-        <span className="font-semibold text-gray-800 text-[14px]">Verificação em duas etapas</span>
-      </div>
-      <div className="px-5 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[13px] font-medium text-gray-800">Código no WhatsApp ao entrar</p>
-            <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">
-              Além da senha, pedimos um código de 6 dígitos enviado ao seu WhatsApp.
-              Proteção obrigatória neste app.
-            </p>
-          </div>
-          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600">
-            ✓ Ativa
-          </span>
-        </div>
-        {!hasPhone && (
-          <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-1.5 mt-3">
-            Cadastre um telefone (WhatsApp) no perfil — é por lá que enviamos o código de acesso.
-          </p>
-        )}
-      </div>
     </div>
   )
 }
@@ -615,9 +578,6 @@ export default function Profile() {
             </button>
           </div>
         )}
-
-        {/* Segurança: verificação em duas etapas */}
-        <MfaToggle />
 
         {/* Language picker */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">

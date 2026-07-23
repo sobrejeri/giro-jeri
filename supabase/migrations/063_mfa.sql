@@ -1,6 +1,14 @@
 -- =============================================================================
 -- 063_mfa.sql — Verificação em duas etapas (2FA/MFA) por WhatsApp (OBRIGATÓRIA)
 -- =============================================================================
+-- ⚠️ DEPRECADA (23/07): o 2FA de LOGIN foi removido — o OTP agora valida apenas
+-- o CADASTRO. Nenhuma parte do código usa mais `users.mfa_enabled` nem a tabela
+-- `mfa_challenges`. Se já rodou esta migration, os objetos ficam órfãos e podem
+-- ser removidos com segurança:
+--   DROP TABLE IF EXISTS mfa_challenges;
+--   ALTER TABLE users DROP COLUMN IF EXISTS mfa_enabled;
+-- Se ainda NÃO rodou, pode simplesmente ignorar esta migration.
+-- =============================================================================
 -- Etapa 4 (item 1). Como o fluxo da plataforma é quase todo por WhatsApp, o 2º
 -- fator é OBRIGATÓRIO: todo login com telefone cadastrado exige, além da senha,
 -- um código de 6 dígitos enviado ao WhatsApp (reaproveita otp_codes / mig. 023).
