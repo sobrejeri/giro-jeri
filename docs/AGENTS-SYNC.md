@@ -28,6 +28,22 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-24 · Agente B (Etapa 5 #4 — sobretaxa de data itemizada)** — A
+  sobretaxa de data (alta temporada OU feriado, via `getDateSurcharge`) JÁ era
+  somada ao `total_amount`, mas o **carrinho** (`/cart-request`) e o **/request**
+  avulso NÃO gravavam a itemização: `subtotal_amount` e `season_additional_amount`
+  ficavam no default 0. Resultado: qualquer relatório do admin que some
+  `season_additional_amount` mostrava a sobretaxa (inclusive feriado) como "não
+  contada". Fix: `computeChargedTotal` passou a devolver `subtotal` +
+  `seasonAdditional` (do retorno dos `calculate*` para passeio; do cálculo local
+  para transfer tabelado), e os dois inserts de reserva agora gravam
+  `subtotal_amount` e `season_additional_amount`. Casa com o item #3 (Dashboard).
+  **Bug separado achado (NÃO corrigido ainda)**: alta temporada "Julho–Janeiro"
+  nunca aplica — o admin (Temporada.jsx) grava start/end no MESMO ano
+  (2026-07-01 → 2026-01-31), e `getSeasonAddition` usa range `start<=data & end>=data`
+  → range invertido nunca casa. Precisa de wrap-around/mês-recorrente; deixado
+  para o usuário priorizar (é do high season, não do feriado do item #4).
+
 - **2026-07-23 · Agente B (OTP só no cadastro — 2FA de login removido)** —
   Decisão do usuário: OTP serve APENAS para validar a criação da conta; o login
   NÃO pede código (usuário + senha entra direto). **Revertido todo o 2FA de

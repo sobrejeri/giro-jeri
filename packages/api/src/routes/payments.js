@@ -148,9 +148,13 @@ async function computeChargedTotal({ data, userId }) {
     service_type, service_id, booking_mode, service_date_iso,
     people_count, region_id, vehicles = [], coupon_code, total_price,
   } = data
-  let chargedTotal   = Number(total_price)
-  let couponId       = null
-  let discountAmount = 0
+  let chargedTotal      = Number(total_price)
+  let couponId          = null
+  let discountAmount    = 0
+  // Itemização: subtotal (antes de data/cupom) e acréscimo de data (alta
+  // temporada OU feriado). Guardados nas reservas p/ o Dashboard somar as taxas.
+  let subtotal          = Number(total_price)
+  let seasonAdditional  = 0
   try {
     if (service_type === 'tour' && service_id && region_id && service_date_iso) {
       let r = null
@@ -169,9 +173,11 @@ async function computeChargedTotal({ data, userId }) {
         }
       }
       if (r && typeof r.totalAmount === 'number') {
-        chargedTotal   = r.totalAmount
-        couponId       = r.couponId || null
-        discountAmount = Number(r.discountAmount) || 0
+        chargedTotal     = r.totalAmount
+        couponId         = r.couponId || null
+        discountAmount   = Number(r.discountAmount) || 0
+        seasonAdditional = Number(r.seasonAdditional) || 0
+        subtotal         = Number(r.subtotalAmount) || chargedTotal
       }
     } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
       // Rota tabelada: recalcula a partir do preço da rota × veículos + acréscimo
@@ -183,6 +189,8 @@ async function computeChargedTotal({ data, userId }) {
         const vehicleCount = (vehicles || []).reduce((s, v) => s + (Number(v.qty) || 1), 0) || 1
         const baseSubtotal = Math.round(Number(route.default_price) * vehicleCount * 100) / 100
         const surcharge    = await getDateSurcharge(region_id, service_date_iso, baseSubtotal)
+        subtotal           = baseSubtotal
+        seasonAdditional   = surcharge
         chargedTotal       = Math.round((baseSubtotal + surcharge) * 100) / 100
         // Cupom em transfer tabelado (os calculate* de passeio já aplicam)
         if (coupon_code) {
@@ -195,11 +203,13 @@ async function computeChargedTotal({ data, userId }) {
     }
   } catch (e) {
     console.error('[payments] recálculo de preço falhou, usando total do cliente:', e.message)
-    chargedTotal   = Number(total_price)
-    couponId       = null
-    discountAmount = 0
+    chargedTotal     = Number(total_price)
+    couponId         = null
+    discountAmount   = 0
+    subtotal         = Number(total_price)
+    seasonAdditional = 0
   }
-  return { total: chargedTotal, couponId, discountAmount }
+  return { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional }
 }
 
 // Credenciais Mercado Pago da cooperativa (com refresh automático se o token
@@ -911,7 +921,7 @@ router.post('/request', authenticate, async (req, res, next) => {
     const aff = parsed.data.affiliate_code ? await resolveAffiliate(parsed.data.affiliate_code) : null
     const affiliateId = aff && aff.id !== req.user.id ? aff.id : null
 
-    const { total: chargedTotal, couponId, discountAmount } =
+    const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional } =
       await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
@@ -927,6 +937,8 @@ router.post('/request', authenticate, async (req, res, next) => {
       people_count:       Number(people_count) || 1,
       origin_text:        origin_text || null,
       destination_text:   destination_text || null,
+      subtotal_amount:          subtotal,
+      season_additional_amount: seasonAdditional,
       total_amount:       chargedTotal,
       ...(couponId ? { coupon_id: couponId, discount_amount: discountAmount } : {}),
       ...(affiliateId ? { affiliate_id: affiliateId, source_channel: 'affiliate_link' } : {}),
@@ -1059,10 +1071,10 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
         })
         if (cutoffErr) throw { status: 400, message: cutoffErr }
         const itemData = (couponIsFixed && couponApplied) ? { ...it, coupon_code: undefined } : it
-        const { total: chargedTotal, couponId, discountAmount } =
+        const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional } =
           await computeChargedTotal({ data: itemData, userId: req.user.id })
         if (couponId) couponApplied = true
-        prepared.push({ it, chargedTotal, couponId, discountAmount })
+        prepared.push({ it, chargedTotal, couponId, discountAmount, subtotal, seasonAdditional })
       } catch (err) {
         return res.status(err?.status || 400).json({
           error: err?.message || 'Item inválido no carrinho', item_index: i, service_id: it.service_id,
@@ -1075,7 +1087,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     const orderGroupId = crypto.randomUUID()
     const now = Date.now()
     const acceptanceExpiresAt = new Date(now + 24 * 60 * 60 * 1000).toISOString()
-    const rows = prepared.map(({ it, chargedTotal, couponId, discountAmount }, i) => ({
+    const rows = prepared.map(({ it, chargedTotal, couponId, discountAmount, subtotal, seasonAdditional }, i) => ({
       booking_code:       `GJ${(now + i).toString(36).toUpperCase().slice(-6)}`,
       user_id:            req.user.id,
       order_group_id:     orderGroupId,
@@ -1088,6 +1100,8 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       people_count:       Number(it.people_count) || 1,
       origin_text:        it.origin_text || null,
       destination_text:   it.destination_text || null,
+      subtotal_amount:          subtotal,
+      season_additional_amount: seasonAdditional,
       total_amount:       chargedTotal,
       ...(couponId ? { coupon_id: couponId, discount_amount: discountAmount } : {}),
       ...(affiliateId ? { affiliate_id: affiliateId, source_channel: 'affiliate_link' } : {}),
