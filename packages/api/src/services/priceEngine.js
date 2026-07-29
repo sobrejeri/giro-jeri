@@ -19,28 +19,45 @@ async function getSetting(key, defaultValue) {
 }
 
 // ── Verifica se a data está em alta temporada ─────────
+// A temporada é RECORRENTE por mês/dia: "Julho a Janeiro" vale todo ano e VIRA
+// o ano (jul→dez do ano X + jan do ano X+1). Por isso comparamos só mês/dia,
+// tratando o wrap-around (quando o início é depois do fim no calendário). O ano
+// gravado em start_date/end_date é ignorado — evita o bug em que o intervalo
+// invertido (2026-07-01 → 2026-01-31) nunca casava e a sobretaxa não era cobrada.
 export async function getSeasonAddition(regionId, serviceDate, subtotal) {
   let q = supabase
     .from('high_season_rules')
-    .select('additional_type, additional_value, region_id')
-    .eq('is_active', true)
-    .lte('start_date', serviceDate)
-    .gte('end_date', serviceDate);
+    .select('additional_type, additional_value, region_id, start_date, end_date')
+    .eq('is_active', true);
   // Regra da região específica + regra GLOBAL (region_id nulo → vale p/ todas
   // as regiões). Mesmo tratamento dos feriados nacionais.
   q = regionId ? q.or(`region_id.eq.${regionId},region_id.is.null`) : q.is('region_id', null);
 
   const { data: rows } = await q
-    .order('region_id', { ascending: false, nullsFirst: false }) // específica antes da global
-    .limit(1);
+    .order('region_id', { ascending: false, nullsFirst: false }); // específica antes da global
 
-  const rule = rows?.[0];
+  if (!rows?.length) return 0;
+
+  // Chave mês*100+dia (ex.: 15/07 → 715) — comparável ignorando o ano.
+  const md = (d) => {
+    const [, m, day] = String(d).slice(0, 10).split('-').map(Number);
+    return m * 100 + day;
+  };
+  const target = md(serviceDate);
+  const inRange = (r) => {
+    const s = md(r.start_date), e = md(r.end_date);
+    return s <= e ? (target >= s && target <= e)   // dentro do mesmo ano
+                  : (target >= s || target <= e);  // wrap-around (vira o ano)
+  };
+
+  // rows já vem com a regra específica da região antes da global.
+  const rule = rows.find(inRange);
   if (!rule) return 0;
 
   if (rule.additional_type === 'percentage') {
-    return Math.round(subtotal * (rule.additional_value / 100) * 100) / 100;
+    return Math.round(subtotal * (Number(rule.additional_value) / 100) * 100) / 100;
   }
-  return rule.additional_value;
+  return Number(rule.additional_value);
 }
 
 // ── Acréscimo de feriado / data comemorativa (data EXATA) ──
