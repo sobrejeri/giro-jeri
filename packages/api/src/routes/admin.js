@@ -436,12 +436,29 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
     const comissoes   = sum(data, 'commission_platform', 'outflow');
     const repassesOut = sum(data, 'payout_operator',  'outflow');
 
+    // Comissões de afiliado: vivem na tabela `commissions` (não no ledger).
+    // São uma taxa financeira real (repasse ao divulgador) e precisam aparecer
+    // no Dashboard. Somamos as geradas no período (affiliate_id não nulo).
+    const { data: afRows } = await supabase
+      .from('commissions')
+      .select('commission_amount, created_at')
+      .not('affiliate_id', 'is', null)
+      .gte('created_at', starts[period] || starts.month);
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const comissoesAfiliados = round2((afRows || []).reduce((s, r) => s + Number(r.commission_amount || 0), 0));
+
+    // Resultado da plataforma = o que ela realmente retém: comissão da plataforma
+    // menos a taxa de gateway e menos o que é pago aos afiliados.
+    const resultado = round2(comissoes - taxas - comissoesAfiliados);
+
     res.json({
       bruto, taxas, liquido,
       nao_creditado: naoCredit,
       comissoes_plataforma: comissoes,
+      comissoes_afiliados: comissoesAfiliados,
       repasses: repassesOut,
-      margem_percent: bruto > 0 ? Math.round(((bruto - taxas - comissoes) / bruto) * 100) : 0,
+      resultado_plataforma: resultado,
+      margem_percent: bruto > 0 ? Math.round((resultado / bruto) * 100) : 0,
     });
   } catch (err) { next(err); }
 });

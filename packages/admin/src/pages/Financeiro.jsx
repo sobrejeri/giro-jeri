@@ -96,10 +96,10 @@ export default function Financeiro() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={DollarSign}   label="Bruto"           value={fmt(summary?.bruto)}             color="text-brand"      />
-        <KpiCard icon={TrendingUp}   label="Líquido"         value={fmt(summary?.liquido)}            color="text-green-400"  />
-        <KpiCard icon={CreditCard}   label="Taxas"           value={fmt(summary?.taxas)}              color="text-orange-400" />
-        <KpiCard icon={AlertCircle}  label="Não creditado"   value={fmt(summary?.nao_creditado)}      color="text-amber-400"  />
+        <KpiCard icon={DollarSign}   label="Bruto"               value={fmt(summary?.bruto)}                color="text-brand"      />
+        <KpiCard icon={TrendingUp}   label="Resultado plataforma" value={fmt(summary?.resultado_plataforma)} color="text-green-400"  />
+        <KpiCard icon={CreditCard}   label="Taxas gateway"       value={fmt(summary?.taxas)}                color="text-orange-400" />
+        <KpiCard icon={AlertCircle}  label="Não creditado"       value={fmt(summary?.nao_creditado)}        color="text-amber-400"  />
       </div>
 
       {/* Gráfico área */}
@@ -150,12 +150,13 @@ export default function Financeiro() {
           <CardBody>
             <dl className="space-y-3">
               {[
-                { label: 'Receita Bruta',           value: summary?.bruto,                         cls: 'text-gray-100 font-bold' },
-                { label: '(-) Taxas gateway',       value: `- ${fmt(summary?.taxas)}`,             cls: 'text-red-400'  },
-                { label: '(-) Comissão plataforma', value: `- ${fmt(summary?.comissoes_plataforma)}`, cls: 'text-red-400'  },
-                { label: 'Receita Líquida',         value: summary?.liquido,                       cls: 'text-green-400 font-bold text-base' },
-                { label: 'Repasses efetuados',      value: summary?.repasses,                      cls: 'text-gray-500'  },
-                { label: 'A creditar',              value: summary?.nao_creditado,                 cls: 'text-amber-400'  },
+                { label: 'Receita Bruta',            value: summary?.bruto,                            cls: 'text-gray-100 font-bold' },
+                { label: '(-) Repasse cooperativas', value: `- ${fmt(summary?.repasses)}`,             cls: 'text-red-400'  },
+                { label: '(-) Taxa gateway',         value: `- ${fmt(summary?.taxas)}`,                cls: 'text-red-400'  },
+                { label: '(-) Comissão afiliados',   value: `- ${fmt(summary?.comissoes_afiliados)}`,  cls: 'text-red-400'  },
+                { label: '= Resultado plataforma',   value: summary?.resultado_plataforma,             cls: 'text-green-400 font-bold text-base' },
+                { label: 'Comissão plataforma (bruta)', value: summary?.comissoes_plataforma,          cls: 'text-gray-400'  },
+                { label: 'A creditar',               value: summary?.nao_creditado,                    cls: 'text-amber-400'  },
               ].map((r) => (
                 <div key={r.label} className="flex justify-between text-sm border-b border-gray-700/50 pb-3 last:border-0 last:pb-0">
                   <span className="text-gray-500">{r.label}</span>

@@ -28,6 +28,22 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-24 · Agente B (Etapa 5 #3 — todas as taxas no Dashboard)** — O
+  Financeiro do admin mostrava **Comissão plataforma** e **Repasses** SEMPRE
+  zerados: os lançamentos `commission_platform`/`payout_operator` só eram gravados
+  por `recordLegAccounting` (motor de pernas), que está DESLIGADO. E a **comissão
+  de afiliado** (tabela `commissions`) nunca aparecia no resumo. Fixes: (1)
+  `orderCommissionRows(booking,payment,...)` grava comissão da plataforma +
+  repasse à cooperativa no nível do pedido quando o motor de pernas está off
+  (dentro do insert protegido por `ledger_created`, idempotente; % vem do
+  `platform_split_pct` da coop ou do `payment_split_admin_pct` global) — ligado
+  nos dois fluxos de aprovação (single + grupo). (2) `/api/admin/financial` passou
+  a somar a **comissão de afiliados** (da tabela commissions) e devolve
+  `comissoes_afiliados` + `resultado_plataforma` (= comissão plataforma − gateway
+  − afiliados); `margem_percent` agora usa o resultado. (3) Financeiro.jsx:
+  KPI "Resultado plataforma" e cascata Bruto → (−)Repasse → (−)Gateway →
+  (−)Afiliados → Resultado. Build admin ok.
+
 - **2026-07-24 · Agente B (Etapa 5 #4 — sobretaxa de data itemizada)** — A
   sobretaxa de data (alta temporada OU feriado, via `getDateSurcharge`) JÁ era
   somada ao `total_amount`, mas o **carrinho** (`/cart-request`) e o **/request**

@@ -1615,6 +1615,33 @@ async function recordLegAccounting(booking, payment) {
   }
 }
 
+// Comissão da plataforma + repasse à cooperativa NO NÍVEL DO PEDIDO — usado
+// quando o motor de pernas está DESLIGADO (fluxo atual). Sem isso, o ledger
+// nunca recebe commission_platform/payout_operator e o Dashboard do admin mostra
+// "Comissão plataforma" e "Repasses" zerados. Retorna as linhas para entrarem no
+// MESMO insert protegido por ledger_created (idempotente por pagamento). Vazio
+// quando o motor de pernas está ligado (aí quem lança é recordLegAccounting, por
+// perna, evitando contagem dobrada).
+async function orderCommissionRows(booking, payment, effectiveDate, cfg) {
+  if (!booking?.id) return []
+  if (await isBookingLegsEngineEnabled()) return []
+  const total = Number(booking.total_amount || 0)
+  if (!(total > 0)) return []
+
+  let pct = Number(cfg?.payment_split_admin_pct) || 0
+  if (booking.operator_id) {
+    const { data: op } = await supabase
+      .from('users').select('platform_split_pct').eq('id', booking.operator_id).maybeSingle()
+    if (op?.platform_split_pct != null) pct = Number(op.platform_split_pct)
+  }
+  const commission = Math.round(total * (pct / 100) * 100) / 100
+  const payout     = Math.round((total - commission) * 100) / 100
+  return [
+    { booking_id: booking.id, payment_id: payment.id, entry_type: 'commission_platform', description: `Comissão plataforma — ${booking.booking_code}`, amount: commission, direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+    { booking_id: booking.id, payment_id: payment.id, entry_type: 'payout_operator',     description: `Repasse cooperativa — ${booking.booking_code}`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+  ]
+}
+
 // ── Helpers ────────────────────────────────────────────
 async function onPaymentApproved(payment) {
   // Carrinho universal: pagamento de GRUPO segue por caminho próprio, que
@@ -1664,11 +1691,14 @@ async function onPaymentApproved(payment) {
       : Math.round(amount * feePct * 100) / 100
     // Data efetiva do recebimento — o gráfico de faturamento agrupa por ela
     const effectiveDate = new Date().toISOString().slice(0, 10)
+    const cfg = await getPaymentSettings()
+    const commissionRows = await orderCommissionRows(booking, payment, effectiveDate, cfg)
 
     const { error: ledgerErr } = await supabase.from('financial_ledger').insert([
       { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${booking?.booking_code}`,  amount,                direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
       { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${booking?.booking_code}`,    amount: gatewayFee,    direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
       { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${booking?.booking_code}`, amount: amount - gatewayFee, direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
+      ...commissionRows,
     ])
 
     if (ledgerErr) {
@@ -1792,6 +1822,7 @@ async function onGroupPaymentApproved(payment) {
       : Math.round(combined * feePct * 100) / 100
     const effectiveDate = new Date().toISOString().slice(0, 10)
     const sumTotals = list.reduce((s, b) => s + Number(b.total_amount || 0), 0) || combined
+    const cfg = await getPaymentSettings()
 
     const rows = []
     let feeAllocated = 0
@@ -1803,10 +1834,12 @@ async function onGroupPaymentApproved(payment) {
         ? Math.round((totalFee - feeAllocated) * 100) / 100
         : Math.round(totalFee * (sumTotals ? amt / sumTotals : 0) * 100) / 100
       feeAllocated = Math.round((feeAllocated + fee) * 100) / 100
+      const commissionRows = await orderCommissionRows(b, payment, effectiveDate, cfg)
       rows.push(
         { booking_id: b.id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${b.booking_code}`,  amount: amt,                              direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
         { booking_id: b.id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${b.booking_code}`,    amount: fee,                              direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
         { booking_id: b.id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${b.booking_code}`, amount: Math.round((amt - fee) * 100) / 100, direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
+        ...commissionRows,
       )
     }
     const { error: ledgerErr } = await supabase.from('financial_ledger').insert(rows)
