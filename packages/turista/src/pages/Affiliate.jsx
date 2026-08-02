@@ -218,6 +218,10 @@ export default function Affiliate() {
   const code = data?.code || null
   const percent = Number(data?.percent) || 5
   const commissions = data?.commissions || []
+  // Comissões que ainda VALEM dinheiro: as canceladas (reserva cancelada, sem
+  // serviço prestado) continuam no extrato para transparência, mas não entram
+  // em nenhum total/gráfico — senão o afiliado veria ganhos que não existem.
+  const earning = commissions.filter((c) => c.payout_status !== 'cancelled')
 
   // Painel: últimos 15 dias (hero + gráfico), meses anteriores (chips),
   // indicações e ticket médio — tudo derivado do extrato.
@@ -229,7 +233,7 @@ export default function Affiliate() {
       iso,
       label: format(d, 'dd/MM'),
       full:  format(d, "d 'de' MMM", { locale: ptBR }),
-      value: commissions
+      value: earning
         .filter((c) => (c.created_at || '').slice(0, 10) === iso)
         .reduce((s2, c) => s2 + Number(c.commission_amount || 0), 0),
     }
@@ -237,13 +241,13 @@ export default function Affiliate() {
   const last15Total = Math.round(days.reduce((s2, d) => s2 + d.value, 0) * 100) / 100
   const monthChips = [1, 2].map((m) => {
     const ref = subMonths(today, m)
-    const tot = commissions
+    const tot = earning
       .filter((c) => c.created_at && isSameMonth(new Date(c.created_at), ref))
       .reduce((s2, c) => s2 + Number(c.commission_amount || 0), 0)
     return { label: format(ref, 'MMM', { locale: ptBR }).replace('.', ''), total: Math.round(tot * 100) / 100 }
   })
-  const allTotal   = commissions.reduce((s2, c) => s2 + Number(c.commission_amount || 0), 0)
-  const ticketMedio = commissions.length ? allTotal / commissions.length : 0
+  const allTotal   = earning.reduce((s2, c) => s2 + Number(c.commission_amount || 0), 0)
+  const ticketMedio = earning.length ? allTotal / earning.length : 0
   // BASE_URL cobre o deploy em subcaminho (GitHub Pages: /giro-jeri/) — sem
   // ele o link cairia em sobrejeri.github.io/a/... (404 fora do app).
   const link = code ? `${window.location.origin}${import.meta.env.BASE_URL}a/${code}` : null
@@ -340,7 +344,7 @@ export default function Affiliate() {
             <div className="grid grid-cols-3 gap-2.5">
               <div className="bg-white rounded-2xl border border-gray-100 px-3 py-3 text-center">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('affiliatePg.referrals')}</p>
-                <p className="text-[16px] font-extrabold text-gray-900 mt-0.5">{commissions.length}</p>
+                <p className="text-[16px] font-extrabold text-gray-900 mt-0.5">{earning.length}</p>
               </div>
               <div className="bg-white rounded-2xl border border-gray-100 px-3 py-3 text-center">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('affiliatePg.pending')}</p>
@@ -427,28 +431,41 @@ export default function Affiliate() {
                 </p>
               ) : (
                 <div className="divide-y divide-gray-50">
-                  {data.commissions.map((c) => (
+                  {data.commissions.map((c) => {
+                    // 3 estados: paga · cancelada (reserva cancelada, serviço não
+                    // realizado — não entra no repasse) · pendente.
+                    const isPaid      = c.payout_status === 'paid'
+                    const isCancelled = c.payout_status === 'cancelled'
+                    return (
                     <div key={c.id} className="flex items-center justify-between px-4 py-3">
                       <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-gray-800">
+                        <p className={`text-[13px] font-semibold ${isCancelled ? 'text-gray-400' : 'text-gray-800'}`}>
                           {c.bookings?.booking_code || t('affiliatePg.reservationFallback')} · {c.bookings?.service_type === 'transfer' ? t('affiliatePg.serviceTransfer') : t('affiliatePg.serviceTour')}
                         </p>
                         <p className="text-[11px] text-gray-400">
                           {c.created_at ? format(new Date(c.created_at), "d 'de' MMM", { locale: ptBR }) : ''}
-                          {c.payout_status !== 'paid' && c.payout_due_date
-                            ? t('affiliatePg.payoutDueLabel', { date: format(new Date(`${c.payout_due_date}T12:00:00`), 'dd/MM', { locale: ptBR }) }) : ''}
+                          {isCancelled
+                            ? t('affiliatePg.cancelledNote')
+                            : (!isPaid && c.payout_due_date
+                                ? t('affiliatePg.payoutDueLabel', { date: format(new Date(`${c.payout_due_date}T12:00:00`), 'dd/MM', { locale: ptBR }) })
+                                : '')}
                         </p>
                       </div>
                       <div className="text-right shrink-0 ml-3">
-                        <p className="text-[14px] font-extrabold text-gray-900">{fmtBRL(c.commission_amount)}</p>
+                        <p className={`text-[14px] font-extrabold ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{fmtBRL(c.commission_amount)}</p>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          c.payout_status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                          isPaid ? 'bg-emerald-50 text-emerald-600'
+                          : isCancelled ? 'bg-gray-100 text-gray-500'
+                          : 'bg-amber-50 text-amber-600'
                         }`}>
-                          {c.payout_status === 'paid' ? t('affiliatePg.paid') : t('affiliatePg.pendingStatus')}
+                          {isPaid ? t('affiliatePg.paid')
+                            : isCancelled ? t('affiliatePg.cancelledStatus')
+                            : t('affiliatePg.pendingStatus')}
                         </span>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

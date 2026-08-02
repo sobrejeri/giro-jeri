@@ -1231,6 +1231,8 @@
     "payoutDueLabel": " · payout by {{date}}",
     "paid": "Paid",
     "pendingStatus": "Pending",
+    "cancelledStatus": "Cancelled",
+    "cancelledNote": " · service not performed",
     "howItWorks": "How it works",
     "step1": "Activate your link and share it with friends and followers.",
     "step2": "Whoever opens the link (or uses your code) stays linked to you for 30 days.",

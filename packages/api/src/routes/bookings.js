@@ -396,6 +396,15 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
 
     if (error) throw error;
 
+    // Comissão de afiliado: serviço não realizado não gera comissão. Cancela a
+    // comissão pendente e avisa quem indicou (app + WhatsApp). Best-effort —
+    // nunca derruba o cancelamento da reserva.
+    if (booking.affiliate_id) {
+      const { cancelAffiliateCommission } = await import('../services/affiliateCommission.js');
+      cancelAffiliateCommission({ ...booking, ...data }).catch((err) =>
+        console.error('[afiliado] cancelamento de comissão falhou booking=%s err=%s', booking.id, err.message));
+    }
+
     // Notifica a contraparte sobre o cancelamento
     const canceledByTourist = req.user.user_type === 'tourist';
     const tipo = serviceLabelBk(booking.service_type);

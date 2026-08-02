@@ -14,6 +14,9 @@ const styles = {
   in_progress:      'bg-brand/20 text-brand',
   completed:        'bg-green-900/40 text-green-400',
   occurrence:       'bg-red-900/40 text-red-400',
+  // Repasse de comissão (payout_status)
+  pending:          'bg-amber-900/40 text-amber-400',
+  ready:            'bg-blue-900/40 text-blue-400',
   pending_quote:    'bg-amber-900/40 text-amber-400',
   quoted:           'bg-blue-900/40 text-blue-400',
   accepted:         'bg-teal-900/40 text-teal-400',
@@ -38,6 +41,7 @@ const labels = {
   new: 'Novo', awaiting_dispatch: 'Ag. Despacho', confirmed: 'Confirmado',
   assigned: 'Atribuído', en_route: 'A Caminho', in_progress: 'Em Andamento',
   completed: 'Concluído', occurrence: 'Ocorrência',
+  pending: 'Pendente', ready: 'Pronto p/ pagar',
   pending_quote: 'Ag. Cotação', quoted: 'Cotado', accepted: 'Aceito',
   expired: 'Expirado', rejected: 'Rejeitado',
   tour: 'Passeio', transfer: 'Transfer',

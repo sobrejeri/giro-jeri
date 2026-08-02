@@ -1231,6 +1231,8 @@
     "payoutDueLabel": " · repasse até {{date}}",
     "paid": "Pago",
     "pendingStatus": "Pendente",
+    "cancelledStatus": "Cancelada",
+    "cancelledNote": " · serviço não realizado",
     "howItWorks": "Como funciona",
     "step1": "Ative seu link e compartilhe com amigos e seguidores.",
     "step2": "Quem abrir o link (ou usar seu código) fica ligado a você por 30 dias.",

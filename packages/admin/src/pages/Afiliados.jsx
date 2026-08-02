@@ -49,8 +49,10 @@ export default function Afiliados() {
   })
 
   const rows = data || []
+  // A pagar = nem paga, nem cancelada (cancelada = reserva cancelada, sem
+  // serviço prestado → não gera repasse).
   const totalPending = rows
-    .filter((c) => c.payout_status !== 'paid')
+    .filter((c) => c.payout_status !== 'paid' && c.payout_status !== 'cancelled')
     .reduce((s, c) => s + Number(c.commission_amount || 0), 0)
 
   function copyText(id, text) {
@@ -99,7 +101,7 @@ export default function Afiliados() {
       {/* Filtro + resumo */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2">
-          {[['pending', 'Pendentes'], ['paid', 'Pagas'], ['all', 'Todas']].map(([id, label]) => (
+          {[['pending', 'Pendentes'], ['paid', 'Pagas'], ['cancelled', 'Canceladas'], ['all', 'Todas']].map(([id, label]) => (
             <button
               key={id}
               onClick={() => setStatus(id)}
@@ -111,7 +113,7 @@ export default function Afiliados() {
             </button>
           ))}
         </div>
-        {status !== 'paid' && rows.length > 0 && (
+        {status !== 'paid' && status !== 'cancelled' && rows.length > 0 && (
           <p className="text-sm text-gray-400">
             A repassar: <span className="font-bold text-orange-400">{fmtBRL(totalPending)}</span>
           </p>
@@ -123,7 +125,9 @@ export default function Afiliados() {
           <CardBody className="py-14 text-center">
             <Megaphone size={32} className="mx-auto text-gray-600 mb-3" />
             <p className="text-gray-400 font-medium">
-              {status === 'pending' ? 'Nenhuma comissão pendente 🎉' : 'Nenhuma comissão encontrada.'}
+              {status === 'pending' ? 'Nenhuma comissão pendente 🎉'
+                : status === 'cancelled' ? 'Nenhuma comissão cancelada.'
+                : 'Nenhuma comissão encontrada.'}
             </p>
             <p className="text-gray-500 text-sm mt-1">
               Comissões nascem quando uma reserva indicada por um afiliado é paga.
@@ -189,12 +193,16 @@ export default function Afiliados() {
                       {c.payout_status === 'paid' ? fmtDia(c.payout_paid_at) : fmtDia(c.payout_due_date)}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={c.payout_status === 'paid' ? 'success' : 'warning'}>
-                        {c.payout_status === 'paid' ? 'Pago' : 'Pendente'}
-                      </Badge>
+                      {/* O Badge recebe `value` (não variant/children) — com
+                          variant a coluna renderizava VAZIA. */}
+                      <Badge value={c.payout_status || 'pending'} />
+                      {c.payout_status === 'cancelled' && (
+                        <p className="text-[11px] text-gray-500 mt-1">reserva cancelada</p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {c.payout_status !== 'paid' && (
+                      {/* Cancelada = serviço não realizado: não há repasse a fazer. */}
+                      {c.payout_status !== 'paid' && c.payout_status !== 'cancelled' && (
                         <Button
                           size="sm"
                           disabled={payMut.isPending}

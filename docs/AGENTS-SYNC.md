@@ -28,6 +28,25 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-24 · Agente B (Etapa 5 #1 e #2 — afiliados)** — **#1 status
+  Pago/Pendente**: no admin (Afiliados.jsx) a coluna Status renderizava **VAZIA**
+  — o componente `Badge` recebe `value`, mas a página passava `variant` + children
+  (props ignoradas). Fix: `<Badge value={c.payout_status} />` + `pending`/`ready`
+  adicionados aos estilos/labels do Badge ('Pendente'/'Pronto p/ pagar'). **#2
+  cancelamento avisa o afiliado**: cancelar reserva NÃO mexia na comissão — ela
+  ficava `pending` e seria repassada mesmo sem serviço prestado. Novo
+  `services/affiliateCommission.js` → `cancelAffiliateCommission(booking)`: marca
+  as comissões de afiliado como `payout_status='cancelled'` (valor já existia no
+  enum, sem migration), avisa o afiliado no app + **WhatsApp**
+  (`notifyAffiliateCommissionCancelled`), é idempotente e NÃO reverte comissão já
+  paga (loga pedindo acerto manual). Ligado no `POST /bookings/:id/cancel` (único
+  caminho que cancela reserva PAGA; os outros dois só cancelam não-pagas, que não
+  têm comissão). UI: turista (Affiliate.jsx) ganha o 3º estado "Cancelada"
+  (riscado/cinza, nota "serviço não realizado") e os totais/gráfico/indicações/
+  ticket passam a excluir canceladas; admin ganha filtro "Canceladas", badge
+  próprio e some o botão "Marcar pago" (nada a repassar) — "A repassar" também
+  exclui canceladas. i18n pt/en/es. Builds ok.
+
 - **2026-07-24 · Agente B (Etapa 5 #3 — todas as taxas no Dashboard)** — O
   Financeiro do admin mostrava **Comissão plataforma** e **Repasses** SEMPRE
   zerados: os lançamentos `commission_platform`/`payout_operator` só eram gravados

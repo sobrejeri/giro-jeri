@@ -172,6 +172,34 @@ export async function notifyAffiliateCommission(supabase, { affiliateId, booking
 }
 
 /**
+ * WhatsApp para o AFILIADO — comissão CANCELADA (a reserva indicada foi
+ * cancelada, ou seja, o serviço não foi realizado). Transparência: o afiliado
+ * já tinha sido avisado da comissão, então precisa saber que ela caiu.
+ * Fire-and-forget: erros logados, nunca derrubam o cancelamento.
+ */
+export async function notifyAffiliateCommissionCancelled(supabase, { affiliateId, booking, amount }) {
+  if (!isWhatsappEnabled() || !affiliateId || !booking) return { skipped: true }
+
+  const phone = await userPhone(supabase, affiliateId)
+  if (!phone) return { skipped: true, reason: 'afiliado sem telefone' }
+
+  const { tipo, data } = bookingSummary(booking)
+  const message =
+    `*TURIVA* · Comissão cancelada\n` +
+    `\n` +
+    `Uma reserva indicada por você foi *cancelada* e o serviço não será realizado:\n` +
+    `${tipo} · 🗓 ${data} · 🔖 ${booking.booking_code || '-'}\n` +
+    `\n` +
+    `❌ Comissão cancelada: *${fmtBRL(amount)}*\n` +
+    `Como a comissão só vale para serviços realizados, esse valor não entra no seu repasse.\n` +
+    `\n` +
+    `Suas outras indicações seguem normalmente: ${TURISTA_APP}/afiliado\n` +
+    `Continue divulgando! 🚀`
+
+  await sendToMany([phone], message)
+}
+
+/**
  * WhatsApp para TODAS as cooperativas ativas — solicitação nova.
  * Admin não recebe aqui; só após a expiração (notifyAdminExpiredBooking).
  * Fire-and-forget: erros logados, nunca derrubam o fluxo.
