@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 064.**
+   registre aqui o número reservado. **Próximo número livre: 066.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,28 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-24 · Agente B (catálogo: voos de helicóptero Frisonfly como exclusivos)**
+  — `065_heli_frisonfly_exclusivos.sql`: os 11 voos panorâmicos da tabela
+  @jerivoospanoramicos entram como passeios `is_exclusive = true` (venda direta,
+  fora do carrinho — migration 051). Modelo de preço: o **01** é o único
+  COMPARTILHADO (R$ 500 **por pessoa** → `tours.shared_price_per_person`); os
+  **02–11** são PRIVATIVOS 3 pax e o preço vem de `vehicle_pricing_rules`
+  (veículo × passeio), por isso a migration cria o veículo `helicoptero-3-pax`
+  (seat_capacity 3) + 1 regra por voo. `vehicle_type='other'` + `category='Helicóptero'`
+  DE PROPÓSITO: `ALTER TYPE ... ADD VALUE` não pode ser usado na mesma transação
+  em que é criado e quebraria o script no editor SQL do Supabase.
+  `duration_hours` = duração TOTAL (nos voos com pouso inclui a parada em terra;
+  o tempo de voo fica no nome/descrição). `min_advance_hours = 24`.
+  **Autossuficiente**: como descobrimos que a 023 nunca rodou neste banco, o
+  script começa com `ADD COLUMN IF NOT EXISTS` para region_ids (028),
+  min_advance_hours (049) e is_exclusive (051) — não assume que rodaram.
+  **VALIDADA CONTRA POSTGRES REAL** (16, schema 001 carregado): roda limpa,
+  os 11 preços conferem com a tabela do parceiro, e é idempotente (2ª execução
+  mantém 11 passeios / 1 veículo / 10 regras).
+  PENDENTE: os 6 translados aéreos (JJD, Camocim, Sobral, Parnaíba, Fortaleza,
+  Teresina) NÃO foram cadastrados — o valor de Sobral na tabela (R$ 97.600) está
+  fora do padrão dos demais e precisa de confirmação do dono.
 
 - **2026-07-24 · Agente B (revisão adversarial das Etapas 4–5 + correções)** — Revisão
   com 8 lentes independentes e verificação adversarial (38 achados; 10 confirmados,
