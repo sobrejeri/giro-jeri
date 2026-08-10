@@ -42,10 +42,24 @@
         opacity: 1; transition: opacity .45s ease;
       }
       #splash.is-hiding { opacity: 0; pointer-events: none; }
-      #splash .splash-logo {
-        width: 96px; height: 96px; border-radius: 22px; object-fit: cover;
+      /* Marca desenhada em CSS: aparece sozinha quando o logo não carrega
+         (sem internet). Sem isto o navegador mostra o ícone de imagem
+         quebrada com o texto alternativo. */
+      #splash .splash-mark {
+        position: relative; width: 96px; height: 96px; border-radius: 22px;
+        background: linear-gradient(135deg, #FF6A00, #FF9040);
         box-shadow: 0 14px 34px rgba(255,106,0,.20);
         animation: splashPop .55s cubic-bezier(.2,.7,.3,1) both;
+        display: flex; align-items: center; justify-content: center;
+      }
+      #splash .splash-mark::before {
+        content: 'T';
+        font-family: 'Fredoka','Syne',system-ui,sans-serif;
+        font-weight: 700; font-size: 46px; color: #fff;
+      }
+      #splash .splash-logo {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%; border-radius: 22px; object-fit: cover;
       }
       #splash .splash-footer {
         position: absolute; left: 0; right: 0; text-align: center;
@@ -72,7 +86,12 @@
 
     <!-- Splash: logo centralizada + marca no rodapé (igual ao abrir o WhatsApp) -->
     <div id="splash" aria-hidden="true">
-      <img src="/logo-icon.jpeg" alt="Turiva" class="splash-logo" />
+      <div class="splash-mark">
+        <!-- alt vazio + onerror: sem rede a imagem some e fica só a marca em
+             CSS — nunca aparece o ícone de imagem quebrada. -->
+        <img src="/logo-icon.jpeg" alt="" class="splash-logo"
+             onerror="this.remove()" />
+      </div>
       <div class="splash-footer">
         <p class="splash-brand">TURIVA</p>
         <p class="splash-tag">Passeios &amp; Transfers</p>
