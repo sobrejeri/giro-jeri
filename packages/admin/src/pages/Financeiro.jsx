@@ -97,7 +97,11 @@ export default function Financeiro() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard icon={DollarSign}   label="Bruto"               value={fmt(summary?.bruto)}                color="text-brand"      />
-        <KpiCard icon={TrendingUp}   label="Resultado plataforma" value={fmt(summary?.resultado_plataforma)} color="text-green-400"  />
+        <KpiCard icon={TrendingUp}   label="Resultado plataforma"
+          value={summary?.dados_incompletos ? '—' : fmt(summary?.resultado_plataforma)}
+          subLabel={summary?.dados_incompletos ? 'Sem dados de comissão neste período' : undefined}
+          subValue={summary?.dados_incompletos ? 'período anterior ao registro de comissões' : undefined}
+          color="text-green-400"  />
         <KpiCard icon={CreditCard}   label="Taxas gateway"       value={fmt(summary?.taxas)}                color="text-orange-400" />
         <KpiCard icon={AlertCircle}  label="Não creditado"       value={fmt(summary?.nao_creditado)}        color="text-amber-400"  />
       </div>
@@ -107,7 +111,7 @@ export default function Financeiro() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-300">Faturamento</h2>
-            {summary?.margem_percent !== undefined && (
+            {summary?.margem_percent != null && (
               <span className="text-xs font-medium text-green-400 bg-green-900/30 px-2 py-1 rounded-full">
                 Margem {summary.margem_percent}%
               </span>
@@ -154,7 +158,9 @@ export default function Financeiro() {
                 { label: '(-) Repasse cooperativas', value: `- ${fmt(summary?.repasses)}`,             cls: 'text-red-400'  },
                 { label: '(-) Taxa gateway',         value: `- ${fmt(summary?.taxas)}`,                cls: 'text-red-400'  },
                 { label: '(-) Comissão afiliados',   value: `- ${fmt(summary?.comissoes_afiliados)}`,  cls: 'text-red-400'  },
-                { label: '= Resultado plataforma',   value: summary?.resultado_plataforma,             cls: 'text-green-400 font-bold text-base' },
+                { label: '= Resultado plataforma',
+                  value: summary?.dados_incompletos ? '—' : summary?.resultado_plataforma,
+                  cls: 'text-green-400 font-bold text-base' },
                 { label: 'Comissão plataforma (bruta)', value: summary?.comissoes_plataforma,          cls: 'text-gray-400'  },
                 { label: 'A creditar',               value: summary?.nao_creditado,                    cls: 'text-amber-400'  },
               ].map((r) => (

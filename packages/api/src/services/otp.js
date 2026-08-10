@@ -120,17 +120,25 @@ export async function requestOtp({ userId, channel, destination, lang = 'pt' }) 
     throw err;
   }
 
-  // 5. Disparar envio (não bloqueia em caso de falha do canal)
+  // 5. Disparar envio. NÃO bloqueia em caso de falha do canal (comportamento
+  //    histórico), mas REPORTA se a mensagem saiu — quem chama decide o que
+  //    fazer. O cadastro usa isso para não deixar a conta presa num estado
+  //    "aguardando código" quando o código nunca foi entregue.
+  let sendResult;
   if (channel === 'email') {
-    await sendEmailOtp({ to: destination, code, lang });
+    sendResult = await sendEmailOtp({ to: destination, code, lang });
   } else if (channel === 'whatsapp') {
-    await sendWhatsappOtp({ phone: destination, code, lang });
+    sendResult = await sendWhatsappOtp({ phone: destination, code, lang });
   }
+  // sendWhatsappOtp devolve { error: true } em falha e { skipped: true } quando
+  // o canal não está configurado; sucesso devolve o corpo da Z-API.
+  const delivered = !!sendResult && !sendResult.error && !sendResult.skipped;
 
   return {
     destination_masked: maskDestination(channel, destination),
     expires_in:  600,  // segundos
     retry_after: COOLDOWN_SECONDS,
+    delivered,
   };
 }
 

@@ -438,11 +438,13 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
 
     // Comissões de afiliado: vivem na tabela `commissions` (não no ledger).
     // São uma taxa financeira real (repasse ao divulgador) e precisam aparecer
-    // no Dashboard. Somamos as geradas no período (affiliate_id não nulo).
+    // no Dashboard. CANCELADAS ficam de fora: reserva cancelada não gera
+    // repasse, e somá-las descontava do resultado dinheiro que ninguém recebe.
     const { data: afRows } = await supabase
       .from('commissions')
-      .select('commission_amount, created_at')
+      .select('commission_amount, payout_status, created_at')
       .not('affiliate_id', 'is', null)
+      .neq('payout_status', 'cancelled')
       .gte('created_at', starts[period] || starts.month);
     const round2 = (v) => Math.round(v * 100) / 100;
     const comissoesAfiliados = round2((afRows || []).reduce((s, r) => s + Number(r.commission_amount || 0), 0));
@@ -451,6 +453,13 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
     // menos a taxa de gateway e menos o que é pago aos afiliados.
     const resultado = round2(comissoes - taxas - comissoesAfiliados);
 
+    // Os lançamentos commission_platform/payout_operator só passaram a ser
+    // gravados a partir do deploy de 24/07. Períodos que incluem receita ANTERIOR
+    // a isso têm booking_gross sem a comissão correspondente — aí `resultado`
+    // fica artificialmente baixo (até negativo) e NÃO deve ser lido como
+    // prejuízo. Este flag avisa a tela para exibir "—" em vez de um número falso.
+    const dadosIncompletos = bruto > 0 && comissoes === 0;
+
     res.json({
       bruto, taxas, liquido,
       nao_creditado: naoCredit,
@@ -458,7 +467,8 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
       comissoes_afiliados: comissoesAfiliados,
       repasses: repassesOut,
       resultado_plataforma: resultado,
-      margem_percent: bruto > 0 ? Math.round((resultado / bruto) * 100) : 0,
+      dados_incompletos: dadosIncompletos,
+      margem_percent: (bruto > 0 && !dadosIncompletos) ? Math.round((resultado / bruto) * 100) : null,
     });
   } catch (err) { next(err); }
 });
@@ -781,11 +791,14 @@ router.put('/commissions/:id/pay', requireAdmin, async (req, res, next) => {
       .from('commissions')
       .update({ payout_status: 'paid', payout_paid_at: new Date().toISOString() })
       .eq('id', req.params.id)
-      .neq('payout_status', 'paid')
+      // Só paga o que está realmente a pagar. Antes era .neq('payout_status','paid'),
+      // que ACEITAVA 'cancelled': com a tela em cache, o admin ressuscitava o
+      // repasse de uma reserva que o cliente já havia cancelado.
+      .in('payout_status', ['pending', 'ready'])
       .select('id, affiliate_id, commission_amount, booking_id, bookings ( booking_code )')
       .maybeSingle();
     if (error) throw error;
-    if (!row) return res.status(404).json({ error: 'Comissão não encontrada (ou já paga)' });
+    if (!row) return res.status(409).json({ error: 'Esta comissão não está a pagar (já foi paga ou a reserva foi cancelada). Atualize a lista.' });
 
     if (row.affiliate_id) {
       const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;

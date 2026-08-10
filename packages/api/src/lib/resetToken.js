@@ -2,8 +2,12 @@
 // JWT HS256 leve para RESET DE SENHA (link enviado por WhatsApp/e-mail).
 // Claims: { purpose:'pwd_reset', user_id, iat, exp }. Expira em 30 min.
 import crypto from 'crypto';
+import { secretFor } from './tokenSecret.js';
 
-const SECRET = process.env.SIGNUP_TOKEN_SECRET || 'giro-jeri-signup-dev-secret-change-in-prod';
+// Chave própria do reset (derivada por propósito): um token de cadastro não vale
+// como token de reset e vice-versa. Resolvida a cada uso — nunca um valor
+// público hardcoded (ver lib/tokenSecret.js).
+const SECRET = () => secretFor('pwd_reset');
 
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 function b64urlDecode(str) {
@@ -18,7 +22,7 @@ export function signResetToken(userId) {
   const claims = { purpose: 'pwd_reset', user_id: userId, iat: now, exp: now + 30 * 60 };
   const body = b64url(Buffer.from(JSON.stringify(claims)));
   const data = `${HEADER_B64}.${body}`;
-  const sig  = b64url(crypto.createHmac('sha256', SECRET).update(data).digest());
+  const sig  = b64url(crypto.createHmac('sha256', SECRET()).update(data).digest());
   return `${data}.${sig}`;
 }
 
@@ -27,7 +31,7 @@ export function verifyResetToken(token) {
   const parts = token.split('.');
   if (parts.length !== 3) { const e = new Error('Token malformado'); e.status = 400; throw e; }
   const [h, b, s] = parts;
-  const expected = b64url(crypto.createHmac('sha256', SECRET).update(`${h}.${b}`).digest());
+  const expected = b64url(crypto.createHmac('sha256', SECRET()).update(`${h}.${b}`).digest());
   if (s.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected))) {
     const e = new Error('Token inválido'); e.status = 400; throw e;
   }

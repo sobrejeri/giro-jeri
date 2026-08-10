@@ -95,17 +95,24 @@ router.post('/register', async (req, res, next) => {
     // Mensagem genérica anti-enumeração.
     const GENERIC_ERROR = 'Não foi possível concluir o cadastro. Tente fazer login.';
 
-    // Com verificação ligada, a unicidade usa phone_e164 (migration 023). Sem ela,
-    // checamos a coluna phone (já única na migration 001) — não depende do 023.
+    // Duplicidade de telefone: checa `phone` (única desde a 001) E `phone_e164`
+    // (migration 023). Antes olhava só uma das duas conforme a flag de
+    // verificação — e como phone_e164 é NULL em TODAS as contas antigas, dava
+    // para criar uma conta nova com um número já cadastrado (duas contas, mesmo
+    // WhatsApp → o reset por telefone fica ambíguo). 42703 = coluna 023 ausente.
     if (phoneToStore) {
-      const dupCol = REQUIRE_SIGNUP_VERIFICATION ? 'phone_e164' : 'phone';
-      const dupVal = REQUIRE_SIGNUP_VERIFICATION ? phoneE164 : phoneToStore;
+      const variants = [...new Set([phoneToStore, phoneE164].filter(Boolean))];
+      const orExpr = variants.map((v) => `phone.eq.${v}`).join(',');
       const { data: dupPhone } = await supabase
-        .from('users')
-        .select('id')
-        .eq(dupCol, dupVal)
-        .maybeSingle();
-      if (dupPhone) {
+        .from('users').select('id').or(orExpr).limit(1).maybeSingle();
+      let dup = dupPhone;
+      if (!dup && phoneE164) {
+        const { data: dupE164, error: e164Err } = await supabase
+          .from('users').select('id').eq('phone_e164', phoneE164).maybeSingle();
+        if (e164Err && e164Err.code !== '42703') throw e164Err;
+        dup = dupE164;
+      }
+      if (dup) {
         return res.status(409).json({ error: GENERIC_ERROR });
       }
     }
@@ -159,7 +166,10 @@ router.post('/register', async (req, res, next) => {
       phone_verified: false,
       language:       body.lang,
     };
-    if (REQUIRE_SIGNUP_VERIFICATION) insertRow.phone_e164 = phoneE164;
+    // ATENÇÃO: phone_e164 é o MARCADOR de "aguardando código" (o gate do login
+    // olha para ele). Não gravamos aqui: só depois de CONFIRMAR que o código
+    // saiu no WhatsApp (mais abaixo). Se gravássemos antes, um Z-API fora do ar
+    // deixaria a conta presa pedindo um código que nunca chega.
 
     let { data: profile, error: profileError } = await supabase
       .from('users')
@@ -202,16 +212,47 @@ router.post('/register', async (req, res, next) => {
     }
 
     // ── Verificação ligada: código de ativação vai pro WHATSAPP ─────────
+    let delivered = false;
     try {
-      await requestOtp({
+      const r = await requestOtp({
         userId:      profile.id,
         channel:     'whatsapp',
         destination: phoneE164,
         lang:        body.lang,
       });
+      delivered = !!r?.delivered;
     } catch (otpErr) {
-      // OTP falhou mas conta foi criada — não é fatal; o wizard reenvia
       console.error('[register] OTP whatsapp falhou:', otpErr.message);
+    }
+
+    // O código NÃO saiu (Z-API fora do ar / número sem WhatsApp). Ativar a conta
+    // é melhor que deixar o cliente preso num código que nunca chega: entra
+    // logado e o telefone fica como não verificado (o perfil mostra isso e
+    // permite verificar depois). Fica registrado no log para o admin agir.
+    if (!delivered) {
+      console.error('[register] código NÃO entregue — conta ativada sem verificação. user=%s', profile.id);
+      const { data: sess } = await freshAuthClient().auth.signInWithPassword({
+        email:    body.email,
+        password: body.password,
+      });
+      if (sess?.session) {
+        return res.status(201).json({
+          token:         sess.session.access_token,
+          refresh_token: sess.session.refresh_token,
+          user:          profile,
+          warning:       'Não conseguimos enviar o código no WhatsApp agora. Sua conta foi criada — confirme o número depois no seu perfil.',
+        });
+      }
+      return res.status(201).json({ status: 'ok', next: 'login' });
+    }
+
+    // Código entregue → marca a conta como "aguardando verificação" (phone_e164
+    // é o marcador lido pelo gate do login). 42703 = migration 023 pendente:
+    // segue sem o marcador (conta ativa) em vez de quebrar o cadastro.
+    const { error: markErr } = await supabase
+      .from('users').update({ phone_e164: phoneE164 }).eq('id', profile.id);
+    if (markErr && markErr.code !== '42703') {
+      console.error('[register] falha ao marcar phone_e164:', markErr.message);
     }
 
     // Monta signup_token (phone_required=true: só o WhatsApp destrava)
@@ -371,6 +412,21 @@ router.post('/login', async (req, res, next) => {
 
     // ── Gate de verificação (apenas tourists) ──────────────
     if (profile.user_type === 'tourist') {
+      // phone_e164 (migration 023) NÃO está no PROFILE_COLS, então precisa ser
+      // buscado à parte. Sem isto, profile.phone_e164 era sempre undefined e o
+      // gate NUNCA disparava: uma conta criada e não verificada entrava
+      // normalmente — o código do cadastro virava decoração.
+      // Coluna ausente (42703) ou erro → trata como "sem marcador" (não trava
+      // ninguém por causa de banco desatualizado/instabilidade).
+      if (profile.phone_e164 === undefined) {
+        const { data: vrow, error: vErr } = await supabase
+          .from('users').select('phone_e164').eq('id', profile.id).maybeSingle();
+        if (vErr && vErr.code !== '42703') {
+          console.error('[login] leitura de phone_e164 falhou:', vErr.message);
+        }
+        profile.phone_e164 = vrow?.phone_e164 ?? null;
+      }
+
       // Ativação pelo WhatsApp: quem tem phone_e164 pendente precisa do código.
       // Contas antigas (sem phone_e164) não são travadas retroativamente.
       const phonePending = profile.phone_e164 && !profile.phone_verified;
@@ -484,7 +540,10 @@ router.post('/forgot-password', async (req, res, next) => {
           .catch((err) => console.error('[reset] email falhou:', err?.message));
       }
     }
-    res.json({ ok: true, channel: user?.phone ? 'whatsapp' : 'email' });
+    // Resposta SEMPRE idêntica, exista a conta ou não. Devolver o canal real
+    // ('whatsapp' vs 'email') era um oráculo: dava para descobrir se um e-mail
+    // /telefone está cadastrado e se a conta tem WhatsApp, só olhando o retorno.
+    res.json({ ok: true });
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos' });
     next(err);

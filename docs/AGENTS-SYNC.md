@@ -28,6 +28,46 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-24 · Agente B (revisão adversarial das Etapas 4–5 + correções)** — Revisão
+  com 8 lentes independentes e verificação adversarial (38 achados; 10 confirmados,
+  5 refutados, 23 sem verificar por limite de cota). Corrigido:
+  **(1) CRÍTICO — takeover de conta.** `lib/resetToken.js` e `lib/signupToken.js`
+  assinavam com `SIGNUP_TOKEN_SECRET || '<string publicada no repo>'`. Como a env
+  não é obrigatória para a API subir, um ambiente sem ela assinava com segredo
+  público → dava para FORJAR o token e trocar a senha de qualquer `user_id` via
+  `POST /auth/reset-password`. Novo `lib/tokenSecret.js`: usa a env se tiver 32+
+  chars, senão DERIVA por HMAC de `SUPABASE_SERVICE_ROLE_KEY` (obrigatória no boot,
+  nunca versionada), com chave separada por propósito (signup ≠ pwd_reset); sem
+  base, LANÇA — nunca cai em segredo público. Testado: token forjado com o segredo
+  antigo é rejeitado, e signup_token não vale como token de reset.
+  **(2) CRÍTICO — gate de verificação era no-op.** `PROFILE_COLS` não inclui
+  `phone_e164`, então `profile.phone_e164` era sempre `undefined` no gate do login:
+  `phonePending` e `emailPending` davam ambos falso e o gate NUNCA disparava —
+  conta criada e não verificada logava normalmente (o OTP do cadastro era
+  decoração). Agora o gate busca `phone_e164` à parte, tolerando 42703.
+  **(3) Anti-lockout no cadastro.** `phone_e164` é o marcador de "aguardando
+  código" — passou a ser gravado SÓ depois de confirmar que o código saiu
+  (`requestOtp` agora devolve `delivered`). Se o Z-API estiver fora, a conta é
+  ativada e o cliente entra logado (com `warning`), em vez de ficar preso pedindo
+  um código que nunca chega.
+  **(4) Duplicidade de telefone.** A checagem olhava só `phone_e164` (NULL em
+  todas as contas antigas) → dava para cadastrar de novo um número já existente.
+  Agora checa `phone` E `phone_e164`.
+  **(5) Enumeração.** `/forgot-password` devolvia `channel: 'whatsapp'|'email'`,
+  revelando se a conta existe e se tem WhatsApp. Resposta agora é sempre `{ok:true}`.
+  **(6) Financeiro.** Comissões de afiliado CANCELADAS eram subtraídas do
+  resultado (dinheiro que ninguém recebe) → agora `.neq('payout_status','cancelled')`.
+  E como `commission_platform` só existe a partir de 24/07, períodos com receita
+  anterior davam "Resultado plataforma" NEGATIVO (falso prejuízo) → novo flag
+  `dados_incompletos` e a tela mostra "—" em vez de número enganoso.
+  **(7) Repasse ressuscitado.** `PUT /commissions/:id/pay` usava
+  `.neq('payout_status','paid')`, que aceitava `cancelled` → agora
+  `.in(['pending','ready'])` e devolve 409 explicativo.
+  **PENDENTE (não corrigido):** alta temporada — regras antigas ainda ativas
+  recobram todo ano e `rows.find()` não tem desempate entre regras sobrepostas;
+  calendário do turista (`/api/seasons`) ainda usa comparação com ano e divergе do
+  backend. Ver seção "Em andamento".
+
 - **2026-07-24 · Agente B (Etapa 5 #1 e #2 — afiliados)** — **#1 status
   Pago/Pendente**: no admin (Afiliados.jsx) a coluna Status renderizava **VAZIA**
   — o componente `Badge` recebe `value`, mas a página passava `variant` + children

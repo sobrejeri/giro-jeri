@@ -4,11 +4,12 @@
 // Expiração padrão: 30 minutos.
 
 import crypto from 'crypto';
+import { secretFor } from './tokenSecret.js';
 
-const SECRET = process.env.SIGNUP_TOKEN_SECRET || 'giro-jeri-signup-dev-secret-change-in-prod';
-
-// ATENÇÃO: o fallback acima é documentado e serve apenas para desenvolvimento local.
-// Em produção, defina SIGNUP_TOKEN_SECRET com pelo menos 32 bytes aleatórios.
+// Chave própria do cadastro (derivada por propósito). Antes havia um fallback
+// hardcoded VERSIONADO no repo — qualquer ambiente sem SIGNUP_TOKEN_SECRET
+// assinava com um segredo público. Ver lib/tokenSecret.js.
+const SECRET = () => secretFor('signup');
 
 function b64url(buf) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
@@ -32,7 +33,7 @@ function sign(payload) {
   };
   const body = b64url(Buffer.from(JSON.stringify(claims)));
   const data = `${HEADER_B64}.${body}`;
-  const sig  = b64url(crypto.createHmac('sha256', SECRET).update(data).digest());
+  const sig  = b64url(crypto.createHmac('sha256', SECRET()).update(data).digest());
   return `${data}.${sig}`;
 }
 
@@ -53,10 +54,12 @@ function verify(token) {
 
   const [headerB64, bodyB64, sigB64] = parts;
   const data        = `${headerB64}.${bodyB64}`;
-  const expectedSig = b64url(crypto.createHmac('sha256', SECRET).update(data).digest());
+  const expectedSig = b64url(crypto.createHmac('sha256', SECRET()).update(data).digest());
 
-  // Comparação em tempo constante
-  if (!crypto.timingSafeEqual(Buffer.from(sigB64), Buffer.from(expectedSig))) {
+  // Comparação em tempo constante. timingSafeEqual LANÇA se os tamanhos diferem,
+  // então checa o tamanho antes — senão um token malformado virava 500 em vez de 400.
+  if (sigB64.length !== expectedSig.length ||
+      !crypto.timingSafeEqual(Buffer.from(sigB64), Buffer.from(expectedSig))) {
     const e = new Error('signup_token inválido'); e.status = 400; throw e;
   }
 
