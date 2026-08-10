@@ -69,6 +69,18 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login',           authLimiter);
 app.use('/api/auth/register',        authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
+// Troca de senha pelo link: o endpoint altera a senha da conta e não tinha
+// limite nenhum — era o alvo natural para martelar tentativas de token.
+app.use('/api/auth/reset-password',  authLimiter);
+// Renovação de sessão: limite próprio e folgado. O refresh token do Supabase é
+// aleatório e longo (não sofre força bruta), e os apps chamam este endpoint
+// sozinhos ao expirar o token — com o limite estrito, vários usuários atrás do
+// mesmo IP (NAT de operadora, escritório) seriam deslogados sem motivo.
+app.use('/api/auth/refresh', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:      300,
+  message:  { error: 'Muitas renovações de sessão. Aguarde alguns minutos.' },
+}));
 // Ativação de afiliado gera escrita com índice único — sem limite, um bot
 // logado poderia martelar tentativas de colisão de código.
 app.use('/api/affiliate/activate',   authLimiter);

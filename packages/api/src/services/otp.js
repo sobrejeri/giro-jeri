@@ -4,13 +4,19 @@
 
 import crypto from 'crypto';
 import { supabase }         from '../supabase.js';
+import { secretFor }        from '../lib/tokenSecret.js';
 import { sendEmailOtp }     from './email.js';
 import { sendWhatsappOtp }  from './whatsapp.js';
 
 // ── Constantes ────────────────────────────────────────────
-const PEPPER     = process.env.OTP_PEPPER || 'giro-jeri-otp-pepper-dev-change-in-prod';
-// ATENÇÃO: o fallback acima serve apenas para desenvolvimento local.
-// Em produção, defina OTP_PEPPER com valor aleatório de pelo menos 32 bytes.
+// Pepper do hash do OTP. Tinha o mesmo problema dos tokens: um fallback fixo
+// VERSIONADO no repositório. Como o código é de 6 dígitos (10⁶), o pepper é a
+// única coisa que impede quem leia `otp_codes.code_hash` de descobrir o código
+// por força bruta. Agora usa OTP_PEPPER quando definida e, senão, deriva por
+// propósito da mesma base dos tokens (ver lib/tokenSecret.js) — nunca público.
+const PEPPER     = (process.env.OTP_PEPPER && process.env.OTP_PEPPER.length >= 32)
+  ? process.env.OTP_PEPPER
+  : secretFor('otp');
 
 const COOLDOWN_SECONDS = 60;
 const MAX_PER_HOUR     = 5;
