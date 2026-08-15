@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 066.**
+   registre aqui o número reservado. **Próximo número livre: 067.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,32 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-07-25 · Agente B (frota opt-in + nome do serviço na coop)** — Três
+  correções vindas de teste real com os voos de helicóptero.
+  **(1) Solicitação de helicóptero ia para TODAS as cooperativas.** O filtro de
+  frota era opt-out (aparecia para todos, menos quem desativou) e, pior, reserva
+  COMPARTILHADA não gera `booking_vehicles` — caía no fail-open e escapava do
+  filtro. **migration 066**: `vehicles.requires_opt_in` (true no helicóptero) —
+  veículo restrito só aparece para quem tem preferência EXPLÍCITA is_active=true;
+  os demais seguem opt-out, sem mudança. `services/fleet.js` reescrito com
+  helpers compartilhados (`requiredVehiclesByBooking`, `optInVehicleIds`,
+  `vehiclePrefs`, `operatorServesVehicles`) usados TANTO pelo feed da coop
+  (operator.js) quanto pelas notificações — antes eram duas lógicas separadas.
+  Veículos exigidos passam a ser resolvidos por `booking_vehicles` e, quando não
+  houver, pelas regras de preço do serviço; a 066 também cria a regra do voo 01
+  (compartilhado, sem regra própria) só para DECLARAR qual veículo o executa.
+  **(2) A coop aceitava às cegas**: o feed mandava `service_id` mas nunca o NOME
+  do serviço — a tela mostrava só "Passeio · Privativo". Novo `attachServiceNames`
+  (tours + transfer_routes, com fallback origem→destino) e o nome agora aparece
+  como título nos cards de solicitação e de "minhas corridas". Tela renomeada de
+  **Corridas → Solicitações** (menu, header e título).
+  **(3) Modo errado na venda**: `Tours.jsx` abria SEMPRE em 'private' e o toggle
+  nunca consultava `is_private_enabled`/`is_shared_enabled` — dava para comprar
+  como privativo um serviço que só existe compartilhado (foi o que aconteceu no
+  voo panorâmico). Agora o modo é alinhado ao que o passeio aceita ao abri-lo.
+  Validado: 7/7 casos da regra de elegibilidade, migrations 065+066 rodadas em
+  Postgres 16 real (idempotentes), builds turista e cooperativa ok.
 
 - **2026-07-24 · Agente B (catálogo: voos de helicóptero Frisonfly como exclusivos)**
   — `065_heli_frisonfly_exclusivos.sql`: os 11 voos panorâmicos da tabela

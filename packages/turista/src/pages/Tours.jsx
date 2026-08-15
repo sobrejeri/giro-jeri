@@ -346,6 +346,20 @@ export default function Tours() {
   // Nada vem pré-selecionado: o cliente escolhe um passeio (tradicional OU
   // exclusivo) e só então os veículos aparecem. Clicar no selecionado desmarca.
   const selectedTour = [...tradTours, ...exclusiveTours].find((t) => t.id === selectedId) || null
+
+  // Nem todo passeio aceita os dois modos — o voo panorâmico, por exemplo, só
+  // existe COMPARTILHADO. A tela abria sempre em "Privativo" e o toggle não
+  // consultava as flags do passeio, então dava para comprar como privativo um
+  // serviço que só é vendido por pessoa (valor e modo errados na reserva).
+  // Ao abrir um passeio, alinha o modo ao que ele realmente aceita.
+  useEffect(() => {
+    if (!selectedTour) return
+    const canPrivate = selectedTour.is_private_enabled !== false
+    const canShared  = !!selectedTour.is_shared_enabled
+    if (mode === 'private' && !canPrivate && canShared) setMode('shared')
+    else if (mode === 'shared' && !canShared && canPrivate) setMode('private')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTour?.id])
   const vehiclesRef = useRef(null)
 
   // Ao selecionar um passeio, rola até os veículos (eles aparecem entre os

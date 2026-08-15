@@ -10,7 +10,7 @@ const TITLES = {
   '/passeios':   'Passeios que Executo',
   '/rotas':      'Rotas de Transfer',
   '/perfil':     'Meu Perfil',
-  '/reservas':   'Corridas',
+  '/reservas':   'Solicitações',
 }
 
 export default function Header({ onMenu = () => {} }) {

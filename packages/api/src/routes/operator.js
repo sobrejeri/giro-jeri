@@ -311,6 +311,37 @@ async function attachCustomers(bookings) {
   }))
 }
 
+// Nome do serviço solicitado. Sem isto a cooperativa via só "Passeio ·
+// Privativo" e não sabia QUAL passeio estava aceitando. `service_id` aponta
+// para tours OU para transfer_routes/transfer_quotes conforme service_type.
+// Best-effort: falha de leitura não derruba o feed (só fica sem o nome).
+async function attachServiceNames(bookings) {
+  const list = bookings || []
+  if (list.length === 0) return list
+
+  const tourIds = [...new Set(list.filter((b) => b.service_type === 'tour' && b.service_id).map((b) => b.service_id))]
+  const trIds   = [...new Set(list.filter((b) => b.service_type !== 'tour' && b.service_id).map((b) => b.service_id))]
+  const names = new Map()
+
+  if (tourIds.length) {
+    const { data } = await supabase.from('tours').select('id, name').in('id', tourIds)
+    for (const t of data || []) names.set(t.id, t.name)
+  }
+  if (trIds.length) {
+    const { data } = await supabase.from('transfer_routes')
+      .select('id, origin_name, destination_name').in('id', trIds)
+    for (const r of data || []) names.set(r.id, `${r.origin_name} → ${r.destination_name}`)
+  }
+
+  return list.map((b) => {
+    // Transfer sem rota tabelada (cotação personalizada): usa origem → destino.
+    const fallback = b.service_type !== 'tour'
+      ? [b.origin_text, b.destination_text].filter(Boolean).join(' → ') || null
+      : null
+    return { ...b, service_name: names.get(b.service_id) || fallback }
+  })
+}
+
 // =============================================================================
 // MOTOR DE PERNAS (Etapa 2, Onda A) — feed leg-shaped, atrás da flag
 // booking_legs_engine_enabled. Escopo: itens por veículo (passeio privativo +
@@ -526,33 +557,22 @@ router.get('/bookings', async (req, res, next) => {
     // engano — só loga e segue sem filtrar.
     if (!isAdmin && acceptanceRows.length > 0) {
       try {
-        const ids = acceptanceRows.map((b) => b.id);
-        const [bvRes, prefsRes] = await Promise.all([
-          supabase.from('booking_vehicles').select('booking_id, vehicle_id').in('booking_id', ids),
-          supabase.from('operator_service_preferences').select('entity_id')
-            .eq('operator_id', req.user.id)
-            .eq('entity_type', 'vehicle')
-            .eq('is_active', false),
-        ]);
+        // Mesma regra usada para notificar (services/fleet.js): veículo comum é
+        // opt-out; veículo restrito (requires_opt_in, ex.: helicóptero) só
+        // aparece para quem ativou. Compartilhado não tem booking_vehicles —
+        // o helper resolve pelos veículos que atendem o serviço.
+        const { requiredVehiclesByBooking, optInVehicleIds, vehiclePrefs, operatorServesVehicles } =
+          await import('../services/fleet.js');
 
-        if (bvRes.error || prefsRes.error) {
-          console.error(
-            '[operator/bookings] filtro por veículo falhou op=%s bv_err=%s prefs_err=%s — fail-open, sem filtrar',
-            req.user.id, bvRes.error?.message, prefsRes.error?.message,
-          );
-        } else {
-          const vehiclesByBooking = new Map();
-          for (const row of bvRes.data || []) {
-            if (!vehiclesByBooking.has(row.booking_id)) vehiclesByBooking.set(row.booking_id, []);
-            vehiclesByBooking.get(row.booking_id).push(row.vehicle_id);
-          }
-          const disabled = new Set((prefsRes.data || []).map((r) => r.entity_id));
+        const byBooking = await requiredVehiclesByBooking(supabase, acceptanceRows);
+        const allVehicleIds = [...new Set([...byBooking.values()].flat())];
 
-          acceptanceRows = acceptanceRows.filter((b) => {
-            const vehicleIds = vehiclesByBooking.get(b.id);
-            if (!vehicleIds || vehicleIds.length === 0) return true; // sem booking_vehicles → fail-open
-            return !vehicleIds.some((vId) => disabled.has(vId));
-          });
+        if (allVehicleIds.length > 0) {
+          const optIn = await optInVehicleIds(supabase, allVehicleIds);
+          const prefs = await vehiclePrefs(supabase, allVehicleIds, [req.user.id]);
+
+          acceptanceRows = acceptanceRows.filter((b) =>
+            operatorServesVehicles(req.user.id, byBooking.get(b.id) || [], optIn, prefs));
         }
       } catch (err) {
         console.error('[operator/bookings] exceção no filtro por veículo op=%s err=%s — fail-open, sem filtrar',
@@ -599,8 +619,8 @@ router.get('/bookings', async (req, res, next) => {
     }
 
     const [pending, mine] = await Promise.all([
-      attachCustomers(pendingRaw),
-      attachCustomers(mineAll),
+      attachCustomers(pendingRaw).then(attachServiceNames),
+      attachCustomers(mineAll).then(attachServiceNames),
     ])
 
     // ── Flag OFF: resposta idêntica à de hoje (zero regressão). ───────────

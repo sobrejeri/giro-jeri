@@ -141,6 +141,14 @@ function PendingCard({ booking, onAccept, accepting }) {
           )}
         </div>
 
+        {/* QUAL serviço foi pedido. Sem isto a coop aceitava às cegas — via só
+            "Passeio · Privativo" e não sabia se era buggy ou helicóptero. */}
+        {(booking.service_name || booking.vehicle_name) && (
+          <p className="text-[15px] font-bold text-gray-900 leading-snug">
+            {booking.service_name || booking.vehicle_name}
+          </p>
+        )}
+
         {/* Detalhes */}
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-[13px] text-gray-700">
@@ -301,6 +309,11 @@ function MyCard({ booking, onConfirm, onRequestInfo, onStart, onComplete, onDisp
           <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">{type}</span>
           <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">{mode}</span>
         </div>
+
+        {/* Qual serviço — a coop precisa saber o que vai executar */}
+        {booking.service_name && (
+          <p className="text-[15px] font-bold text-gray-900 leading-snug">{booking.service_name}</p>
+        )}
 
         {/* Cliente */}
         <div className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
@@ -798,7 +811,7 @@ export default function Reservas() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Corridas</h1>
+          <h1 className="text-xl font-bold text-gray-900">Solicitações</h1>
           <p className="text-sm text-gray-400 mt-0.5">
             {pending.length === 0 && pendingQuotes.length === 0
               ? 'Nenhuma solicitação no momento'
