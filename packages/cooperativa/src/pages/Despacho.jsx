@@ -194,6 +194,9 @@ export default function Despacho() {
   const [date, setDate]       = useState('all')
   const [modal, setModal]     = useState(null)
   const [form, setForm]       = useState({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
+  // Gerando o PDF da OS antes de enviar o despacho — o botão precisa mostrar
+  // isso, senão o clique parece não fazer nada.
+  const [preparing, setPreparing] = useState(false)
   const qc                    = useQueryClient()
 
   const { data, isLoading, isFetching } = useQuery({
@@ -261,10 +264,17 @@ export default function Despacho() {
     e.preventDefault()
     // Obrigatórios (item 9): veículo, motorista e WhatsApp do motorista.
     if (!form.real_vehicle_text.trim() || !form.driver_name.trim() || !form.driver_phone.trim()) return
+    if (preparing || assignMut.isPending) return          // evita duplo clique
     // Gera o PDF da OS aqui e manda junto: o backend anexa no WhatsApp do
-    // cliente e do motorista. Se falhar, `os_pdf_base64` vem null e o despacho
-    // segue normalmente — só sem o anexo.
-    const os_pdf_base64 = await orderPDFBase64(modal, form, cooperativa)
+    // cliente e do motorista. Tem teto de tempo e nunca lança — se não der,
+    // `os_pdf_base64` vem null e o despacho segue normalmente, só sem o anexo.
+    setPreparing(true)
+    let os_pdf_base64 = null
+    try {
+      os_pdf_base64 = await orderPDFBase64(modal, form, cooperativa)
+    } finally {
+      setPreparing(false)
+    }
     assignMut.mutate({ id: modal.id, ...form, os_pdf_base64 })
   }
 
@@ -391,8 +401,8 @@ export default function Despacho() {
                 {!canDispatch && (
                   <p className="text-[11px] text-amber-600">Preencha veículo, motorista e WhatsApp para confirmar o despacho.</p>
                 )}
-                <Button type="submit" className="w-full" disabled={assignMut.isPending || !canDispatch}>
-                  {assignMut.isPending ? 'Salvando…' : 'Confirmar Despacho'}
+                <Button type="submit" className="w-full" disabled={assignMut.isPending || preparing || !canDispatch}>
+                  {preparing ? 'Gerando OS…' : assignMut.isPending ? 'Salvando…' : 'Confirmar Despacho'}
                 </Button>
               </>
             )

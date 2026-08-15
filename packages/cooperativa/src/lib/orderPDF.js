@@ -23,10 +23,15 @@ function fmtDateLong(s) {
 }
 
 // ── Carrega imagem remota como base64 ──────────────────
-async function fetchBase64(url) {
+async function fetchBase64(url, timeoutMs = 3000) {
   if (!url) return null
+  // TIMEOUT OBRIGATÓRIO: sem ele, um storage lento deixa o fetch pendurado para
+  // sempre. Como o despacho passou a esperar o PDF, isso travava o botão
+  // "Confirmar Despacho" — o clique simplesmente não fazia nada.
+  const ctrl  = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    const resp = await fetch(url)
+    const resp = await fetch(url, { signal: ctrl.signal })
     if (!resp.ok) return null
     const blob = await resp.blob()
     return new Promise((resolve) => {
@@ -36,6 +41,7 @@ async function fetchBase64(url) {
       reader.readAsDataURL(blob)
     })
   } catch { return null }
+  finally { clearTimeout(timer) }
 }
 
 // ── Helpers de desenho ─────────────────────────────────
@@ -421,14 +427,23 @@ function drawLogoPlaceholder(doc, name, x, y, size) {
 // PDF da OS em base64 (sem o prefixo data:) para o backend anexar no WhatsApp
 // do cliente e do motorista ao despachar. Usa exatamente o mesmo layout do PDF
 // que a cooperativa baixa/compartilha — uma única fonte de verdade.
-export async function orderPDFBase64(booking, form, cooperativa = null) {
-  try {
+export async function orderPDFBase64(booking, form, cooperativa = null, timeoutMs = 6000) {
+  // O anexo é um EXTRA: o despacho é a operação que não pode falhar. Por isso,
+  // além do try/catch, há um teto de tempo — se o PDF não ficar pronto a tempo,
+  // devolve null e o despacho segue sem anexo, em vez de travar o botão.
+  const build = (async () => {
     const enriched = await _enrichWithLogo(cooperativa)
     const doc      = generateOrderPDF(booking, form, enriched)
-    const out      = doc.output('datauristring')   // 'data:application/pdf;base64,XXXX'
+    const out      = doc.output('datauristring')   // 'data:...;base64,XXXX'
     return out.slice(out.indexOf(',') + 1)
+  })()
+
+  try {
+    return await Promise.race([
+      build,
+      new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ])
   } catch (e) {
-    // Falha ao montar o PDF não pode impedir o despacho — segue sem anexo.
     console.warn('[orderPDF] não foi possível gerar o PDF da OS:', e?.message)
     return null
   }
