@@ -28,6 +28,26 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-07-25 · Agente B (PDF da OS no WhatsApp ao despachar)** — Ao clicar em
+  "Despachar", o cliente e o motorista passam a receber a **Ordem de Serviço em
+  PDF** anexada, além das mensagens de texto que já existiam.
+  Decisão de design: o PDF é gerado no APP DA COOPERATIVA
+  (`packages/cooperativa/src/lib/orderPDF.js`, jsPDF, que já existia e alimenta
+  os botões Baixar/Compartilhar) e vai em base64 no corpo do despacho. Assim o
+  documento enviado é EXATAMENTE o mesmo que a coop vê — sem duplicar 518 linhas
+  de layout no servidor nem adicionar stack de PDF na API.
+  - `orderPDF.js`: novo `orderPDFBase64()` (usa `output('datauristring')` e corta
+    o prefixo). Falha ao gerar devolve null — o despacho nunca é bloqueado.
+  - `Despacho.jsx`: `handleSubmit` virou async, gera o PDF e manda em
+    `os_pdf_base64` junto do assign.
+  - `admin.js` `/operational/:id/assign`: lê `os_pdf_base64` e repassa.
+  - `whatsapp.js`: novo `sendDocument()` (Z-API `/send-document/pdf`, aceita URL
+    ou data URI) e `notifyDispatchOS` ganhou `pdfBase64` — envia o anexo ao
+    cliente e ao motorista depois do texto. Best-effort: erro só é logado.
+  Testado: PDF gerado com dados reais = 15 KB, assinatura `%PDF-` válida (cabe
+  folgado no limite de 5mb do express). Build da cooperativa ok. NÃO foi possível
+  testar contra o Z-API real (o proxy do sandbox bloqueia).
+
 - **2026-07-25 · Agente B (frota opt-in + nome do serviço na coop)** — Três
   correções vindas de teste real com os voos de helicóptero.
   **(1) Solicitação de helicóptero ia para TODAS as cooperativas.** O filtro de

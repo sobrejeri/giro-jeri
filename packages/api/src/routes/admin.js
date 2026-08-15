@@ -550,6 +550,7 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       dispatch_notes,
       driver_name,
       driver_phone,
+      os_pdf_base64,   // PDF da OS gerado no app da coop (opcional)
     } = req.body;
 
     const bookingId = req.params.id;
@@ -605,7 +606,7 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       const { data: bk } = await supabase.from('bookings')
         .select('id, booking_code, user_id, service_type, booking_mode, service_date, service_time, people_count, origin_text, destination_text, pickup_place_name, destination_place_name')
         .eq('id', bookingId).maybeSingle();
-      if (bk) notifyDispatchOS(supabase, { booking: bk, assignment: result })
+      if (bk) notifyDispatchOS(supabase, { booking: bk, assignment: result, pdfBase64: os_pdf_base64 || null })
         .catch((err) => console.error('[whatsapp] OS de despacho falhou:', err.message));
     } catch (err) {
       console.error('[whatsapp] OS de despacho: erro ao carregar reserva:', err.message);

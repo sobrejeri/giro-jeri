@@ -418,6 +418,22 @@ function drawLogoPlaceholder(doc, name, x, y, size) {
   doc.text(initials, x + size / 2, y + size * 0.62, { align: 'center' })
 }
 
+// PDF da OS em base64 (sem o prefixo data:) para o backend anexar no WhatsApp
+// do cliente e do motorista ao despachar. Usa exatamente o mesmo layout do PDF
+// que a cooperativa baixa/compartilha — uma única fonte de verdade.
+export async function orderPDFBase64(booking, form, cooperativa = null) {
+  try {
+    const enriched = await _enrichWithLogo(cooperativa)
+    const doc      = generateOrderPDF(booking, form, enriched)
+    const out      = doc.output('datauristring')   // 'data:application/pdf;base64,XXXX'
+    return out.slice(out.indexOf(',') + 1)
+  } catch (e) {
+    // Falha ao montar o PDF não pode impedir o despacho — segue sem anexo.
+    console.warn('[orderPDF] não foi possível gerar o PDF da OS:', e?.message)
+    return null
+  }
+}
+
 // ── Exportações públicas (assíncronas — carregam logo) ──
 export async function downloadOrderPDF(booking, form, cooperativa = null) {
   const enriched = await _enrichWithLogo(cooperativa)

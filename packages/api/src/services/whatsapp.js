@@ -94,6 +94,37 @@ async function sendButtonLink(phone, message, label, url) {
   await sendToMany([phone], `${message}\n\n👉 ${label}: ${url}`)
 }
 
+// Envia um DOCUMENTO (PDF) pelo Z-API. `document` aceita URL pública ou data
+// URI base64 ('data:application/pdf;base64,...'). Best-effort: registra a falha
+// e devolve o resultado, nunca lança — o envio do documento não pode derrubar
+// o fluxo que o disparou (ex.: despacho).
+async function sendDocument(phone, document, fileName, caption) {
+  if (!isWhatsappEnabled() || !phone || !document) return { skipped: true }
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
+  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-document/pdf`
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
+      body: JSON.stringify({
+        phone: toZapiPhone(phone),
+        document,
+        fileName: fileName || 'documento.pdf',
+        ...(caption ? { caption } : {}),
+      }),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error('[whatsapp] envio de PDF falhou', res.status, body.slice(0, 300))
+      return { error: true }
+    }
+    return await res.json().catch(() => ({ ok: true }))
+  } catch (err) {
+    console.error('[whatsapp] envio de PDF falhou:', err.message)
+    return { error: true }
+  }
+}
+
 // Busca o telefone de um usuário (cliente ou operador) por id.
 async function userPhone(supabase, userId) {
   if (!userId) return null
@@ -296,8 +327,16 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
 // ── ORDEM DE SERVIÇO (Despacho) ────────────────────────
 // Ao confirmar o despacho, envia a OS automaticamente via Z-API para o CLIENTE
 // (dados do veículo/motorista) e para o MOTORISTA (dados da corrida/cliente).
-export async function notifyDispatchOS(supabase, { booking, assignment }) {
+export async function notifyDispatchOS(supabase, { booking, assignment, pdfBase64 = null }) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  // O PDF da OS é gerado no app da cooperativa (packages/cooperativa/src/lib/
+  // orderPDF.js) e chega aqui em base64 — assim o documento enviado no WhatsApp
+  // é EXATAMENTE o mesmo que a coop vê na tela, sem duplicar o layout no
+  // servidor. Quando não vier, seguem só as mensagens de texto.
+  const osFile = pdfBase64
+    ? (pdfBase64.startsWith('data:') ? pdfBase64 : `data:application/pdf;base64,${pdfBase64}`)
+    : null
+  const osName = `OS-${booking.booking_code || 'turiva'}.pdf`
   const { tipo, data } = bookingSummary(booking)
   const hora       = booking.service_time ? booking.service_time.slice(0, 5) : null
   const quando     = `${data}${hora ? ` às ${hora}` : ''}`
@@ -322,6 +361,7 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
       `🔖 ${booking.booking_code}` + obs +
       `\n\nQualquer dúvida, é só chamar. Boa viagem! 🌴`
     await sendToMany([clientePhone], msg)
+    if (osFile) await sendDocument(clientePhone, osFile, osName, 'Ordem de Serviço')
   }
 
   // Motorista (a OS)
@@ -339,9 +379,10 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
       `🙋 Cliente: ${cli?.full_name || '—'}${cli?.phone ? ` — ${cli.phone}` : ''}\n` +
       `🔖 ${booking.booking_code}` + obs
     await sendToMany([motoFone], msg)
+    if (osFile) await sendDocument(motoFone, osFile, osName, 'Ordem de Serviço')
   }
 
-  return { sent: true }
+  return { sent: true, pdf: !!osFile }
 }
 
 // ── RESET DE SENHA ─────────────────────────────────────

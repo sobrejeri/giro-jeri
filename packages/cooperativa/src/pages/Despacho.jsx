@@ -13,7 +13,7 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
-import { downloadOrderPDF, shareOrderPDF } from '../lib/orderPDF'
+import { downloadOrderPDF, shareOrderPDF, orderPDFBase64 } from '../lib/orderPDF'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -257,11 +257,15 @@ export default function Despacho() {
     })
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     // Obrigatórios (item 9): veículo, motorista e WhatsApp do motorista.
     if (!form.real_vehicle_text.trim() || !form.driver_name.trim() || !form.driver_phone.trim()) return
-    assignMut.mutate({ id: modal.id, ...form })
+    // Gera o PDF da OS aqui e manda junto: o backend anexa no WhatsApp do
+    // cliente e do motorista. Se falhar, `os_pdf_base64` vem null e o despacho
+    // segue normalmente — só sem o anexo.
+    const os_pdf_base64 = await orderPDFBase64(modal, form, cooperativa)
+    assignMut.mutate({ id: modal.id, ...form, os_pdf_base64 })
   }
 
   // Só reservas PAGAS entram no despacho (não se despacha antes do pagamento);
