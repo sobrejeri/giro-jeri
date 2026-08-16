@@ -458,7 +458,10 @@ function drawLogoPlaceholder(doc, name, x, y, size) {
 // PDF da OS em base64 (sem o prefixo data:) para o backend anexar no WhatsApp
 // do cliente e do motorista ao despachar. Usa exatamente o mesmo layout do PDF
 // que a cooperativa baixa/compartilha — uma única fonte de verdade.
-export async function orderPDFBase64(booking, form, cooperativa = null, timeoutMs = 6000) {
+// opts.noLogo → gera sem o logo (bem menor). Usado como segunda tentativa
+// quando a API recusa o corpo por tamanho.
+export async function orderPDFBase64(booking, form, cooperativa = null, opts = {}) {
+  const { noLogo = false, timeoutMs = 6000 } = opts
   // O anexo é um EXTRA: o despacho é a operação que não pode falhar. Por isso,
   // além do try/catch, há um teto de tempo — se o PDF não ficar pronto a tempo,
   // devolve null e o despacho segue sem anexo, em vez de travar o botão.
@@ -468,7 +471,8 @@ export async function orderPDFBase64(booking, form, cooperativa = null, timeoutM
   const MAX_B64 = 3 * 1024 * 1024   // ~3 MB de base64 (~2,2 MB de PDF)
 
   const build = (async () => {
-    const enriched = await _enrichWithLogo(cooperativa)
+    const enriched = noLogo ? { ...(cooperativa || {}), logoBase64: null }
+                            : await _enrichWithLogo(cooperativa)
     const toB64 = (coop) => {
       const out = generateOrderPDF(booking, form, coop).output('datauristring')
       return out.slice(out.indexOf(',') + 1)

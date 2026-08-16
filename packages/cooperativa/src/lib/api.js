@@ -106,7 +106,11 @@ async function request(path, options = {}, isRetry = false) {
 
   if (res.status === 204) return null
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
+  if (!res.ok) {
+    const e = new Error(data?.error || `Erro ${res.status}`)
+    e.status = res.status          // quem chama precisa distinguir 413 (corpo grande)
+    throw e
+  }
   return data
 }
 

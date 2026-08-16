@@ -16,25 +16,43 @@ export default function SendOsButton({ booking, form, cooperativa, variant = 'in
   const [state, setState] = useState('idle')   // idle | sending | ok | error
   const [msg, setMsg]     = useState('')
 
+  const mbOf = (b64) => (b64.length / 1024 / 1024).toFixed(2)
+
   async function send() {
     if (state === 'sending') return
     setState('sending'); setMsg('')
+    let tamanho = '?'
     try {
-      const pdf = await orderPDFBase64(booking, form, cooperativa)
+      let pdf = await orderPDFBase64(booking, form, cooperativa)
       if (!pdf) throw new Error('Não foi possível gerar o PDF da OS.')
-      // O tamanho é a causa mais provável de recusa; avisa antes de tentar.
-      const mb = (pdf.length / 1024 / 1024).toFixed(1)
-      if (pdf.length > 7 * 1024 * 1024) {
-        throw new Error(`PDF muito grande (${mb} MB). Reduza a foto do perfil da cooperativa.`)
+      tamanho = mbOf(pdf)
+
+      try {
+        const r = await api.sendOsPdf(booking.id, pdf)
+        if (r?.error) throw new Error(`Z-API: ${r.error}`)
+        if (!r?.sent) throw new Error('Nenhum número recebeu — confira os telefones.')
+        setState('ok')
+        setMsg(`OS enviada para ${r.sent} de ${r.total} número(s) · ${tamanho} MB`)
+        return
+      } catch (err) {
+        // 413 = corpo recusado por tamanho. Refaz SEM o logo (bem menor) e
+        // tenta uma vez — em vez de exigir que alguém troque a foto do perfil.
+        const tooLarge = err?.status === 413 || /too large|entity/i.test(err?.message || '')
+        if (!tooLarge) throw err
+        pdf = await orderPDFBase64(booking, form, cooperativa, { noLogo: true })
+        if (!pdf) throw err
+        tamanho = mbOf(pdf)
+        const r2 = await api.sendOsPdf(booking.id, pdf)
+        if (r2?.error) throw new Error(`Z-API: ${r2.error}`)
+        if (!r2?.sent) throw new Error('Nenhum número recebeu — confira os telefones.')
+        setState('ok')
+        setMsg(`OS enviada (sem logo) para ${r2.sent} de ${r2.total} número(s) · ${tamanho} MB`)
+        return
       }
-      const r = await api.sendOsPdf(booking.id, pdf)
-      if (r?.error) throw new Error(`Z-API: ${r.error}`)
-      if (!r?.sent) throw new Error('Nenhum número recebeu — confira os telefones.')
-      setState('ok')
-      setMsg(`OS enviada para ${r.sent} de ${r.total} número(s).`)
     } catch (e) {
       setState('error')
-      setMsg(e?.message || 'Falha ao enviar.')
+      // O tamanho no fim é o que fecha o diagnóstico quando o erro é de corpo.
+      setMsg(`${e?.message || 'Falha ao enviar.'} · PDF ${tamanho} MB`)
     }
   }
 
