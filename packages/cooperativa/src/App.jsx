@@ -13,6 +13,7 @@ import Perfil from './pages/Perfil'
 import Reservas from './pages/Reservas'
 import Reputacao from './pages/Reputacao'
 import OsPublica from './pages/OsPublica'
+import UpdateGate from './components/UpdateGate'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -44,6 +45,7 @@ export default function App() {
   return (
     <>
     <SpaRedirectHandler />
+    <UpdateGate />
     <Routes>
       <Route path="/login" element={<Login />} />
       {/* PÚBLICA: link da OS enviado no WhatsApp do cliente e do motorista —
