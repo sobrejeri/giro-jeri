@@ -1,0 +1,87 @@
+// ── routes/os.js ────────────────────────────────────────
+// Link PÚBLICO da Ordem de Serviço: GET /api/os/:token
+//
+// Aberto de propósito — quem abre é o passageiro ou o motorista, que não têm
+// conta. O acesso é controlado pelo token assinado (lib/osToken.js), não por
+// sessão. Devolve SÓ o que a OS mostra; nada de dados financeiros da
+// cooperativa, cadastro do cliente ou outras reservas.
+import { Router } from 'express';
+import { supabase } from '../supabase.js';
+import { verifyOsToken } from '../lib/osToken.js';
+
+const router = Router();
+
+router.get('/:token', async (req, res, next) => {
+  try {
+    let claims;
+    try { claims = verifyOsToken(req.params.token); }
+    catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .select(`id, booking_code, service_type, service_id, booking_mode, service_date,
+               service_time, people_count, total_amount, origin_text, destination_text,
+               pickup_place_name, destination_place_name, special_notes,
+               status_commercial, status_operational, user_id, operator_id`)
+      .eq('id', claims.booking_id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!booking) return res.status(404).json({ error: 'Ordem de serviço não encontrada.' });
+
+    // Dados do despacho (veículo real, motorista, observações).
+    const { data: assignment } = await supabase
+      .from('operational_assignments')
+      .select('real_vehicle_text, driver_name, driver_phone, dispatch_notes')
+      .eq('booking_id', booking.id)
+      .maybeSingle();
+
+    // Cliente: só nome e telefone — é o que a OS exibe.
+    const { data: cliente } = await supabase
+      .from('users').select('full_name, phone').eq('id', booking.user_id).maybeSingle();
+
+    // Cooperativa responsável (cabeçalho da OS).
+    let cooperativa = null;
+    if (booking.operator_id) {
+      const { data: op } = await supabase
+        .from('users')
+        .select('full_name, document_number, phone, profile_photo_url')
+        .eq('id', booking.operator_id).maybeSingle();
+      if (op) {
+        cooperativa = {
+          name:              op.full_name,
+          cnpj:              op.document_number,
+          phone:             op.phone,
+          profile_photo_url: op.profile_photo_url,
+        };
+      }
+    }
+
+    // Nome do serviço (passeio ou rota) — a OS mostra o que foi contratado.
+    let service_name = null;
+    if (booking.service_id) {
+      if (booking.service_type === 'tour') {
+        const { data: t } = await supabase.from('tours').select('name').eq('id', booking.service_id).maybeSingle();
+        service_name = t?.name || null;
+      } else {
+        const { data: r } = await supabase.from('transfer_routes')
+          .select('origin_name, destination_name').eq('id', booking.service_id).maybeSingle();
+        if (r) service_name = `${r.origin_name} → ${r.destination_name}`;
+      }
+    }
+
+    // Veículos escolhidos na reserva (quando privativo).
+    const { data: veiculos } = await supabase
+      .from('booking_vehicles')
+      .select('quantity, vehicle_name_snapshot')
+      .eq('booking_id', booking.id);
+
+    res.json({
+      booking: { ...booking, service_name, users: cliente || null },
+      assignment: assignment || null,
+      cooperativa,
+      vehicles: veiculos || [],
+    });
+  } catch (err) { next(err); }
+});
+
+export default router;

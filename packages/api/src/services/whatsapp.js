@@ -14,6 +14,10 @@ const COOP_APP    = (process.env.COOP_APP_URL    || 'https://sobrejeri.github.io
 const linkBookingPay  = (id) => `${TURISTA_APP}/minhas-reservas/${id}`;
 const linkMyBookings  = ()   => `${TURISTA_APP}/minhas-reservas`;
 const linkCoopRides   = ()   => `${COOP_APP}/reservas`;
+// Link público da Ordem de Serviço (token assinado) — abre sem login e tem
+// botão de baixar. Substitui o envio do PDF como anexo, que esbarrava em
+// limite de tamanho no caminho app -> API -> Z-API.
+const linkOs          = (t)  => `${COOP_APP}/os/${t}`;
 
 export function isWhatsappEnabled() {
   return !!(
@@ -372,6 +376,15 @@ export async function sendOsPdf(supabase, { booking, driverPhone, pdfBase64 }) {
 
 export async function notifyDispatchOS(supabase, { booking, assignment }) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  // Link da OS (não o PDF): o anexo em base64 estourava o limite de corpo da
+  // API. O link abre a OS no navegador, com opção de baixar em PDF.
+  let osUrl = null
+  try {
+    const { signOsToken } = await import('../lib/osToken.js')
+    osUrl = linkOs(signOsToken(booking.id))
+  } catch (e) {
+    console.error('[whatsapp] não foi possível gerar o link da OS:', e.message)
+  }
   const { tipo, data } = bookingSummary(booking)
   const hora       = booking.service_time ? booking.service_time.slice(0, 5) : null
   const quando     = `${data}${hora ? ` às ${hora}` : ''}`
@@ -394,6 +407,7 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
       `🚗 Veículo: ${veiculo}\n` +
       `👤 Motorista: ${motorista}${motoFone ? ` — ${motoFone}` : ''}\n` +
       `🔖 ${booking.booking_code}` + obs +
+      (osUrl ? `\n\n📄 Ordem de Serviço: ${osUrl}` : '') +
       `\n\nQualquer dúvida, é só chamar. Boa viagem! 🌴`
     await sendToMany([clientePhone], msg)
   }
@@ -411,7 +425,8 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
       (destino  ? `🏁 Destino: ${destino}\n` : '') +
       `🚗 Veículo: ${veiculo}\n` +
       `🙋 Cliente: ${cli?.full_name || '—'}${cli?.phone ? ` — ${cli.phone}` : ''}\n` +
-      `🔖 ${booking.booking_code}` + obs
+      `🔖 ${booking.booking_code}` + obs +
+      (osUrl ? `\n\n📄 Ordem de Serviço: ${osUrl}` : '')
     await sendToMany([motoFone], msg)
   }
 

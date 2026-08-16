@@ -12,6 +12,7 @@ import Rotas from './pages/Rotas'
 import Perfil from './pages/Perfil'
 import Reservas from './pages/Reservas'
 import Reputacao from './pages/Reputacao'
+import OsPublica from './pages/OsPublica'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -45,6 +46,9 @@ export default function App() {
     <SpaRedirectHandler />
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* PÚBLICA: link da OS enviado no WhatsApp do cliente e do motorista —
+          eles não têm conta, então fica FORA do PrivateRoute. */}
+      <Route path="/os/:token" element={<OsPublica />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard"  element={<Dashboard />} />

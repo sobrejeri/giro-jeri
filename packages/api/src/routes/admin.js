@@ -473,39 +473,31 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── POST /api/admin/operational/:id/os-pdf ─────────────
-// Anexa a Ordem de Serviço em PDF no WhatsApp do cliente e do motorista.
-// SEPARADO do /assign de propósito: o despacho é a operação crítica e não pode
-// depender do anexo (nem carregar o peso dele no corpo da requisição). O app da
-// coop chama isto DEPOIS que o despacho já deu certo — se falhar aqui, o
-// despacho continua feito e as mensagens de texto já foram enviadas.
-router.post('/operational/:id/os-pdf', requireOperator, async (req, res, next) => {
+// ── POST /api/admin/operational/:id/os-link ────────────
+// Reenvia a Ordem de Serviço (link público) no WhatsApp do cliente e do
+// motorista. Separado do /assign: o despacho é a operação crítica e não pode
+// depender do envio. Substituiu o /os-pdf, que mandava o PDF em base64 e
+// esbarrava no limite de corpo da API.
+router.post('/operational/:id/os-link', requireOperator, async (req, res, next) => {
   try {
-    const pdf = req.body?.os_pdf_base64;
-    if (!pdf || typeof pdf !== 'string') {
-      return res.status(400).json({ error: 'PDF ausente.' });
-    }
-
     const { data: bk } = await supabase.from('bookings')
-      .select('id, booking_code, user_id, operator_id')
+      .select(`id, booking_code, user_id, operator_id, service_type, booking_mode,
+               service_date, service_time, people_count, origin_text, destination_text,
+               pickup_place_name, destination_place_name`)
       .eq('id', req.params.id).maybeSingle();
     if (!bk) return res.status(404).json({ error: 'Reserva não encontrada.' });
 
-    // Cooperativa só anexa OS da própria reserva; admin pode qualquer uma.
+    // Cooperativa só reenvia OS da própria reserva; admin pode qualquer uma.
     if (req.user.user_type !== 'admin' && bk.operator_id && bk.operator_id !== req.user.id) {
       return res.status(403).json({ error: 'Reserva de outra cooperativa.' });
     }
 
     const { data: assignment } = await supabase.from('operational_assignments')
-      .select('driver_phone').eq('booking_id', bk.id).maybeSingle();
+      .select('real_vehicle_text, driver_name, driver_phone, dispatch_notes')
+      .eq('booking_id', bk.id).maybeSingle();
 
-    const { sendOsPdf } = await import('../services/whatsapp.js');
-    const r = await sendOsPdf(supabase, {
-      booking:     bk,
-      driverPhone: assignment?.driver_phone || null,
-      pdfBase64:   pdf,
-    });
-    res.json(r);
+    const r = await notifyDispatchOS(supabase, { booking: bk, assignment: assignment || null });
+    res.json(r || { sent: true });
   } catch (err) { next(err); }
 });
 
