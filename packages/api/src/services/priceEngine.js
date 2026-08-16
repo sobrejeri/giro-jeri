@@ -27,14 +27,19 @@ async function getSetting(key, defaultValue) {
 export async function getSeasonAddition(regionId, serviceDate, subtotal) {
   let q = supabase
     .from('high_season_rules')
-    .select('additional_type, additional_value, region_id, start_date, end_date')
+    .select('additional_type, additional_value, region_id, start_date, end_date, updated_at')
     .eq('is_active', true);
   // Regra da região específica + regra GLOBAL (region_id nulo → vale p/ todas
   // as regiões). Mesmo tratamento dos feriados nacionais.
   q = regionId ? q.or(`region_id.eq.${regionId},region_id.is.null`) : q.is('region_id', null);
 
+  // Desempate entre regras que cobrem a MESMA data (decisão do dono): primeiro
+  // a da região específica, depois a ATUALIZADA MAIS RECENTEMENTE. Sem isso, o
+  // percentual aplicado dependia da ordem que o banco devolvia — se o admin
+  // criasse "+25%" sem desativar a "+10%" antiga, o valor virava sorteio.
   const { data: rows } = await q
-    .order('region_id', { ascending: false, nullsFirst: false }); // específica antes da global
+    .order('region_id',  { ascending: false, nullsFirst: false })
+    .order('updated_at', { ascending: false, nullsFirst: false });
 
   if (!rows?.length) return 0;
 
@@ -61,34 +66,46 @@ export async function getSeasonAddition(regionId, serviceDate, subtotal) {
 }
 
 // ── Acréscimo de feriado / data comemorativa (data EXATA) ──
+// Devolve NULL quando não existe regra para a data — diferente de 0, que é uma
+// regra cadastrada com acréscimo zero. A distinção importa: feriado tem
+// PRECEDÊNCIA sobre a alta temporada (ver getDateSurcharge), então "feriado com
+// 0%" precisa poder zerar a sobretaxa da temporada.
 export async function getHolidayAddition(regionId, serviceDate, subtotal) {
   let q = supabase
     .from('holidays')
-    .select('additional_type, additional_value, region_id')
+    .select('additional_type, additional_value, region_id, updated_at')
     .eq('holiday_date', serviceDate)
     .eq('is_active', true)
     .eq('affects_pricing', true);
   // Região específica + feriados nacionais (region_id nulo)
   q = regionId ? q.or(`region_id.eq.${regionId},region_id.is.null`) : q.is('region_id', null);
 
+  // Específico antes do nacional; entre iguais, o atualizado mais recentemente.
   const { data: rows } = await q
-    .order('region_id', { ascending: false, nullsFirst: false }) // específico antes do nacional
+    .order('region_id',  { ascending: false, nullsFirst: false })
+    .order('updated_at', { ascending: false, nullsFirst: false })
     .limit(1);
 
   const h = rows?.[0];
-  if (!h || h.additional_value == null) return 0;
+  if (!h) return null;                      // nenhuma data especial cadastrada
+  if (h.additional_value == null) return 0; // cadastrada sem valor = sem acréscimo
   if (h.additional_type === 'fixed') return Number(h.additional_value);
   return Math.round(subtotal * (Number(h.additional_value) / 100) * 100) / 100;
 }
 
-// ── Acréscimo aplicável à data: o MAIOR entre alta temporada e feriado ──
-// (evita empilhar os dois sem querer quando um feriado cai dentro da temporada)
+// ── Acréscimo aplicável à data ──────────────────────────────────────────────
+// FERIADO / DATA ESPECIAL TEM PRECEDÊNCIA (decisão do dono). Se existe regra
+// para aquela data exata, é ela que vale — mesmo que o percentual seja MENOR
+// que o da alta temporada. A razão: a data específica foi cadastrada de
+// propósito para aquele dia; a temporada é a regra geral do período.
+//
+// Nunca soma os dois. Sem data especial cadastrada, vale a alta temporada.
 export async function getDateSurcharge(regionId, serviceDate, subtotal) {
   const [season, holiday] = await Promise.all([
     getSeasonAddition(regionId, serviceDate, subtotal),
     getHolidayAddition(regionId, serviceDate, subtotal),
   ]);
-  return Math.max(season || 0, holiday || 0);
+  return holiday === null ? (season || 0) : holiday;
 }
 
 // ── Valida e calcula desconto de cupom ─────────────────

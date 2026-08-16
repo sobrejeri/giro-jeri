@@ -14,12 +14,19 @@ const MONTHS = [
 ]
 
 // Converte mês (1-12) + ano corrente para uma data ISO no formato YYYY-MM-DD
-function monthToDate(month, isEnd) {
+function monthToDate(month, isEnd, startMonth = null) {
   const year = new Date().getFullYear()
   if (isEnd) {
-    // último dia do mês (se mês < start, assume próximo ano)
-    const d = new Date(year, month, 0) // day 0 = último dia do mês anterior
-    return d.toISOString().slice(0, 10)
+    // Temporada que VIRA O ANO (ex.: Julho → Janeiro): o fim cai no ano
+    // SEGUINTE. O comentário antigo dizia isso, mas o código usava sempre o ano
+    // corrente — gerava end_date (31/01) menor que start_date (01/07), o banco
+    // recusava pelo CHECK high_season_dates_check e era IMPOSSÍVEL salvar a
+    // temporada principal da plataforma ("Julho a Janeiro").
+    const endYear = (startMonth && Number(month) < Number(startMonth)) ? year + 1 : year
+    const ultimoDia = new Date(endYear, Number(month), 0).getDate()
+    // Montado à mão de propósito: toISOString() converte para UTC e, no fuso do
+    // Brasil, devolvia o dia ANTERIOR (31/01 virava 30/01).
+    return `${endYear}-${String(month).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`
   }
   return `${year}-${String(month).padStart(2, '0')}-01`
 }
@@ -79,7 +86,7 @@ export default function Temporada() {
       name,
       region_id:        form.region_id || null,
       start_date:       monthToDate(sm, false),
-      end_date:         monthToDate(em, true),
+      end_date:         monthToDate(em, true, sm),   // sm decide se o fim vira o ano
       additional_type:  'percentage',
       additional_value: Number(form.pct),
       applies_to:       'all',
