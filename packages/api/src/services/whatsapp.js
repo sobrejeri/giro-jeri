@@ -116,12 +116,14 @@ async function sendDocument(phone, document, fileName, caption) {
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       console.error('[whatsapp] envio de PDF falhou', res.status, body.slice(0, 300))
-      return { error: true }
+      // `detail` volta para a tela da cooperativa: sem a resposta crua do Z-API
+      // não dá para saber se o problema é credencial, formato ou o número.
+      return { error: true, status: res.status, detail: body.slice(0, 300) }
     }
     return await res.json().catch(() => ({ ok: true }))
   } catch (err) {
     console.error('[whatsapp] envio de PDF falhou:', err.message)
-    return { error: true }
+    return { error: true, detail: err.message }
   }
 }
 
@@ -341,17 +343,31 @@ export async function sendOsPdf(supabase, { booking, driverPhone, pdfBase64 }) {
     : `data:application/pdf;base64,${pdfBase64}`
   const name = `OS-${booking.booking_code || 'turiva'}.pdf`
 
+  // O Z-API espera DDI+DDD+número. O telefone do motorista é digitado à mão no
+  // despacho e costuma vir sem o 55 — mesma normalização que o app já faz ao
+  // compartilhar a OS manualmente (≤11 dígitos = número local → prefixa 55).
+  const comDDI = (p) => {
+    const d = String(p || '').replace(/\D/g, '')
+    return d && d.length <= 11 ? `55${d}` : d
+  }
+
   const alvos = []
   const clientePhone = await userPhone(supabase, booking.user_id)
-  if (clientePhone) alvos.push(clientePhone)
-  if (driverPhone)  alvos.push(driverPhone)
+  if (clientePhone) alvos.push(comDDI(clientePhone))
+  if (driverPhone)  alvos.push(comDDI(driverPhone))
   if (alvos.length === 0) return { skipped: true, reason: 'sem telefone' }
 
   const results = await Promise.all(
-    alvos.map((p) => sendDocument(p, file, name, 'Ordem de Serviço')),
+    alvos.map(async (p) => ({ phone: p, ...(await sendDocument(p, file, name, 'Ordem de Serviço')) })),
   )
   const enviados = results.filter((r) => r && !r.error && !r.skipped).length
-  return { sent: enviados, total: alvos.length }
+  const falhas   = results.filter((r) => r?.error)
+  return {
+    sent:  enviados,
+    total: alvos.length,
+    kb:    Math.round((file.length * 0.75) / 1024),
+    ...(falhas.length ? { error: falhas[0].detail || 'falha no envio', status: falhas[0].status } : {}),
+  }
 }
 
 export async function notifyDispatchOS(supabase, { booking, assignment }) {

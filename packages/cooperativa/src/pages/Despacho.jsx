@@ -26,6 +26,48 @@ function hasDispatch(b) {
   return !!(a && (a.real_vehicle_text || a.driver_name))
 }
 
+// Envia a OS em PDF pelo Z-API (cliente + motorista) e mostra o resultado.
+// Em caso de falha, exibe a resposta crua do Z-API — sem isso não dá para
+// distinguir credencial errada de formato recusado ou número sem WhatsApp.
+function SendOsButton({ booking, form, cooperativa }) {
+  const [state, setState] = useState('idle')   // idle | sending | ok | error
+  const [msg, setMsg]     = useState('')
+
+  async function send() {
+    if (state === 'sending') return
+    setState('sending'); setMsg('')
+    try {
+      const pdf = await orderPDFBase64(booking, form, cooperativa)
+      if (!pdf) throw new Error('Não foi possível gerar o PDF da OS.')
+      const r = await api.sendOsPdf(booking.id, pdf)
+      if (r?.error) throw new Error(`Z-API: ${r.error}`)
+      setState('ok')
+      setMsg(`Enviado para ${r?.sent ?? 0} de ${r?.total ?? 0} número(s).`)
+    } catch (e) {
+      setState('error')
+      setMsg(e?.message || 'Falha ao enviar.')
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={send}
+        disabled={state === 'sending'}
+        className="flex items-center gap-1.5 text-xs font-medium bg-brand/10 hover:bg-brand/20 text-brand rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+      >
+        <FileText size={12} />
+        {state === 'sending' ? 'Enviando OS…' : 'Enviar OS no WhatsApp'}
+      </button>
+      {msg && (
+        <p className={`w-full text-[11px] mt-1 ${state === 'ok' ? 'text-emerald-600' : 'text-red-600'}`}>
+          {msg}
+        </p>
+      )}
+    </>
+  )
+}
+
 function BookingRow({ b, onDispatch, onStart, onComplete, cooperativa }) {
   const dateStr = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), "dd/MM", { locale: ptBR }) : ''
@@ -115,6 +157,11 @@ function BookingRow({ b, onDispatch, onStart, onComplete, cooperativa }) {
             >
               <MessageCircle size={12} /> WhatsApp Cliente
             </button>
+
+            {/* Envia a OS em PDF automaticamente (cliente + motorista) pelo
+                Z-API. Serve para reenviar uma OS de corrida já despachada e
+                mostra o retorno do Z-API quando falha. */}
+            <SendOsButton booking={b} form={formForOS} cooperativa={cooperativa} />
 
             {/* Ciclo da corrida (item 13): iniciar depois do despacho, depois concluir */}
             {b.status_operational !== 'in_progress' && b.status_operational !== 'completed' && (
