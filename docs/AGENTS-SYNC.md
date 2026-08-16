@@ -28,6 +28,22 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-16 · Agente B (aviso de atualização + rótulos de status)** — Fechado
+  e testado pelo usuário. **(a) Atualização:** os três apps agora só AVISAM que
+  saiu versão nova (removida a recarga automática — trocava a versão sem ninguém
+  perceber e podia apagar formulário em preenchimento). O aviso sai UMA vez por
+  versão e some ao clicar em "Atualizar", sem depender do X. O botão navega com
+  `?v=<buildId>` — `location.reload()` NÃO serve, o GitHub Pages devolve o mesmo
+  index.html do cache e o aviso ficava preso (foi a causa real de várias voltas
+  em falso no envio da OS: o navegador chamava `/os-pdf`, já removido). A coop
+  usa o MESMO componente do admin/turista; não aparece na página pública
+  `/os/:token` (lá quem lê é o passageiro). **(b) Status em inglês:**
+  `awaiting_acceptance` entrou no enum por migration posterior e ninguém
+  atualizou o mapa do Badge — a tela mostrava a chave crua ao lado de "Pago".
+  Corrigido em admin e cooperativa ('Ag. Aceite', com estilo em cada paleta) e o
+  fallback deixou de imprimir a chave: humaniza o snake_case. Conferido por
+  script contra os 5 enums do schema — nenhum status sem rótulo em português.
+
 - **2026-08-16 · Agente B (OS por LINK + auto-atualização do painel)** — A OS
   passou a ser entregue como **link público**, não como anexo PDF.
   **Caminho até aqui (vale para não repetir):** tentamos anexar o PDF em base64
