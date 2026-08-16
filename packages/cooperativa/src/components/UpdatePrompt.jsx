@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { RefreshCw, X } from 'lucide-react'
 
 // eslint-disable-next-line no-undef
@@ -6,12 +7,23 @@ const CURRENT_BUILD = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev'
 const POLL_MS = 60_000
 const DISMISS_KEY = 'giro_update_dismissed'
 
+// Mesmo componente do admin e do turista — comportamento único nos três apps:
+// detecta versão nova, tenta atualizar sozinho UMA vez (com cache-buster ?v=,
+// porque o GitHub Pages entrega o index.html com cache e um reload comum traz o
+// mesmo pacote velho) e, só se ainda assim continuar desatualizado, mostra o
+// aviso — que dá para adiar.
+//
+// Diferença daqui: NÃO aparece na página pública da OS (/os/:token). Quem abre
+// aquilo é o passageiro ou o motorista, e um aviso de atualização do painel não
+// significa nada para eles.
 export default function UpdatePrompt() {
+  const { pathname } = useLocation()
+  const paginaPublica = pathname.startsWith('/os/')
   const [latest, setLatest] = useState(null)
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    if (import.meta.env.DEV) return
+    if (import.meta.env.DEV || paginaPublica) return
     let cancelled = false
     async function check() {
       try {
@@ -27,28 +39,25 @@ export default function UpdatePrompt() {
     const onFocus = () => check()
     window.addEventListener('focus', onFocus)
     return () => { cancelled = true; clearInterval(id); window.removeEventListener('focus', onFocus) }
-  }, [])
+  }, [paginaPublica])
 
   const hasUpdate = latest && CURRENT_BUILD !== 'dev' && latest !== CURRENT_BUILD
 
   // Auto-atualiza: ao detectar versão nova, recarrega sozinho (uma vez).
-  // Guarda anti-loop: se já tentou pra esse buildId e ainda vê update (o
-  // bundle não trocou no CDN), para de recarregar e cai pro banner manual.
+  // Guarda anti-loop: se já tentou pra esse buildId e ainda vê update, para.
   useEffect(() => {
-    if (!hasUpdate) return
+    if (!hasUpdate || paginaPublica) return
     const key = `giro_autoupdate_${latest}`
     if (sessionStorage.getItem(key)) return
     sessionStorage.setItem(key, '1')
     const u = new URL(window.location.href)
     u.searchParams.set('v', String(latest))
     window.location.replace(u.toString())
-  }, [hasUpdate, latest])
+  }, [hasUpdate, latest, paginaPublica])
 
   const autoTried       = latest && sessionStorage.getItem(`giro_autoupdate_${latest}`)
   const reallyDismissed = dismissed || (latest && sessionStorage.getItem(DISMISS_KEY) === latest)
-  // Banner só aparece como fallback: quando o auto-reload já tentou e mesmo
-  // assim ainda há versão nova (raro). No caminho normal, recarrega sozinho.
-  if (!hasUpdate || reallyDismissed || !autoTried) return null
+  if (paginaPublica || !hasUpdate || reallyDismissed || !autoTried) return null
 
   function reload() {
     const u = new URL(window.location.href)
@@ -61,7 +70,7 @@ export default function UpdatePrompt() {
   }
 
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 bottom-6 z-[100] w-[min(380px,calc(100%-24px))] bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3">
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-6 z-[100] w-[min(380px,calc(100%-24px))] bg-gray-800 text-white rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 border border-gray-700">
       <div className="w-9 h-9 rounded-xl bg-brand/20 flex items-center justify-center shrink-0">
         <RefreshCw size={16} className="text-brand" />
       </div>
