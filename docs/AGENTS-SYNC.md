@@ -28,6 +28,34 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-16 · Agente B (OS por LINK + auto-atualização do painel)** — A OS
+  passou a ser entregue como **link público**, não como anexo PDF.
+  **Caminho até aqui (vale para não repetir):** tentamos anexar o PDF em base64
+  (app -> API -> Z-API). Falhou em sequência por três motivos DIFERENTES, e o
+  diagnóstico só andou quando cada erro passou a aparecer NA TELA: (1) o
+  despacho travava porque o `fetch` do logo não tinha timeout; (2) "request
+  entity too large" — o logo era embutido em resolução original (perfil aceita
+  2 MB) num desenho de 22mm; (3) o que parecia erro novo era **pacote antigo no
+  navegador** chamando endpoint já removido. A mensagem "PDF 0,03 MB" no botão
+  provou que (2) já estava resolvido.
+  **Desenho final** (ideia do usuário): `lib/osToken.js` (HMAC, purpose
+  'os_view', 180 dias — a corrida pode ser daqui a meses; não usa o id da
+  reserva na URL porque a OS traz nome/telefone do cliente) + `routes/os.js`
+  (`GET /api/os/:token`, PÚBLICO — passageiro e motorista não têm conta; devolve
+  só o que a OS exibe) + página pública `/os/:token` no app da coop (fora do
+  PrivateRoute) que renderiza a OS e gera o PDF NO APARELHO de quem abre,
+  reusando `orderPDF.js` — nada de arquivo trafegando. `notifyDispatchOS` inclui
+  o link nas duas mensagens; botão "Enviar OS no WhatsApp" reenvia via
+  `/operational/:id/os-link` (substituiu `/os-pdf`).
+  **`UpdateGate` (components/) — importante:** o `vite.config` da coop já emitia
+  `version.json`, mas ninguém consultava. Agora compara o buildId a cada 45s (e
+  ao focar a aba) e **RECARREGA sozinho**, com trava anti-loop. Diferente do
+  turista (que só sugere) porque na coop o pacote velho não é tela desatualizada
+  — é operação chamando endpoint inexistente. Foi a causa real de várias voltas.
+  Também: logo reduzido para 256px/JPEG antes de entrar no PDF, teto de ~3 MB
+  que refaz sem logo, limite de corpo da API 5mb -> 8mb.
+  CONFIRMADO PELO USUÁRIO: funcionando.
+
 - **2026-07-25 · Agente B (PDF da OS no WhatsApp ao despachar)** — Ao clicar em
   "Despachar", o cliente e o motorista passam a receber a **Ordem de Serviço em
   PDF** anexada, além das mensagens de texto que já existiam.
