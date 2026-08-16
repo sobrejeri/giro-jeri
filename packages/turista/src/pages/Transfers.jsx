@@ -385,8 +385,15 @@ export default function Transfers() {
     enabled:  !!region?.id,
   })
 
-  const routes   = Array.isArray(routesData?.routes) ? routesData.routes
-                 : Array.isArray(routesData) ? routesData : []
+  const todasRotas = Array.isArray(routesData?.routes) ? routesData.routes
+                   : Array.isArray(routesData) ? routesData : []
+
+  // Translado EXCLUSIVO (ex.: helicóptero) sai da lista comum e ganha carrossel
+  // próprio: misturar um trecho de R$ 3.000 com um de R$ 200 na mesma lista
+  // confunde o cliente — e a cooperativa que só opera helicóptero recebe
+  // solicitação de buggy. Mesma separação dos passeios exclusivos.
+  const rotasExclusivas = todasRotas.filter((r) => r.transfers?.is_exclusive)
+  const routes          = todasRotas.filter((r) => !r.transfers?.is_exclusive)
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
                     .filter(v => v.is_transfer_allowed && v.is_active !== false)
 
@@ -771,6 +778,43 @@ export default function Transfers() {
                 active={origin === r.origin_name && dest === r.destination_name}
                 onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
               />
+            ))}
+          </div>
+        </div>
+        )}
+
+        {/* TRANSLADOS EXCLUSIVOS (helicóptero) — carrossel separado, para não
+            misturar com as rotas comuns nem no preço nem na operação. */}
+        {rotasExclusivas.length > 0 && (
+        <div>
+          <div className="flex items-baseline justify-between mb-2.5">
+            <p className="text-[13px] font-bold text-gray-700">
+              {rotasExclusivas[0]?.transfers?.name || 'Translado aéreo'}
+            </p>
+            <span className="text-[10px] font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-full">
+              Exclusivo
+            </span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+            {rotasExclusivas.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                className={`shrink-0 w-[190px] text-left rounded-2xl p-3.5 border transition-colors ${
+                  origin === r.origin_name && dest === r.destination_name
+                    ? 'border-brand bg-brand/5'
+                    : 'border-gray-100 bg-white active:bg-gray-50'
+                }`}
+              >
+                <p className="text-[10px] text-gray-400 leading-tight">{r.origin_name}</p>
+                <p className="text-[14px] font-bold text-gray-900 leading-snug mt-0.5">
+                  {r.destination_name}
+                </p>
+                <p className="text-[15px] font-extrabold text-brand mt-2">
+                  R$ {Number(r.default_price).toLocaleString('pt-BR')}
+                </p>
+                <p className="text-[10px] text-gray-400">por voo · até 3 pax</p>
+              </button>
             ))}
           </div>
         </div>

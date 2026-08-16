@@ -191,7 +191,7 @@ router.get('/', async (req, res, next) => {
       .from('transfers')
       .select(`
         id, name, slug, short_description, pricing_mode,
-        estimated_duration_minutes, is_active, display_order,
+        estimated_duration_minutes, is_active, display_order, is_exclusive,
         latitude, longitude, service_radius_km,
         regions ( id, name, center_latitude, center_longitude, service_radius_km ),
         transfer_routes (
@@ -218,7 +218,10 @@ router.get('/routes', async (req, res, next) => {
 
     let query = supabase
       .from('transfer_routes')
-      .select('*, transfers ( short_description, full_description, booking_cutoff_time, min_advance_hours )')
+      // is_exclusive/name do serviço-pai: o app separa os translados exclusivos
+      // (ex.: helicóptero) num carrossel próprio, para não misturar com os
+      // translados comuns — a diferença de preço confunde o cliente.
+      .select('*, transfers ( name, is_exclusive, short_description, full_description, booking_cutoff_time, min_advance_hours )')
       .eq('is_active', true)
       .order('default_price');
 
