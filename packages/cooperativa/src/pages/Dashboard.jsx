@@ -10,7 +10,8 @@ import {
   CheckCircle2, TrendingUp, TrendingDown, Star,
 } from 'lucide-react'
 import { api } from '../lib/api'
-import { downloadOrderPDF, shareOrderPDF } from '../lib/orderPDF'
+import { downloadOrderPDF } from '../lib/orderPDF'
+import SendOsButton from '../components/SendOsButton'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -618,7 +619,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <p className="text-sm text-gray-500 text-center">Como deseja compartilhar a Ordem de Serviço?</p>
+            <p className="text-sm text-gray-500 text-center">Ordem de Serviço</p>
 
             <button
               onClick={() => downloadOrderPDF(dispatchedBooking, savedForm, cooperativa)}
@@ -633,41 +634,15 @@ export default function Dashboard() {
               </div>
             </button>
 
-            <button
-              onClick={() => shareOrderPDF(dispatchedBooking, savedForm, 'driver', cooperativa)}
-              disabled={!savedForm.driver_phone}
-              className={`w-full flex items-center gap-3 p-3.5 border rounded-xl transition-colors text-left ${
-                savedForm.driver_phone ? 'bg-green-50 hover:bg-green-100 border-green-200' : 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
-              }`}
-            >
-              <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
-                <MessageCircle size={16} className="text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-green-800">Enviar ao Motorista</p>
-                <p className="text-xs text-green-600">
-                  {savedForm.driver_phone ? `WhatsApp ${savedForm.driver_phone}` : 'Informe o WhatsApp do motorista no despacho'}
-                </p>
-              </div>
-            </button>
-
-            <button
-              onClick={() => shareOrderPDF(dispatchedBooking, savedForm, 'client', cooperativa)}
-              disabled={!dispatchedBooking.users?.phone}
-              className={`w-full flex items-center gap-3 p-3.5 border rounded-xl transition-colors text-left ${
-                dispatchedBooking.users?.phone ? 'bg-green-50 hover:bg-green-100 border-green-200' : 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
-              }`}
-            >
-              <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
-                <MessageCircle size={16} className="text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-green-800">Enviar ao Cliente</p>
-                <p className="text-xs text-green-600">
-                  {dispatchedBooking.users?.phone ? `WhatsApp ${dispatchedBooking.users.phone}` : 'Cliente sem telefone cadastrado'}
-                </p>
-              </div>
-            </button>
+            {/* Um botão só: envia a OS em PDF ao cliente E ao motorista pelo
+                Z-API. Os dois anteriores apenas abriam a conversa e exigiam
+                anexar o arquivo à mão. */}
+            <SendOsButton
+              booking={dispatchedBooking}
+              form={savedForm}
+              cooperativa={cooperativa}
+              variant="block"
+            />
 
             <button onClick={closeDispatch} className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors">
               Fechar

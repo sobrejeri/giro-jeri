@@ -13,7 +13,8 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
-import { downloadOrderPDF, shareOrderPDF, orderPDFBase64 } from '../lib/orderPDF'
+import { downloadOrderPDF } from '../lib/orderPDF'
+import SendOsButton from '../components/SendOsButton'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -24,48 +25,6 @@ const fmt = (v) =>
 function hasDispatch(b) {
   const a = b.operational_assignments?.[0]
   return !!(a && (a.real_vehicle_text || a.driver_name))
-}
-
-// Envia a OS em PDF pelo Z-API (cliente + motorista) e mostra o resultado.
-// Em caso de falha, exibe a resposta crua do Z-API — sem isso não dá para
-// distinguir credencial errada de formato recusado ou número sem WhatsApp.
-function SendOsButton({ booking, form, cooperativa }) {
-  const [state, setState] = useState('idle')   // idle | sending | ok | error
-  const [msg, setMsg]     = useState('')
-
-  async function send() {
-    if (state === 'sending') return
-    setState('sending'); setMsg('')
-    try {
-      const pdf = await orderPDFBase64(booking, form, cooperativa)
-      if (!pdf) throw new Error('Não foi possível gerar o PDF da OS.')
-      const r = await api.sendOsPdf(booking.id, pdf)
-      if (r?.error) throw new Error(`Z-API: ${r.error}`)
-      setState('ok')
-      setMsg(`Enviado para ${r?.sent ?? 0} de ${r?.total ?? 0} número(s).`)
-    } catch (e) {
-      setState('error')
-      setMsg(e?.message || 'Falha ao enviar.')
-    }
-  }
-
-  return (
-    <>
-      <button
-        onClick={send}
-        disabled={state === 'sending'}
-        className="flex items-center gap-1.5 text-xs font-medium bg-brand/10 hover:bg-brand/20 text-brand rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
-      >
-        <FileText size={12} />
-        {state === 'sending' ? 'Enviando OS…' : 'Enviar OS no WhatsApp'}
-      </button>
-      {msg && (
-        <p className={`w-full text-[11px] mt-1 ${state === 'ok' ? 'text-emerald-600' : 'text-red-600'}`}>
-          {msg}
-        </p>
-      )}
-    </>
-  )
 }
 
 function BookingRow({ b, onDispatch, onStart, onComplete, cooperativa }) {
@@ -144,23 +103,9 @@ function BookingRow({ b, onDispatch, onStart, onComplete, cooperativa }) {
             >
               <FileText size={12} /> Baixar PDF
             </button>
-            <button
-              onClick={() => shareOrderPDF(b, formForOS, 'driver', cooperativa)}
-              className="flex items-center gap-1.5 text-xs font-medium bg-green-100 hover:bg-green-200 text-green-700 rounded-lg px-3 py-1.5 transition-colors"
-            >
-              <MessageCircle size={12} /> WhatsApp Motorista
-            </button>
-            <button
-              onClick={() => shareOrderPDF(b, formForOS, 'client', cooperativa)}
-              disabled={!b.users?.phone}
-              className="flex items-center gap-1.5 text-xs font-medium bg-green-100 hover:bg-green-200 text-green-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <MessageCircle size={12} /> WhatsApp Cliente
-            </button>
-
-            {/* Envia a OS em PDF automaticamente (cliente + motorista) pelo
-                Z-API. Serve para reenviar uma OS de corrida já despachada e
-                mostra o retorno do Z-API quando falha. */}
+            {/* Um botão só: envia a OS em PDF para o cliente E o motorista pelo
+                Z-API. Substituiu os dois antigos, que apenas abriam a conversa
+                e obrigavam a anexar o arquivo à mão. */}
             <SendOsButton booking={b} form={formForOS} cooperativa={cooperativa} />
 
             {/* Ciclo da corrida (item 13): iniciar depois do despacho, depois concluir */}
