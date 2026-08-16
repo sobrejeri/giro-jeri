@@ -23,6 +23,16 @@ function fmtDate(s) {
   catch { return s }
 }
 
+// 0,25h -> "15 minutos" · 4,5h -> "4h30". Voo com pouso ocupa o dia; o
+// motorista precisa disso para não marcar outra corrida em cima.
+function fmtDuracao(h) {
+  const n = Number(h)
+  if (!n) return null
+  if (n < 1) return `${Math.round(n * 60)} minutos`
+  if (Number.isInteger(n)) return `${n} hora(s)`
+  return `${Math.floor(n)}h${String(Math.round((n % 1) * 60)).padStart(2, '0')}`
+}
+
 function Linha({ label, children }) {
   if (!children) return null
   return (
@@ -122,9 +132,14 @@ export default function OsPublica() {
         <div className="bg-white rounded-2xl shadow-sm p-5">
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Serviço</p>
           {booking.service_name && (
-            <p className="text-[16px] font-bold text-gray-900 mb-2 leading-snug">{booking.service_name}</p>
+            <p className="text-[16px] font-bold text-gray-900 mb-1 leading-snug">{booking.service_name}</p>
+          )}
+          {/* Roteiro: quem lê a OS precisa saber por onde passa, não só o nome */}
+          {booking.service_description && (
+            <p className="text-[12px] text-gray-500 mb-2 leading-relaxed">{booking.service_description}</p>
           )}
           <Linha label="Tipo">{`${tipo} · ${modo}`}</Linha>
+          <Linha label="Duração prevista">{fmtDuracao(booking.service_duration_hours)}</Linha>
           <Linha label="Data">{fmtDate(booking.service_date)}</Linha>
           <Linha label="Horário">{booking.service_time ? booking.service_time.slice(0, 5) : null}</Linha>
           <Linha label="Passageiros">{booking.people_count ? `${booking.people_count} pessoa(s)` : null}</Linha>

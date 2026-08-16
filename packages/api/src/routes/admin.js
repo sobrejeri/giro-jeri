@@ -549,11 +549,16 @@ router.get('/operational', requireOperator, async (req, res, next) => {
       if (uErr) throw uErr;
       byId = new Map((users || []).map((u) => [u.id, u]));
     }
-    const enriched = (data || []).map((b) => ({
+    let enriched = (data || []).map((b) => ({
       ...b,
       users:    byId.get(b.user_id) || null,
       operator: b.operator_id ? (byId.get(b.operator_id) || null) : null,
     }));
+
+    // Nome/roteiro/duração do serviço: sem isso a tela de despacho e a Ordem de
+    // Serviço mostravam só "Passeio — Privativo", sem dizer QUAL passeio.
+    const { attachServiceDetails } = await import('../services/serviceDetails.js');
+    enriched = await attachServiceDetails(supabase, enriched);
 
     // Agrupa por status operacional
     const grouped = {};

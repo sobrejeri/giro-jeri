@@ -121,7 +121,8 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   const origin   = booking.pickup_place_name      || booking.origin_text       || '—'
   const dest     = booking.destination_place_name || booking.destination_text  || '—'
   const vehicle  = form.real_vehicle_text || booking.booking_vehicles?.[0]?.vehicle_name_snapshot || '—'
-  const tipo     = booking.service_type === 'tour'    ? 'Passeio'       : 'Transfer'
+  const isTour   = booking.service_type === 'tour'
+  const tipo     = isTour ? 'Passeio' : 'Transfer'
   const modo     = booking.booking_mode  === 'shared' ? 'Compartilhado' : 'Privativo'
   const colW2    = CW / 2 - 4
 
@@ -243,6 +244,36 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   y = sectionTitle(doc, '2. DADOS DO SERVIÇO', M, y, CW)
   y += 1
 
+  // O QUE foi contratado. Antes a OS dizia só "Passeio — Privativo" e o
+  // motorista recebia o documento sem saber qual roteiro ia fazer.
+  const servico = booking.service_name
+    || (booking.service_type !== 'tour'
+        ? [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
+        : null)
+  if (servico) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7.5)
+    doc.setTextColor(...GRAY)
+    doc.text('SERVIÇO CONTRATADO:', M, y + 3)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(...DARK)
+    const linhasNome = doc.splitTextToSize(String(servico), CW)
+    doc.text(linhasNome, M, y + 8.5)
+    y += 6 + linhasNome.length * 5
+
+    // Roteiro resumido: o motorista precisa saber onde vai passar.
+    if (booking.service_description) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(...GRAY)
+      const linhasDesc = doc.splitTextToSize(String(booking.service_description), CW).slice(0, 4)
+      doc.text(linhasDesc, M, y + 2)
+      y += linhasDesc.length * 3.8 + 2
+    }
+    y += 2
+  }
+
   dataField(doc, 'TIPO DE SERVIÇO:', `${tipo} — ${modo}`, M, y, colW2)
   dataField(doc, 'DATA DO SERVIÇO:', dateLong, COL + 2, y, colW2)
   y += 10
@@ -252,6 +283,17 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
     dataField(doc, 'HORÁRIO DE SAÍDA:', `${timeStr}hs`, COL + 2, y, colW2)
   }
   y += 10
+
+  // Duração prevista — evita o motorista se comprometer com outra corrida em
+  // cima da hora (voo com pouso, por exemplo, ocupa o dia inteiro).
+  if (booking.service_duration_hours) {
+    const h = Number(booking.service_duration_hours)
+    const txt = h < 1 ? `${Math.round(h * 60)} minutos`
+              : Number.isInteger(h) ? `${h} hora(s)`
+              : `${Math.floor(h)}h${String(Math.round((h % 1) * 60)).padStart(2, '0')}`
+    dataField(doc, 'DURAÇÃO PREVISTA:', txt, M, y, colW2)
+    y += 10
+  }
 
   // Caixa SAÍDA / DATA
   doc.setFillColor(...XLGRAY)
@@ -284,7 +326,9 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   doc.setTextColor(...GRAY)
-  doc.text('Destino da Partida:', M + 3, y + 4.8)
+  // Passeio sai e volta do mesmo lugar; "Destino da Partida/Chegada" só faz
+  // sentido em translado. Rótulos conforme o tipo de serviço.
+  doc.text(isTour ? 'Local de embarque:' : 'Origem:', M + 3, y + 4.8)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.setTextColor(...DARK)
@@ -301,7 +345,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   doc.setTextColor(...GRAY)
-  doc.text('Destino da Chegada:', M + 3, y + 4.8)
+  doc.text(isTour ? 'Retorno / destino:' : 'Destino:', M + 3, y + 4.8)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.setTextColor(...DARK)

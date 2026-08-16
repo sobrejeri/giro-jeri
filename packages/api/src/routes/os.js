@@ -56,18 +56,10 @@ router.get('/:token', async (req, res, next) => {
       }
     }
 
-    // Nome do serviço (passeio ou rota) — a OS mostra o que foi contratado.
-    let service_name = null;
-    if (booking.service_id) {
-      if (booking.service_type === 'tour') {
-        const { data: t } = await supabase.from('tours').select('name').eq('id', booking.service_id).maybeSingle();
-        service_name = t?.name || null;
-      } else {
-        const { data: r } = await supabase.from('transfer_routes')
-          .select('origin_name, destination_name').eq('id', booking.service_id).maybeSingle();
-        if (r) service_name = `${r.origin_name} → ${r.destination_name}`;
-      }
-    }
+    // Nome, roteiro e duração do serviço — a OS precisa dizer O QUE foi
+    // contratado, não só "Passeio — Privativo".
+    const { attachServiceDetails } = await import('../services/serviceDetails.js');
+    const [comServico] = await attachServiceDetails(supabase, [booking]);
 
     // Veículos escolhidos na reserva (quando privativo).
     const { data: veiculos } = await supabase
@@ -76,7 +68,7 @@ router.get('/:token', async (req, res, next) => {
       .eq('booking_id', booking.id);
 
     res.json({
-      booking: { ...booking, service_name, users: cliente || null },
+      booking: { ...comServico, users: cliente || null },
       assignment: assignment || null,
       cooperativa,
       vehicles: veiculos || [],
