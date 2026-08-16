@@ -31,21 +31,12 @@ export default function UpdatePrompt() {
 
   const hasUpdate = latest && CURRENT_BUILD !== 'dev' && latest !== CURRENT_BUILD
 
-  // Auto-atualiza: ao detectar versão nova, recarrega sozinho (uma vez).
-  // Guarda anti-loop: se já tentou pra esse buildId e ainda vê update, para.
-  useEffect(() => {
-    if (!hasUpdate) return
-    const key = `giro_autoupdate_${latest}`
-    if (sessionStorage.getItem(key)) return
-    sessionStorage.setItem(key, '1')
-    const u = new URL(window.location.href)
-    u.searchParams.set('v', String(latest))
-    window.location.replace(u.toString())
-  }, [hasUpdate, latest])
-
-  const autoTried       = latest && sessionStorage.getItem(`giro_autoupdate_${latest}`)
+  // NÃO recarrega sozinho: a plataforma AVISA e quem decide é a pessoa. Recarga
+  // silenciosa some com a versão nova sem ninguém perceber que houve mudança —
+  // e, se acontecer no meio de um formulário, apaga o que estava preenchido.
+  // O aviso aparece UMA vez por versão (o X guarda o buildId adiado).
   const reallyDismissed = dismissed || (latest && sessionStorage.getItem(DISMISS_KEY) === latest)
-  if (!hasUpdate || reallyDismissed || !autoTried) return null
+  if (!hasUpdate || reallyDismissed) return null
 
   function reload() {
     const u = new URL(window.location.href)
