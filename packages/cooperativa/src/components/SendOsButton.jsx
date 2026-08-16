@@ -22,6 +22,11 @@ export default function SendOsButton({ booking, form, cooperativa, variant = 'in
     try {
       const pdf = await orderPDFBase64(booking, form, cooperativa)
       if (!pdf) throw new Error('Não foi possível gerar o PDF da OS.')
+      // O tamanho é a causa mais provável de recusa; avisa antes de tentar.
+      const mb = (pdf.length / 1024 / 1024).toFixed(1)
+      if (pdf.length > 7 * 1024 * 1024) {
+        throw new Error(`PDF muito grande (${mb} MB). Reduza a foto do perfil da cooperativa.`)
+      }
       const r = await api.sendOsPdf(booking.id, pdf)
       if (r?.error) throw new Error(`Z-API: ${r.error}`)
       if (!r?.sent) throw new Error('Nenhum número recebeu — confira os telefones.')

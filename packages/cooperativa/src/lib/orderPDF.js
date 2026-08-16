@@ -23,6 +23,34 @@ function fmtDateLong(s) {
 }
 
 // ── Carrega imagem remota como base64 ──────────────────
+// Reduz a imagem antes de embutir no PDF. O logo é desenhado com 22mm de lado;
+// embutir a foto original (o perfil aceita até 2 MB) inflava o PDF em vários MB
+// e a API recusava o envio com "request entity too large". 256px cobre 22mm com
+// folga até em impressão. JPEG sobre fundo branco (JPEG não tem transparência).
+async function downscaleDataUrl(dataUrl, maxPx = 256) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
+          const w = Math.max(1, Math.round(img.width  * scale))
+          const h = Math.max(1, Math.round(img.height * scale))
+          const canvas = document.createElement('canvas')
+          canvas.width = w; canvas.height = h
+          const ctx = canvas.getContext('2d')
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, w, h)
+          ctx.drawImage(img, 0, 0, w, h)
+          resolve(canvas.toDataURL('image/jpeg', 0.82))
+        } catch { resolve(null) }
+      }
+      img.onerror = () => resolve(null)
+      img.src = dataUrl
+    } catch { resolve(null) }
+  })
+}
+
 async function fetchBase64(url, timeoutMs = 3000) {
   if (!url) return null
   // TIMEOUT OBRIGATÓRIO: sem ele, um storage lento deixa o fetch pendurado para
@@ -123,7 +151,10 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   if (coopLogoB64) {
     // Logo carregado como base64
     try {
-      doc.addImage(coopLogoB64, 'PNG', LOGO_X, LOGO_Y, LOGO_SZ, LOGO_SZ)
+      // Formato vem do próprio data URI: o logo é reduzido para JPEG, mas um
+      // PNG ainda pode chegar aqui (ex.: se a redução falhar).
+      const fmt = /^data:image\/jpe?g/i.test(coopLogoB64) ? 'JPEG' : 'PNG'
+      doc.addImage(coopLogoB64, fmt, LOGO_X, LOGO_Y, LOGO_SZ, LOGO_SZ)
     } catch {
       drawLogoPlaceholder(doc, coopName, LOGO_X, LOGO_Y, LOGO_SZ)
     }
@@ -431,11 +462,23 @@ export async function orderPDFBase64(booking, form, cooperativa = null, timeoutM
   // O anexo é um EXTRA: o despacho é a operação que não pode falhar. Por isso,
   // além do try/catch, há um teto de tempo — se o PDF não ficar pronto a tempo,
   // devolve null e o despacho segue sem anexo, em vez de travar o botão.
+  // Teto de segurança: a API recusa corpo grande demais ("request entity too
+  // large"). Se mesmo com o logo reduzido o PDF passar disso, refaz SEM logo —
+  // melhor a OS chegar sem a marca do que não chegar.
+  const MAX_B64 = 3 * 1024 * 1024   // ~3 MB de base64 (~2,2 MB de PDF)
+
   const build = (async () => {
     const enriched = await _enrichWithLogo(cooperativa)
-    const doc      = generateOrderPDF(booking, form, enriched)
-    const out      = doc.output('datauristring')   // 'data:...;base64,XXXX'
-    return out.slice(out.indexOf(',') + 1)
+    const toB64 = (coop) => {
+      const out = generateOrderPDF(booking, form, coop).output('datauristring')
+      return out.slice(out.indexOf(',') + 1)
+    }
+    let b64 = toB64(enriched)
+    if (b64.length > MAX_B64 && enriched?.logoBase64) {
+      console.warn('[orderPDF] PDF grande demais com o logo — refazendo sem ele.')
+      b64 = toB64({ ...enriched, logoBase64: null })
+    }
+    return b64
   })()
 
   try {
@@ -489,7 +532,10 @@ export async function shareOrderPDF(booking, form, target = 'driver', cooperativ
 
 async function _enrichWithLogo(cooperativa) {
   if (!cooperativa) return null
-  const logoBase64 = await fetchBase64(cooperativa.profile_photo_url)
+  const original   = await fetchBase64(cooperativa.profile_photo_url)
+  // Reduz antes de embutir; se a redução falhar, prefere ficar SEM logo a
+  // inflar o PDF (o placeholder com as iniciais é desenhado no lugar).
+  const logoBase64 = original ? await downscaleDataUrl(original) : null
   return { ...cooperativa, logoBase64 }
 }
 
