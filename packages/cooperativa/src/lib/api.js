@@ -119,6 +119,7 @@ export const api = {
   getOperational:       (params = {}) => request(`/api/admin/operational?${new URLSearchParams(params)}`),
   updateBookingStatus:  (id, body)    => request(`/api/bookings/${id}/status`, { method: 'PATCH', body }),
   assignBooking:        (id, body)    => request(`/api/admin/operational/${id}/assign`, { method: 'POST', body }),
+  sendOsPdf:            (id, pdf)     => request(`/api/admin/operational/${id}/os-pdf`, { method: 'POST', body: { os_pdf_base64: pdf } }),
 
   // Cotações
   getPendingQuotes: ()         => request('/api/transfers/quotes/pending'),

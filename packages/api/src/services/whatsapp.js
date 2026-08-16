@@ -327,16 +327,35 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
 // ── ORDEM DE SERVIÇO (Despacho) ────────────────────────
 // Ao confirmar o despacho, envia a OS automaticamente via Z-API para o CLIENTE
 // (dados do veículo/motorista) e para o MOTORISTA (dados da corrida/cliente).
-export async function notifyDispatchOS(supabase, { booking, assignment, pdfBase64 = null }) {
+// Envia o PDF da Ordem de Serviço ao cliente e ao motorista. Chamado por um
+// endpoint PRÓPRIO (/operational/:id/os-pdf), depois que o despacho já
+// aconteceu — o anexo nunca entra no caminho crítico do despacho.
+// O PDF é gerado no app da cooperativa (orderPDF.js) e chega em base64, então o
+// documento enviado é exatamente o que a coop vê, sem duplicar layout aqui.
+export async function sendOsPdf(supabase, { booking, driverPhone, pdfBase64 }) {
+  if (!isWhatsappEnabled()) return { skipped: true, reason: 'whatsapp desligado' }
+  if (!booking || !pdfBase64) return { skipped: true, reason: 'sem PDF' }
+
+  const file = pdfBase64.startsWith('data:')
+    ? pdfBase64
+    : `data:application/pdf;base64,${pdfBase64}`
+  const name = `OS-${booking.booking_code || 'turiva'}.pdf`
+
+  const alvos = []
+  const clientePhone = await userPhone(supabase, booking.user_id)
+  if (clientePhone) alvos.push(clientePhone)
+  if (driverPhone)  alvos.push(driverPhone)
+  if (alvos.length === 0) return { skipped: true, reason: 'sem telefone' }
+
+  const results = await Promise.all(
+    alvos.map((p) => sendDocument(p, file, name, 'Ordem de Serviço')),
+  )
+  const enviados = results.filter((r) => r && !r.error && !r.skipped).length
+  return { sent: enviados, total: alvos.length }
+}
+
+export async function notifyDispatchOS(supabase, { booking, assignment }) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
-  // O PDF da OS é gerado no app da cooperativa (packages/cooperativa/src/lib/
-  // orderPDF.js) e chega aqui em base64 — assim o documento enviado no WhatsApp
-  // é EXATAMENTE o mesmo que a coop vê na tela, sem duplicar o layout no
-  // servidor. Quando não vier, seguem só as mensagens de texto.
-  const osFile = pdfBase64
-    ? (pdfBase64.startsWith('data:') ? pdfBase64 : `data:application/pdf;base64,${pdfBase64}`)
-    : null
-  const osName = `OS-${booking.booking_code || 'turiva'}.pdf`
   const { tipo, data } = bookingSummary(booking)
   const hora       = booking.service_time ? booking.service_time.slice(0, 5) : null
   const quando     = `${data}${hora ? ` às ${hora}` : ''}`
@@ -361,7 +380,6 @@ export async function notifyDispatchOS(supabase, { booking, assignment, pdfBase6
       `🔖 ${booking.booking_code}` + obs +
       `\n\nQualquer dúvida, é só chamar. Boa viagem! 🌴`
     await sendToMany([clientePhone], msg)
-    if (osFile) await sendDocument(clientePhone, osFile, osName, 'Ordem de Serviço')
   }
 
   // Motorista (a OS)
@@ -379,10 +397,9 @@ export async function notifyDispatchOS(supabase, { booking, assignment, pdfBase6
       `🙋 Cliente: ${cli?.full_name || '—'}${cli?.phone ? ` — ${cli.phone}` : ''}\n` +
       `🔖 ${booking.booking_code}` + obs
     await sendToMany([motoFone], msg)
-    if (osFile) await sendDocument(motoFone, osFile, osName, 'Ordem de Serviço')
   }
 
-  return { sent: true, pdf: !!osFile }
+  return { sent: true }
 }
 
 // ── RESET DE SENHA ─────────────────────────────────────

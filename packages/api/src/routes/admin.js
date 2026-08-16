@@ -473,6 +473,42 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/admin/operational/:id/os-pdf ─────────────
+// Anexa a Ordem de Serviço em PDF no WhatsApp do cliente e do motorista.
+// SEPARADO do /assign de propósito: o despacho é a operação crítica e não pode
+// depender do anexo (nem carregar o peso dele no corpo da requisição). O app da
+// coop chama isto DEPOIS que o despacho já deu certo — se falhar aqui, o
+// despacho continua feito e as mensagens de texto já foram enviadas.
+router.post('/operational/:id/os-pdf', requireOperator, async (req, res, next) => {
+  try {
+    const pdf = req.body?.os_pdf_base64;
+    if (!pdf || typeof pdf !== 'string') {
+      return res.status(400).json({ error: 'PDF ausente.' });
+    }
+
+    const { data: bk } = await supabase.from('bookings')
+      .select('id, booking_code, user_id, operator_id')
+      .eq('id', req.params.id).maybeSingle();
+    if (!bk) return res.status(404).json({ error: 'Reserva não encontrada.' });
+
+    // Cooperativa só anexa OS da própria reserva; admin pode qualquer uma.
+    if (req.user.user_type !== 'admin' && bk.operator_id && bk.operator_id !== req.user.id) {
+      return res.status(403).json({ error: 'Reserva de outra cooperativa.' });
+    }
+
+    const { data: assignment } = await supabase.from('operational_assignments')
+      .select('driver_phone').eq('booking_id', bk.id).maybeSingle();
+
+    const { sendOsPdf } = await import('../services/whatsapp.js');
+    const r = await sendOsPdf(supabase, {
+      booking:     bk,
+      driverPhone: assignment?.driver_phone || null,
+      pdfBase64:   pdf,
+    });
+    res.json(r);
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/admin/operational ─────────────────────────
 // Painel kanban da operação
 router.get('/operational', requireOperator, async (req, res, next) => {
@@ -550,7 +586,6 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       dispatch_notes,
       driver_name,
       driver_phone,
-      os_pdf_base64,   // PDF da OS gerado no app da coop (opcional)
     } = req.body;
 
     const bookingId = req.params.id;
@@ -606,7 +641,7 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       const { data: bk } = await supabase.from('bookings')
         .select('id, booking_code, user_id, service_type, booking_mode, service_date, service_time, people_count, origin_text, destination_text, pickup_place_name, destination_place_name')
         .eq('id', bookingId).maybeSingle();
-      if (bk) notifyDispatchOS(supabase, { booking: bk, assignment: result, pdfBase64: os_pdf_base64 || null })
+      if (bk) notifyDispatchOS(supabase, { booking: bk, assignment: result })
         .catch((err) => console.error('[whatsapp] OS de despacho falhou:', err.message));
     } catch (err) {
       console.error('[whatsapp] OS de despacho: erro ao carregar reserva:', err.message);

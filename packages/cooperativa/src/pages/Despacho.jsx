@@ -194,9 +194,8 @@ export default function Despacho() {
   const [date, setDate]       = useState('all')
   const [modal, setModal]     = useState(null)
   const [form, setForm]       = useState({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
-  // Gerando o PDF da OS antes de enviar o despacho — o botão precisa mostrar
-  // isso, senão o clique parece não fazer nada.
-  const [preparing, setPreparing] = useState(false)
+  // Erro do despacho visível na tela (antes falhava em silêncio).
+  const [errMsg, setErrMsg] = useState('')
   const qc                    = useQueryClient()
 
   const { data, isLoading, isFetching } = useQuery({
@@ -223,11 +222,28 @@ export default function Despacho() {
 
   const assignMut = useMutation({
     mutationFn: ({ id, ...body }) => api.assignBooking(id, body),
-    onSuccess:  () => {
+    onSuccess:  (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['dispatch'] })
+      // Despacho OK → gera e envia o PDF da OS em segundo plano. Falha aqui não
+      // desfaz nada: o despacho está feito e o cliente/motorista já receberam
+      // as mensagens de texto.
+      const snapshot = modal
+      const formSnap = { ...form }
+      ;(async () => {
+        try {
+          const pdf = await orderPDFBase64(snapshot, formSnap, cooperativa)
+          if (pdf) await api.sendOsPdf(vars.id, pdf)
+        } catch (err) {
+          console.warn('[despacho] envio do PDF da OS falhou:', err?.message)
+        }
+      })()
       setModal(null)
       setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
+      setErrMsg('')
     },
+    // Sem isto, uma falha no despacho não mostrava NADA na tela: o modal ficava
+    // aberto e parecia que o clique não tinha feito efeito.
+    onError: (err) => setErrMsg(err?.message || 'Não foi possível despachar. Tente novamente.'),
   })
 
   // Ciclo da corrida no Despacho (item 13): iniciar após o despacho, depois concluir.
@@ -260,22 +276,14 @@ export default function Despacho() {
     })
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
     // Obrigatórios (item 9): veículo, motorista e WhatsApp do motorista.
     if (!form.real_vehicle_text.trim() || !form.driver_name.trim() || !form.driver_phone.trim()) return
-    if (preparing || assignMut.isPending) return          // evita duplo clique
-    // Gera o PDF da OS aqui e manda junto: o backend anexa no WhatsApp do
-    // cliente e do motorista. Tem teto de tempo e nunca lança — se não der,
-    // `os_pdf_base64` vem null e o despacho segue normalmente, só sem o anexo.
-    setPreparing(true)
-    let os_pdf_base64 = null
-    try {
-      os_pdf_base64 = await orderPDFBase64(modal, form, cooperativa)
-    } finally {
-      setPreparing(false)
-    }
-    assignMut.mutate({ id: modal.id, ...form, os_pdf_base64 })
+    // O despacho vai SOZINHO, com o mesmo corpo de sempre. O PDF da OS é um
+    // extra e sai numa chamada separada, depois (ver onSuccess do assignMut) —
+    // assim nada relacionado ao anexo pode atrasar ou impedir o despacho.
+    assignMut.mutate({ id: modal.id, ...form })
   }
 
   // Só reservas PAGAS entram no despacho (não se despacha antes do pagamento);
@@ -401,8 +409,11 @@ export default function Despacho() {
                 {!canDispatch && (
                   <p className="text-[11px] text-amber-600">Preencha veículo, motorista e WhatsApp para confirmar o despacho.</p>
                 )}
-                <Button type="submit" className="w-full" disabled={assignMut.isPending || preparing || !canDispatch}>
-                  {preparing ? 'Gerando OS…' : assignMut.isPending ? 'Salvando…' : 'Confirmar Despacho'}
+                {errMsg && (
+                  <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{errMsg}</p>
+                )}
+                <Button type="submit" className="w-full" disabled={assignMut.isPending || !canDispatch}>
+                  {assignMut.isPending ? 'Salvando…' : 'Confirmar Despacho'}
                 </Button>
               </>
             )
