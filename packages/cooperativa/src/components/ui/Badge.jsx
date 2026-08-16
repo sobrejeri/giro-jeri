@@ -1,6 +1,7 @@
 const styles = {
   // comercial
   draft:           'bg-gray-100 text-gray-600',
+  awaiting_acceptance: 'bg-sky-100 text-sky-700',
   awaiting_payment:'bg-amber-100 text-amber-700',
   paid:            'bg-green-100 text-green-700',
   payment_failed:  'bg-red-100 text-red-700',
@@ -34,16 +35,26 @@ const styles = {
 }
 
 const labels = {
-  draft: 'Rascunho', awaiting_payment: 'Ag. Pagamento', paid: 'Pago',
+  draft: 'Rascunho', awaiting_acceptance: 'Ag. Aceite', awaiting_payment: 'Ag. Pagamento', paid: 'Pago',
   payment_failed: 'Falha Pgto', cancelled: 'Cancelado', refunded: 'Reembolsado',
   new: 'Novo', awaiting_dispatch: 'Ag. Despacho', confirmed: 'Confirmado',
   assigned: 'Atribuído', en_route: 'A Caminho', in_progress: 'Em Andamento',
   completed: 'Concluído', occurrence: 'Ocorrência',
   pending_quote: 'Ag. Cotação', quoted: 'Cotado', accepted: 'Aceito',
   expired: 'Expirado', rejected: 'Rejeitado',
+  pending: 'Pendente', ready: 'Pronto p/ pagar',
   tour: 'Passeio', transfer: 'Transfer',
   tourist: 'Turista', operator: 'Operador', admin: 'Admin',
   agency: 'Agência', finance: 'Financeiro', affiliate: 'Afiliado',
+}
+
+// Rótulo desconhecido nunca deve vazar o valor cru do banco
+// ('awaiting_acceptance' apareceu na tela porque foi adicionado ao enum depois
+// e ninguém lembrou do mapa). Aqui viramos snake_case em texto legível — não
+// traduz, mas evita a cara de erro até alguém acrescentar o rótulo certo.
+function humanizar(key) {
+  if (!key || key === 'undefined' || key === 'null') return '—'
+  return key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 }
 
 export default function Badge({ value, className = '' }) {

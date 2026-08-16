@@ -1,6 +1,7 @@
 const styles = {
   draft:           'bg-gray-700 text-gray-300',
   pending_payment:  'bg-amber-900/40 text-amber-400',
+  awaiting_acceptance: 'bg-sky-900/40 text-sky-400',
   awaiting_payment: 'bg-amber-900/40 text-amber-400',
   paid:            'bg-green-900/40 text-green-400',
   payment_failed:  'bg-red-900/40 text-red-400',
@@ -36,7 +37,7 @@ const styles = {
 }
 
 const labels = {
-  draft: 'Rascunho', pending_payment: 'Ag. Pagamento', awaiting_payment: 'Ag. Pagamento', paid: 'Pago',
+  draft: 'Rascunho', awaiting_acceptance: 'Ag. Aceite', pending_payment: 'Ag. Pagamento', awaiting_payment: 'Ag. Pagamento', paid: 'Pago',
   payment_failed: 'Falha Pgto', cancelled: 'Cancelado', refunded: 'Reembolsado',
   new: 'Novo', awaiting_dispatch: 'Ag. Despacho', confirmed: 'Confirmado',
   assigned: 'Atribuído', en_route: 'A Caminho', in_progress: 'Em Andamento',
@@ -50,12 +51,21 @@ const labels = {
   true: 'Ativo', false: 'Inativo',
 }
 
+// Rótulo desconhecido nunca deve vazar o valor cru do banco
+// ('awaiting_acceptance' apareceu na tela porque foi adicionado ao enum depois
+// e ninguém lembrou do mapa). Aqui viramos snake_case em texto legível — não
+// traduz, mas evita a cara de erro até alguém acrescentar o rótulo certo.
+function humanizar(key) {
+  if (!key || key === 'undefined' || key === 'null') return '—'
+  return key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+}
+
 export default function Badge({ value, className = '' }) {
   const key = String(value)
   const cls = styles[key] || 'bg-gray-700 text-gray-300'
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls} ${className}`}>
-      {labels[key] || value}
+      {labels[key] || humanizar(key)}
     </span>
   )
 }
