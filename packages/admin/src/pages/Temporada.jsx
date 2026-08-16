@@ -36,6 +36,46 @@ function dateToMonth(dateStr) {
   return parseInt(dateStr.slice(5, 7), 10)
 }
 
+// ── Sobreposição entre regras de temporada ───────────────────────────────────
+// Duas regras ativas podem cobrir a mesma data. O motor resolve isso aplicando a
+// ATUALIZADA MAIS RECENTEMENTE — o que tem uma consequência traiçoeira: editar
+// uma regra ANTIGA faz ela passar a valer no lugar da nova, sem aviso nenhum.
+// Por isso a lista marca qual está realmente em vigor.
+
+// Regra vira 1 ou 2 intervalos na chave mês*100+dia (2 quando atravessa o ano).
+function faixas(s) {
+  const md = (d) => {
+    const [, m, dia] = String(d).slice(0, 10).split('-').map(Number)
+    return m * 100 + dia
+  }
+  const ini = md(s.start_date), fim = md(s.end_date)
+  if (!ini || !fim) return []
+  return ini <= fim ? [[ini, fim]] : [[ini, 1231], [101, fim]]
+}
+
+function seSobrepoe(a, b) {
+  // Só concorrem no mesmo escopo: mesma região, ou ambas globais.
+  const mesmaRegiao = (a.region_id || null) === (b.region_id || null)
+  const umaGlobal   = !a.region_id || !b.region_id
+  if (!mesmaRegiao && !umaGlobal) return false
+  return faixas(a).some(([i1, f1]) => faixas(b).some(([i2, f2]) => i1 <= f2 && i2 <= f1))
+}
+
+// Para cada regra ativa, diz se está em vigor ou se perdeu para outra.
+function analisarSobreposicao(seasons) {
+  const ativas = (seasons || []).filter((s) => s.is_active)
+  const mapa = new Map()
+  for (const s of ativas) {
+    const rivais = ativas.filter((o) => o.id !== s.id && seSobrepoe(s, o))
+    if (rivais.length === 0) { mapa.set(s.id, null); continue }
+    const maisRecente = [...rivais, s].sort(
+      (x, y) => new Date(y.updated_at || 0) - new Date(x.updated_at || 0),
+    )[0]
+    mapa.set(s.id, maisRecente.id === s.id ? 'vigora' : 'perdeu')
+  }
+  return mapa
+}
+
 const EMPTY = { region_id: '', start_month: 7, end_month: 1, pct: 10, is_active: true }
 const EMPTY_HOLIDAY = { region_id: '', name: '', holiday_date: '', pct: 20, is_active: true }
 
@@ -52,6 +92,9 @@ export default function Temporada() {
 
   const { data: seasons = [], isLoading: l1 } = useQuery({ queryKey: ['seasons'],  queryFn: () => api.getSeasons() })
   const { data: regions = [], isLoading: l2 } = useQuery({ queryKey: ['regions'],  queryFn: () => api.getRegions() })
+
+  // Quais regras ativas se sobrepõem e qual delas realmente vale.
+  const sobreposicao = analisarSobreposicao(seasons)
 
   const saveMut = useMutation({
     mutationFn: (body) =>
@@ -146,10 +189,20 @@ export default function Temporada() {
       <div className="bg-brand/10 border border-brand/20 rounded-xl p-4 text-sm">
         <p className="font-semibold text-brand mb-1">Como funciona</p>
         <p className="text-gray-400 text-xs leading-relaxed">
-          Durante a alta temporada, o preço dos serviços é acrescido automaticamente pelo percentual configurado.
-          O período padrão é <strong className="text-gray-300">Julho a Janeiro (+10%)</strong>.
-          Múltiplas regras podem ser criadas por região.
+          Durante a alta temporada, o preço é acrescido automaticamente pelo percentual configurado.
+          A regra vale <strong className="text-gray-300">todo ano</strong> (você escolhe só os meses) e pode
+          atravessar a virada — ex.: <strong className="text-gray-300">Julho a Janeiro (+10%)</strong>.
         </p>
+        <ul className="text-gray-400 text-xs leading-relaxed mt-2 space-y-1 list-disc list-inside">
+          <li>
+            <strong className="text-gray-300">Feriados e datas especiais têm prioridade</strong>: se a data
+            estiver cadastrada ali embaixo, vale o percentual dela — mesmo que seja menor. Os dois nunca somam.
+          </li>
+          <li>
+            Se duas regras cobrirem as mesmas datas, vale a <strong className="text-gray-300">editada por
+            último</strong>. Atenção: reeditar uma regra antiga faz ela voltar a valer.
+          </li>
+        </ul>
       </div>
 
       {seasons.length === 0 ? (
@@ -175,6 +228,22 @@ export default function Temporada() {
                     {s.regions?.name || 'Todas as regiões'} · +{s.additional_value}%
                   </p>
                 </div>
+                {sobreposicao.get(s.id) === 'perdeu' && (
+                  <span
+                    title="Outra regra ativa cobre as mesmas datas e foi editada depois — é ela que vale."
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 whitespace-nowrap"
+                  >
+                    Sobreposta
+                  </span>
+                )}
+                {sobreposicao.get(s.id) === 'vigora' && (
+                  <span
+                    title="Há outra regra para as mesmas datas, mas esta foi editada por último — é a que vale."
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-400 whitespace-nowrap"
+                  >
+                    Em vigor
+                  </span>
+                )}
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.is_active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
                   {s.is_active ? 'Ativa' : 'Inativa'}
                 </span>
