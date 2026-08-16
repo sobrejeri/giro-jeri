@@ -51,6 +51,12 @@ export default function UpdatePrompt() {
   if (paginaPublica || !hasUpdate || reallyDismissed) return null
 
   function reload() {
+    // Some na hora: a navegação abaixo já recarrega, mas se a versão nova
+    // ainda não estiver disponível (CDN), o aviso não deve voltar e ficar
+    // pedindo clique no X. Marcado como visto PARA ESTA versão — quando
+    // sair a próxima, avisa de novo.
+    sessionStorage.setItem(DISMISS_KEY, String(latest))
+    setDismissed(true)
     const u = new URL(window.location.href)
     u.searchParams.set('v', String(latest))
     window.location.replace(u.toString())
