@@ -235,6 +235,65 @@ router.get('/routes', async (req, res, next) => {
 
 // ── POST /api/transfers/calculate ─────────────────────
 // Calcula preço de rota tabelada antes da reserva
+// ── GET /api/transfers/routes/:id/vehicles ──────────────────────────────────
+// Veículos que ATENDEM esta rota — mesma ideia da matriz dos passeios.
+//
+// Antes o app listava TODOS os veículos com is_transfer_allowed, para qualquer
+// rota. Com o translado aéreo isso quebra dos dois lados: o cliente podia
+// escolher um buggy num trecho de helicóptero (e a solicitação ia para as
+// cooperativas de buggy, porque o filtro de frota olha os veículos da reserva),
+// e o helicóptero aparecia como opção num translado comum.
+//
+// Regra:
+//   • a rota TEM regras de preço  → só os veículos dessas regras;
+//   • a rota NÃO tem regras        → todos os de transfer, MENOS os restritos
+//     (requires_opt_in, ex.: helicóptero), que só aparecem onde foram ligados.
+router.get('/routes/:id/vehicles', async (req, res, next) => {
+  try {
+    const { data: rules, error } = await supabase
+      .from('vehicle_pricing_rules')
+      .select(`
+        base_price, region_id,
+        vehicles!inner (
+          id, name, vehicle_type, seat_capacity, luggage_capacity,
+          image_url, description, display_order, is_active, is_transfer_allowed
+        )
+      `)
+      .eq('service_type', 'transfer')
+      .eq('service_id', req.params.id)
+      .eq('is_active', true)
+      .eq('vehicles.is_active', true)
+      .eq('vehicles.is_transfer_allowed', true);
+    if (error) throw error;
+
+    const comRegra = (rules || []).filter((r) => r.vehicles);
+    if (comRegra.length > 0) {
+      const map = new Map();
+      for (const r of comRegra) {
+        if (!map.has(r.vehicles.id)) map.set(r.vehicles.id, { ...r.vehicles, base_price: r.base_price });
+      }
+      return res.json([...map.values()].sort((a, b) => (a.display_order || 0) - (b.display_order || 0)));
+    }
+
+    // Sem regra própria: comportamento de antes, tirando os veículos restritos.
+    let q = supabase
+      .from('vehicles')
+      .select('id, name, vehicle_type, seat_capacity, luggage_capacity, image_url, description, display_order')
+      .eq('is_active', true)
+      .eq('is_transfer_allowed', true);
+    if (req.query.region_id) q = q.eq('region_id', req.query.region_id);
+
+    let { data: livres, error: e2 } = await q.eq('requires_opt_in', false).order('display_order');
+    if (e2?.code === '42703') {
+      // migration 066 pendente — sem a coluna, mantém a lista completa.
+      const retry = await q.order('display_order');
+      livres = retry.data; e2 = retry.error;
+    }
+    if (e2) throw e2;
+    res.json(livres || []);
+  } catch (err) { next(err); }
+});
+
 router.post('/calculate', async (req, res, next) => {
   try {
     const { region_id, route_id, service_date, service_time, coupon_code } = req.body;

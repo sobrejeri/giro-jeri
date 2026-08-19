@@ -379,12 +379,6 @@ export default function Transfers() {
     queryKey: ['transfer-routes'],
     queryFn:  () => api.getTransferRoutes(),
   })
-  const { data: vehiclesData } = useQuery({
-    queryKey: ['vehicles', 'transfer', region?.id],
-    queryFn:  () => region?.id ? api.getVehicles({ region_id: region.id }) : Promise.resolve([]),
-    enabled:  !!region?.id,
-  })
-
   const todasRotas = Array.isArray(routesData?.routes) ? routesData.routes
                    : Array.isArray(routesData) ? routesData : []
 
@@ -394,8 +388,6 @@ export default function Transfers() {
   // solicitação de buggy. Mesma separação dos passeios exclusivos.
   const rotasExclusivas = todasRotas.filter((r) => r.transfers?.is_exclusive)
   const routes          = todasRotas.filter((r) => !r.transfers?.is_exclusive)
-  const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
-                    .filter(v => v.is_transfer_allowed && v.is_active !== false)
 
   // Alta temporada: meses com acréscimo, p/ sinalizar no calendário.
   const { data: seasonsData } = useQuery({
@@ -409,8 +401,28 @@ export default function Transfers() {
 
   const origins    = useMemo(() => [...new Set(routes.map(r => r.origin_name))], [routes])
   const dests      = useMemo(() => routes.filter(r => r.origin_name === origin).map(r => r.destination_name), [routes, origin])
-  const matched    = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
+  // Procura em TODAS as rotas: o carrossel de translado exclusivo também define
+  // origem/destino, e sem isso a rota aérea ficava "não encontrada" (sem preço).
+  // Já `origins`/`dests` acima usam só as comuns — rota exclusiva não entra nos
+  // seletores manuais, ela é escolhida pelo carrossel.
+  const matched    = useMemo(
+    () => todasRotas.find(r => r.origin_name === origin && r.destination_name === dest),
+    [todasRotas, origin, dest],
+  )
   const unitPrice  = matched ? Number(matched.default_price) : null
+
+  // Veículos: com a rota escolhida, usa os que ATENDEM aquela rota (matriz
+  // veículo × rota). É o que impede pedir buggy num trecho de helicóptero — e
+  // o contrário. Sem rota ainda, mostra a lista geral da região.
+  const { data: vehiclesData } = useQuery({
+    queryKey: ['vehicles', 'transfer', region?.id, matched?.id || null],
+    queryFn:  () => matched?.id
+      ? api.getRouteVehicles(matched.id, region?.id ? { region_id: region.id } : {})
+      : (region?.id ? api.getVehicles({ region_id: region.id }) : Promise.resolve([])),
+    enabled:  !!region?.id || !!matched?.id,
+  })
+  const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
+                    .filter(v => v.is_transfer_allowed !== false && v.is_active !== false)
   const popularRoutes = useMemo(() => pickPopularRoutes(routes), [routes])
 
   // Antecedência mínima (America/Fortaleza): bloqueia datas E horários

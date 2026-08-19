@@ -166,6 +166,10 @@ export const api = {
   // Transfers
   getTransfers:       (params = {}) => request(`/api/transfers?${new URLSearchParams(params)}`),
   getTransferRoutes:  (params = {}) => request(`/api/transfers/routes?${new URLSearchParams(params)}`),
+  // Veículos que atendem UMA rota (matriz veículo × rota). Sem isso o app
+  // listava todos os de transfer — dava para pedir buggy num trecho aéreo.
+  getRouteVehicles:   (routeId, params = {}) =>
+    request(`/api/transfers/routes/${routeId}/vehicles?${new URLSearchParams(params)}`),
   calculateTransfer:  (body)        => request('/api/transfers/calculate', { method: 'POST', body }),
   transferSurcharge:  (body)        => request('/api/transfers/surcharge', { method: 'POST', body }),
   // Alta temporada (público): regras ativas p/ sinalizar datas no calendário
