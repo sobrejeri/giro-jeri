@@ -8,7 +8,7 @@ import CheckoutSolicitado  from './pages/checkout/CheckoutSolicitado'
 import CheckoutPayment     from './pages/checkout/CheckoutPayment'
 import CheckoutProcessando from './pages/checkout/CheckoutProcessando'
 import CheckoutSucesso     from './pages/checkout/CheckoutSucesso'
-import Home            from './pages/Home'
+import HomeSwitcher    from './pages/HomeSwitcher'   // home atual + proposta nova (em avaliação)
 import Feed            from './pages/Feed'
 import Tours           from './pages/Tours'
 import TourDetail      from './pages/TourDetail'
@@ -77,7 +77,7 @@ export default function App() {
 
       {/* App — layout responsivo com nav */}
       <Route path="/" element={<Layout />}>
-        <Route index                      element={<Home />} />
+        <Route index                      element={<HomeSwitcher />} />
         <Route path="eventos"             element={<Feed />} />
         <Route path="passeios"            element={<Tours />} />
         <Route path="passeios/:id"        element={<TourDetail />} />
