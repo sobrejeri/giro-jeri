@@ -28,6 +28,32 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-19 · Agente B (home nova em avaliação — turista)** — O dono mandou
+  um mockup da tela principal e pediu para testar **com as duas versões
+  selecionáveis**, para decidir depois. Nada foi substituído: `HomeSwitcher.jsx`
+  renderiza `Home` (atual) ou `HomeV2` (proposta) e um botão flutuante alterna
+  na hora; a escolha fica no `localStorage` (`turiva_home_versao`) e também
+  aceita `?home=nova|atual` na URL, para mandar o link já na versão certa. As
+  duas usam **as mesmas consultas** — com dado falso a comparação não valeria.
+  O estado mora em `lib/homeVersion.js` (`useSyncExternalStore`) porque o
+  **menu inferior** também reage: na proposta são 5 itens em vez de 6
+  ("Descubra" sai do menu e vira uma grade dentro da home).
+  Ajustes da revisão do dono já aplicados na V2: topo ~35% mais baixo; preço,
+  nota e duração no cartão; carrossel com 1 cartão inteiro + ~20% do próximo
+  (82% + scroll-snap); ofertas subiram para antes dos destaques; "Saindo de:"
+  em destaque; tracking da marca reduzido (com espaçamento largo lia-se
+  "TURVA"). Depois, na passada de enxugamento: as **duas** fileiras de atalho
+  viraram **uma** fileira de chips (havia sete botões para ~cinco intenções, e
+  "Para hoje"/"Passeio hoje" eram o mesmo clique). Os atalhos de etiqueta
+  passaram a filtrar de verdade — `Tours.jsx` ignorava `state.tag` e abria a
+  lista inteira; agora casa por tags, nome ou descrição curta e **cai de volta
+  na lista completa quando nada casa**, para o atalho nunca levar a tela vazia.
+  **Pendências desta tela:** (1) o dono ainda não escolheu a vencedora — quando
+  escolher, apagar a perdedora, o `HomeSwitcher.jsx` e o `lib/homeVersion.js`
+  (o `BottomNav` volta a ter lista fixa); (2) os quatro quadros de "Descubra"
+  (Restaurantes / Eventos / Lugares / Dicas) apontam **todos** para `/eventos`
+  — Restaurantes/Lugares/Dicas seriam telas novas, ainda não existem.
+
 - **2026-08-16 · Agente B (aviso de atualização + rótulos de status)** — Fechado
   e testado pelo usuário. **(a) Atualização:** os três apps agora só AVISAM que
   saiu versão nova (removida a recarga automática — trocava a versão sem ninguém
