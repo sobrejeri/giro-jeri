@@ -5,7 +5,7 @@ import { format, startOfDay, addDays, isToday, isTomorrow, parseISO } from 'date
 import { ptBR } from 'date-fns/locale'
 import {
   Star, Heart, ChevronDown, ChevronRight, ArrowRight, MapPin,
-  Car, Bus, Flame, Sun, Sunset, Waves, Percent, Ticket,
+  Car, Bus, Flame, Sun, Sunrise, Sunset, Waves, Percent, Ticket,
   UtensilsCrossed, PartyPopper, Lightbulb, Clock, Plane,
 } from 'lucide-react'
 import { api } from '../lib/api'
@@ -124,28 +124,30 @@ function CardDestaque({ tour, fav, onFav, onOpen }) {
   )
 }
 
-function Atalho({ icon: Icon, label, onClick, cor = 'text-brand' }) {
+// Chip horizontal: ocupa uma linha só e rola. Cartões quadrados empilhados
+// gastavam altura demais para o que entregam.
+function Chip({ icon: Icon, label, onClick, cor = 'text-brand' }) {
   return (
     <button
       onClick={onClick}
-      className="flex-1 min-w-0 bg-white rounded-2xl py-3 px-1.5 shadow-sm flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+      className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200/80 rounded-full pl-2.5 pr-3.5 py-2 active:bg-gray-50 transition-colors"
     >
-      <Icon size={20} className={cor} />
-      <span className="text-[10.5px] font-semibold text-gray-700 leading-none text-center">{label}</span>
+      <Icon size={14} className={cor} />
+      <span className="text-[12.5px] font-semibold text-gray-700 leading-none whitespace-nowrap">{label}</span>
     </button>
   )
 }
 
-function TileDescubra({ icon: Icon, label, onClick }) {
+// Conteúdo secundário: cor suave própria para não competir com os cartões de
+// Passeios/Transfers, mas sem virar mais uma caixa branca no meio de tantas.
+function TileDescubra({ icon: Icon, label, onClick, tom }) {
   return (
     <button
       onClick={onClick}
-      className="bg-white rounded-2xl py-3.5 px-2 shadow-sm flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+      className={`${tom} rounded-2xl py-3 px-2 flex flex-col items-center gap-1.5 active:scale-95 transition-transform`}
     >
-      <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center">
-        <Icon size={16} className="text-brand" />
-      </div>
-      <span className="text-[11px] font-semibold text-gray-700 leading-none text-center">{label}</span>
+      <Icon size={17} strokeWidth={2} />
+      <span className="text-[10.5px] font-semibold leading-none text-center">{label}</span>
     </button>
   )
 }
@@ -248,15 +250,12 @@ export default function HomeV2() {
         </div>
 
         <div className="px-4 pt-4 space-y-5">
-          {/* Chamada enxuta */}
-          <div>
-            <h1 className="text-[21px] font-extrabold text-gray-900 leading-tight">
-              Vamos explorar {nomeRegiao.split(' ')[0]}? 🌴
-            </h1>
-            <p className="text-[13px] text-gray-500 mt-0.5 leading-snug">
-              Passeios e transfers com operadores locais.
-            </p>
-          </div>
+          {/* Chamada enxuta — uma linha só. A frase "passeios e transfers com
+              operadores locais" saiu: os dois cartões logo abaixo já dizem
+              isso, e em tela de celular cada linha aqui empurra o conteúdo. */}
+          <h1 className="text-[21px] font-extrabold text-gray-900 leading-tight">
+            Vamos explorar {nomeRegiao.split(' ')[0]}? 🌴
+          </h1>
 
           {/* ── 1ª prioridade: Passeios / Transfers ─────────── */}
           <div className="grid grid-cols-2 gap-3">
@@ -289,37 +288,25 @@ export default function HomeV2() {
             </button>
           </div>
 
-          {/* Atalhos por interesse */}
-          <div className="flex gap-2">
-            <Atalho icon={Flame}  label="Mais vendidos" onClick={() => navigate('/passeios')} />
-            <Atalho icon={Sun}    label="Para hoje"     onClick={() => navigate('/passeios', { state: { dateIso: isoHoje } })} cor="text-amber-500" />
-            <Atalho icon={Sunset} label="Pôr do sol"    onClick={() => navigate('/passeios', { state: { tag: 'Pôr do sol' } })} cor="text-orange-500" />
-            <Atalho icon={Waves}  label="Lagoas"        onClick={() => navigate('/passeios', { state: { tag: 'Lagoas' } })} cor="text-sky-500" />
-          </div>
-
-          {/* ── Ação imediata: quem já entrou decidido ──────── */}
-          <div>
-            <p className="text-[13px] font-bold text-gray-700 mb-2">O que você quer fazer hoje?</p>
-            <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" style={{ scrollbarWidth: 'none' }}>
-              <button
-                onClick={() => navigate('/passeios', { state: { dateIso: isoHoje } })}
-                className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-3 pr-3.5 py-2 text-[12.5px] font-semibold text-gray-700 active:bg-gray-50"
-              >
-                <Sun size={14} className="text-amber-500" /> Passeio hoje
-              </button>
-              <button
-                onClick={() => navigate('/passeios', { state: { dateIso: isoAmanha } })}
-                className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-3 pr-3.5 py-2 text-[12.5px] font-semibold text-gray-700 active:bg-gray-50"
-              >
-                <Sunset size={14} className="text-orange-500" /> Passeio amanhã
-              </button>
-              <button
-                onClick={() => navigate('/transfers')}
-                className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-3 pr-3.5 py-2 text-[12.5px] font-semibold text-gray-700 active:bg-gray-50"
-              >
-                <Plane size={14} className="text-sky-600" /> Transfer aeroporto
-              </button>
-            </div>
+          {/* ── Filtros rápidos ──────────────────────────────
+              Uma fileira só. Antes eram DUAS ("Mais vendidos/Para hoje/Pôr do
+              sol/Lagoas" + "Passeio hoje/amanhã/Transfer aeroporto") — com
+              "Para hoje" e "Passeio hoje" fazendo a MESMA coisa. Sete botões
+              empilhados comiam justamente a altura que economizamos no topo.
+              "Mais vendidos" também saiu: ia para /passeios sem filtro nenhum,
+              igual ao cartão Passeios e ao "Ver todos" — e o carrossel logo
+              abaixo já É a lista dos mais procurados. */}
+          <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" style={{ scrollbarWidth: 'none' }}>
+            <Chip icon={Sun}    cor="text-amber-500"  label="Hoje"
+                  onClick={() => navigate('/passeios', { state: { dateIso: isoHoje } })} />
+            <Chip icon={Sunrise} cor="text-rose-500"  label="Amanhã"
+                  onClick={() => navigate('/passeios', { state: { dateIso: isoAmanha } })} />
+            <Chip icon={Sunset} cor="text-orange-500" label="Pôr do sol"
+                  onClick={() => navigate('/passeios', { state: { tag: 'pôr do sol' } })} />
+            <Chip icon={Waves}  cor="text-sky-500"    label="Lagoas"
+                  onClick={() => navigate('/passeios', { state: { tag: 'lagoa' } })} />
+            <Chip icon={Plane}  cor="text-indigo-500" label="Aeroporto"
+                  onClick={() => navigate('/transfers')} />
           </div>
 
           {/* ── Ofertas: subiram para antes dos destaques ───── */}
@@ -348,7 +335,7 @@ export default function HomeV2() {
           {/* ── 2ª prioridade: Mais procurados ──────────────── */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
-              <h2 className="text-[17px] font-extrabold text-gray-900">🔥 Mais procurados</h2>
+              <h2 className="text-[17px] font-extrabold text-gray-900">Mais procurados</h2>
               <button onClick={() => navigate('/passeios')} className="flex items-center gap-1 text-[12.5px] font-bold text-brand">
                 Ver todos <ArrowRight size={13} />
               </button>
@@ -408,12 +395,12 @@ export default function HomeV2() {
 
           {/* ── Conteúdo secundário: Descubra ───────────────── */}
           <div>
-            <h2 className="text-[15px] font-bold text-gray-800 mb-2.5">✨ Descubra {nomeRegiao.split(' ')[0]}</h2>
+            <h2 className="text-[15px] font-bold text-gray-800 mb-2.5">Descubra {nomeRegiao.split(' ')[0]}</h2>
             <div className="grid grid-cols-4 gap-2">
-              <TileDescubra icon={UtensilsCrossed} label="Restaurantes" onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={PartyPopper}     label="Eventos"      onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={MapPin}          label="Lugares"      onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={Lightbulb}       label="Dicas"        onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={UtensilsCrossed} label="Restaurantes" tom="bg-rose-50 text-rose-600"       onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={PartyPopper}     label="Eventos"      tom="bg-violet-50 text-violet-600"   onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={MapPin}          label="Lugares"      tom="bg-emerald-50 text-emerald-600" onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={Lightbulb}       label="Dicas"        tom="bg-amber-50 text-amber-600"     onClick={() => navigate('/eventos')} />
             </div>
           </div>
         </div>

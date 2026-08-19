@@ -340,9 +340,24 @@ export default function Tours() {
   const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
 
   const allTours = toursData?.tours || toursData || []
+  // Etiqueta vinda dos atalhos da home ("Pôr do sol", "Lagoas"): sem isto o
+  // atalho abriria a lista inteira e o cliente teria de procurar na mão.
+  // Casa na etiqueta OU no nome/descrição, porque nem todo passeio tem tag.
+  const tagAtalho = locationState?.tag || null
+  const casaTag = (t) => {
+    if (!tagAtalho) return true
+    const alvo = tagAtalho.toLowerCase()
+    const tags = Array.isArray(t.tags) ? t.tags.map((x) => String(x).toLowerCase()) : []
+    return tags.some((x) => x.includes(alvo))
+      || String(t.name || '').toLowerCase().includes(alvo)
+      || String(t.short_description || '').toLowerCase().includes(alvo)
+  }
+  const porTag = allTours.filter(casaTag)
+  // Se a etiqueta não casar com nada, mostra tudo em vez de uma tela vazia.
+  const base = (tagAtalho && porTag.length === 0) ? allTours : porTag
   const tours = searchTerm.trim()
-    ? allTours.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    : allTours
+    ? base.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    : base
   // Tradicionais entram no carrinho/combo (fluxo desta tela); exclusivos são
   // venda direta (carrossel próprio → tela de detalhes, sem carrinho).
   const tradTours      = tours.filter((t) => !t.is_exclusive)
