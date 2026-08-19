@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { format, startOfDay, addDays, isToday, isTomorrow, parseISO } from 'date-fns'
+import { format, startOfDay, isToday, isTomorrow, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   Star, Heart, ChevronDown, ChevronRight, ArrowRight, MapPin,
-  Car, Bus, Flame, Sun, Sunrise, Sunset, Waves, Percent, Ticket,
-  UtensilsCrossed, PartyPopper, Lightbulb, Clock, Plane,
+  Car, Bus, Flame, Sun, Sunset, Waves, Percent, CalendarCheck,
+  UtensilsCrossed, PartyPopper, Lightbulb, Clock,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
@@ -16,14 +16,13 @@ import NotificationBell from '../components/NotificationBell'
 import HomeDesktop from './HomeDesktop'
 
 // ── Home — versão em avaliação ───────────────────────────────────────────────
-// Layout proposto pelo dono, mantido LADO A LADO com a home atual (ver
-// HomeSwitcher). Usa as MESMAS consultas da home atual — com dado falso a
-// comparação não valeria. Desktop segue no HomeDesktop; a proposta é mobile.
+// Layout definido pelo dono por mockup, reproduzido tela a tela. Mantida LADO A
+// LADO com a home atual (ver HomeSwitcher) até a escolha sair. Usa as MESMAS
+// consultas da home atual — com dado falso a comparação não valeria. Desktop
+// segue no HomeDesktop; a proposta é mobile.
 //
-// Ordem da tela, conforme a revisão: topo compacto → Passeios/Transfers →
-// atalhos → o que fazer hoje → ofertas → mais procurados → próxima reserva →
-// descubra. Ofertas subiram para antes dos destaques (antes sumiam atrás da
-// navegação).
+// Ordem da tela, como no mockup: topo → região → chamada → Passeios/Transfers →
+// 4 atalhos → mais procurados → ofertas → próxima reserva → descubra.
 
 const GRADS = [
   'from-orange-400 to-amber-300',
@@ -56,67 +55,131 @@ const fmtDuracao = (h) => {
   return Number.isInteger(n) ? `${n}h` : `${Math.floor(n)}h${String(Math.round((n % 1) * 60)).padStart(2, '0')}`
 }
 
+// ── Ilustrações ─────────────────────────────────────────────────────────────
+// Desenhadas em SVG, não são imagens: o mockup tem coqueiro/duna nos cartões e
+// um sol riscado ao lado do título. Como arquivo seriam mais 4 downloads na
+// abertura da home — em vetor pesam bytes e acompanham a cor do cartão.
+
+function Dunas({ className = '', ...rest }) {
+  return (
+    <svg viewBox="0 0 200 90" className={className} fill="currentColor" aria-hidden="true" {...rest}>
+      <path d="M0 90 C30 62 62 58 92 74 C120 88 150 66 200 58 L200 90 Z" opacity=".5" />
+      <path d="M0 90 C40 78 70 84 108 88 L200 90 Z" opacity=".3" />
+      <path d="M150 90 C150 70 152 56 156 44 L161 45 C157 58 156 72 157 90 Z" />
+      <path d="M159 43 C149 33 137 31 129 35 C139 31 151 35 159 41 Z" />
+      <path d="M159 43 C169 33 181 33 188 38 C179 33 167 35 159 41 Z" />
+      <path d="M159 42 C155 31 147 23 139 21 C149 25 156 33 159 41 Z" />
+      <path d="M159 42 C164 31 173 25 181 23 C171 27 163 34 160 41 Z" />
+    </svg>
+  )
+}
+
+function SolRiscado({ className = '' }) {
+  return (
+    <svg viewBox="0 0 92 58" className={className} fill="none" stroke="currentColor"
+         strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <path d="M25 47a21 21 0 0 1 42 0" />
+      <path d="M9 47h74" />
+      <path d="M46 15V6M27 21l-6-7M65 21l6-7M13 32l-8-4M79 32l8-4" />
+    </svg>
+  )
+}
+
+function BuggyDoodle({ className = '' }) {
+  return (
+    <svg viewBox="0 0 120 74" className={className} aria-hidden="true">
+      <ellipse cx="60" cy="66" rx="54" ry="6" className="fill-orange-100" />
+      <path d="M20 54h82l-7-17H79L69 24H45L35 37H23z" className="fill-orange-400" />
+      <path d="M46 28h22l6 9H40z" className="fill-orange-200" />
+      <circle cx="38" cy="55" r="11" className="fill-gray-800" />
+      <circle cx="38" cy="55" r="4" className="fill-orange-200" />
+      <circle cx="88" cy="55" r="11" className="fill-gray-800" />
+      <circle cx="88" cy="55" r="4" className="fill-orange-200" />
+    </svg>
+  )
+}
+
+// ── Peças da tela ───────────────────────────────────────────────────────────
+
 function CardDestaque({ tour, fav, onFav, onOpen }) {
   const { valor, selo } = precoDe(tour)
-  const nota = Number(tour.rating_average) || null
-  const dur  = fmtDuracao(tour.duration_hours)
-  const tag  = Array.isArray(tour.tags) ? tour.tags[0] : null
+  const nota  = Number(tour.rating_average) || null
+  const avals = Number(tour.rating_count) || null
+  const dur   = fmtDuracao(tour.duration_hours)
+  const tag   = Array.isArray(tour.tags) ? tour.tags[0] : null
 
   return (
     <button
       onClick={onOpen}
-      // 82% da largura: mostra 1 card inteiro + ~20% do próximo, deixando claro
-      // que rola para o lado (antes apareciam pedaços dos dois lados).
-      className="snap-start shrink-0 w-[82%] text-left bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.99] transition-transform"
+      // Largura parcial: o mockup mostra dois cartões inteiros e um pedaço do
+      // terceiro, deixando claro que rola para o lado. O mínimo em px evita que
+      // em telas estreitas o cartão fique menor do que o texto comporta.
+      className="snap-start shrink-0 w-[46%] min-w-[162px] text-left bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.99] transition-transform"
     >
-      <div className={`relative h-[150px] bg-gradient-to-br ${gradOf(tour.id)}`}>
+      <div className={`relative h-[104px] bg-gradient-to-br ${gradOf(tour.id)}`}>
         {tour.cover_image_url && (
           <img src={tour.cover_image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
         )}
         {tour.is_featured && (
-          <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-1 bg-brand text-white text-[10px] font-bold px-2 py-1 rounded-full">
-            <Flame size={11} /> MAIS VENDIDO
+          <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-brand text-white text-[9px] font-bold px-2 py-1 rounded-full">
+            <Flame size={10} /> MAIS VENDIDO
           </span>
         )}
         <span
           onClick={(e) => { e.stopPropagation(); onFav?.() }}
-          className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center"
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 flex items-center justify-center"
         >
-          <Heart size={15} className={fav ? 'fill-brand text-brand' : 'text-gray-400'} />
+          <Heart size={13} className={fav ? 'fill-brand text-brand' : 'text-gray-400'} />
         </span>
       </div>
 
-      <div className="p-3.5">
-        <p className="text-[16px] font-extrabold text-gray-900 leading-snug line-clamp-1">{tour.name}</p>
-
-        {/* Linha de confiança: nota + duração + etiqueta */}
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          {nota && (
-            <span className="flex items-center gap-1 text-[12px] font-bold text-gray-800">
-              <Star size={12} className="fill-amber-400 text-amber-400" />
-              {nota.toFixed(1).replace('.', ',')}
-            </span>
-          )}
-          {nota && dur && <span className="text-gray-300 text-[11px]">•</span>}
+      <div className="p-2.5">
+        {/* Linha de confiança: nota + nº de avaliações à esquerda, duração à direita */}
+        <div className="flex items-center justify-between gap-1">
+          <span className="flex items-center gap-1 min-w-0">
+            {nota ? (
+              <>
+                <Star size={11} className="fill-amber-400 text-amber-400 shrink-0" />
+                <span className="text-[11.5px] font-bold text-gray-900">{nota.toFixed(1).replace('.', ',')}</span>
+                {avals ? <span className="text-[10.5px] text-gray-400">({avals})</span> : null}
+              </>
+            ) : (
+              <span className="text-[10.5px] text-gray-400">Novo</span>
+            )}
+          </span>
           {dur && (
-            <span className="flex items-center gap-1 text-[12px] text-gray-500">
-              <Clock size={11} /> {dur}
+            <span className="flex items-center gap-0.5 text-[10.5px] text-gray-500 shrink-0">
+              <Clock size={10} /> {dur}
             </span>
-          )}
-          {tag && (
-            <span className="text-[10px] font-semibold text-brand bg-brand/10 px-2 py-0.5 rounded-full">{tag}</span>
           )}
         </div>
 
-        <div className="flex items-end justify-between mt-2.5">
-          <div>
-            {valor && <p className="text-[10px] text-gray-400 leading-none">A partir de</p>}
-            <p className="text-[19px] font-extrabold text-gray-900 leading-tight mt-0.5">
-              {valor || 'Sob consulta'}
-            </p>
-          </div>
+        <div className="flex items-start gap-1 mt-1.5">
+          <p className="text-[12.5px] font-extrabold text-gray-900 leading-tight truncate flex-1 min-w-0">
+            {tour.name}
+          </p>
+          {/* Etiqueta miúda de propósito: no celular o cartão tem ~185pt e, com
+              ela maior, sobrava tão pouco que o nome virava "Extrem…". Nome
+              inteiro vale mais do que etiqueta grande. Sem max-w: a largura
+              percentual reservava espaço mesmo quando a etiqueta era curta. */}
+          {tag && (
+            <span className="shrink-0 text-[8px] font-bold uppercase text-brand border border-brand/40 px-1 py-[3px] rounded-full leading-none">
+              {tag}
+            </span>
+          )}
+        </div>
+
+        {tour.short_description && (
+          <p className="text-[11px] text-gray-500 leading-snug mt-1 line-clamp-2">{tour.short_description}</p>
+        )}
+
+        <p className="text-[9.5px] text-gray-400 leading-none mt-2">{valor ? 'A partir de' : ' '}</p>
+        <div className="flex items-center justify-between gap-1 mt-1">
+          <p className="text-[16px] font-extrabold text-gray-900 leading-none">{valor || 'Sob consulta'}</p>
           {selo && (
-            <span className="text-[11px] font-semibold text-gray-500 mb-0.5">{selo}</span>
+            <span className="shrink-0 text-[9px] font-bold text-brand bg-brand/10 px-1.5 py-1 rounded-full leading-none">
+              {selo}
+            </span>
           )}
         </div>
       </div>
@@ -124,30 +187,48 @@ function CardDestaque({ tour, fav, onFav, onOpen }) {
   )
 }
 
-// Chip horizontal: ocupa uma linha só e rola. Cartões quadrados empilhados
-// gastavam altura demais para o que entregam.
-function Chip({ icon: Icon, label, onClick, cor = 'text-brand' }) {
+// Atalho quadrado do mockup: quatro numa linha, ícone em cima e legenda embaixo.
+function Atalho({ icon: Icon, label, cor, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200/80 rounded-full pl-2.5 pr-3.5 py-2 active:bg-gray-50 transition-colors"
+      className="bg-white rounded-2xl shadow-sm h-[68px] flex flex-col items-center justify-center gap-1.5 px-0.5 active:scale-95 transition-transform"
     >
-      <Icon size={14} className={cor} />
-      <span className="text-[12.5px] font-semibold text-gray-700 leading-none whitespace-nowrap">{label}</span>
+      <Icon size={21} className={cor} strokeWidth={2} />
+      {/* Sem truncate: em tela estreita "Mais vendidos" virava "Mais vendid…". */}
+      <span className="text-[9.5px] font-semibold text-gray-700 leading-tight text-center">
+        {label}
+      </span>
     </button>
   )
 }
 
-// Conteúdo secundário: cor suave própria para não competir com os cartões de
-// Passeios/Transfers, mas sem virar mais uma caixa branca no meio de tantas.
-function TileDescubra({ icon: Icon, label, onClick, tom }) {
+// Quadro do "Descubra": foto de fundo com véu escuro, ícone em bolha branca no
+// alto e legenda embaixo. A foto é opcional — enquanto não houver arquivo, o
+// degradê fica no lugar dela (o <img> se esconde sozinho se não carregar).
+function TileDescubra({ icon: Icon, label, foto, tom, cor, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`${tom} rounded-2xl py-3 px-2 flex flex-col items-center gap-1.5 active:scale-95 transition-transform`}
+      className="relative h-[74px] rounded-2xl overflow-hidden active:scale-95 transition-transform"
     >
-      <Icon size={17} strokeWidth={2} />
-      <span className="text-[10.5px] font-semibold leading-none text-center">{label}</span>
+      <div className={`absolute inset-0 bg-gradient-to-br ${tom}`} />
+      {foto && (
+        <img
+          src={foto}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 w-full h-full object-cover"
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/5" />
+      <span className="absolute top-1.5 left-1.5 w-[26px] h-[26px] rounded-full bg-white/95 flex items-center justify-center">
+        <Icon size={13} className={cor} strokeWidth={2.2} />
+      </span>
+      <span className="absolute bottom-1.5 left-1.5 right-1 text-white text-[9.5px] font-bold leading-tight text-left">
+        {label}
+      </span>
     </button>
   )
 }
@@ -197,6 +278,7 @@ export default function HomeV2() {
   }, [isLoading])
 
   const nomeRegiao = region?.name || 'Jericoacoara'
+  const primeiroNome = nomeRegiao.split(' ')[0]
   const temOferta  = !!(settings?.home_banner_title || settings?.home_banner_subtitle)
 
   // "Amanhã • Litoral Leste • 09:00" — informação útil no lugar de texto morto.
@@ -215,135 +297,119 @@ export default function HomeV2() {
     return [quando, nome, hora].filter(Boolean).join(' • ')
   })()
 
-  // Data em ISO para os atalhos de "hoje / amanhã".
-  const isoHoje    = format(new Date(), 'yyyy-MM-dd')
-  const isoAmanha  = format(addDays(new Date(), 1), 'yyyy-MM-dd')
+  const base = import.meta.env.BASE_URL
 
   return (
     <>
       <div className="hidden lg:block"><HomeDesktop /></div>
 
-      <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
-        {/* ── Topo compacto ───────────────────────────────────
-            Logo + sino + região em ~35% menos altura que antes: os passeios
-            precisam aparecer cedo na tela. */}
-        <div className="bg-white px-4 pt-3.5 pb-3">
+      <div className="lg:hidden min-h-screen bg-[#F7F8FA] pb-28">
+        {/* ── Topo ───────────────────────────────────────────── */}
+        <div className="px-4 pt-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
-              {/* Espaçamento menor entre letras: com tracking largo o "I" some
-                  no meio e a marca parecia ler "TURVA". */}
-              <p className="font-giro font-bold text-[18px] text-gray-900 leading-none tracking-[0.02em]">TURIVA</p>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <img src={base + 'logo-icon.jpeg'} alt="" className="w-11 h-11 rounded-2xl shrink-0" />
+              <div className="min-w-0">
+                {/* Espaçamento menor entre letras: com tracking largo o "I" some
+                    no meio e a marca parecia ler "TURVA". */}
+                <p className="font-giro font-bold text-[20px] text-gray-900 leading-none tracking-[0.02em]">TURIVA</p>
+                <p className="text-[12px] text-gray-500 leading-none mt-1">Passeios &amp; Transfers</p>
+              </div>
             </div>
             <NotificationBell />
           </div>
 
+          {/* Região como pastilha: no mockup ela é um botão com corpo próprio,
+              não um texto solto — é o filtro que manda em tudo abaixo. */}
           <button
             onClick={openPicker}
-            className="mt-2.5 flex items-center gap-1.5 active:opacity-70"
+            className="mt-3.5 inline-flex items-center gap-2 bg-white rounded-full pl-3 pr-3.5 py-2.5 shadow-sm border border-gray-100 active:bg-gray-50 transition-colors max-w-full"
           >
-            <MapPin size={14} className="text-brand shrink-0" />
-            <span className="text-[13px] text-gray-500">Saindo de:</span>
-            <span className="text-[13px] font-bold text-gray-900 truncate max-w-[45vw]">{nomeRegiao}</span>
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            <MapPin size={15} className="text-brand shrink-0" />
+            <span className="text-[13.5px] text-gray-500 shrink-0">Saindo de:</span>
+            <span className="text-[13.5px] font-bold text-gray-900 truncate">{nomeRegiao}</span>
+            <ChevronDown size={15} className="text-gray-400 shrink-0" />
           </button>
         </div>
 
-        <div className="px-4 pt-4 space-y-5">
-          {/* Chamada enxuta — uma linha só. A frase "passeios e transfers com
-              operadores locais" saiu: os dois cartões logo abaixo já dizem
-              isso, e em tela de celular cada linha aqui empurra o conteúdo. */}
-          <h1 className="text-[21px] font-extrabold text-gray-900 leading-tight">
-            Vamos explorar {nomeRegiao.split(' ')[0]}? 🌴
-          </h1>
+        <div className="px-4 pt-5 space-y-5">
+          {/* ── Chamada ──────────────────────────────────────── */}
+          {/* O recuo à direita é só no título — o sol fica na altura dele. Na
+              linha de apoio o recuo faria a frase quebrar em duas. */}
+          <div className="relative">
+            <h1 className="text-[20px] font-extrabold text-gray-900 leading-tight pr-[68px]">
+              Vamos explorar {primeiroNome}? 🌴
+            </h1>
+            <p className="text-[13px] text-gray-500 mt-1 leading-snug">
+              Encontre passeios e transfers com operadores locais.
+            </p>
+            <SolRiscado className="absolute -top-1 right-0 w-[58px] text-brand/70" />
+          </div>
 
           {/* ── 1ª prioridade: Passeios / Transfers ─────────── */}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => navigate('/passeios')}
-              className="relative h-[118px] rounded-2xl overflow-hidden bg-gradient-to-br from-brand to-orange-400 p-3.5 text-left active:scale-[0.98] transition-transform"
+              className="relative h-[132px] rounded-3xl overflow-hidden bg-gradient-to-br from-brand to-orange-400 p-3.5 text-left active:scale-[0.98] transition-transform"
             >
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                <Car size={19} className="text-white" />
+              {/* A silhueta fica presa à metade de baixo: subindo mais, o branco
+                  passa por trás do título e o texto perde contraste. */}
+              <Dunas className="absolute bottom-0 right-0 w-[85%] h-[55%] text-white/20" preserveAspectRatio="none" />
+              <div className="relative">
+                <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center">
+                  <Car size={21} className="text-white" />
+                </div>
+                <p className="text-white text-[18px] font-extrabold mt-3 leading-none">Passeios</p>
+                <p className="text-white/85 text-[11px] mt-1.5 leading-snug pr-8">Buggy, lagoas, pôr do sol</p>
               </div>
-              <p className="text-white text-[16px] font-extrabold mt-2.5 leading-none">Passeios</p>
-              <p className="text-white/85 text-[10.5px] mt-1 leading-snug">Buggy, lagoas, pôr do sol</p>
-              <span className="absolute bottom-3 right-3 w-6 h-6 rounded-full bg-white flex items-center justify-center">
-                <ChevronRight size={13} className="text-brand" />
+              <span className="absolute bottom-3.5 right-3.5 w-7 h-7 rounded-full bg-white flex items-center justify-center">
+                <ChevronRight size={15} className="text-brand" strokeWidth={2.5} />
               </span>
             </button>
 
             <button
               onClick={() => navigate('/transfers')}
-              className="relative h-[118px] rounded-2xl overflow-hidden bg-gradient-to-br from-sky-700 to-blue-500 p-3.5 text-left active:scale-[0.98] transition-transform"
+              className="relative h-[132px] rounded-3xl overflow-hidden bg-gradient-to-br from-sky-800 to-blue-500 p-3.5 text-left active:scale-[0.98] transition-transform"
             >
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                <Bus size={19} className="text-white" />
+              <Dunas className="absolute bottom-0 right-0 w-[85%] h-[55%] text-white/15" preserveAspectRatio="none" />
+              <div className="relative">
+                <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center">
+                  <Bus size={21} className="text-white" />
+                </div>
+                <p className="text-white text-[18px] font-extrabold mt-3 leading-none">Transfers</p>
+                <p className="text-white/85 text-[11px] mt-1.5 leading-snug pr-8">Aeroporto, hotéis e rotas</p>
               </div>
-              <p className="text-white text-[16px] font-extrabold mt-2.5 leading-none">Transfers</p>
-              <p className="text-white/85 text-[10.5px] mt-1 leading-snug">Aeroporto, hotéis e rotas</p>
-              <span className="absolute bottom-3 right-3 w-6 h-6 rounded-full bg-white flex items-center justify-center">
-                <ChevronRight size={13} className="text-sky-700" />
+              <span className="absolute bottom-3.5 right-3.5 w-7 h-7 rounded-full bg-white flex items-center justify-center">
+                <ChevronRight size={15} className="text-sky-700" strokeWidth={2.5} />
               </span>
             </button>
           </div>
 
-          {/* ── Filtros rápidos ──────────────────────────────
-              Uma fileira só. Antes eram DUAS ("Mais vendidos/Para hoje/Pôr do
-              sol/Lagoas" + "Passeio hoje/amanhã/Transfer aeroporto") — com
-              "Para hoje" e "Passeio hoje" fazendo a MESMA coisa. Sete botões
-              empilhados comiam justamente a altura que economizamos no topo.
-              "Mais vendidos" também saiu: ia para /passeios sem filtro nenhum,
-              igual ao cartão Passeios e ao "Ver todos" — e o carrossel logo
-              abaixo já É a lista dos mais procurados. */}
-          <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" style={{ scrollbarWidth: 'none' }}>
-            <Chip icon={Sun}    cor="text-amber-500"  label="Hoje"
-                  onClick={() => navigate('/passeios', { state: { dateIso: isoHoje } })} />
-            <Chip icon={Sunrise} cor="text-rose-500"  label="Amanhã"
-                  onClick={() => navigate('/passeios', { state: { dateIso: isoAmanha } })} />
-            <Chip icon={Sunset} cor="text-orange-500" label="Pôr do sol"
-                  onClick={() => navigate('/passeios', { state: { tag: 'pôr do sol' } })} />
-            <Chip icon={Waves}  cor="text-sky-500"    label="Lagoas"
-                  onClick={() => navigate('/passeios', { state: { tag: 'lagoa' } })} />
-            <Chip icon={Plane}  cor="text-indigo-500" label="Aeroporto"
-                  onClick={() => navigate('/transfers')} />
+          {/* ── Atalhos ──────────────────────────────────────── */}
+          <div className="grid grid-cols-4 gap-2.5">
+            <Atalho icon={Flame}  cor="text-brand"        label="Mais vendidos"
+                    onClick={() => navigate('/passeios', { state: { featured: true } })} />
+            <Atalho icon={Sun}    cor="text-orange-400"   label="Para hoje"
+                    onClick={() => navigate('/passeios', { state: { dateIso: hoje } })} />
+            <Atalho icon={Sunset} cor="text-orange-500"   label="Pôr do sol"
+                    onClick={() => navigate('/passeios', { state: { tag: 'pôr do sol' } })} />
+            <Atalho icon={Waves}  cor="text-sky-500"      label="Lagoas"
+                    onClick={() => navigate('/passeios', { state: { tag: 'lagoa' } })} />
           </div>
-
-          {/* ── Ofertas: subiram para antes dos destaques ───── */}
-          {temOferta && (
-            <button
-              onClick={() => navigate('/passeios')}
-              className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand to-orange-400 p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
-            >
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <Percent size={18} className="text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-extrabold text-[14px] leading-snug">
-                  {settings.home_banner_title || 'Ofertas para você'}
-                </p>
-                {settings.home_banner_subtitle && (
-                  <p className="text-white/85 text-[11.5px] leading-snug mt-0.5 line-clamp-1">
-                    {settings.home_banner_subtitle}
-                  </p>
-                )}
-              </div>
-              <span className="shrink-0 bg-white text-brand text-[11.5px] font-bold px-3 py-1.5 rounded-lg">Ver</span>
-            </button>
-          )}
 
           {/* ── 2ª prioridade: Mais procurados ──────────────── */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
-              <h2 className="text-[17px] font-extrabold text-gray-900">Mais procurados</h2>
-              <button onClick={() => navigate('/passeios')} className="flex items-center gap-1 text-[12.5px] font-bold text-brand">
-                Ver todos <ArrowRight size={13} />
+              <h2 className="text-[18px] font-extrabold text-gray-900">Mais procurados</h2>
+              <button onClick={() => navigate('/passeios')} className="flex items-center gap-1 text-[13px] font-bold text-brand">
+                Ver todos <ArrowRight size={14} />
               </button>
             </div>
 
             {isLoading ? (
               <div className="flex gap-3 overflow-hidden">
-                <div className="shrink-0 w-[82%] h-[290px] bg-white rounded-2xl shadow-sm animate-pulse" />
+                <div className="shrink-0 w-[46%] min-w-[162px] h-[250px] bg-white rounded-2xl shadow-sm animate-pulse" />
+                <div className="shrink-0 w-[46%] min-w-[162px] h-[250px] bg-white rounded-2xl shadow-sm animate-pulse" />
               </div>
             ) : destaques.length === 0 ? (
               <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
@@ -369,38 +435,73 @@ export default function HomeV2() {
             )}
           </div>
 
+          {/* ── Ofertas ──────────────────────────────────────── */}
+          {temOferta && (
+            <button
+              onClick={() => navigate('/passeios')}
+              className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand to-orange-400 p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+            >
+              <Dunas className="absolute bottom-0 right-0 w-[45%] text-white/15" />
+              <div className="relative w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <Percent size={19} className="text-white" />
+              </div>
+              <div className="relative flex-1 min-w-0">
+                <p className="text-white font-extrabold text-[14.5px] leading-snug">
+                  {settings.home_banner_title || 'Ofertas para você'}
+                </p>
+                {settings.home_banner_subtitle && (
+                  <p className="text-white/85 text-[11.5px] leading-snug mt-0.5 line-clamp-2">
+                    {settings.home_banner_subtitle}
+                  </p>
+                )}
+              </div>
+              <span className="relative shrink-0 bg-white text-brand text-[12px] font-bold px-3.5 py-2 rounded-full">
+                Ver ofertas
+              </span>
+            </button>
+          )}
+
           {/* ── Contextual: próxima reserva ─────────────────── */}
           <button
             onClick={() => navigate(user ? (proxima ? '/minhas-reservas' : '/passeios') : '/login')}
-            className="w-full bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+            className="w-full relative overflow-hidden bg-white rounded-2xl p-3.5 shadow-sm flex items-start gap-3 text-left active:scale-[0.99] transition-transform"
           >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${proxima ? 'bg-emerald-100' : 'bg-violet-100'}`}>
-              <Ticket size={18} className={proxima ? 'text-emerald-600' : 'text-violet-600'} />
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${proxima ? 'bg-emerald-100' : 'bg-violet-100'}`}>
+              <CalendarCheck size={19} className={proxima ? 'text-emerald-600' : 'text-violet-600'} />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[13.5px] font-bold text-gray-900 leading-snug">
-                {proxima ? 'Sua próxima reserva' : 'Minhas reservas'}
+            <div className="flex-1 min-w-0 pr-16">
+              <p className="text-[14px] font-bold text-gray-900 leading-snug">
+                {proxima ? 'Sua próxima reserva' : 'Sua próxima reserva'}
               </p>
-              <p className="text-[12px] text-gray-500 mt-0.5 truncate">
+              <p className="text-[12.5px] text-gray-500 mt-0.5 truncate">
                 {!user ? 'Entre para ver suas reservas'
                   : proxima ? resumoReserva
-                  : 'Você ainda não reservou'}
+                  : 'Você ainda não tem reservas.'}
               </p>
+              <span className="inline-flex items-center gap-1 text-[13px] font-bold text-brand mt-1.5">
+                {!user ? 'Entrar' : proxima ? 'Ver detalhes' : 'Encontre seu primeiro passeio'}
+                <ArrowRight size={14} />
+              </span>
             </div>
-            <span className="shrink-0 flex items-center gap-1 text-[12.5px] font-bold text-brand">
-              {!user ? 'Entrar' : proxima ? 'Ver' : 'Ver passeios'}
-              <ArrowRight size={13} />
-            </span>
+            <BuggyDoodle className="absolute bottom-1 right-2 w-[74px] opacity-90" />
           </button>
 
           {/* ── Conteúdo secundário: Descubra ───────────────── */}
           <div>
-            <h2 className="text-[15px] font-bold text-gray-800 mb-2.5">Descubra {nomeRegiao.split(' ')[0]}</h2>
-            <div className="grid grid-cols-4 gap-2">
-              <TileDescubra icon={UtensilsCrossed} label="Restaurantes" tom="bg-rose-50 text-rose-600"       onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={PartyPopper}     label="Eventos"      tom="bg-violet-50 text-violet-600"   onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={MapPin}          label="Lugares"      tom="bg-emerald-50 text-emerald-600" onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={Lightbulb}       label="Dicas"        tom="bg-amber-50 text-amber-600"     onClick={() => navigate('/eventos')} />
+            <h2 className="text-[18px] font-extrabold text-gray-900 mb-2.5">Descubra {primeiroNome}</h2>
+            <div className="grid grid-cols-4 gap-2.5">
+              <TileDescubra icon={UtensilsCrossed} label="Restaurantes" cor="text-rose-500"
+                            tom="from-rose-400 to-orange-300"    foto={base + 'descubra/restaurantes.jpg'}
+                            onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={PartyPopper} label="Eventos" cor="text-violet-500"
+                            tom="from-violet-500 to-fuchsia-400" foto={base + 'descubra/eventos.jpg'}
+                            onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={MapPin} label="Lugares" cor="text-emerald-500"
+                            tom="from-emerald-500 to-teal-300"   foto={base + 'descubra/lugares.jpg'}
+                            onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={Lightbulb} label="Dicas" cor="text-amber-500"
+                            tom="from-amber-400 to-yellow-300"   foto={base + 'descubra/dicas.jpg'}
+                            onClick={() => navigate('/eventos')} />
             </div>
           </div>
         </div>

@@ -354,7 +354,13 @@ export default function Tours() {
   }
   const porTag = allTours.filter(casaTag)
   // Se a etiqueta não casar com nada, mostra tudo em vez de uma tela vazia.
-  const base = (tagAtalho && porTag.length === 0) ? allTours : porTag
+  let base = (tagAtalho && porTag.length === 0) ? allTours : porTag
+  // Atalho "Mais vendidos" da home: só os destacados. Mesma regra de segurança
+  // — se nenhum estiver marcado, a lista inteira em vez de tela vazia.
+  if (locationState?.featured) {
+    const destacados = base.filter((t) => t.is_featured)
+    if (destacados.length > 0) base = destacados
+  }
   const tours = searchTerm.trim()
     ? base.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
     : base
