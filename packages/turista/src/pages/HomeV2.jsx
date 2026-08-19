@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { format, startOfDay } from 'date-fns'
+import { format, startOfDay, addDays, isToday, isTomorrow, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import {
   Star, Heart, ChevronDown, ChevronRight, ArrowRight, MapPin,
-  Car, Bus, Flame, Sun, Sunset, Waves, Percent, CalendarCheck,
-  UtensilsCrossed, PartyPopper, Lightbulb, Clock,
+  Car, Bus, Flame, Sun, Sunset, Waves, Percent, Ticket,
+  UtensilsCrossed, PartyPopper, Lightbulb, Clock, Plane,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
@@ -15,10 +16,14 @@ import NotificationBell from '../components/NotificationBell'
 import HomeDesktop from './HomeDesktop'
 
 // ── Home — versão em avaliação ───────────────────────────────────────────────
-// Layout novo proposto pelo dono, mantido LADO A LADO com a home atual para
-// comparação (ver components/HomeVersionSwitch.jsx). Usa exatamente as MESMAS
-// consultas da home atual — nada de dado falso, senão a comparação não vale.
-// Só o desktop continua reaproveitando HomeDesktop; a proposta é de tela mobile.
+// Layout proposto pelo dono, mantido LADO A LADO com a home atual (ver
+// HomeSwitcher). Usa as MESMAS consultas da home atual — com dado falso a
+// comparação não valeria. Desktop segue no HomeDesktop; a proposta é mobile.
+//
+// Ordem da tela, conforme a revisão: topo compacto → Passeios/Transfers →
+// atalhos → o que fazer hoje → ofertas → mais procurados → próxima reserva →
+// descubra. Ofertas subiram para antes dos destaques (antes sumiam atrás da
+// navegação).
 
 const GRADS = [
   'from-orange-400 to-amber-300',
@@ -34,27 +39,37 @@ const gradOf = (id = '') => {
 
 const fmtPreco = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 
-// Preço "a partir de": compartilhado é por pessoa; privativo vem do veículo.
+// Preço na home: é a principal dúvida antes do clique. Compartilhado é por
+// pessoa; privativo usa o menor preço de veículo (from_price, vindo da API).
 function precoDe(tour) {
   if (tour.shared_price_per_person) {
     return { valor: fmtPreco(tour.shared_price_per_person), selo: 'por pessoa' }
   }
   if (tour.from_price) return { valor: fmtPreco(tour.from_price), selo: 'privativo' }
-  return { valor: null, selo: tour.is_private_enabled === false ? 'por pessoa' : 'privativo' }
+  return { valor: null, selo: null }
 }
 
-function CardServico({ tour, fav, onFav, onOpen }) {
+const fmtDuracao = (h) => {
+  const n = Number(h)
+  if (!n) return null
+  if (n < 1) return `${Math.round(n * 60)}min`
+  return Number.isInteger(n) ? `${n}h` : `${Math.floor(n)}h${String(Math.round((n % 1) * 60)).padStart(2, '0')}`
+}
+
+function CardDestaque({ tour, fav, onFav, onOpen }) {
   const { valor, selo } = precoDe(tour)
   const nota = Number(tour.rating_average) || null
-  const avaliacoes = Number(tour.rating_count) || 0
-  const horas = tour.duration_hours ? `${Number(tour.duration_hours)}h` : null
+  const dur  = fmtDuracao(tour.duration_hours)
+  const tag  = Array.isArray(tour.tags) ? tour.tags[0] : null
 
   return (
     <button
       onClick={onOpen}
-      className="shrink-0 w-[248px] text-left bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.99] transition-transform"
+      // 82% da largura: mostra 1 card inteiro + ~20% do próximo, deixando claro
+      // que rola para o lado (antes apareciam pedaços dos dois lados).
+      className="snap-start shrink-0 w-[82%] text-left bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.99] transition-transform"
     >
-      <div className={`relative h-[132px] bg-gradient-to-br ${gradOf(tour.id)}`}>
+      <div className={`relative h-[150px] bg-gradient-to-br ${gradOf(tour.id)}`}>
         {tour.cover_image_url && (
           <img src={tour.cover_image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
         )}
@@ -71,35 +86,38 @@ function CardServico({ tour, fav, onFav, onOpen }) {
         </span>
       </div>
 
-      <div className="p-3">
-        <div className="flex items-center justify-between mb-1">
-          {nota ? (
-            <span className="flex items-center gap-1 text-[12px] font-semibold text-gray-700">
+      <div className="p-3.5">
+        <p className="text-[16px] font-extrabold text-gray-900 leading-snug line-clamp-1">{tour.name}</p>
+
+        {/* Linha de confiança: nota + duração + etiqueta */}
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          {nota && (
+            <span className="flex items-center gap-1 text-[12px] font-bold text-gray-800">
               <Star size={12} className="fill-amber-400 text-amber-400" />
-              {nota.toFixed(1)}
-              {avaliacoes > 0 && <span className="text-gray-400 font-normal">({avaliacoes})</span>}
-            </span>
-          ) : <span />}
-          {horas && (
-            <span className="flex items-center gap-1 text-[11px] text-gray-400">
-              <Clock size={11} /> {horas}
+              {nota.toFixed(1).replace('.', ',')}
             </span>
           )}
+          {nota && dur && <span className="text-gray-300 text-[11px]">•</span>}
+          {dur && (
+            <span className="flex items-center gap-1 text-[12px] text-gray-500">
+              <Clock size={11} /> {dur}
+            </span>
+          )}
+          {tag && (
+            <span className="text-[10px] font-semibold text-brand bg-brand/10 px-2 py-0.5 rounded-full">{tag}</span>
+          )}
         </div>
-
-        <p className="text-[15px] font-bold text-gray-900 leading-snug line-clamp-1">{tour.name}</p>
-        {tour.short_description && (
-          <p className="text-[12px] text-gray-500 leading-snug mt-0.5 line-clamp-2">{tour.short_description}</p>
-        )}
 
         <div className="flex items-end justify-between mt-2.5">
           <div>
             {valor && <p className="text-[10px] text-gray-400 leading-none">A partir de</p>}
-            <p className="text-[17px] font-extrabold text-gray-900 leading-tight mt-0.5">
+            <p className="text-[19px] font-extrabold text-gray-900 leading-tight mt-0.5">
               {valor || 'Sob consulta'}
             </p>
           </div>
-          <span className="text-[10px] font-semibold text-brand bg-brand/10 px-2 py-1 rounded-full">{selo}</span>
+          {selo && (
+            <span className="text-[11px] font-semibold text-gray-500 mb-0.5">{selo}</span>
+          )}
         </div>
       </div>
     </button>
@@ -110,10 +128,10 @@ function Atalho({ icon: Icon, label, onClick, cor = 'text-brand' }) {
   return (
     <button
       onClick={onClick}
-      className="flex-1 min-w-[78px] bg-white rounded-2xl py-3.5 px-2 shadow-sm flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+      className="flex-1 min-w-0 bg-white rounded-2xl py-3 px-1.5 shadow-sm flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
     >
-      <Icon size={22} className={cor} />
-      <span className="text-[11px] font-semibold text-gray-700 leading-none">{label}</span>
+      <Icon size={20} className={cor} />
+      <span className="text-[10.5px] font-semibold text-gray-700 leading-none text-center">{label}</span>
     </button>
   )
 }
@@ -122,13 +140,12 @@ function TileDescubra({ icon: Icon, label, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="relative h-[92px] rounded-2xl overflow-hidden bg-gradient-to-br from-gray-700 to-gray-900 active:scale-[0.98] transition-transform"
+      className="bg-white rounded-2xl py-3.5 px-2 shadow-sm flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
     >
-      <div className="absolute inset-0 bg-black/25" />
-      <div className="absolute top-2.5 left-2.5 w-8 h-8 rounded-full bg-white/95 flex items-center justify-center">
-        <Icon size={15} className="text-brand" />
+      <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center">
+        <Icon size={16} className="text-brand" />
       </div>
-      <span className="absolute bottom-2.5 left-2.5 text-white text-[13px] font-bold">{label}</span>
+      <span className="text-[11px] font-semibold text-gray-700 leading-none text-center">{label}</span>
     </button>
   )
 }
@@ -143,7 +160,6 @@ export default function HomeV2() {
   const coarseLat = userCoords?.lat != null ? Math.round(userCoords.lat * 100) / 100 : null
   const coarseLon = userCoords?.lon != null ? Math.round(userCoords.lon * 100) / 100 : null
 
-  // MESMAS consultas da home atual — a comparação precisa ser justa.
   const { data: toursData, isLoading } = useQuery({
     queryKey: ['tours', 'home', region?.id, coarseLat, coarseLon],
     queryFn:  () => api.getTours({ limit: 12, ...geo }),
@@ -166,11 +182,11 @@ export default function HomeV2() {
   })
   const hoje = format(startOfDay(new Date()), 'yyyy-MM-dd')
   const reservas = Array.isArray(myBookingsRaw) ? myBookingsRaw : (myBookingsRaw?.data || [])
-  const proximas = reservas.filter(
-    (b) => (b.service_date || '') >= hoje && b.status_commercial !== 'cancelled',
-  )
+  // A mais próxima no tempo — é a que interessa mostrar.
+  const proxima = reservas
+    .filter((b) => (b.service_date || '') >= hoje && b.status_commercial !== 'cancelled')
+    .sort((a, b) => (a.service_date || '').localeCompare(b.service_date || ''))[0] || null
 
-  // Cold start do Render: avisa que o servidor está acordando.
   const [lento, setLento] = useState(false)
   useEffect(() => {
     if (!isLoading) { setLento(false); return }
@@ -179,102 +195,168 @@ export default function HomeV2() {
   }, [isLoading])
 
   const nomeRegiao = region?.name || 'Jericoacoara'
+  const temOferta  = !!(settings?.home_banner_title || settings?.home_banner_subtitle)
+
+  // "Amanhã • Litoral Leste • 09:00" — informação útil no lugar de texto morto.
+  const resumoReserva = (() => {
+    if (!proxima) return null
+    let quando = ''
+    try {
+      const d = parseISO(`${proxima.service_date}T12:00:00`)
+      quando = isToday(d) ? 'Hoje' : isTomorrow(d) ? 'Amanhã'
+             : format(d, "d 'de' MMM", { locale: ptBR })
+    } catch { quando = proxima.service_date || '' }
+    const nome = proxima.service_name
+      || [proxima.origin_text, proxima.destination_text].filter(Boolean).join(' → ')
+      || (proxima.service_type === 'transfer' ? 'Translado' : 'Passeio')
+    const hora = proxima.service_time ? proxima.service_time.slice(0, 5) : null
+    return [quando, nome, hora].filter(Boolean).join(' • ')
+  })()
+
+  // Data em ISO para os atalhos de "hoje / amanhã".
+  const isoHoje    = format(new Date(), 'yyyy-MM-dd')
+  const isoAmanha  = format(addDays(new Date(), 1), 'yyyy-MM-dd')
 
   return (
     <>
-      {/* Desktop continua na tela atual — a proposta é de mobile */}
       <div className="hidden lg:block"><HomeDesktop /></div>
 
       <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
-        {/* ── Cabeçalho ───────────────────────────────────────── */}
-        <div className="bg-white px-4 pt-5 pb-4">
+        {/* ── Topo compacto ───────────────────────────────────
+            Logo + sino + região em ~35% menos altura que antes: os passeios
+            precisam aparecer cedo na tela. */}
+        <div className="bg-white px-4 pt-3.5 pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-11 h-11 rounded-2xl shrink-0" />
-              <div>
-                <p className="font-giro font-bold text-[19px] text-gray-900 leading-tight tracking-[0.08em]">TURIVA</p>
-                <p className="text-[12px] text-gray-400 leading-none mt-0.5">Passeios &amp; Transfers</p>
-              </div>
+            <div className="flex items-center gap-2">
+              <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
+              {/* Espaçamento menor entre letras: com tracking largo o "I" some
+                  no meio e a marca parecia ler "TURVA". */}
+              <p className="font-giro font-bold text-[18px] text-gray-900 leading-none tracking-[0.02em]">TURIVA</p>
             </div>
             <NotificationBell />
           </div>
 
-          {/* Região */}
           <button
             onClick={openPicker}
-            className="mt-4 w-full flex items-center gap-2 bg-white border border-gray-200 rounded-2xl px-4 h-12 shadow-sm active:bg-gray-50"
+            className="mt-2.5 flex items-center gap-1.5 active:opacity-70"
           >
-            <MapPin size={16} className="text-brand shrink-0" />
-            <span className="text-[14px] text-gray-500">Saindo de:</span>
-            <span className="text-[14px] font-bold text-gray-900 truncate">{nomeRegiao}</span>
-            <ChevronDown size={16} className="text-gray-400 ml-auto shrink-0" />
+            <MapPin size={14} className="text-brand shrink-0" />
+            <span className="text-[13px] text-gray-500">Saindo de:</span>
+            <span className="text-[13px] font-bold text-gray-900 truncate max-w-[45vw]">{nomeRegiao}</span>
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
           </button>
         </div>
 
-        <div className="px-4 pt-5 space-y-6">
-          {/* ── Chamada ─────────────────────────────────────── */}
+        <div className="px-4 pt-4 space-y-5">
+          {/* Chamada enxuta */}
           <div>
-            <h1 className="text-[24px] font-extrabold text-gray-900 leading-tight">
-              Vamos explorar {nomeRegiao}? 🌴
+            <h1 className="text-[21px] font-extrabold text-gray-900 leading-tight">
+              Vamos explorar {nomeRegiao.split(' ')[0]}? 🌴
             </h1>
-            <p className="text-[14px] text-gray-500 mt-1 leading-snug">
-              Encontre passeios e transfers com operadores locais.
+            <p className="text-[13px] text-gray-500 mt-0.5 leading-snug">
+              Passeios e transfers com operadores locais.
             </p>
           </div>
 
-          {/* ── Dois caminhos principais ────────────────────── */}
+          {/* ── 1ª prioridade: Passeios / Transfers ─────────── */}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => navigate('/passeios')}
-              className="relative h-[132px] rounded-2xl overflow-hidden bg-gradient-to-br from-brand to-orange-400 p-4 text-left active:scale-[0.98] transition-transform"
+              className="relative h-[118px] rounded-2xl overflow-hidden bg-gradient-to-br from-brand to-orange-400 p-3.5 text-left active:scale-[0.98] transition-transform"
             >
-              <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center">
-                <Car size={20} className="text-white" />
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <Car size={19} className="text-white" />
               </div>
-              <p className="text-white text-[17px] font-extrabold mt-3 leading-none">Passeios</p>
-              <p className="text-white/85 text-[11px] mt-1 leading-snug">Buggy, lagoas, pôr do sol</p>
-              <span className="absolute bottom-3 right-3 w-7 h-7 rounded-full bg-white flex items-center justify-center">
-                <ChevronRight size={15} className="text-brand" />
+              <p className="text-white text-[16px] font-extrabold mt-2.5 leading-none">Passeios</p>
+              <p className="text-white/85 text-[10.5px] mt-1 leading-snug">Buggy, lagoas, pôr do sol</p>
+              <span className="absolute bottom-3 right-3 w-6 h-6 rounded-full bg-white flex items-center justify-center">
+                <ChevronRight size={13} className="text-brand" />
               </span>
             </button>
 
             <button
               onClick={() => navigate('/transfers')}
-              className="relative h-[132px] rounded-2xl overflow-hidden bg-gradient-to-br from-sky-700 to-blue-500 p-4 text-left active:scale-[0.98] transition-transform"
+              className="relative h-[118px] rounded-2xl overflow-hidden bg-gradient-to-br from-sky-700 to-blue-500 p-3.5 text-left active:scale-[0.98] transition-transform"
             >
-              <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center">
-                <Bus size={20} className="text-white" />
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <Bus size={19} className="text-white" />
               </div>
-              <p className="text-white text-[17px] font-extrabold mt-3 leading-none">Transfers</p>
-              <p className="text-white/85 text-[11px] mt-1 leading-snug">Aeroporto, hotéis e rotas</p>
-              <span className="absolute bottom-3 right-3 w-7 h-7 rounded-full bg-white flex items-center justify-center">
-                <ChevronRight size={15} className="text-sky-700" />
+              <p className="text-white text-[16px] font-extrabold mt-2.5 leading-none">Transfers</p>
+              <p className="text-white/85 text-[10.5px] mt-1 leading-snug">Aeroporto, hotéis e rotas</p>
+              <span className="absolute bottom-3 right-3 w-6 h-6 rounded-full bg-white flex items-center justify-center">
+                <ChevronRight size={13} className="text-sky-700" />
               </span>
             </button>
           </div>
 
-          {/* ── Atalhos ─────────────────────────────────────── */}
-          <div className="flex gap-2.5">
+          {/* Atalhos por interesse */}
+          <div className="flex gap-2">
             <Atalho icon={Flame}  label="Mais vendidos" onClick={() => navigate('/passeios')} />
-            <Atalho icon={Sun}    label="Para hoje"     onClick={() => navigate('/passeios')} cor="text-amber-500" />
-            <Atalho icon={Sunset} label="Pôr do sol"    onClick={() => navigate('/passeios')} cor="text-orange-500" />
-            <Atalho icon={Waves}  label="Lagoas"        onClick={() => navigate('/passeios')} cor="text-sky-500" />
+            <Atalho icon={Sun}    label="Para hoje"     onClick={() => navigate('/passeios', { state: { dateIso: isoHoje } })} cor="text-amber-500" />
+            <Atalho icon={Sunset} label="Pôr do sol"    onClick={() => navigate('/passeios', { state: { tag: 'Pôr do sol' } })} cor="text-orange-500" />
+            <Atalho icon={Waves}  label="Lagoas"        onClick={() => navigate('/passeios', { state: { tag: 'Lagoas' } })} cor="text-sky-500" />
           </div>
 
-          {/* ── Mais procurados ─────────────────────────────── */}
+          {/* ── Ação imediata: quem já entrou decidido ──────── */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[17px] font-extrabold text-gray-900">Mais procurados</h2>
-              <button onClick={() => navigate('/passeios')} className="flex items-center gap-1 text-[13px] font-bold text-brand">
-                Ver todos <ArrowRight size={14} />
+            <p className="text-[13px] font-bold text-gray-700 mb-2">O que você quer fazer hoje?</p>
+            <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-0.5" style={{ scrollbarWidth: 'none' }}>
+              <button
+                onClick={() => navigate('/passeios', { state: { dateIso: isoHoje } })}
+                className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-3 pr-3.5 py-2 text-[12.5px] font-semibold text-gray-700 active:bg-gray-50"
+              >
+                <Sun size={14} className="text-amber-500" /> Passeio hoje
+              </button>
+              <button
+                onClick={() => navigate('/passeios', { state: { dateIso: isoAmanha } })}
+                className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-3 pr-3.5 py-2 text-[12.5px] font-semibold text-gray-700 active:bg-gray-50"
+              >
+                <Sunset size={14} className="text-orange-500" /> Passeio amanhã
+              </button>
+              <button
+                onClick={() => navigate('/transfers')}
+                className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-3 pr-3.5 py-2 text-[12.5px] font-semibold text-gray-700 active:bg-gray-50"
+              >
+                <Plane size={14} className="text-sky-600" /> Transfer aeroporto
+              </button>
+            </div>
+          </div>
+
+          {/* ── Ofertas: subiram para antes dos destaques ───── */}
+          {temOferta && (
+            <button
+              onClick={() => navigate('/passeios')}
+              className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand to-orange-400 p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+            >
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <Percent size={18} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-extrabold text-[14px] leading-snug">
+                  {settings.home_banner_title || 'Ofertas para você'}
+                </p>
+                {settings.home_banner_subtitle && (
+                  <p className="text-white/85 text-[11.5px] leading-snug mt-0.5 line-clamp-1">
+                    {settings.home_banner_subtitle}
+                  </p>
+                )}
+              </div>
+              <span className="shrink-0 bg-white text-brand text-[11.5px] font-bold px-3 py-1.5 rounded-lg">Ver</span>
+            </button>
+          )}
+
+          {/* ── 2ª prioridade: Mais procurados ──────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2.5">
+              <h2 className="text-[17px] font-extrabold text-gray-900">🔥 Mais procurados</h2>
+              <button onClick={() => navigate('/passeios')} className="flex items-center gap-1 text-[12.5px] font-bold text-brand">
+                Ver todos <ArrowRight size={13} />
               </button>
             </div>
 
             {isLoading ? (
               <div className="flex gap-3 overflow-hidden">
-                {[0, 1].map((i) => (
-                  <div key={i} className="shrink-0 w-[248px] h-[264px] bg-white rounded-2xl shadow-sm animate-pulse" />
-                ))}
+                <div className="shrink-0 w-[82%] h-[290px] bg-white rounded-2xl shadow-sm animate-pulse" />
               </div>
             ) : destaques.length === 0 ? (
               <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
@@ -283,9 +365,12 @@ export default function HomeV2() {
                 </p>
               </div>
             ) : (
-              <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+              <div
+                className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 snap-x snap-mandatory"
+                style={{ scrollbarWidth: 'none' }}
+              >
                 {destaques.map((tour) => (
-                  <CardServico
+                  <CardDestaque
                     key={tour.id}
                     tour={tour}
                     fav={favs?.includes?.(tour.id)}
@@ -297,54 +382,34 @@ export default function HomeV2() {
             )}
           </div>
 
-          {/* ── Faixa promocional (do admin) ────────────────── */}
-          {(settings?.home_banner_title || settings?.home_banner_subtitle) && (
-            <button
-              onClick={() => navigate('/passeios')}
-              className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand to-orange-400 p-4 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
-            >
-              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <Percent size={20} className="text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-extrabold text-[15px] leading-snug">
-                  {settings.home_banner_title || 'Ofertas da semana'}
-                </p>
-                {settings.home_banner_subtitle && (
-                  <p className="text-white/85 text-[12px] leading-snug mt-0.5">{settings.home_banner_subtitle}</p>
-                )}
-              </div>
-              <span className="shrink-0 bg-white text-brand text-[12px] font-bold px-3 py-2 rounded-xl">Ver</span>
-            </button>
-          )}
-
-          {/* ── Próxima reserva ─────────────────────────────── */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
-              <CalendarCheck size={20} className="text-violet-600" />
+          {/* ── Contextual: próxima reserva ─────────────────── */}
+          <button
+            onClick={() => navigate(user ? (proxima ? '/minhas-reservas' : '/passeios') : '/login')}
+            className="w-full bg-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${proxima ? 'bg-emerald-100' : 'bg-violet-100'}`}>
+              <Ticket size={18} className={proxima ? 'text-emerald-600' : 'text-violet-600'} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-bold text-gray-900 leading-snug">Sua próxima reserva</p>
-              <p className="text-[12px] text-gray-400 mt-0.5">
-                {!user ? 'Entre para ver suas reservas.'
-                  : proximas.length > 0
-                    ? `${proximas.length} reserva(s) a caminho.`
-                    : 'Você ainda não tem reservas.'}
+              <p className="text-[13.5px] font-bold text-gray-900 leading-snug">
+                {proxima ? 'Sua próxima reserva' : 'Minhas reservas'}
               </p>
-              <button
-                onClick={() => navigate(user ? '/minhas-reservas' : '/login')}
-                className="flex items-center gap-1 text-[13px] font-bold text-brand mt-1.5"
-              >
-                {!user ? 'Entrar' : proximas.length > 0 ? 'Ver reservas' : 'Encontre seu primeiro passeio'}
-                <ArrowRight size={13} />
-              </button>
+              <p className="text-[12px] text-gray-500 mt-0.5 truncate">
+                {!user ? 'Entre para ver suas reservas'
+                  : proxima ? resumoReserva
+                  : 'Você ainda não reservou'}
+              </p>
             </div>
-          </div>
+            <span className="shrink-0 flex items-center gap-1 text-[12.5px] font-bold text-brand">
+              {!user ? 'Entrar' : proxima ? 'Ver' : 'Ver passeios'}
+              <ArrowRight size={13} />
+            </span>
+          </button>
 
-          {/* ── Descubra ────────────────────────────────────── */}
+          {/* ── Conteúdo secundário: Descubra ───────────────── */}
           <div>
-            <h2 className="text-[17px] font-extrabold text-gray-900 mb-3">Descubra {nomeRegiao}</h2>
-            <div className="grid grid-cols-4 gap-2.5">
+            <h2 className="text-[15px] font-bold text-gray-800 mb-2.5">✨ Descubra {nomeRegiao.split(' ')[0]}</h2>
+            <div className="grid grid-cols-4 gap-2">
               <TileDescubra icon={UtensilsCrossed} label="Restaurantes" onClick={() => navigate('/eventos')} />
               <TileDescubra icon={PartyPopper}     label="Eventos"      onClick={() => navigate('/eventos')} />
               <TileDescubra icon={MapPin}          label="Lugares"      onClick={() => navigate('/eventos')} />

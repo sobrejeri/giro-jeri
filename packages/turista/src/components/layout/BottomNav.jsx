@@ -1,15 +1,19 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Home, Compass, Car, CalendarCheck, User, Sparkles } from 'lucide-react'
+import { useHomeVersion } from '../../lib/homeVersion'
 
 export default function BottomNav() {
   const navigate     = useNavigate()
   const { pathname } = useLocation()
   const { t }        = useTranslation()
+  const homeNova     = useHomeVersion() === 'nova'
 
+  // Na proposta nova são 5 itens: com 6 as legendas ficam apertadas no celular.
+  // "Descubra" sai daqui e passa a viver dentro da home (grade "Descubra").
   const NAV = [
     { to: '/',                icon: Home,          label: t('nav.home'),      exact: true },
-    { to: '/eventos',         icon: Sparkles,      label: t('nav.events') },
+    ...(homeNova ? [] : [{ to: '/eventos', icon: Sparkles, label: t('nav.events') }]),
     { to: '/passeios',        icon: Compass,       label: t('nav.tours') },
     { to: '/transfers',       icon: Car,           label: t('nav.transfers') },
     { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings') },

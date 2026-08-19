@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Sparkles, RotateCcw } from 'lucide-react'
 import Home from './Home'
 import HomeV2 from './HomeV2'
+import { useHomeVersion, setHomeVersion } from '../lib/homeVersion'
 
 // ── Home em avaliação: duas versões lado a lado ─────────────────────────────
 // O dono está comparando o layout atual com uma proposta nova antes de decidir.
@@ -16,23 +17,15 @@ import HomeV2 from './HomeV2'
 // Quando a decisão sair: manter só a vencedora e apagar este arquivo (e o
 // perdedor). Enquanto isso, NENHUMA das duas é alterada por causa da outra —
 // as duas usam as mesmas consultas de dados.
-const CHAVE = 'turiva_home_versao'
-
 export default function HomeSwitcher() {
   const { search } = useLocation()
-  const [versao, setVersao] = useState(() => {
-    const daUrl = new URLSearchParams(window.location.search).get('home')
-    if (daUrl === 'nova' || daUrl === 'atual') return daUrl
-    return localStorage.getItem(CHAVE) || 'atual'
-  })
+  const versao = useHomeVersion()
 
-  // Link com ?home=... tem prioridade e passa a valer para as próximas visitas.
+  // Link com ?home=... passa a valer também para as próximas visitas.
   useEffect(() => {
     const daUrl = new URLSearchParams(search).get('home')
-    if (daUrl === 'nova' || daUrl === 'atual') setVersao(daUrl)
+    if (daUrl === 'nova' || daUrl === 'atual') setHomeVersion(daUrl)
   }, [search])
-
-  useEffect(() => { localStorage.setItem(CHAVE, versao) }, [versao])
 
   const nova = versao === 'nova'
 
@@ -43,7 +36,7 @@ export default function HomeSwitcher() {
       {/* Alternador — some quando a decisão for tomada e este arquivo sair.
           Fica acima da barra de navegação para não cobrir os botões. */}
       <button
-        onClick={() => setVersao(nova ? 'atual' : 'nova')}
+        onClick={() => setHomeVersion(nova ? 'atual' : 'nova')}
         className={`lg:hidden fixed right-4 bottom-24 z-40 flex items-center gap-2 rounded-full pl-3.5 pr-4 py-2.5 shadow-lg text-[12px] font-bold transition-colors ${
           nova ? 'bg-gray-900 text-white' : 'bg-brand text-white'
         }`}

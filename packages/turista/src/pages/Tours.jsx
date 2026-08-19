@@ -297,8 +297,12 @@ export default function Tours() {
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
   const [people, setPeople] = useState(restoredItem?.people || 2)
   const [date, setDate] = useState(() => {
-    if (restoredItem?.dateIso) {
-      const d = new Date(`${restoredItem.dateIso}T12:00:00`)
+    // dateIso pode vir do rascunho do carrinho OU dos atalhos da home
+    // ("Passeio hoje" / "Passeio amanhã") — sem honrar isso, o atalho abriria a
+    // lista na data de hoje e o cliente teria de escolher de novo.
+    const iso = restoredItem?.dateIso || locationState?.dateIso
+    if (iso) {
+      const d = new Date(`${iso}T12:00:00`)
       if (!Number.isNaN(d.getTime()) && !isBefore(d, startOfDay(new Date()))) return startOfDay(d)
     }
     return startOfDay(new Date())

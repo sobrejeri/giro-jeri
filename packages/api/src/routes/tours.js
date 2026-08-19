@@ -39,7 +39,34 @@ router.get('/', async (req, res, next) => {
     const { data, error } = await query;
     if (error) throw error;
 
-    const filtered = lat && lon ? filterByRadius(data, lat, lon, radius) : data;
+    let filtered = lat && lon ? filterByRadius(data, lat, lon, radius) : data;
+
+    // Preço "a partir de" do PRIVATIVO: menor base_price entre as regras ativas
+    // do passeio. A lista não trazia isso, então a home só conseguia mostrar
+    // preço de passeio compartilhado — e preço é a principal dúvida antes do
+    // clique. Best-effort: se falhar, a lista sai sem o campo.
+    try {
+      const ids = (filtered || []).map((t) => t.id).filter(Boolean);
+      if (ids.length) {
+        const { data: regras } = await supabase
+          .from('vehicle_pricing_rules')
+          .select('service_id, base_price')
+          .eq('service_type', 'tour')
+          .eq('is_active', true)
+          .in('service_id', ids);
+        const minimo = new Map();
+        for (const r of regras || []) {
+          const atual = minimo.get(r.service_id);
+          const preco = Number(r.base_price);
+          if (!Number.isFinite(preco)) continue;
+          if (atual == null || preco < atual) minimo.set(r.service_id, preco);
+        }
+        filtered = filtered.map((t) => ({ ...t, from_price: minimo.get(t.id) ?? null }));
+      }
+    } catch (e) {
+      console.error('[tours] preço "a partir de" falhou:', e.message);
+    }
+
     res.json(filtered);
   } catch (err) { next(err); }
 });
