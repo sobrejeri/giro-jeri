@@ -315,36 +315,48 @@ router.post('/login', async (req, res, next) => {
     }
 
     if (body.cnpj) {
-      // CNPJ vale tanto para cooperativas (operator) quanto pro admin com
-      // CNPJ cadastrado — o painel da cooperativa aceita os dois.
+      // Documento do operador: CNPJ (cooperativa) OU CPF (operador pessoa
+      // física). Os dois usam o MESMO painel e o mesmo user_type 'operator' —
+      // muda só o documento. O campo continua chamando `cnpj` no corpo por
+      // compatibilidade com as versões já instaladas do app.
       //
       // Comparação robusta: em vez de .eq() exato (que quebra se o
       // document_number no banco tiver formatação/espaço/caractere oculto),
       // busca os candidatos e compara só os dígitos em memória.
-      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      const docDigits = String(body.cnpj).replace(/\D/g, '');
+
+      // Tamanho obrigatório: 11 (CPF) ou 14 (CNPJ). Sem isto, mandar "-"
+      // gerava string vazia, que casava com QUALQUER operador/admin sem
+      // document_number preenchido — o atacante mirava uma conta privilegiada
+      // sem sequer saber o documento dela e ficava só tentando senha.
+      if (docDigits.length !== 11 && docDigits.length !== 14) {
+        return res.status(401).json({ error: 'Credenciais incorretas' });
+      }
+
       // NÃO filtra por document_type: cadastros antigos podem ter o tipo
-      // vazio/'CNPJ'/outro. O que identifica é o próprio número — 14 dígitos
-      // não colidem com CPF (11) — restrito a operator/admin.
+      // vazio/'CNPJ'/outro. O que identifica é o próprio número.
       const { data: candidates, error: lookupErr } = await supabase
         .from('users')
         .select('email, document_number, document_type')
-        .in('user_type', ['operator', 'admin']);
+        .in('user_type', ['operator', 'admin'])
+        .not('document_number', 'is', null);
 
       const opUser = (candidates || []).find(
-        (u) => String(u.document_number || '').replace(/\D/g, '') === cnpjDigits,
+        (u) => String(u.document_number || '').replace(/\D/g, '') === docDigits,
       );
 
-      console.log('[login] cnpj=%s candidatos=%d achou=%s err=%s',
-        cnpjDigits, candidates?.length || 0, opUser ? opUser.email : 'NÃO',
+      // Log sem PII: nunca registrar e-mail nem o documento completo.
+      console.log('[login] doc=***%s candidatos=%d achou=%s err=%s',
+        docDigits.slice(-4), candidates?.length || 0, opUser ? 'sim' : 'não',
         lookupErr ? `${lookupErr.code}:${lookupErr.message}` : 'null');
 
-      // Erro de consulta (deploy/instabilidade) NÃO é "CNPJ não existe" —
+      // Erro de consulta (deploy/instabilidade) NÃO é "documento não existe" —
       // devolve 503 pedindo para tentar de novo, em vez de mensagem enganosa.
       if (lookupErr) {
         return res.status(503).json({ error: 'Instabilidade momentânea no servidor. Tente novamente em alguns segundos.' });
       }
       if (!opUser) {
-        return res.status(401).json({ error: 'CNPJ não encontrado ou não autorizado' });
+        return res.status(401).json({ error: 'CNPJ/CPF não encontrado ou não autorizado' });
       }
       authEmail = opUser.email;
       authPhone = undefined;

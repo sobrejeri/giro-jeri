@@ -269,7 +269,7 @@ export default function Usuarios() {
                     <p className="font-medium text-gray-200">{u.full_name || '—'}</p>
                     <p className="text-xs text-gray-500">
                       {u.user_type === 'operator' && u.document_number
-                        ? `CNPJ: ${u.document_number}`
+                        ? `${String(u.document_number).replace(/\D/g, '').length === 11 ? 'CPF' : 'CNPJ'}: ${u.document_number}`
                         : u.email || u.phone || '—'}
                     </p>
                   </td>
@@ -442,10 +442,10 @@ export default function Usuarios() {
             </Select>
             {importForm.user_type === 'operator' && (
               <Input
-                label="CNPJ"
+                label="CNPJ ou CPF"
                 value={importForm.cnpj}
                 onChange={(e) => setImportForm({ ...importForm, cnpj: e.target.value })}
-                placeholder="00.000.000/0001-00"
+                placeholder="CNPJ (cooperativa) ou CPF (operador pessoa física)"
                 inputMode="numeric"
                 required
               />
@@ -485,10 +485,10 @@ export default function Usuarios() {
           />
           {createForm.user_type === 'operator' ? (
             <Input
-              label="CNPJ"
+              label="CNPJ ou CPF"
               value={createForm.cnpj}
               onChange={(e) => setCreateForm({ ...createForm, cnpj: e.target.value })}
-              placeholder="00.000.000/0001-00"
+              placeholder="CNPJ (cooperativa) ou CPF (operador pessoa física)"
               inputMode="numeric"
               required
             />

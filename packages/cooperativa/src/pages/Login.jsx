@@ -5,8 +5,17 @@ import { api } from '../lib/api'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 
-function formatCNPJ(v) {
-  const d = v.replace(/\D/g, '').slice(0, 14)
+// Máscara de documento: aceita CNPJ (cooperativa) e CPF (operador pessoa
+// física). Até 11 dígitos formata como CPF; a partir do 12º vira CNPJ — assim
+// quem digita um CNPJ vê a máscara certa conforme avança, sem escolher o tipo.
+function formatDoc(v) {
+  const d = String(v).replace(/\D/g, '').slice(0, 14)
+  if (d.length <= 11) {
+    return d
+      .replace(/^(\d{3})(\d)/, '$1.$2')
+      .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+      .replace(/\.(\d{3})(\d)/, '.$1-$2')
+  }
   return d
     .replace(/^(\d{2})(\d)/, '$1.$2')
     .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
@@ -26,8 +35,8 @@ export default function Login() {
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
 
-  function handleCNPJ(e) {
-    setForm({ ...form, cnpj: formatCNPJ(e.target.value) })
+  function handleDoc(e) {
+    setForm({ ...form, cnpj: formatDoc(e.target.value) })
   }
 
   async function handleSubmit(e) {
@@ -69,10 +78,10 @@ export default function Login() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="CNPJ"
+              label="CNPJ ou CPF"
               value={form.cnpj}
-              onChange={handleCNPJ}
-              placeholder="00.000.000/0001-00"
+              onChange={handleDoc}
+              placeholder="CNPJ da cooperativa ou seu CPF"
               inputMode="numeric"
               required
               autoFocus
@@ -92,7 +101,7 @@ export default function Login() {
             </Button>
           </form>
           <p className="mt-5 text-center text-xs text-gray-400">
-            Acesso com CNPJ cadastrado pelo administrador da plataforma.
+            Acesso com o CNPJ ou CPF cadastrado pelo administrador da plataforma.
           </p>
 
           <button
@@ -101,7 +110,7 @@ export default function Login() {
               const phone = import.meta.env.VITE_ADMIN_WHATSAPP || '5588999999999'
               const cnpj  = form.cnpj || '____________'
               const msg = encodeURIComponent(
-                `Olá! Preciso redefinir a senha da minha cooperativa.\n\nCNPJ: ${cnpj}`
+                `Olá! Preciso redefinir a senha do meu acesso de operador.\n\nCNPJ/CPF: ${cnpj}`
               )
               window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
             }}

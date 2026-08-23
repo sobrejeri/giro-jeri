@@ -241,14 +241,32 @@ router.post('/users', requireAdmin, async (req, res, next) => {
     let docType   = null;
 
     if (body.user_type === 'operator' && body.cnpj) {
-      const cnpjDigits = body.cnpj.replace(/\D/g, '');
+      // Operador entra por documento: CNPJ (cooperativa, 14 dígitos) ou CPF
+      // (operador pessoa física, 11). Os dois usam o mesmo painel — muda só o
+      // documento. O campo segue chamando `cnpj` no corpo por compatibilidade.
+      const digits = String(body.cnpj).replace(/\D/g, '');
+      const tipo   = digits.length === 11 ? 'cpf' : digits.length === 14 ? 'cnpj' : null;
+      if (!tipo) {
+        return res.status(400).json({ error: 'Informe um CNPJ (14 dígitos) ou CPF (11 dígitos).' });
+      }
       const { validateBrDoc } = await import('../lib/document.js');
-      const docErr = validateBrDoc('cnpj', cnpjDigits);
+      const docErr = validateBrDoc(tipo, digits);
       if (docErr) return res.status(400).json({ error: docErr });
-      authEmail = `${cnpjDigits}@op.girojeri.app`;
+
+      // Documento já usado por outra conta derrubaria a criação com erro de
+      // e-mail duplicado (o e-mail sintético vem do documento) — mensagem clara.
+      const { data: jaExiste } = await supabase
+        .from('users').select('id').eq('document_number', digits).maybeSingle();
+      if (jaExiste) {
+        return res.status(409).json({ error: 'Já existe uma conta com este CNPJ/CPF.' });
+      }
+
+      // Mantém o domínio sintético: é o que identifica login de operador em
+      // todo o sistema — trocar quebraria o acesso de quem já está cadastrado.
+      authEmail = `${digits}@op.girojeri.app`;
       authPhone = undefined;
-      docNumber = cnpjDigits;
-      docType   = 'cnpj';
+      docNumber = digits;
+      docType   = tipo;
     }
 
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
