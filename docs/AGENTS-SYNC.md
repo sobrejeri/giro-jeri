@@ -28,6 +28,23 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (home e passeios promovidos a oficiais)** — Decisão do
+  dono: os dois redesenhos ficam. Alternadores e versões antigas **removidos**.
+  `HomeV2.jsx` → `Home.jsx` e `ToursV2.jsx` → `Tours.jsx` (renomeados, não
+  copiados — nome com "V2" não deve virar permanente). Apagados:
+  `HomeSwitcher.jsx`, `ToursSwitcher.jsx`, `lib/homeVersion.js`,
+  `lib/toursVersion.js` e `lib/versaoTela.js` (a fábrica só existia para os
+  dois alternadores; sem eles, é código morto).
+  `BottomNav` deixou de consultar a versão: cinco itens e risco laranja no item
+  ativo passam a ser fixos. "Descubra" continua fora do menu inferior e vive na
+  grade da home — no menu do DESKTOP ele permanece, é outro componente.
+  Bundle do turista: 279,6 KB → 270,4 KB comprimidos (as duas telas duplicadas
+  saíram). Conferido em tela: home e passeios abrindo na versão nova, sem botão
+  de alternar, menu com 5 itens, seleção de passeio ainda abrindo os veículos,
+  página da oferta guardando o cupom e o código aparecendo preenchido no
+  carrinho. Zero erro de JS.
+  **A seguir (pedido do dono): validação de pagamento.**
+
 - **2026-08-23 · Agente B (divulgar cupom por WhatsApp — migration 068)** —
   Na aba de Cupons, botão que envia a oferta para a base de clientes; o cliente
   toca em "Quero a oferta" e o código passa a vir preenchido no carrinho e no

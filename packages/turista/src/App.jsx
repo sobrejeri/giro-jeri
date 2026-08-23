@@ -8,9 +8,9 @@ import CheckoutSolicitado  from './pages/checkout/CheckoutSolicitado'
 import CheckoutPayment     from './pages/checkout/CheckoutPayment'
 import CheckoutProcessando from './pages/checkout/CheckoutProcessando'
 import CheckoutSucesso     from './pages/checkout/CheckoutSucesso'
-import HomeSwitcher    from './pages/HomeSwitcher'   // home atual + proposta nova (em avaliação)
+import Home            from './pages/Home'
 import Feed            from './pages/Feed'
-import ToursSwitcher   from './pages/ToursSwitcher' // desenho novo + anterior (em avaliação)
+import Tours           from './pages/Tours'
 import TourDetail      from './pages/TourDetail'
 import Transfers       from './pages/Transfers'
 import Bookings        from './pages/Bookings'
@@ -82,9 +82,9 @@ export default function App() {
 
       {/* App — layout responsivo com nav */}
       <Route path="/" element={<Layout />}>
-        <Route index                      element={<HomeSwitcher />} />
+        <Route index                      element={<Home />} />
         <Route path="eventos"             element={<Feed />} />
-        <Route path="passeios"            element={<ToursSwitcher />} />
+        <Route path="passeios"            element={<Tours />} />
         <Route path="passeios/:id"        element={<TourDetail />} />
         <Route path="transfers"           element={<Transfers />} />
         <Route path="carrinho"            element={<CartPage />} />

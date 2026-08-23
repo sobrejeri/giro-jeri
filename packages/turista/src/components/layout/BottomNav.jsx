@@ -1,19 +1,16 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Home, Compass, Car, CalendarCheck, User, Sparkles } from 'lucide-react'
-import { useHomeVersion } from '../../lib/homeVersion'
+import { Home, Compass, Car, CalendarCheck, User } from 'lucide-react'
 
 export default function BottomNav() {
   const navigate     = useNavigate()
   const { pathname } = useLocation()
   const { t }        = useTranslation()
-  const homeNova     = useHomeVersion() === 'nova'
 
-  // Na proposta nova são 5 itens: com 6 as legendas ficam apertadas no celular.
-  // "Descubra" sai daqui e passa a viver dentro da home (grade "Descubra").
+  // Cinco itens: com seis as legendas ficam apertadas no celular. "Descubra"
+  // não sumiu — vive dentro da home, na grade do rodapé.
   const NAV = [
     { to: '/',                icon: Home,          label: t('nav.home'),      exact: true },
-    ...(homeNova ? [] : [{ to: '/eventos', icon: Sparkles, label: t('nav.events') }]),
     { to: '/passeios',        icon: Compass,       label: t('nav.tours') },
     { to: '/transfers',       icon: Car,           label: t('nav.transfers') },
     { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings') },
@@ -31,22 +28,19 @@ export default function BottomNav() {
               onClick={() => navigate(to)}
               className="flex-1 min-w-0 flex flex-col items-center gap-[2px] py-1.5 px-0.5 rounded-xl active:scale-95 transition-transform"
             >
-              {/* Item ativo: na proposta o destaque é um risco embaixo (como no
-                  mockup); na home atual continua sendo a bolha atrás do ícone. */}
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${active && !homeNova ? 'bg-brand/10' : ''}`}>
+              {/* Item ativo: ícone preenchido + risco embaixo. */}
+              <div className="w-7 h-7 rounded-full flex items-center justify-center">
                 <Icon
                   size={20}
                   className={active ? 'text-brand' : 'text-gray-400'}
                   strokeWidth={active ? 2.5 : 1.75}
-                  fill={active && homeNova ? 'currentColor' : 'none'}
+                  fill={active ? 'currentColor' : 'none'}
                 />
               </div>
               <span className={`text-[10px] leading-tight max-w-full truncate transition-colors ${active ? 'text-brand font-semibold' : 'text-gray-400 font-medium'}`}>
                 {label}
               </span>
-              {homeNova && (
-                <span className={`h-[3px] w-5 rounded-full transition-colors ${active ? 'bg-brand' : 'bg-transparent'}`} />
-              )}
+              <span className={`h-[3px] w-5 rounded-full transition-colors ${active ? 'bg-brand' : 'bg-transparent'}`} />
             </button>
           )
         })}
