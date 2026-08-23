@@ -168,28 +168,45 @@ function pickPopularRoutes(routes) {
 
 function PresetCard({ route, bg, active, onSelect }) {
   const { t } = useTranslation()
+  const img = route.cover_image_url
   return (
     <button
       onClick={onSelect}
-      className={`flex-none w-[150px] rounded-2xl overflow-hidden shadow-sm border active:scale-95 transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
+      className={`flex-none w-[168px] rounded-2xl overflow-hidden bg-white shadow-sm border active:scale-[0.97] transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
     >
-      <div className={`bg-gradient-to-br ${bg} px-3 pt-2.5 pb-2`}>
-        <span className="inline-block text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-1.5">
+      {/* Capa: foto da rota quando houver; senão o gradiente de sempre. */}
+      <div className="relative h-[104px] overflow-hidden">
+        {img ? (
+          <img src={img} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${bg}`} />
+        )}
+        {/* Escurece a base para o texto ficar legível sobre qualquer foto. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+
+        <span className="absolute top-2 left-2 text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full">
           {t('transfersPg.privateBadge')}
         </span>
-        <p className="text-white font-bold text-[12px] leading-tight">
-          {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
-        </p>
-        <div className="flex items-center gap-1 mt-1">
-          <Users size={9} className="text-white/70" />
-          <span className="text-[10px] text-white/80">{t('transfersPg.upTo4')}</span>
+
+        <div className="absolute bottom-2 left-2.5 right-2.5">
+          <p className="text-white font-bold text-[12.5px] leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
+            {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
+          </p>
+          <div className="flex items-center gap-1 mt-0.5">
+            <Users size={9} className="text-white/80" />
+            <span className="text-[10px] text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,.4)]">{t('transfersPg.upTo4')}</span>
+          </div>
         </div>
       </div>
-      <div className="bg-white px-3 py-2">
-        <p className="text-[9px] text-gray-400">{t('transfersPg.startingFrom')}</p>
-        <p className="text-[13px] font-extrabold text-gray-900">
-          R$ {Number(route.default_price).toLocaleString('pt-BR')}
-        </p>
+
+      <div className="px-3 py-2 flex items-end justify-between gap-1">
+        <div className="min-w-0">
+          <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
+          <p className="text-[14px] font-extrabold text-gray-900 leading-tight mt-0.5">
+            R$ {Number(route.default_price).toLocaleString('pt-BR')}
+          </p>
+        </div>
+        <ChevronRight size={14} className="text-brand shrink-0 mb-0.5" />
       </div>
     </button>
   )

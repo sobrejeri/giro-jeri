@@ -147,8 +147,14 @@ function RouteCard({ route }) {
       onClick={() => navigate('/transfers', { state: { origin: route.origin_name, dest: route.destination_name } })}
       className="shrink-0 w-[158px] lg:w-auto rounded-2xl overflow-hidden bg-white shadow-sm border border-gray-100 transition-transform cursor-pointer active:scale-[0.96]"
     >
-      <div className={`h-[108px] lg:h-44 relative overflow-hidden bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
-        <Plane size={36} className="text-white/25" />
+      <div className="h-[108px] lg:h-44 relative overflow-hidden">
+        {route.cover_image_url ? (
+          <img src={route.cover_image_url} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
+            <Plane size={36} className="text-white/25" />
+          </div>
+        )}
         <span className="absolute top-2 left-2 bg-black/35 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-[3px] rounded-full">
           {t('homePg.transferBadge')}
         </span>

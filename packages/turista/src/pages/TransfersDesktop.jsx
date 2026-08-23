@@ -46,18 +46,40 @@ function RouteCard({ route, bg, active, onSelect }) {
         active ? 'border-brand ring-2 ring-brand/20' : 'border-gray-100'
       }`}
     >
-      <div className={`bg-gradient-to-br ${bg} px-4 pt-3 pb-3.5`}>
-        <span className="inline-block text-[10px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full mb-2">{t('transfersPg.privateBadge')}</span>
-        <p className="text-white font-bold text-[15px] leading-tight">
-          {route.origin_name} → {route.destination_name}
-        </p>
-        <div className="flex items-center gap-1 mt-2 text-white/85 text-[11px]">
-          <Users size={11} /> {t('transfersPg.upTo4Passengers')}
+      {/* Capa: foto da rota quando houver; senão o gradiente de sempre. */}
+      <div className="relative h-[150px] overflow-hidden group">
+        {route.cover_image_url ? (
+          <img
+            src={route.cover_image_url} alt="" loading="lazy"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${bg}`} />
+        )}
+        {/* Escurece a base para o texto ficar legível sobre qualquer foto. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+
+        <span className="absolute top-3 left-3 text-[10px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full">
+          {t('transfersPg.privateBadge')}
+        </span>
+
+        <div className="absolute bottom-3 left-4 right-4">
+          <p className="text-white font-bold text-[15px] leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
+            {route.origin_name} → {route.destination_name}
+          </p>
+          <div className="flex items-center gap-1 mt-1 text-white/90 text-[11px] [text-shadow:0_1px_2px_rgba(0,0,0,.4)]">
+            <Users size={11} /> {t('transfersPg.upTo4Passengers')}
+          </div>
         </div>
       </div>
-      <div className="p-4 flex flex-col gap-1 flex-1">
-        <p className="text-[11px] text-gray-400">{t('transfersPg.startingFrom')}</p>
-        <p className="text-[20px] font-extrabold text-gray-900">R$ {Number(route.default_price).toLocaleString('pt-BR')}</p>
+      <div className="p-4 flex items-end justify-between gap-2 flex-1">
+        <div className="min-w-0">
+          <p className="text-[11px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
+          <p className="text-[20px] font-extrabold text-gray-900 leading-tight mt-1">
+            R$ {Number(route.default_price).toLocaleString('pt-BR')}
+          </p>
+        </div>
+        <span className="text-[12px] font-semibold text-brand shrink-0">Selecionar →</span>
       </div>
     </button>
   )

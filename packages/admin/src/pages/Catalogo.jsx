@@ -66,7 +66,7 @@ const TRANSFER_EMPTY = {
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', region_ids: [],
 }
-const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', is_active: true, is_featured: false }
+const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', cover_image_url: '', is_active: true, is_featured: false }
 const VEHICLE_EMPTY = {
   name: '', vehicle_type: 'buggy', description: '',
   seat_capacity: 4, luggage_capacity: 4,
@@ -104,11 +104,14 @@ export default function Catalogo() {
   const [vehicleForm, setVehicleForm]   = useState({})
   const [imageFile, setImageFile]   = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
+  const [routeImageFile, setRouteImageFile]       = useState(null)
+  const [routeImagePreview, setRouteImagePreview] = useState(null)
   const [vehicleImageFile, setVehicleImageFile]   = useState(null)
   const [vehicleImagePreview, setVehicleImagePreview] = useState(null)
   const [uploading, setUploading]   = useState(false)
   const [filterRegion, setFilterRegion] = useState(null)
   const fileRef        = useRef(null)
+  const routeFileRef   = useRef(null)
   const vehicleFileRef = useRef(null)
   const qc = useQueryClient()
 
@@ -202,8 +205,16 @@ export default function Catalogo() {
   }
   function openNewTransfer()   { setForm(TRANSFER_EMPTY); setModal({ isNew: true, _type: 'transfer' }) }
   function openEditTransfer(t) { setForm({ ...t, region_ids: t.region_ids || [] }); setModal({ ...t, _type: 'transfer' }) }
-  function openNewRoute()      { setRouteForm(ROUTE_EMPTY); setRouteModal({ isNew: true }) }
-  function openEditRoute(r)    { setRouteForm({ ...r });    setRouteModal(r) }
+  function openNewRoute() {
+    setRouteForm(ROUTE_EMPTY)
+    setRouteImageFile(null); setRouteImagePreview(null)
+    setRouteModal({ isNew: true })
+  }
+  function openEditRoute(r) {
+    setRouteForm({ ...r })
+    setRouteImageFile(null); setRouteImagePreview(r.cover_image_url || null)
+    setRouteModal(r)
+  }
 
   function openNewVehicle() {
     setVehicleForm(VEHICLE_EMPTY)
@@ -222,6 +233,13 @@ export default function Catalogo() {
     if (!file) return
     setImageFile(file)
     setImagePreview(URL.createObjectURL(file))
+  }
+
+  function handleRouteFileChange(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setRouteImageFile(file)
+    setRouteImagePreview(URL.createObjectURL(file))
   }
 
   function handleVehicleFileChange(e) {
@@ -270,9 +288,17 @@ export default function Catalogo() {
     transferMut.mutate(clean)
   }
 
-  function handleRouteSubmit(e) {
+  async function handleRouteSubmit(e) {
     e.preventDefault()
-    routeMut.mutate({ ...routeForm, default_price: Number(routeForm.default_price) })
+    const body = { ...routeForm, default_price: Number(routeForm.default_price) }
+    if (routeImageFile) {
+      try { body.cover_image_url = await uploadImage(routeImageFile, 'routes') }
+      catch (err) { alert('Erro ao enviar a foto: ' + (err?.message || 'tente novamente')); return }
+    }
+    // Remove joins/campos read-only vindos do SELECT (o id do registro a
+    // atualizar vem de routeModal.id, não do corpo).
+    const { transfers: _t, id: _id, created_at: _ca, updated_at: _ua, ...clean } = body
+    routeMut.mutate(clean)
   }
 
   async function handleVehicleSubmit(e) {
@@ -805,6 +831,29 @@ export default function Catalogo() {
       {/* ── Modal rota ─────────────────────────────────────────── */}
       <Modal open={!!routeModal} onClose={() => setRouteModal(null)} title={routeModal?.isNew ? 'Nova Rota' : 'Editar Rota'} size="sm">
         <form onSubmit={handleRouteSubmit} className="space-y-4">
+          {/* Foto de capa — ilustra a rota no app (sem foto, cai no gradiente) */}
+          <div>
+            <p className="text-xs font-medium text-gray-400 mb-1.5">Foto de capa</p>
+            <input ref={routeFileRef} type="file" accept="image/*" className="hidden" onChange={handleRouteFileChange} />
+            {routeImagePreview ? (
+              <div className="relative">
+                <img src={routeImagePreview} className="w-full h-32 object-cover rounded-xl" />
+                <button type="button"
+                  onClick={() => { setRouteImageFile(null); setRouteImagePreview(null); setRouteForm({ ...routeForm, cover_image_url: '' }) }}
+                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center"
+                >
+                  <X size={12} className="text-white" />
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => routeFileRef.current?.click()}
+                className="w-full h-24 border-2 border-dashed border-gray-700 rounded-xl flex flex-col items-center justify-center gap-1.5 text-gray-600 hover:border-gray-500 hover:text-gray-400 transition-colors"
+              >
+                <ImagePlus size={20} />
+                <span className="text-xs">Adicionar foto da rota</span>
+              </button>
+            )}
+          </div>
           <Input label="Origem" value={routeForm.origin_name || ''} onChange={(e) => setRouteForm({ ...routeForm, origin_name: e.target.value })} required />
           <Input label="Destino" value={routeForm.destination_name || ''} onChange={(e) => setRouteForm({ ...routeForm, destination_name: e.target.value })} required />
           <Input label="Preço padrão (R$)" type="number" min={0} step={0.01}

@@ -159,8 +159,17 @@ function RouteMiniCard({ route, gradient, onClick }) {
       onClick={onClick}
       className="group text-left bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
     >
-      <div className={`relative h-36 overflow-hidden bg-gradient-to-br ${gradient} flex items-center justify-center`}>
-        <Plane size={40} className="text-white/30" />
+      <div className="relative h-36 overflow-hidden">
+        {route.cover_image_url ? (
+          <img
+            src={route.cover_image_url} alt="" loading="lazy"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            <Plane size={40} className="text-white/30" />
+          </div>
+        )}
         <span className="absolute top-2 left-2 bg-black/35 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
           {t('homePg.transferBadge')}
         </span>
