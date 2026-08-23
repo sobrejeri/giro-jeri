@@ -28,6 +28,25 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (nada a rodar no SQL — script de verificação)** — O
+  dono perguntou o que precisava rodar por causa das imagens. **Resposta: nada.**
+  Nenhuma migration nova. Motivos, verificados e não supostos:
+  (a) as três colunas do cartão (`difficulty_level`, `max_people`,
+  `highlight_badge`) existem desde a **001** — conferido criando a tabela real
+  a partir da migration num Postgres 16 local;
+  (b) as fotos do "Descubra" e o banner moram em `system_settings`, cuja
+  `setting_key` é `VARCHAR(100) UNIQUE` **sem CHECK de chaves permitidas**, e o
+  `PUT /api/admin/settings/:key` é upsert por `setting_key` — a chave nasce no
+  primeiro envio pelo admin;
+  (c) RLS está ligado em `system_settings` (migration 053), mas a API usa a
+  **service role**, que passa por cima.
+  O que costuma faltar é DADO, não estrutura. Ficou
+  `supabase/verificacao_passeios.sql` — **só consultas, nenhuma alteração**:
+  confere se as colunas existem, lista por passeio o que está vazio
+  (dificuldade / capacidade / etiqueta / foto / tags / preço privativo) e mostra
+  quais imagens já foram enviadas. Traz modelos de UPDATE comentados. Rodado de
+  ponta a ponta contra Postgres 16 com as tabelas extraídas da 001.
+
 - **2026-08-23 · Agente B (revisão da tela de Passeios — 8 correções)** — Feita
   a pedido do dono, procurando falha e não estilo. O que apareceu:
   1. **`GET /api/tours` podia cair inteiro.** As colunas de apresentação
