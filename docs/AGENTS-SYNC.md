@@ -48,11 +48,24 @@ enxerga o trabalho do outro no próximo `git fetch`.
   passaram a filtrar de verdade — `Tours.jsx` ignorava `state.tag` e abria a
   lista inteira; agora casa por tags, nome ou descrição curta e **cai de volta
   na lista completa quando nada casa**, para o atalho nunca levar a tela vazia.
+  Depois o dono mandou o mockup fechado e a tela foi reproduzida peça a peça
+  (topo em duas linhas, região em pastilha, sol riscado, duna/coqueiro nos
+  cartões, os quatro atalhos quadrados de volta, nº de avaliações no cartão,
+  ofertas depois do carrossel, menu com risco no item ativo). Conferido com
+  captura renderizada em 430×932 — foi assim que apareceram quatro defeitos que
+  o código não denunciava (nome do passeio cortado, "Mais vendid…", a silhueta
+  passando por trás do título e a linha de apoio quebrando em duas).
+  **Fotos do "Descubra":** as quatro saem de `system_settings`
+  (`descubra_{restaurantes,eventos,lugares,dicas}_image_url`), enviadas em
+  Configurações → Aparência pelo mesmo `POST /api/admin/site-image` do banner.
+  Não precisa de migration: o PUT de settings é upsert por `setting_key`. Sem
+  foto o quadro fica no degradê — e **de propósito não existe caminho fixo em
+  `public/`**, senão quem nunca enviasse imagem pagaria quatro 404 por abertura.
   **Pendências desta tela:** (1) o dono ainda não escolheu a vencedora — quando
   escolher, apagar a perdedora, o `HomeSwitcher.jsx` e o `lib/homeVersion.js`
   (o `BottomNav` volta a ter lista fixa); (2) os quatro quadros de "Descubra"
-  (Restaurantes / Eventos / Lugares / Dicas) apontam **todos** para `/eventos`
-  — Restaurantes/Lugares/Dicas seriam telas novas, ainda não existem.
+  apontam **todos** para `/eventos` — Restaurantes/Lugares/Dicas seriam telas
+  novas, ainda não existem.
 
 - **2026-08-16 · Agente B (aviso de atualização + rótulos de status)** — Fechado
   e testado pelo usuário. **(a) Atualização:** os três apps agora só AVISAM que

@@ -13,6 +13,12 @@ const PUBLIC_KEYS = [
   'whatsapp_support_number',
   'app_version',
   'default_currency',
+  // Fotos de fundo dos quadros "Descubra" da home. Vazio = a home cai no
+  // degradê, então dá para publicar sem imagem nenhuma e ir trocando depois.
+  'descubra_restaurantes_image_url',
+  'descubra_eventos_image_url',
+  'descubra_lugares_image_url',
+  'descubra_dicas_image_url',
 ];
 
 // ── GET /api/settings/public ───────────────────────────

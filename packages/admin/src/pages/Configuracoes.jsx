@@ -627,6 +627,70 @@ function SaveRow({ onSave, pending, saved }) {
   )
 }
 
+// ── Quadros "Descubra" da home ────────────────────────────
+// Os quatro quadros no rodapé da home do turista. Cada um aceita uma foto de
+// fundo; sem foto o app usa um degradê, então nunca fica um buraco na tela.
+const DESCUBRA = [
+  { chave: 'descubra_restaurantes_image_url', rotulo: 'Restaurantes', degrade: 'from-rose-400 to-orange-300' },
+  { chave: 'descubra_eventos_image_url',      rotulo: 'Eventos',      degrade: 'from-violet-500 to-fuchsia-400' },
+  { chave: 'descubra_lugares_image_url',      rotulo: 'Lugares',      degrade: 'from-emerald-500 to-teal-300' },
+  { chave: 'descubra_dicas_image_url',        rotulo: 'Dicas',        degrade: 'from-amber-400 to-yellow-300' },
+]
+
+function QuadroDescubra({ item, url, onChange }) {
+  const fileRef = useRef(null)
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function escolher(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setErro('Use JPEG, PNG ou WebP.'); return
+    }
+    setErro('')
+    setEnviando(true)
+    try {
+      // Quadro pequeno na home: 800px já cobre telas retina e mantém o
+      // arquivo leve — são quatro imagens carregando de uma vez.
+      const dataUrl = await fileToResizedDataUrl(file, 800)
+      const { url: nova } = await api.uploadSiteImage(dataUrl, `descubra-${item.rotulo}`)
+      await onChange(nova)
+    } catch (err) {
+      setErro(err?.message || 'Falha ao enviar.')
+    } finally {
+      setEnviando(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Prévia no mesmo formato do app: foto, véu escuro e legenda embaixo. */}
+      <div className="relative rounded-xl overflow-hidden border border-gray-700 aspect-[5/4]">
+        <div className={`absolute inset-0 bg-gradient-to-br ${item.degrade}`} />
+        {url && <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/5" />
+        <span className="absolute bottom-1.5 left-2 text-white text-[11px] font-bold">{item.rotulo}</span>
+      </div>
+
+      {erro && <p className="text-[11px] text-red-400">{erro}</p>}
+
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={escolher} />
+      <div className="flex gap-1.5">
+        <Button type="button" onClick={() => fileRef.current?.click()} disabled={enviando} className="flex-1 !px-2 !text-xs">
+          <Upload size={12} /> {enviando ? 'Enviando…' : (url ? 'Trocar' : 'Enviar')}
+        </Button>
+        {url && (
+          <Button type="button" variant="ghost" onClick={() => onChange('')} disabled={enviando} className="!px-2">
+            <Trash2 size={12} />
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Aparência tab (banner da home) ────────────────────────
 function TabAparencia({ settings, qc }) {
   const fileRef = useRef(null)
@@ -636,13 +700,21 @@ function TabAparencia({ settings, qc }) {
   const [uploading, setUploading] = useState(false)
   const [error, setError]         = useState('')
   const [savedText, setSavedText] = useState(false)
+  const [descubra, setDescubra]   = useState({})
 
   useEffect(() => {
     const m = settingsToMap(settings)
     setBannerUrl(m.home_banner_image_url || '')
     setTitle(m.home_banner_title || '')
     setSubtitle(m.home_banner_subtitle || '')
+    setDescubra(Object.fromEntries(DESCUBRA.map((d) => [d.chave, m[d.chave] || ''])))
   }, [settings])
+
+  async function salvarDescubra(chave, rotulo, url) {
+    await persist(chave, url, `Foto do quadro "${rotulo}" no Descubra da home`)
+    qc.invalidateQueries({ queryKey: ['settings'] })
+    setDescubra((d) => ({ ...d, [chave]: url }))
+  }
 
   function persist(key, value, description) {
     return api.updateSetting(key, { setting_value: value, value_type: 'string', description })
@@ -750,6 +822,33 @@ function TabAparencia({ settings, qc }) {
             <Input label="Subtítulo" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Passeios, transfers e experiências únicas…" />
             <SaveRow onSave={saveTexts} pending={false} saved={savedText} />
           </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <ImageIcon size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">Quadros “Descubra”</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {DESCUBRA.map((item) => (
+              <QuadroDescubra
+                key={item.chave}
+                item={item}
+                url={descubra[item.chave] || ''}
+                onChange={(url) => salvarDescubra(item.chave, item.rotulo, url)}
+              />
+            ))}
+          </div>
+          <p className="text-xs text-gray-600 mt-4">
+            Fotos de fundo dos quatro quadros no rodapé da home do turista. Cada
+            uma é salva assim que você envia. Sem foto, o quadro fica com o degradê
+            colorido — a tela nunca quebra por falta de imagem. Prefira fotos com o
+            assunto no centro: o quadro é pequeno e corta as bordas.
+          </p>
         </CardBody>
       </Card>
     </div>
