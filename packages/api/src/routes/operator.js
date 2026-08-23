@@ -16,7 +16,34 @@ import {
   notifyClientRideStarted, notifyClientRideCompleted, notifyClientReviewRequest,
 } from '../services/whatsapp.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
+import { isMarketplaceConfigured } from '../services/mercadoPago.js';
 import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
+
+// Porteiro do Mercado Pago: devolve a MENSAGEM de bloqueio, ou null se pode
+// seguir. Só exige a conexão quando ela é possível e devida:
+//   • marketplace não configurado na plataforma → não há o que conectar;
+//   • operador marcado como isento (operação própria, repasse manual);
+//   • coluna ainda sem a migration 070 → não trava ninguém.
+async function mpGate(operatorId) {
+  if (!isMarketplaceConfigured()) return null;
+
+  let { data, error } = await supabase
+    .from('users')
+    .select('mp_user_id, mp_payout_exempt')
+    .eq('id', operatorId)
+    .maybeSingle();
+
+  if (error?.code === '42703') {
+    // Migration 070 pendente: segue sem a isenção, checando só a conexão.
+    const retry = await supabase.from('users').select('mp_user_id').eq('id', operatorId).maybeSingle();
+    data = retry.data; error = retry.error;
+  }
+  if (error) return null;               // instabilidade não pode barrar trabalho
+  if (data?.mp_payout_exempt) return null;
+  if (data?.mp_user_id) return null;
+
+  return 'Conecte sua conta Mercado Pago no Perfil para aceitar corridas — é por ela que você recebe a sua parte de cada reserva.';
+}
 
 // Rótulo amigável do serviço para o texto da notificação
 const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
@@ -672,6 +699,13 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
       return res.status(404).json({ error: 'Motor de pernas não habilitado' });
     }
 
+    // Mesma exigência do aceite por reserva: sem Mercado Pago conectado, o
+    // split não teria para onde mandar a parte do operador.
+    if (req.user?.user_type !== 'admin') {
+      const bloqueio = await mpGate(req.user.id);
+      if (bloqueio) return res.status(409).json({ error: bloqueio });
+    }
+
     const isAdmin = req.user?.user_type === 'admin';
     const nowIso  = new Date().toISOString();
 
@@ -764,6 +798,12 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
     const isAdmin = req.user?.user_type === 'admin'
     const nowIso  = new Date().toISOString()
 
+    // Mesma exigência dos demais aceites.
+    if (!isAdmin) {
+      const bloqueio = await mpGate(req.user.id)
+      if (bloqueio) return res.status(409).json({ error: bloqueio })
+    }
+
     const { data: groupRows, error: gErr } = await supabase
       .from('bookings')
       .select('id, booking_code, user_id, service_type, operator_id, status_commercial, status_operational')
@@ -840,6 +880,14 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
     // Tentativa 1 — fluxo novo: solicitação aguardando aceite → vai para pagamento.
     const isAdmin = req.user?.user_type === 'admin'
     const nowIso  = new Date().toISOString()
+
+    // Conta Mercado Pago obrigatória para aceitar (migration 070). Sem ela o
+    // pagamento cairia inteiro na plataforma e o operador ficaria esperando um
+    // repasse que o split deveria fazer sozinho.
+    if (!isAdmin) {
+      const bloqueio = await mpGate(req.user.id)
+      if (bloqueio) return res.status(409).json({ error: bloqueio })
+    }
 
     // Motor de pernas ON: pedidos com booking_legs (privativo/transfer de
     // rota, Onda A) NÃO podem mais ser aceitos por booking inteiro — cada

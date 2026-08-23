@@ -236,6 +236,14 @@ function SplitPorCooperativa({ globalAdminPct, qc }) {
 
   const operators = data?.data || []
 
+  // Isenção de Mercado Pago: usada no "operador da casa", quando a própria
+  // plataforma opera e paga os motoristas por fora (aba Repasses).
+  const exemptMut = useMutation({
+    mutationFn: ({ id, exempt }) => api.updateUser(id, { mp_payout_exempt: exempt }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['operators-split'] }),
+    onError:   (err) => alert(err?.message || 'Não foi possível alterar a isenção.'),
+  })
+
   const updateMut = useMutation({
     mutationFn: ({ id, pct }) => api.updateUser(id, { platform_split_pct: pct }),
     onSuccess: (_, { id }) => {
@@ -298,6 +306,30 @@ function SplitPorCooperativa({ globalAdminPct, qc }) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200 truncate">{op.full_name}</p>
                     <p className="text-xs text-gray-600 truncate">{op.email || op.phone || '—'}</p>
+                    {/* Sem Mercado Pago o operador não consegue aceitar corridas
+                        (a não ser que esteja isento — operação própria). */}
+                    <div className="flex items-center gap-2 mt-1">
+                      {op.mp_payout_exempt ? (
+                        <span className="text-[10px] font-semibold text-sky-400 bg-sky-900/30 px-1.5 py-0.5 rounded">
+                          isento de MP · repasse manual
+                        </span>
+                      ) : op.mp_user_id ? (
+                        <span className="text-[10px] font-semibold text-green-400 bg-green-900/30 px-1.5 py-0.5 rounded">
+                          MP conectado
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-amber-400 bg-amber-900/30 px-1.5 py-0.5 rounded">
+                          sem MP · não aceita corridas
+                        </span>
+                      )}
+                      <button
+                        onClick={() => exemptMut.mutate({ id: op.id, exempt: !op.mp_payout_exempt })}
+                        disabled={exemptMut.isPending}
+                        className="text-[10px] text-gray-500 hover:text-gray-300 underline disabled:opacity-50"
+                      >
+                        {op.mp_payout_exempt ? 'exigir MP' : 'isentar'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Percentuais */}
