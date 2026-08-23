@@ -295,7 +295,7 @@ export default function Dashboard() {
   const [assignModal, setAssign]           = useState(null)
   const [dispatchedBooking, setDispatched] = useState(null)
   const [savedForm, setSavedForm]          = useState(null)
-  const [form, setForm]                    = useState({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
+  const [form, setForm]                    = useState({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '', driver_payout_amount: '' })
 
   const qc = useQueryClient()
 
@@ -338,7 +338,7 @@ export default function Dashboard() {
       setSavedForm({ ...form })
       setDispatched(assignModal)
       setAssign(null)
-      setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
+      setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '', driver_payout_amount: '' })
     },
   })
 
@@ -654,7 +654,7 @@ export default function Dashboard() {
       {/* ── Modal de despacho ──────────────────────────── */}
       <Modal
         open={!!assignModal}
-        onClose={() => { setAssign(null); setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' }) }}
+        onClose={() => { setAssign(null); setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '', driver_payout_amount: '' }) }}
         title={`Despachar — ${assignModal?.booking_code || ''}`}
         size="md"
       >
@@ -767,6 +767,18 @@ export default function Dashboard() {
                 placeholder="Instruções especiais, ponto de referência…"
                 value={form.dispatch_notes}
                 onChange={(e) => setForm({ ...form, dispatch_notes: e.target.value })}
+              />
+
+              {/* Combinado com o motorista. Fica registrado na aba Repasses do
+                  admin, que controla o pagamento feito fora da plataforma. */}
+              <Input
+                label="Valor do repasse ao motorista (opcional)"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Ex: 120,00 — pode definir depois"
+                value={form.driver_payout_amount}
+                onChange={(e) => setForm({ ...form, driver_payout_amount: e.target.value })}
               />
 
               <Button

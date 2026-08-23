@@ -19,6 +19,7 @@ import Feed from './pages/Feed'
 import Estabelecimentos from './pages/Estabelecimentos'
 import Stories from './pages/Stories'
 import Perfil from './pages/Perfil'
+import Repasses from './pages/Repasses'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="stories"      element={<Stories />} />
         <Route path="estabelecimentos" element={<Estabelecimentos />} />
         <Route path="financeiro"   element={<Financeiro />} />
+        <Route path="repasses"     element={<Repasses />} />
         <Route path="auditoria"    element={<Auditoria />} />
         <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="perfil"        element={<Perfil />} />

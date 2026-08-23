@@ -194,6 +194,10 @@ export const api = {
   // Cupons
   getCommissions: (params = {}) => request(`/api/admin/commissions?${new URLSearchParams(params)}`),
   payCommission:  (id)          => request(`/api/admin/commissions/${id}/pay`, { method: 'PUT' }),
+
+  // Repasse ao motorista (pagamento manual, fora da plataforma)
+  getDriverPayouts:   (params = {}) => request(`/api/admin/driver-payouts?${new URLSearchParams(params)}`),
+  updateDriverPayout: (id, body)    => request(`/api/admin/driver-payouts/${id}`, { method: 'PATCH', body }),
   getCoupons:   (params = {}) => request(`/api/admin/coupons?${new URLSearchParams(params)}`),
   createCoupon: (body)        => request('/api/admin/coupons', { method: 'POST', body }),
   updateCoupon: (id, body)    => request(`/api/admin/coupons/${id}`, { method: 'PUT', body }),

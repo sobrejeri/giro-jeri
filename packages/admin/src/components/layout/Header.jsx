@@ -13,6 +13,7 @@ const TITLES = {
   '/afiliados':        'Afiliados',
   '/temporada':        'Alta Temporada',
   '/financeiro':       'Financeiro',
+  '/repasses':         'Repasses aos Motoristas',
   '/auditoria':        'Auditoria',
   '/configuracoes':    'Configurações',
   '/reservas':         'Reservas',

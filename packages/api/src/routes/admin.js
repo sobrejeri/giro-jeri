@@ -590,9 +590,24 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       dispatch_notes,
       driver_name,
       driver_phone,
+      driver_payout_amount,
     } = req.body;
 
     const bookingId = req.params.id;
+
+    // Só o dono da reserva despacha. Sem isto, uma cooperativa despachava a
+    // reserva de OUTRA e a plataforma mandava o itinerário do cliente para o
+    // telefone informado por ela. Admin passa direto.
+    const { data: alvo } = await supabase
+      .from('bookings')
+      .select('id, operator_id')
+      .eq('id', bookingId)
+      .maybeSingle();
+    if (!alvo) return res.status(404).json({ error: 'Reserva não encontrada' });
+    if (req.user.user_type !== 'admin' && alvo.operator_id !== req.user.id) {
+      return res.status(403).json({ error: 'Esta reserva não é da sua operação.' });
+    }
+
     const payload   = {
       booking_id:                bookingId,
       assigned_operator_user_id: req.user.id,
@@ -605,6 +620,12 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       assignment_status:         'assigned',
       updated_at:                new Date().toISOString(),
     };
+    // Valor do repasse ao motorista (opcional no despacho — pode ser definido
+    // depois na aba de Repasses). Só entra no payload quando informado, para
+    // não zerar um valor já combinado ao redespachar.
+    if (driver_payout_amount !== undefined && driver_payout_amount !== null && driver_payout_amount !== '') {
+      payload.driver_payout_amount = Number(driver_payout_amount);
+    }
 
     // Verifica se já existe um assignment para essa reserva
     const { data: existing } = await supabase
@@ -785,6 +806,95 @@ router.post('/storage-sign', requireAdmin, async (req, res, next) => {
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
 
     res.json({ signed_url: data.signedUrl, path, public_url: publicUrl });
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/driver-payouts ──────────────────────
+// Repasses aos motoristas. Quando a plataforma opera as corridas, o dinheiro
+// cai todo na conta dela e o pagamento ao motorista é feito por fora — esta
+// listagem é o controle do que já foi pago e do que ainda deve.
+router.get('/driver-payouts', requireAdmin, async (req, res, next) => {
+  try {
+    const { status, from, to } = req.query;
+    let query = supabase
+      .from('operational_assignments')
+      .select(`id, booking_id, driver_name, driver_phone, real_vehicle_text,
+               driver_payout_amount, driver_payout_status, driver_paid_at,
+               driver_payout_notes, assignment_status, created_at,
+               bookings ( booking_code, service_type, service_date, service_time,
+                          total_amount, status_commercial, origin_text, destination_text )`)
+      .not('driver_name', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(300);
+    if (status) query = query.eq('driver_payout_status', status);
+
+    let { data: rows, error } = await query;
+    // Migration 066 pendente: devolve lista vazia em vez de derrubar a tela.
+    if (error?.code === '42703') {
+      return res.json({ rows: [], totals: { pending: 0, paid: 0, count: 0 }, migration_pending: true });
+    }
+    if (error) throw error;
+
+    // Filtro por data DO SERVIÇO (não do despacho) — é o que o admin usa para
+    // fechar o período de pagamento.
+    rows = (rows || []).filter((r) => {
+      const d = r.bookings?.service_date;
+      if (from && (!d || d < from)) return false;
+      if (to   && (!d || d > to))   return false;
+      return true;
+    });
+
+    const totals = rows.reduce((acc, r) => {
+      const v = Number(r.driver_payout_amount) || 0;
+      if (r.driver_payout_status === 'paid')    acc.paid    += v;
+      if (r.driver_payout_status === 'pending') acc.pending += v;
+      return acc;
+    }, { pending: 0, paid: 0, count: rows.length });
+    totals.pending = Math.round(totals.pending * 100) / 100;
+    totals.paid    = Math.round(totals.paid    * 100) / 100;
+
+    res.json({ rows, totals });
+  } catch (err) { next(err); }
+});
+
+// ── PATCH /api/admin/driver-payouts/:id ────────────────
+// Define o valor combinado e/ou dá baixa no repasse (pago fora da plataforma).
+router.patch('/driver-payouts/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { amount, status, notes } = req.body || {};
+    const patch = { updated_at: new Date().toISOString() };
+
+    if (amount !== undefined && amount !== null && amount !== '') {
+      const v = Number(amount);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ error: 'Valor do repasse inválido.' });
+      }
+      patch.driver_payout_amount = Math.round(v * 100) / 100;
+    }
+    if (notes !== undefined) patch.driver_payout_notes = notes || null;
+
+    if (status !== undefined) {
+      if (!['pending', 'paid', 'cancelled'].includes(status)) {
+        return res.status(400).json({ error: 'Status inválido.' });
+      }
+      patch.driver_payout_status = status;
+      // Marca/limpa a data conforme o estado, para o histórico não mentir.
+      patch.driver_paid_at = status === 'paid' ? new Date().toISOString() : null;
+    }
+
+    const { data, error } = await supabase
+      .from('operational_assignments')
+      .update(patch)
+      .eq('id', req.params.id)
+      .select('id, driver_payout_amount, driver_payout_status, driver_paid_at, driver_payout_notes')
+      .maybeSingle();
+
+    if (error?.code === '42703') {
+      return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 066 no banco.' });
+    }
+    if (error) return res.status(400).json({ error: error.message });
+    if (!data)  return res.status(404).json({ error: 'Despacho não encontrado' });
+    res.json(data);
   } catch (err) { next(err); }
 });
 
