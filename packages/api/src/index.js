@@ -7,6 +7,7 @@ import rateLimit      from 'express-rate-limit';
 import { supabase }   from './supabase.js';
 import authRoutes     from './routes/auth.js';
 import otpRoutes      from './routes/otp.js';
+import broadcastRoutes from './routes/broadcast.js';
 import osRoutes       from './routes/os.js';
 import toursRoutes    from './routes/tours.js';
 import transfersRoutes from './routes/transfers.js';
@@ -141,6 +142,7 @@ app.use('/api/payments',  paymentsRoutes);
 app.use('/api/regions',   regionsRouter);
 app.use('/api/seasons',   seasonsRouter);
 app.use('/api/os',        osRoutes);            // link público da Ordem de Serviço
+app.use('/api/broadcast', broadcastRoutes);     // oferta por WhatsApp: ver, aceitar, sair
 app.use('/api/partner',   partnerRouter);
 app.use('/api/reviews',   reviewsRouter);
 app.use('/api/affiliate', affiliateRouter);

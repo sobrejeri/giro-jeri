@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
+import { lerOferta } from '../../lib/oferta'
 import { useCart } from '../../contexts/CartContext'
 import { checkoutStateFor } from '../../lib/cartCheckout'
 import { getPartner as getPartnerAttribution } from '../../lib/partner'
@@ -255,6 +256,14 @@ function CheckoutSummaryInner() {
   const [appliedCoupon, setAppliedCoupon] = useState(null) // { code, discount }
   const [couponErr,     setCouponErr]     = useState('')
   const [couponBusy,    setCouponBusy]    = useState(false)
+
+  // Cupom que chegou por WhatsApp: já vem preenchido, senão o cliente teria de
+  // decorar o código da mensagem e digitar na mão — é aí que a oferta se perde.
+  useEffect(() => {
+    const guardado = lerOferta()
+    if (guardado) setCouponInput(guardado)
+  }, [])
+
 
   /* ── Early return after hooks ────────────────────────────── */
   if (!ls) { navigate(-1); return null }

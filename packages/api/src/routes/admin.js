@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
+import {
+  destinatariosElegiveis,
+  dispararEmSegundoPlano,
+  montarMensagem,
+  isWhatsappEnabled,
+  TETO_POR_DISPARO,
+} from '../services/couponBroadcast.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
 import { notifyDispatchOS } from '../services/whatsapp.js';
@@ -893,6 +900,102 @@ router.delete('/coupons/:id', requireAdmin, async (req, res, next) => {
       .from('coupons').update({ is_active: false }).eq('id', req.params.id);
     if (error) throw error;
     res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ── Divulgação de cupom por WhatsApp ───────────────────
+// Prévia: quantos clientes ainda podem receber ESTE cupom e como fica a
+// mensagem. Sempre antes do disparo — o dono precisa ver o texto exato e o
+// número de destinatários antes de mandar para a base inteira.
+router.get('/coupons/:id/broadcast', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: cupom, error } = await supabase
+      .from('coupons').select('*').eq('id', req.params.id).maybeSingle();
+    if (error) throw error;
+    if (!cupom) return res.status(404).json({ error: 'Cupom não encontrado' });
+
+    const destinatarios = await destinatariosElegiveis(supabase, cupom.id);
+
+    // Histórico e disparo em andamento, para a tela não oferecer um botão que
+    // o banco vai recusar (há UNIQUE de um disparo ativo por cupom).
+    const { data: disparos } = await supabase
+      .from('coupon_broadcasts')
+      .select('*')
+      .eq('coupon_id', cupom.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    res.json({
+      whatsapp_ativo:  isWhatsappEnabled(),
+      destinatarios:   destinatarios.length,
+      teto_por_disparo: TETO_POR_DISPARO,
+      mensagem_exemplo: montarMensagem(cupom, { nome: destinatarios[0]?.full_name || null }),
+      em_andamento:    (disparos || []).find((d) => d.status === 'running') || null,
+      historico:       disparos || [],
+    });
+  } catch (err) { next(err); }
+});
+
+// Dispara. Responde na hora com o id; o envio segue em segundo plano.
+router.post('/coupons/:id/broadcast', requireAdmin, async (req, res, next) => {
+  try {
+    if (!isWhatsappEnabled()) {
+      return res.status(503).json({ error: 'WhatsApp não configurado nesta instalação.' });
+    }
+    const { data: cupom, error } = await supabase
+      .from('coupons').select('*').eq('id', req.params.id).maybeSingle();
+    if (error) throw error;
+    if (!cupom) return res.status(404).json({ error: 'Cupom não encontrado' });
+    if (!cupom.is_active) {
+      return res.status(400).json({ error: 'Cupom inativo: reative antes de divulgar.' });
+    }
+    if (cupom.valid_until && new Date(cupom.valid_until) < new Date()) {
+      return res.status(400).json({ error: 'Cupom já expirou.' });
+    }
+
+    const destinatarios = await destinatariosElegiveis(supabase, cupom.id);
+    if (destinatarios.length === 0) {
+      return res.status(400).json({ error: 'Nenhum cliente novo para receber este cupom.' });
+    }
+
+    const { data: disparo, error: errDisparo } = await supabase
+      .from('coupon_broadcasts')
+      .insert({
+        coupon_id:          cupom.id,
+        created_by_user_id: req.user.id,
+        message:            montarMensagem(cupom),
+        total_recipients:   Math.min(destinatarios.length, TETO_POR_DISPARO),
+      })
+      .select().single();
+
+    // 23505 = já existe disparo 'running' para este cupom (índice único
+    // parcial). Acontece com clique duplo ou duas abas do admin abertas.
+    if (errDisparo?.code === '23505') {
+      return res.status(409).json({ error: 'Já existe um envio em andamento para este cupom.' });
+    }
+    if (errDisparo) throw errDisparo;
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'coupons',
+      entity_id:       cupom.id,
+      action_type:     'broadcast_whatsapp',
+      new_values_json: { broadcast_id: disparo.id, destinatarios: disparo.total_recipients },
+    });
+
+    dispararEmSegundoPlano(supabase, { broadcastId: disparo.id, cupom, destinatarios });
+    res.status(202).json({ id: disparo.id, total: disparo.total_recipients });
+  } catch (err) { next(err); }
+});
+
+// Andamento de um disparo — a tela consulta enquanto está enviando.
+router.get('/broadcasts/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('coupon_broadcasts').select('*').eq('id', req.params.id).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Envio não encontrado' });
+    res.json(data);
   } catch (err) { next(err); }
 });
 

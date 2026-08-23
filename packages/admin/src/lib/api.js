@@ -197,6 +197,9 @@ export const api = {
   getCoupons:   (params = {}) => request(`/api/admin/coupons?${new URLSearchParams(params)}`),
   createCoupon: (body)        => request('/api/admin/coupons', { method: 'POST', body }),
   updateCoupon: (id, body)    => request(`/api/admin/coupons/${id}`, { method: 'PUT', body }),
+  getCouponBroadcast:  (id) => request(`/api/admin/coupons/${id}/broadcast`),
+  sendCouponBroadcast: (id) => request(`/api/admin/coupons/${id}/broadcast`, { method: 'POST' }),
+  getBroadcast:        (id) => request(`/api/admin/broadcasts/${id}`),
   deleteCoupon: (id)          => request(`/api/admin/coupons/${id}`, { method: 'DELETE' }),
 
   // Alta Temporada

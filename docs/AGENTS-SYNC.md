@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 068.**
+   registre aqui o número reservado. **Próximo número livre: 069.**
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +27,41 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-23 · Agente B (divulgar cupom por WhatsApp — migration 068)** —
+  Na aba de Cupons, botão que envia a oferta para a base de clientes; o cliente
+  toca em "Quero a oferta" e o código passa a vir preenchido no carrinho e no
+  resumo. **Rodar a migration 068.**
+  **Peças:** `068_coupon_broadcast.sql` (opt-out em `users` + `coupon_broadcasts`
+  + `coupon_broadcast_recipients`), `services/couponBroadcast.js`,
+  `lib/optOutToken.js`, `routes/broadcast.js` (público), rotas de disparo em
+  `admin.js`, `components/DivulgarCupom.jsx` no admin e, no turista,
+  `pages/Oferta.jsx`, `pages/SairDasOfertas.jsx` e `lib/oferta.js`.
+  **O que NÃO é enfeite:**
+  · **Cadência.** Envio sequencial com pausa (`BROADCAST_INTERVALO_MS`, padrão
+    1200ms) e teto por disparo (`BROADCAST_TETO`, padrão 500). Rajada de
+    centenas de mensagens é o que faz o WhatsApp banir o número — e o número é
+    o MESMO do OTP de cadastro, do aviso de reserva e da ordem de serviço.
+  · **Porta de saída.** Link de descadastro no rodapé de toda mensagem, com
+    token HMAC. Confirmar é POST, não GET: o WhatsApp busca prévia de link e
+    antivírus abrem links de mensagem — com GET, gente que nunca tocou no link
+    sairia da lista sozinha.
+  · **Reserva antes do envio.** A linha em `coupon_broadcast_recipients` é
+    criada ANTES de mandar a mensagem; a UNIQUE `(coupon_id, user_id)` é a
+    única garantia real contra envio duplicado. Reservar depois deixaria a
+    mensagem sair antes de o banco poder recusar.
+  · **Paginação.** PostgREST corta em 1000 linhas. Sem paginar, a lista de
+    "quem já recebeu" viria incompleta numa base grande e alguém receberia a
+    mesma oferta duas vezes.
+  · **Segundo plano.** 500 mensagens a 1,2s são 10 minutos; a rota devolve 202
+    com o id e o progresso fica em `coupon_broadcasts`, que a tela consulta.
+  **Verificado:** migration aplicada em Postgres 16 real (idempotente; a UNIQUE
+  de disparo ativo e a de destinatário barram o clique duplo e o reenvio), regra
+  de elegibilidade conferida com 8 casos (opt-out, sem WhatsApp, inativo, sem
+  telefone, cooperativa, já recebeu → sobram só os 2 certos), token de
+  descadastro recusando adulteração/truncamento/vazio/nulo.
+  **Pendente:** ninguém testou um envio real ainda — o dono precisa disparar
+  para um cupom de teste antes de usar na base inteira.
 
 - **2026-08-23 · Agente B (nada a rodar no SQL — script de verificação)** — O
   dono perguntou o que precisava rodar por causa das imagens. **Resposta: nada.**

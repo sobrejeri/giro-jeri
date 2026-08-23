@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Ticket, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Ticket, Search, Send } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -9,6 +9,7 @@ import Modal from '../components/ui/Modal'
 import Input, { Select } from '../components/ui/Input'
 import Card, { CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
+import DivulgarCupom from '../components/DivulgarCupom'
 
 const EMPTY = {
   code: '', title: '', discount_type: 'percentage', discount_value: '',
@@ -25,6 +26,7 @@ export default function Cupons() {
   const [search, setSearch] = useState('')
   const [modal, setModal]   = useState(null)
   const [form, setForm]     = useState(EMPTY)
+  const [divulgar, setDivulgar] = useState(null)
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -135,6 +137,18 @@ export default function Cupons() {
                     <td className="px-5 py-3"><Badge value={String(c.is_active)} /></td>
                     <td className="px-5 py-3">
                       <div className="flex gap-1 justify-end">
+                        {/* Só cupom ativo pode ser divulgado: enviar oferta
+                            desligada para a base inteira gera cliente batendo
+                            num código que não funciona. */}
+                        {c.is_active && (
+                          <button
+                            onClick={() => setDivulgar(c)}
+                            title="Divulgar no WhatsApp"
+                            className="p-1.5 text-gray-600 hover:text-emerald-400 hover:bg-emerald-900/20 rounded-lg"
+                          >
+                            <Send size={13} />
+                          </button>
+                        )}
                         <button onClick={() => openEdit(c)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
                           <Pencil size={13} />
                         </button>
@@ -153,6 +167,8 @@ export default function Cupons() {
           </div>
         )}
       </Card>
+
+      {divulgar && <DivulgarCupom cupom={divulgar} onClose={() => setDivulgar(null)} />}
 
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.isNew ? 'Novo Cupom' : 'Editar Cupom'}>
         <form onSubmit={handleSubmit} className="space-y-4">

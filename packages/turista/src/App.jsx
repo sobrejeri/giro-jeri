@@ -17,6 +17,8 @@ import Bookings        from './pages/Bookings'
 import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
 import Auth            from './pages/Auth'
+import Oferta from './pages/Oferta'
+import SairDasOfertas from './pages/SairDasOfertas'
 import ResetPassword   from './pages/ResetPassword'
 import Legal           from './pages/Legal'
 import CartPage        from './pages/CartPage'
@@ -65,6 +67,9 @@ export default function App() {
       <Route path="/login"    element={<Auth defaultTab="login" />} />
       <Route path="/cadastro" element={<Auth defaultTab="register" />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />
+      {/* Links das ofertas enviadas por WhatsApp — abrem sem login */}
+      <Route path="/oferta/:code"            element={<Oferta />} />
+      <Route path="/nao-quero-ofertas/:token" element={<SairDasOfertas />} />
 
       {/* Checkout — frame 430px, sem nav bars */}
       <Route path="/checkout" element={<PrivateRoute><CheckoutLayout /></PrivateRoute>}>

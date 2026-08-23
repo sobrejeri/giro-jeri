@@ -152,6 +152,11 @@ export const api = {
   deletePost:     (id)         => request(`/api/feed/${id}`,  { method: 'DELETE' }),
 
   // Regiões
+  // Ofertas divulgadas por WhatsApp
+  getOffer:    (code)  => request(`/api/broadcast/offer/${encodeURIComponent(code)}`),
+  acceptOffer: (code)  => request('/api/broadcast/accept', { method: 'POST', body: { code } }),
+  getOptOut:   (token) => request(`/api/broadcast/opt-out/${token}`),
+  optOut:      (token) => request('/api/broadcast/opt-out', { method: 'POST', body: { token } }),
   getRegions: () => request('/api/regions'),
 
   // Veículos

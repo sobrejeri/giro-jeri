@@ -10,6 +10,7 @@ import PageHeader from '../components/layout/PageHeader'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
+import { lerOferta } from '../lib/oferta'
 import { itemMissing, requestPayloadFor } from '../lib/cartCheckout'
 import { getPartner as getPartnerAttribution } from '../lib/partner'
 import { getAffiliate as getAffiliateAttribution } from '../lib/affiliate'
@@ -489,6 +490,14 @@ export default function CartPage() {
   const [appliedCoupon, setAppliedCoupon] = useState(null) // {code, discount, applicable}
   const [couponErr,     setCouponErr]     = useState('')
   const [couponBusy,    setCouponBusy]    = useState(false)
+
+  // Cupom que chegou por WhatsApp: já vem preenchido, senão o cliente teria de
+  // decorar o código da mensagem e digitar na mão — é aí que a oferta se perde.
+  useEffect(() => {
+    const guardado = lerOferta()
+    if (guardado) setCouponInput(guardado)
+  }, [])
+
 
   const couponEligible = (it) =>
     !appliedCoupon?.applicable ||
