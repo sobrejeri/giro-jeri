@@ -1476,7 +1476,45 @@ router.post('/webhook', async (req, res, next) => {
     }
 
     if ((eventType === 'payment' || eventType === 'payment.updated') && paymentForEvent) {
-      const mpStatus = event.data?.status || event.status
+      // ── O status vem do Mercado Pago, NÃO do corpo do evento ──────────────
+      // A notificação do MP carrega apenas o id do recurso ({"data":{"id":...}}) —
+      // não existe `data.status`. Ler o status do payload deixava `mpStatus`
+      // indefinido e NENHUM pagamento era confirmado por webhook: só era
+      // confirmado quem ficasse com a tela de "processando" aberta, porque lá o
+      // app consulta /status de 4 em 4 segundos. Quem pagava o PIX no app do
+      // banco e fechava o Turiva pagava e ficava sem reserva até expirar.
+      // Só consulta o MP para cobrança que realmente vive lá. Pagamento de
+      // teste (gateway 'test'/'manual', ou id "TEST-") não existe no MP: a
+      // consulta falharia, cairia no 503 e o MP reenviaria o evento em laço.
+      const noMercadoPago = paymentForEvent.gateway_name === 'mercado_pago'
+        && paymentForEvent.gateway_transaction_id
+        && !String(paymentForEvent.gateway_transaction_id).startsWith('TEST-')
+      if (!noMercadoPago) {
+        console.warn('[webhook] evento para pagamento fora do MP (gateway=%s) — ignorado',
+          paymentForEvent.gateway_name)
+        return res.status(200).json({ ok: true, ignorado: true })
+      }
+
+      let mpStatus = null
+      try {
+        const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
+        // Com split, o pagamento vive na conta da cooperativa — consulta com o
+        // token dela, como já faz o polling.
+        const opMp = await getOperatorMp(paymentForEvent.bookings?.operator_id)
+        mpStatus = await getMpPaymentStatus(paymentForEvent.gateway_transaction_id, opMp?.token)
+      } catch (err) {
+        console.error('[webhook] consulta ao MP falhou payment=%s: %s',
+          paymentForEvent.id, err.message)
+      }
+
+      if (!mpStatus) {
+        // Sem status confiável, não decide nada. Responder com erro faz o MP
+        // reenviar o evento — melhor uma retentativa do que marcar a reserva
+        // errada (paga sem dinheiro, ou falha sobre pagamento aprovado).
+        console.warn('[webhook] status indeterminado payment=%s — pedindo retentativa', paymentForEvent.id)
+        return res.status(503).json({ error: 'Status indeterminado, reenvie' })
+      }
+
       if (mpStatus === 'approved' && paymentForEvent.status !== 'approved') {
         await onPaymentApproved(paymentForEvent)
       } else if (['rejected', 'cancelled'].includes(mpStatus)) {
@@ -1651,8 +1689,20 @@ async function onPaymentApproved(payment) {
 
   await supabase.from('payments').update({ status: 'approved', paid_at: new Date().toISOString() }).eq('id', payment.id)
 
-  // Carrega a reserva ANTES de atualizar para saber se a cooperativa já aceitou.
-  const booking = payment.bookings || (await supabase.from('bookings').select('*').eq('id', payment.booking_id).single()).data
+  // Carrega a reserva COMPLETA antes de atualizar (precisa saber se a
+  // cooperativa já aceitou).
+  //
+  // Antes isto era `payment.bookings || (busca)`, confiando no join de quem
+  // chamou — e o polling de /status seleciona só três colunas da reserva
+  // (booking_code, status_commercial, operator_id). Como um objeto parcial é
+  // "verdadeiro" em JavaScript, a busca de reserva NUNCA acontecia e o resto da
+  // função trabalhava sem `user_id`, `service_type`, `service_id` e as demais
+  // que ela usa: orçamento de translado não virava "pago", a notificação ao
+  // cliente ficava sem destinatário e a comissão do afiliado saía de uma
+  // reserva pela metade. E o polling é justamente o caminho por onde as
+  // aprovações passam hoje.
+  const { data: booking } = await supabase
+    .from('bookings').select('*').eq('id', payment.booking_id).maybeSingle()
 
   // Fluxo novo (solicitar→aceitar→pagar): a cooperativa já está atribuída, então
   // a reserva permanece 'assigned' e segue direto para o atendimento. Fluxo
@@ -1674,15 +1724,27 @@ async function onPaymentApproved(payment) {
     }
   }
 
-  // Cria lançamentos no ledger apenas uma vez — ledger_created evita duplicação
-  // quando webhook e polling aprovam o mesmo pagamento quase simultaneamente.
+  // ── Lança no ledger UMA vez, com reserva atômica ──────────────────────────
+  // Antes isto era ler `ledger_created` e depois inserir. Ler e escrever em duas
+  // idas ao banco NÃO impede a corrida que o próprio comentário descrevia:
+  // webhook e polling podiam ler `false` ao mesmo tempo, os dois inserirem e a
+  // receita aparecer DOBRADA no financeiro. Era raro só porque o webhook nunca
+  // aprovava nada (ele lia um status que o Mercado Pago não manda); com o
+  // webhook consertado, a corrida passou a ser alcançável.
+  //
+  // Agora a marca é feita por UPDATE condicional: no Postgres, só uma das
+  // chamadas concorrentes encontra `ledger_created = false` e leva a linha. Se
+  // a inserção falhar depois, a marca é DEVOLVIDA — senão o pagamento ficaria
+  // marcado como lançado sem nenhum lançamento existir.
   const { data: freshPayment } = await supabase
     .from('payments')
-    .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount')
+    .update({ ledger_created: true })
     .eq('id', payment.id)
-    .single()
+    .eq('ledger_created', false)
+    .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount')
+    .maybeSingle()
 
-  if (!freshPayment?.ledger_created) {
+  if (freshPayment) {
     const amount     = freshPayment?.amount_gross ?? payment.amount_gross
     // Usa a taxa real registrada no payment; fallback 3.5% para linhas antigas sem gateway_fee_pct
     const feePct     = freshPayment?.gateway_fee_pct ?? 0.035
@@ -1702,10 +1764,10 @@ async function onPaymentApproved(payment) {
     ])
 
     if (ledgerErr) {
-      // Não marca ledger_created: a próxima aprovação/consulta tenta de novo
+      // Devolve a marca: sem isso o pagamento ficaria "lançado" sem lançamento
+      // nenhum, e a receita sumiria do financeiro para sempre.
       console.error('[ledger] falha ao lançar receita:', ledgerErr.message)
-    } else {
-      await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
+      await supabase.from('payments').update({ ledger_created: false }).eq('id', payment.id)
     }
   }
 
@@ -1810,11 +1872,18 @@ async function onGroupPaymentApproved(payment) {
 
   // 2) Receita no ledger — uma vez por pagamento (gate ledger_created),
   //    rateando a taxa de gateway entre as reservas pelo total de cada uma.
+  // Mesma reserva atômica do caminho de reserva única: UPDATE condicional em
+  // vez de ler-depois-escrever. Aqui o estrago seria maior — o grupo lança a
+  // receita de VÁRIAS reservas de uma vez, então a duplicação sairia
+  // multiplicada.
   const { data: fresh } = await supabase.from('payments')
+    .update({ ledger_created: true })
+    .eq('id', payment.id)
+    .eq('ledger_created', false)
     .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount')
-    .eq('id', payment.id).single()
+    .maybeSingle()
 
-  if (!fresh?.ledger_created) {
+  if (fresh) {
     const combined = Number(fresh?.amount_gross ?? payment.amount_gross) || 0
     const feePct   = fresh?.gateway_fee_pct ?? 0.035
     const totalFee = fresh?.gateway_fee_amount > 0
@@ -1844,9 +1913,9 @@ async function onGroupPaymentApproved(payment) {
     }
     const { error: ledgerErr } = await supabase.from('financial_ledger').insert(rows)
     if (ledgerErr) {
+      // Devolve a marca para a próxima aprovação tentar de novo.
       console.error('[ledger] grupo: falha ao lançar receita:', ledgerErr.message)
-    } else {
-      await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
+      await supabase.from('payments').update({ ledger_created: false }).eq('id', payment.id)
     }
   }
 

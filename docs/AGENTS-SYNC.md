@@ -28,6 +28,47 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (validação de pagamento — 3 defeitos corrigidos)** —
+  Revisão do fluxo de pagamento a pedido do dono. **Nenhuma migration.**
+  1. **O webhook do MP nunca confirmou pagamento.** Lia
+     `event.data?.status || event.status`; a notificação do Mercado Pago traz
+     só `data.id` — o status precisa ser BUSCADO (`GET /v1/payments/{id}`).
+     `mpStatus` saía indefinido e nada era aprovado. Na prática só confirmava
+     quem ficasse com a tela "processando" aberta, porque lá o app consulta
+     `/status` de 4 em 4s e ESSA rota busca o status de verdade. Quem pagava o
+     PIX no app do banco e fechava o Turiva **pagava e ficava sem reserva** até
+     expirar. Não há cron de conciliação. Agora o webhook busca o status real,
+     e devolve **503** quando não consegue determinar (o MP reenvia) em vez de
+     decidir errado. Guarda para pagamento fora do MP ('test'/'manual', id
+     "TEST-"), senão o 503 viraria laço de retentativa.
+  2. **Corrida no lançamento do ledger.** Era ler `ledger_created` e depois
+     inserir — duas idas ao banco não impedem a corrida que o próprio
+     comentário descrevia. Era raro só porque o webhook nunca aprovava; com o
+     item 1 corrigido, virou alcançável. Trocado por UPDATE condicional
+     (`SET ledger_created=true WHERE ledger_created=false`), atômico no
+     Postgres; se a inserção falhar, a marca é DEVOLVIDA. Nos dois caminhos
+     (reserva única e grupo). Atenção: o índice único da **046** é
+     `(leg_id, entry_type)` e NÃO cobre lançamento de reserva (leg_id nulo).
+  3. **Reserva parcial em `onPaymentApproved`.** Era
+     `payment.bookings || (busca)`; o polling de `/status` seleciona só 3
+     colunas da reserva e objeto parcial é "verdadeiro" em JS, então a busca
+     nunca acontecia. A função usa 8 campos: orçamento de translado não virava
+     "pago", notificação ao cliente ficava sem `user_id` e a comissão saía de
+     uma reserva pela metade. **Este estava ativo hoje** (polling é o caminho
+     por onde tudo passa). Agora sempre carrega a reserva completa.
+  **Observação menor:** o UNIQUE de `payment_events`
+  `(payment_id, event_name, received_at)` NÃO deduplica retentativas do MP —
+  medido: requisições separadas gravam 2 linhas (só colide na mesma transação,
+  onde `NOW()` é constante). Impacto é só ruído no log; a trava de aprovação
+  está em outro lugar. Deixado como está.
+  **Provado em Postgres 16:** UPDATE condicional concorrente → exatamente 1
+  vencedor; padrão antigo (ler-depois-inserir) → 2 lançamentos para 1 pagamento.
+  Ficou `supabase/diagnostico_pagamentos.sql` (só consultas) — as 4 foram
+  testadas com os defeitos plantados e acusaram todos.
+  **A fazer:** não há conciliação para pagamento aprovado fora da janela do
+  webhook; uma varredura preguiçosa (nos moldes do `legFlow.js`) fecharia o
+  caso de webhook perdido.
+
 - **2026-08-23 · Agente B (home e passeios promovidos a oficiais)** — Decisão do
   dono: os dois redesenhos ficam. Alternadores e versões antigas **removidos**.
   `HomeV2.jsx` → `Home.jsx` e `ToursV2.jsx` → `Tours.jsx` (renomeados, não
