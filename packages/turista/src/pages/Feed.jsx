@@ -689,7 +689,7 @@ export default function Feed() {
   }
 
   return (
-    <div className="min-h-full bg-[#F8F8F8] lg:bg-transparent pb-24 lg:pb-10">
+    <div className="min-h-full pb-24 lg:pb-10">
       <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-14 z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="max-w-2xl mx-auto">
           <div className="relative flex items-center justify-center min-h-[32px]">
@@ -741,7 +741,9 @@ export default function Feed() {
       </div>
 
       {/* ── Filtros (cards) — abaixo do buscador ───────────────────────────── */}
-      <div className="bg-white border-b border-gray-100 mt-3">
+      {/* Sem faixa branca: sobre o fundo de areia ela virava uma listra no meio
+          da tela. As pastilhas ficam soltas, como na home. */}
+      <div className="mt-3">
         <div className="max-w-2xl mx-auto px-4 py-2.5">
           <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
             {FILTERS.map(({ id, label, Icon }) => {
@@ -751,7 +753,7 @@ export default function Feed() {
                   key={id}
                   onClick={() => setFilter(id)}
                   className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${
-                    active ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                    active ? 'bg-brand text-white' : 'bg-white border border-gray-200/80 text-gray-600 active:bg-gray-50'
                   }`}
                 >
                   <Icon size={13} /> {label}

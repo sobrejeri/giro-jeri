@@ -88,7 +88,7 @@ export default function Legal() {
   const isPrivacidade = pathname.includes('privacidade')
 
   return (
-    <div className="min-h-full bg-[#F8F8F8] lg:bg-transparent pb-24 lg:pb-10">
+    <div className="min-h-full pb-24 lg:pb-10">
       <header className="bg-white px-4 pt-6 pb-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="max-w-2xl mx-auto">
           <Link to="/perfil" className="inline-flex items-center gap-1.5 text-[13px] text-gray-400 hover:text-gray-600 mb-3">

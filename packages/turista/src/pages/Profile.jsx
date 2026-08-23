@@ -298,7 +298,7 @@ export default function Profile() {
 
   return (
     <>
-    <div className="lg:hidden min-h-full bg-[#F8F8F8] pb-24">
+    <div className="lg:hidden min-h-full pb-24">
 
       <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-14 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
         <div className="relative flex items-center justify-center min-h-[32px]">
@@ -629,12 +629,14 @@ export default function Profile() {
           </button>
         )}
 
-        <p className="text-center text-[11px] text-gray-400 pb-1">
+        {/* Um tom mais escuro que antes: são links sobre o fundo de areia, e no
+            cinza anterior ficavam quase apagados. */}
+        <p className="text-center text-[11px] text-gray-500 pb-1">
           <Link to="/termos" className="hover:text-brand">Termos de Uso</Link>
           {' · '}
           <Link to="/privacidade" className="hover:text-brand">Privacidade</Link>
         </p>
-        <p className="text-center text-[11px] text-gray-300 pb-2">{versionLabel()}</p>
+        <p className="text-center text-[11px] text-gray-400 pb-2">{versionLabel()}</p>
       </main>
     </div>
 

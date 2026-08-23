@@ -46,6 +46,13 @@ enxerga o trabalho do outro no próximo `git fetch`.
   Quem liga "mais contraste" no sistema recebe só a cor lisa, um pouco mais
   clara (o grão reduz a separação entre texto e fundo).
   Conferido em 430×932 e em 1280 (home, passeios e desktop).
+  **Segunda passada:** faltavam Reservas, Perfil, Descubra e Legal — usavam
+  `min-h-full` e a varredura anterior só pegou `min-h-screen`. Junto, duas
+  coisas que o fundo cinza escondia: no Descubra a fileira de filtros tinha
+  faixa branca (virava listra atravessando a areia) e os links de rodapé do
+  Perfil eram `gray-300/400` (quase apagados). `Login.jsx` NÃO foi tocado —
+  não é importado em lugar nenhum, é código morto. Admin e cooperativa ficam
+  como estão, por decisão do dono.
 
 - **2026-08-19 · Agente B (home nova em avaliação — turista)** — O dono mandou
   um mockup da tela principal e pediu para testar **com as duas versões

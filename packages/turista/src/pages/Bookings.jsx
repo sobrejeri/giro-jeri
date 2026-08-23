@@ -877,7 +877,7 @@ export default function Bookings() {
   ].sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
 
   return (
-    <div className="min-h-full bg-gray-50 pb-24">
+    <div className="min-h-full pb-24">
       {/* Header */}
       <header className="bg-white px-4 pt-5 pb-0 sticky top-0 lg:top-14 z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)] lg:max-w-5xl lg:mx-auto">
         <div className="relative flex items-center justify-center min-h-[32px] mb-1">
