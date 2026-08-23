@@ -28,6 +28,34 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (redesign da tela de Passeios)** — Só UI/UX: nenhuma
+  regra de negócio foi tocada. Modo privativo/compartilhado, saída, data,
+  pessoas, favoritos, carrinho, sugestão de veículo, cutoff/antecedência,
+  venda direta de exclusivo e as barras flutuantes continuam idênticos.
+  **Componentes novos** em `components/tours/`: `SegmentedControl`,
+  `FilterChip`, `SectionHeader`, `TourCard`, `PromoBanner`, `BenefitsStrip`.
+  O `TourPickCard` interno saiu (substituído pelo `TourCard`).
+  **API:** o SELECT da lista de passeios passou a trazer `difficulty_level`,
+  `max_people` e `highlight_badge` — colunas que já existiam desde a 001 e que
+  ninguém expunha. Só isso; nenhuma migration.
+  **De onde vem cada dado da tela nova** (nada é fixo no código): preço do
+  cartão = `shared_price_per_person` no compartilhado, senão `from_price` (o
+  menor preço de veículo, calculado na API) e, sem os dois, "sob consulta" —
+  nunca zero, que o cliente leria como grátis. Capacidade = `max_people`.
+  Etiqueta = `highlight_badge` → exclusivo/destaque → 1ª tag. Foto do banner =
+  `home_banner_image_url` do admin → capa de um passeio em destaque da região;
+  sem nenhuma, o banner NÃO é renderizado.
+  **Pastilhas de filtro** são derivadas das tags que os passeios realmente
+  têm, nunca de lista fixa (pastilha fixa vira botão morto quando o admin
+  renomeia uma etiqueta). "Mais vendidos"/"Exclusivos" só entram se houver
+  passeio marcado. A pastilha já nasce alinhada ao atalho vindo da home.
+  `difficulty_level` é texto livre e foi preenchido à mão (inglês, português,
+  com e sem acento): o casamento é por prefixo normalizado e o que não casar é
+  exibido como veio, em cinza — dado do admin não some da tela.
+  Conferido em 430×932 nos estados: privativo, compartilhado, sem/com passeio
+  selecionado, catálogo de veículos, carrinho com item (barra flutuante),
+  filtro por pastilha, passeio sem foto/preço/duração e lista vazia.
+
 - **2026-08-23 · Agente B (fundo de areia no app do turista)** — O fundo branco
   saiu. Agora o corpo do app é um tom de areia (`#F4EDE4`) com duas camadas
   quase invisíveis: um grão fino (feTurbulence em SVG) e três manchas quentes

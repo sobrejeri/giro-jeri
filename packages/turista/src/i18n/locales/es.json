@@ -469,15 +469,13 @@
       "weekdaySat": "S"
     },
     "card": {
-      "recommendedBadge": "Más recomendado",
-      "favoriteAria": "Favorito",
-      "newBadge": "Nuevo",
-      "fromLabel": "Desde",
-      "perPersonSuffix": "por persona",
-      "viewOptions": "Ver opciones →",
-      "durationHours": "{{count}} horas",
-      "tourTypeBoth": "Privado o compartido",
-      "tourTypePrivateGroups": "Grupos privados"
+      "startingAt": "Desde",
+      "perPerson": "Por persona",
+      "onRequest": "A consultar",
+      "badgeExclusive": "Exclusivo",
+      "badgeBestSeller": "Más vendido",
+      "favorite": "Añadir a favoritos",
+      "selected": "Seleccionado"
     },
     "page": {
       "title": "Paseos en {{region}}",
@@ -491,7 +489,45 @@
       "exclusiveSectionTitle": "Experiencias exclusivas ✨",
       "exclusiveSectionSubtitle": "Paseos especiales con venta directa, sin combo.",
       "exclusiveBadge": "Exclusivo"
-    }
+    },
+    "difficulty": {
+      "easy": "Fácil",
+      "moderate": "Moderado",
+      "hard": "Difícil"
+    },
+    "chips": {
+      "all": "Todos",
+      "bestSellers": "Más vendidos",
+      "exclusive": "Exclusivos"
+    },
+    "banner": {
+      "badge": "Más buscado",
+      "title": "Las mejores experiencias",
+      "highlight": "en {{region}}",
+      "description": "Paseos increíbles para vivir momentos únicos en el paraíso.",
+      "benefit1": "Guías locales especializados",
+      "benefit2": "Reserva segura y rápida",
+      "cta": "Ver todos los paseos"
+    },
+    "favorites": {
+      "title": "Los favoritos de Jeri",
+      "subtitle": "Los paseos más elegidos por los viajeros"
+    },
+    "exclusiveSection": {
+      "title": "Experiencias exclusivas",
+      "subtitle": "Servicio privado para momentos especiales"
+    },
+    "seeAll": "Ver todos",
+    "benefits": {
+      "cancelTitle": "Cancelación flexible",
+      "cancelText": "Hasta 24h antes del paseo",
+      "supportTitle": "Atención rápida",
+      "supportText": "Por WhatsApp",
+      "payTitle": "Pago seguro",
+      "payText": "Entorno 100% seguro"
+    },
+    "cartAria": "Carrito",
+    "noResults": "Ningún paseo coincide con este filtro."
   },
   "homePg": {
     "today": "Hoy",

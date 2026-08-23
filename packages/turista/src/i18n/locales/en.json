@@ -469,15 +469,13 @@
       "weekdaySat": "S"
     },
     "card": {
-      "recommendedBadge": "Most recommended",
-      "favoriteAria": "Favorite",
-      "newBadge": "New",
-      "fromLabel": "From",
-      "perPersonSuffix": "per person",
-      "viewOptions": "View options →",
-      "durationHours": "{{count}} hours",
-      "tourTypeBoth": "Private or shared",
-      "tourTypePrivateGroups": "Private groups"
+      "startingAt": "From",
+      "perPerson": "Per person",
+      "onRequest": "On request",
+      "badgeExclusive": "Exclusive",
+      "badgeBestSeller": "Best seller",
+      "favorite": "Add to favorites",
+      "selected": "Selected"
     },
     "page": {
       "title": "Tours in {{region}}",
@@ -491,7 +489,45 @@
       "exclusiveSectionTitle": "Exclusive experiences ✨",
       "exclusiveSectionSubtitle": "Special tours with direct sale, no combo.",
       "exclusiveBadge": "Exclusive"
-    }
+    },
+    "difficulty": {
+      "easy": "Easy",
+      "moderate": "Moderate",
+      "hard": "Hard"
+    },
+    "chips": {
+      "all": "All",
+      "bestSellers": "Best sellers",
+      "exclusive": "Exclusive"
+    },
+    "banner": {
+      "badge": "Most wanted",
+      "title": "The best experiences",
+      "highlight": "in {{region}}",
+      "description": "Amazing tours to live unique moments in paradise.",
+      "benefit1": "Specialised local guides",
+      "benefit2": "Safe and quick booking",
+      "cta": "See all tours"
+    },
+    "favorites": {
+      "title": "Jeri's favourites",
+      "subtitle": "The tours travellers pick the most"
+    },
+    "exclusiveSection": {
+      "title": "Exclusive experiences",
+      "subtitle": "Private service for special moments"
+    },
+    "seeAll": "See all",
+    "benefits": {
+      "cancelTitle": "Flexible cancellation",
+      "cancelText": "Up to 24h before the tour",
+      "supportTitle": "Fast support",
+      "supportText": "Over WhatsApp",
+      "payTitle": "Secure payment",
+      "payText": "100% safe environment"
+    },
+    "cartAria": "Cart",
+    "noResults": "No tours match this filter."
   },
   "homePg": {
     "today": "Today",

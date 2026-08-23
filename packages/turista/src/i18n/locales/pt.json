@@ -469,15 +469,13 @@
       "weekdaySat": "S"
     },
     "card": {
-      "recommendedBadge": "Mais recomendado",
-      "favoriteAria": "Favoritar",
-      "newBadge": "Novidade",
-      "fromLabel": "A partir de",
-      "perPersonSuffix": "por pessoa",
-      "viewOptions": "Ver opções →",
-      "durationHours": "{{count}} horas",
-      "tourTypeBoth": "Privativo ou compartilhado",
-      "tourTypePrivateGroups": "Grupos particulares"
+      "startingAt": "A partir de",
+      "perPerson": "Por pessoa",
+      "onRequest": "Sob consulta",
+      "badgeExclusive": "Exclusivo",
+      "badgeBestSeller": "Mais vendido",
+      "favorite": "Favoritar",
+      "selected": "Selecionado"
     },
     "page": {
       "title": "Passeios em {{region}}",
@@ -491,7 +489,45 @@
       "exclusiveSectionTitle": "Experiências exclusivas ✨",
       "exclusiveSectionSubtitle": "Passeios especiais com venda direta, sem combo.",
       "exclusiveBadge": "Exclusivo"
-    }
+    },
+    "difficulty": {
+      "easy": "Fácil",
+      "moderate": "Moderado",
+      "hard": "Difícil"
+    },
+    "chips": {
+      "all": "Todos",
+      "bestSellers": "Mais vendidos",
+      "exclusive": "Exclusivos"
+    },
+    "banner": {
+      "badge": "Mais procurado",
+      "title": "As melhores experiências",
+      "highlight": "em {{region}}",
+      "description": "Passeios incríveis para viver momentos únicos no paraíso.",
+      "benefit1": "Guias locais especializados",
+      "benefit2": "Reserva segura e rápida",
+      "cta": "Ver todos passeios"
+    },
+    "favorites": {
+      "title": "Os favoritos de Jeri",
+      "subtitle": "Passeios mais escolhidos pelos viajantes"
+    },
+    "exclusiveSection": {
+      "title": "Experiências exclusivas",
+      "subtitle": "Serviço privativo para momentos especiais"
+    },
+    "seeAll": "Ver todos",
+    "benefits": {
+      "cancelTitle": "Cancelamento flexível",
+      "cancelText": "Até 24h antes do passeio",
+      "supportTitle": "Atendimento rápido",
+      "supportText": "Pelo WhatsApp",
+      "payTitle": "Pagamento seguro",
+      "payText": "Ambiente 100% seguro"
+    },
+    "cartAria": "Carrinho",
+    "noResults": "Nenhum passeio encontrado com esse filtro."
   },
   "homePg": {
     "today": "Hoje",
