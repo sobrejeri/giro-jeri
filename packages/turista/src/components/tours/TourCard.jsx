@@ -171,9 +171,13 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
               {valor || t('toursPg.card.onRequest')}
             </p>
             {cap && (
-              <span className="min-w-0 inline-flex items-center gap-0.5 text-[10px] text-gray-500 leading-none">
-                <Users size={10} className="text-gray-400 shrink-0" />
-                <span className="truncate">{t('toursPg.vehicle.upToPeople', { count: cap })}</span>
+              <span className="min-w-0 inline-flex items-center gap-0.5 text-[9.5px] text-gray-500 leading-none">
+                <Users size={9} className="text-gray-400 shrink-0" />
+                {/* "12 pessoas" e não "Até 12 pessoas": medido, a forma
+                    longa pede 76px e o espaço ao lado do preço dá 64px mesmo
+                    num aparelho de 430px — aparecia cortada em TODAS as
+                    larguras. O ícone de pessoas já diz que é capacidade. */}
+                <span className="truncate">{t('toursPg.card.capacity', { count: cap })}</span>
               </span>
             )}
           </div>

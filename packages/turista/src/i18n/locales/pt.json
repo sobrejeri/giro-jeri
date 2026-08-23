@@ -475,7 +475,8 @@
       "badgeExclusive": "Exclusivo",
       "badgeBestSeller": "Mais vendido",
       "favorite": "Favoritar",
-      "selected": "Selecionado"
+      "selected": "Selecionado",
+      "capacity": "{{count}} pessoas"
     },
     "page": {
       "title": "Passeios em {{region}}",

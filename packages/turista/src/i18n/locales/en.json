@@ -475,7 +475,8 @@
       "badgeExclusive": "Exclusive",
       "badgeBestSeller": "Best seller",
       "favorite": "Add to favorites",
-      "selected": "Selected"
+      "selected": "Selected",
+      "capacity": "{{count}} people"
     },
     "page": {
       "title": "Tours in {{region}}",

@@ -655,38 +655,41 @@ export default function ToursV2() {
         />
 
         {/* ── Saída · Data · Pessoas ────────────────────────── */}
-        <div className="flex gap-2.5">
-          {/* Saída é o campo obrigatório e o mais largo: sem ele o checkout não
-              fecha, então ganha borda tracejada laranja enquanto está vazio. */}
-          {/* Data e Pessoas ocupam só o que o conteúdo pede (shrink-0) e a
-              Saída fica com a sobra. Com os três em flex-1 o espaço era
-              repartido igual e "Selecionar local" virava "Selecionar l…" ao
-              lado de uma caixa de Data com folga sobrando. */}
+        {/* Saída ocupa a linha inteira; Data e Pessoas dividem a de baixo.
+            Os três lado a lado só cabem em tela larga: medido, "Selecionar
+            local" pede 111px e sobravam 53px num aparelho de 360px — o campo
+            OBRIGATÓRIO da tela aparecia cortado. Em duas linhas cabe em
+            qualquer largura, e a Saída ganha o destaque que merece. */}
+        <div className="space-y-2.5">
+          {/* Sem ele o checkout não fecha, então fica com borda tracejada
+              laranja enquanto está vazio. */}
           <button
             onClick={() => setShowOriginPicker(true)}
-            className={`flex-1 min-w-0 flex items-center gap-2 rounded-[18px] px-3 py-2.5 text-left active:scale-[0.97] transition-transform ${
+            className={`w-full flex items-center gap-2.5 rounded-[18px] px-3.5 py-2.5 text-left active:scale-[0.98] transition-transform ${
               origin
                 ? 'bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)]'
                 : 'bg-brand/[0.04] border border-dashed border-brand'
             }`}
           >
-            <MapPin size={15} className="text-brand shrink-0" />
-            <div className="min-w-0">
+            <MapPin size={16} className="text-brand shrink-0" />
+            <div className="min-w-0 flex-1">
               <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.origin.label')}</p>
-              <p className={`text-[12.5px] font-bold mt-1 leading-tight truncate ${origin ? 'text-gray-800' : 'text-brand'}`}>
+              <p className={`text-[13px] font-bold mt-1 leading-tight truncate ${origin ? 'text-gray-800' : 'text-brand'}`}>
                 {origin?.name || t('toursPg.origin.placeholder')}
               </p>
             </div>
+            <ChevronDown size={13} className="text-gray-400 shrink-0" />
           </button>
 
+          <div className="flex gap-2.5">
           <button
             onClick={() => setShowDatePicker(true)}
-            className="shrink-0 flex items-center gap-1.5 bg-white rounded-[18px] px-2.5 py-2.5 text-left shadow-[0_4px_20px_rgba(0,0,0,0.05)] active:scale-[0.97] transition-transform"
+            className="flex-1 min-w-0 flex items-center gap-2 bg-white rounded-[18px] px-3 py-2.5 text-left shadow-[0_4px_20px_rgba(0,0,0,0.05)] active:scale-[0.97] transition-transform"
           >
-            <Calendar size={15} className="text-brand shrink-0" />
-            <div>
+            <Calendar size={16} className="text-brand shrink-0" />
+            <div className="min-w-0 flex-1">
               <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.date.label')}</p>
-              <p className="text-[12.5px] font-bold text-gray-800 mt-1 leading-tight whitespace-nowrap">
+              <p className="text-[13px] font-bold text-gray-800 mt-1 leading-tight truncate">
                 {isToday(date) ? t('toursPg.date.today')
                   : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
                   : format(date, 'd MMM', { locale: ptBR })}
@@ -695,7 +698,7 @@ export default function ToursV2() {
             <ChevronDown size={12} className="text-gray-400 shrink-0" />
           </button>
 
-          <div className="shrink-0 bg-white rounded-[18px] px-2.5 py-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+          <div className="shrink-0 bg-white rounded-[18px] px-3 py-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
             <p className="text-[10px] text-gray-400 leading-none text-center">{t('toursPg.people.label')}</p>
             <div className="flex items-center gap-1.5 mt-1">
               <button
@@ -715,6 +718,7 @@ export default function ToursV2() {
               </button>
             </div>
           </div>
+          </div>
         </div>
 
         {/* ── Pastilhas de filtro ───────────────────────────── */}
@@ -732,7 +736,7 @@ export default function ToursV2() {
           </div>
         )}
 
-        {/* ── Banner ────────────────────────────────────────
+        {/* ── Faixa ilustrativa ─────────────────────────────
             Só aparece com foto real (do admin ou de um passeio da região):
             sem imagem seria uma caixa colorida fingindo ser fotografia. */}
         {bannerFoto && (
@@ -741,9 +745,6 @@ export default function ToursV2() {
             badge={t('toursPg.banner.badge')}
             titulo={t('toursPg.banner.title')}
             destaque={t('toursPg.banner.highlight', { region: nomeRegiao })}
-            descricao={t('toursPg.banner.description')}
-            beneficios={[t('toursPg.banner.benefit1'), t('toursPg.banner.benefit2')]}
-            cta={t('toursPg.banner.cta')}
             onCta={() => { setChip('__all'); setSearchTerm('') }}
           />
         )}
