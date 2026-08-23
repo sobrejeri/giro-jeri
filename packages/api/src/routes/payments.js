@@ -434,6 +434,40 @@ async function checkBookingCutoff({ service_type, service_id, service_date_iso }
   return null
 }
 
+// Janela de operação do serviço (migration 069): o horário escolhido precisa
+// estar entre service_window_start e service_window_end. Nulo = sem restrição.
+// Validado no SERVIDOR porque regra só na tela é contornável chamando a API.
+async function checkServiceWindow({ service_type, service_id, service_time }) {
+  if (!service_id || !service_time) return null
+
+  let win = null
+  if (service_type === 'tour') {
+    const { data, error } = await supabase.from('tours')
+      .select('service_window_start, service_window_end').eq('id', service_id).maybeSingle()
+    if (error?.code === '42703') return null   // migration 069 pendente
+    win = data
+  } else if (service_type === 'transfer') {
+    // service_id é um transfer_route; a janela mora no transfer pai.
+    const { data, error } = await supabase.from('transfer_routes')
+      .select('transfers ( service_window_start, service_window_end )').eq('id', service_id).maybeSingle()
+    if (error?.code === '42703') return null
+    win = data?.transfers
+  }
+  if (!win?.service_window_start && !win?.service_window_end) return null
+
+  const toMin = (t) => Number(String(t).slice(0, 2)) * 60 + Number(String(t).slice(3, 5))
+  const hhmm  = (t) => `${String(t).slice(0, 2)}h${String(t).slice(3, 5)}`
+  const alvo  = toMin(service_time)
+
+  if (win.service_window_start && alvo < toMin(win.service_window_start)) {
+    return `Este serviço começa a partir das ${hhmm(win.service_window_start)}. Escolha um horário dentro do período de operação.`
+  }
+  if (win.service_window_end && alvo > toMin(win.service_window_end)) {
+    return `Este serviço só opera até as ${hhmm(win.service_window_end)}. Escolha um horário dentro do período de operação.`
+  }
+  return null
+}
+
 // ── POST /api/payments/intent ───────────────────────────
 router.post('/intent', authenticate, async (req, res, next) => {
   try {
@@ -460,6 +494,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
     if (!existing_booking_id && !isGroup) {
       const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
       if (cutoffErr) return res.status(400).json({ error: cutoffErr })
+      const windowErr = await checkServiceWindow({ service_type, service_id, service_time })
+      if (windowErr) return res.status(400).json({ error: windowErr })
     }
 
     // ── Total autoritativo: o SERVIDOR é a fonte de verdade do valor cobrado.
@@ -908,6 +944,8 @@ router.post('/request', authenticate, async (req, res, next) => {
     // R6: respeita o horário limite de solicitação do serviço.
     const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
     if (cutoffErr) return res.status(400).json({ error: cutoffErr })
+    const windowErr = await checkServiceWindow({ service_type, service_id, service_time })
+    if (windowErr) return res.status(400).json({ error: windowErr })
 
     // Link direto de cooperativa: resolve o slug no SERVIDOR. Reserva nasce
     // atribuída (operator_id) e pronta para pagar — mesmo estado que o aceite
@@ -1070,6 +1108,10 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
           service_type: it.service_type, service_id: it.service_id, service_date_iso: it.service_date_iso,
         })
         if (cutoffErr) throw { status: 400, message: cutoffErr }
+        const windowErr = await checkServiceWindow({
+          service_type: it.service_type, service_id: it.service_id, service_time: it.service_time,
+        })
+        if (windowErr) throw { status: 400, message: windowErr }
         const itemData = (couponIsFixed && couponApplied) ? { ...it, coupon_code: undefined } : it
         const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional } =
           await computeChargedTotal({ data: itemData, userId: req.user.id })

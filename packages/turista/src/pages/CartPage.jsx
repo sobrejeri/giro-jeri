@@ -162,17 +162,44 @@ function EditSheet({ item, onSave, onClose }) {
   const minDateIso = rollsToTomorrow ? nextDayIso(fToday) : fToday
   const minDate    = startOfDay(new Date(`${minDateIso}T12:00:00`))
 
-  const dateOk = !!dateIso && dateIso >= minDateIso
-  const sameDay = dateIso === fToday
-  const timeOk  = !!time && (!sameDay || toMin(time) >= earliestTodayMin)
+  // Janela de operação do serviço (migration 069): ex.: buggy só sai das 06:00
+  // às 12:00. Nula = qualquer horário. Combina com a antecedência: no MESMO
+  // dia o horário mínimo é o mais restritivo entre os dois.
+  const winStart = toMin(item.service_window_start || null)
+  const winEnd   = toMin(item.service_window_end   || null)
+  const sameDay  = dateIso === fToday
+  // Horário mínimo aceito: o mais restritivo entre a antecedência (só hoje) e
+  // o início da janela. É o que alimenta o `min` do seletor de horário.
+  const minTimeMin = Math.max(sameDay ? earliestTodayMin : 0, winStart ?? 0)
+  // Se hoje a janela já passou, não há horário possível — empurra para amanhã.
+  const semHorarioHoje = winEnd != null && sameDay && earliestTodayMin > winEnd
+
+  const dateOk = !!dateIso && dateIso >= minDateIso && !semHorarioHoje
+  const dentroDaJanela = !time || (
+    (winStart == null || toMin(time) >= winStart) &&
+    (winEnd   == null || toMin(time) <= winEnd)
+  )
+  const timeOk = !!time && (!sameDay || toMin(time) >= earliestTodayMin) && dentroDaJanela
+
+  const janelaLabel = (winStart != null && winEnd != null)
+    ? `${fromMin(winStart)} às ${fromMin(winEnd)}`
+    : winStart != null ? `a partir das ${fromMin(winStart)}`
+    : winEnd   != null ? `até as ${fromMin(winEnd)}` : null
 
   let timeHint = null
-  if (dateIso && !dateOk && afterCutoff) {
+  if (semHorarioHoje) {
+    timeHint = `Este serviço opera ${janelaLabel} — não há mais horário para hoje. Escolha a partir de ${dayLabel(nextDayIso(fToday))}.`
+  } else if (dateIso && !dateOk && afterCutoff) {
     timeHint = t('cartPg.editSheet.timeHintCutoff', { cutoff: item.booking_cutoff_time.slice(0, 5), date: dayLabel(minDateIso) })
+  } else if (time && !dentroDaJanela) {
+    timeHint = `Este serviço opera ${janelaLabel}. Escolha um horário dentro desse período.`
   } else if (time && sameDay && !timeOk && earliestTodayMin < 1440) {
     timeHint = t('cartPg.editSheet.timeHintLead', { time: fromMin(earliestTodayMin), lead: perServiceLead != null ? `${item.min_advance_hours}h` : isTransfer ? '4h' : '30min' })
   } else if (time && sameDay && !timeOk) {
     timeHint = t('cartPg.editSheet.timeHintNoMore', { date: dayLabel(nextDayIso(fToday)) })
+  } else if (janelaLabel && !time) {
+    // Ainda sem horário escolhido: mostra a janela como orientação, não erro.
+    timeHint = `Horário de operação: ${janelaLabel}.`
   }
 
   const missing = []
@@ -246,7 +273,9 @@ function EditSheet({ item, onSave, onClose }) {
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.timeLabel')}</label>
               <input
-                type="time" value={time} min={sameDay ? fromMin(earliestTodayMin) : undefined}
+                type="time" value={time}
+                min={minTimeMin > 0 ? fromMin(minTimeMin) : undefined}
+                max={winEnd != null ? fromMin(winEnd) : undefined}
                 onChange={(e) => setTime(e.target.value)}
                 className="mt-1 w-full bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30"
               />

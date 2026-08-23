@@ -496,6 +496,8 @@ export default function Tours() {
       cover_image_url: selectedTour.cover_image_url || null,
       booking_cutoff_time: selectedTour.booking_cutoff_time || null,
       min_advance_hours: selectedTour.min_advance_hours ?? null,
+      service_window_start: selectedTour.service_window_start || null,
+      service_window_end:   selectedTour.service_window_end   || null,
       dateIso: format(date, 'yyyy-MM-dd'),
       time:    existing?.time || null,
       people,

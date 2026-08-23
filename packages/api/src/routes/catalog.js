@@ -35,6 +35,7 @@ const ROUTE_COLS = [
 
 // Colunas graváveis de transfers (serviço-pai)
 const TRANSFER_COLS = [
+  'service_window_start', 'service_window_end',
   'region_id', 'name', 'slug', 'short_description', 'pricing_mode',
   'is_active', 'display_order', 'booking_cutoff_time', 'min_advance_hours',
   'region_ids',
@@ -75,6 +76,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       is_private_enabled, is_shared_enabled, shared_price_per_person,
       cover_image_url, category_id, region_ids, is_featured, display_order,
       booking_cutoff_time, min_advance_hours, is_exclusive,
+      service_window_start, service_window_end,
     } = req.body;
 
     const slug = `${slugify(name)}-${Date.now().toString(36)}`;
@@ -97,6 +99,8 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       booking_cutoff_time:     booking_cutoff_time || null,
       min_advance_hours:       min_advance_hours ? Number(min_advance_hours) : null,
       is_exclusive:            !!is_exclusive,
+      service_window_start:    service_window_start || null,
+      service_window_end:      service_window_end   || null,
     }).select().single();
 
     if (error) throw error;
@@ -112,12 +116,15 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
       cover_image_url, category_id, is_active, display_order, is_featured,
       latitude, longitude, service_radius_km, region_ids,
       booking_cutoff_time, min_advance_hours, is_exclusive,
+      service_window_start, service_window_end,
     } = req.body;
 
     const update = {};
     if (booking_cutoff_time !== undefined) update.booking_cutoff_time = booking_cutoff_time || null;
     if (min_advance_hours   !== undefined) update.min_advance_hours   = min_advance_hours ? Number(min_advance_hours) : null;
     if (is_exclusive        !== undefined) update.is_exclusive        = !!is_exclusive;
+    if (service_window_start !== undefined) update.service_window_start = service_window_start || null;
+    if (service_window_end   !== undefined) update.service_window_end   = service_window_end   || null;
     if (name               !== undefined) update.name                    = name;
     if (short_description  !== undefined) update.short_description       = short_description;
     if (duration_hours     !== undefined) update.duration_hours          = duration_hours ? Number(duration_hours) : null;

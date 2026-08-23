@@ -58,13 +58,14 @@ const TOUR_EMPTY = {
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '', min_advance_hours: '', region_ids: [], is_featured: false, display_order: 0,
+  booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '',
+  region_ids: [], is_featured: false, display_order: 0,
   is_exclusive: false,
 }
 const TRANSFER_EMPTY = {
   name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
-  booking_cutoff_time: '', min_advance_hours: '', region_ids: [],
+  booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '', region_ids: [],
 }
 const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', cover_image_url: '', is_active: true, is_featured: false }
 const VEHICLE_EMPTY = {
@@ -655,6 +656,41 @@ export default function Catalogo() {
               />
               <p className="text-[11px] text-gray-500 mt-1">
                 Horas mínimas entre a reserva e o passeio. Deixe em branco para usar o padrão.
+              </p>
+            </div>
+
+            {/* Janela de operação: fora dela o cliente não consegue agendar
+                (ex.: buggy só sai das 06:00 às 12:00). Vazio = sem restrição. */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                Horário de operação
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="time"
+                  value={(form.service_window_start || '').slice(0, 5)}
+                  onChange={(e) => setForm({ ...form, service_window_start: e.target.value || null })}
+                  className="flex-1 bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
+                />
+                <span className="text-gray-500 text-sm">até</span>
+                <input
+                  type="time"
+                  value={(form.service_window_end || '').slice(0, 5)}
+                  onChange={(e) => setForm({ ...form, service_window_end: e.target.value || null })}
+                  className="flex-1 bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
+                />
+                {(form.service_window_start || form.service_window_end) && (
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, service_window_start: null, service_window_end: null })}
+                    className="text-[11px] text-gray-500 hover:text-gray-300 shrink-0"
+                  >
+                    limpar
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Faixa de horário em que este serviço pode ser agendado. Em branco = qualquer horário.
               </p>
             </div>
 

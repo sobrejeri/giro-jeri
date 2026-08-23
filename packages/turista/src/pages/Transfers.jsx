@@ -537,6 +537,8 @@ export default function Transfers() {
     region_id: region?.id || null,
     booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
     min_advance_hours: matched?.transfers?.min_advance_hours ?? null,
+    service_window_start: matched?.transfers?.service_window_start || null,
+    service_window_end:   matched?.transfers?.service_window_end   || null,
     vehicles: cartItems.map(({ vehicle, qty }) => ({
       id: vehicle.id, name: vehicle.name, qty,
       price: unitPrice || 0, cap: vehicle.seat_capacity || null,
