@@ -557,7 +557,7 @@ export default function Tours() {
 
   return (
     <>
-    <div className="lg:hidden min-h-screen bg-gray-50 pb-28">
+    <div className="lg:hidden min-h-screen pb-28">
 
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">

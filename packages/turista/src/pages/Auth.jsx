@@ -164,7 +164,7 @@ export default function Auth({ defaultTab = 'login' }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8] flex flex-col lg:flex-row">
+    <div className="min-h-screen flex flex-col lg:flex-row">
 
       <button
         onClick={() => navigate(-1)}

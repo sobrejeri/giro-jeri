@@ -310,7 +310,7 @@ export default function HomeV2() {
     <>
       <div className="hidden lg:block"><HomeDesktop /></div>
 
-      <div className="lg:hidden min-h-screen bg-[#F7F8FA] pb-28">
+      <div className="lg:hidden min-h-screen pb-28">
         {/* ── Topo ───────────────────────────────────────────── */}
         <div className="px-4 pt-3">
           <div className="flex items-center justify-between">

@@ -263,7 +263,7 @@ export default function Affiliate() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <div className="min-h-screen pb-28">
       {/* Header */}
       <div className="bg-white px-4 pt-5 pb-4 shadow-sm">
         <div className="relative flex items-center justify-center min-h-[32px]">

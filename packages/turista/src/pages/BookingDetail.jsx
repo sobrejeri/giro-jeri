@@ -212,13 +212,13 @@ export default function BookingDetail() {
   }
 
   if (isLoading) return (
-    <div className="min-h-screen bg-[#F8F8F8] flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <PageSpinner />
     </div>
   )
 
   if (!booking) return (
-    <div className="min-h-screen bg-[#F8F8F8] flex flex-col items-center justify-center gap-4 text-gray-400">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-gray-400">
       <XCircle size={48} className="text-gray-200" />
       <p className="text-sm">{t('bookingDetailPg.notFound.message')}</p>
       <button onClick={() => navigate('/minhas-reservas')} className="text-brand text-sm font-semibold">
@@ -273,7 +273,7 @@ export default function BookingDetail() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8]">
+    <div className="min-h-screen">
       {/* Header */}
       <header className="bg-white px-4 pt-4 md:pt-6 pb-4 sticky top-0 md:top-14 z-40 shadow-sm">
         <div className="flex items-center gap-3 max-w-2xl lg:max-w-3xl mx-auto">

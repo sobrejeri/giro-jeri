@@ -581,7 +581,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-40">
+    <div className="min-h-screen pb-40">
       <PageHeader title={items.length ? t('cartPg.titleCount', { count: items.length }) : t('cartPg.title')} />
 
       {list.length === 0 && !done ? (

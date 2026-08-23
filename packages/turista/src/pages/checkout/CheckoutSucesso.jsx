@@ -19,7 +19,7 @@ export default function CheckoutSucesso() {
   const value = amount || total_price
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8] flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <main className="flex-1 px-4 pt-14 pb-10 flex flex-col items-center">
 
         {/* Ícone sucesso */}

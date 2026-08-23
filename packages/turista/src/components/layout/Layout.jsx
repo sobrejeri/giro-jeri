@@ -42,10 +42,14 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#EBEBEB] lg:bg-gray-50">
+    // Sem cor em nenhum tamanho: a textura de areia mora no body (index.css) e
+    // só aparece se ninguém pintar por cima. Aqui não há moldura a destacar —
+    // no desktop a coluna vira largura total (lg:max-w-none), então pintar o
+    // pai só deixava o fundo mais escuro e sem textura.
+    <div className="min-h-screen">
       <TopNav />
 
-      <div className="relative w-full max-w-[430px] lg:max-w-none mx-auto min-h-screen lg:min-h-0 bg-[#F8F8F8] lg:bg-transparent overflow-x-hidden shadow-2xl lg:shadow-none">
+      <div className="relative w-full max-w-[430px] lg:max-w-none mx-auto min-h-screen lg:min-h-0 lg:bg-transparent overflow-x-hidden shadow-2xl lg:shadow-none">
         <OfflineBanner />
         <PartnerBadge />
         <div className="pb-[68px] lg:pb-0">

@@ -52,7 +52,7 @@ export default function AffiliateLink() {
   }, [code]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-8 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center">
       <div className="w-10 h-10 border-2 border-brand border-t-transparent rounded-full animate-spin mb-4" />
       <p className="text-[14px] font-semibold text-gray-700">{msg || t('miscPg.affiliateLink.opening')}</p>
     </div>

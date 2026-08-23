@@ -28,6 +28,25 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (fundo de areia no app do turista)** — O fundo branco
+  saiu. Agora o corpo do app é um tom de areia (`#F4EDE4`) com duas camadas
+  quase invisíveis: um grão fino (feTurbulence em SVG) e três manchas quentes
+  que sugerem duna. Tudo em CSS/SVG — **nenhum arquivo de imagem**.
+  **Onde mexer:** a cor está em `tailwind.config.js` (`fundo.DEFAULT`,
+  `fundo.moldura`, `fundo.linha`) e a textura em `src/index.css`. Antes cada
+  tela escolhia o seu fundo — havia **quatro** tons diferentes (`#F8F8F8`,
+  `#EBEBEB`, `#F7F8FA`, `gray-50`) espalhados por 18 arquivos; todos foram
+  removidos e as telas ficaram **transparentes**, então quem pintar um fundo
+  opaco numa tela nova tapa a textura sem perceber.
+  **Detalhes que não são gosto, são causa:** a textura vive num `body::before`
+  *fixo* em vez de ir no `background` do body com `background-attachment:
+  fixed` — no Safari do iPhone isso repinta o fundo a cada quadro de rolagem e
+  a lista treme. E o `z-index: -1` só funciona porque nada acima pinta por
+  cima; é o mesmo motivo de as telas terem ficado transparentes.
+  Quem liga "mais contraste" no sistema recebe só a cor lisa, um pouco mais
+  clara (o grão reduz a separação entre texto e fundo).
+  Conferido em 430×932 e em 1280 (home, passeios e desktop).
+
 - **2026-08-19 · Agente B (home nova em avaliação — turista)** — O dono mandou
   um mockup da tela principal e pediu para testar **com as duas versões
   selecionáveis**, para decidir depois. Nada foi substituído: `HomeSwitcher.jsx`

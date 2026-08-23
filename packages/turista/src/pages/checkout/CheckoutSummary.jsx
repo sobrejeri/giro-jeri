@@ -440,7 +440,7 @@ function CheckoutSummaryInner() {
   const GIcon = TOUR_ICONS[idx]
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8]">
+    <div className="min-h-screen">
 
       {/* Header */}
       <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">

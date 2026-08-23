@@ -79,7 +79,7 @@ function ManualPayment({ state }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8]">
+    <div className="min-h-screen">
       <header className="bg-white px-4 pt-12 pb-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <h1 className="text-lg font-bold text-gray-900">{t('payment.manual.title')}</h1>
         <p className="text-[12px] text-gray-400 mt-1">
@@ -314,7 +314,7 @@ export default function CheckoutProcessando() {
 
   if (status === 'approved') {
     return (
-      <div className="min-h-screen bg-[#F8F8F8] flex items-center justify-center p-6">
+      <div className="min-h-screen flex items-center justify-center p-6">
         <div className="text-center">
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
             <Check size={36} className="text-green-500" strokeWidth={2.5} />
@@ -328,7 +328,7 @@ export default function CheckoutProcessando() {
 
   if (status === 'expired' || status === 'failed') {
     return (
-      <div className="min-h-screen bg-[#F8F8F8] flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen flex flex-col items-center justify-center p-6">
         <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Clock size={32} className="text-red-400" />
         </div>
@@ -349,7 +349,7 @@ export default function CheckoutProcessando() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8]">
+    <div className="min-h-screen">
       <header className="bg-white px-4 pt-12 pb-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold text-gray-900">{t('payment.gateway.title')}</h1>

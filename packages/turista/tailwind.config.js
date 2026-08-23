@@ -28,6 +28,15 @@ export default {
           100: '#FEF3C7',
           500: '#F59E0B',
         },
+        // Fundo do app. Antes cada tela escolhia o seu (#F8F8F8, #EBEBEB,
+        // #F7F8FA, gray-50) e o resultado era um cinza sem intenção; agora sai
+        // tudo daqui. Tom de areia, para as fotos de praia e o laranja da marca
+        // caírem sobre algo quente em vez de branco de escritório.
+        fundo: {
+          DEFAULT: '#F4EDE4',   // corpo do app
+          moldura: '#E9E0D4',   // moldura ao redor do celular, no desktop
+          linha:   '#E7DDCE',   // divisórias sobre o fundo de areia
+        },
       },
       fontFamily: {
         sans:    ['Plus Jakarta Sans', 'ui-sans-serif', 'system-ui'],

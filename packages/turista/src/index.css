@@ -4,9 +4,41 @@
 
 @layer base {
   body {
-    @apply bg-white text-gray-900 font-sans antialiased;
+    @apply bg-fundo text-gray-900 font-sans antialiased;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;
+  }
+
+  /* ── Textura do fundo ────────────────────────────────────────────────────
+     Areia em vez de branco liso. São duas camadas quase invisíveis de perto:
+     um grão fino (ruído em SVG) e duas manchas quentes que dão a sensação de
+     duna. Ambas em SVG/gradiente — nenhum arquivo de imagem, nenhum download.
+
+     Vive num ::before FIXO em vez de ir direto no `background` do body: com
+     `background-attachment: fixed` o Safari do iPhone repinta o fundo a cada
+     quadro de rolagem e a lista treme. Assim a camada nunca é repintada.
+
+     z-index -1 exige que nada acima crie contexto de empilhamento opaco por
+     cima — por isso as telas ficam TRANSPARENTES (ver Layout.jsx). */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-color: #F4EDE4;
+    background-image:
+      radial-gradient(90% 55% at 12% 0%,   rgba(255, 176, 102, 0.13), transparent 62%),
+      radial-gradient(80% 50% at 92% 22%,  rgba(214, 176, 132, 0.16), transparent 60%),
+      radial-gradient(120% 60% at 50% 100%, rgba(196, 160, 120, 0.13), transparent 58%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23g)' opacity='0.42'/%3E%3C/svg%3E");
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  }
+
+  /* Quem pede mais contraste no sistema fica só com a cor lisa: o grão reduz
+     um pouco a separação entre o texto e o fundo. */
+  @media (prefers-contrast: more) {
+    body::before { background-image: none; background-color: #FAF6F0; }
   }
 
   input[type="date"],

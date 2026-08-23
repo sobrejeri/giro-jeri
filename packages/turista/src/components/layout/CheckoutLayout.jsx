@@ -10,7 +10,9 @@ import { MapPin, ShieldCheck } from 'lucide-react'
  */
 export default function CheckoutLayout() {
   return (
-    <div className="min-h-screen bg-[#EBEBEB] flex flex-col items-center">
+    // Mesma regra do Layout: no celular a textura de areia do body aparece; no
+    // desktop a moldura em volta da coluna fecha um tom.
+    <div className="min-h-screen lg:bg-fundo-moldura flex flex-col items-center">
       {/* Barra de topo — só desktop */}
       <div className="hidden lg:flex w-full bg-white border-b border-gray-100 px-8 py-3 items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -26,7 +28,7 @@ export default function CheckoutLayout() {
       </div>
 
       {/* Moldura do app */}
-      <div className="relative w-full max-w-[430px] min-h-screen bg-[#F8F8F8] overflow-x-hidden shadow-2xl">
+      <div className="relative w-full max-w-[430px] min-h-screen overflow-x-hidden shadow-2xl">
         <Outlet />
       </div>
     </div>

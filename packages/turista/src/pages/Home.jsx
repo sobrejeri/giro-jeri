@@ -331,7 +331,7 @@ export default function Home() {
 
   return (
     <>
-    <div className="lg:hidden min-h-screen bg-gray-50 pb-24">
+    <div className="lg:hidden min-h-screen pb-24">
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-6 lg:rounded-2xl lg:px-6">
