@@ -28,6 +28,37 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (TELA BRANCA no app do turista — corrigida)** —
+  Relatada pelo dono com foto: fundo de areia, nada mais. Sem migration.
+  **Causa raiz:** `api.js` fazia `await res.json().catch(() => ({}))` — resposta
+  que não é JSON virava `{}` silenciosamente. Quando o Render está acordando ou
+  reiniciando ele devolve **HTML** de erro; o `{}` seguia como se fosse a lista
+  de passeios e, na home, `toursData?.tours || toursData || []` deixava passar
+  (objeto vazio é "verdadeiro"). O `.filter` estourava
+  (`tours.filter is not a function`) e, **sem barreira de erro**, o React
+  desmontava a árvore inteira → tela branca.
+  **Corrigido em três camadas:**
+  1. `api.js` — resposta não-JSON agora **lança**, com mensagem legível. É
+     falha de servidor, não dado; o React Query trata como erro e a tela mostra
+     o estado de erro que ela já sabe exibir.
+  2. `components/ErroNaTela.jsx` — barreira de erro (classe, `componentDidCatch`)
+     por FORA de todos os providers em `main.jsx`. Qualquer erro de render vira
+     tela com explicação, botão "Tentar de novo" e link do WhatsApp. **Tela
+     branca deixa de ser um desfecho possível**, inclusive para bugs futuros.
+  3. Defesa local: `Home`, `Tours`, `ToursDesktop` e `ProfileDesktop` passam a
+     exigir `Array.isArray` antes de usar a lista.
+  **Reproduzido antes e verificado depois** com 6 modos de falha (HTML com 200,
+  502 com HTML, 500, objeto no lugar da lista, texto puro, API fora): antes
+  quebrava com HTML; agora **todos renderizam**. Barreira provada com erro
+  injetado de propósito (virou a tela explicativa, não branco).
+  **Descartados na investigação:** deploys do Pages (todos com sucesso);
+  service worker (ciclo completo de cache→deploy→revisita reproduzido, sem
+  quebra); rota sem catch-all (existe `path="*"`).
+  **Não verificado:** o proxy deste ambiente bloqueia `github.io` e
+  `onrender.com`, então **não deu para confirmar se a API estava fora** no
+  momento da foto — o que está provado é que existe um caminho determinístico
+  que produz exatamente esse sintoma, e ele está fechado.
+
 - **2026-08-23 · Agente B (conciliação de pagamento — ETAPA 1 de 3)** — Rede de
   segurança para o aviso do MP que não chega (rede, deploy, API fora). Sem
   migration. **Credenciais do MP são de PRODUÇÃO** — as regras do

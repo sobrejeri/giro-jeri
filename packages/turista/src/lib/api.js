@@ -91,7 +91,31 @@ async function request(path, options = {}, isRetry = false) {
   }
 
   if (res.status === 204) return null
-  const data = await res.json().catch(() => ({}))
+
+  // Resposta que não é JSON é FALHA DE SERVIDOR, não dado.
+  //
+  // Antes isto virava `{}` silenciosamente. Quando o Render está acordando ou
+  // reiniciando, ele devolve uma página HTML de erro com status 200 — e o `{}`
+  // seguia como se fosse a lista de passeios. Na home, `toursData?.tours ||
+  // toursData || []` deixava o `{}` passar (objeto vazio é "verdadeiro"), o
+  // `.filter` estourava e, sem barreira de erro, a TELA INTEIRA ficava branca.
+  // Lançar aqui faz o React Query tratar como erro e a tela mostrar o estado
+  // de erro, que é o que ela já sabe fazer.
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    if (!res.ok) {
+      const err = new Error(`Erro ${res.status}`)
+      err.status = res.status
+      throw err
+    }
+    const err = new Error('O servidor respondeu num formato inesperado. Tente de novo em instantes.')
+    err.status = res.status
+    err.naoEhJson = true
+    throw err
+  }
+
   if (!res.ok) {
     const err = new Error(data.error || `Erro ${res.status}`)
     err.status  = res.status

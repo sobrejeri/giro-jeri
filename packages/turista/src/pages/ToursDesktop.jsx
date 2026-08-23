@@ -133,7 +133,10 @@ export default function ToursDesktop() {
     queryKey: ['tours', 'desktop', region?.id, geo?.lat, geo?.lon],
     queryFn:  () => api.getTours({ ...geo }),
   })
-  const tours = data?.tours || data || []
+  // Sempre lista — ver a mesma defesa em Home.jsx.
+  const tours = Array.isArray(data?.tours) ? data.tours
+              : Array.isArray(data)        ? data
+              : []
 
   // Alta temporada: datas exatas em laranja no calendário do filtro.
   const { data: seasonsData } = useQuery({

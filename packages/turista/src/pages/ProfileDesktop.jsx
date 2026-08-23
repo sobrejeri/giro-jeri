@@ -59,7 +59,10 @@ export default function ProfileDesktop() {
     queryFn:  () => api.getMyBookings(),
     enabled:  !!token,
   })
-  const bookings  = bookingsData?.data || bookingsData || []
+  // Sempre lista — ver a mesma defesa em Home.jsx.
+  const bookings  = Array.isArray(bookingsData?.data) ? bookingsData.data
+                  : Array.isArray(bookingsData)       ? bookingsData
+                  : []
   const concluded = bookings.filter((b) => (b.status_operational || b.status) === 'completed').length
 
   const firstName = user?.full_name?.split(' ')[0] || 'viajante'

@@ -247,7 +247,12 @@ export default function Home() {
     queryKey: ['tours', 'home', region?.id, coarseLat, coarseLon],
     queryFn:  () => api.getTours({ limit: 12, ...geo }),
   })
-  const tours = toursData?.tours || toursData || []
+  // Sempre lista. Se a API devolver outra coisa (objeto de erro, HTML do
+  // servidor acordando), o `||` deixava passar e o `.filter` abaixo derrubava
+  // a tela inteira.
+  const tours = Array.isArray(toursData?.tours) ? toursData.tours
+              : Array.isArray(toursData)        ? toursData
+              : []
   const destaques = (tours.filter((t) => t.is_featured).length > 0
     ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
 

@@ -322,7 +322,10 @@ export default function Tours() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const allTours = toursData?.tours || toursData || []
+  // Sempre lista — ver a mesma defesa em Home.jsx.
+  const allTours = Array.isArray(toursData?.tours) ? toursData.tours
+                 : Array.isArray(toursData)        ? toursData
+                 : []
 
   /* ── Pastilhas de filtro ───────────────────────────────────────────────
      Montadas a partir das etiquetas que os passeios REALMENTE têm, nunca de
