@@ -15,29 +15,43 @@ router.get('/', async (req, res, next) => {
   try {
     const { region_id, category_id, mode, featured, search, lat, lon, radius } = req.query;
 
-    let query = supabase
-      .from('tours')
-      .select(`
-        id, name, slug, short_description, duration_hours,
-        is_private_enabled, is_shared_enabled, shared_price_per_person,
-        cover_image_url, tags, rating_average, rating_count,
-        is_featured, display_order, booking_cutoff_time, min_advance_hours, is_exclusive,
-        difficulty_level, max_people, highlight_badge,
-        latitude, longitude, service_radius_km,
-        regions ( id, name, center_latitude, center_longitude, service_radius_km ),
-        categories ( id, name, slug )
-      `)
-      .eq('is_active', true)
-      .order('display_order');
+    // Colunas de apresentação do cartão (duração/dificuldade/capacidade/selo).
+    // Ficam separadas porque são OPCIONAIS: se alguma faltar no banco, a lista
+    // inteira de passeios cairia — e esta é a consulta que sustenta a home e a
+    // tela de Passeios. O front já trata a ausência de cada uma (some do
+    // cartão), então vale mais devolver a lista sem elas do que devolver 500.
+    const COLUNAS_APRESENTACAO = 'difficulty_level, max_people, highlight_badge,';
 
-    if (region_id)   query = query.or(`region_ids.cs.{${region_id}},region_id.eq.${region_id}`);
-    if (category_id) query = query.eq('category_id', category_id);
-    if (featured)    query = query.eq('is_featured', true);
-    if (mode === 'private')  query = query.eq('is_private_enabled', true);
-    if (mode === 'shared')   query = query.eq('is_shared_enabled', true);
-    if (search) query = query.ilike('name', `%${search}%`);
+    const montar = (apresentacao) => {
+      let q = supabase
+        .from('tours')
+        .select(`
+          id, name, slug, short_description, duration_hours,
+          is_private_enabled, is_shared_enabled, shared_price_per_person,
+          cover_image_url, tags, rating_average, rating_count,
+          is_featured, display_order, booking_cutoff_time, min_advance_hours, is_exclusive,
+          ${apresentacao}
+          latitude, longitude, service_radius_km,
+          regions ( id, name, center_latitude, center_longitude, service_radius_km ),
+          categories ( id, name, slug )
+        `)
+        .eq('is_active', true)
+        .order('display_order');
 
-    const { data, error } = await query;
+      if (region_id)   q = q.or(`region_ids.cs.{${region_id}},region_id.eq.${region_id}`);
+      if (category_id) q = q.eq('category_id', category_id);
+      if (featured)    q = q.eq('is_featured', true);
+      if (mode === 'private')  q = q.eq('is_private_enabled', true);
+      if (mode === 'shared')   q = q.eq('is_shared_enabled', true);
+      if (search) q = q.ilike('name', `%${search}%`);
+      return q;
+    };
+
+    let { data, error } = await montar(COLUNAS_APRESENTACAO);
+    if (error?.code === '42703') {   // coluna inexistente
+      console.warn('[tours] colunas de apresentação ausentes; seguindo sem elas:', error.message);
+      ({ data, error } = await montar(''));
+    }
     if (error) throw error;
 
     let filtered = lat && lon ? filterByRadius(data, lat, lon, radius) : data;

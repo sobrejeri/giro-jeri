@@ -18,7 +18,10 @@ export default function PromoBanner({ foto, badge, titulo, destaque, onCta }) {
       onClick={onCta}
       className="relative w-full text-left rounded-[22px] overflow-hidden active:scale-[0.99] transition-transform duration-200 shadow-[0_4px_20px_rgba(0,0,0,0.07)]"
     >
-      <div className="relative h-[116px] bg-gradient-to-br from-sky-500 to-teal-400">
+      {/* min-h e não h: o nome da região entra no texto e varia muito
+          ("Cruz" x "Jijoca de Jericoacoara"). Com altura travada, o nome longo
+          era cortado pela borda da faixa. Assim ela cresce o mínimo. */}
+      <div className="relative min-h-[116px] bg-gradient-to-br from-sky-500 to-teal-400">
         {foto && (
           <img src={foto} alt="" loading="lazy" decoding="async"
                className="absolute inset-0 w-full h-full object-cover" />
@@ -40,9 +43,13 @@ export default function PromoBanner({ foto, badge, titulo, destaque, onCta }) {
             {titulo}
           </p>
 
+          {/* Quebra em duas linhas em vez de reticências: "em Jijoca de
+              Jericoac…" é pior do que uma faixa 10px mais alta, e o nome do
+              destino é justamente o que a faixa existe para dizer. */}
           {destaque && (
-            <span className="inline-flex items-center gap-1 font-giro text-brand text-[17px] leading-tight mt-0.5">
-              {destaque} <ArrowRight size={13} className="mt-[3px]" />
+            <span className="flex items-start gap-1 font-giro text-brand text-[17px] leading-tight mt-0.5 max-w-[66%]">
+              <span className="line-clamp-2">{destaque}</span>
+              <ArrowRight size={13} className="shrink-0 mt-[5px]" />
             </span>
           )}
         </div>

@@ -28,6 +28,41 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (revisão da tela de Passeios — 8 correções)** — Feita
+  a pedido do dono, procurando falha e não estilo. O que apareceu:
+  1. **`GET /api/tours` podia cair inteiro.** As colunas de apresentação
+     (`difficulty_level`, `max_people`, `highlight_badge`) estavam no caminho
+     duro do SELECT: se alguma faltasse no banco, a consulta que sustenta a
+     HOME e a tela de Passeios devolveria 500. Agora tolera `42703` e repete
+     sem elas (mesmo padrão de `payments.js`); o front já esconde cada campo
+     ausente.
+  2. **Seção contradizendo a si mesma:** com a pastilha "Exclusivos", os
+     favoritos anunciavam "Nenhum passeio encontrado" logo acima de uma
+     fileira de passeios. A seção vazia agora some quando há exclusivos.
+  3. **Pastilha invisível:** etiqueta vinda dos atalhos da home podia casar
+     por NOME e não existir em `tags` — a lista saía filtrada sem nenhuma
+     pastilha marcada. Agora ela é inserida na lista.
+  4. **Faixa com altura travada** cortava nome de região longo ("Jijoca de
+     Jericoacoara"); virou `min-h` + duas linhas.
+  5. **Capacidade sumindo:** com preço largo ("Sob consulta", "R$ 1.200") o
+     "12 pessoas" virava "12 pes…". Agora desce de linha (`flex-wrap`).
+  6. **Dificuldade crua** (valor não reconhecido, exibido como veio) podia ser
+     uma frase e empurrar a duração para fora — ganhou `truncate`.
+  7. **Acessibilidade do cartão:** era `role="button"` com um botão
+     (favoritar) ANINHADO — inválido — e o leitor de tela anunciava
+     "Aventura Favoritar Extremo Leste 8h Moderado…" como nome do botão. O
+     papel de botão passou para o NOME do passeio; o cartão continua clicável.
+  8. **Contêiner das barras flutuantes engolia toques:** `fixed` de largura
+     total e transparente, com z-40, bloqueava cliques na área vazia (pegava
+     o alternador). Ganhou `pointer-events-none`, com o cartão de dentro em
+     `pointer-events-auto`.
+  Também: espaço extra no fim da página enquanto os alternadores existem (o
+  botão flutuante cobria o rodapé) — nos DOIS, home e passeios.
+  Verificado com cenários hostis (colunas ausentes, região de nome longo,
+  dificuldade desconhecida, passeio sem foto/preço/descrição, só exclusivos,
+  catálogo vazio) medindo corte de texto por `scrollWidth`×`clientWidth`, mais
+  12 verificações de fluxo. Zero erro de JS, zero corte, zero rolagem lateral.
+
 - **2026-08-23 · Agente B (alternador da tela de Passeios + correção do fixed)**
   — O desenho anterior de Passeios voltou ao repositório e as duas versões
   convivem, como já acontecia na home: `Tours.jsx` (anterior), `ToursV2.jsx`

@@ -34,6 +34,11 @@ export default function HomeSwitcher() {
     <>
       {nova ? <HomeV2 /> : <Home />}
 
+      {/* Espaço extra no fim da página só enquanto o alternador existe: o botão
+          flutua sobre o conteúdo e, no fim da rolagem, cobria a faixa de
+          benefícios. Sai junto com este arquivo quando a decisão for tomada. */}
+      <div aria-hidden="true" className="lg:hidden h-16" />
+
       {/* Alternador — some quando a decisão for tomada e este arquivo sair.
           Fica acima da barra de navegação para não cobrir os botões.
 

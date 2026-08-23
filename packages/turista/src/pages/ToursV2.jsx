@@ -345,8 +345,15 @@ export default function ToursV2() {
     if (allTours.some((x) => x.is_exclusive)) {
       out.push({ id: '__exclusive', icon: Sparkles, label: t('toursPg.chips.exclusive') })
     }
+    // A etiqueta pode chegar pela navegação (atalhos "Pôr do sol"/"Lagoas" da
+    // home) e casar por NOME ou descrição, sem existir em `tags` — aí não
+    // haveria pastilha para ela e o cliente veria a lista filtrada sem nenhuma
+    // pastilha marcada, sem entender por que faltam passeios nem como voltar.
+    if (chip.startsWith('tag:') && !out.some((c) => c.id === chip)) {
+      out.splice(1, 0, { id: chip, label: locationState?.tag || chip.slice(4) })
+    }
     return out
-  }, [allTours, t])
+  }, [allTours, chip, locationState?.tag, t])
 
   // Casa na etiqueta OU no nome/descrição, porque nem todo passeio tem tag.
   const casaTag = (tour, alvo) => {
@@ -749,7 +756,12 @@ export default function ToursV2() {
           />
         )}
 
-        {/* ── Passeios tradicionais (carrinho/combo) ────────── */}
+        {/* ── Passeios tradicionais (carrinho/combo) ─────────
+            Escondida quando não sobrou nenhum tradicional MAS há exclusivos na
+            tela: com a pastilha "Exclusivos" ligada, esta seção anunciava
+            "nenhum passeio encontrado" logo acima de uma fileira de passeios.
+            A mensagem de vazio só faz sentido quando a tela está mesmo vazia. */}
+        {(tradTours.length > 0 || exclusiveTours.length === 0 || toursLoading) && (
         <section>
           <SectionHeader
             icon={Flame}
@@ -784,6 +796,7 @@ export default function ToursV2() {
             </div>
           )}
         </section>
+        )}
 
         {/* Exclusivo selecionado → carrossel exclusivo ACIMA dos veículos */}
         {selectedTour?.is_exclusive && exclusiveCarousel}
@@ -997,8 +1010,8 @@ export default function ToursV2() {
         // cobrir as pessoas; data/hora/saída são definidas depois, no carrinho.
         const canContinue = cartCapacity >= people
         return (
-          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
-            <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
+          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40 pointer-events-none">
+            <div className="pointer-events-auto bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
               {/* Resumo do que está selecionado */}
               <div className="flex-1 min-w-0 mr-3">
                 {cartHasItems ? (
@@ -1049,8 +1062,8 @@ export default function ToursV2() {
         const pricePerPerson = Number(selectedTour.shared_price_per_person)
         const sharedTotal    = pricePerPerson * people
         return (
-          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
-            <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
+          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40 pointer-events-none">
+            <div className="pointer-events-auto bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
               <div className="flex-1 min-w-0 mr-3">
                 <div className="flex items-center gap-1">
                   <Users size={11} className="text-gray-400" />

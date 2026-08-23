@@ -36,6 +36,11 @@ export default function ToursSwitcher() {
     <>
       {nova ? <ToursV2 /> : <Tours />}
 
+      {/* Espaço extra no fim da página só enquanto o alternador existe: o botão
+          flutua sobre o conteúdo e, no fim da rolagem, cobria a faixa de
+          benefícios. Sai junto com este arquivo quando a decisão for tomada. */}
+      <div aria-hidden="true" className="lg:hidden h-16" />
+
       {/* Portal para o document.body, como já faz a barra do carrinho: o
           wrapper do PullToRefresh usa transform, e transform quebra o
           position:fixed dos filhos — preso na página, o botão descia junto com
@@ -47,7 +52,7 @@ export default function ToursSwitcher() {
       {createPortal(
         <button
           onClick={() => setToursVersion(nova ? 'atual' : 'nova')}
-          className={`lg:hidden fixed left-4 bottom-[136px] z-30 flex items-center gap-2 rounded-full pl-3 pr-3.5 py-2 shadow-lg text-[11.5px] font-bold transition-colors ${
+          className={`lg:hidden fixed left-4 bottom-[152px] z-30 flex items-center gap-2 rounded-full pl-3 pr-3.5 py-2 shadow-lg text-[11.5px] font-bold transition-colors ${
             nova ? 'bg-gray-900 text-white' : 'bg-brand text-white'
           }`}
           // Sem aria-label: ele substituiria o nome acessível pelo texto do

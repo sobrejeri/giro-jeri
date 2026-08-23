@@ -84,11 +84,13 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
   const cap  = Number(tour.max_people) || null
 
   return (
+    // O cartão INTEIRO responde ao toque, mas não é um `role="button"`: como
+    // o nome acessível vem de todo o texto de dentro, o leitor de tela
+    // anunciava "Aventura Favoritar Extremo Leste 8h Moderado…" de uma vez —
+    // e ainda havia um botão (favoritar) aninhado dentro de outro, o que é
+    // inválido. Quem carrega o papel de botão é o NOME do passeio, abaixo.
     <div
       onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect?.() } }}
       // ~2,3 cartões na largura de um celular comum: o próximo aparece pela
       // metade e deixa claro que rola para o lado. O mínimo em px impede que em
       // telas de 360px o cartão fique menor do que o texto comporta.
@@ -136,9 +138,17 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
 
       {/* ── Conteúdo ─────────────────────────────────────── */}
       <div className="p-3">
-        <p className="text-[14px] font-extrabold text-gray-900 leading-snug line-clamp-2 min-h-[2.4em]">
-          {tour.name}
-        </p>
+        {/* stopPropagation: sem isso o clique subiria para o cartão e
+            dispararia onSelect duas vezes — selecionando e desmarcando na
+            mesma batida. */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onSelect?.() }}
+          className="block w-full text-left"
+        >
+          <span className="block text-[14px] font-extrabold text-gray-900 leading-snug line-clamp-2 min-h-[2.4em]">
+            {tour.name}
+          </span>
+        </button>
 
         {(dur || dif) && (
           <div className="flex items-center gap-2.5 mt-1.5">
@@ -147,9 +157,13 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
                 <Clock size={11} className="text-brand" /> {dur}
               </span>
             )}
+            {/* min-w-0/truncate: quando `difficulty_level` traz um valor que
+                não reconhecemos, ele é exibido cru — e pode ser uma frase
+                ("Moderado a difícil") que empurraria a duração para fora. */}
             {dif && (
-              <span className={`inline-flex items-center gap-1 text-[11.5px] ${dif.texto}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${dif.cor}`} /> {dif.label}
+              <span className={`inline-flex items-center gap-1 min-w-0 text-[11.5px] ${dif.texto}`}>
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dif.cor}`} />
+                <span className="truncate">{dif.label}</span>
               </span>
             )}
           </div>
@@ -166,7 +180,10 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
           {/* O preço nunca quebra: "R$ 1.200" partido em duas linhas ("R$" em
               cima, número embaixo) é o tipo de coisa que faz o cliente
               desconfiar do valor. Quem cede espaço é a capacidade, ao lado. */}
-          <div className="flex items-end justify-between gap-1 mt-1">
+          {/* flex-wrap: com preço largo ("Sob consulta", "R$ 1.200") a
+              capacidade não cabia ao lado e virava "12 pes…". Descer de linha
+              não esconde nada; reticências em número, sim. */}
+          <div className="flex flex-wrap items-end justify-between gap-x-1 gap-y-1 mt-1">
             <p className="shrink-0 whitespace-nowrap text-[16px] font-extrabold text-brand leading-none">
               {valor || t('toursPg.card.onRequest')}
             </p>
