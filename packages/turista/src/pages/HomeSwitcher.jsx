@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { Sparkles, RotateCcw } from 'lucide-react'
 import Home from './Home'
@@ -34,17 +35,25 @@ export default function HomeSwitcher() {
       {nova ? <HomeV2 /> : <Home />}
 
       {/* Alternador — some quando a decisão for tomada e este arquivo sair.
-          Fica acima da barra de navegação para não cobrir os botões. */}
-      <button
-        onClick={() => setHomeVersion(nova ? 'atual' : 'nova')}
-        className={`lg:hidden fixed right-4 bottom-24 z-40 flex items-center gap-2 rounded-full pl-3.5 pr-4 py-2.5 shadow-lg text-[12px] font-bold transition-colors ${
-          nova ? 'bg-gray-900 text-white' : 'bg-brand text-white'
-        }`}
-        aria-label="Alternar entre a home atual e a nova"
-      >
-        {nova ? <RotateCcw size={14} /> : <Sparkles size={14} />}
-        {nova ? 'Ver home atual' : 'Ver home nova'}
-      </button>
+          Fica acima da barra de navegação para não cobrir os botões.
+
+          Portal para o document.body: o wrapper do PullToRefresh usa transform,
+          e transform quebra o position:fixed dos filhos. Sem o portal o botão
+          ficava preso à PÁGINA e descia junto com a rolagem, indo parar no meio
+          do conteúdo em vez de acompanhar o rodapé da tela. */}
+      {createPortal(
+        <button
+          onClick={() => setHomeVersion(nova ? 'atual' : 'nova')}
+          className={`lg:hidden fixed right-4 bottom-24 z-40 flex items-center gap-2 rounded-full pl-3.5 pr-4 py-2.5 shadow-lg text-[12px] font-bold transition-colors ${
+            nova ? 'bg-gray-900 text-white' : 'bg-brand text-white'
+          }`}
+          title="Alternar entre a home atual e a nova"
+        >
+          {nova ? <RotateCcw size={14} /> : <Sparkles size={14} />}
+          {nova ? 'Ver home atual' : 'Ver home nova'}
+        </button>,
+        document.body,
+      )}
     </>
   )
 }

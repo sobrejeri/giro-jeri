@@ -10,7 +10,7 @@ import CheckoutProcessando from './pages/checkout/CheckoutProcessando'
 import CheckoutSucesso     from './pages/checkout/CheckoutSucesso'
 import HomeSwitcher    from './pages/HomeSwitcher'   // home atual + proposta nova (em avaliação)
 import Feed            from './pages/Feed'
-import Tours           from './pages/Tours'
+import ToursSwitcher   from './pages/ToursSwitcher' // desenho novo + anterior (em avaliação)
 import TourDetail      from './pages/TourDetail'
 import Transfers       from './pages/Transfers'
 import Bookings        from './pages/Bookings'
@@ -79,7 +79,7 @@ export default function App() {
       <Route path="/" element={<Layout />}>
         <Route index                      element={<HomeSwitcher />} />
         <Route path="eventos"             element={<Feed />} />
-        <Route path="passeios"            element={<Tours />} />
+        <Route path="passeios"            element={<ToursSwitcher />} />
         <Route path="passeios/:id"        element={<TourDetail />} />
         <Route path="transfers"           element={<Transfers />} />
         <Route path="carrinho"            element={<CartPage />} />

@@ -28,6 +28,30 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (alternador da tela de Passeios + correção do fixed)**
+  — O desenho anterior de Passeios voltou ao repositório e as duas versões
+  convivem, como já acontecia na home: `Tours.jsx` (anterior), `ToursV2.jsx`
+  (novo) e `ToursSwitcher.jsx` decidindo qual renderizar. **O padrão aqui é
+  'nova'** — ao contrário da home, cujo padrão é 'atual': o redesenho foi
+  pedido e já é o que todo mundo vê; o botão existe para VOLTAR.
+  O motor da troca saiu para `lib/versaoTela.js` (`criarVersaoTela`), usado
+  pelo `homeVersion.js` e pelo novo `toursVersion.js` — antes era código solto
+  só da home, e duplicar em duas telas garantiria divergência. Ganhou try/catch
+  no localStorage: com duas telas dependendo dele, uma exceção em navegação
+  privada derrubaria a navegação inteira.
+  **Defeito corrigido nos dois alternadores:** o botão usava `position: fixed`
+  dentro do wrapper do `PullToRefresh`, que aplica `transform` — e transform
+  quebra o fixed dos filhos. O botão ficava preso à PÁGINA e descia com a
+  rolagem (medido: y=1034 numa janela de 932). Agora vai por portal para o
+  `document.body`, a mesma solução que a barra do carrinho já usava. Também
+  saiu o `aria-label` dos dois: ele substituía o nome acessível pelo texto do
+  atributo, e o leitor de tela anunciava algo diferente do rótulo visível.
+  Conferido: padrão novo, reverter, persistir ao recarregar, voltar ao novo,
+  `?passeios=atual`, e o botão sem cobrir a barra do carrinho.
+  **Quando a decisão sair:** apagar a perdedora, o `ToursSwitcher.jsx` e o
+  `lib/toursVersion.js`. `lib/versaoTela.js` só sai quando as DUAS avaliações
+  (home e passeios) terminarem.
+
 - **2026-08-23 · Agente B (redesign da tela de Passeios)** — Só UI/UX: nenhuma
   regra de negócio foi tocada. Modo privativo/compartilhado, saída, data,
   pessoas, favoritos, carrinho, sugestão de veículo, cutoff/antecedência,

@@ -14,7 +14,15 @@ import {
   MapPin, Calendar, Users,
   Star, Clock, Heart, Zap, Plus, Minus, Check,
   ChevronLeft, ChevronRight, X, Info, Bus, Search,
+  Flame, Sparkles, ShoppingCart, ChevronDown,
+  ShieldCheck, MessageCircle, Lock, User as UserIcon,
 } from 'lucide-react'
+import SegmentedControl from '../components/tours/SegmentedControl'
+import FilterChip from '../components/tours/FilterChip'
+import SectionHeader from '../components/tours/SectionHeader'
+import TourCard from '../components/tours/TourCard'
+import PromoBanner from '../components/tours/PromoBanner'
+import BenefitsStrip from '../components/tours/BenefitsStrip'
 import {
   format, startOfDay, startOfMonth, endOfMonth,
   eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths,
@@ -64,56 +72,15 @@ function suggest(vehicles, people, filter = 'recommended') {
   return { vehicle: biggest, qty: Math.ceil(people / biggest.seat_capacity) }
 }
 
-/* ── Card de passeio na seleção horizontal ──────────────────── */
-function TourPickCard({ tour, selected, onSelect, isFav, onFav }) {
-  const [from, to] = GRADIENTS[gi(tour.id)]
-  return (
-    <div
-      onClick={onSelect}
-      className={`shrink-0 w-[140px] rounded-2xl overflow-hidden bg-white cursor-pointer transition-all active:scale-[0.96] ${
-        selected ? 'ring-2 ring-brand shadow-md' : 'border border-gray-100 shadow-sm'
-      }`}
-    >
-      <div className="h-[88px] relative overflow-hidden">
-        {tour.cover_image_url ? (
-          <img src={tour.cover_image_url} alt={tour.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className={`h-full bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
-            <Zap size={28} className="text-white/20" />
-          </div>
-        )}
-        {selected && (
-          <div className="absolute top-2 left-2 w-5 h-5 bg-brand rounded-full flex items-center justify-center shadow">
-            <Check size={10} className="text-white" strokeWidth={3} />
-          </div>
-        )}
-        <button
-          onClick={(e) => { e.stopPropagation(); onFav() }}
-          className="absolute top-2 right-2 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center"
-        >
-          <Heart size={10} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-400'} />
-        </button>
-      </div>
-      <div className="p-2">
-        <p className="text-[11px] font-bold text-gray-900 leading-tight line-clamp-1 mb-0.5">{tour.name}</p>
-        {tour.short_description ? (
-          <p className="text-[10px] text-gray-400 leading-snug line-clamp-2">{tour.short_description}</p>
-        ) : tour.rating_average > 0 ? (
-          <div className="flex items-center gap-1">
-            <Star size={9} className="text-amber-400 fill-amber-400" />
-            <span className="text-[10px] text-gray-500">{tour.rating_average}</span>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
 /* ── Card de veículo no catálogo ────────────────────────────── */
 function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
   const { t } = useTranslation()
   return (
-    <div className={`bg-white rounded-2xl p-3 border flex items-center gap-3 transition-all ${qty > 0 ? 'border-brand shadow-sm shadow-brand/10' : 'border-gray-100'}`}>
+    <div className={`bg-white rounded-[18px] p-3 flex items-center gap-3 transition-all duration-200 ${
+      qty > 0
+        ? 'ring-2 ring-brand shadow-[0_4px_20px_rgba(255,101,0,0.15)]'
+        : 'shadow-[0_4px_20px_rgba(0,0,0,0.06)]'
+    }`}>
       <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
         {vehicle.image_url ? (
           <img src={vehicle.image_url} alt={vehicle.name} className="w-full h-full object-contain p-0.5" />
@@ -279,13 +246,13 @@ function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeaso
 }
 
 /* ── Main ───────────────────────────────────────────────────── */
-export default function Tours() {
+export default function ToursV2() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
-  const { items: savedCartItems, upsertItem: saveCartItem } = useCart()
+  const { items: savedCartItems, upsertItem: saveCartItem, count: cartCount } = useCart()
 
   // "Retomar" do carrinho flutuante: restaura o rascunho salvo (data/pessoas/
   // veículos) do passeio escolhido. Os dados vivem no localStorage (CartContext).
@@ -309,6 +276,14 @@ export default function Tours() {
   })
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
+  // Pastilha ativa da lista. Já nasce alinhada ao atalho que trouxe o cliente
+  // da home ("Mais vendidos", "Pôr do sol"), senão ele chegaria numa lista
+  // filtrada sem nenhuma pastilha marcada e sem saber como voltar a "Todos".
+  const [chip, setChip] = useState(() => {
+    if (locationState?.featured) return '__featured'
+    if (locationState?.tag) return `tag:${String(locationState.tag).toLowerCase()}`
+    return '__all'
+  })
   const [cart, setCart] = useState(() => {
     if (!restoredItem?.vehicles?.length) return {}
     const c = {}
@@ -339,30 +314,65 @@ export default function Tours() {
   })
   const highSeasonMonths = useMemo(() => highSeasonMonthSet(seasonsData || []), [seasonsData])
 
+  // Imagem do banner: a mesma que o admin já configura para a home. Sem ela o
+  // banner usa a capa de um passeio real (ver abaixo) — nada é fixo no código.
+  const { data: settings } = useQuery({
+    queryKey: ['public-settings'],
+    queryFn:  () => api.getPublicSettings(),
+    staleTime: 5 * 60 * 1000,
+  })
+
   const allTours = toursData?.tours || toursData || []
-  // Etiqueta vinda dos atalhos da home ("Pôr do sol", "Lagoas"): sem isto o
-  // atalho abriria a lista inteira e o cliente teria de procurar na mão.
+
+  /* ── Pastilhas de filtro ───────────────────────────────────────────────
+     Montadas a partir das etiquetas que os passeios REALMENTE têm, nunca de
+     uma lista fixa: pastilha fixa vira botão morto assim que o admin renomeia
+     ou aposenta uma etiqueta. "Mais vendidos" e "Exclusivos" só entram se
+     houver passeio marcado como tal. */
+  const chips = useMemo(() => {
+    const out = [{ id: '__all', label: t('toursPg.chips.all') }]
+    if (allTours.some((x) => x.is_featured)) {
+      out.push({ id: '__featured', icon: Flame, label: t('toursPg.chips.bestSellers') })
+    }
+    const vistas = new Map()
+    for (const x of allTours) {
+      for (const tg of (Array.isArray(x.tags) ? x.tags : [])) {
+        const rotulo = String(tg || '').trim()
+        if (rotulo && !vistas.has(rotulo.toLowerCase())) vistas.set(rotulo.toLowerCase(), rotulo)
+      }
+    }
+    for (const [chave, rotulo] of vistas) out.push({ id: `tag:${chave}`, label: rotulo })
+    if (allTours.some((x) => x.is_exclusive)) {
+      out.push({ id: '__exclusive', icon: Sparkles, label: t('toursPg.chips.exclusive') })
+    }
+    return out
+  }, [allTours, t])
+
   // Casa na etiqueta OU no nome/descrição, porque nem todo passeio tem tag.
-  const tagAtalho = locationState?.tag || null
-  const casaTag = (t) => {
-    if (!tagAtalho) return true
-    const alvo = tagAtalho.toLowerCase()
-    const tags = Array.isArray(t.tags) ? t.tags.map((x) => String(x).toLowerCase()) : []
+  const casaTag = (tour, alvo) => {
+    const tags = Array.isArray(tour.tags) ? tour.tags.map((x) => String(x).toLowerCase()) : []
     return tags.some((x) => x.includes(alvo))
-      || String(t.name || '').toLowerCase().includes(alvo)
-      || String(t.short_description || '').toLowerCase().includes(alvo)
+      || String(tour.name || '').toLowerCase().includes(alvo)
+      || String(tour.short_description || '').toLowerCase().includes(alvo)
   }
-  const porTag = allTours.filter(casaTag)
-  // Se a etiqueta não casar com nada, mostra tudo em vez de uma tela vazia.
-  let base = (tagAtalho && porTag.length === 0) ? allTours : porTag
-  // Atalho "Mais vendidos" da home: só os destacados. Mesma regra de segurança
-  // — se nenhum estiver marcado, a lista inteira em vez de tela vazia.
-  if (locationState?.featured) {
-    const destacados = base.filter((t) => t.is_featured)
-    if (destacados.length > 0) base = destacados
-  }
+
+  const base = useMemo(() => {
+    if (chip === '__all') return allTours
+    const filtra = (fn) => {
+      const r = allTours.filter(fn)
+      // Nunca deixa a tela vazia por causa de um atalho: as pastilhas nascem do
+      // próprio dado e sempre casam, mas a etiqueta pode chegar pela navegação
+      // (atalhos da home) e não corresponder a nada.
+      return r.length > 0 ? r : allTours
+    }
+    if (chip === '__featured')  return filtra((x) => x.is_featured)
+    if (chip === '__exclusive') return filtra((x) => x.is_exclusive)
+    const alvo = chip.slice(4)
+    return filtra((x) => casaTag(x, alvo))
+  }, [allTours, chip])
+
   const tours = searchTerm.trim()
-    ? base.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    ? base.filter((x) => x.name.toLowerCase().includes(searchTerm.toLowerCase()))
     : base
   // Tradicionais entram no carrinho/combo (fluxo desta tela); exclusivos são
   // venda direta (carrossel próprio → tela de detalhes, sem carrinho).
@@ -527,6 +537,22 @@ export default function Tours() {
     setCart({ [suggestion.vehicle.id]: suggestion.qty })
   }
 
+  const nomeRegiao = region?.name || 'Jericoacoara'
+
+  // Foto do banner: a configurada no admin e, na falta dela, a capa de um
+  // passeio em destaque da própria região. Nunca uma URL fixa no código —
+  // seria a única imagem da tela que não acompanharia o catálogo.
+  const bannerFoto = settings?.home_banner_image_url
+    || allTours.find((x) => x.is_featured && x.cover_image_url)?.cover_image_url
+    || allTours.find((x) => x.cover_image_url)?.cover_image_url
+    || null
+
+  const BENEFICIOS = [
+    { icon: ShieldCheck,   titulo: t('toursPg.benefits.cancelTitle'),  texto: t('toursPg.benefits.cancelText') },
+    { icon: MessageCircle, titulo: t('toursPg.benefits.supportTitle'), texto: t('toursPg.benefits.supportText') },
+    { icon: Lock,          titulo: t('toursPg.benefits.payTitle'),     texto: t('toursPg.benefits.payText') },
+  ]
+
   const FILTERS = [
     { id: 'recommended', label: t('toursPg.filters.recommended'), emoji: '⭐' },
     { id: 'economico',   label: t('toursPg.filters.economic'),   emoji: '💰' },
@@ -538,13 +564,20 @@ export default function Tours() {
   // demais casos. Assim os veículos sempre aparecem abaixo do carrossel escolhido.
   const exclusiveCarousel = !toursLoading && exclusiveTours.length > 0 ? (
     <section>
-      <p className="text-[14px] font-bold text-gray-900 mb-0.5">{t('toursPg.exclusive.title')}</p>
-      <p className="text-[11px] text-gray-400 mb-2.5">{t('toursPg.exclusive.subtitle')}</p>
-      <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
+      <SectionHeader
+        icon={Sparkles}
+        cor="text-violet-500"
+        title={t('toursPg.exclusiveSection.title')}
+        subtitle={t('toursPg.exclusiveSection.subtitle')}
+        verTodosLabel={t('toursPg.seeAll')}
+        onVerTodos={chip !== '__exclusive' ? () => setChip('__exclusive') : undefined}
+      />
+      <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 scrollbar-hide snap-x">
         {exclusiveTours.map((tour) => (
-          <TourPickCard
+          <TourCard
             key={tour.id}
             tour={tour}
+            mode={mode}
             selected={selectedTour?.id === tour.id}
             onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
             isFav={favs.has(tour.id)}
@@ -570,13 +603,28 @@ export default function Tours() {
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
           <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('toursPg.header.title')}</h1>
-          <div className="absolute right-0 flex items-center gap-1.5">
+          <div className="absolute right-0 flex items-center gap-2">
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
-              className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
+              className={`w-9 h-9 rounded-full flex items-center justify-center active:scale-95 transition-transform ${showSearch ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}
               aria-label={t('toursPg.header.search')}
             >
-              <Search size={15} />
+              <Search size={16} />
+            </button>
+            {/* Carrinho no cabeçalho: o carrinho flutuante fica sobre o
+                conteúdo e some ao rolar; aqui o cliente vê o que já juntou sem
+                precisar caçar o botão. */}
+            <button
+              onClick={() => navigate('/carrinho')}
+              className="relative w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform"
+              aria-label={t('toursPg.cartAria')}
+            >
+              <ShoppingCart size={16} />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center">
+                  {cartCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -596,92 +644,136 @@ export default function Tours() {
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
 
-        {/* ── Toggle Privativo / Compartilhado ──────────────── */}
-        <div className="flex bg-gray-100 rounded-full p-1 gap-1">
-          {[['private', t('toursPg.mode.private')], ['shared', t('toursPg.mode.shared')]].map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setMode(id)}
-              className={`flex-1 py-2 rounded-full text-[13px] font-semibold transition-all active:scale-[0.98] ${
-                mode === id ? 'bg-brand text-white shadow-sm' : 'text-gray-500'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* ── Privativo / Compartilhado ─────────────────────── */}
+        <SegmentedControl
+          value={mode}
+          onChange={setMode}
+          options={[
+            { id: 'private', label: t('toursPg.mode.private'), icon: UserIcon },
+            { id: 'shared',  label: t('toursPg.mode.shared'),  icon: Users },
+          ]}
+        />
 
-        {/* ── Filtros rápidos ───────────────────────────────── */}
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+        {/* ── Saída · Data · Pessoas ────────────────────────── */}
+        <div className="flex gap-2.5">
+          {/* Saída é o campo obrigatório e o mais largo: sem ele o checkout não
+              fecha, então ganha borda tracejada laranja enquanto está vazio. */}
+          {/* Data e Pessoas ocupam só o que o conteúdo pede (shrink-0) e a
+              Saída fica com a sobra. Com os três em flex-1 o espaço era
+              repartido igual e "Selecionar local" virava "Selecionar l…" ao
+              lado de uma caixa de Data com folga sobrando. */}
           <button
             onClick={() => setShowOriginPicker(true)}
-            className={`shrink-0 flex items-center gap-2 rounded-xl px-3 py-2 active:scale-95 transition-transform max-w-[180px] border ${
-              origin ? 'bg-white border-gray-200' : 'bg-brand/5 border-brand border-dashed'
+            className={`flex-1 min-w-0 flex items-center gap-2 rounded-[18px] px-3 py-2.5 text-left active:scale-[0.97] transition-transform ${
+              origin
+                ? 'bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)]'
+                : 'bg-brand/[0.04] border border-dashed border-brand'
             }`}
           >
-            <MapPin size={11} className="text-brand shrink-0" />
-            <div className="text-left min-w-0">
-              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.origin.label')}</p>
-              <p className={`text-[11px] font-semibold mt-0.5 leading-tight truncate ${
-                origin ? 'text-gray-700' : 'text-brand'
-              }`}>
+            <MapPin size={15} className="text-brand shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.origin.label')}</p>
+              <p className={`text-[12.5px] font-bold mt-1 leading-tight truncate ${origin ? 'text-gray-800' : 'text-brand'}`}>
                 {origin?.name || t('toursPg.origin.placeholder')}
               </p>
             </div>
           </button>
+
           <button
             onClick={() => setShowDatePicker(true)}
-            className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 active:scale-95 transition-transform"
+            className="shrink-0 flex items-center gap-1.5 bg-white rounded-[18px] px-2.5 py-2.5 text-left shadow-[0_4px_20px_rgba(0,0,0,0.05)] active:scale-[0.97] transition-transform"
           >
-            <Calendar size={11} className="text-brand" />
-            <div className="text-left">
-              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.date.label')}</p>
-              <p className="text-[11px] font-semibold text-gray-700 mt-0.5 leading-tight">
+            <Calendar size={15} className="text-brand shrink-0" />
+            <div>
+              <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.date.label')}</p>
+              <p className="text-[12.5px] font-bold text-gray-800 mt-1 leading-tight whitespace-nowrap">
                 {isToday(date) ? t('toursPg.date.today')
                   : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
                   : format(date, 'd MMM', { locale: ptBR })}
               </p>
             </div>
+            <ChevronDown size={12} className="text-gray-400 shrink-0" />
           </button>
-          <div className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
-            <Users size={11} className="text-brand" />
-            <div className="text-left">
-              <p className="text-[9px] text-gray-400 leading-none">{t('toursPg.people.label')}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <button
-                  onClick={() => setPeople((p) => Math.max(1, p - 1))}
-                  className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center active:scale-95"
-                >
-                  <Minus size={8} className="text-gray-600" />
-                </button>
-                <span className="text-[11px] font-semibold text-gray-700 w-4 text-center tabular-nums">{people}</span>
-                <button
-                  onClick={() => setPeople((p) => p + 1)}
-                  className="w-4 h-4 rounded-full bg-brand flex items-center justify-center active:scale-95"
-                >
-                  <Plus size={8} className="text-white" />
-                </button>
-              </div>
+
+          <div className="shrink-0 bg-white rounded-[18px] px-2.5 py-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+            <p className="text-[10px] text-gray-400 leading-none text-center">{t('toursPg.people.label')}</p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <button
+                onClick={() => setPeople((p) => Math.max(1, p - 1))}
+                aria-label="-"
+                className="w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center active:scale-90 transition-transform shrink-0"
+              >
+                <Minus size={11} className="text-gray-600" />
+              </button>
+              <span className="text-[14px] font-extrabold text-gray-900 tabular-nums">{people}</span>
+              <button
+                onClick={() => setPeople((p) => p + 1)}
+                aria-label="+"
+                className="w-6 h-6 rounded-full bg-brand flex items-center justify-center active:scale-90 transition-transform shrink-0"
+              >
+                <Plus size={11} className="text-white" />
+              </button>
             </div>
           </div>
         </div>
 
+        {/* ── Pastilhas de filtro ───────────────────────────── */}
+        {chips.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
+            {chips.map((c) => (
+              <FilterChip
+                key={c.id}
+                icon={c.icon}
+                label={c.label}
+                ativo={chip === c.id}
+                onClick={() => setChip(c.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* ── Banner ────────────────────────────────────────
+            Só aparece com foto real (do admin ou de um passeio da região):
+            sem imagem seria uma caixa colorida fingindo ser fotografia. */}
+        {bannerFoto && (
+          <PromoBanner
+            foto={bannerFoto}
+            badge={t('toursPg.banner.badge')}
+            titulo={t('toursPg.banner.title')}
+            destaque={t('toursPg.banner.highlight', { region: nomeRegiao })}
+            descricao={t('toursPg.banner.description')}
+            beneficios={[t('toursPg.banner.benefit1'), t('toursPg.banner.benefit2')]}
+            cta={t('toursPg.banner.cta')}
+            onCta={() => { setChip('__all'); setSearchTerm('') }}
+          />
+        )}
+
         {/* ── Passeios tradicionais (carrinho/combo) ────────── */}
         <section>
-          <p className="text-[14px] font-bold text-gray-900 mb-0.5">{t('toursPg.traditional.title')}</p>
-          <p className="text-[11px] text-gray-400 mb-2.5">{t('toursPg.traditional.subtitle')}</p>
+          <SectionHeader
+            icon={Flame}
+            title={t('toursPg.favorites.title')}
+            subtitle={t('toursPg.favorites.subtitle')}
+            verTodosLabel={t('toursPg.seeAll')}
+            onVerTodos={chip !== '__all' || searchTerm ? () => { setChip('__all'); setSearchTerm('') } : undefined}
+          />
           {toursLoading ? (
-            <div className="h-[130px] flex items-center justify-center">
-              <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+            <div className="flex gap-3 -mx-4 px-4">
+              {[0, 1].map((i) => (
+                <div key={i} className="shrink-0 w-[44%] min-w-[166px] h-[268px] rounded-[22px] bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)] animate-pulse" />
+              ))}
             </div>
           ) : tradTours.length === 0 ? (
-            <p className="text-[12px] text-gray-400 py-4">{t('toursPg.traditional.empty')}</p>
+            <p className="text-[12.5px] text-gray-500 py-4">
+              {searchTerm.trim() || chip !== '__all' ? t('toursPg.noResults') : t('toursPg.traditional.empty')}
+            </p>
           ) : (
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
+            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 scrollbar-hide snap-x">
               {tradTours.map((tour) => (
-                <TourPickCard
+                <TourCard
                   key={tour.id}
                   tour={tour}
+                  mode={mode}
                   selected={selectedTour?.id === tour.id}
                   onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
                   isFav={favs.has(tour.id)}
@@ -704,7 +796,7 @@ export default function Tours() {
             {/* Sugestões */}
             {suggestion && (
               <section>
-                <p className="text-[14px] font-bold text-gray-900 mb-2">
+                <p className="text-[17.5px] font-extrabold text-gray-900 mb-2.5">
                   {t('toursPg.suggestions.for')} {people} {people === 1 ? t('toursPg.common.person') : t('toursPg.common.peopleWord')}
                 </p>
 
@@ -726,7 +818,7 @@ export default function Tours() {
                 </div>
 
                 {/* Suggestion card */}
-                <div className="bg-white rounded-2xl p-3 border border-gray-100 flex items-center gap-3">
+                <div className="bg-white rounded-[18px] p-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] flex items-center gap-3">
                   <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${suggestion.vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
                     {suggestion.vehicle.image_url ? (
                       <img src={suggestion.vehicle.image_url} alt={suggestion.vehicle.name} className="w-full h-full object-contain p-0.5" />
@@ -765,8 +857,8 @@ export default function Tours() {
             {/* Catálogo de veículos */}
             {vehicles.length > 0 && (
               <section className="pb-2">
-                <p className="text-[14px] font-bold text-gray-900">{t('toursPg.catalog.title')}</p>
-                <p className="text-[11px] text-brand mt-0.5 mb-3">{t('toursPg.catalog.subtitle')}</p>
+                <p className="text-[17.5px] font-extrabold text-gray-900">{t('toursPg.catalog.title')}</p>
+                <p className="text-[12px] text-gray-500 mt-1 mb-3">{t('toursPg.catalog.subtitle')}</p>
                 <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-3 xl:grid-cols-4 lg:gap-2.5">
                   {sortedVehicles.map((v) => (
                     <VehicleCard
@@ -784,7 +876,7 @@ export default function Tours() {
             {/* Nenhum veículo ligado para este passeio (Motor de Preços) */}
             {vehiclesFetched && vehicles.length === 0 && (
               <section className="pb-2">
-                <div className="bg-white rounded-2xl p-4 border border-gray-100 text-center">
+                <div className="bg-white rounded-[18px] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] text-center">
                   <p className="text-[13px] font-semibold text-gray-700">{t('toursPg.noVehicles.title')}</p>
                   <p className="text-[11px] text-gray-400 mt-1">{t('toursPg.noVehicles.subtitle')}</p>
                 </div>
@@ -802,8 +894,8 @@ export default function Tours() {
           return (
             <>
               {/* Número de pessoas */}
-              <div className="bg-white rounded-2xl p-4 border border-gray-100">
-                <p className="text-[14px] font-bold text-gray-900">{t('toursPg.sharedMode.peopleTitle')}</p>
+              <div className="bg-white rounded-[22px] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+                <p className="text-[17.5px] font-extrabold text-gray-900">{t('toursPg.sharedMode.peopleTitle')}</p>
                 <p className="text-[11px] text-gray-400 mt-0.5 mb-4">{t('toursPg.sharedMode.peopleSubtitle')}</p>
                 <div className="flex items-center justify-between px-4">
                   <button
@@ -824,7 +916,7 @@ export default function Tours() {
 
               {/* Card de preço */}
               {pricePerPerson ? (
-                <div className="bg-brand rounded-2xl p-4">
+                <div className="bg-brand rounded-[22px] p-4 shadow-[0_6px_24px_rgba(255,101,0,0.25)]">
                   <p className="text-white/70 text-[12px] font-medium">{t('toursPg.sharedMode.pricePerPerson')}</p>
                   <p className="text-white text-[30px] font-extrabold leading-tight mt-0.5">
                     R$ {pricePerPerson.toLocaleString('pt-BR')}
@@ -850,8 +942,8 @@ export default function Tours() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl p-4 border border-gray-100">
-                  <p className="text-[13px] text-gray-400">{t('toursPg.sharedMode.unavailable')}</p>
+                <div className="bg-white rounded-[18px] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+                  <p className="text-[13px] text-gray-500">{t('toursPg.sharedMode.unavailable')}</p>
                 </div>
               )}
 
@@ -875,6 +967,11 @@ export default function Tours() {
 
         {/* Sem exclusivo selecionado → carrossel exclusivo ABAIXO dos veículos */}
         {!selectedTour?.is_exclusive && exclusiveCarousel}
+
+        {/* ── Confiança ─────────────────────────────────────
+            Fecha a página logo antes do menu: é a última coisa lida por quem
+            rolou tudo e ainda está em dúvida se reserva. */}
+        <BenefitsStrip itens={BENEFICIOS} />
 
       </div>
 
