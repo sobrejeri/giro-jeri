@@ -215,7 +215,7 @@ async function computeChargedTotal({ data, userId }) {
 // Credenciais Mercado Pago da cooperativa (com refresh automático se o token
 // estiver expirando). Retorna { token, publicKey, platformPct } ou null quando
 // a cooperativa não conectou a conta dela.
-async function getOperatorMp(operatorId) {
+export async function getOperatorMp(operatorId) {
   if (!operatorId) return null
   const { data: op } = await supabase
     .from('users')
@@ -1681,7 +1681,11 @@ async function orderCommissionRows(booking, payment, effectiveDate, cfg) {
 }
 
 // ── Helpers ────────────────────────────────────────────
-async function onPaymentApproved(payment) {
+// Exportada para a conciliação (services/paymentReconcile.js) reaproveitar
+// EXATAMENTE o mesmo caminho de aprovação do webhook e do polling — inclusive a
+// reserva atômica do ledger. Duplicar essa lógica seria criar uma segunda
+// verdade sobre quando uma reserva vira paga.
+export async function onPaymentApproved(payment) {
   // Carrinho universal: pagamento de GRUPO segue por caminho próprio, que
   // aplica a aprovação a TODAS as reservas do grupo. O caminho de reserva
   // única abaixo permanece intacto.

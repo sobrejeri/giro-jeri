@@ -11,6 +11,8 @@ import {
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
 import { sweepExpiredLegBookings } from '../services/legFlow.js';
+import { reconciliarPagamentosDoCliente } from '../services/paymentReconcile.js';
+import { onPaymentApproved, getOperatorMp } from './payments.js';
 import dayjs from 'dayjs';
 
 const serviceLabelBk = (t) => (t === 'transfer' ? 'translado' : 'passeio');
@@ -238,6 +240,16 @@ router.get('/', authenticate, async (req, res, next) => {
     // Varredura lazy (R3): cancela reservas com prazo de pagamento vencido antes
     // de o cliente ver a lista. Best-effort e inerte com a flag off.
     await sweepExpiredLegBookings().catch(() => {});
+
+    // Conciliação lazy: confere no Mercado Pago os pagamentos AINDA PENDENTES
+    // deste cliente antes de montar a lista. É o momento certo — quem pagou o
+    // PIX no app do banco e fechou o Turiva volta justamente aqui para ver se
+    // caiu. Cobre o caso do aviso do MP que não chegou (rede, deploy, API fora).
+    // Só leitura no MP e best-effort: a lista abre mesmo com o MP fora do ar.
+    await reconciliarPagamentosDoCliente(req.user.id, {
+      aoAprovar:     onPaymentApproved,
+      resolverToken: async (operatorId) => (await getOperatorMp(operatorId))?.token || null,
+    }).catch(() => {});
 
     let query = supabase
       .from('bookings')

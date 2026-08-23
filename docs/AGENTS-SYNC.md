@@ -28,6 +28,34 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (conciliação de pagamento — ETAPA 1 de 3)** — Rede de
+  segurança para o aviso do MP que não chega (rede, deploy, API fora). Sem
+  migration. **Credenciais do MP são de PRODUÇÃO** — as regras do
+  `services/paymentReconcile.js` são contenção de estrago, não preferência:
+  só LEITURA no MP (`GET /v1/payments/{id}`); só toca pagamento `pending`;
+  **só aprova com resposta exata `approved`** (erro de rede não aprova nada);
+  janela de 7 dias, teto de 5 por rodada, espera de 30s por cliente; e
+  best-effort — a lista de reservas abre com o MP fora do ar.
+  **Gatilho (etapa 1):** ao abrir `GET /api/bookings`, concilia os pendentes
+  DAQUELE cliente. É o momento certo: quem pagou o PIX no banco e fechou o app
+  volta justamente ali para conferir.
+  `onPaymentApproved` e `getOperatorMp` foram EXPORTADAS de `payments.js` e
+  injetadas no serviço (junto com `consultarStatus`). Injetar em vez de mover:
+  são funções que renovam token do MP e lançam no financeiro — não se realoca
+  código que move dinheiro junto com funcionalidade nova. A aprovação reusa o
+  MESMO `onPaymentApproved` do webhook e do polling (uma verdade só sobre
+  quando a reserva vira paga), já com a reserva atômica do ledger.
+  **Testado:** tabela de decisão com 12 casos (approved / rejected / cancelled
+  / in_process / pending / MP lançando exceção / null / pagamento já aprovado /
+  já falhado / gateway de teste / id TEST- / sem id) — todos corretos; espera
+  por cliente conferida (2ª chamada seguida é ignorada, outro cliente não é
+  afetado, volta a valer após o intervalo).
+  **Ainda NÃO feito:** `reconciliarLote` existe e está testada, mas **não está
+  ligada a nenhuma rota** — é a etapa 2 (botão no admin, sob demanda). Etapa 3
+  seria varredura periódica, se o dono quiser.
+  **Nada foi testado contra a conta real do MP** — combinado com o dono: testes
+  reais depois.
+
 - **2026-08-23 · Agente B (validação de pagamento — 3 defeitos corrigidos)** —
   Revisão do fluxo de pagamento a pedido do dono. **Nenhuma migration.**
   1. **O webhook do MP nunca confirmou pagamento.** Lia
