@@ -556,11 +556,10 @@ export default function Tours() {
       people,
       region_id:   selectedTour.regions?.id || null,
       origin_text: origin?.name || existing?.origin_text || null,
-      vehicles: cartItems.map(({ vehicle, qty }) => ({
-        id: vehicle.id, name: vehicle.name, qty,
-        price: Number(vehicle.base_price) || 0, cap: vehicle.seat_capacity || null,
-      })),
-      total: cartTotal,
+      // Veículos saíram desta tela: são escolhidos no carrinho, junto com
+      // data, horário e local de saída. O rascunho nasce sem eles.
+      vehicles: existing?.vehicles || [],
+      total:    Number(existing?.total) || 0,
     }
   }
 
@@ -865,100 +864,6 @@ export default function Tours() {
         {/* âncora p/ rolar até os veículos ao selecionar um passeio */}
         <div ref={vehiclesRef} className="scroll-mt-4" />
 
-        {/* ── Modo PRIVATIVO (só quando um passeio está selecionado) ── */}
-        {selectedTour && mode === 'private' && (
-          <>
-            {/* Sugestões */}
-            {suggestion && (
-              <section>
-                <p className="text-[17.5px] font-extrabold text-gray-900 mb-2.5">
-                  {t('toursPg.suggestions.for')} {people} {people === 1 ? t('toursPg.common.person') : t('toursPg.common.peopleWord')}
-                </p>
-
-                {/* Filter chips */}
-                <div className="flex gap-2 mb-3">
-                  {FILTERS.map(({ id, label, emoji }) => (
-                    <button
-                      key={id}
-                      onClick={() => setFilter(id)}
-                      className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all active:scale-95 ${
-                        filter === id
-                          ? 'bg-brand text-white border-brand'
-                          : 'bg-white text-gray-500 border-gray-200'
-                      }`}
-                    >
-                      {emoji} {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Suggestion card */}
-                <div className="bg-white rounded-[18px] p-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] flex items-center gap-3">
-                  <div className={`w-16 h-14 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${suggestion.vehicle.image_url ? 'bg-white' : 'bg-gray-100'}`}>
-                    {suggestion.vehicle.image_url ? (
-                      <img src={suggestion.vehicle.image_url} alt={suggestion.vehicle.name} className="w-full h-full object-contain p-0.5" />
-                    ) : (
-                      <Zap size={20} className="text-gray-400" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-bold text-gray-900">
-                      {suggestion.qty > 1 ? `${suggestion.qty}x ` : ''}{suggestion.vehicle.name}
-                    </p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <Users size={10} className="text-gray-400" />
-                      <span className="text-[11px] text-gray-500">
-                        {t('toursPg.vehicle.upToPeople', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    {suggestion.vehicle.base_price && (
-                      <span className="text-[14px] font-bold text-brand">
-                        R$ {(Number(suggestion.vehicle.base_price) * suggestion.qty).toLocaleString('pt-BR')}
-                      </span>
-                    )}
-                    <button
-                      onClick={applySuggestion}
-                      className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
-                    >
-                      {t('toursPg.actions.apply')}
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* Catálogo de veículos */}
-            {vehicles.length > 0 && (
-              <section className="pb-2">
-                <p className="text-[17.5px] font-extrabold text-gray-900">{t('toursPg.catalog.title')}</p>
-                <p className="text-[12px] text-gray-500 mt-1 mb-3">{t('toursPg.catalog.subtitle')}</p>
-                <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-3 xl:grid-cols-4 lg:gap-2.5">
-                  {sortedVehicles.map((v) => (
-                    <VehicleCard
-                      key={v.id}
-                      vehicle={v}
-                      qty={cart[v.id] || 0}
-                      onAdd={() => setCart((c) => ({ ...c, [v.id]: (c[v.id] || 0) + 1 }))}
-                      onRemove={() => setCart((c) => ({ ...c, [v.id]: Math.max(0, (c[v.id] || 1) - 1) }))}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Nenhum veículo ligado para este passeio (Motor de Preços) */}
-            {vehiclesFetched && vehicles.length === 0 && (
-              <section className="pb-2">
-                <div className="bg-white rounded-[18px] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] text-center">
-                  <p className="text-[13px] font-semibold text-gray-700">{t('toursPg.noVehicles.title')}</p>
-                  <p className="text-[11px] text-gray-400 mt-1">{t('toursPg.noVehicles.subtitle')}</p>
-                </div>
-              </section>
-            )}
-          </>
-        )}
 
         {/* ── Modo COMPARTILHADO ────────────────────────────── */}
         {mode === 'shared' && selectedTour && (() => {
@@ -1066,50 +971,25 @@ export default function Tours() {
           Portal p/ document.body: o wrapper do PullToRefresh usa transform/
           will-change e prenderia o position:fixed na página (a barra sumia no
           fim do conteúdo ao rolar). Pelo portal ela cola no rodapé da tela. ── */}
-      {mode === 'private' && cartHasItems && createPortal((() => {
-        // Barra aparece só quando há veículo selecionado. Basta a pré-seleção
-        // cobrir as pessoas; data/hora/saída são definidas depois, no carrinho.
-        const canContinue = cartCapacity >= people
+      {mode === 'private' && selectedTour && createPortal((() => {
+        // A barra aparece assim que um passeio é escolhido. Veículos, data,
+        // horário e local de saída passaram a ser definidos no carrinho, então
+        // aqui não há mais nada a validar antes de guardar o rascunho.
         return (
           <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40 pointer-events-none">
             <div className="pointer-events-auto bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-              {/* Resumo do que está selecionado */}
               <div className="flex-1 min-w-0 mr-3">
-                {cartHasItems ? (
-                  <>
-                    <p className="text-[13px] font-bold text-gray-900 truncate">
-                      {cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ')}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="inline-flex items-center gap-1">
-                        <Users size={11} className={cartCapacity >= people ? 'text-gray-400' : 'text-red-400'} />
-                        <span className={`text-[11px] font-medium ${cartCapacity >= people ? 'text-gray-500' : 'text-red-400'}`}>
-                          {cartCapacity}/{people} {t('toursPg.cart.seats')}
-                        </span>
-                      </span>
-                      {cartTotal > 0 && (
-                        <span className="text-[13px] font-extrabold text-brand">
-                          R$ {cartTotal.toLocaleString('pt-BR')}
-                        </span>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-[13px] text-gray-400">{t('toursPg.cart.selectVehicle')}</p>
-                )}
+                <p className="text-[13px] font-bold text-gray-900 truncate">{selectedTour.name}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <Users size={11} className="text-gray-400" />
+                  <span className="text-[11px] text-gray-500">
+                    {people} {people === 1 ? t('toursPg.common.person') : t('toursPg.common.peopleWord')}
+                  </span>
+                </div>
               </div>
-              {/* Todo serviço passa pelo carrinho — inclusive o exclusivo. Sem
-                  isso, um combo com passeio exclusivo tinha de ser pedido em
-                  duas viagens separadas pelo checkout. */}
               <button
-                onClick={canContinue
-                  ? () => { saveCartItem(buildCartDraft()); navigate('/carrinho') }
-                  : undefined}
-                className={`shrink-0 font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
-                  canContinue
-                    ? 'bg-brand text-white active:scale-95 cursor-pointer'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
+                onClick={() => { saveCartItem(buildCartDraft()); navigate('/carrinho') }}
+                className="shrink-0 font-bold rounded-xl px-4 py-2.5 text-[13px] bg-brand text-white active:scale-95 transition-transform"
               >
                 {t('toursPg.actions.addToCart')}
               </button>

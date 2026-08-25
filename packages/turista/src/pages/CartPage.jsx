@@ -63,7 +63,12 @@ function EditSheet({ item, onSave, onClose }) {
   const [people, setPeople]     = useState(item.people || 1)
   const [originText, setOrigin] = useState(item.origin_text || '')
   const [vehicles, setVehicles] = useState(() => (item.vehicles || []).map((v) => ({ ...v })))
-  const [showExtras, setShowExtras] = useState(false)
+  // Com os veículos saindo da vitrine, o carrinho virou o único lugar de
+  // escolha: rascunho sem veículo já abre com a lista aberta, senão o turista
+  // via só um link discreto e não sabia onde escolher.
+  const [showExtras, setShowExtras] = useState(
+    () => (item.vehicles || []).filter((v) => v.qty > 0).length === 0,
+  )
 
   // Capacidades/preços reais vêm da API — rascunhos antigos podem não ter a
   // capacidade gravada, e sem ela a regra "pessoas × lugares" não fecha.
@@ -369,7 +374,9 @@ function EditSheet({ item, onSave, onClose }) {
               <div className="mt-2">
                 <button onClick={() => setShowExtras((s) => !s)}
                   className="inline-flex items-center gap-1 text-[12px] font-bold text-brand active:scale-95 transition-transform">
-                  <Plus size={13} /> {showExtras ? t('cartPg.editSheet.hideOtherVehicles') : t('cartPg.editSheet.addOtherVehicle')}
+                  <Plus size={13} /> {showExtras
+                    ? t('cartPg.editSheet.hideOtherVehicles')
+                    : (vehicles.length === 0 ? 'Escolher veículo' : t('cartPg.editSheet.addOtherVehicle'))}
                 </button>
                 {showExtras && (
                   <div className="mt-2 space-y-2">
