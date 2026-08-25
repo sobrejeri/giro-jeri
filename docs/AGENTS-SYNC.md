@@ -36,6 +36,23 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (rotas: tipo de translado + filtro)** — Pedido do
+  dono: não dava para saber qual rota é terrestre e qual é aérea. Só UI.
+  **Bug encontrado no caminho:** o formulário de rota NÃO tinha o campo
+  `transfer_id`, e a coluna é **NOT NULL**. Ou seja, o botão "Nova Rota"
+  falhava sempre — a edição funcionava por acidente, porque o valor vinha junto
+  no objeto da rota carregada. Agora há um **Select "Tipo de translado"**
+  (obrigatório, pré-selecionado quando só existe um tipo) e uma guarda no
+  submit com mensagem clara, em vez do erro cru do banco.
+  **Filtro por tipo** na lista: chips com contagem por transfer
+  ("Todas (34) · Transfer Jericoacoara (32) · Translado Aéreo (2)"). Só aparece
+  com 2+ tipos. Os contadores de foto passaram a seguir o tipo escolhido —
+  senão o cabeçalho falaria de rotas que nem estão na tela — e o filtro
+  "Só sem foto" combina com o de tipo.
+  Conferido em tela: 6 verificações (filtro aéreo, filtro terrestre, contador
+  refletindo o tipo, tipo+sem foto combinados, voltar para todas, e o campo
+  novo presente no formulário).
+
 - **2026-08-23 · Agente B (rotas: ver quais já têm foto)** — Pedido do dono, na
   lista de Rotas Tabeladas do admin (34 rotas). Só UI, sem migration.
   Três coisas: **miniatura** 40×40 igual à dos passeios; **contador** no

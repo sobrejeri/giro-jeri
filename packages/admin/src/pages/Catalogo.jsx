@@ -67,7 +67,7 @@ const TRANSFER_EMPTY = {
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '', region_ids: [],
 }
-const ROUTE_EMPTY   = { origin_name: '', destination_name: '', default_price: '', cover_image_url: '', is_active: true, is_featured: false }
+const ROUTE_EMPTY   = { transfer_id: '', origin_name: '', destination_name: '', default_price: '', cover_image_url: '', is_active: true, is_featured: false }
 const VEHICLE_EMPTY = {
   name: '', vehicle_type: 'buggy', description: '',
   seat_capacity: 4, luggage_capacity: 4,
@@ -106,6 +106,7 @@ export default function Catalogo() {
   const [imageFile, setImageFile]   = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [soSemFoto, setSoSemFoto]                = useState(false)
+  const [tipoRota, setTipoRota]                  = useState('todos')
   const [routeImageFile, setRouteImageFile]       = useState(null)
   const [routeImagePreview, setRouteImagePreview] = useState(null)
   const [vehicleImageFile, setVehicleImageFile]   = useState(null)
@@ -137,11 +138,17 @@ export default function Catalogo() {
     queryFn:  () => api.getTransferRoutes(),
   })
 
-  // Quantas rotas já têm foto de capa. Com dezenas de rotas, o número no
-  // cabeçalho responde "quanto falta" sem obrigar a percorrer a lista.
-  const rotasComFoto  = routes.filter((r) => r.cover_image_url).length
-  const rotasSemFoto  = routes.length - rotasComFoto
-  const rotasVisiveis = soSemFoto ? routes.filter((r) => !r.cover_image_url) : routes
+  // Filtro por tipo de translado (terrestre, aéreo…). Sem ele as 34 rotas
+  // ficam num monte só e não dá para saber o que é o quê.
+  const rotasDoTipo = tipoRota === 'todos'
+    ? routes
+    : routes.filter((r) => r.transfer_id === tipoRota)
+
+  // Contadores seguem o tipo escolhido — senão o cabeçalho falaria de rotas que
+  // nem estão na tela.
+  const rotasComFoto  = rotasDoTipo.filter((r) => r.cover_image_url).length
+  const rotasSemFoto  = rotasDoTipo.length - rotasComFoto
+  const rotasVisiveis = soSemFoto ? rotasDoTipo.filter((r) => !r.cover_image_url) : rotasDoTipo
   const { data: vehicles = [], isLoading: l4 } = useQuery({
     queryKey: ['vehicles'],
     queryFn:  () => api.getVehicles(),
@@ -214,7 +221,8 @@ export default function Catalogo() {
   function openNewTransfer()   { setForm(TRANSFER_EMPTY); setModal({ isNew: true, _type: 'transfer' }) }
   function openEditTransfer(t) { setForm({ ...t, region_ids: t.region_ids || [] }); setModal({ ...t, _type: 'transfer' }) }
   function openNewRoute() {
-    setRouteForm(ROUTE_EMPTY)
+    // Pré-seleciona quando só existe um tipo: evita obrigar a escolher o óbvio.
+    setRouteForm({ ...ROUTE_EMPTY, transfer_id: transfers.length === 1 ? transfers[0].id : '' })
     setRouteImageFile(null); setRouteImagePreview(null)
     setRouteModal({ isNew: true })
   }
@@ -298,6 +306,7 @@ export default function Catalogo() {
 
   async function handleRouteSubmit(e) {
     e.preventDefault()
+    if (!routeForm.transfer_id) { alert('Escolha o tipo de translado.'); return }
     const body = { ...routeForm, default_price: Number(routeForm.default_price) }
     if (routeImageFile) {
       try { body.cover_image_url = await uploadImage(routeImageFile, 'routes') }
@@ -507,11 +516,11 @@ export default function Catalogo() {
                 <div className="flex items-center gap-2">
                   <Route size={16} className="text-gray-500" />
                   <h2 className="text-sm font-semibold text-gray-300">
-                    Rotas Tabeladas ({routes.length})
+                    Rotas Tabeladas ({rotasDoTipo.length}{tipoRota !== 'todos' ? `/${routes.length}` : ''})
                   </h2>
                   {/* Com dezenas de rotas, "quantas faltam" é mais útil do que
                       conferir uma a uma percorrendo a lista. */}
-                  {routes.length > 0 && (
+                  {rotasDoTipo.length > 0 && (
                     <span className="text-xs text-gray-500">
                       · {rotasComFoto} com foto
                       {rotasSemFoto > 0 && <span className="text-amber-500/90"> · {rotasSemFoto} sem</span>}
@@ -534,6 +543,30 @@ export default function Catalogo() {
                   <Button size="sm" variant="secondary" onClick={openNewRoute}><Plus size={14} /> Nova Rota</Button>
                 </div>
               </div>
+
+              {/* Separação por tipo de translado. Só aparece com 2+ tipos: com
+                  um só, a barra seria um botão inútil ocupando espaço. */}
+              {transfers.length > 1 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {[{ id: 'todos', name: `Todas (${routes.length})` },
+                    ...transfers.map((tr) => ({
+                      id: tr.id,
+                      name: `${tr.name} (${routes.filter((r) => r.transfer_id === tr.id).length})`,
+                    }))].map((op) => (
+                    <button
+                      key={op.id}
+                      onClick={() => { setTipoRota(op.id); setSoSemFoto(false) }}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                        tipoRota === op.id
+                          ? 'bg-brand/15 border-brand/60 text-brand'
+                          : 'border-gray-700 text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      {op.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </CardHeader>
             <div className="divide-y divide-gray-800">
               {rotasVisiveis.map((r) => (
@@ -935,6 +968,21 @@ export default function Catalogo() {
               </button>
             )}
           </div>
+          {/* Faltava por completo. `transfer_routes.transfer_id` é NOT NULL, então
+              criar rota nova por esta tela SEMPRE falhava — o formulário não
+              mandava o campo. Na edição funcionava por acidente: o valor vinha
+              junto no objeto da rota. */}
+          <Select
+            label="Tipo de translado"
+            value={routeForm.transfer_id || ''}
+            onChange={(e) => setRouteForm({ ...routeForm, transfer_id: e.target.value })}
+            required
+          >
+            <option value="" disabled>Selecione…</option>
+            {transfers.map((tr) => (
+              <option key={tr.id} value={tr.id}>{tr.name}</option>
+            ))}
+          </Select>
           <Input label="Origem" value={routeForm.origin_name || ''} onChange={(e) => setRouteForm({ ...routeForm, origin_name: e.target.value })} required />
           <Input label="Destino" value={routeForm.destination_name || ''} onChange={(e) => setRouteForm({ ...routeForm, destination_name: e.target.value })} required />
           <Input label="Preço padrão (R$)" type="number" min={0} step={0.01}
