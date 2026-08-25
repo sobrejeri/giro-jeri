@@ -64,6 +64,7 @@ const TOUR_EMPTY = {
 }
 const TRANSFER_EMPTY = {
   name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
+  is_exclusive: false,
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '', region_ids: [],
 }
@@ -306,7 +307,7 @@ export default function Catalogo() {
 
   async function handleRouteSubmit(e) {
     e.preventDefault()
-    if (!routeForm.transfer_id) { alert('Escolha o tipo de translado.'); return }
+    if (!routeForm.transfer_id) { alert('Escolha a categoria da rota.'); return }
     const body = { ...routeForm, default_price: Number(routeForm.default_price) }
     if (routeImageFile) {
       try { body.cover_image_url = await uploadImage(routeImageFile, 'routes') }
@@ -489,8 +490,11 @@ export default function Catalogo() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-300">Transfers ({filteredTransfers.length}{filterRegion ? `/${transfers.length}` : ''})</h2>
-                <Button size="sm" onClick={openNewTransfer}><Plus size={14} /> Novo Transfer</Button>
+                {/* "Categoria" e não "Transfer": é o que agrupa as rotas e vira um
+                    carrossel no app. O nome antigo descrevia a implementação
+                    (o serviço-pai), não o que a coisa faz. */}
+                <h2 className="text-sm font-semibold text-gray-300">Categorias ({filteredTransfers.length}{filterRegion ? `/${transfers.length}` : ''})</h2>
+                <Button size="sm" onClick={openNewTransfer}><Plus size={14} /> Nova Categoria</Button>
               </div>
             </CardHeader>
             <div className="divide-y divide-gray-800">
@@ -682,8 +686,8 @@ export default function Catalogo() {
         open={!!modal}
         onClose={() => setModal(null)}
         title={modal?.isNew
-          ? (isTransferModal ? 'Novo Transfer' : 'Novo Passeio')
-          : (isTransferModal ? 'Editar Transfer' : 'Editar Passeio')}
+          ? (isTransferModal ? 'Nova Categoria' : 'Novo Passeio')
+          : (isTransferModal ? 'Editar Categoria' : 'Editar Passeio')}
       >
         {isTransferModal ? (
           <form onSubmit={handleTransferSubmit} className="space-y-4">
@@ -785,6 +789,29 @@ export default function Catalogo() {
               />
               <span className="text-sm text-gray-300">Ativo (visível para turistas)</span>
             </label>
+
+            {/* É ESTE campo que cria o carrossel separado no app: a vitrine de
+                translados filtra por `transfers.is_exclusive`. Antes ele não
+                existia na tela — o "Translado Aéreo" só ficou exclusivo porque
+                uma migration gravou direto no banco, e não havia como criar uma
+                categoria nova com carrossel próprio pelo admin. */}
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand mt-0.5"
+                checked={!!form.is_exclusive}
+                onChange={(e) => setForm({ ...form, is_exclusive: e.target.checked })}
+              />
+              <span className="text-sm text-gray-300">
+                Carrossel próprio no app
+                <span className="block text-[11px] text-gray-500">
+                  As rotas desta categoria aparecem num carrossel separado — como os
+                  translados aéreos — em vez de entrarem na lista comum de rotas.
+                  A reserva é direta: uma por vez, sem carrinho nem combo.
+                </span>
+              </span>
+            </label>
+
             <Button type="submit" className="w-full" disabled={transferMut.isPending}>
               {transferMut.isPending ? 'Salvando…' : 'Salvar'}
             </Button>
@@ -973,7 +1000,7 @@ export default function Catalogo() {
               mandava o campo. Na edição funcionava por acidente: o valor vinha
               junto no objeto da rota. */}
           <Select
-            label="Tipo de translado"
+            label="Categoria"
             value={routeForm.transfer_id || ''}
             onChange={(e) => setRouteForm({ ...routeForm, transfer_id: e.target.value })}
             required

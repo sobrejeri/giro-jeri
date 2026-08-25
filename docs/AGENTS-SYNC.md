@@ -36,6 +36,26 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B ("Transfer" vira "Categoria" no admin)** — Pedido do
+  dono: o que hoje se chama Transfer é, na prática, a CATEGORIA que agrupa as
+  rotas e vira carrossel no app. Só rótulo + um campo que faltava; banco e
+  código inalterados (`transfers` continua `transfers`).
+  Renomeados: seção "Transfers (N)" → "Categorias (N)", botão → "Nova
+  Categoria", título do modal → "Nova/Editar Categoria", campo da rota
+  "Tipo de translado" → "Categoria".
+  **O que faltava de verdade:** o modal de categoria NÃO tinha o checkbox de
+  `is_exclusive` — e é ele que a vitrine usa para separar
+  (`todasRotas.filter(r => r.transfers?.is_exclusive)`). Ou seja, não havia
+  como criar uma categoria com carrossel próprio pelo admin; o "Translado
+  Aéreo" só é exclusivo porque a migration 067 gravou direto no banco. Agora há
+  o campo **"Carrossel próprio no app"**.
+  **Erro meu, pego no teste:** editei primeiro o checkbox do modal de PASSEIO
+  achando que era o do transfer — os dois ramos vivem no mesmo arquivo e o do
+  transfer termina na linha 795. Revertido; o teste agora verifica os DOIS
+  modais para não repetir.
+  Conferido em tela: 8 verificações (nomes, chips, modal de categoria, campo da
+  rota com as duas opções, e o modal de passeio intacto).
+
 - **2026-08-23 · Agente B (rotas: tipo de translado + filtro)** — Pedido do
   dono: não dava para saber qual rota é terrestre e qual é aérea. Só UI.
   **Bug encontrado no caminho:** o formulário de rota NÃO tinha o campo
