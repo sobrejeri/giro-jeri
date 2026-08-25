@@ -392,6 +392,17 @@ export default function Transfers() {
       shortName: (o, d) => `${shortPlace(o)} → ${shortPlace(d)}`,
     }))
   }, [cartIds, dropCartItem, saveCartItem, region?.id])
+
+  // Tocar no cartão: guarda a rota e leva ao carrinho. O formulário de
+  // veículos/data/horário/passageiros saiu desta tela — é lá que ele vive
+  // agora, e todos os campos continuam obrigatórios para solicitar.
+  const abrirNoCarrinho = useCallback((route) => {
+    saveCartItem(draftFromRoute(route, {
+      region_id: region?.id || null,
+      shortName: (o, d) => `${shortPlace(o)} → ${shortPlace(d)}`,
+    }))
+    navigate('/carrinho')
+  }, [saveCartItem, region?.id, navigate])
   const timeRef      = useRef(null)
   const customTimeRef = useRef(null)
   // Tracks the last suggestion we auto-applied so we know when to follow updates
@@ -1007,7 +1018,7 @@ export default function Transfers() {
                   full
                   bg={GRADIENTS[i % GRADIENTS.length]}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                  onSelect={() => abrirNoCarrinho(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
                 />
@@ -1021,7 +1032,7 @@ export default function Transfers() {
                   route={r}
                   bg={GRADIENTS[i % GRADIENTS.length]}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                  onSelect={() => abrirNoCarrinho(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
                 />
@@ -1049,7 +1060,7 @@ export default function Transfers() {
                   key={r.id}
                   route={r}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                  onSelect={() => abrirNoCarrinho(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
                 />
@@ -1058,246 +1069,8 @@ export default function Transfers() {
           </div>
         ))}
 
-        {/* ROTA */}
-        <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.routeSection')}</p>
-
-          <button onClick={() => setShowOrigin(true)}
-            className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-50 active:bg-gray-50">
-            <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
-            <div className="flex-1 text-left">
-              <p className="text-[10px] text-gray-400">{t('transfersPg.origin')}</p>
-              <p className={`text-[13px] font-semibold ${origin ? 'text-gray-900' : 'text-gray-400'}`}>
-                {origin || t('transfersPg.selectOrigin')}
-              </p>
-            </div>
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
-          </button>
-
-          <button onClick={() => dests.length ? setShowDest(true) : null}
-            className="w-full flex items-center gap-3 px-4 py-3 border-t border-gray-100 active:bg-gray-50">
-            <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
-            <div className="flex-1 text-left">
-              <p className="text-[10px] text-gray-400">{t('transfersPg.destination')}</p>
-              <p className={`text-[13px] font-semibold ${dest ? 'text-gray-900' : 'text-gray-400'}`}>
-                {dest || (dests.length ? t('transfersPg.selectDestination') : t('transfersPg.chooseOriginFirst'))}
-              </p>
-            </div>
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
-          </button>
-        </section>
-
-        {/* DATA & HORÁRIO */}
-        <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.dateTimeSection')}</p>
-          <div className="flex gap-2 px-4 pb-4">
-            <button onClick={() => setShowDate(true)}
-              className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform">
-              <Calendar size={13} className="text-brand" />
-              <div className="text-left">
-                <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.dateLabel')}</p>
-                <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{dateLabel}</p>
-              </div>
-            </button>
-            <button onClick={() => timeRef.current?.showPicker?.() || timeRef.current?.focus()}
-              className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform relative">
-              <Clock size={13} className="text-brand" />
-              <div className="text-left flex-1">
-                <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.timeLabel')}</p>
-                <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{time || t('transfersPg.select')}</p>
-              </div>
-              <input
-                ref={timeRef}
-                type="time"
-                value={time}
-                min={minTime}
-                onChange={e => setTime(e.target.value)}
-                className="absolute inset-0 opacity-0 w-full cursor-pointer"
-              />
-            </button>
-          </div>
-          {!advanceOk && (
-            <p className="px-4 pb-3 -mt-1 text-[11px] text-amber-600">
-              {t('transfersPg.minAdvanceNotice', { hours: MIN_ADVANCE_HOURS, datetime: format(minBookable, "d/MM 'às' HH:mm") })}
-            </p>
-          )}
-        </section>
-
-        {/* PASSAGEIROS */}
-        <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.passengersSection')}</p>
-          <div className="flex items-center justify-between px-4 pb-4">
-            <div className="flex items-center gap-2">
-              <Users size={16} className="text-brand" />
-              <div>
-                <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.passengersCount', { count: people })}</p>
-                <p className="text-[10px] text-gray-400">{t('transfersPg.passengersNote')}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPeople(p => Math.max(1, p - 1))}
-                className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center active:scale-95 transition-transform">
-                <Minus size={12} className="text-gray-600" />
-              </button>
-              <span className="text-[15px] font-bold text-gray-900 w-5 text-center tabular-nums">{people}</span>
-              <button onClick={() => setPeople(p => Math.min(20, p + 1))}
-                className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform">
-                <Plus size={12} className="text-white" />
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* VEÍCULO */}
-        {vehicles.length > 0 && (
-          <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.vehicleSection')}</p>
-
-            {/* Sugestão */}
-            {suggestion && (
-              <div className="mx-4 mb-3 bg-orange-50 rounded-2xl p-3 border border-orange-100 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center shrink-0">
-                  <Car size={18} className="text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-bold text-gray-900">
-                    {suggestion.qty > 1 ? `${suggestion.qty}x ` : ''}{suggestion.vehicle.name}
-                  </p>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <Users size={10} className="text-gray-400" />
-                    <span className="text-[11px] text-gray-400">
-                      {t('transfersPg.upToPeopleCapacity', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  {unitPrice && (
-                    <span className="text-[13px] font-bold text-brand">
-                      R$ {(unitPrice * suggestion.qty).toLocaleString('pt-BR')}
-                    </span>
-                  )}
-                  {suggestionIsApplied ? (
-                    <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
-                      <Check size={11} /> {t('transfersPg.selected')}
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setCart({ [suggestion.vehicle.id]: suggestion.qty })
-                        autoAppliedRef.current = `${suggestion.vehicle.id}:${suggestion.qty}`
-                      }}
-                      className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform"
-                    >
-                      {t('transfersPg.apply')}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="divide-y divide-gray-50">
-              {vehicles.map(v => (
-                <VehicleRow
-                  key={v.id}
-                  vehicle={v}
-                  unitPrice={unitPrice}
-                  qty={cart[v.id] || 0}
-                  onAdd={() => setCart(c => ({ ...c, [v.id]: (c[v.id] || 0) + 1 }))}
-                  onRemove={() => setCart(c => ({ ...c, [v.id]: Math.max(0, (c[v.id] || 1) - 1) }))}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* OBSERVAÇÕES */}
-        <section className="bg-white rounded-2xl border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">{t('transfersPg.notesBaggageSection')}</p>
-          <div className="px-4 pb-4">
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder={t('transfersPg.notesPlaceholderRoute')}
-              className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400"
-            />
-          </div>
-        </section>
-
-        {/* RESUMO */}
-        {matched && (
-          <section className="bg-white rounded-2xl border border-gray-100">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-3">{t('transfersPg.summaryTitle')}</p>
-            <div className="px-4 pb-4 space-y-2.5">
-              {[
-                { dot: 'bg-brand',    label: t('transfersPg.origin'),      val: origin },
-                { dot: 'bg-gray-400', label: t('transfersPg.destination'), val: dest   },
-                { icon: Users,        label: t('transfersPg.passengersSection'), val: t('transfersPg.peopleCount', { count: people }) },
-                ...(cartItems.length ? [{ icon: Car, label: t('transfersPg.vehicleSection'), val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
-              ].map((row, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  {row.dot
-                    ? <div className={`w-2.5 h-2.5 rounded-full ${row.dot} shrink-0`} />
-                    : <row.icon size={13} className="text-brand shrink-0" />}
-                  <div className="flex-1 flex items-center justify-between">
-                    <p className="text-[12px] text-gray-400">{row.label}</p>
-                    <p className="text-[12px] font-semibold text-gray-800">{row.val}</p>
-                  </div>
-                </div>
-              ))}
-              <div className="border-t border-gray-100 pt-2 flex items-center justify-between">
-                <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.vehiclesTotal')}</p>
-                <p className="text-[16px] font-extrabold text-brand">R$ {cartTotal ? cartTotal.toLocaleString('pt-BR') : '—'}</p>
-              </div>
-              <p className="text-[11px] text-gray-400 leading-snug">
-                {t('transfersPg.summaryFootnote')}
-              </p>
-            </div>
-          </section>
-        )}
-
-        {/* Info */}
-        <div className="flex items-start gap-2 px-1">
-          <Info size={13} className="text-blue-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-gray-400 leading-relaxed">
-            {t('transfersPg.driverInfoRoute')}
-          </p>
-        </div>
       </div>
 
-      {/* Bottom CTA — resumo fixo no viewport, só quando há veículo selecionado.
-          Portal p/ document.body: o wrapper do PullToRefresh usa transform/
-          will-change e prenderia o position:fixed na página (a barra sumia no
-          fim do conteúdo). */}
-      {cartHasItems && createPortal(
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40">
-        <div className="bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] text-gray-400">{t('transfersPg.vehiclesTotal')}</p>
-            <p className={`text-[16px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-              {cartTotal
-                ? `R$ ${cartTotal.toLocaleString('pt-BR')}`
-                : matched ? t('transfersPg.selectVehicle') : t('transfersPg.selectRoute')}
-            </p>
-          </div>
-          <button
-            onClick={canBook ? handleConfirm : undefined}
-            disabled={loading}
-            className={`font-bold rounded-xl px-5 py-2.5 text-[13px] transition-transform ${
-              canBook ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            {loading ? t('transfersPg.wait') : t('transfersPg.addToCart')}
-          </button>
-        </div>
-        </div>,
-        document.body,
-      )}
-
-      {/* Sheets */}
-      {showDate   && <DateSheet value={date} onChange={setDate} onClose={() => setShowDate(false)} minDate={minDate} seasons={seasonsData || []} highSeasonMonths={highSeasonMonths} />}
-      {showOrigin && <RouteSheet title={t('transfersPg.chooseOrigin')} options={origins} selected={origin} onSelect={v => { setOrigin(v); setDest(''); setCart({}) }} onClose={() => setShowOrigin(false)} />}
-      {showDest   && <RouteSheet title={t('transfersPg.chooseDestination')} options={dests} selected={dest} onSelect={v => { setDest(v); setCart({}) }} onClose={() => setShowDest(false)} />}
     </> )} {/* end mode === 'rota' */}
 
       {/* Bottom CTA — Custom ride */}
