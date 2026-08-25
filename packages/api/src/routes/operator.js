@@ -27,20 +27,24 @@ import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
 async function mpGate(operatorId) {
   if (!isMarketplaceConfigured()) return null;
 
+  // Checa mp_access_token — é ele que o split usa de fato (getOperatorMp).
+  // Usar mp_user_id aqui bloquearia quem tem token válido mas ficou sem
+  // user_id (o MP nem sempre devolve), impedindo de trabalhar alguém que
+  // receberia normalmente.
   let { data, error } = await supabase
     .from('users')
-    .select('mp_user_id, mp_payout_exempt')
+    .select('mp_access_token, mp_payout_exempt')
     .eq('id', operatorId)
     .maybeSingle();
 
   if (error?.code === '42703') {
     // Migration 070 pendente: segue sem a isenção, checando só a conexão.
-    const retry = await supabase.from('users').select('mp_user_id').eq('id', operatorId).maybeSingle();
+    const retry = await supabase.from('users').select('mp_access_token').eq('id', operatorId).maybeSingle();
     data = retry.data; error = retry.error;
   }
   if (error) return null;               // instabilidade não pode barrar trabalho
   if (data?.mp_payout_exempt) return null;
-  if (data?.mp_user_id) return null;
+  if (data?.mp_access_token) return null;
 
   return 'Conecte sua conta Mercado Pago no Perfil para aceitar corridas — é por ela que você recebe a sua parte de cada reserva.';
 }
