@@ -459,6 +459,24 @@ export default function Transfers() {
   const rotasExclusivas = todasRotas.filter((r) => r.transfers?.is_exclusive)
   const routes          = todasRotas.filter((r) => !r.transfers?.is_exclusive)
 
+  // UM carrossel por categoria, não um só com tudo dentro.
+  //
+  // Antes as rotas exclusivas iam todas para o mesmo carrossel, com o nome da
+  // PRIMEIRA delas no título. Com só uma categoria exclusiva funcionava por
+  // coincidência; ao criar a segunda (lancha, buggy 4x4…), as rotas das duas
+  // apareceriam juntas sob o nome de uma delas.
+  const categoriasExclusivas = useMemo(() => {
+    const porId = new Map()
+    for (const r of rotasExclusivas) {
+      const id = r.transfer_id || r.transfers?.name || 'sem-categoria'
+      if (!porId.has(id)) {
+        porId.set(id, { id, nome: r.transfers?.name || 'Translado exclusivo', rotas: [] })
+      }
+      porId.get(id).rotas.push(r)
+    }
+    return [...porId.values()]
+  }, [rotasExclusivas])
+
   // Alta temporada: meses com acréscimo, p/ sinalizar no calendário.
   const { data: seasonsData } = useQuery({
     queryKey: ['seasons', region?.id],
@@ -959,28 +977,28 @@ export default function Transfers() {
 
         {/* TRANSLADOS EXCLUSIVOS (helicóptero) — carrossel separado, para não
             misturar com as rotas comuns nem no preço nem na operação. */}
-        {rotasExclusivas.length > 0 && (
-        <div>
-          <div className="flex items-baseline justify-between mb-2.5">
-            <p className="text-[13px] font-bold text-gray-700">
-              {rotasExclusivas[0]?.transfers?.name || 'Translado aéreo'}
-            </p>
-            <span className="text-[10px] font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-full">
-              Exclusivo
-            </span>
+        {categoriasExclusivas.map((cat) => (
+          <div key={cat.id}>
+            <div className="flex items-baseline justify-between mb-2.5">
+              {/* O título é o NOME DA CATEGORIA cadastrada no admin: criar uma
+                  categoria nova já nomeia o carrossel dela. */}
+              <p className="text-[13px] font-bold text-gray-700">{cat.nome}</p>
+              <span className="text-[10px] font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-full">
+                Exclusivo
+              </span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+              {cat.rotas.map((r) => (
+                <ExclusiveCard
+                  key={r.id}
+                  route={r}
+                  active={origin === r.origin_name && dest === r.destination_name}
+                  onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                />
+              ))}
+            </div>
           </div>
-          <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
-            {rotasExclusivas.map((r) => (
-              <ExclusiveCard
-                key={r.id}
-                route={r}
-                active={origin === r.origin_name && dest === r.destination_name}
-                onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
-              />
-            ))}
-          </div>
-        </div>
-        )}
+        ))}
 
         {/* ROTA */}
         <section className="bg-white rounded-2xl overflow-hidden border border-gray-100">

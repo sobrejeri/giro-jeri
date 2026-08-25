@@ -36,6 +36,21 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (um carrossel por categoria na vitrine de translados)**
+  — O título já usava o nome da categoria, mas TODAS as rotas exclusivas iam
+  para o MESMO carrossel, com o nome da primeira delas
+  (`rotasExclusivas[0]?.transfers?.name`). Com uma única categoria exclusiva
+  funcionava por coincidência; ao criar a segunda (lancha, buggy 4x4…), as
+  rotas das duas apareceriam juntas sob o nome de uma.
+  Agora as exclusivas são agrupadas por `transfer_id` e cada categoria rende
+  seu próprio bloco, com o nome cadastrado no admin como título. Criar uma
+  categoria nova com "Carrossel próprio no app" já nomeia o carrossel dela.
+  Conferido com DUAS categorias exclusivas: dois blocos, títulos corretos e as
+  rotas certas em cada (helicóptero 2, lancha 1).
+  **Nota de método:** minha primeira verificação contou os `span` com texto
+  "Exclusivo" e deu 5 — o selo também aparece em cada CARTÃO. Contar o selo
+  errado quase virou "não funcionou"; o certo é contar os títulos.
+
 - **2026-08-23 · Agente B ("Transfer" vira "Categoria" no admin)** — Pedido do
   dono: o que hoje se chama Transfer é, na prática, a CATEGORIA que agrupa as
   rotas e vira carrossel no app. Só rótulo + um campo que faltava; banco e
