@@ -345,10 +345,17 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
   const { total, allPay, count, payableCount } = groupSummary(bookings)
   return (
     <Overlay>
-    <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center">
+    {/* Painel de tela cheia no celular: abre já no topo da viewport, com o
+        cabeçalho e o primeiro serviço visíveis sem rolar. Em telas maiores
+        vira um cartão centralizado. `dvh` acompanha a barra do navegador — com
+        `vh` a parte de baixo ficava fora da tela no iOS. */}
+    <div className="fixed inset-0 h-[100dvh] z-[90] flex items-stretch sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-gray-50 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[86vh] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 bg-white rounded-t-3xl border-b border-gray-100">
+      <div className="relative bg-gray-50 w-full h-full sm:h-auto sm:max-w-md sm:rounded-3xl sm:max-h-[86dvh] flex flex-col shadow-2xl">
+        <div
+          className="flex items-center justify-between px-5 pb-4 bg-white sm:rounded-t-3xl border-b border-gray-100 shrink-0"
+          style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+        >
           <div className="flex items-center gap-2">
             <Package size={16} className="text-brand" />
             <h3 className="font-bold text-gray-900">Pedido · {count} serviços</h3>
@@ -357,14 +364,20 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
             <X size={15} className="text-gray-500" />
           </button>
         </div>
-        <div className="overflow-y-auto px-4 py-4 space-y-3 flex-1">
+        <div
+          className="overflow-y-auto px-4 py-4 space-y-3 flex-1"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+        >
           {bookings.map((b) => (
             <BookingCard key={b.id} booking={b} onCancel={onCancel} onDetail={onDetail} onPay={onPay}
               onReview={onReview} reviewed={reviewedIds?.has(b.id)} />
           ))}
         </div>
         {allPay && payableCount >= 2 && (
-          <div className="px-4 py-4 bg-white border-t border-gray-100">
+          <div
+            className="px-4 pt-4 bg-white border-t border-gray-100 shrink-0"
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+          >
             <button
               onClick={onPayGroup}
               className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
