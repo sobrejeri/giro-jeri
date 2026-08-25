@@ -378,6 +378,8 @@ export default function Transfers() {
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
   const { upsertItem: saveCartItem, items: savedCartItems, removeItem: dropCartItem } = useCart()
+  const { token } = useAuth()
+  const { region, userCoords, getServiceQuery } = useRegion()
 
   // Marcar rotas direto da vitrine, várias de uma vez. Entra como rascunho —
   // o carrinho é quem cobra veículos, data, horário e pessoas. Tocar de novo
@@ -390,8 +392,6 @@ export default function Transfers() {
       shortName: (o, d) => `${shortPlace(o)} → ${shortPlace(d)}`,
     }))
   }, [cartIds, dropCartItem, saveCartItem, region?.id])
-  const { token } = useAuth()
-  const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
   const customTimeRef = useRef(null)
   // Tracks the last suggestion we auto-applied so we know when to follow updates
