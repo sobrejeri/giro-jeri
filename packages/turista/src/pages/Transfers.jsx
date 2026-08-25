@@ -6,6 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { useCart }     from '../contexts/CartContext'
+import { draftFromRoute } from '../lib/cartDraft'
 import { highSeasonMonthSet } from '../lib/season'
 import DateSheet from '../components/DateSheet'
 import { api }         from '../lib/api'
@@ -167,9 +168,26 @@ function pickPopularRoutes(routes) {
     .slice(0, 8)
 }
 
+// Atalho de carrinho sobre a foto da rota: dá para marcar várias rotas de uma
+// vez sem configurar cada uma. Data, horário e veículos ficam para o carrinho.
+function CartToggle({ inCart, onToggle }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle() }}
+      aria-label={inCart ? 'Remover do carrinho' : 'Adicionar ao carrinho'}
+      aria-pressed={!!inCart}
+      className={`absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center shadow-sm active:scale-90 transition-all ${
+        inCart ? 'bg-brand text-white' : 'bg-white/90 backdrop-blur-sm text-gray-600'
+      }`}
+    >
+      {inCart ? <Check size={15} strokeWidth={3} /> : <Plus size={16} strokeWidth={2.5} />}
+    </button>
+  )
+}
+
 // `full` = ocupa a largura da célula (grade "todas as rotas"); sem ele mantém
 // a largura fixa do carrossel horizontal.
-function PresetCard({ route, bg, active, onSelect, full = false }) {
+function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggleCart }) {
   const { t } = useTranslation()
   const img = route.cover_image_url
   return (
@@ -200,6 +218,8 @@ function PresetCard({ route, bg, active, onSelect, full = false }) {
             <span className="text-[10px] text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,.4)]">{t('transfersPg.upTo4')}</span>
           </div>
         </div>
+
+        {onToggleCart && <CartToggle inCart={inCart} onToggle={onToggleCart} />}
       </div>
 
       <div className="px-3 py-2 flex items-end justify-between gap-1">
@@ -222,7 +242,7 @@ function PresetCard({ route, bg, active, onSelect, full = false }) {
  * do "a partir de". Sem foto cadastrada, cai num gradiente de céu com o ícone
  * do avião, para não virar um cartão vazio no meio dos que têm imagem.
  */
-function ExclusiveCard({ route, active, onSelect }) {
+function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart }) {
   const img = route.cover_image_url
   return (
     <button
@@ -251,6 +271,8 @@ function ExclusiveCard({ route, active, onSelect }) {
             {shortPlace(route.destination_name)}
           </p>
         </div>
+
+        {onToggleCart && <CartToggle inCart={inCart} onToggle={onToggleCart} />}
       </div>
 
       <div className="px-3 py-2 flex items-end justify-between gap-1">
@@ -355,7 +377,19 @@ export default function Transfers() {
   const navigate  = useNavigate()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
-  const { upsertItem: saveCartItem } = useCart()
+  const { upsertItem: saveCartItem, items: savedCartItems, removeItem: dropCartItem } = useCart()
+
+  // Marcar rotas direto da vitrine, várias de uma vez. Entra como rascunho —
+  // o carrinho é quem cobra veículos, data, horário e pessoas. Tocar de novo
+  // desmarca. Não mexe na rota selecionada logo abaixo.
+  const cartIds = useMemo(() => new Set(savedCartItems.map((i) => i.id)), [savedCartItems])
+  const toggleRouteInCart = useCallback((route) => {
+    if (cartIds.has(route.id)) dropCartItem(route.id)
+    else saveCartItem(draftFromRoute(route, {
+      region_id: region?.id || null,
+      shortName: (o, d) => `${shortPlace(o)} → ${shortPlace(d)}`,
+    }))
+  }, [cartIds, dropCartItem, saveCartItem, region?.id])
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
   const timeRef      = useRef(null)
@@ -974,6 +1008,8 @@ export default function Transfers() {
                   bg={GRADIENTS[i % GRADIENTS.length]}
                   active={origin === r.origin_name && dest === r.destination_name}
                   onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                  inCart={cartIds.has(r.id)}
+                  onToggleCart={() => toggleRouteInCart(r)}
                 />
               ))}
             </div>
@@ -986,6 +1022,8 @@ export default function Transfers() {
                   bg={GRADIENTS[i % GRADIENTS.length]}
                   active={origin === r.origin_name && dest === r.destination_name}
                   onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                  inCart={cartIds.has(r.id)}
+                  onToggleCart={() => toggleRouteInCart(r)}
                 />
               ))}
             </div>
@@ -1012,6 +1050,8 @@ export default function Transfers() {
                   route={r}
                   active={origin === r.origin_name && dest === r.destination_name}
                   onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                  inCart={cartIds.has(r.id)}
+                  onToggleCart={() => toggleRouteInCart(r)}
                 />
               ))}
             </div>

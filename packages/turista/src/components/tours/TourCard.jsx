@@ -1,4 +1,4 @@
-import { Heart, Clock, Users, Check } from 'lucide-react'
+import { Heart, Clock, Users, Check, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 /* ── Degradê de reserva para passeio sem foto ────────────────────────────── */
@@ -75,7 +75,7 @@ function etiquetaDe(tour, t) {
   return tag || null
 }
 
-export default function TourCard({ tour, mode = 'private', selected, onSelect, isFav, onFav }) {
+export default function TourCard({ tour, mode = 'private', selected, onSelect, isFav, onFav, inCart, onToggleCart }) {
   const { t } = useTranslation()
   const { valor, rotulo } = precoDe(tour, mode, t)
   const dur  = fmtDuracao(tour.duration_hours)
@@ -133,6 +133,22 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
           <span className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 bg-brand text-white text-[10px] font-bold px-2 py-1 rounded-full">
             <Check size={11} strokeWidth={3} /> {t('toursPg.card.selected')}
           </span>
+        )}
+
+        {/* Atalho para o carrinho: marca vários passeios de uma vez sem abrir
+            cada um. O que falta (data, horário, veículos) é pedido no carrinho.
+            Tocar de novo tira do carrinho. */}
+        {onToggleCart && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleCart() }}
+            aria-label={inCart ? 'Remover do carrinho' : 'Adicionar ao carrinho'}
+            aria-pressed={!!inCart}
+            className={`absolute bottom-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-sm active:scale-90 transition-all ${
+              inCart ? 'bg-brand text-white' : 'bg-white/90 backdrop-blur-sm text-gray-600'
+            }`}
+          >
+            {inCart ? <Check size={15} strokeWidth={3} /> : <Plus size={16} strokeWidth={2.5} />}
+          </button>
         )}
       </div>
 

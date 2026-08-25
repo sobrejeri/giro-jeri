@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
+import { draftFromTour } from '../lib/cartDraft'
 import { highSeasonMonthSet, isHighSeasonIso } from '../lib/season'
 import OriginPicker from '../components/OriginPicker'
 import ToursDesktop from './ToursDesktop'
@@ -252,7 +253,17 @@ export default function Tours() {
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
 
-  const { items: savedCartItems, upsertItem: saveCartItem, count: cartCount } = useCart()
+  const { items: savedCartItems, upsertItem: saveCartItem, removeItem: dropCartItem, count: cartCount } = useCart()
+
+  // Marcar vários passeios direto da vitrine: entra no carrinho como rascunho
+  // (sem data/veículos ainda) e o carrinho cobra o que falta antes de
+  // solicitar. Tocar de novo desmarca. Não mexe no passeio selecionado — dá
+  // para montar o combo sem perder o que já estava configurado na tela.
+  const cartIds = useMemo(() => new Set(savedCartItems.map((i) => i.id)), [savedCartItems])
+  const toggleCart = useCallback((tour) => {
+    if (cartIds.has(tour.id)) dropCartItem(tour.id)
+    else saveCartItem(draftFromTour(tour, { region_id: region?.id || null }))
+  }, [cartIds, dropCartItem, saveCartItem, region?.id])
 
   // "Retomar" do carrinho flutuante: restaura o rascunho salvo (data/pessoas/
   // veículos) do passeio escolhido. Os dados vivem no localStorage (CartContext).
@@ -553,36 +564,6 @@ export default function Tours() {
     }
   }
 
-  // Passeio EXCLUSIVO (privativo): venda direta — vai direto ao Resumo da
-  // reserva com os veículos escolhidos, sem passar pelo carrinho.
-  const continueExclusivePrivate = () => {
-    navigate('/checkout/resumo', {
-      state: {
-        service_name:        selectedTour.name,
-        short_description:   selectedTour.short_description || null,
-        service_type:        'tour',
-        booking_mode:        'private',
-        service_date:        t('toursPg.common.toBeConfirmed'),
-        service_date_iso:    format(date, 'yyyy-MM-dd'),
-        service_time:        t('toursPg.common.toBeConfirmed'),
-        people_count:        people,
-        origin_text:         origin?.name || null,
-        origin_latitude:     origin?.latitude,
-        origin_longitude:    origin?.longitude,
-        vehicle_name:        cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + '),
-        total_price:         cartTotal,
-        breakdown:           { [t('toursPg.breakdown.vehicles')]: cartTotal },
-        cover_image_url:     selectedTour.cover_image_url || null,
-        region_id:           selectedTour.regions?.id,
-        service_id:          selectedTour.id,
-        vehicles:            cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(vehicle.base_price) || 0 })),
-        booking_cutoff_time: selectedTour.booking_cutoff_time || null,
-        min_advance_hours:   selectedTour.min_advance_hours ?? null,
-        open_editing:        true,
-      },
-    })
-  }
-
   const applySuggestion = () => {
     if (!suggestion) return
     setCart({ [suggestion.vehicle.id]: suggestion.qty })
@@ -633,6 +614,8 @@ export default function Tours() {
             onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
             isFav={favs.has(tour.id)}
             onFav={() => toggleFav(tour.id)}
+            inCart={cartIds.has(tour.id)}
+            onToggleCart={() => toggleCart(tour)}
           />
         ))}
       </div>
@@ -864,6 +847,8 @@ export default function Tours() {
                   onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
                   isFav={favs.has(tour.id)}
                   onFav={() => toggleFav(tour.id)}
+                  inCart={cartIds.has(tour.id)}
+                  onToggleCart={() => toggleCart(tour)}
                 />
               ))}
             </div>
@@ -1113,12 +1098,12 @@ export default function Tours() {
                   <p className="text-[13px] text-gray-400">{t('toursPg.cart.selectVehicle')}</p>
                 )}
               </div>
-              {/* Botão: exclusivo vai direto ao Resumo; tradicional vai ao carrinho */}
+              {/* Todo serviço passa pelo carrinho — inclusive o exclusivo. Sem
+                  isso, um combo com passeio exclusivo tinha de ser pedido em
+                  duas viagens separadas pelo checkout. */}
               <button
                 onClick={canContinue
-                  ? (selectedTour?.is_exclusive
-                      ? continueExclusivePrivate
-                      : () => { saveCartItem(buildCartDraft()); navigate('/carrinho') })
+                  ? () => { saveCartItem(buildCartDraft()); navigate('/carrinho') }
                   : undefined}
                 className={`shrink-0 font-bold rounded-xl px-4 py-2.5 text-[13px] transition-transform ${
                   canContinue
@@ -1126,7 +1111,7 @@ export default function Tours() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {selectedTour?.is_exclusive ? t('toursPg.actions.continue') : t('toursPg.actions.addToCart')}
+                {t('toursPg.actions.addToCart')}
               </button>
             </div>
           </div>

@@ -82,7 +82,11 @@ function EditSheet({ item, onSave, onClose }) {
     staleTime: 5 * 60 * 1000,
   })
 
-  const unitPrice = isTransfer ? (Number(item.vehicles?.[0]?.price) || 0) : null
+  // Rascunho vindo da vitrine ainda não tem veículo; o preço da rota vem em
+  // `unit_price`. Sem essa reserva, todo veículo adicionado sairia por R$ 0.
+  const unitPrice = isTransfer
+    ? (Number(item.vehicles?.[0]?.price) || Number(item.unit_price) || 0)
+    : null
   const available = useMemo(() => {
     const all = Array.isArray(allVehiclesData) ? allVehiclesData : (allVehiclesData?.vehicles || [])
     if (isTransfer) {
@@ -716,9 +720,16 @@ export default function CartPage() {
                   {!batch && (
                     <button
                       onClick={() => setEditing(item)}
-                      className="inline-flex items-center gap-1.5 border border-brand/30 text-brand text-[12px] font-bold px-3.5 py-2 rounded-xl active:scale-95 transition-transform"
+                      // Item que veio do atalho da vitrine nunca foi configurado:
+                      // "Editar" soaria como algo opcional. Em laranja cheio,
+                      // "Completar" diz que a solicitação depende disso.
+                      className={`inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl active:scale-95 transition-transform ${
+                        complete
+                          ? 'border border-brand/30 text-brand'
+                          : 'bg-brand text-white shadow-sm shadow-brand/20'
+                      }`}
                     >
-                      <Pencil size={12} /> {t('cartPg.card.edit')}
+                      <Pencil size={12} /> {complete ? t('cartPg.card.edit') : 'Completar'}
                     </button>
                   )}
                 </div>
