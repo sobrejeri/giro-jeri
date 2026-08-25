@@ -599,6 +599,9 @@ router.get('/bookings', async (req, res, next) => {
           requiredVehiclesByBooking, optInVehicleIds, vehiclePrefs, operatorServesVehicles,
           modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals,
         } = await import('../services/fleet.js');
+        // `operatorServesModals` já deixa o COMBO passar (reserva com modais
+        // diferentes). Precisa ser a MESMA função das notificações: se as duas
+        // telas divergirem, a coop recebe WhatsApp de pedido que não vê aqui.
 
         const byBooking = await requiredVehiclesByBooking(supabase, acceptanceRows);
         const allVehicleIds = [...new Set([...byBooking.values()].flat())];

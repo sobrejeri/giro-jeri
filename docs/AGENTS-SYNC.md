@@ -47,6 +47,26 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (combo não pode ficar sem cooperativa)** — Furo que o
+  próprio filtro por modal (076) abriu: reserva com veículos de modais
+  DIFERENTES (buggy + barco) exigiria uma cooperativa que opera os dois. Se
+  nenhuma opera, a lista de elegíveis sai vazia — e aí **ninguém é notificado**,
+  em silêncio, porque `notifyOperatorsNewBooking` faz `skipped: true` com lista
+  vazia. O cliente pediria e nada se moveria até um admin reparar.
+  Agora `operatorServesModals` deixa o COMBO passar: reserva multimodal não é
+  filtrada por modal, cai no filtro por veículo (como era antes) e sai um
+  `console.warn` nomeando a reserva. Melhor avisar demais do que não avisar.
+  A regra mora numa função só (`ehCombo`), usada pela notificação E pelo feed —
+  se as duas divergirem, a coop recebe WhatsApp de pedido que não enxerga.
+  Conferido: combo buggy+barco volta a sair para as 4 cooperativas; modal único
+  segue filtrado certo.
+  **PENDENTE DE DECISÃO DO DONO:** o combo real precisa de duas cooperativas,
+  uma por trecho. O motor de pernas (`booking_legs`, migration 042) já está
+  desenhado e implementado para isso — 1 veículo = 1 perna, cada uma roteável a
+  UMA coop — mas está atrás da flag `booking_legs_engine_enabled = false` desde
+  a 042, esperando o split de pagamento liquidar N coops a partir de um
+  pagamento só. É esse o próximo passo para "controle de veículos e execução".
+
 - **2026-08-25 · Agente B (roteamento do operador por MODAL)** — Pedido do dono:
   em vez de liberar frota veículo a veículo, escolher terrestre/aéreo/aquático —
   "facilita na distribuição de solicitações". **Migration 076**: o CHECK da 006

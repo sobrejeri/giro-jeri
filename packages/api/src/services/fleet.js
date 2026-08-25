@@ -164,9 +164,25 @@ export async function modalPrefs(supabase, modalIds, operatorIds) {
   return disabled;
 }
 
+// COMBO: reserva que exige veículos de modais DIFERENTES (buggy + barco).
+//
+// Nenhuma cooperativa precisa operar os dois, e exigir isso deixaria o pedido
+// sem NINGUÉM para notificar — em silêncio, porque o envio de WhatsApp
+// simplesmente não acontece quando a lista de elegíveis sai vazia. O cliente
+// pediu e nada se moveria até um admin reparar.
+//
+// Enquanto o motor de pernas (`booking_legs`, migration 042) estiver desligado,
+// não existe a quem rotear cada trecho separadamente. Então o combo NÃO é
+// filtrado por modal: cai no filtro por veículo, como era antes, e a
+// coordenação fica com o admin. Melhor avisar demais do que não avisar.
+export function ehCombo(modalIds) {
+  return !!modalIds && modalIds.size > 1;
+}
+
 // A cooperativa opera TODOS os modais que a reserva exige?
 export function operatorServesModals(opId, modalIds, disabledByOp) {
   if (!modalIds || modalIds.size === 0) return true;   // sem modal → fail-open
+  if (ehCombo(modalIds)) return true;                  // combo → ver acima
   const dis = disabledByOp.get(opId);
   if (!dis) return true;
   for (const mId of modalIds) if (dis.has(mId)) return false;
@@ -238,6 +254,12 @@ export async function eligibleOperatorsForBooking(supabase, bookingId) {
       modalIdByVehicle(supabase, vehicleIds),
     ]);
     const modalIds = modalIdsOf(vehicleIds, modalPorVeiculo);
+    if (ehCombo(modalIds)) {
+      // Visível no log: é o pedido que precisa de duas cooperativas e hoje sai
+      // para todas. Quando o motor de pernas ligar, este caso vira N pernas.
+      console.warn('[fleet] reserva %s é COMBO (%d modais) — filtro por modal não se aplica',
+        bookingId, modalIds.size);
+    }
     const modaisDesativados = await modalPrefs(supabase, [...modalIds], opIds);
 
     // Os dois filtros valem JUNTOS: opera o modal E não desativou o veículo.
