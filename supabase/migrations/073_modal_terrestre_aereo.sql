@@ -23,6 +23,14 @@
 -- Idempotente.
 -- =============================================================================
 
+-- ── 0. Garantia da 071 ──────────────────────────────────────────────────────
+-- O INSERT do passo 3 grava `is_exclusive`, criada na 071. Num banco onde a 071
+-- não rodou, a 073 inteira morreria em "column does not exist". Esta base já
+-- teve OITO números de migration duplicados e duas rodadas fora de ordem; a
+-- garantia custa uma linha e evita a terceira.
+ALTER TABLE categories
+  ADD COLUMN IF NOT EXISTS is_exclusive BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- ── 1. A coluna, nos três lugares ───────────────────────────────────────────
 -- TEXT + CHECK em vez de ENUM: acrescentar valor num enum exige migration com
 -- ALTER TYPE (e não roda dentro de transação em versões antigas). Com CHECK,

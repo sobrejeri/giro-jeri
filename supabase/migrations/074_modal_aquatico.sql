@@ -20,12 +20,26 @@ ALTER TABLE vehicles   DROP CONSTRAINT IF EXISTS vehicles_modal_check;
 ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_modal_check;
 ALTER TABLE transfers  DROP CONSTRAINT IF EXISTS transfers_modal_check;
 
-ALTER TABLE vehicles   ADD CONSTRAINT vehicles_modal_check
-  CHECK (modal IN ('terrestre', 'aereo', 'aquatico'));
-ALTER TABLE categories ADD CONSTRAINT categories_modal_check
-  CHECK (modal IN ('terrestre', 'aereo', 'aquatico'));
-ALTER TABLE transfers  ADD CONSTRAINT transfers_modal_check
-  CHECK (modal IN ('terrestre', 'aereo', 'aquatico'));
+-- Só recria o CHECK se a 075 AINDA não passou por aqui.
+--
+-- A 075 troca este CHECK por chave estrangeira para `service_modals`, e é ela
+-- que permite criar modal novo pelo painel. Rodar a 074 depois da 075 —
+-- reaplicando as migrations em ordem, por exemplo — devolveria um CHECK preso a
+-- três valores POR CIMA da FK, e um modal criado pelo dono ("Fluvial") passaria
+-- a ser recusado. Reproduzido em Postgres antes de escrever esta guarda.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'vehicles_modal_fkey') THEN
+    ALTER TABLE vehicles   ADD CONSTRAINT vehicles_modal_check
+      CHECK (modal IN ('terrestre', 'aereo', 'aquatico'));
+    ALTER TABLE categories ADD CONSTRAINT categories_modal_check
+      CHECK (modal IN ('terrestre', 'aereo', 'aquatico'));
+    ALTER TABLE transfers  ADD CONSTRAINT transfers_modal_check
+      CHECK (modal IN ('terrestre', 'aereo', 'aquatico'));
+  ELSE
+    RAISE NOTICE '074: migration 075 já aplicada (FK no lugar do CHECK) — nada a fazer.';
+  END IF;
+END $$;
 
 COMMENT ON COLUMN vehicles.modal IS
   'terrestre | aereo | aquatico — em que meio o veículo opera. Cruzado com '
