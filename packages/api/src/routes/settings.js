@@ -19,6 +19,12 @@ const PUBLIC_KEYS = [
   'descubra_eventos_image_url',
   'descubra_lugares_image_url',
   'descubra_dicas_image_url',
+  // Formas de pagamento que o checkout oferece. São só chaves de exibição —
+  // a chave da API e o segredo do webhook NUNCA entram aqui.
+  'payment_method_pix',
+  'payment_method_credit',
+  'payment_method_debit',
+  'payment_max_installments',
 ];
 
 // ── GET /api/settings/public ───────────────────────────

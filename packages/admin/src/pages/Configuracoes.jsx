@@ -49,14 +49,23 @@ const PAYMENT_KEYS = new Set([
   'payment_admin_bank_name', 'payment_admin_bank_agency',
   'payment_admin_bank_account', 'payment_admin_bank_account_type',
   'payment_admin_bank_document',
+  // Sem isto, as chaves novas apareceriam TAMBÉM na aba Sistema, como
+  // configuração crua — dois lugares editando a mesma coisa.
+  'payment_method_pix', 'payment_method_credit', 'payment_method_debit',
+  'payment_max_installments',
 ])
 
 // ── Payment tab constants ─────────────────────────────────
 const GATEWAYS = [
-  { value: 'manual',  label: 'Manual (sem gateway)' },
-  { value: 'test',    label: 'Modo de Teste (aprova em 15s)' },
-  { value: 'asaas',   label: 'Asaas' },
-  { value: 'pagarme', label: 'Pagar.me' },
+  { value: 'manual',       label: 'Manual (sem gateway)' },
+  { value: 'test',         label: 'Modo de Teste (aprova em 15s)' },
+  // Faltava na lista, embora seja o gateway em uso. Sem a opção, o campo
+  // aparecia EM BRANCO para quem já está no Mercado Pago — e quem tentasse
+  // "corrigir" o branco escolheria outro gateway, desligando a cobrança de
+  // produção sem perceber.
+  { value: 'mercado_pago', label: 'Mercado Pago' },
+  { value: 'asaas',        label: 'Asaas' },
+  { value: 'pagarme',      label: 'Pagar.me' },
 ]
 
 const ENVS = [
@@ -90,6 +99,12 @@ const PAYMENT_DEFAULTS = {
   payment_admin_bank_account:     '',
   payment_admin_bank_account_type:'corrente',
   payment_admin_bank_document:    '',
+  // Formas que o cliente vê no checkout. 'true' por padrão: uma instalação que
+  // nunca abriu esta tela precisa continuar aceitando tudo.
+  payment_method_pix:             'true',
+  payment_method_credit:          'true',
+  payment_method_debit:           'true',
+  payment_max_installments:       '12',
 }
 
 function settingsToMap(list) {
@@ -437,6 +452,87 @@ function TabPagamentos({ settings, qc }) {
 
   return (
     <div className="space-y-5 max-w-2xl">
+
+      {/* Formas de pagamento */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CreditCard size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">Formas de pagamento</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <p className="text-xs text-gray-500 mb-4">
+            O que o cliente vê na hora de pagar. Desmarcar uma forma faz ela sumir
+            do checkout na hora — vale para reservas novas e para as que já estão
+            aguardando pagamento.
+          </p>
+
+          <div className="space-y-2">
+            {[
+              ['payment_method_pix',    'PIX',                'Aprovação na hora, sem taxa de cartão.'],
+              ['payment_method_credit', 'Cartão de crédito',  'Permite parcelar.'],
+              ['payment_method_debit',  'Cartão de débito',   'À vista, aprovação na hora.'],
+            ].map(([chave, titulo, ajuda]) => {
+              const ativo = form[chave] !== 'false'
+              // Impede desligar a última: checkout sem forma de pagamento é
+              // cliente pronto para pagar e sem como.
+              const ultima = ativo && ['payment_method_pix','payment_method_credit','payment_method_debit']
+                .filter((k) => form[k] !== 'false').length === 1
+              return (
+                <label
+                  key={chave}
+                  className={`flex items-start gap-3 rounded-xl p-3 border transition-colors ${
+                    ativo ? 'bg-gray-800 border-gray-700' : 'bg-gray-850 border-gray-800 opacity-60'
+                  } ${ultima ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                  title={ultima ? 'Pelo menos uma forma precisa ficar ativa' : undefined}
+                >
+                  <input
+                    type="checkbox"
+                    checked={ativo}
+                    disabled={ultima}
+                    onChange={(e) => set(chave, e.target.checked ? 'true' : 'false')}
+                    className="mt-0.5 w-4 h-4 accent-brand"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-gray-200">{titulo}</span>
+                    <span className="block text-[11px] text-gray-500 mt-0.5">
+                      {ultima ? 'Única forma ativa — não dá para desligar.' : ajuda}
+                    </span>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+
+          {form.payment_method_credit !== 'false' && (
+            <div className="mt-4">
+              <Select
+                label="Máximo de parcelas no crédito"
+                value={form.payment_max_installments}
+                onChange={(e) => set('payment_max_installments', e.target.value)}
+              >
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map((n) => (
+                  <option key={n} value={String(n)}>{n === 1 ? 'À vista (sem parcelar)' : `Até ${n}x`}</option>
+                ))}
+              </Select>
+              <p className="text-[11px] text-gray-500 mt-1.5">
+                Quem define juros e repasse é a sua conta no Mercado Pago — aqui você
+                escolhe só até quantas vezes o cliente pode dividir.
+              </p>
+            </div>
+          )}
+
+          <SaveRow
+            onSave={() => saveSection(
+              ['payment_method_pix','payment_method_credit','payment_method_debit','payment_max_installments'],
+              'method',
+            )}
+            pending={saveMut.isPending}
+            saved={savedSection === 'method'}
+          />
+        </CardBody>
+      </Card>
 
       {/* Gateway */}
       <Card>

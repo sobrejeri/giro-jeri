@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ShieldCheck, AlertCircle } from 'lucide-react'
 import { api } from '../../lib/api'
+import { paymentMethodsDoBrick } from '../../lib/formasPagamento'
 
 // ─── helpers ────────────────────────────────────────────────
 function fmt(v) {
@@ -34,7 +35,7 @@ function getUserEmail() {
 // Brick unificado do Mercado Pago: cartão (crédito/débito) E PIX na mesma tela
 // embutida. Tokeniza com segurança (PCI) e devolve os dados no onSubmit; a API
 // cria o pagamento (com split quando a cooperativa está conectada).
-function PaymentBrick({ amount, publicKey, onCard, onPix }) {
+function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
   const { t }    = useTranslation()
   const brickRef = useRef(null)
   const [phase,       setPhase]       = useState('loading') // loading | ready | error
@@ -62,13 +63,11 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
   },
 },
           customization: {
-            visual:         { style: { theme: 'default' } },
-            paymentMethods: {
-              creditCard:     'all',
-              debitCard:      'all',
-              bankTransfer:   ['pix'],   // habilita PIX no mesmo Brick
-              maxInstallments: 12,
-            },
+            visual: { style: { theme: 'default' } },
+            // Quais formas aparecem vem das Configurações do admin. Método
+            // desligado é OMITIDO do objeto — é assim que o Brick esconde uma
+            // forma de pagamento; lista vazia não desliga.
+            paymentMethods: paymentMethodsDoBrick(settings),
           },
           callbacks: {
             onReady: () => { if (!cancelled) setPhase('ready') },
@@ -121,7 +120,9 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
       cancelled = true
       try { brickRef.current?.unmount?.() } catch { /* ignore */ }
     }
-  }, [amount, publicKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // `settings` entra nas dependências: se o dono mudar as formas de pagamento
+  // no admin, o Brick precisa ser remontado — ele lê a configuração só ao criar.
+  }, [amount, publicKey, settings]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (phase === 'error') {
     return (
@@ -158,6 +159,17 @@ export default function CheckoutPayment() {
   const navigate   = useNavigate()
   const { state }  = useLocation()
   const { t }      = useTranslation()
+  // Formas de pagamento configuradas pelo dono no admin. Best-effort: se a
+  // consulta falhar, `settings` fica indefinido e o checkout cai no padrão
+  // (todas as formas ligadas) — nunca deixa o cliente sem como pagar.
+  const [settings, setSettings] = useState(undefined)
+  useEffect(() => {
+    let vivo = true
+    api.getPublicSettings()
+      .then((s) => { if (vivo) setSettings(s || {}) })
+      .catch(() => { if (vivo) setSettings({}) })
+    return () => { vivo = false }
+  }, [])
   // Chave pública da cooperativa atribuída (split). Buscada para reservas já
   // existentes (pagamento pós-aceite). keyChecked evita montar o Brick antes.
   const [sellerKey,  setSellerKey]  = useState(null)
@@ -313,12 +325,17 @@ export default function CheckoutPayment() {
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
           <p className="text-[14px] font-bold text-gray-900 px-4 pt-4 pb-1">{t('payment.choose')}</p>
           <div className="px-3 pb-3 pt-1">
-            {keyChecked ? (
+            {/* Espera TAMBÉM as formas de pagamento chegarem. Sem isso o Brick
+                montaria uma vez sem a configuração e outra com ela — e o
+                Mercado Pago não gosta de ser montado duas vezes no mesmo
+                container: o formulário aparece duplicado. */}
+            {keyChecked && settings !== undefined ? (
               <PaymentBrick
                 amount={total_price}
                 publicKey={sellerKey}
                 onCard={handleCardPayment}
                 onPix={handlePix}
+                settings={settings}
               />
             ) : (
               <div className="flex items-center justify-center py-8 gap-2 text-gray-400">

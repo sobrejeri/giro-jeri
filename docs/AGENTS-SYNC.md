@@ -28,6 +28,35 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (formas de pagamento configuráveis)** — O dono passa a
+  escolher o que o cliente vê no checkout: PIX, crédito, débito e o máximo de
+  parcelas. **Sem migration** (as chaves nascem no upsert de settings).
+  Antes o `customization.paymentMethods` do Payment Brick era FIXO no código
+  (`creditCard:'all'`, `debitCard:'all'`, `bankTransfer:['pix']`, 12x).
+  **Peças:** 4 chaves públicas em `settings.js` (`payment_method_pix|credit|
+  debit`, `payment_max_installments` — só exibição; chave da API e segredo do
+  webhook NUNCA entram na lista pública), `turista/src/lib/formasPagamento.js`
+  (decide o que o Brick recebe) e um card novo na aba Pagamentos do admin.
+  **Duas regras para o cliente nunca ficar sem pagar:** configuração ausente =
+  tudo ligado (instalação que nunca abriu a tela segue funcionando); tudo
+  desligado = volta para PIX. No admin, a última forma ativa fica travada.
+  Método desligado é **OMITIDO** do objeto do Brick — lista vazia não desliga.
+  **Dois defeitos achados de passagem, na mesma tela:**
+  · `GATEWAYS` não listava **'mercado_pago'**, que é o gateway em uso — o campo
+    aparecia EM BRANCO, e quem tentasse "corrigir" o branco trocaria o gateway
+    de produção. Adicionado.
+  · As chaves novas apareceriam também na aba Sistema como configuração crua
+    (dois lugares editando o mesmo valor). Somadas a `PAYMENT_KEYS`.
+  Também: o Brick só monta depois de `settings` chegar — com `settings` nas
+  dependências e sem essa espera, ele montava duas vezes e o formulário do MP
+  aparecia duplicado.
+  **Testado:** 11 casos da tabela de decisão (sem configuração, vazio, só PIX,
+  só crédito, PIX+crédito 6x, crédito 1x, tudo desligado, parcelas 99/texto/0)
+  — todos corretos.
+  **ATENÇÃO p/ o dono:** se `payment_gateway_webhook_secret` estiver vazio em
+  produção, o webhook do MP **rejeita todos os eventos** (bloqueio proposital
+  contra aprovação forjada). Quem confirma hoje é a conciliação da etapa 1.
+
 - **2026-08-23 · Agente B (TELA BRANCA no app do turista — corrigida)** —
   Relatada pelo dono com foto: fundo de areia, nada mais. Sem migration.
   **Causa raiz:** `api.js` fazia `await res.json().catch(() => ({}))` — resposta
