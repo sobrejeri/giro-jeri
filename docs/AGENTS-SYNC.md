@@ -36,6 +36,21 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (formulário de categoria enxuto)** — Pedido do dono:
+  criar categoria pedia informação demais. Agora abre com **quatro campos** —
+  Nome, Descrição, Ativo e "Carrossel próprio no app". As REGRAS DE OPERAÇÃO
+  (modo de precificação, horário limite de pedido, antecedência mínima, janela
+  de horário, municípios) foram para um bloco recolhido **"Regras de operação
+  (opcional)"**. Nada removido: são campos de outros agentes e continuam
+  funcionando ao abrir o bloco.
+  Conferido: 4 campos ao criar, os avançados escondidos, e os 8 de volta ao
+  clicar em "Mostrar".
+  **ATENÇÃO — o erro que o dono viu não era da tela:** *"Could not find the
+  'service_window_end' column of 'transfers'"* é a **migration 069** que não
+  foi rodada. É o SEGUNDO caso do mesmo tipo (o primeiro foi
+  `transfer_routes.cover_image_url`, migration 065). O
+  `supabase/o_que_falta_rodar.sql` teria mostrado os dois de uma vez.
+
 - **2026-08-23 · Agente B (um carrossel por categoria na vitrine de translados)**
   — O título já usava o nome da categoria, mas TODAS as rotas exclusivas iam
   para o MESMO carrossel, com o nome da primeira delas
