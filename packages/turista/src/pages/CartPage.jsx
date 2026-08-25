@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -235,18 +236,26 @@ function EditSheet({ item, onSave, onClose }) {
     })
   }
 
-  return (
+  // Portal para o <body>: dentro da árvore da página, um ancestral com
+  // transform vira o bloco de contenção do position:fixed e a folha ia parar
+  // abaixo da dobra — o fundo escurecia e nada aparecia. No celular ela ocupa
+  // a viewport inteira (dvh acompanha a barra do navegador); em telas grandes
+  // continua o cartão centralizado.
+  return createPortal(
     <>
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl max-w-[430px] mx-auto max-h-[88vh] flex flex-col lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:max-w-xl lg:shadow-2xl">
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
+      <div className="fixed inset-0 bg-black/40 z-[80]" onClick={onClose} />
+      <div className="fixed inset-0 h-[100dvh] z-[80] flex flex-col bg-white lg:inset-auto lg:h-auto lg:top-1/2 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:max-w-xl lg:w-full lg:max-h-[88dvh] lg:shadow-2xl">
+        <div
+          className="flex items-center justify-between px-5 pb-3 border-b border-gray-100 shrink-0 lg:pt-4"
+          style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+        >
           <p className="font-bold text-gray-900 text-[15px] leading-tight flex-1 pr-2">{item.name}</p>
           <button onClick={onClose} aria-label={t('cartPg.editSheet.closeAria')} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95">
             <X size={15} className="text-gray-600" />
           </button>
         </div>
 
-        <div className="overflow-y-auto px-5 py-4 space-y-4">
+        <div className="overflow-y-auto px-5 py-4 space-y-4 flex-1">
           {isTransfer && (
             <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 text-[12.5px] text-gray-700">
               <MapPin size={13} className="text-brand shrink-0" />
@@ -402,7 +411,7 @@ function EditSheet({ item, onSave, onClose }) {
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-gray-100 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2">
+        <div className="px-5 py-4 border-t border-gray-100 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2 shrink-0">
           <div className="flex items-center justify-between">
             <p className="text-[11px] text-gray-400 uppercase font-bold tracking-wide">{t('cartPg.editSheet.itemTotal')}</p>
             <p className="text-[18px] font-extrabold text-brand">{fmt(total)}</p>
@@ -421,7 +430,8 @@ function EditSheet({ item, onSave, onClose }) {
           )}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
