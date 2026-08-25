@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -72,11 +73,29 @@ const ICONS = [Zap, Sun, Waves, Anchor]
 function gi(id = '') { let n = 0; for (const c of id) n += c.charCodeAt(0); return n % GRADIENTS.length }
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR')}` }
 
+/* ── Overlay ────────────────────────────────────────────────────
+ * Portal para o <body> + trava do scroll da página de trás.
+ *
+ * Sem o portal, um ancestral com transform/filter (o wrapper do app tem) vira
+ * o bloco de contenção do `position: fixed` — o painel ia parar abaixo da
+ * dobra e só o desfoque aparecia, dando a impressão de que o toque falhou.
+ * A trava do scroll evita que a lista atrás role junto e leve o painel embora.
+ */
+function Overlay({ children }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+  return createPortal(children, document.body)
+}
+
 /* ── Cancel Dialog ──────────────────────────────────────────── */
 function CancelDialog({ booking, onConfirm, onClose, loading, error }) {
   const { t } = useTranslation()
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <Overlay>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
         <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -102,6 +121,7 @@ function CancelDialog({ booking, onConfirm, onClose, loading, error }) {
         </div>
       </div>
     </div>
+    </Overlay>
   )
 }
 
@@ -324,7 +344,8 @@ function GroupCard({ bookings, onOpen }) {
 function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDetail, onReview, reviewedIds }) {
   const { total, allPay, count, payableCount } = groupSummary(bookings)
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <Overlay>
+    <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-gray-50 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[86vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 bg-white rounded-t-3xl border-b border-gray-100">
@@ -354,6 +375,7 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
         )}
       </div>
     </div>
+    </Overlay>
   )
 }
 
@@ -374,7 +396,8 @@ function ReviewSheet({ booking, onClose, onDone }) {
     || (booking.service_type === 'tour' ? 'Passeio' : 'Transfer') + ' · ' + booking.booking_code
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+    <Overlay>
+    <div className="fixed inset-0 z-[95] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -435,6 +458,7 @@ function ReviewSheet({ booking, onClose, onDone }) {
         </div>
       </div>
     </div>
+    </Overlay>
   )
 }
 
@@ -466,7 +490,8 @@ function QuoteDetailDialog({ quote, onClose }) {
     ...(quote.quoted_price != null ? [['Valor', fmt(quote.quoted_price)]] : []),
   ]
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <Overlay>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
         <div className="flex items-center justify-between mb-4 gap-3">
@@ -495,6 +520,7 @@ function QuoteDetailDialog({ quote, onClose }) {
         </button>
       </div>
     </div>
+    </Overlay>
   )
 }
 
