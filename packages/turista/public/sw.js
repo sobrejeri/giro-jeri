@@ -1,7 +1,7 @@
 /* Turiva — Service Worker (PWA offline + Web Push) */
 
 // Suba a versão para invalidar os caches antigos num deploy.
-const VERSION      = 'v2'
+const VERSION      = 'v3'
 const SHELL_CACHE  = `turiva-shell-${VERSION}`
 const ASSET_CACHE  = `turiva-assets-${VERSION}`
 const KEEP         = [SHELL_CACHE, ASSET_CACHE]
@@ -39,7 +39,11 @@ self.addEventListener('fetch', (event) => {
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        const res = await fetch(req)
+        // `cache: 'no-store'` é o ponto decisivo: sem ele o Safari podia
+        // devolver o index.html da própria cache HTTP, ainda apontando para os
+        // bundles antigos — e um recarregar não trazia o deploy novo. Em PWA
+        // instalado isso deixa o app preso numa versão quebrada.
+        const res = await fetch(req, { cache: 'no-store' })
         const copy = res.clone()
         caches.open(SHELL_CACHE).then((c) => c.put('shell', copy)).catch(() => {})
         return res
