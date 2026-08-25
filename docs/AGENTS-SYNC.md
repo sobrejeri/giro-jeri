@@ -47,6 +47,28 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (saída/data/pessoas saem da tela de Passeios)** —
+  Pedido do dono: a barra "Saída · Data · Pessoas" do topo sai da vitrine e os
+  campos ficam obrigatórios no carrinho, "tbm" — como já tinha sido feito com os
+  veículos. A vitrine passa a só apresentar; quem cobra os dados é o carrinho.
+  - **Privativo**: o rascunho nasce com `dateIso`, `time` e `origin_text`
+    vazios. O carrinho já exigia os três (`itemMissing` em lib/cartCheckout) e
+    já tinha os campos na folha de edição — nada de novo foi preciso lá.
+    Rascunho já existente é preservado ao tocar de novo no mesmo passeio.
+  - **Compartilhado é a exceção**: não passa pelo carrinho (vai direto ao
+    Resumo), então perderia os campos e reservaria sempre para HOJE. Saída e
+    data foram para dentro do bloco do compartilhado, abaixo do passeio
+    escolhido. Novo estado `dataEscolhida` separa "hoje é o padrão de exibição"
+    de "o cliente escolheu hoje" — sem ele o CTA liberaria uma data que ninguém
+    confirmou.
+  - O botão da folha, no compartilhado, só fechava a folha e não dizia nada.
+    Agora leva ao campo que falta (abre o seletor de saída ou o calendário).
+  Conferido no navegador: topo sem os três campos; privativo grava rascunho
+  vazio e o carrinho acusa o que falta; compartilhado mostra saída e data no
+  bloco, o CTA fica travado sem os dois e o botão da folha abre o seletor certo.
+  Sem erros de página. **Desktop (`ToursDesktop`) não foi mexido** — lá os
+  controles alimentam `/passeios/:id`, outro fluxo, e não têm campo de saída.
+
 - **2026-08-25 · Agente B (RLS: admin não podia gravar categorias)** — Com a 071
   rodada, criar categoria falhava com *"new row violates row-level security
   policy for table categories"*. **Migration 072.**

@@ -408,6 +408,14 @@ export default function Tours() {
     }
     return startOfDay(new Date())
   })
+  // O `date` acima sempre tem um valor (hoje, como padrão de exibição). Este
+  // marca se o CLIENTE de fato escolheu — sem ele, o compartilhado deixaria
+  // passar uma reserva para hoje que ninguém confirmou, agora que o seletor de
+  // data saiu do topo da tela.
+  const [dataEscolhida, setDataEscolhida] = useState(
+    !!(restoredItem?.dateIso || locationState?.dateIso),
+  )
+  const escolherData = (d) => { setDate(d); setDataEscolhida(true) }
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
   // Pastilha ativa da lista. Já nasce alinhada ao atalho que trouxe o cliente
@@ -670,9 +678,14 @@ export default function Tours() {
   const cartHasItems = cartItems.length > 0
   const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
 
-  // Monta o rascunho do carrinho a partir da PRÉ-SELEÇÃO atual (passeio +
-  // veículos + pessoas). NÃO é auto-salvo: só vai pro carrinho quando o cliente
-  // clica em "Continuar". Data/hora/saída são refinadas depois, no carrinho.
+  // Rascunho do carrinho. Guarda só o que o cliente realmente escolheu nesta
+  // tela: o passeio e o número de pessoas (da folha). Data, horário, local de
+  // saída e veículos nascem VAZIOS — são pedidos no carrinho, que já trava o
+  // "Solicitar" enquanto faltar qualquer um deles.
+  //
+  // Um rascunho já existente é preservado: se o cliente voltar à vitrine e
+  // tocar de novo no mesmo passeio, o que ele preencheu no carrinho continua lá
+  // em vez de ser zerado.
   const buildCartDraft = () => {
     const existing = savedCartItems.find((i) => i.id === selectedTour.id)
     return {
@@ -685,13 +698,11 @@ export default function Tours() {
       min_advance_hours: selectedTour.min_advance_hours ?? null,
       service_window_start: selectedTour.service_window_start || null,
       service_window_end:   selectedTour.service_window_end   || null,
-      dateIso: format(date, 'yyyy-MM-dd'),
-      time:    existing?.time || null,
+      dateIso: existing?.dateIso || '',
+      time:    existing?.time || '',
       people,
       region_id:   selectedTour.regions?.id || null,
-      origin_text: origin?.name || existing?.origin_text || null,
-      // Veículos saíram desta tela: são escolhidos no carrinho, junto com
-      // data, horário e local de saída. O rascunho nasce sem eles.
+      origin_text: existing?.origin_text || '',
       vehicles: existing?.vehicles || [],
       total:    Number(existing?.total) || 0,
     }
@@ -852,72 +863,16 @@ export default function Tours() {
           ]}
         />
 
-        {/* ── Saída · Data · Pessoas ────────────────────────── */}
-        {/* Saída ocupa a linha inteira; Data e Pessoas dividem a de baixo.
-            Os três lado a lado só cabem em tela larga: medido, "Selecionar
-            local" pede 111px e sobravam 53px num aparelho de 360px — o campo
-            OBRIGATÓRIO da tela aparecia cortado. Em duas linhas cabe em
-            qualquer largura, e a Saída ganha o destaque que merece. */}
-        <div className="space-y-2.5">
-          {/* Sem ele o checkout não fecha, então fica com borda tracejada
-              laranja enquanto está vazio. */}
-          <button
-            onClick={() => setShowOriginPicker(true)}
-            className={`w-full flex items-center gap-2.5 rounded-[18px] px-3.5 py-2.5 text-left active:scale-[0.98] transition-transform ${
-              origin
-                ? 'bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)]'
-                : 'bg-brand/[0.04] border border-dashed border-brand'
-            }`}
-          >
-            <MapPin size={16} className="text-brand shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.origin.label')}</p>
-              <p className={`text-[13px] font-bold mt-1 leading-tight truncate ${origin ? 'text-gray-800' : 'text-brand'}`}>
-                {origin?.name || t('toursPg.origin.placeholder')}
-              </p>
-            </div>
-            <ChevronDown size={13} className="text-gray-400 shrink-0" />
-          </button>
+        {/* Saída, data e pessoas saíram DESTA tela.
+            A vitrine só apresenta os passeios; quem cobra os dados da reserva é
+            o carrinho, onde os três já são obrigatórios para poder solicitar
+            (`itemMissing` em lib/cartCheckout). Mesma decisão já tomada para os
+            veículos — juntar tudo num lugar só evita o cliente preencher aqui,
+            preencher de novo lá, e as duas respostas divergirem.
+            O modo COMPARTILHADO é a exceção: ele não passa pelo carrinho (vai
+            direto ao Resumo), então pede saída e data no próprio bloco dele,
+            mais abaixo. */}
 
-          <div className="flex gap-2.5">
-          <button
-            onClick={() => setShowDatePicker(true)}
-            className="flex-1 min-w-0 flex items-center gap-2 bg-white rounded-[18px] px-3 py-2.5 text-left shadow-[0_4px_20px_rgba(0,0,0,0.05)] active:scale-[0.97] transition-transform"
-          >
-            <Calendar size={16} className="text-brand shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.date.label')}</p>
-              <p className="text-[13px] font-bold text-gray-800 mt-1 leading-tight truncate">
-                {isToday(date) ? t('toursPg.date.today')
-                  : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
-                  : format(date, 'd MMM', { locale: ptBR })}
-              </p>
-            </div>
-            <ChevronDown size={12} className="text-gray-400 shrink-0" />
-          </button>
-
-          <div className="shrink-0 bg-white rounded-[18px] px-3 py-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-            <p className="text-[10px] text-gray-400 leading-none text-center">{t('toursPg.people.label')}</p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <button
-                onClick={() => setPeople((p) => Math.max(1, p - 1))}
-                aria-label="-"
-                className="w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center active:scale-90 transition-transform shrink-0"
-              >
-                <Minus size={11} className="text-gray-600" />
-              </button>
-              <span className="text-[14px] font-extrabold text-gray-900 tabular-nums">{people}</span>
-              <button
-                onClick={() => setPeople((p) => p + 1)}
-                aria-label="+"
-                className="w-6 h-6 rounded-full bg-brand flex items-center justify-center active:scale-90 transition-transform shrink-0"
-              >
-                <Plus size={11} className="text-white" />
-              </button>
-            </div>
-          </div>
-          </div>
-        </div>
 
         {/* ── Pastilhas de filtro ───────────────────────────── */}
         {chips.length > 1 && (
@@ -1009,6 +964,49 @@ export default function Tours() {
 
           return (
             <>
+              {/* Saída e data — só no COMPARTILHADO.
+                  Este modo não passa pelo carrinho (vai direto ao Resumo), então
+                  é aqui que os dois campos obrigatórios são pedidos. No
+                  privativo eles não existem nesta tela: quem cobra é o carrinho.
+                  Ficam junto do passeio escolhido, e não no topo, porque só
+                  fazem sentido depois de escolher o quê. */}
+              <div className="bg-white rounded-[22px] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] space-y-2.5">
+                <button
+                  onClick={() => setShowOriginPicker(true)}
+                  className={`w-full flex items-center gap-2.5 rounded-[18px] px-3.5 py-2.5 text-left active:scale-[0.98] transition-transform ${
+                    origin ? 'bg-gray-50' : 'bg-brand/[0.04] border border-dashed border-brand'
+                  }`}
+                >
+                  <MapPin size={16} className="text-brand shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.origin.label')}</p>
+                    <p className={`text-[13px] font-bold mt-1 leading-tight truncate ${origin ? 'text-gray-800' : 'text-brand'}`}>
+                      {origin?.name || t('toursPg.origin.placeholder')}
+                    </p>
+                  </div>
+                  <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                </button>
+
+                <button
+                  onClick={() => setShowDatePicker(true)}
+                  className={`w-full flex items-center gap-2.5 rounded-[18px] px-3.5 py-2.5 text-left active:scale-[0.98] transition-transform ${
+                    dataEscolhida ? 'bg-gray-50' : 'bg-brand/[0.04] border border-dashed border-brand'
+                  }`}
+                >
+                  <Calendar size={16} className="text-brand shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.date.label')}</p>
+                    <p className={`text-[13px] font-bold mt-1 leading-tight truncate ${dataEscolhida ? 'text-gray-800' : 'text-brand'}`}>
+                      {!dataEscolhida ? t('toursPg.date.placeholder')
+                        : isToday(date) ? t('toursPg.date.today')
+                        : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
+                        : format(date, 'd MMM', { locale: ptBR })}
+                    </p>
+                  </div>
+                  <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                </button>
+              </div>
+
               {/* Número de pessoas */}
               <div className="bg-white rounded-[22px] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
                 <p className="text-[17.5px] font-extrabold text-gray-900">{t('toursPg.sharedMode.peopleTitle')}</p>
@@ -1098,7 +1096,7 @@ export default function Tours() {
           minDate={cutoffMinDate}
           seasons={seasonsData || []}
           highSeasonMonths={highSeasonMonths}
-          onChange={setDate}
+          onChange={escolherData}
           onClose={() => setShowDatePicker(false)}
         />
       )}
@@ -1118,11 +1116,15 @@ export default function Tours() {
         inCart={sheetTour ? cartIds.has(sheetTour.id) : false}
         onClose={() => setSheetTourId(null)}
         onAdd={() => {
-          // Compartilhado segue para o Resumo (precisa do local de saída e não
-          // entra no carrinho, que hoje exige veículos). Privativo vai ao
-          // carrinho, onde veículos, data e horário são definidos.
+          // Compartilhado segue para o Resumo (não entra no carrinho, que hoje
+          // exige veículos) e precisa de saída e data — que ficam no bloco
+          // abaixo, agora que saíram do topo da tela. Fecha a folha e leva
+          // direto ao campo que falta; antes o botão só fechava a folha e o
+          // cliente não recebia nenhuma pista do que fazer em seguida.
           if (mode === 'shared' && sheetTour?.shared_price_per_person) {
             setSheetTourId(null)
+            if (!origin) { setShowOriginPicker(true); return }
+            if (!dataEscolhida) { setShowDatePicker(true); return }
             return
           }
           saveCartItem(buildCartDraft())
@@ -1151,7 +1153,11 @@ export default function Tours() {
               </div>
               <button
                 onClick={() => {
+                  // Leva ao campo que falta em vez de só ficar apagado: com os
+                  // dois seletores agora abaixo do passeio, um botão inerte não
+                  // diria o que está pendente.
                   if (!origin) { setShowOriginPicker(true); return }
+                  if (!dataEscolhida) { setShowDatePicker(true); return }
                   navigate('/checkout/resumo', {
                     state: {
                       service_name:     selectedTour.name,
@@ -1180,7 +1186,7 @@ export default function Tours() {
                   })
                 }}
                 className={`font-bold rounded-xl px-5 py-2.5 text-[13px] transition-transform shrink-0 ${
-                  origin ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400'
+                  origin && dataEscolhida ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400'
                 }`}
               >
                 {t('toursPg.actions.continue')}

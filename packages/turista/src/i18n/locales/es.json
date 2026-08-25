@@ -391,7 +391,8 @@
     "date": {
       "label": "Fecha",
       "today": "Hoy",
-      "tomorrow": "Mañana"
+      "tomorrow": "Mañana",
+      "placeholder": "Seleccionar fecha"
     },
     "people": {
       "label": "Personas"
