@@ -47,6 +47,28 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (correção de dados: voo só com helicóptero)** — APLICADO
+  no banco do dono (`supabase/voo_somente_helicoptero.sql`). Não é migration.
+  Diagnóstico saiu do próprio banco, não de suposição: `HELICOPTERO [buggy-2]`
+  era um registro de BUGGY antigo renomeado para helicóptero — o nome mudou, o
+  slug não — cadastrado em voos reais, com 4 regras de preço e 2 reservas.
+  A 073 marcou ele como `aereo` procurando por NOME (`ILIKE '%helic%'`), e por
+  sorte acertou: ele está mesmo nos voos da 065. Mas o episódio mostra o limite
+  de backfill por nome quando o cadastro foi reaproveitado.
+  **O furo maior não era esse:** `requires_opt_in` estava ligado no helicóptero
+  oficial e NENHUMA cooperativa tinha opt-in — a regra "voo só para quem opera
+  voo" nunca esteve em vigor. E o buggy-2 estava com `requires_opt_in = false`,
+  então as 2 reservas dele iam para todas as cooperativas, buggy inclusive.
+  O script transferiu as regras onde o buggy-2 era o ÚNICO veículo (desativar
+  direto deixaria o voo sem veículo, calado), desativou as duplicadas, marcou a
+  Frisonfly nos dois registros — nos dois por causa das reservas antigas —,
+  ligou `requires_opt_in` e aposentou o duplicado.
+  Estado atual: os voos oferecem só o helicóptero oficial, nenhum órfão, e voo
+  chega só na Frisonfly.
+  **PENDENTE:** `GUIA TURISTICO [teste-mrjv8wuq]` ainda ativo (1 regra, 0
+  reservas) — script pronto na conversa. Os demais registros de teste
+  (`TESTE — Passeio R$ 1,00`, `Buggy teste`) já estavam inativos.
+
 - **2026-08-25 · Agente B (operador universal — combo sem motor de pernas)** —
   Proposta do dono, e é melhor que o caminho que eu ia seguir: em vez de partir
   o combo em duas cooperativas (motor de pernas + split entre 2+ contas, hoje
