@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 074.**
+   registre aqui o número reservado. **Próximo número livre: 075.**
    (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
    com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
 
@@ -46,6 +46,27 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (terceiro modal: aquático)** — O dono completou a
+  lista: "terrestre, aéreo, aquático…". A 073 tinha aberto o eixo com dois
+  valores. **Migration 074** amplia o CHECK das três tabelas para incluir
+  `aquatico` (barco, lancha, catamarã) e atualiza os COMMENTs.
+  DROP + ADD da constraint em vez de "criar se não existir": a 073 já criou a
+  dela com dois valores, e um `ADD ... EXCEPTION duplicate_object` nunca
+  atualizaria uma constraint existente — a 074 ficaria sem efeito em quem já
+  rodou a 073. Assim converge rodando uma ou dez vezes.
+  **Nenhum veículo é reclassificado automaticamente**, de propósito. Um
+  `UPDATE vehicles SET modal='aquatico' WHERE vehicle_type='boat'` seria fácil e
+  perigoso: se existe passeio que hoje oferece barco E buggy na mesma matriz,
+  mover só o barco o faria SUMIR daquele passeio, sem aviso — o serviço
+  continuaria terrestre e o barco deixaria de casar. Reclassificar é decisão de
+  quem conhece a operação e precisa dos dois lados juntos (categoria + veículo).
+  A migration traz, comentada, a consulta de diagnóstico que mostra cada veículo
+  de água e em que serviço/categoria ele está hoje — validada em Postgres.
+  Conferido em Postgres 16: antes da 074 'aquatico' é recusado; depois é aceito
+  nas três tabelas; nenhum veículo se moveu; valor inválido segue barrado; e
+  re-rodar preserva os modais já gravados. No admin, os três formulários listam
+  Terrestre/Aéreo/Aquático.
 
 - **2026-08-25 · Agente B (frota por MODAL: terrestre × aéreo)** — Observação do
   dono: "existe os veículos que executam passeios terrestres, passeios aéreos,

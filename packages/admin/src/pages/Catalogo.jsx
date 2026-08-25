@@ -87,12 +87,15 @@ const VEHICLE_EMPTY = {
   region_ids: [],
 }
 
-// Terrestre × aéreo (migration 073). O segundo eixo da frota: cruzado com
-// "serve para passeio / para transfer", dá as quatro combinações reais —
-// passeio terrestre, passeio aéreo, translado terrestre, translado aéreo.
+// Modal (migrations 073 e 074). O segundo eixo da frota: cruzado com "serve
+// para passeio / para transfer", dá as combinações reais do negócio — passeio
+// terrestre, passeio aéreo, passeio aquático, e o mesmo nos translados.
+// O veículo só é oferecido em serviço do MESMO modal, e quem define o modal do
+// serviço é a categoria dele.
 const MODAIS = [
   { value: 'terrestre', label: 'Terrestre' },
   { value: 'aereo',     label: 'Aéreo' },
+  { value: 'aquatico',  label: 'Aquático' },
 ]
 
 const VEHICLE_TYPES = [
