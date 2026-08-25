@@ -538,9 +538,10 @@ export default function Catalogo() {
             <div className="divide-y divide-gray-800">
               {rotasVisiveis.map((r) => (
                 <div key={r.id} className="flex items-center gap-3 px-5 py-3">
-                  {/* Mesma miniatura da lista de passeios. Sem foto, mostra o
-                      ícone de adicionar imagem em vez de um cinza mudo — dá
-                      para varrer a lista e ver onde falta. */}
+                  {/* EXATAMENTE a mesma miniatura da lista de passeios (mesmo
+                      tamanho, mesmo cinza no vazio) — pedido do dono para as
+                      duas listas se lerem do mesmo jeito. O `title` fica como
+                      reforço para quem passa o mouse. */}
                   {r.cover_image_url ? (
                     <img
                       src={r.cover_image_url}
@@ -549,12 +550,7 @@ export default function Catalogo() {
                       className="w-10 h-10 rounded-lg object-cover shrink-0"
                     />
                   ) : (
-                    <div
-                      title="Sem foto de capa"
-                      className="w-10 h-10 rounded-lg bg-gray-800 border border-dashed border-gray-700 flex items-center justify-center shrink-0"
-                    >
-                      <ImagePlus size={14} className="text-gray-600" />
-                    </div>
+                    <div title="Sem foto de capa" className="w-10 h-10 rounded-lg bg-gray-700 shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{r.origin_name} → {r.destination_name}</p>
