@@ -125,21 +125,34 @@ router.get('/:id/vehicles', async (req, res, next) => {
     // aparece na matriz do admin) vazaria para o app.
     // REGIÃO: mesma visão da matriz — só regras da região do passeio (ou sem
     // região). Regra criada sob outra região não vaza para o app.
-    const { data: tourRow } = await supabase
-      .from('tours').select('region_id, region_ids').eq('id', req.params.id).maybeSingle();
+    // MODAL (migration 073): a categoria do passeio diz se ele é terrestre ou
+    // aéreo, e só entra veículo do mesmo modal. Aqui NÃO existe recuo para "toda
+    // a frota do modal" como nos translados: no passeio o preço vem da regra do
+    // Motor de Preços, então um veículo sem regra só poderia ser oferecido por
+    // R$ 0. Passeio sem matriz continua sem veículo — o admin controla, e nunca
+    // inventamos preço.
+    let { data: tourRow, error: eTour } = await supabase
+      .from('tours')
+      .select('region_id, region_ids, categories ( modal )')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (eTour?.code === '42703') {   // 073 ainda não aplicada
+      console.warn('[tours] categories.modal ausente (migration 073):', eTour.message);
+      ({ data: tourRow } = await supabase
+        .from('tours').select('region_id, region_ids').eq('id', req.params.id).maybeSingle());
+    }
+    const modalDoPasseio = tourRow?.categories?.modal || null;
+    const mesmoModal = (v) => !modalDoPasseio || !v.modal || v.modal === modalDoPasseio;
     const userRegion = req.query.region_id || null;
     const tourRegions = [tourRow?.region_id, ...(Array.isArray(tourRow?.region_ids) ? tourRow.region_ids : [])]
       .filter(Boolean);
 
     // Todas as regras ATIVAS deste passeio (veículo ativo e permitido p/ passeios).
-    const { data, error } = await supabase
+    const montarRegras = (colunas) => supabase
       .from('vehicle_pricing_rules')
       .select(`
         base_price, region_id,
-        vehicles!inner (
-          id, name, vehicle_type, seat_capacity, luggage_capacity,
-          image_url, description, display_order
-        )
+        vehicles!inner ( ${colunas} )
       `)
       .eq('service_type', 'tour')
       .eq('service_id', req.params.id)
@@ -147,8 +160,17 @@ router.get('/:id/vehicles', async (req, res, next) => {
       .eq('vehicles.is_active', true)
       .eq('vehicles.is_tour_allowed', true);
 
+    const COLS = `id, name, vehicle_type, seat_capacity, luggage_capacity,
+                  image_url, description, display_order`;
+    let { data, error } = await montarRegras(`${COLS}, modal`);
+    if (error?.code === '42703') {   // vehicles.modal ausente (073 pendente)
+      console.warn('[tours] vehicles.modal ausente; seguindo sem o filtro de modal:', error.message);
+      ({ data, error } = await montarRegras(COLS));
+    }
     if (error) throw error;
-    const all = (data || []).filter((r) => r.vehicles);
+    // `mesmoModal` recorta a matriz: regra cadastrada por engano (um buggy num
+    // voo panorâmico) não vira oferta só por existir.
+    const all = (data || []).filter((r) => r.vehicles && mesmoModal(r.vehicles));
 
     // "Matriz = app 1:1" por região: usa só as regras da(s) região(ões) do
     // passeio (ou globais, sem região). Assim uma regra criada sob OUTRA região

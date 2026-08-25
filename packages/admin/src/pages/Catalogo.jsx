@@ -65,7 +65,7 @@ const TOUR_EMPTY = {
 }
 const TRANSFER_EMPTY = {
   name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
-  is_exclusive: false,
+  is_exclusive: false, modal: 'terrestre',
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '', region_ids: [],
 }
@@ -75,10 +75,10 @@ const ROUTE_EMPTY   = { transfer_id: '', origin_name: '', destination_name: '', 
 // nome, descrição, ordem e as duas caixas.
 const CATEGORY_EMPTY = {
   name: '', description: '', is_active: true, is_exclusive: false,
-  sort_order: 0, category_type: 'tour',
+  sort_order: 0, category_type: 'tour', modal: 'terrestre',
 }
 const VEHICLE_EMPTY = {
-  name: '', vehicle_type: 'buggy', description: '',
+  name: '', vehicle_type: 'buggy', description: '', modal: 'terrestre',
   seat_capacity: 4, luggage_capacity: 4,
   is_private_allowed: true, is_shared_allowed: false,
   is_transfer_allowed: false, is_tour_allowed: true,
@@ -86,6 +86,14 @@ const VEHICLE_EMPTY = {
   latitude: null, longitude: null, service_radius_km: null,
   region_ids: [],
 }
+
+// Terrestre × aéreo (migration 073). O segundo eixo da frota: cruzado com
+// "serve para passeio / para transfer", dá as quatro combinações reais —
+// passeio terrestre, passeio aéreo, translado terrestre, translado aéreo.
+const MODAIS = [
+  { value: 'terrestre', label: 'Terrestre' },
+  { value: 'aereo',     label: 'Aéreo' },
+]
 
 const VEHICLE_TYPES = [
   { value: 'buggy',      label: 'Buggy' },
@@ -850,6 +858,23 @@ export default function Catalogo() {
           <form onSubmit={handleTransferSubmit} className="space-y-4">
             <Input label="Nome" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <Textarea label="Descrição" rows={2} value={form.short_description || ''} onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
+
+            {/* Modal da categoria de TRANSLADO: as rotas dela herdam. É o que
+                faz a rota aérea listar só helicóptero. */}
+            <div>
+              <Select
+                label="Modal"
+                value={form.modal || 'terrestre'}
+                onChange={(e) => setForm({ ...form, modal: e.target.value })}
+              >
+                {MODAIS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </Select>
+              <p className="text-[11px] text-gray-500 mt-1">
+                As rotas desta categoria só oferecem veículos deste modal.
+              </p>
+            </div>
             {/* Para criar uma categoria bastam nome e as duas caixas abaixo.
                 O resto são REGRAS DE OPERAÇÃO (preço, prazos, janela de
                 horário, municípios) — úteis depois, não na hora de criar. Ficam
@@ -1193,6 +1218,21 @@ export default function Catalogo() {
             value={catForm.description || ''}
             onChange={(e) => setCatForm({ ...catForm, description: e.target.value })}
           />
+          <div>
+            <Select
+              label="Modal"
+              value={catForm.modal || 'terrestre'}
+              onChange={(e) => setCatForm({ ...catForm, modal: e.target.value })}
+            >
+              {MODAIS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </Select>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Os passeios desta categoria só oferecem veículos deste modal.
+            </p>
+          </div>
+
           <Input
             label="Ordem de exibição (menor aparece primeiro)"
             type="number" min={0}
@@ -1342,6 +1382,23 @@ export default function Catalogo() {
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </Select>
+
+          {/* É este campo que impede o buggy de aparecer num voo — e o
+              helicóptero num translado de estrada. */}
+          <div>
+            <Select
+              label="Modal"
+              value={vehicleForm.modal || 'terrestre'}
+              onChange={(e) => setVehicleForm({ ...vehicleForm, modal: e.target.value })}
+            >
+              {MODAIS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </Select>
+            <p className="text-[11px] text-gray-500 mt-1">
+              O veículo só é oferecido em serviços do mesmo modal.
+            </p>
+          </div>
 
           <Textarea
             label="Descrição"

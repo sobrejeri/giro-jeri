@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 073.**
+   registre aqui o número reservado. **Próximo número livre: 074.**
    (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
    com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
 
@@ -46,6 +46,41 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (frota por MODAL: terrestre × aéreo)** — Observação do
+  dono: "existe os veículos que executam passeios terrestres, passeios aéreos,
+  translados terrestres e translados aéreos". A frota só sabia responder o
+  primeiro eixo (`is_tour_allowed` / `is_transfer_allowed`); faltava o segundo.
+  **Migration 073.** `modal` ('terrestre'|'aereo', TEXT + CHECK, default
+  'terrestre') em `vehicles`, `categories` e `transfers`.
+  O modal fica na CATEGORIA, escolha do dono: toda rota já tem categoria
+  obrigatória e os voos ficam na categoria deles, então marca-se uma vez e todos
+  os serviços herdam — em vez de um campo novo por serviço, que dá para esquecer.
+  Backfill: helicóptero → aéreo; 'Translado Aéreo — Helicóptero' → aéreo; e os
+  11 voos da 065, que estavam **sem categoria nenhuma**, ganharam a categoria
+  'Voos Panorâmicos' (aérea). Sem isso o passeio aéreo passaria por terrestre —
+  o próprio defeito que a migration fecha. Ela nasce com `is_exclusive = FALSE`
+  de propósito: marcar moveria os voos para um carrossel próprio, mudança
+  visível que fica à escolha do dono na tela de Catálogo.
+  **Regra por serviço, e a assimetria é intencional:**
+  • TRANSLADO — matriz recortada pelo modal e, sem matriz, recuo para a frota
+    daquele modal (o preço é o da ROTA, então dá para oferecer). Na lista aérea
+    o `requires_opt_in` não se aplica: ele existe para o helicóptero não vazar
+    para as listas comuns, e ali a lista é a dele — senão rota aérea nova abriria
+    vazia.
+  • PASSEIO — matriz recortada pelo modal, **sem recuo**. Ali o preço vem da
+    regra do Motor de Preços; um veículo sem regra só poderia ser oferecido por
+    R$ 0, e a regra do dono é nunca inventar preço.
+  Tudo tolerante a 42703: sem a 073 aplicada, some o filtro em vez de dar 500.
+  `modal` entrou em `TRANSFER_COLS`, `CATEGORY_COLS` e `buildVehiclePayload` —
+  sem isso o `pick` descartaria a escolha do admin em silêncio, como já
+  aconteceu com `is_exclusive` (ver 2026-08-23).
+  Conferido em Postgres 16: rota aérea sem matriz → só helicóptero; rota
+  terrestre → buggy/hilux/jardineira; passeio aéreo com uma regra ERRADA (buggy)
+  cadastrada de propósito → o buggy some e sobra o helicóptero com o preço real;
+  CHECK barra valor inválido; re-rodar é idempotente. No admin, os três
+  formulários (veículo, categoria de passeio, categoria de translado) têm o
+  seletor, e os dois de categoria seguem distintos.
 
 - **2026-08-25 · Agente B (frota por serviço também no carrinho)** — O dono viu
   Hilux e Jardineira ao lado do helicóptero num trecho aéreo. A regra já

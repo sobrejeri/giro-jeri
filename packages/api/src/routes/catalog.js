@@ -42,6 +42,8 @@ const TRANSFER_COLS = [
   // Faltava: sem isto o `pick` descartava o campo e a categoria era salva SEM
   // carrossel próprio, em silêncio — a caixa marcada no admin não virava nada.
   'is_exclusive',
+  // Modal da categoria de translado (073): terrestre ou aéreo.
+  'modal',
 ]
 
 // Campos NÃO textuais de transfers. O formulário manda '' quando o campo fica
@@ -62,7 +64,7 @@ function vaziosViramNulo(body, campos) {
 // ── Categorias ────────────────────────────────────────────
 
 const CATEGORY_COLS = ['name', 'slug', 'description', 'icon', 'color',
-  'category_type', 'is_active', 'sort_order', 'is_exclusive']
+  'category_type', 'is_active', 'sort_order', 'is_exclusive', 'modal']
 
 router.get('/categories', async (req, res, next) => {
   try {

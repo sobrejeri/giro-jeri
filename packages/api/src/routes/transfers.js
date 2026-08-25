@@ -248,25 +248,54 @@ router.get('/routes', async (req, res, next) => {
 //   • a rota TEM regras de preço  → só os veículos dessas regras;
 //   • a rota NÃO tem regras        → todos os de transfer, MENOS os restritos
 //     (requires_opt_in, ex.: helicóptero), que só aparecem onde foram ligados.
+//
+// Em cima disso, o MODAL (migration 073): a categoria da rota diz se ela é
+// terrestre ou aérea, e só entra veículo do mesmo modal. `requires_opt_in`
+// resolvia meio caminho — tirava o helicóptero das listas comuns, mas não
+// impedia o contrário, um buggy oferecido num trecho aéreo. O modal fecha os
+// dois lados, e sem depender de o admin lembrar de cadastrar a matriz rota a
+// rota. Sem a 073 aplicada, `modalDaRota` vem nulo e nada é filtrado — o
+// comportamento antigo, em vez de uma lista vazia.
 router.get('/routes/:id/vehicles', async (req, res, next) => {
   try {
-    const { data: rules, error } = await supabase
+    // Modal da CATEGORIA desta rota (transfer_routes → transfers.modal).
+    let modalDaRota = null;
+    try {
+      const { data: rota } = await supabase
+        .from('transfer_routes')
+        .select('transfers ( modal )')
+        .eq('id', req.params.id)
+        .maybeSingle();
+      modalDaRota = rota?.transfers?.modal || null;
+    } catch (e) {
+      console.warn('[transfers] modal da rota indisponível:', e.message);
+    }
+    const mesmoModal = (v) => !modalDaRota || !v.modal || v.modal === modalDaRota;
+
+    const montarRegras = (colunas) => supabase
       .from('vehicle_pricing_rules')
       .select(`
         base_price, region_id,
-        vehicles!inner (
-          id, name, vehicle_type, seat_capacity, luggage_capacity,
-          image_url, description, display_order, is_active, is_transfer_allowed
-        )
+        vehicles!inner ( ${colunas} )
       `)
       .eq('service_type', 'transfer')
       .eq('service_id', req.params.id)
       .eq('is_active', true)
       .eq('vehicles.is_active', true)
       .eq('vehicles.is_transfer_allowed', true);
+
+    const COLS = `id, name, vehicle_type, seat_capacity, luggage_capacity,
+                  image_url, description, display_order, is_active, is_transfer_allowed`;
+    let { data: rules, error } = await montarRegras(`${COLS}, modal`);
+    if (error?.code === '42703') {   // vehicles.modal ausente (073 pendente)
+      console.warn('[transfers] vehicles.modal ausente; seguindo sem o filtro de modal:', error.message);
+      ({ data: rules, error } = await montarRegras(COLS));
+    }
     if (error) throw error;
 
-    const comRegra = (rules || []).filter((r) => r.vehicles);
+    // O modal também recorta a MATRIZ: uma regra criada por engano (buggy num
+    // trecho aéreo) não deve virar oferta só porque alguém a cadastrou.
+    const comRegra = (rules || []).filter((r) => r.vehicles && mesmoModal(r.vehicles));
     if (comRegra.length > 0) {
       const map = new Map();
       for (const r of comRegra) {
@@ -275,19 +304,33 @@ router.get('/routes/:id/vehicles', async (req, res, next) => {
       return res.json([...map.values()].sort((a, b) => (a.display_order || 0) - (b.display_order || 0)));
     }
 
-    // Sem regra própria: comportamento de antes, tirando os veículos restritos.
-    let q = supabase
-      .from('vehicles')
-      .select('id, name, vehicle_type, seat_capacity, luggage_capacity, image_url, description, display_order')
-      .eq('is_active', true)
-      .eq('is_transfer_allowed', true);
-    if (req.query.region_id) q = q.eq('region_id', req.query.region_id);
+    // Sem regra própria: a frota do MODAL da rota.
+    //
+    // Numa rota AÉREA isso vira "todos os veículos aéreos" — e aí o
+    // `requires_opt_in` não se aplica: ele existe para o helicóptero não vazar
+    // para as listas comuns, e aqui a lista é justamente a aérea. Sem essa
+    // ressalva, uma rota aérea nova (ainda sem matriz de preço) abriria vazia,
+    // que é o cadastro incompleto travando a reserva.
+    const montarLivres = (comModal, comOptIn) => {
+      let q = supabase
+        .from('vehicles')
+        .select('id, name, vehicle_type, seat_capacity, luggage_capacity, image_url, description, display_order')
+        .eq('is_active', true)
+        .eq('is_transfer_allowed', true);
+      if (req.query.region_id) q = q.eq('region_id', req.query.region_id);
+      if (comModal && modalDaRota) q = q.eq('modal', modalDaRota);
+      if (comOptIn) q = q.eq('requires_opt_in', false);
+      return q.order('display_order');
+    };
 
-    let { data: livres, error: e2 } = await q.eq('requires_opt_in', false).order('display_order');
+    const ehAerea = modalDaRota === 'aereo';
+    let { data: livres, error: e2 } = await montarLivres(true, !ehAerea);
     if (e2?.code === '42703') {
-      // migration 066 pendente — sem a coluna, mantém a lista completa.
-      const retry = await q.order('display_order');
-      livres = retry.data; e2 = retry.error;
+      // 073 (modal) ou 066 (requires_opt_in) pendente: cai para o comportamento
+      // que a coluna existente permitir, em vez de devolver 500.
+      console.warn('[transfers] coluna de frota ausente; seguindo sem o filtro:', e2.message);
+      ({ data: livres, error: e2 } = await montarLivres(false, true));
+      if (e2?.code === '42703') ({ data: livres, error: e2 } = await montarLivres(false, false));
     }
     if (e2) throw e2;
     res.json(livres || []);

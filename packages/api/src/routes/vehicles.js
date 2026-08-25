@@ -20,6 +20,10 @@ function buildVehiclePayload(body = {}) {
 
   str('region_id'); str('name'); str('slug'); str('vehicle_type');
   str('category'); str('description'); str('image_url');
+  // `modal` (073): terrestre ou aéreo. Sem estar aqui, o `pick` do payload
+  // descartava o campo e a escolha do admin não virava nada, em silêncio —
+  // exatamente o que já aconteceu com `is_exclusive` nos transfers.
+  str('modal');
   num('seat_capacity'); num('luggage_capacity'); num('display_order');
   num('latitude'); num('longitude'); num('service_radius_km');
   bool('is_private_allowed'); bool('is_shared_allowed');
