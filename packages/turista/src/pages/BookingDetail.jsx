@@ -254,7 +254,10 @@ export default function BookingDetail() {
   }
   const timeStr = booking.service_time ? booking.service_time.slice(0, 5) : '—'
   const isPrivate = booking.booking_mode === 'private'
-  const serviceLabel = booking.service_type === 'tour' ? t('bookingDetailPg.service.tour') : t('bookingDetailPg.service.transfer')
+  const typeLabel    = booking.service_type === 'tour' ? t('bookingDetailPg.service.tour') : t('bookingDetailPg.service.transfer')
+  // Nome real do serviço (resolvido pela API a partir do service_id); sem ele
+  // fica a categoria, como era antes.
+  const serviceLabel = booking.service_name || typeLabel
   const modeLabel    = booking.service_type === 'tour'
     ? (isPrivate ? t('bookingDetailPg.mode.private') : t('bookingDetailPg.mode.shared'))
     : t('bookingDetailPg.service.transfer')
@@ -438,13 +441,20 @@ export default function BookingDetail() {
 
         {/* Service Card */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
-          <div className={`h-24 bg-gradient-to-br ${TOUR_GRADIENTS[gradientIdx]} relative flex items-center justify-center`}>
-            <IconComp size={40} className="text-brand/15" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-            <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-              <div>
-                <p className="text-white font-bold text-base leading-tight">{serviceLabel}</p>
-                <p className="text-white/80 text-xs mt-0.5">{modeLabel}</p>
+          <div className={`h-32 bg-gradient-to-br ${TOUR_GRADIENTS[gradientIdx]} relative flex items-center justify-center`}>
+            {booking.cover_image_url ? (
+              <img src={booking.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <IconComp size={40} className="text-brand/15" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+            <span className="absolute top-3 left-3 flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+              <IconComp size={10} /> {typeLabel}
+            </span>
+            <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-white font-bold text-base leading-tight truncate drop-shadow">{serviceLabel}</p>
+                <p className="text-white/80 text-xs mt-0.5 drop-shadow">{modeLabel}</p>
               </div>
               <p className="text-white font-bold text-lg">{fmt(booking.total_amount)}</p>
             </div>

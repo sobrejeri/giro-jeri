@@ -125,8 +125,9 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
     ? `${booking.pickup_place_name} → ${booking.destination_place_name}`
     : booking.pickup_place_name || null
 
-  const serviceName = booking.service_name
-    || (isTour ? 'Passeio' : 'Transfer') + ' · ' + booking.booking_code
+  // Nome real do serviço quando o backend consegue resolvê-lo; o código da
+  // reserva vira a linha de apoio (identifica sem roubar o lugar do nome).
+  const serviceName = booking.service_name || (isTour ? 'Passeio' : 'Transfer')
 
   return (
     <div onClick={() => onDetail?.(booking.id)} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer">
@@ -156,10 +157,15 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
           </span>
         </div>
 
-        {/* name */}
-        <p className="absolute bottom-3 left-3 right-3 text-white font-bold text-[16px] leading-tight drop-shadow truncate">
-          {serviceName}
-        </p>
+        {/* name + código */}
+        <div className="absolute bottom-3 left-3 right-3">
+          <p className="text-white font-bold text-[16px] leading-tight drop-shadow truncate">
+            {serviceName}
+          </p>
+          <p className="text-white/75 text-[11px] font-semibold leading-none mt-1 drop-shadow truncate">
+            {booking.booking_code}
+          </p>
+        </div>
       </div>
 
       {/* ── Body ── */}

@@ -231,6 +231,41 @@ router.post('/', authenticate, async (req, res, next) => {
   }
 });
 
+// Nome e foto do serviço de cada reserva. A tabela `bookings` guarda só o
+// service_id — sem isso o app do turista cai no gradiente genérico e no rótulo
+// "Passeio · CÓDIGO", e o cliente não reconhece o que reservou. Duas consultas
+// em lote (uma por tipo), tolerante a falha: se der erro, a lista sai como antes.
+async function enrichServiceInfo(bookings) {
+  const tourIds  = [...new Set(bookings.filter(b => b.service_type === 'tour'     && b.service_id).map(b => b.service_id))];
+  const routeIds = [...new Set(bookings.filter(b => b.service_type === 'transfer' && b.service_id).map(b => b.service_id))];
+  const info = new Map();
+
+  if (tourIds.length > 0) {
+    const { data } = await supabase
+      .from('tours').select('id, name, cover_image_url').in('id', tourIds);
+    for (const t of data || []) info.set(t.id, { name: t.name, cover: t.cover_image_url });
+  }
+  if (routeIds.length > 0) {
+    const { data } = await supabase
+      .from('transfer_routes')
+      .select('id, origin_name, destination_name, cover_image_url')
+      .in('id', routeIds);
+    for (const r of data || []) {
+      info.set(r.id, {
+        name:  [r.origin_name, r.destination_name].filter(Boolean).join(' → ') || null,
+        cover: r.cover_image_url,
+      });
+    }
+  }
+
+  for (const b of bookings) {
+    const it = b.service_id ? info.get(b.service_id) : null;
+    if (!it) continue;
+    b.service_name    = it.name  || null;
+    b.cover_image_url = it.cover || null;
+  }
+}
+
 // ── GET /api/bookings ──────────────────────────────────
 router.get('/', authenticate, async (req, res, next) => {
   try {
@@ -277,6 +312,8 @@ router.get('/', authenticate, async (req, res, next) => {
     const { data, error, count } = await query;
     if (error) throw error;
 
+    await enrichServiceInfo(data || []).catch(() => {});
+
     res.json({ data, total: count, page: Number(page), limit: Number(limit) });
   } catch (err) { next(err); }
 });
@@ -306,6 +343,9 @@ router.get('/:id', authenticate, async (req, res, next) => {
     if (req.user.user_type === 'tourist' && data.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Sem permissão' });
     }
+
+    // Mesma identificação visual da lista (nome + foto do serviço) no detalhe.
+    await enrichServiceInfo([data]).catch(() => {});
 
     // Sem embed por FK (frágil) — busca cliente/operador à parte e junta em memória.
     const ids = [data.user_id, data.operator_id].filter(Boolean);
