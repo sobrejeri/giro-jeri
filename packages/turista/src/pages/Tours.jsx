@@ -637,7 +637,15 @@ export default function Tours() {
   // SEM fallback de "todos os veículos": o app mostra exatamente os veículos
   // ligados para o passeio no Motor de Preços. Se o passeio não tiver nenhum,
   // a lista fica vazia (com aviso) — o admin controla isso.
-  const vehicles = useMemo(() => vehiclesData || [], [vehiclesData])
+  //
+  // `Array.isArray` e não `|| []`: qualquer resposta que não seja lista (um
+  // objeto de erro devolvido com 200, por exemplo) é truthy e passava direto,
+  // e o `.slice()` logo abaixo derrubava a tela inteira. Mesma guarda que o
+  // resto do arquivo já usa para as outras listas.
+  const vehicles = useMemo(
+    () => (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || []),
+    [vehiclesData],
+  )
 
   /* ── Sugestão ─────────────────────────────────────────────── */
   const suggestion = useMemo(() => suggest(vehicles, people, filter), [vehicles, people, filter])
@@ -748,8 +756,8 @@ export default function Tours() {
   ) : null
 
   // Uma vitrine por categoria marcada, com o NOME da categoria no título —
-  // igual aos translados. Renderizadas acima dos veículos, para que selecionar
-  // um passeio daqui faça os veículos surgirem logo abaixo.
+  // igual aos translados. Ficam logo abaixo da lista comum, antes do bloco do
+  // passeio selecionado.
   const carrosseisDeCategoria = !toursLoading && categoriasCarrossel.length > 0 ? (
     categoriasCarrossel.map((cat) => (
       <section key={cat.id}>
@@ -769,6 +777,8 @@ export default function Tours() {
               onSelect={() => { setSelectedId(tour.id); setSheetTourId(tour.id); setCart({}) }}
               isFav={favs.has(tour.id)}
               onFav={() => toggleFav(tour.id)}
+              inCart={cartIds.has(tour.id)}
+              onToggleCart={() => toggleCart(tour)}
             />
           ))}
         </div>
@@ -981,7 +991,7 @@ export default function Tours() {
         </section>
         )}
 
-        {/* Vitrines por categoria — sempre acima dos veículos */}
+        {/* Vitrines por categoria (categories.is_exclusive) */}
         {carrosseisDeCategoria}
 
         {/* Exclusivo selecionado → carrossel exclusivo ACIMA dos veículos */}
