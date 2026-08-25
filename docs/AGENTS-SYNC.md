@@ -36,6 +36,19 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (rotas: ver quais já têm foto)** — Pedido do dono, na
+  lista de Rotas Tabeladas do admin (34 rotas). Só UI, sem migration.
+  Três coisas: **miniatura** 40×40 igual à dos passeios; **contador** no
+  cabeçalho ("34 · 12 com foto · 22 sem"); e botão **"Só sem foto"**.
+  A miniatura vazia mostra o ícone de adicionar imagem em moldura tracejada, em
+  vez do quadrado cinza mudo dos passeios — aqui o que interessa é justamente
+  destacar o que FALTA. Com dezenas de rotas, o contador e o filtro resolvem a
+  pergunta ("quanto falta / quais?") sem obrigar a percorrer a lista.
+  Conferido em tela: contador correto, filtro devolvendo exatamente as sem foto
+  e o botão voltando a mostrar todas.
+  **Depende da migration `065_route_cover_image.sql`** — sem ela a coluna não
+  existe e nenhuma rota terá foto.
+
 - **2026-08-23 · Agente B (migrations perdidas por numeração duplicada)** — O
   dono não conseguia salvar foto de rota: *"Could not find the
   'cover_image_url' column of 'transfer_routes' in the schema cache"*. A

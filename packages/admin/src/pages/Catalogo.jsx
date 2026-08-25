@@ -105,6 +105,7 @@ export default function Catalogo() {
   const [vehicleForm, setVehicleForm]   = useState({})
   const [imageFile, setImageFile]   = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
+  const [soSemFoto, setSoSemFoto]                = useState(false)
   const [routeImageFile, setRouteImageFile]       = useState(null)
   const [routeImagePreview, setRouteImagePreview] = useState(null)
   const [vehicleImageFile, setVehicleImageFile]   = useState(null)
@@ -135,6 +136,12 @@ export default function Catalogo() {
     queryKey: ['admin-routes'],
     queryFn:  () => api.getTransferRoutes(),
   })
+
+  // Quantas rotas já têm foto de capa. Com dezenas de rotas, o número no
+  // cabeçalho responde "quanto falta" sem obrigar a percorrer a lista.
+  const rotasComFoto  = routes.filter((r) => r.cover_image_url).length
+  const rotasSemFoto  = routes.length - rotasComFoto
+  const rotasVisiveis = soSemFoto ? routes.filter((r) => !r.cover_image_url) : routes
   const { data: vehicles = [], isLoading: l4 } = useQuery({
     queryKey: ['vehicles'],
     queryFn:  () => api.getVehicles(),
@@ -499,14 +506,56 @@ export default function Catalogo() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Route size={16} className="text-gray-500" />
-                  <h2 className="text-sm font-semibold text-gray-300">Rotas Tabeladas ({routes.length})</h2>
+                  <h2 className="text-sm font-semibold text-gray-300">
+                    Rotas Tabeladas ({routes.length})
+                  </h2>
+                  {/* Com dezenas de rotas, "quantas faltam" é mais útil do que
+                      conferir uma a uma percorrendo a lista. */}
+                  {routes.length > 0 && (
+                    <span className="text-xs text-gray-500">
+                      · {rotasComFoto} com foto
+                      {rotasSemFoto > 0 && <span className="text-amber-500/90"> · {rotasSemFoto} sem</span>}
+                    </span>
+                  )}
                 </div>
-                <Button size="sm" variant="secondary" onClick={openNewRoute}><Plus size={14} /> Nova Rota</Button>
+                <div className="flex items-center gap-2">
+                  {rotasSemFoto > 0 && (
+                    <button
+                      onClick={() => setSoSemFoto((v) => !v)}
+                      className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                        soSemFoto
+                          ? 'bg-amber-900/30 border-amber-700/50 text-amber-300'
+                          : 'border-gray-700 text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      {soSemFoto ? 'Mostrar todas' : 'Só sem foto'}
+                    </button>
+                  )}
+                  <Button size="sm" variant="secondary" onClick={openNewRoute}><Plus size={14} /> Nova Rota</Button>
+                </div>
               </div>
             </CardHeader>
             <div className="divide-y divide-gray-800">
-              {routes.map((r) => (
-                <div key={r.id} className="flex items-center gap-4 px-5 py-3">
+              {rotasVisiveis.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 px-5 py-3">
+                  {/* Mesma miniatura da lista de passeios. Sem foto, mostra o
+                      ícone de adicionar imagem em vez de um cinza mudo — dá
+                      para varrer a lista e ver onde falta. */}
+                  {r.cover_image_url ? (
+                    <img
+                      src={r.cover_image_url}
+                      alt=""
+                      loading="lazy"
+                      className="w-10 h-10 rounded-lg object-cover shrink-0"
+                    />
+                  ) : (
+                    <div
+                      title="Sem foto de capa"
+                      className="w-10 h-10 rounded-lg bg-gray-800 border border-dashed border-gray-700 flex items-center justify-center shrink-0"
+                    >
+                      <ImagePlus size={14} className="text-gray-600" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{r.origin_name} → {r.destination_name}</p>
                     <p className="text-xs text-gray-500">{r.transfers?.name}</p>
