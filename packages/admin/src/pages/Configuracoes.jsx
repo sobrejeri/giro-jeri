@@ -581,6 +581,15 @@ function TabPagamentos({ settings, qc }) {
                 <p className="text-xs text-amber-500/80">
                   Estas chaves são armazenadas no banco e nunca expostas ao cliente final.
                 </p>
+                {/* O texto acima dizia só metade: o servidor lê primeiro a
+                    variável de ambiente do Render, e este campo é a reserva.
+                    Sem essa explicação, preencher aqui e ver o webhook falhar
+                    não fazia sentido nenhum para quem opera. */}
+                <p className="text-xs text-gray-500">
+                  O Webhook Secret preenchido aqui só é usado se a variável
+                  <code className="mx-1 text-gray-400">MERCADO_PAGO_WEBHOOK_SECRET</code>
+                  não estiver definida no servidor — ela tem prioridade.
+                </p>
               </>
             )}
             <SaveRow

@@ -1430,8 +1430,25 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
 // Em desenvolvimento, aceita sem secret pra facilitar testes locais. Em
 // produção, BLOQUEIA quando secret ausente — sem isso, qualquer um poderia
 // mandar um POST /webhook forjado aprovando pagamentos.
-function verifyMpSignature(req, event) {
-  const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET
+async function verifyMpSignature(req, event) {
+  // Duas fontes, e a ordem importa: a variável de ambiente do Render é a
+  // canônica; o campo "Webhook Secret" do painel entra como reserva.
+  //
+  // Sem essa reserva havia uma armadilha cara: o admin TEM o campo, diz que
+  // "as chaves são armazenadas no banco", e a API nunca lia esse valor —
+  // preenchê-lo não fazia nada. Em produção, sem a env var, o webhook rejeita
+  // TODOS os eventos: pagamento aprovado no Mercado Pago e reserva que não
+  // confirma sozinha, em silêncio.
+  let secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET
+  if (!secret) {
+    try {
+      const cfg = await getPaymentSettings()
+      secret = cfg?.payment_gateway_webhook_secret || null
+      if (secret) console.warn('[webhook] usando o secret do painel (MERCADO_PAGO_WEBHOOK_SECRET ausente)')
+    } catch (e) {
+      console.error('[webhook] falha ao ler o secret do painel:', e.message)
+    }
+  }
   if (!secret) {
     if (process.env.NODE_ENV === 'production') {
       console.error('[webhook] MERCADO_PAGO_WEBHOOK_SECRET ausente em produção — REJEITANDO evento')
@@ -1487,7 +1504,7 @@ router.post('/webhook', async (req, res, next) => {
     // MP manda data.id no body e também na query string da URL
     const gatewayId = (req.query['data.id'] || event.data?.id)?.toString()
 
-    if (!verifyMpSignature(req, event)) {
+    if (!(await verifyMpSignature(req, event))) {
       console.warn('[webhook] assinatura inválida — evento descartado')
       return res.status(401).json({ error: 'Assinatura inválida' })
     }

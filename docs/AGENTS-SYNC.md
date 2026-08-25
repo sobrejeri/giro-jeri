@@ -47,6 +47,21 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (armadilha do Webhook Secret)** — Achado durante a
+  revisão geral pedida pelo dono. O admin TEM um campo "Webhook Secret" que diz
+  *"estas chaves são armazenadas no banco"* — e a API **nunca lia esse valor**:
+  `verifyMpSignature` usava só `process.env.MERCADO_PAGO_WEBHOOK_SECRET`.
+  Preencher o campo não fazia absolutamente nada.
+  Consequência em produção: sem a env var no Render, o webhook **rejeita todos
+  os eventos**. Pagamento aprovado no Mercado Pago e reserva que não confirma
+  sozinha — em silêncio, com o dono achando que tinha configurado.
+  Agora a env var continua sendo a canônica e o campo do painel entra como
+  RESERVA. A verificação de assinatura continua real: secret errado segue
+  rejeitando. Sem nenhum dos dois, produção segue rejeitando (não virou bypass).
+  O texto do admin passou a explicar a precedência.
+  Conferido nos 6 casos: env certa/errada, só painel certo/errado, nenhum dos
+  dois em produção, e precedência da env sobre o painel.
+
 - **2026-08-25 · Agente B (voo avulso × voo dentro de combo)** — Regra do dono:
   "a Frisonfly trabalha só com aéreo; combo que inclua aéreo vai para o operador
   universal". Do jeito que estava, essa regra era **inexprimível**: o
