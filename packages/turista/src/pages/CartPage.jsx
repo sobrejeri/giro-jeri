@@ -96,7 +96,11 @@ function EditSheet({ item, onSave, onClose }) {
   })
   const allowsPrivate = tourInfo ? tourInfo.is_private_enabled !== false : item.allows_private !== false
   const allowsShared  = tourInfo ? !!tourInfo.is_shared_enabled        : !!item.allows_shared
-  const podeEscolherModo = !isTransfer && allowsPrivate && allowsShared
+  // O bloco aparece em TODO passeio, mesmo quando só um modo é vendido: a
+  // opção indisponível fica desabilitada com o motivo. Escondendo o bloco
+  // inteiro, quem procurava a escolha não sabia se o passeio não aceita ou se
+  // o app estava com defeito.
+  const mostraModo = !isTransfer && (allowsPrivate || allowsShared)
 
   const needAll = isTransfer || (tvFetched && (tourVehiclesData || []).length === 0)
   const { data: allVehiclesData } = useQuery({
@@ -287,27 +291,34 @@ function EditSheet({ item, onSave, onClose }) {
         </div>
 
         <div className="overflow-y-auto px-5 py-4 space-y-4 flex-1">
-          {podeEscolherModo && (
+          {mostraModo && (
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Tipo de passeio</label>
               <div className="mt-1.5 grid grid-cols-2 gap-2">
                 {[
                   { id: 'private', label: t('toursPg.mode.private'), Icon: Car,
-                    hint: 'Veículo só para o seu grupo' },
+                    ok: allowsPrivate, hint: 'Veículo só para o seu grupo' },
                   { id: 'shared',  label: t('toursPg.mode.shared'),  Icon: Users,
+                    ok: allowsShared,
                     hint: precoPorPessoa ? `${fmt(precoPorPessoa)} por pessoa` : 'Preço por pessoa' },
-                ].map(({ id, label, Icon, hint }) => (
+                ].map(({ id, label, Icon, ok, hint }) => (
                   <button
                     key={id}
-                    onClick={() => setMode(id)}
+                    onClick={() => ok && setMode(id)}
+                    disabled={!ok}
                     className={`rounded-2xl border px-3 py-2.5 text-left transition-colors ${
-                      mode === id ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
+                      !ok ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                        : mode === id ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
                     }`}
                   >
-                    <span className={`inline-flex items-center gap-1.5 text-[13px] font-bold ${mode === id ? 'text-brand' : 'text-gray-700'}`}>
+                    <span className={`inline-flex items-center gap-1.5 text-[13px] font-bold ${
+                      !ok ? 'text-gray-400' : mode === id ? 'text-brand' : 'text-gray-700'
+                    }`}>
                       <Icon size={14} /> {label}
                     </span>
-                    <span className="block text-[10.5px] text-gray-400 leading-snug mt-0.5">{hint}</span>
+                    <span className="block text-[10.5px] text-gray-400 leading-snug mt-0.5">
+                      {ok ? hint : 'Não disponível neste passeio'}
+                    </span>
                   </button>
                 ))}
               </div>
