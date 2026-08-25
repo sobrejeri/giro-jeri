@@ -68,7 +68,6 @@ function EditSheet({ item, onSave, onClose }) {
   // de Passeios, hoje é decisão por item, aqui, junto do que ela muda.
   const [mode, setMode] = useState(item.mode === 'shared' ? 'shared' : 'private')
   const compartilhado = !isTransfer && mode === 'shared'
-  const podeEscolherModo = !isTransfer && item.allows_private !== false && !!item.allows_shared
   // Com os veículos saindo da vitrine, o carrinho virou o único lugar de
   // escolha: rascunho sem veículo já abre com a lista aberta, senão o turista
   // via só um link discreto e não sabia onde escolher.
@@ -85,6 +84,20 @@ function EditSheet({ item, onSave, onClose }) {
     enabled:  !isTransfer,
     staleTime: 5 * 60 * 1000,
   })
+  // Quais modos o passeio aceita e quanto custa por pessoa: a fonte é o
+  // catálogo, não o rascunho. Rascunho salvo antes destes campos existirem não
+  // os traz, e sem isto o seletor de modo nunca apareceria para quem já tinha
+  // itens no carrinho. Mesma chave do CartItemDetails — a consulta é uma só.
+  const { data: tourInfo } = useQuery({
+    queryKey: ['cart-item-detail', item.id],
+    queryFn:  () => api.getTour(item.id),
+    enabled:  !isTransfer,
+    staleTime: 5 * 60 * 1000,
+  })
+  const allowsPrivate = tourInfo ? tourInfo.is_private_enabled !== false : item.allows_private !== false
+  const allowsShared  = tourInfo ? !!tourInfo.is_shared_enabled        : !!item.allows_shared
+  const podeEscolherModo = !isTransfer && allowsPrivate && allowsShared
+
   const needAll = isTransfer || (tvFetched && (tourVehiclesData || []).length === 0)
   const { data: allVehiclesData } = useQuery({
     queryKey: ['cart-edit-all-vehicles'],
@@ -125,10 +138,18 @@ function EditSheet({ item, onSave, onClose }) {
     }))
   }, [available])
 
+  // Passeio de modo único (o voo panorâmico só existe compartilhado): alinha o
+  // rascunho ao que ele realmente aceita, senão sairia com modo e valor errados.
+  useEffect(() => {
+    if (isTransfer || !tourInfo) return
+    if (mode === 'private' && !allowsPrivate && allowsShared) setMode('shared')
+    else if (mode === 'shared' && !allowsShared && allowsPrivate) setMode('private')
+  }, [isTransfer, tourInfo, allowsPrivate, allowsShared, mode])
+
   const extras = available.filter((a) => !vehicles.some((v) => v.id === a.id))
 
   // Compartilhado cobra por pessoa; privativo soma os veículos escolhidos.
-  const precoPorPessoa = Number(item.shared_price_per_person) || 0
+  const precoPorPessoa = Number(tourInfo?.shared_price_per_person ?? item.shared_price_per_person) || 0
   const totalVeiculos = vehicles.reduce((s, v) => s + (Number(v.price) || 0) * (v.qty || 0), 0)
   const total = compartilhado ? precoPorPessoa * people : totalVeiculos
   const qtyTotal = vehicles.reduce((s, v) => s + (v.qty || 0), 0)
