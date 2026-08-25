@@ -166,13 +166,15 @@ function pickPopularRoutes(routes) {
     .slice(0, 8)
 }
 
-function PresetCard({ route, bg, active, onSelect }) {
+// `full` = ocupa a largura da célula (grade "todas as rotas"); sem ele mantém
+// a largura fixa do carrossel horizontal.
+function PresetCard({ route, bg, active, onSelect, full = false }) {
   const { t } = useTranslation()
   const img = route.cover_image_url
   return (
     <button
       onClick={onSelect}
-      className={`flex-none w-[168px] rounded-2xl overflow-hidden bg-white shadow-sm border active:scale-[0.97] transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
+      className={`${full ? 'w-full' : 'flex-none w-[168px]'} rounded-2xl overflow-hidden bg-white shadow-sm border active:scale-[0.97] transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
     >
       {/* Capa: foto da rota quando houver; senão o gradiente de sempre. */}
       <div className="relative h-[104px] overflow-hidden">
@@ -441,6 +443,38 @@ export default function Transfers() {
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
                     .filter(v => v.is_transfer_allowed !== false && v.is_active !== false)
   const popularRoutes = useMemo(() => pickPopularRoutes(routes), [routes])
+
+  // Vitrine de rotas: por padrão mostra as populares num carrossel. O turista
+  // pode filtrar pelo local de saída ou abrir a lista completa — antes só as 8
+  // primeiras apareciam e as demais ficavam invisíveis, sem nenhuma pista de
+  // que existiam.
+  const [routeOrigin,   setRouteOrigin]   = useState('')     // '' = todas as saídas
+  const [showAllRoutes, setShowAllRoutes] = useState(false)
+
+  // Locais de saída com pelo menos uma rota, ordenados por quantidade.
+  const originOptions = useMemo(() => {
+    const m = new Map()
+    for (const r of routes) m.set(r.origin_name, (m.get(r.origin_name) || 0) + 1)
+    return [...m.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ name, count }))
+  }, [routes])
+
+  // Filtrar por saída já é um pedido explícito: mostra todas daquela origem.
+  const routesShown = useMemo(() => {
+    if (routeOrigin) {
+      return routes
+        .filter(r => r.origin_name === routeOrigin)
+        .sort((a, b) => Number(a.default_price) - Number(b.default_price))
+    }
+    if (showAllRoutes) {
+      return [...routes].sort((a, b) =>
+        a.origin_name.localeCompare(b.origin_name) || Number(a.default_price) - Number(b.default_price))
+    }
+    return popularRoutes
+  }, [routes, routeOrigin, showAllRoutes, popularRoutes])
+
+  const routesExpanded = !!routeOrigin || showAllRoutes
 
   // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
   // anteriores a "agora + N horas". Padrão 4h; a rota selecionada pode definir
@@ -797,20 +831,78 @@ export default function Transfers() {
       <><div className="px-4 pt-4 space-y-3 lg:max-w-3xl lg:mx-auto">
 
         {/* ROTAS POPULARES */}
-        {popularRoutes.length > 0 && (
+        {routes.length > 0 && (
         <div>
-          <p className="text-[13px] font-bold text-gray-700 mb-2.5">{t('transfersPg.popularRoutes')}</p>
-          <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
-            {popularRoutes.map((r, i) => (
-              <PresetCard
-                key={r.id}
-                route={r}
-                bg={GRADIENTS[i % GRADIENTS.length]}
-                active={origin === r.origin_name && dest === r.destination_name}
-                onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
-              />
-            ))}
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-[13px] font-bold text-gray-700">
+              {routeOrigin ? `Saindo de ${shortPlace(routeOrigin)}` : t('transfersPg.popularRoutes')}
+            </p>
+            {routes.length > popularRoutes.length && !routeOrigin && (
+              <button
+                onClick={() => setShowAllRoutes((v) => !v)}
+                className="text-[11px] font-bold text-brand active:scale-95 transition-transform"
+              >
+                {showAllRoutes ? 'Ver menos' : `Ver todas (${routes.length})`}
+              </button>
+            )}
           </div>
+
+          {/* Filtro por local de saída — só faz sentido com mais de uma saída */}
+          {originOptions.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2.5" style={{ scrollbarWidth: 'none' }}>
+              <button
+                onClick={() => setRouteOrigin('')}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${
+                  routeOrigin === '' ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200'
+                }`}
+              >
+                Todas
+              </button>
+              {originOptions.map(({ name, count }) => (
+                <button
+                  key={name}
+                  onClick={() => { setRouteOrigin((v) => (v === name ? '' : name)); setShowAllRoutes(false) }}
+                  className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${
+                    routeOrigin === name ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200'
+                  }`}
+                >
+                  {shortPlace(name)} <span className={routeOrigin === name ? 'text-white/70' : 'text-gray-400'}>{count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {routesShown.length === 0 ? (
+            <p className="text-[12px] text-gray-400 bg-white/60 rounded-xl px-3 py-3">
+              Nenhuma rota saindo daqui por enquanto.
+            </p>
+          ) : routesExpanded ? (
+            // Expandida: grade, para dar pra bater o olho em todas de uma vez.
+            <div className="grid grid-cols-2 gap-3">
+              {routesShown.map((r, i) => (
+                <PresetCard
+                  key={r.id}
+                  route={r}
+                  full
+                  bg={GRADIENTS[i % GRADIENTS.length]}
+                  active={origin === r.origin_name && dest === r.destination_name}
+                  onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+              {routesShown.map((r, i) => (
+                <PresetCard
+                  key={r.id}
+                  route={r}
+                  bg={GRADIENTS[i % GRADIENTS.length]}
+                  active={origin === r.origin_name && dest === r.destination_name}
+                  onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                />
+              ))}
+            </div>
+          )}
         </div>
         )}
 
