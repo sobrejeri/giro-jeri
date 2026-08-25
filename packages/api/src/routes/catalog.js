@@ -39,7 +39,25 @@ const TRANSFER_COLS = [
   'region_id', 'name', 'slug', 'short_description', 'pricing_mode',
   'is_active', 'display_order', 'booking_cutoff_time', 'min_advance_hours',
   'region_ids',
+  // Faltava: sem isto o `pick` descartava o campo e a categoria era salva SEM
+  // carrossel próprio, em silêncio — a caixa marcada no admin não virava nada.
+  'is_exclusive',
 ]
+
+// Campos NÃO textuais de transfers. O formulário manda '' quando o campo fica
+// em branco, e o Postgres recusa '' em TIME/INT/NUMERIC
+// ("invalid input syntax for type time"). Texto vazio é inofensivo e continua
+// passando; aqui só os tipados viram NULL, que é o que "em branco" significa.
+const TRANSFER_NAO_TEXTO = [
+  'service_window_start', 'service_window_end', 'booking_cutoff_time',
+  'min_advance_hours', 'display_order', 'region_id',
+]
+
+function vaziosViramNulo(body, campos) {
+  const out = { ...body }
+  for (const c of campos) if (out[c] === '') out[c] = null
+  return out
+}
 
 // ── Categorias ────────────────────────────────────────────
 
@@ -173,7 +191,7 @@ router.get('/transfers', async (req, res, next) => {
 
 router.post('/transfers', requireAdmin, async (req, res, next) => {
   try {
-    const body = pick(req.body, TRANSFER_COLS);
+    const body = vaziosViramNulo(pick(req.body, TRANSFER_COLS), TRANSFER_NAO_TEXTO);
     // slug e region_id são NOT NULL no banco, mas o formulário não os envia —
     // mesmo tratamento do POST de tours (sem isto o INSERT falhava e o modal
     // 'não salvava' em silêncio).
@@ -197,7 +215,9 @@ router.post('/transfers', requireAdmin, async (req, res, next) => {
 router.put('/transfers/:id', requireAdmin, async (req, res, next) => {
   try {
     const { data, error } = await req.supabase
-      .from('transfers').update(pick(req.body, TRANSFER_COLS)).eq('id', req.params.id).select().single();
+      .from('transfers')
+      .update(vaziosViramNulo(pick(req.body, TRANSFER_COLS), TRANSFER_NAO_TEXTO))
+      .eq('id', req.params.id).select().single();
     if (error || !data) return res.status(404).json({ error: 'Transfer não encontrado' });
     res.json(data);
   } catch (err) { next(err); }

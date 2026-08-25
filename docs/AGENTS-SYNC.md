@@ -36,6 +36,22 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (criar categoria: 2 defeitos na API)** — Depois de
+  rodar a 069, criar categoria falhava com *"invalid input syntax for type
+  time"*. Dois problemas em `routes/catalog.js`, ambos no lado do servidor:
+  1. **String vazia em campo tipado.** O formulário manda `''` no que fica em
+     branco, e o Postgres recusa `''` em TIME/INT. O POST/PUT de **transfers**
+     fazia só `pick(...)`, sem normalizar — diferente do de **tours**, que já
+     fazia `|| null` campo a campo. Agora há `vaziosViramNulo()` aplicada nos
+     dois verbos, só nos campos NÃO textuais (texto vazio continua passando).
+  2. **`is_exclusive` não estava em `TRANSFER_COLS`.** O `pick` descartava o
+     campo: a categoria seria salva SEM carrossel próprio, em silêncio, e a
+     caixa marcada no admin não viraria nada. Este seria o próximo "não
+     funciona" depois de resolver o erro de tempo.
+  Verificado: 8 casos com o corpo EXATO que o formulário envia (horários e
+  antecedência viram null, `is_exclusive` chega, valores preenchidos passam
+  intactos) e o erro reproduzido em Postgres 16 — `''` falha, `NULL` insere.
+
 - **2026-08-23 · Agente B (formulário de categoria enxuto)** — Pedido do dono:
   criar categoria pedia informação demais. Agora abre com **quatro campos** —
   Nome, Descrição, Ativo e "Carrossel próprio no app". As REGRAS DE OPERAÇÃO
