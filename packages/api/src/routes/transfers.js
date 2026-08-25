@@ -428,6 +428,8 @@ router.post('/quotes', authenticate, async (req, res, next) => {
 
     // Avisa cooperativas + admin sobre a nova solicitação de translado personalizado
     await notifyOperatorsAndAdmin({
+      // Mesmo corte do WhatsApp logo abaixo: translado personalizado é de rua.
+      fleetModalSlug: 'terrestre',
       templateKey: 'new_transfer_quote',
       title:       'Nova cotação de translado',
       body:        `${req.user.full_name} pediu um translado personalizado: ${body.origin_place_name} → ${body.destination_place_name} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,

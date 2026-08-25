@@ -55,11 +55,21 @@ export async function notifyUser({ userId, bookingId = null, templateKey = null,
 }
 
 // Notifica TODAS as cooperativas ativas + admins (ex.: nova solicitação).
-export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = null, title, body, fleetBookingId = null }) {
+export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = null, title, body, fleetBookingId = null, fleetModalSlug = null }) {
   if (!body) return
   try {
     let recipients
-    if (fleetBookingId) {
+    if (fleetModalSlug) {
+      // Cotação personalizada: nasce sem veículo, então o corte é o MODAL.
+      // Sem isto ela caía no `else` abaixo e ia para TODA cooperativa ativa —
+      // a que só voa recebia pedido de translado de rua.
+      const { eligibleOperatorsForModal } = await import('./fleet.js')
+      const [ops, adminsRes] = await Promise.all([
+        eligibleOperatorsForModal(supabase, fleetModalSlug),
+        supabase.from('users').select('id').eq('user_type', 'admin').eq('is_active', true),
+      ])
+      recipients = [...(ops || []).map((o) => ({ id: o.id })), ...(adminsRes.data || [])]
+    } else if (fleetBookingId) {
       // Item 17: solicitação nova → só as coops com frota compatível + admins.
       const { eligibleOperatorsForBooking } = await import('./fleet.js')
       const [ops, adminsRes] = await Promise.all([

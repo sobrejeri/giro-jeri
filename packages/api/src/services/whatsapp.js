@@ -265,6 +265,12 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
   await sendToMany(operators.map((op) => op.phone), message)
 }
 
+// Modal de um translado PERSONALIZADO. É de rua por natureza: os translados
+// aéreos são rotas fixas (migration 067), não cotação livre. Constante e não
+// campo do formulário porque o cliente não escolhe meio ao pedir cotação — se
+// um dia escolher, isto vira uma coluna em `transfer_quotes`.
+const MODAL_DA_COTACAO = 'terrestre'
+
 /**
  * WhatsApp pras cooperativas — nova cotação de translado personalizado.
  * Diferente da reserva: a coop precisa abrir e enviar o PREÇO, não só aceitar.
@@ -272,11 +278,12 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
 export async function notifyOperatorsNewQuote(supabase, quote) {
   if (!isWhatsappEnabled() || !quote) return { skipped: true }
 
-  const { data: operators } = await supabase
-    .from('users')
-    .select('phone')
-    .eq('user_type', 'operator')
-    .eq('is_active', true)
+  // Cotação nasce SEM veículo — o cliente só diz de onde, para onde e quando —
+  // então o filtro por veículo não tem no que se apoiar. O corte é o MODAL:
+  // translado personalizado é de rua, e a cooperativa que só voa não deve
+  // receber pedido de buggy. Fail-open dentro do helper.
+  const { eligibleOperatorsForModal } = await import('./fleet.js')
+  const operators = await eligibleOperatorsForModal(supabase, MODAL_DA_COTACAO)
 
   if (!operators?.length) return { skipped: true }
 

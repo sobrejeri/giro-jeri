@@ -47,6 +47,29 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (COTAÇÃO ia para todas as cooperativas)** — O dono
+  perguntou se as solicitações estavam mesmo sendo distribuídas certo, e a
+  resposta honesta era "testei a lógica, não os caminhos". Auditando os pontos
+  de notificação, achei um que **não passava pelo filtro**:
+  a cotação de translado personalizado (`POST` de `transfer_quotes`) notificava
+  **todas** as cooperativas ativas, nos DOIS canais — `notifyOperatorsNewQuote`
+  buscava operadores direto, e `notifyOperatorsAndAdmin` era chamado **sem**
+  `fleetBookingId`, caindo no `else` que pega todo mundo. Resultado: a
+  cooperativa que só voa recebia pedido de translado de rua.
+  Por que escapou: a cotação nasce SEM veículo (o cliente só diz de onde, para
+  onde e quando), então o filtro por veículo não tinha no que se apoiar.
+  Agora o corte é o MODAL, via `eligibleOperatorsForModal`. Translado
+  personalizado é de rua — os aéreos são rotas fixas (067), não cotação livre —
+  então a constante é `terrestre`, com comentário dizendo o que fazer se um dia
+  o cliente puder escolher o meio.
+  Fail-open em três camadas: erro, 075 pendente, ou ninguém operando o modal →
+  notifica todas. Cotação que não chega a ninguém é cliente sem resposta.
+  Conferido: Frisonfly (só aéreo) fica de fora; sem a 075 notifica todas;
+  ninguém operando terrestre cai na rede. Os demais testes seguem passando.
+  **Conferido também que os caminhos de RESERVA estavam certos:** os dois
+  pontos que criam solicitação (pagamento avulso e carrinho) passam
+  `fleetBookingId` e chamam `notifyOperatorsNewBooking` — ambos filtrados.
+
 - **2026-08-25 · Agente B (armadilha do Webhook Secret)** — Achado durante a
   revisão geral pedida pelo dono. O admin TEM um campo "Webhook Secret" que diz
   *"estas chaves são armazenadas no banco"* — e a API **nunca lia esse valor**:

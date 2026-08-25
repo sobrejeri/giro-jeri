@@ -265,6 +265,43 @@ export function operatorServesVehicles(opId, vehicleIds, optIn, prefs, combo = f
     (optIn.has(vId) && !combo) ? !!ena?.has(vId) : !dis?.has(vId));
 }
 
+// Operadores que atendem um MODAL, sem passar por reserva nenhuma.
+//
+// Serve para a COTAÇÃO de translado personalizado: ela nasce sem veículo — o
+// cliente só diz de onde, para onde e quando —, então não há o que filtrar por
+// veículo. Sem isso a cotação era disparada para TODAS as cooperativas ativas,
+// e a que só opera helicóptero recebia pedido de translado de rua.
+//
+// Fail-open em qualquer erro: notificar demais é melhor do que a cotação não
+// chegar a ninguém e o cliente ficar sem resposta.
+export async function eligibleOperatorsForModal(supabase, modalSlug) {
+  const { data: ops } = await supabase
+    .from('users')
+    .select('id, phone')
+    .eq('user_type', 'operator')
+    .eq('is_active', true);
+  const operators = ops || [];
+  if (!modalSlug || operators.length === 0) return operators;
+
+  try {
+    const { data: modal, error } = await supabase
+      .from('service_modals').select('id').eq('slug', modalSlug).maybeSingle();
+    if (error) throw error;
+    if (!modal?.id) return operators;   // 075 pendente ou modal inexistente
+
+    const desativados = await modalPrefs(supabase, [modal.id], operators.map((o) => o.id));
+    const filtrados = operators.filter((op) => !desativados.get(op.id)?.has(modal.id));
+    if (filtrados.length === 0) {
+      console.warn('[fleet] nenhuma cooperativa opera o modal %s — notificando todas', modalSlug);
+      return operators;
+    }
+    return filtrados;
+  } catch (err) {
+    console.error('[fleet] elegibilidade por modal falhou, notificando todas:', err?.message);
+    return operators;
+  }
+}
+
 // Operadores ativos ELEGÍVEIS para uma reserva. Retorna [{ id, phone }].
 export async function eligibleOperatorsForBooking(supabase, bookingId) {
   const { data: ops } = await supabase
