@@ -753,6 +753,37 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
     enabled:  open && !!operatorId,
   })
 
+  // MODAIS operados — o corte grosso. Fica ACIMA da lista de veículos porque é
+  // por aqui que a escolha começa: "esta cooperativa faz terrestre" resolve
+  // numa chave o que antes eram dezenas.
+  const modalsKey = ['admin-operator-modals', operatorId]
+  const { data: modais = [] } = useQuery({
+    queryKey: modalsKey,
+    queryFn:  () => api.getOperatorModals(operatorId),
+    enabled:  open && !!operatorId,
+  })
+
+  const modalToggleMut = useMutation({
+    mutationFn: ({ modalId, is_active }) => api.setOperatorModal(operatorId, modalId, { is_active }),
+    onMutate: async ({ modalId, is_active }) => {
+      setErrorRow(null)
+      await qc.cancelQueries({ queryKey: modalsKey })
+      const previous = qc.getQueryData(modalsKey)
+      qc.setQueryData(modalsKey, (old = []) =>
+        old.map((m) => (m.modal_id === modalId ? { ...m, is_active } : m)))
+      return { previous }
+    },
+    onError: (err, variables, context) => {
+      if (context?.previous) qc.setQueryData(modalsKey, context.previous)
+      setErrorRow({ id: variables.modalId, message: err.message || fleetCopy.saveError })
+    },
+    onSuccess: (_d, variables) => {
+      setSavedId(variables.modalId)
+      clearTimeout(savedTimer.current)
+      savedTimer.current = setTimeout(() => setSavedId(null), 1500)
+    },
+  })
+
   const toggleMut = useMutation({
     mutationFn: ({ vehicleId, is_active }) => api.setOperatorVehicle(operatorId, vehicleId, { is_active }),
     onMutate: async ({ vehicleId, is_active }) => {
@@ -788,6 +819,52 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
     <Modal open={open} onClose={onClose} title={fleetCopy.modalTitle(operatorName)} size="md">
       <div className="space-y-3">
         <p className="text-xs text-gray-500">{fleetCopy.modalHint}</p>
+
+        {/* Modais operados. Some se a migration 075 ainda não rodou (a API
+            devolve lista vazia), e aí a tela fica como era antes. */}
+        {modais.length > 0 && (
+          <div className="rounded-xl border border-gray-700 bg-gray-900/40 p-3">
+            <p className="text-xs font-semibold text-gray-300">Em que meios esta cooperativa opera</p>
+            <p className="text-[11px] text-gray-500 mt-0.5 mb-2">
+              Desmarcar um meio já tira a cooperativa de todas as solicitações dele —
+              sem precisar mexer veículo por veículo abaixo.
+            </p>
+            <div className="space-y-1.5">
+              {modais.map((m) => {
+                const ligado  = m.is_active !== false
+                const salvando = modalToggleMut.isPending && modalToggleMut.variables?.modalId === m.modal_id
+                return (
+                  <div key={m.modal_id} className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-200">{m.name}</p>
+                      <p className="text-[11px] text-gray-500">
+                        {m.vehicle_count} veículo{m.vehicle_count === 1 ? '' : 's'}
+                        {m.description ? ` · ${m.description}` : ''}
+                      </p>
+                      {errorRow?.id === m.modal_id && (
+                        <p className="text-[11px] text-red-400 mt-0.5">{errorRow.message}</p>
+                      )}
+                      {savedId === m.modal_id && !errorRow && (
+                        <p className="text-[11px] text-emerald-400 mt-0.5">{fleetCopy.saved}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => modalToggleMut.mutate({ modalId: m.modal_id, is_active: !ligado })}
+                      disabled={salvando}
+                      className={`shrink-0 text-[11.5px] font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                        ligado
+                          ? 'bg-brand/15 border-brand/60 text-brand'
+                          : 'border-gray-700 text-gray-500 hover:text-gray-300'
+                      }`}
+                    >
+                      {ligado ? 'Opera' : 'Não opera'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {vehicles.length > 8 && (
           <div className="relative">

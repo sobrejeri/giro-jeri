@@ -592,18 +592,31 @@ router.get('/bookings', async (req, res, next) => {
         // opt-out; veículo restrito (requires_opt_in, ex.: helicóptero) só
         // aparece para quem ativou. Compartilhado não tem booking_vehicles —
         // o helper resolve pelos veículos que atendem o serviço.
-        const { requiredVehiclesByBooking, optInVehicleIds, vehiclePrefs, operatorServesVehicles } =
-          await import('../services/fleet.js');
+        // MODAL (076) entra aqui também, e não só na notificação: sem isso a
+        // coop deixaria de ser avisada mas continuaria vendo o pedido no feed,
+        // e as duas telas contariam histórias diferentes.
+        const {
+          requiredVehiclesByBooking, optInVehicleIds, vehiclePrefs, operatorServesVehicles,
+          modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals,
+        } = await import('../services/fleet.js');
 
         const byBooking = await requiredVehiclesByBooking(supabase, acceptanceRows);
         const allVehicleIds = [...new Set([...byBooking.values()].flat())];
 
         if (allVehicleIds.length > 0) {
-          const optIn = await optInVehicleIds(supabase, allVehicleIds);
-          const prefs = await vehiclePrefs(supabase, allVehicleIds, [req.user.id]);
+          const [optIn, prefs, modalPorVeiculo] = await Promise.all([
+            optInVehicleIds(supabase, allVehicleIds),
+            vehiclePrefs(supabase, allVehicleIds, [req.user.id]),
+            modalIdByVehicle(supabase, allVehicleIds),
+          ]);
+          const todosModais = modalIdsOf(allVehicleIds, modalPorVeiculo);
+          const modaisDesativados = await modalPrefs(supabase, [...todosModais], [req.user.id]);
 
-          acceptanceRows = acceptanceRows.filter((b) =>
-            operatorServesVehicles(req.user.id, byBooking.get(b.id) || [], optIn, prefs));
+          acceptanceRows = acceptanceRows.filter((b) => {
+            const veics = byBooking.get(b.id) || [];
+            return operatorServesModals(req.user.id, modalIdsOf(veics, modalPorVeiculo), modaisDesativados)
+                && operatorServesVehicles(req.user.id, veics, optIn, prefs);
+          });
         }
       } catch (err) {
         console.error('[operator/bookings] exceção no filtro por veículo op=%s err=%s — fail-open, sem filtrar',

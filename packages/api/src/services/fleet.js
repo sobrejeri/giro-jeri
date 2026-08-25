@@ -85,6 +85,94 @@ export async function optInVehicleIds(supabase, vehicleIds) {
   return new Set((data || []).map((v) => v.id));
 }
 
+// ── MODAL (migrations 075/076) ──────────────────────────
+// Segundo eixo do roteamento, e o mais simples de operar: em vez de ligar
+// veículo a veículo, o admin diz que a cooperativa opera terrestre, aéreo,
+// aquático… A solicitação só chega a quem opera o modal dela.
+//
+// Opt-out, igual ao de veículo: sem linha, a cooperativa recebe. Assim ligar o
+// recurso não cala ninguém — só quem for desmarcado deixa de receber.
+
+// Modal de cada veículo, já no id de `service_modals` — que é o que a
+// preferência guarda em `entity_id`. Map<vehicleId, modalId>.
+//
+// Vem do VEÍCULO (e não da categoria do serviço) de propósito: é o veículo que
+// a cooperativa opera, e ele já está resolvido aqui para o filtro antigo.
+export async function modalIdByVehicle(supabase, vehicleIds) {
+  const out = new Map();
+  const ids = [...new Set((vehicleIds || []).filter(Boolean))];
+  if (ids.length === 0) return out;
+  try {
+    const { data: veics, error } = await supabase
+      .from('vehicles').select('id, modal').in('id', ids);
+    if (error) throw error;
+    const slugs = [...new Set((veics || []).map((v) => v.modal).filter(Boolean))];
+    if (slugs.length === 0) return out;
+
+    const { data: modais, error: e2 } = await supabase
+      .from('service_modals').select('id, slug').in('slug', slugs);
+    if (e2) throw e2;
+    const idPorSlug = new Map((modais || []).map((m) => [m.slug, m.id]));
+    for (const v of veics || []) {
+      const mId = idPorSlug.get(v.modal);
+      if (mId) out.set(v.id, mId);
+    }
+    return out;
+  } catch (err) {
+    // 073/075 pendentes, ou qualquer falha: sem modal, ninguém é filtrado por
+    // ele. Fail-open — nunca deixar de notificar por causa deste filtro.
+    if (err?.code !== '42703' && err?.code !== '42P01') {
+      console.error('[fleet] leitura de modal falhou:', err?.message);
+    }
+    return new Map();
+  }
+}
+
+// Modais exigidos por um conjunto de veículos. Set<modalId>.
+export function modalIdsOf(vehicleIds, modalPorVeiculo) {
+  const out = new Set();
+  for (const vId of vehicleIds || []) {
+    const mId = modalPorVeiculo.get(vId);
+    if (mId) out.add(mId);
+  }
+  return out;
+}
+
+// Modais que cada cooperativa DESATIVOU. Map<opId, Set<modalId>>.
+export async function modalPrefs(supabase, modalIds, operatorIds) {
+  const disabled = new Map();
+  const ids = [...new Set((modalIds || []).filter(Boolean))];
+  if (ids.length === 0) return disabled;
+
+  let q = supabase
+    .from('operator_service_preferences')
+    .select('operator_id, entity_id, is_active')
+    .eq('entity_type', 'modal')
+    .in('entity_id', ids);
+  if (operatorIds?.length) q = q.in('operator_id', operatorIds);
+
+  const { data, error } = await q;
+  if (error) {
+    console.error('[fleet] leitura de preferências de modal falhou:', error.message);
+    return disabled;   // fail-open
+  }
+  for (const p of data || []) {
+    if (p.is_active !== false) continue;
+    if (!disabled.has(p.operator_id)) disabled.set(p.operator_id, new Set());
+    disabled.get(p.operator_id).add(p.entity_id);
+  }
+  return disabled;
+}
+
+// A cooperativa opera TODOS os modais que a reserva exige?
+export function operatorServesModals(opId, modalIds, disabledByOp) {
+  if (!modalIds || modalIds.size === 0) return true;   // sem modal → fail-open
+  const dis = disabledByOp.get(opId);
+  if (!dis) return true;
+  for (const mId of modalIds) if (dis.has(mId)) return false;
+  return true;
+}
+
 // Preferências de veículo de um conjunto de cooperativas.
 // Retorna { disabled: Map<opId, Set<vehicleId>>, enabled: Map<opId, Set<vehicleId>> }.
 export async function vehiclePrefs(supabase, vehicleIds, operatorIds) {
@@ -143,10 +231,21 @@ export async function eligibleOperatorsForBooking(supabase, bookingId) {
     const vehicleIds = byBooking.get(bookingId) || [];
     if (vehicleIds.length === 0) return operators; // fail-open
 
-    const optIn = await optInVehicleIds(supabase, vehicleIds);
-    const prefs = await vehiclePrefs(supabase, vehicleIds, operators.map((o) => o.id));
+    const opIds = operators.map((o) => o.id);
+    const [optIn, prefs, modalPorVeiculo] = await Promise.all([
+      optInVehicleIds(supabase, vehicleIds),
+      vehiclePrefs(supabase, vehicleIds, opIds),
+      modalIdByVehicle(supabase, vehicleIds),
+    ]);
+    const modalIds = modalIdsOf(vehicleIds, modalPorVeiculo);
+    const modaisDesativados = await modalPrefs(supabase, [...modalIds], opIds);
 
-    return operators.filter((op) => operatorServesVehicles(op.id, vehicleIds, optIn, prefs));
+    // Os dois filtros valem JUNTOS: opera o modal E não desativou o veículo.
+    // O modal é o corte grosso (quem faz aéreo x terrestre); o veículo segue
+    // para o ajuste fino dentro do mesmo modal.
+    return operators.filter((op) =>
+      operatorServesModals(op.id, modalIds, modaisDesativados)
+      && operatorServesVehicles(op.id, vehicleIds, optIn, prefs));
   } catch (err) {
     console.error('[fleet] elegibilidade falhou, notificando todos:', err?.message);
     return operators; // fail-open

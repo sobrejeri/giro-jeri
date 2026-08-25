@@ -120,6 +120,9 @@ export const api = {
   // Frota liberada por cooperativa (roteamento por veículo operado)
   getOperatorVehicles: (operatorId)                    => request(`/api/admin/operators/${operatorId}/vehicles`),
   setOperatorVehicle:  (operatorId, vehicleId, body)   => request(`/api/admin/operators/${operatorId}/vehicles/${vehicleId}`, { method: 'PUT', body }),
+  // Modais operados pela cooperativa (076): o corte grosso do roteamento.
+  getOperatorModals:   (operatorId)                    => request(`/api/admin/operators/${operatorId}/modals`),
+  setOperatorModal:    (operatorId, modalId, body)     => request(`/api/admin/operators/${operatorId}/modals/${modalId}`, { method: 'PUT', body }),
 
   // Financeiro
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),

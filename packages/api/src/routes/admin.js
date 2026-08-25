@@ -1327,6 +1327,117 @@ router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, nex
   } catch (err) { next(err); }
 });
 
+// =============================================================================
+// MODAIS OPERADOS POR COOPERATIVA (migrations 075/076)
+// O corte grosso do roteamento: em vez de ligar veículo a veículo, o admin diz
+// que a cooperativa opera terrestre, aéreo, aquático… Opt-out como o de
+// veículo: sem linha = opera. O filtro por veículo continua valendo por cima,
+// para o ajuste fino dentro do mesmo modal.
+// =============================================================================
+
+// ── GET /api/admin/operators/:operatorId/modals ────────
+router.get('/operators/:operatorId/modals', requireAdmin, async (req, res, next) => {
+  try {
+    const { operatorId } = req.params;
+
+    const { data: operator, error: opErr } = await supabase
+      .from('users').select('id').eq('id', operatorId)
+      .eq('user_type', 'operator').maybeSingle();
+    if (opErr) throw opErr;
+    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+
+    const { data: modais, error: mErr } = await supabase
+      .from('service_modals')
+      .select('id, slug, name, description')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+    // Sem a 075 aplicada a tabela não existe: devolve lista vazia e a tela
+    // some, em vez de quebrar o cadastro inteiro da cooperativa.
+    if (mErr) {
+      console.warn('[admin] service_modals indisponível (migration 075):', mErr.message);
+      return res.json([]);
+    }
+
+    const { data: prefs, error: pErr } = await supabase
+      .from('operator_service_preferences')
+      .select('entity_id, is_active')
+      .eq('operator_id', operatorId)
+      .eq('entity_type', 'modal');
+    if (pErr) throw pErr;
+    const porId = new Map((prefs || []).map((p) => [p.entity_id, p]));
+
+    // Quantos veículos existem em cada modal — ajuda a entender o peso da
+    // escolha antes de desmarcar.
+    const { data: veics } = await supabase
+      .from('vehicles').select('modal').eq('is_active', true);
+    const porModal = new Map();
+    for (const v of veics || []) porModal.set(v.modal, (porModal.get(v.modal) || 0) + 1);
+
+    res.json((modais || []).map((m) => ({
+      modal_id:      m.id,
+      slug:          m.slug,
+      name:          m.name,
+      description:   m.description,
+      vehicle_count: porModal.get(m.slug) || 0,
+      // Opt-out: sem linha explícita, opera.
+      is_active:     porId.has(m.id) ? porId.get(m.id).is_active !== false : true,
+    })));
+  } catch (err) { next(err); }
+});
+
+// ── PUT /api/admin/operators/:operatorId/modals/:modalId ──
+const operatorModalPrefSchema = z.object({ is_active: z.boolean() });
+
+router.put('/operators/:operatorId/modals/:modalId', requireAdmin, async (req, res, next) => {
+  try {
+    const { operatorId, modalId } = req.params;
+    const body = operatorModalPrefSchema.parse(req.body);
+
+    const { data: operator, error: opErr } = await supabase
+      .from('users').select('id').eq('id', operatorId)
+      .eq('user_type', 'operator').maybeSingle();
+    if (opErr) throw opErr;
+    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+
+    const { data: modal, error: mErr } = await supabase
+      .from('service_modals').select('id').eq('id', modalId).maybeSingle();
+    if (mErr) throw mErr;
+    if (!modal) return res.status(404).json({ error: 'Modal não encontrado' });
+
+    const { data, error } = await supabase
+      .from('operator_service_preferences')
+      .upsert(
+        {
+          operator_id: operatorId,
+          entity_type: 'modal',
+          entity_id:   modalId,
+          is_active:   body.is_active,
+          updated_at:  new Date().toISOString(),
+        },
+        { onConflict: 'operator_id,entity_type,entity_id' },
+      )
+      .select()
+      .single();
+    if (error) {
+      // O CHECK da 006 só aceitava tour|vehicle|transfer até a 076.
+      if (error.code === '23514') {
+        return res.status(400).json({
+          error: 'O banco ainda não aceita preferência por modal. '
+               + 'Rode a migration 076_operador_por_modal.sql no Supabase.',
+        });
+      }
+      throw error;
+    }
+
+    res.json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
+});
+
 // ── PUT /api/admin/operators/:operatorId/vehicles/:vehicleId ──
 const operatorVehiclePrefSchema = z.object({
   is_active: z.boolean(),

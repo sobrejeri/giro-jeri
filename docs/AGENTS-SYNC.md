@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 076.**
+   registre aqui o número reservado. **Próximo número livre: 077.**
    (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
    com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
 
@@ -46,6 +46,34 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (roteamento do operador por MODAL)** — Pedido do dono:
+  em vez de liberar frota veículo a veículo, escolher terrestre/aéreo/aquático —
+  "facilita na distribuição de solicitações". **Migration 076**: o CHECK da 006
+  passa a aceitar `entity_type='modal'` em `operator_service_preferences`,
+  guardando o id de `service_modals` (075). Reaproveita a tabela, o RLS e a
+  plumbing que já existiam.
+  **SOMA, não substitui.** A distribuição agora exige as duas coisas: operar o
+  MODAL da solicitação E não ter desativado os veículos dela. O modal é o corte
+  grosso (quem faz aéreo × terrestre); o veículo segue para o ajuste fino dentro
+  do mesmo modal. Arrancar o nível do veículo derrubaria o opt-in do
+  helicóptero (066), que é o que hoje roteia voo só para a Frisonfly.
+  Opt-out como o de veículo: sem linha, a coop recebe. Ligar o recurso não cala
+  ninguém — só quem for desmarcado deixa de receber.
+  O filtro entrou nos DOIS caminhos: `eligibleOperatorsForBooking` (notificação)
+  e o feed em `operator.js`. Só na notificação, a coop pararia de ser avisada
+  mas continuaria vendo o pedido na tela — duas telas contando histórias
+  diferentes.
+  Fail-open em tudo: 075/076 pendentes, tabela ausente ou erro de leitura →
+  ninguém é filtrado por modal. Nunca deixar de notificar por causa deste filtro.
+  Admin: bloco "Em que meios esta cooperativa opera" no topo do modal de frota,
+  com contagem de veículos por modal. Some sozinho se a 075 não rodou.
+  Conferido com Supabase falso, nos casos que decidem quem recebe: voo → só
+  Frisonfly; buggy → só Buggy Tour; barco → só Marina; **combo buggy+barco → só
+  quem opera os dois**; reserva sem veículo → todos; e sem a 075 ninguém é
+  filtrado. Em Postgres 16: antes da 076 a preferência por modal é recusada,
+  depois grava, os tipos antigos seguem valendo, tipo inventado segue barrado e
+  re-rodar preserva as linhas.
 
 - **2026-08-25 · Agente B (modal vira cadastro, não lista fixa)** — Pedido do
   dono: "não ficar limitada apenas em duas categorias". As 073/074 tinham
