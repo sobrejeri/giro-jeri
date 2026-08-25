@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 075.**
+   registre aqui o número reservado. **Próximo número livre: 076.**
    (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
    com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
 
@@ -46,6 +46,34 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (modal vira cadastro, não lista fixa)** — Pedido do
+  dono: "não ficar limitada apenas em duas categorias". As 073/074 tinham
+  cravado os modais num CHECK, então cada modal novo exigia migration + deploy.
+  **Migration 075**: tabela `service_modals`, e as três colunas (`vehicles`,
+  `categories`, `transfers`) passam a apontar para ela por **chave estrangeira**
+  no lugar do CHECK.
+  FK e não CHECK porque o banco passa a garantir três coisas de graça: modal
+  inexistente é barrado; `ON UPDATE CASCADE` arruma quem aponta ao renomear o
+  slug; `ON DELETE RESTRICT` impede apagar modal em uso em vez de deixar
+  registro órfão.
+  A tabela nasce **com as duas policies de RLS** — leitura pública e escrita do
+  admin. A 034 criou as de catálogo e esqueceu `categories`, e o dono levou o
+  erro na cara meses depois (corrigido só na 072). Tabela nova não repete isso.
+  A migration semeia os modais já em uso (inclusive valores editados à mão),
+  senão a criação da FK falharia.
+  API: CRUD em `/api/catalog/modals`. O GET devolve os três padrões se a 075
+  ainda não rodou — o painel não quebra. Remover ou desativar modal em uso é
+  recusado com a contagem de quem depende dele. `slug` fica fora do PUT: é a
+  chave que os outros guardam, e renomear é caso de `name`.
+  Admin: card "Modais de operação" na aba Veículos, o modal aparece na linha do
+  veículo, e os três selects agora leem da API (com a opção atual preservada se
+  ela tiver saído da lista).
+  Conferido em Postgres 16: criar modal novo funciona; modal inexistente é
+  barrado pela FK; apagar em uso é barrado; renomear o slug propaga; apagar sem
+  uso funciona; re-rodar é idempotente e preserva o que já foi marcado. No
+  navegador: a lista mostra um modal criado fora do código ("Fluvial"), esconde
+  o inativo, e o POST de criação sai com o corpo certo.
 
 - **2026-08-25 · Agente B (terceiro modal: aquático)** — O dono completou a
   lista: "terrestre, aéreo, aquático…". A 073 tinha aberto o eixo com dois

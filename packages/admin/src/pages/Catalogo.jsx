@@ -92,11 +92,15 @@ const VEHICLE_EMPTY = {
 // terrestre, passeio aéreo, passeio aquático, e o mesmo nos translados.
 // O veículo só é oferecido em serviço do MESMO modal, e quem define o modal do
 // serviço é a categoria dele.
-const MODAIS = [
-  { value: 'terrestre', label: 'Terrestre' },
-  { value: 'aereo',     label: 'Aéreo' },
-  { value: 'aquatico',  label: 'Aquático' },
+// A lista de modais vem do BANCO (migration 075), não daqui. Enquanto ela não
+// carrega — ou se a 075 ainda não rodou — estes três seguram a tela para o
+// select nunca aparecer vazio.
+const MODAIS_PADRAO = [
+  { slug: 'terrestre', name: 'Terrestre' },
+  { slug: 'aereo',     name: 'Aéreo' },
+  { slug: 'aquatico',  name: 'Aquático' },
 ]
+const MODAL_EMPTY = { name: '', description: '', is_active: true, sort_order: 99 }
 
 const VEHICLE_TYPES = [
   { value: 'buggy',      label: 'Buggy' },
@@ -122,6 +126,8 @@ export default function Catalogo() {
   const [routeModal, setRouteModal] = useState(null)
   const [catModal, setCatModal] = useState(null)
   const [catForm, setCatForm]   = useState({})
+  const [modalModal, setModalModal] = useState(null)   // cadastro de MODAL
+  const [modalForm, setModalForm]   = useState({})
   const [mostrarAvancado, setMostrarAvancado] = useState(false)
   const [routeForm, setRouteForm]   = useState({})
   const [vehicleModal, setVehicleModal] = useState(null)
@@ -178,6 +184,17 @@ export default function Catalogo() {
     queryFn:  () => api.getVehicles(),
   })
 
+  // Modais de operação. Cadastráveis (075); a API já devolve os três padrões
+  // se a migration ainda não rodou, então a tela nunca fica sem opção.
+  const { data: modaisBrutos } = useQuery({
+    queryKey: ['admin-modals'],
+    queryFn:  () => api.getModals(),
+  })
+  const modais = (Array.isArray(modaisBrutos) && modaisBrutos.length ? modaisBrutos : MODAIS_PADRAO)
+  const modaisAtivos = modais.filter((m) => m.is_active !== false)
+  // Nome do modal para exibir; cai no slug se o cadastro sumiu.
+  const nomeDoModal = (slug) => modais.find((m) => m.slug === slug)?.name || slug || '—'
+
   // Categorias de PASSEIO. `category_type` só ganhou padrão na migration 071;
   // linha antiga vem nula e continua sendo de passeio (é o único uso da tabela).
   const { data: categoriasBrutas = [] } = useQuery({
@@ -219,6 +236,23 @@ export default function Catalogo() {
   const deleteTourMut = useMutation({
     mutationFn: (id) => api.deleteTour(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-tours'] }),
+  })
+
+  /* ── Modal (meio de operação) mutations ──────────────────── */
+  const modalMut = useMutation({
+    mutationFn: (body) =>
+      modalModal?.isNew ? api.createModal(body) : api.updateModal(modalModal.id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-modals'] })
+      setModalModal(null)
+    },
+    onError: (err) => alert(err?.message || 'Erro ao salvar o modal.'),
+  })
+  const deleteModalMut = useMutation({
+    mutationFn: (id) => api.deleteModal(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-modals'] }),
+    // A API recusa remover modal em uso e diz quem usa — a mensagem é útil.
+    onError:    (err) => alert(err?.message || 'Erro ao remover o modal.'),
   })
 
   /* ── Category mutations ──────────────────────────────────── */
@@ -284,6 +318,19 @@ export default function Catalogo() {
     setForm({ ...t, region_ids: t.region_ids || [] }); setImageFile(null); setImagePreview(t.cover_image_url || null)
     setModal(t)
   }
+  function openNewModal()   { setModalForm(MODAL_EMPTY); setModalModal({ isNew: true }) }
+  function openEditModal(m) { setModalForm({ ...MODAL_EMPTY, ...m }); setModalModal(m) }
+  function handleModalSubmit(e) {
+    e.preventDefault()
+    if (!modalForm.name?.trim()) { alert('Informe o nome do modal.'); return }
+    modalMut.mutate({
+      name:        modalForm.name.trim(),
+      description: modalForm.description || null,
+      is_active:   !!modalForm.is_active,
+      sort_order:  Number(modalForm.sort_order) || 99,
+    })
+  }
+
   // Categoria tem MODAL PRÓPRIO (`catModal`), separado do modal de passeio /
   // categoria-de-translado que compartilha `modal`+`form`. São formulários
   // diferentes; misturá-los já causou confusão de campo antes.
@@ -785,6 +832,51 @@ export default function Catalogo() {
 
       {/* ── Veículos ───────────────────────────────────────────── */}
       {tab === 'vehicles' && (
+        <>
+        {/* Modais de operação — a lista que alimenta o campo "Modal" do veículo
+            e das duas categorias. Era fixa no código; agora é cadastro. */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-300">Modais de operação ({modais.length})</h2>
+              <Button size="sm" onClick={openNewModal}><Plus size={14} /> Novo Modal</Button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              O veículo só é oferecido em serviço do mesmo modal. Quem define o modal do serviço é a categoria dele.
+            </p>
+          </CardHeader>
+          <div className="divide-y divide-gray-800">
+            {modais.map((m) => {
+              const usoVeiculos = vehicles.filter((v) => v.modal === m.slug).length
+              return (
+                <div key={m.slug} className="flex items-center gap-3 px-5 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-200">{m.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {usoVeiculos} veículo{usoVeiculos === 1 ? '' : 's'}
+                      {m.description ? ` · ${m.description}` : ''}
+                    </p>
+                  </div>
+                  <Badge value={String(m.is_active !== false)} />
+                  {m.id && (
+                    <div className="flex gap-1">
+                      <button onClick={() => openEditModal(m)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => confirm(`Remover o modal "${m.name}"?`) && deleteModalMut.mutate(m.id)}
+                        className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -815,6 +907,8 @@ export default function Catalogo() {
                       <span>·</span>
                       <Users size={10} className="text-gray-500" />
                       <span>{v.seat_capacity} pax</span>
+                      <span>·</span>
+                      <span className="text-sky-400/80">{nomeDoModal(v.modal)}</span>
                       {v.is_tour_allowed && <span className="text-brand/70">· Passeios</span>}
                       {v.is_transfer_allowed && <span className="text-purple-400/70">· Transfer</span>}
                       {v.is_shared_allowed && <span className="text-amber-400/70">· Compartilhado</span>}
@@ -847,6 +941,7 @@ export default function Catalogo() {
             </div>
           )}
         </Card>
+        </>
       )}
 
       {/* ── Modal tour / transfer ──────────────────────────────── */}
@@ -870,9 +965,12 @@ export default function Catalogo() {
                 value={form.modal || 'terrestre'}
                 onChange={(e) => setForm({ ...form, modal: e.target.value })}
               >
-                {MODAIS.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
+                {modaisAtivos.map((m) => (
+                  <option key={m.slug} value={m.slug}>{m.name}</option>
                 ))}
+                {form.modal && !modaisAtivos.some((m) => m.slug === form.modal) && (
+                  <option value={form.modal}>{nomeDoModal(form.modal)} (inativo)</option>
+                )}
               </Select>
               <p className="text-[11px] text-gray-500 mt-1">
                 As rotas desta categoria só oferecem veículos deste modal.
@@ -1198,6 +1296,55 @@ export default function Catalogo() {
         )}
       </Modal>
 
+      {/* ── Cadastro de MODAL de operação ──────────────────────── */}
+      {/* Formulário próprio (`modalModal`), como o de categoria: são cadastros
+          diferentes e juntá-los num só estado já causou edição no campo errado. */}
+      <Modal
+        open={!!modalModal}
+        onClose={() => setModalModal(null)}
+        title={modalModal?.isNew ? 'Novo Modal de Operação' : 'Editar Modal'}
+        size="sm"
+      >
+        <form onSubmit={handleModalSubmit} className="space-y-4">
+          <Input
+            label="Nome"
+            placeholder="Ex.: Aquático"
+            value={modalForm.name || ''}
+            onChange={(e) => setModalForm({ ...modalForm, name: e.target.value })}
+            required
+          />
+          <Textarea
+            label="Descrição (opcional)"
+            rows={2}
+            placeholder="Ex.: Barco, lancha, catamarã."
+            value={modalForm.description || ''}
+            onChange={(e) => setModalForm({ ...modalForm, description: e.target.value })}
+          />
+          <Input
+            label="Ordem de exibição (menor aparece primeiro)"
+            type="number" min={0}
+            value={modalForm.sort_order ?? 99}
+            onChange={(e) => setModalForm({ ...modalForm, sort_order: e.target.value })}
+          />
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-brand"
+              checked={!!modalForm.is_active}
+              onChange={(e) => setModalForm({ ...modalForm, is_active: e.target.checked })}
+            />
+            <span className="text-sm text-gray-300">Ativo (aparece na lista de escolha)</span>
+          </label>
+          <p className="text-[11px] text-gray-500">
+            Modal em uso não pode ser removido nem desativado — o painel diz quantos
+            veículos e categorias dependem dele.
+          </p>
+          <Button type="submit" className="w-full" disabled={modalMut.isPending}>
+            {modalMut.isPending ? 'Salvando…' : 'Salvar Modal'}
+          </Button>
+        </form>
+      </Modal>
+
       {/* ── Modal categoria de passeio ─────────────────────────── */}
       {/* Só o essencial para criar — mesmo enxugamento pedido para a categoria
           de translado. Nome, descrição, ordem e as duas caixas. */}
@@ -1227,9 +1374,12 @@ export default function Catalogo() {
               value={catForm.modal || 'terrestre'}
               onChange={(e) => setCatForm({ ...catForm, modal: e.target.value })}
             >
-              {MODAIS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+              {modaisAtivos.map((m) => (
+                <option key={m.slug} value={m.slug}>{m.name}</option>
               ))}
+              {catForm.modal && !modaisAtivos.some((m) => m.slug === catForm.modal) && (
+                <option value={catForm.modal}>{nomeDoModal(catForm.modal)} (inativo)</option>
+              )}
             </Select>
             <p className="text-[11px] text-gray-500 mt-1">
               Os passeios desta categoria só oferecem veículos deste modal.
@@ -1394,9 +1544,12 @@ export default function Catalogo() {
               value={vehicleForm.modal || 'terrestre'}
               onChange={(e) => setVehicleForm({ ...vehicleForm, modal: e.target.value })}
             >
-              {MODAIS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+              {modaisAtivos.map((m) => (
+                <option key={m.slug} value={m.slug}>{m.name}</option>
               ))}
+              {vehicleForm.modal && !modaisAtivos.some((m) => m.slug === vehicleForm.modal) && (
+                <option value={vehicleForm.modal}>{nomeDoModal(vehicleForm.modal)} (inativo)</option>
+              )}
             </Select>
             <p className="text-[11px] text-gray-500 mt-1">
               O veículo só é oferecido em serviços do mesmo modal.

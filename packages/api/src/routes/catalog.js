@@ -61,6 +61,135 @@ function vaziosViramNulo(body, campos) {
   return out
 }
 
+// ── Modais de operação ────────────────────────────────────
+// Terrestre, aéreo, aquático… A lista era fixa no código (CHECK das migrations
+// 073/074): cada modal novo exigia migration e deploy. Virou cadastro na
+// migration 075, e as três colunas apontam para cá por chave estrangeira.
+
+const MODAL_COLS = ['slug', 'name', 'description', 'is_active', 'sort_order']
+
+router.get('/modals', async (req, res, next) => {
+  try {
+    const { data, error } = await req.supabase
+      .from('service_modals').select('*')
+      .order('sort_order', { ascending: true })
+      .order('name');
+    // Sem a 075 aplicada a tabela não existe. Devolve os três de sempre em vez
+    // de 500 — o painel continua funcionando com a lista de antes.
+    if (error) {
+      console.warn('[catalog] service_modals indisponível (migration 075):', error.message);
+      return res.json([
+        { slug: 'terrestre', name: 'Terrestre', is_active: true, sort_order: 1 },
+        { slug: 'aereo',     name: 'Aéreo',     is_active: true, sort_order: 2 },
+        { slug: 'aquatico',  name: 'Aquático',  is_active: true, sort_order: 3 },
+      ]);
+    }
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// Quantos registros apontam para um modal. Usado antes de desativar: some da
+// lista sem avisar e o dono só descobriria pela frota sumindo de um serviço.
+async function usoDoModal(supabase, slug) {
+  const conta = async (tabela) => {
+    const { count, error } = await supabase
+      .from(tabela).select('id', { count: 'exact', head: true }).eq('modal', slug);
+    return error ? 0 : (count || 0);
+  };
+  const [veiculos, passeios, translados] = await Promise.all([
+    conta('vehicles'), conta('categories'), conta('transfers'),
+  ]);
+  return { veiculos, passeios, translados, total: veiculos + passeios + translados };
+}
+
+router.post('/modals', requireAdmin, async (req, res, next) => {
+  try {
+    const body = pick(req.body, MODAL_COLS);
+    if (!body.name) return res.status(400).json({ error: 'Informe o nome do modal.' });
+    // O slug é a chave que as outras tabelas guardam — gerado a partir do nome
+    // e SEM sufixo aleatório, ao contrário de tours/categorias: aqui ele é
+    // lido por gente ao conferir o banco, e um `aquatico-l3k9` não ajudaria.
+    if (!body.slug) body.slug = slugify(body.name);
+    if (!body.slug) return res.status(400).json({ error: 'Nome inválido para gerar o identificador.' });
+    if (body.sort_order === '' || body.sort_order === undefined) body.sort_order = 99;
+
+    const { data, error } = await req.supabase
+      .from('service_modals').insert(body).select().single();
+    if (error) {
+      if (error.code === '23505') return res.status(400).json({ error: 'Já existe um modal com este nome.' });
+      if (error.code === '42P01') {
+        return res.status(400).json({
+          error: 'O banco ainda não tem a tabela de modais. Rode a migration 075_modais_cadastraveis.sql no Supabase.',
+        });
+      }
+      if (error.code === '42501') {
+        return res.status(400).json({
+          error: 'O banco ainda não autoriza o admin a gravar modais. Rode a migration 075 no Supabase.',
+        });
+      }
+      throw error;
+    }
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+router.put('/modals/:id', requireAdmin, async (req, res, next) => {
+  try {
+    // `slug` fica FORA do update: é a chave que veículos e categorias guardam.
+    // Trocá-la por aqui exigiria propagar (o banco até faz, via ON UPDATE
+    // CASCADE) — mas renomear é o caso comum, e para isso basta `name`.
+    const body = pick(req.body, MODAL_COLS.filter((c) => c !== 'slug'));
+    if (body.sort_order === '') body.sort_order = 99;
+
+    // Desativar um modal em uso esconde a opção e deixa registros apontando
+    // para algo que sumiu da tela. Melhor recusar dizendo quem usa.
+    if (body.is_active === false) {
+      const { data: atual } = await req.supabase
+        .from('service_modals').select('slug').eq('id', req.params.id).maybeSingle();
+      if (atual?.slug) {
+        const uso = await usoDoModal(req.supabase, atual.slug);
+        if (uso.total > 0) {
+          return res.status(400).json({
+            error: `Este modal está em uso: ${uso.veiculos} veículo(s), `
+                 + `${uso.passeios} categoria(s) de passeio e ${uso.translados} de translado. `
+                 + 'Mude esses cadastros de modal antes de desativar.',
+          });
+        }
+      }
+    }
+
+    const { data, error } = await req.supabase
+      .from('service_modals').update(body).eq('id', req.params.id).select().single();
+    if (error || !data) return res.status(404).json({ error: 'Modal não encontrado' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+router.delete('/modals/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: atual } = await req.supabase
+      .from('service_modals').select('slug').eq('id', req.params.id).maybeSingle();
+    if (!atual) return res.status(404).json({ error: 'Modal não encontrado' });
+
+    const uso = await usoDoModal(req.supabase, atual.slug);
+    if (uso.total > 0) {
+      return res.status(400).json({
+        error: `Não dá para remover: ${uso.veiculos} veículo(s), ${uso.passeios} categoria(s) `
+             + `de passeio e ${uso.translados} de translado usam este modal.`,
+      });
+    }
+
+    const { error } = await req.supabase
+      .from('service_modals').delete().eq('id', req.params.id);
+    // A FK é RESTRICT: mesmo que a contagem acima erre por RLS, o banco barra.
+    if (error?.code === '23503') {
+      return res.status(400).json({ error: 'Este modal está em uso e não pode ser removido.' });
+    }
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
 // ── Categorias ────────────────────────────────────────────
 
 const CATEGORY_COLS = ['name', 'slug', 'description', 'icon', 'color',

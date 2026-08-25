@@ -138,6 +138,11 @@ export const api = {
 
   // Catálogo — Rotas de Transfer
   // Categorias de passeio (a que agrupa e vira carrossel no app)
+  // Modais de operação (terrestre, aéreo, aquático…) — cadastráveis desde a 075.
+  getModals:        ()          => request('/api/catalog/modals'),
+  createModal:      (body)      => request('/api/catalog/modals', { method: 'POST', body }),
+  updateModal:      (id, body)  => request(`/api/catalog/modals/${id}`, { method: 'PUT', body }),
+  deleteModal:      (id)        => request(`/api/catalog/modals/${id}`, { method: 'DELETE' }),
   getCategories:    ()          => request('/api/catalog/categories'),
   createCategory:   (body)      => request('/api/catalog/categories', { method: 'POST', body }),
   updateCategory:   (id, body)  => request(`/api/catalog/categories/${id}`, { method: 'PUT', body }),
