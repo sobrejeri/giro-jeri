@@ -101,6 +101,7 @@ export default function Catalogo() {
   const [modal, setModal]   = useState(null)
   const [form, setForm]     = useState({})
   const [routeModal, setRouteModal] = useState(null)
+  const [mostrarAvancado, setMostrarAvancado] = useState(false)
   const [routeForm, setRouteForm]   = useState({})
   const [vehicleModal, setVehicleModal] = useState(null)
   const [vehicleForm, setVehicleForm]   = useState({})
@@ -693,6 +694,21 @@ export default function Catalogo() {
           <form onSubmit={handleTransferSubmit} className="space-y-4">
             <Input label="Nome" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <Textarea label="Descrição" rows={2} value={form.short_description || ''} onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
+            {/* Para criar uma categoria bastam nome e as duas caixas abaixo.
+                O resto são REGRAS DE OPERAÇÃO (preço, prazos, janela de
+                horário, municípios) — úteis depois, não na hora de criar. Ficam
+                recolhidas para o formulário não assustar; nada foi removido. */}
+            <button
+              type="button"
+              onClick={() => setMostrarAvancado((v) => !v)}
+              className="w-full flex items-center justify-between text-left px-3 py-2 rounded-xl border border-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              <span className="text-xs font-semibold">Regras de operação (opcional)</span>
+              <span className="text-xs">{mostrarAvancado ? 'Ocultar' : 'Mostrar'}</span>
+            </button>
+
+            {mostrarAvancado && (
+            <div className="space-y-4 border-l-2 border-gray-800 pl-3">
             <Select label="Modo de precificação" value={form.pricing_mode || 'fixed_route'} onChange={(e) => setForm({ ...form, pricing_mode: e.target.value })}>
               <option value="fixed_route">Rota tabelada</option>
               <option value="by_vehicle">Por veículo</option>
@@ -780,6 +796,8 @@ export default function Catalogo() {
               value={form.region_ids}
               onChange={(next) => setForm((f) => ({ ...f, region_ids: next }))}
             />
+            </div>
+            )}
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
