@@ -17,6 +17,14 @@ enxerga o trabalho do outro no próximo `git fetch`.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
    registre aqui o número reservado. **Próximo número livre: 069.**
+
+   ⚠️ **OITO números já foram usados DUAS vezes** por agentes diferentes:
+   015, 016, 017, 021, 022, 023, 065 e 066. Isso já causou estrago real: quem
+   rodou "a 065" rodou uma das duas e a outra ficou para trás — o app quebrou
+   ao salvar foto de rota, porque `transfer_routes.cover_image_url` nunca foi
+   criada. **Antes de criar migration, confira se o número já existe** com
+   `ls supabase/migrations/ | sed 's/_.*//' | sort | uniq -d`. Para descobrir o
+   que falta rodar num banco, use `supabase/o_que_falta_rodar.sql`.
 5. **Deploy**: tudo (Pages + Render) sai do branch
    `claude/giro-jeri-platform-GFBFR`. Não versionar segredos aqui — nunca.
 
@@ -27,6 +35,20 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-23 · Agente B (migrations perdidas por numeração duplicada)** — O
+  dono não conseguia salvar foto de rota: *"Could not find the
+  'cover_image_url' column of 'transfer_routes' in the schema cache"*. A
+  migration existe (`065_route_cover_image.sql`) e **nunca foi rodada** — há
+  **DOIS** arquivos 065 (o outro é `065_heli_frisonfly_exclusivos.sql`), então
+  quem rodou "a 065" rodou uma só e a outra passou despercebida.
+  **Oito números duplicados no total:** 015, 016, 017, 021, 022, 023, 065, 066.
+  Não renomeei nada — migration já aplicada com nome trocado confunde mais do
+  que ajuda. Em vez disso ficou `supabase/o_que_falta_rodar.sql`: extrai de
+  TODAS as migrations as colunas que elas adicionam e mostra quais não existem
+  no banco. Validado em Postgres 16 — acusa a coluna faltando e para de acusar
+  depois de aplicar a migration.
+  Aviso adicionado ao Protocolo, no topo deste arquivo.
 
 - **2026-08-23 · Agente B (tela de pagamento travada — regressão MINHA)** — O
   dono relatou que "Pagar agora" não prosseguia. **Causa: eu.** Ao tornar as
