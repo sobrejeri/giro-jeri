@@ -61,12 +61,75 @@ function vaziosViramNulo(body, campos) {
 
 // ── Categorias ────────────────────────────────────────────
 
+const CATEGORY_COLS = ['name', 'slug', 'description', 'icon', 'color',
+  'category_type', 'is_active', 'sort_order', 'is_exclusive']
+
 router.get('/categories', async (req, res, next) => {
   try {
     const { data, error } = await req.supabase
-      .from('categories').select('*').order('name');
+      .from('categories').select('*')
+      .order('sort_order', { ascending: true })
+      .order('name');
     if (error) throw error;
     res.json(data);
+  } catch (err) { next(err); }
+});
+
+// ── CRUD de categorias (só admin) ──────────────────────────
+// Antes só existia o GET: dava para LIGAR um passeio a uma categoria, mas não
+// para criar categoria alguma pelo painel — a lista vinha do seed e ficava
+// congelada.
+router.post('/categories', requireAdmin, async (req, res, next) => {
+  try {
+    const body = pick(req.body, CATEGORY_COLS);
+    if (!body.name) return res.status(400).json({ error: 'Informe o nome da categoria.' });
+    // slug é NOT NULL e UNIQUE; o formulário não pede — mesmo tratamento dos
+    // tours e transfers. O sufixo evita colisão com categoria de nome parecido.
+    if (!body.slug) body.slug = `${slugify(body.name)}-${Date.now().toString(36)}`;
+    if (!body.category_type) body.category_type = 'tour';
+    if (body.sort_order === '' || body.sort_order === undefined) body.sort_order = 0;
+
+    let { data, error } = await req.supabase
+      .from('categories').insert(body).select().single();
+    // `is_exclusive` só existe a partir da migration 071. Sem ela aplicada, o
+    // insert inteiro morria em 42703 e não dava para criar categoria nenhuma —
+    // melhor salvar sem a marca de carrossel do que recusar o cadastro.
+    if (error?.code === '42703') {
+      console.warn('[catalog] categories.is_exclusive ausente (migration 071):', error.message);
+      const { is_exclusive: _ie, ...semMarca } = body;
+      ({ data, error } = await req.supabase
+        .from('categories').insert(semMarca).select().single());
+    }
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+router.put('/categories/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const body = pick(req.body, CATEGORY_COLS);
+    if (body.sort_order === '') body.sort_order = 0;
+    let { data, error } = await req.supabase
+      .from('categories').update(body).eq('id', req.params.id).select().single();
+    if (error?.code === '42703') {
+      console.warn('[catalog] categories.is_exclusive ausente (migration 071):', error.message);
+      const { is_exclusive: _ie, ...semMarca } = body;
+      ({ data, error } = await req.supabase
+        .from('categories').update(semMarca).eq('id', req.params.id).select().single());
+    }
+    if (error || !data) return res.status(404).json({ error: 'Categoria não encontrada' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// Desativa em vez de apagar: passeios apontam para a categoria
+// (`tours.category_id`), e remover a linha deixaria o vínculo pendurado.
+router.delete('/categories/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { error } = await req.supabase
+      .from('categories').update({ is_active: false }).eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
   } catch (err) { next(err); }
 });
 

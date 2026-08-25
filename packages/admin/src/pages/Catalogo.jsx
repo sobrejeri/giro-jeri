@@ -54,6 +54,7 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
 }
 
 const TOUR_EMPTY = {
+  category_id: '',
   name: '', short_description: '', duration_hours: 2, max_people: 10,
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
@@ -69,6 +70,13 @@ const TRANSFER_EMPTY = {
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '', region_ids: [],
 }
 const ROUTE_EMPTY   = { transfer_id: '', origin_name: '', destination_name: '', default_price: '', cover_image_url: '', is_active: true, is_featured: false }
+// Categoria de PASSEIO — o equivalente ao que `transfers` faz nos translados:
+// agrupa e, marcada, vira carrossel próprio no app. Só o essencial para criar:
+// nome, descrição, ordem e as duas caixas.
+const CATEGORY_EMPTY = {
+  name: '', description: '', is_active: true, is_exclusive: false,
+  sort_order: 0, category_type: 'tour',
+}
 const VEHICLE_EMPTY = {
   name: '', vehicle_type: 'buggy', description: '',
   seat_capacity: 4, luggage_capacity: 4,
@@ -101,6 +109,8 @@ export default function Catalogo() {
   const [modal, setModal]   = useState(null)
   const [form, setForm]     = useState({})
   const [routeModal, setRouteModal] = useState(null)
+  const [catModal, setCatModal] = useState(null)
+  const [catForm, setCatForm]   = useState({})
   const [mostrarAvancado, setMostrarAvancado] = useState(false)
   const [routeForm, setRouteForm]   = useState({})
   const [vehicleModal, setVehicleModal] = useState(null)
@@ -109,6 +119,7 @@ export default function Catalogo() {
   const [imagePreview, setImagePreview] = useState(null)
   const [soSemFoto, setSoSemFoto]                = useState(false)
   const [tipoRota, setTipoRota]                  = useState('todos')
+  const [catPasseio, setCatPasseio]              = useState('todos')
   const [routeImageFile, setRouteImageFile]       = useState(null)
   const [routeImagePreview, setRouteImagePreview] = useState(null)
   const [vehicleImageFile, setVehicleImageFile]   = useState(null)
@@ -156,8 +167,25 @@ export default function Catalogo() {
     queryFn:  () => api.getVehicles(),
   })
 
+  // Categorias de PASSEIO. `category_type` só ganhou padrão na migration 071;
+  // linha antiga vem nula e continua sendo de passeio (é o único uso da tabela).
+  const { data: categoriasBrutas = [] } = useQuery({
+    queryKey: ['admin-categories'],
+    queryFn:  () => api.getCategories(),
+  })
+  const categorias = (Array.isArray(categoriasBrutas) ? categoriasBrutas : [])
+    .filter((c) => !c.category_type || c.category_type === 'tour')
+  // Desativada some da lista, mas continua no <select> se algum passeio ainda
+  // aponta para ela — senão editar esse passeio apagaria a categoria em silêncio.
+  const categoriasAtivas = categorias.filter((c) => c.is_active)
+  const passeiosPorCategoria = (id) => tours.filter((t) => t.category_id === id).length
+
   const byRegion = (item) => !filterRegion || (item.region_ids || []).includes(filterRegion)
   const filteredTours     = tours.filter(byRegion)
+  const passeiosVisiveis =
+    catPasseio === 'todos' ? filteredTours
+      : catPasseio === '__sem' ? filteredTours.filter((t) => !t.category_id)
+      : filteredTours.filter((t) => t.category_id === catPasseio)
   const filteredTransfers = transfers.filter(byRegion)
   const filteredVehicles  = vehicles.filter(byRegion)
 
@@ -173,10 +201,35 @@ export default function Catalogo() {
     mutationFn: (body) =>
       modal?.isNew ? api.createTour(body) : api.updateTour(modal.id, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-tours'] }); setModal(null) },
+    // Sem isto, falha ao salvar passeio não dizia nada: o modal ficava aberto e
+    // parecia que o botão não tinha funcionado.
+    onError:   (err) => alert(err?.message || 'Erro ao salvar o passeio.'),
   })
   const deleteTourMut = useMutation({
     mutationFn: (id) => api.deleteTour(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-tours'] }),
+  })
+
+  /* ── Category mutations ──────────────────────────────────── */
+  const catMut = useMutation({
+    mutationFn: (body) =>
+      catModal?.isNew ? api.createCategory(body) : api.updateCategory(catModal.id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-categories'] })
+      // O passeio guarda `category_id`; a lista precisa recarregar para o
+      // nome novo aparecer no cartão.
+      qc.invalidateQueries({ queryKey: ['admin-tours'] })
+      setCatModal(null)
+    },
+    onError: (err) => alert(err?.message || 'Erro ao salvar a categoria.'),
+  })
+  const deleteCatMut = useMutation({
+    mutationFn: (id) => api.deleteCategory(id),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['admin-categories'] })
+      qc.invalidateQueries({ queryKey: ['admin-tours'] })
+    },
+    onError: (err) => alert(err?.message || 'Erro ao desativar a categoria.'),
   })
 
   /* ── Transfer mutations ──────────────────────────────────── */
@@ -220,6 +273,24 @@ export default function Catalogo() {
     setForm({ ...t, region_ids: t.region_ids || [] }); setImageFile(null); setImagePreview(t.cover_image_url || null)
     setModal(t)
   }
+  // Categoria tem MODAL PRÓPRIO (`catModal`), separado do modal de passeio /
+  // categoria-de-translado que compartilha `modal`+`form`. São formulários
+  // diferentes; misturá-los já causou confusão de campo antes.
+  function openNewCategory()   { setCatForm(CATEGORY_EMPTY); setCatModal({ isNew: true }) }
+  function openEditCategory(c) { setCatForm({ ...CATEGORY_EMPTY, ...c }); setCatModal(c) }
+  function handleCategorySubmit(e) {
+    e.preventDefault()
+    if (!catForm.name?.trim()) { alert('Informe o nome da categoria.'); return }
+    catMut.mutate({
+      name:          catForm.name.trim(),
+      description:   catForm.description || null,
+      is_active:     !!catForm.is_active,
+      is_exclusive:  !!catForm.is_exclusive,
+      sort_order:    Number(catForm.sort_order) || 0,
+      category_type: 'tour',
+    })
+  }
+
   function openNewTransfer()   { setForm(TRANSFER_EMPTY); setModal({ isNew: true, _type: 'transfer' }) }
   function openEditTransfer(t) { setForm({ ...t, region_ids: t.region_ids || [] }); setModal({ ...t, _type: 'transfer' }) }
   function openNewRoute() {
@@ -442,15 +513,91 @@ export default function Catalogo() {
 
       {/* ── Tours ──────────────────────────────────────────────── */}
       {tab === 'tours' && (
+        <>
+        {/* Mesma lógica das categorias de translado: a categoria agrupa os
+            passeios e, marcada, vira um carrossel próprio no app com o nome
+            dela de título. */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-300">Passeios ({filteredTours.length}{filterRegion ? `/${tours.length}` : ''})</h2>
-              <Button size="sm" onClick={openNewTour}><Plus size={14} /> Novo Passeio</Button>
+              <h2 className="text-sm font-semibold text-gray-300">Categorias ({categorias.length})</h2>
+              <Button size="sm" onClick={openNewCategory}><Plus size={14} /> Nova Categoria</Button>
             </div>
           </CardHeader>
           <div className="divide-y divide-gray-800">
-            {filteredTours.map((t) => (
+            {categorias.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 px-5 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-200">{c.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {passeiosPorCategoria(c.id)} passeio{passeiosPorCategoria(c.id) === 1 ? '' : 's'}
+                    {c.is_exclusive && <span className="text-brand/80"> · Carrossel próprio</span>}
+                  </p>
+                </div>
+                <Badge value={String(c.is_active)} />
+                <div className="flex gap-1">
+                  <button onClick={() => openEditCategory(c)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
+                    <Pencil size={13} />
+                  </button>
+                  {c.is_active && (
+                    <button
+                      onClick={() => confirm(`Desativar a categoria "${c.name}"? Os passeios dela continuam ativos.`) && deleteCatMut.mutate(c.id)}
+                      className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {categorias.length === 0 && (
+              <CardBody>
+                <p className="text-sm text-gray-600">Nenhuma categoria.</p>
+                <p className="text-xs text-gray-700 mt-1">
+                  Sem categoria os passeios continuam na lista comum do app. Crie uma para separá-los em carrossel próprio.
+                </p>
+              </CardBody>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-300">
+                Passeios ({passeiosVisiveis.length}{passeiosVisiveis.length !== tours.length ? `/${tours.length}` : ''})
+              </h2>
+              <Button size="sm" onClick={openNewTour}><Plus size={14} /> Novo Passeio</Button>
+            </div>
+
+            {/* Separação por categoria — mesma barra das rotas. Só com 1+
+                categoria: sem nenhuma, seria um botão sozinho sem função. */}
+            {categoriasAtivas.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {[{ id: 'todos', name: `Todos (${filteredTours.length})` },
+                  ...categoriasAtivas.map((c) => ({
+                    id: c.id,
+                    name: `${c.name} (${filteredTours.filter((t) => t.category_id === c.id).length})`,
+                  })),
+                  { id: '__sem', name: `Sem categoria (${filteredTours.filter((t) => !t.category_id).length})` },
+                ].map((op) => (
+                  <button
+                    key={op.id}
+                    onClick={() => setCatPasseio(op.id)}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                      catPasseio === op.id
+                        ? 'bg-brand/15 border-brand/60 text-brand'
+                        : 'border-gray-700 text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    {op.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardHeader>
+          <div className="divide-y divide-gray-800">
+            {passeiosVisiveis.map((t) => (
               <div key={t.id} className="flex items-center gap-3 px-5 py-3">
                 {t.cover_image_url ? (
                   <img src={t.cover_image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
@@ -463,6 +610,9 @@ export default function Catalogo() {
                     {t.duration_hours}h · cap. {t.max_people}
                     {t.is_private_enabled && ' · Privativo'}
                     {t.is_shared_enabled && ' · Compartilhado'}
+                    {/* Nome da categoria direto na linha: sem isto só dava para
+                        saber a que grupo o passeio pertence abrindo a edição. */}
+                    {t.categories?.name && <span className="text-brand/70"> · {t.categories.name}</span>}
                     <RegionTags ids={t.region_ids} />
                   </p>
                 </div>
@@ -480,9 +630,15 @@ export default function Catalogo() {
                 </div>
               </div>
             ))}
-            {filteredTours.length === 0 && <CardBody><p className="text-sm text-gray-600">{filterRegion ? 'Nenhum passeio neste município' : 'Nenhum passeio'}</p></CardBody>}
+            {passeiosVisiveis.length === 0 && (
+              <CardBody><p className="text-sm text-gray-600">
+                {catPasseio !== 'todos' ? 'Nenhum passeio nesta categoria'
+                  : filterRegion ? 'Nenhum passeio neste município' : 'Nenhum passeio'}
+              </p></CardBody>
+            )}
           </div>
         </Card>
+        </>
       )}
 
       {/* ── Transfers ──────────────────────────────────────────── */}
@@ -862,6 +1018,33 @@ export default function Catalogo() {
 
             <Input label="Nome" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <Textarea label="Descrição" rows={2} value={form.short_description || ''} onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
+
+            {/* Faltava por completo: a coluna `tours.category_id` existe desde a
+                001 e a API já a grava, mas não havia como escolher a categoria
+                pelo painel. É ela que decide em qual carrossel o passeio entra. */}
+            <div>
+              <Select
+                label="Categoria"
+                value={form.category_id || ''}
+                onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+              >
+                <option value="">Sem categoria</option>
+                {categoriasAtivas.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}{c.is_exclusive ? ' (carrossel próprio)' : ''}</option>
+                ))}
+                {/* Categoria desativada só aparece se ESTE passeio já usa ela —
+                    senão salvar o passeio apagaria o vínculo sem avisar. */}
+                {form.category_id && !categoriasAtivas.some((c) => c.id === form.category_id) && (
+                  <option value={form.category_id}>
+                    {categorias.find((c) => c.id === form.category_id)?.name || 'Categoria atual'} (inativa)
+                  </option>
+                )}
+              </Select>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Categoria com carrossel próprio ganha uma vitrine só dela no app. Sem categoria, o passeio segue na lista comum.
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Duração (horas)" type="number" min={0.5} step={0.5}
                 value={form.duration_hours || ''} onChange={(e) => setForm({ ...form, duration_hours: e.target.value })} />
@@ -985,6 +1168,68 @@ export default function Catalogo() {
             </Button>
           </form>
         )}
+      </Modal>
+
+      {/* ── Modal categoria de passeio ─────────────────────────── */}
+      {/* Só o essencial para criar — mesmo enxugamento pedido para a categoria
+          de translado. Nome, descrição, ordem e as duas caixas. */}
+      <Modal
+        open={!!catModal}
+        onClose={() => setCatModal(null)}
+        title={catModal?.isNew ? 'Nova Categoria de Passeio' : 'Editar Categoria de Passeio'}
+        size="sm"
+      >
+        <form onSubmit={handleCategorySubmit} className="space-y-4">
+          <Input
+            label="Nome"
+            placeholder="Ex.: Passeios de barco"
+            value={catForm.name || ''}
+            onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
+            required
+          />
+          <Textarea
+            label="Descrição (opcional)"
+            rows={2}
+            value={catForm.description || ''}
+            onChange={(e) => setCatForm({ ...catForm, description: e.target.value })}
+          />
+          <Input
+            label="Ordem de exibição (menor aparece primeiro)"
+            type="number" min={0}
+            value={catForm.sort_order ?? 0}
+            onChange={(e) => setCatForm({ ...catForm, sort_order: e.target.value })}
+          />
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-brand"
+              checked={!!catForm.is_active}
+              onChange={(e) => setCatForm({ ...catForm, is_active: e.target.checked })}
+            />
+            <span className="text-sm text-gray-300">Ativa</span>
+          </label>
+
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-brand mt-0.5"
+              checked={!!catForm.is_exclusive}
+              onChange={(e) => setCatForm({ ...catForm, is_exclusive: e.target.checked })}
+            />
+            <span className="text-sm text-gray-300">
+              Carrossel próprio no app
+              <span className="block text-[11px] text-gray-500">
+                Os passeios desta categoria aparecem num carrossel separado, com o
+                nome da categoria como título, em vez de entrarem na lista comum.
+              </span>
+            </span>
+          </label>
+
+          <Button type="submit" className="w-full" disabled={catMut.isPending}>
+            {catMut.isPending ? 'Salvando…' : 'Salvar Categoria'}
+          </Button>
+        </form>
       </Modal>
 
       {/* ── Modal rota ─────────────────────────────────────────── */}

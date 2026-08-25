@@ -518,6 +518,9 @@
       "title": "Experiencias exclusivas",
       "subtitle": "Servicio privado para momentos especiales"
     },
+    "categorySection": {
+      "subtitle": "Seleccionados en esta categoría"
+    },
     "seeAll": "Ver todos",
     "benefits": {
       "cancelTitle": "Cancelación flexible",

@@ -158,10 +158,32 @@ export default function ToursDesktop() {
     ? byCategory.filter((t) => t.name.toLowerCase().includes(searchTerm.trim().toLowerCase()))
     : byCategory
 
+  // Categoria marcada como "carrossel próprio" (categories.is_exclusive) ganha
+  // seção separada, com o nome dela de título — mesma lógica do mobile e dos
+  // translados. Independente de `tours.is_exclusive`, que define o fluxo de venda.
+  const secoesDeCategoria = useMemo(() => {
+    const porId = new Map()
+    for (const x of list) {
+      if (!x.categories?.is_exclusive) continue
+      const id = x.categories.id || x.category_id || x.categories.name
+      if (!id) continue
+      if (!porId.has(id)) {
+        porId.set(id, { id, nome: x.categories.name || '', ordem: Number(x.categories.sort_order) || 0, passeios: [] })
+      }
+      porId.get(id).passeios.push(x)
+    }
+    return [...porId.values()].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome))
+  }, [list])
+  const idsEmCategoria = useMemo(
+    () => new Set(secoesDeCategoria.flatMap((c) => c.passeios.map((p) => p.id))),
+    [secoesDeCategoria],
+  )
+
   // Tradicionais (carrinho/combo) × exclusivos (venda direta) — mesma divisão
-  // do mobile. Os dois abrem a página de detalhe no desktop.
-  const tradList      = list.filter((t) => !t.is_exclusive)
-  const exclusiveList = list.filter((t) => t.is_exclusive)
+  // do mobile. Os dois abrem a página de detalhe no desktop. Quem já tem seção
+  // de categoria sai daqui para não aparecer duas vezes.
+  const tradList      = list.filter((t) => !t.is_exclusive && !idsEmCategoria.has(t.id))
+  const exclusiveList = list.filter((t) =>  t.is_exclusive && !idsEmCategoria.has(t.id))
 
   // R6: horário limite de solicitação (padrão 12:00, America/Fortaleza) —
   // passou do cutoff, a data mínima do filtro passa a ser amanhã. O backend
@@ -302,6 +324,28 @@ export default function ToursDesktop() {
               ))}
             </div>
           )}
+
+          {/* Uma seção por categoria marcada, com o nome da categoria. */}
+          {secoesDeCategoria.map((cat) => (
+            <div key={cat.id}>
+              <div className="mt-10 mb-4">
+                <h2 className="text-[20px] font-extrabold text-gray-900">{cat.nome}</h2>
+                <p className="text-[13px] text-gray-500 mt-0.5">{t('toursPg.categorySection.subtitle')}</p>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {cat.passeios.map((tour, i) => (
+                  <TourCard
+                    key={tour.id}
+                    tour={tour}
+                    gradient={FALLBACK_GRADIENTS[(i + 1) % FALLBACK_GRADIENTS.length]}
+                    isFav={favs.has(tour.id)}
+                    onToggleFav={toggleFav}
+                    onDetails={openDetails}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
 
           {/* Exclusivos: venda direta, carrossel próprio no mobile — aqui em
               seção separada com selo (mesma divisão do catálogo). */}

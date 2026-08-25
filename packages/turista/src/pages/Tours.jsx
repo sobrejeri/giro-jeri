@@ -384,13 +384,52 @@ export default function Tours() {
   const tours = searchTerm.trim()
     ? base.filter((x) => x.name.toLowerCase().includes(searchTerm.toLowerCase()))
     : base
+  // CATEGORIA com carrossel próprio (categories.is_exclusive, migration 071) —
+  // mesma lógica já usada nos translados. A categoria tira o passeio da lista
+  // comum e ganha uma vitrine só dela, com o nome da categoria de título.
+  //
+  // É independente de `tours.is_exclusive`: aquele decide o FLUXO DE VENDA
+  // (venda direta, sem carrinho); este decide apenas ONDE o passeio aparece.
+  // Um passeio pode ter os dois, um só, ou nenhum.
+  const temCarrosselProprio = (x) => !!x.categories?.is_exclusive
+
+  const categoriasCarrossel = useMemo(() => {
+    const porId = new Map()
+    for (const x of tours) {
+      if (!temCarrosselProprio(x)) continue
+      const id = x.category_id || x.categories?.id || x.categories?.name
+      if (!id) continue
+      if (!porId.has(id)) {
+        porId.set(id, {
+          id,
+          nome:  x.categories?.name || '',
+          ordem: Number(x.categories?.sort_order) || 0,
+          passeios: [],
+        })
+      }
+      porId.get(id).passeios.push(x)
+    }
+    // Ordem definida no admin; empate resolvido pelo nome para a vitrine não
+    // trocar de posição a cada carregamento.
+    return [...porId.values()].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome))
+  }, [tours])
+
+  const idsEmCarrossel = useMemo(
+    () => new Set(categoriasCarrossel.flatMap((c) => c.passeios.map((p) => p.id))),
+    [categoriasCarrossel],
+  )
+
   // Tradicionais entram no carrinho/combo (fluxo desta tela); exclusivos são
   // venda direta (carrossel próprio → tela de detalhes, sem carrinho).
-  const tradTours      = tours.filter((t) => !t.is_exclusive)
-  const exclusiveTours = tours.filter((t) => t.is_exclusive)
+  // Quem já está numa vitrine de categoria sai das duas listas — senão o mesmo
+  // passeio apareceria duas vezes na tela.
+  const tradTours      = tours.filter((t) => !t.is_exclusive && !idsEmCarrossel.has(t.id))
+  const exclusiveTours = tours.filter((t) =>  t.is_exclusive && !idsEmCarrossel.has(t.id))
+  const emCategorias   = categoriasCarrossel.flatMap((c) => c.passeios)
   // Nada vem pré-selecionado: o cliente escolhe um passeio (tradicional OU
   // exclusivo) e só então os veículos aparecem. Clicar no selecionado desmarca.
-  const selectedTour = [...tradTours, ...exclusiveTours].find((t) => t.id === selectedId) || null
+  const selectedTour = [...tradTours, ...exclusiveTours, ...emCategorias]
+    .find((t) => t.id === selectedId) || null
 
   // Nem todo passeio aceita os dois modos — o voo panorâmico, por exemplo, só
   // existe COMPARTILHADO. A tela abria sempre em "Privativo" e o toggle não
@@ -600,6 +639,35 @@ export default function Tours() {
     </section>
   ) : null
 
+  // Uma vitrine por categoria marcada, com o NOME da categoria no título —
+  // igual aos translados. Renderizadas acima dos veículos, para que selecionar
+  // um passeio daqui faça os veículos surgirem logo abaixo.
+  const carrosseisDeCategoria = !toursLoading && categoriasCarrossel.length > 0 ? (
+    categoriasCarrossel.map((cat) => (
+      <section key={cat.id}>
+        <SectionHeader
+          icon={Sparkles}
+          cor="text-violet-500"
+          title={cat.nome}
+          subtitle={t('toursPg.categorySection.subtitle')}
+        />
+        <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 scrollbar-hide snap-x">
+          {cat.passeios.map((tour) => (
+            <TourCard
+              key={tour.id}
+              tour={tour}
+              mode={mode}
+              selected={selectedTour?.id === tour.id}
+              onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
+              isFav={favs.has(tour.id)}
+              onFav={() => toggleFav(tour.id)}
+            />
+          ))}
+        </div>
+      </section>
+    ))
+  ) : null
+
   return (
     <>
     <div className="lg:hidden min-h-screen pb-28">
@@ -766,7 +834,7 @@ export default function Tours() {
             tela: com a pastilha "Exclusivos" ligada, esta seção anunciava
             "nenhum passeio encontrado" logo acima de uma fileira de passeios.
             A mensagem de vazio só faz sentido quando a tela está mesmo vazia. */}
-        {(tradTours.length > 0 || exclusiveTours.length === 0 || toursLoading) && (
+        {(tradTours.length > 0 || (exclusiveTours.length === 0 && emCategorias.length === 0) || toursLoading) && (
         <section>
           <SectionHeader
             icon={Flame}
@@ -802,6 +870,9 @@ export default function Tours() {
           )}
         </section>
         )}
+
+        {/* Vitrines por categoria — sempre acima dos veículos */}
+        {carrosseisDeCategoria}
 
         {/* Exclusivo selecionado → carrossel exclusivo ACIMA dos veículos */}
         {selectedTour?.is_exclusive && exclusiveCarousel}

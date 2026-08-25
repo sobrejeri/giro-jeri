@@ -21,8 +21,12 @@ router.get('/', async (req, res, next) => {
     // tela de Passeios. O front já trata a ausência de cada uma (some do
     // cartão), então vale mais devolver a lista sem elas do que devolver 500.
     const COLUNAS_APRESENTACAO = 'difficulty_level, max_people, highlight_badge,';
+    // `is_exclusive`/`sort_order` da CATEGORIA (migration 071) definem os
+    // carrosséis por categoria no app. Entram no mesmo caminho tolerante: sem a
+    // migration aplicada, a lista sai com a categoria básica em vez de 500.
+    const COLUNAS_CATEGORIA = 'id, name, slug, is_exclusive, sort_order';
 
-    const montar = (apresentacao) => {
+    const montar = (apresentacao, colunasCategoria) => {
       let q = supabase
         .from('tours')
         .select(`
@@ -33,7 +37,7 @@ router.get('/', async (req, res, next) => {
           ${apresentacao}
           latitude, longitude, service_radius_km,
           regions ( id, name, center_latitude, center_longitude, service_radius_km ),
-          categories ( id, name, slug )
+          categories ( ${colunasCategoria} )
         `)
         .eq('is_active', true)
         .order('display_order');
@@ -47,10 +51,14 @@ router.get('/', async (req, res, next) => {
       return q;
     };
 
-    let { data, error } = await montar(COLUNAS_APRESENTACAO);
+    let { data, error } = await montar(COLUNAS_APRESENTACAO, COLUNAS_CATEGORIA);
     if (error?.code === '42703') {   // coluna inexistente
+      console.warn('[tours] colunas opcionais ausentes; tentando sem as da categoria:', error.message);
+      ({ data, error } = await montar(COLUNAS_APRESENTACAO, 'id, name, slug'));
+    }
+    if (error?.code === '42703') {
       console.warn('[tours] colunas de apresentação ausentes; seguindo sem elas:', error.message);
-      ({ data, error } = await montar(''));
+      ({ data, error } = await montar('', 'id, name, slug'));
     }
     if (error) throw error;
 

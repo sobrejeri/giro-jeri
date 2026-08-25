@@ -16,7 +16,9 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 069.**
+   registre aqui o número reservado. **Próximo número livre: 072.**
+   (069, 070 e 071 já estão criadas — a linha ficou desatualizada por duas
+   sessões seguidas; confirme sempre com `ls supabase/migrations/ | tail -3`.)
 
    ⚠️ **OITO números já foram usados DUAS vezes** por agentes diferentes:
    015, 016, 017, 021, 022, 023, 065 e 066. Isso já causou estrago real: quem
@@ -35,6 +37,37 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (categorias de PASSEIO com carrossel próprio)** —
+  Pedido do dono: "quero que os passeios funcionem assim tbm, por categoria e
+  criação de carrossel separados, mesma lógica que acabamos de criar" (nos
+  translados). **Migration 071** — reservada e criada.
+  A tabela `categories` já existia e `tours.category_id` já apontava para ela,
+  mas faltava tudo em volta: não havia como criar categoria pelo painel (a rota
+  era só GET), o formulário de passeio não tinha campo de categoria, e a
+  categoria não sabia dizer se rende carrossel.
+  - **Banco (071)**: `categories.is_exclusive` (espelha `transfers.is_exclusive`
+    da 067) + `category_type` com default `'tour'` e backfill das linhas antigas
+    + índice parcial de listagem. Idempotente, validada em Postgres 16.
+  - **API**: POST/PUT/DELETE de `/api/catalog/categories` (o DELETE **desativa**,
+    não apaga — `tours.category_id` aponta para a linha). POST/PUT toleram
+    42703: sem a 071 aplicada, salvam sem a marca em vez de recusar o cadastro.
+    `/api/tours` passou a trazer `is_exclusive`/`sort_order` da categoria, no
+    mesmo caminho tolerante das colunas de apresentação.
+  - **Admin**: card "Categorias" na aba Passeios (CRUD, contagem de passeios,
+    selo "Carrossel próprio"), barra de filtro por categoria, nome da categoria
+    na linha do passeio, `<Select>` "Categoria" no formulário e **modal próprio**
+    (`catModal`) — separado do modal de passeio de propósito, porque misturar os
+    dois já causou edição no campo errado antes.
+  - **App**: uma vitrine por categoria marcada, com o nome dela de título e na
+    ordem do `sort_order` (mobile e desktop). Passeio que entra numa vitrine sai
+    das listas comuns para não aparecer duas vezes.
+  `categories.is_exclusive` (ONDE aparece) é independente de `tours.is_exclusive`
+  (fluxo de venda direta). Um passeio pode ter os dois, um só, ou nenhum.
+  Conferido no navegador: 2 categorias marcadas + 1 comum + 1 sem categoria + 1
+  exclusivo sem categoria → 4 seções na ordem certa e **cada passeio aparece
+  exatamente 1×**; no admin, os dois modais são distintos (o de categoria tem 5
+  campos e nenhum campo de passeio) e o filtro por categoria recorta a lista.
 
 - **2026-08-23 · Agente B (criar categoria: 2 defeitos na API)** — Depois de
   rodar a 069, criar categoria falhava com *"invalid input syntax for type

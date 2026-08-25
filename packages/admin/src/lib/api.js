@@ -137,6 +137,11 @@ export const api = {
   deleteTransfer: (id)       => request(`/api/catalog/transfers/${id}`, { method: 'DELETE' }),
 
   // Catálogo — Rotas de Transfer
+  // Categorias de passeio (a que agrupa e vira carrossel no app)
+  getCategories:    ()          => request('/api/catalog/categories'),
+  createCategory:   (body)      => request('/api/catalog/categories', { method: 'POST', body }),
+  updateCategory:   (id, body)  => request(`/api/catalog/categories/${id}`, { method: 'PUT', body }),
+  deleteCategory:   (id)        => request(`/api/catalog/categories/${id}`, { method: 'DELETE' }),
   getTransferRoutes:   (params = {}) => request(`/api/catalog/transfer-routes?${new URLSearchParams(params)}`),
   createTransferRoute: (body)        => request('/api/catalog/transfer-routes', { method: 'POST', body }),
   updateTransferRoute: (id, body)    => request(`/api/catalog/transfer-routes/${id}`, { method: 'PUT', body }),
