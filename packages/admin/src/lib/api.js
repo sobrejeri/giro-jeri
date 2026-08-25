@@ -123,6 +123,7 @@ export const api = {
   // Modais operados pela cooperativa (076): o corte grosso do roteamento.
   getOperatorModals:   (operatorId)                    => request(`/api/admin/operators/${operatorId}/modals`),
   setOperatorModal:    (operatorId, modalId, body)     => request(`/api/admin/operators/${operatorId}/modals/${modalId}`, { method: 'PUT', body }),
+  setOperatorCombos:   (operatorId, body)              => request(`/api/admin/operators/${operatorId}/combos`, { method: 'PUT', body }),
 
   // Financeiro
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),

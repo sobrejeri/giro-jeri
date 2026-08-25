@@ -763,6 +763,25 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
     enabled:  open && !!operatorId,
   })
 
+  // Perfil de COMBO (077). Vem junto na lista de modais.
+  const aceitaCombo = modais.length > 0 ? modais[0].accepts_combos !== false : true
+  const meiosOperados = modais.filter((m) => m.is_active !== false).length
+
+  const comboMut = useMutation({
+    mutationFn: (accepts_combos) => api.setOperatorCombos(operatorId, { accepts_combos }),
+    onMutate: async (accepts_combos) => {
+      setErrorRow(null)
+      await qc.cancelQueries({ queryKey: modalsKey })
+      const previous = qc.getQueryData(modalsKey)
+      qc.setQueryData(modalsKey, (old = []) => old.map((m) => ({ ...m, accepts_combos })))
+      return { previous }
+    },
+    onError: (err, _v, context) => {
+      if (context?.previous) qc.setQueryData(modalsKey, context.previous)
+      setErrorRow({ id: 'combo', message: err.message || fleetCopy.saveError })
+    },
+  })
+
   const modalToggleMut = useMutation({
     mutationFn: ({ modalId, is_active }) => api.setOperatorModal(operatorId, modalId, { is_active }),
     onMutate: async ({ modalId, is_active }) => {
@@ -862,6 +881,43 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
                   </div>
                 )
               })}
+            </div>
+
+            {/* Perfil de COMBO — pedido que junta meios diferentes (buggy +
+                barco). Ele vai INTEIRO para uma cooperativa só, então só faz
+                sentido para quem opera mais de um meio. */}
+            <div className="mt-3 pt-3 border-t border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-200">Aceita pedidos combinados</p>
+                  <p className="text-[11px] text-gray-500">
+                    {meiosOperados > 1
+                      ? 'Pedido que junta meios diferentes (ex.: buggy + barco) vai inteiro para esta cooperativa.'
+                      : 'Só vale para quem opera mais de um meio — marque os meios acima primeiro.'}
+                  </p>
+                  {errorRow?.id === 'combo' && (
+                    <p className="text-[11px] text-red-400 mt-0.5">{errorRow.message}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => comboMut.mutate(!aceitaCombo)}
+                  disabled={comboMut.isPending}
+                  className={`shrink-0 text-[11.5px] font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                    aceitaCombo
+                      ? 'bg-brand/15 border-brand/60 text-brand'
+                      : 'border-gray-700 text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  {aceitaCombo ? 'Aceita' : 'Não aceita'}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-2">
+                {meiosOperados > 1 && aceitaCombo
+                  ? 'Perfil: universal — recebe os serviços de cada meio e os combos entre eles.'
+                  : meiosOperados <= 1
+                    ? 'Perfil: categoria única — recebe só os serviços do meio que opera.'
+                    : 'Perfil: recebe os serviços de cada meio, mas não os combos.'}
+              </p>
             </div>
           </div>
         )}

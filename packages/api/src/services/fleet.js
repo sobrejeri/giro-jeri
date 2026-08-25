@@ -166,27 +166,48 @@ export async function modalPrefs(supabase, modalIds, operatorIds) {
 
 // COMBO: reserva que exige veículos de modais DIFERENTES (buggy + barco).
 //
-// Nenhuma cooperativa precisa operar os dois, e exigir isso deixaria o pedido
-// sem NINGUÉM para notificar — em silêncio, porque o envio de WhatsApp
-// simplesmente não acontece quando a lista de elegíveis sai vazia. O cliente
-// pediu e nada se moveria até um admin reparar.
+// O combo vai INTEIRO para UMA cooperativa — a "universal", que opera os dois
+// meios e aceita fechar o pedido combinado (migration 077). Uma cooperativa,
+// um recebedor: o split de recebedor único já funciona, e não é preciso ligar o
+// motor de pernas nem liberar o split entre 2+ cooperativas.
 //
-// Enquanto o motor de pernas (`booking_legs`, migration 042) estiver desligado,
-// não existe a quem rotear cada trecho separadamente. Então o combo NÃO é
-// filtrado por modal: cai no filtro por veículo, como era antes, e a
-// coordenação fica com o admin. Melhor avisar demais do que não avisar.
+// Os dois perfis saem do que já está cadastrado:
+//   • categoria única → opera um modal só; nunca casa com um combo, porque não
+//     executaria a outra metade;
+//   • universal → opera todos os modais do combo E tem accepts_combos.
 export function ehCombo(modalIds) {
   return !!modalIds && modalIds.size > 1;
 }
 
 // A cooperativa opera TODOS os modais que a reserva exige?
-export function operatorServesModals(opId, modalIds, disabledByOp) {
+// `aceitaCombo` é consultado só quando a reserva É um combo — serviço de modal
+// único chega normalmente a quem não aceita combo.
+export function operatorServesModals(opId, modalIds, disabledByOp, aceitaCombo = null) {
   if (!modalIds || modalIds.size === 0) return true;   // sem modal → fail-open
-  if (ehCombo(modalIds)) return true;                  // combo → ver acima
+  if (ehCombo(modalIds) && aceitaCombo && aceitaCombo.get(opId) === false) return false;
   const dis = disabledByOp.get(opId);
   if (!dis) return true;
   for (const mId of modalIds) if (dis.has(mId)) return false;
   return true;
+}
+
+// accepts_combos de cada cooperativa. Map<opId, boolean>.
+// Ausência da coluna (077 pendente) devolve mapa vazio → ninguém é barrado por
+// ela, e o combo volta a depender só dos modais operados.
+export async function comboPrefs(supabase, operatorIds) {
+  const out = new Map();
+  const ids = [...new Set((operatorIds || []).filter(Boolean))];
+  if (ids.length === 0) return out;
+  const { data, error } = await supabase
+    .from('users').select('id, accepts_combos').in('id', ids);
+  if (error) {
+    if (error.code !== '42703') {
+      console.error('[fleet] leitura de accepts_combos falhou:', error.message);
+    }
+    return out;
+  }
+  for (const u of data || []) out.set(u.id, u.accepts_combos !== false);
+  return out;
 }
 
 // Preferências de veículo de um conjunto de cooperativas.
@@ -254,20 +275,31 @@ export async function eligibleOperatorsForBooking(supabase, bookingId) {
       modalIdByVehicle(supabase, vehicleIds),
     ]);
     const modalIds = modalIdsOf(vehicleIds, modalPorVeiculo);
-    if (ehCombo(modalIds)) {
-      // Visível no log: é o pedido que precisa de duas cooperativas e hoje sai
-      // para todas. Quando o motor de pernas ligar, este caso vira N pernas.
-      console.warn('[fleet] reserva %s é COMBO (%d modais) — filtro por modal não se aplica',
-        bookingId, modalIds.size);
-    }
-    const modaisDesativados = await modalPrefs(supabase, [...modalIds], opIds);
+    const combo = ehCombo(modalIds);
+    const [modaisDesativados, aceitaCombo] = await Promise.all([
+      modalPrefs(supabase, [...modalIds], opIds),
+      combo ? comboPrefs(supabase, opIds) : Promise.resolve(new Map()),
+    ]);
 
     // Os dois filtros valem JUNTOS: opera o modal E não desativou o veículo.
     // O modal é o corte grosso (quem faz aéreo x terrestre); o veículo segue
     // para o ajuste fino dentro do mesmo modal.
-    return operators.filter((op) =>
-      operatorServesModals(op.id, modalIds, modaisDesativados)
+    const elegiveis = operators.filter((op) =>
+      operatorServesModals(op.id, modalIds, modaisDesativados, aceitaCombo)
       && operatorServesVehicles(op.id, vehicleIds, optIn, prefs));
+
+    // REDE DE SEGURANÇA. Lista vazia = ninguém recebe WhatsApp
+    // (`notifyOperatorsNewBooking` faz skipped), e o pedido fica parado em
+    // silêncio até alguém reparar. Isso é pior do que avisar demais.
+    // Acontece de verdade num combo sem cooperativa universal que cubra
+    // aqueles meios — cadastro incompleto, não regra de negócio.
+    if (elegiveis.length === 0) {
+      console.warn('[fleet] reserva %s%s sem NENHUMA cooperativa elegível — notificando todas. '
+        + 'Confira os meios operados e quem aceita combo no admin.',
+        bookingId, combo ? ` (COMBO, ${modalIds.size} modais)` : '');
+      return operators;
+    }
+    return elegiveis;
   } catch (err) {
     console.error('[fleet] elegibilidade falhou, notificando todos:', err?.message);
     return operators; // fail-open

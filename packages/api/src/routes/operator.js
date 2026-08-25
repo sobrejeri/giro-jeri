@@ -612,13 +612,14 @@ router.get('/bookings', async (req, res, next) => {
         // MODAL (076) entra aqui também, e não só na notificação: sem isso a
         // coop deixaria de ser avisada mas continuaria vendo o pedido no feed,
         // e as duas telas contariam histórias diferentes.
+        // Mesmas funções das notificações, de propósito: se as duas divergirem,
+        // a coop recebe WhatsApp de um pedido que não aparece na tela dela.
+        // O COMBO (modais diferentes no mesmo pedido) só chega a quem opera
+        // todos os meios E aceita combo — o "operador universal" da 077.
         const {
           requiredVehiclesByBooking, optInVehicleIds, vehiclePrefs, operatorServesVehicles,
-          modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals,
+          modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals, comboPrefs,
         } = await import('../services/fleet.js');
-        // `operatorServesModals` já deixa o COMBO passar (reserva com modais
-        // diferentes). Precisa ser a MESMA função das notificações: se as duas
-        // telas divergirem, a coop recebe WhatsApp de pedido que não vê aqui.
 
         const byBooking = await requiredVehiclesByBooking(supabase, acceptanceRows);
         const allVehicleIds = [...new Set([...byBooking.values()].flat())];
@@ -630,11 +631,15 @@ router.get('/bookings', async (req, res, next) => {
             modalIdByVehicle(supabase, allVehicleIds),
           ]);
           const todosModais = modalIdsOf(allVehicleIds, modalPorVeiculo);
-          const modaisDesativados = await modalPrefs(supabase, [...todosModais], [req.user.id]);
+          const [modaisDesativados, aceitaCombo] = await Promise.all([
+            modalPrefs(supabase, [...todosModais], [req.user.id]),
+            comboPrefs(supabase, [req.user.id]),
+          ]);
 
           acceptanceRows = acceptanceRows.filter((b) => {
             const veics = byBooking.get(b.id) || [];
-            return operatorServesModals(req.user.id, modalIdsOf(veics, modalPorVeiculo), modaisDesativados)
+            const modais = modalIdsOf(veics, modalPorVeiculo);
+            return operatorServesModals(req.user.id, modais, modaisDesativados, aceitaCombo)
                 && operatorServesVehicles(req.user.id, veics, optIn, prefs);
           });
         }

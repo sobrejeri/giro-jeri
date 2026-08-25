@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 077.**
+   registre aqui o número reservado. **Próximo número livre: 078.**
    (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
    com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
 
@@ -46,6 +46,33 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (operador universal — combo sem motor de pernas)** —
+  Proposta do dono, e é melhor que o caminho que eu ia seguir: em vez de partir
+  o combo em duas cooperativas (motor de pernas + split entre 2+ contas, hoje
+  bloqueado em payments.js), o combo vai **inteiro para UMA** cooperativa — a
+  universal. Uma cooperativa, um recebedor, split de recebedor único que já
+  funciona. **Migration 077**: `users.accepts_combos`, default TRUE.
+  Os dois perfis saem da combinação do que já existia, sem cadastro novo:
+  • categoria única = opera um modal (076) → nunca casa com combo;
+  • universal = opera todos os modais do combo E `accepts_combos`.
+  A flag é separada de "opera 2+ modais" de propósito: atender barco e buggy não
+  é o mesmo que topar FECHAR os dois no mesmo passeio, com uma logística só.
+  Default TRUE + modal opt-out = nada muda ao aplicar; aperta conforme o admin
+  marca os meios de cada cooperativa.
+  **Rede de segurança nova em `eligibleOperatorsForBooking`:** lista de
+  elegíveis vazia passou a devolver TODAS as cooperativas, com `console.warn`
+  nomeando a reserva. Sem isso, um combo sem universal que o cubra (ex.:
+  terrestre+aéreo, que ninguém opera junto) sairia para ninguém — e
+  `notifyOperatorsNewBooking` faz `skipped` com lista vazia, então o pedido
+  ficaria parado em silêncio. É cadastro incompleto, não regra de negócio.
+  Conferido com Supabase falso: combo buggy+barco → só a universal; a coop que
+  opera os dois meios mas recusa combo fica fora do combo e continua recebendo
+  avulso; combo terrestre+aéreo (ninguém faz os dois) cai na rede e notifica
+  todas, com o aviso no log. Em Postgres 16: default TRUE, a consulta de perfil
+  do comentário funciona, desmarcar grava e re-rodar preserva.
+  O motor de pernas continua desligado e agora não é mais pré-requisito para
+  combo — segue disponível se um dia o split multi-cooperativa for liberado.
 
 - **2026-08-25 · Agente B (modal também nas PERNAS)** — Onde o filtro por modal
   funciona sem ressalva nenhuma: a perna (`booking_legs`) tem UM veículo, logo

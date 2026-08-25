@@ -1373,8 +1373,15 @@ router.get('/operators/:operatorId/modals', requireAdmin, async (req, res, next)
     const porModal = new Map();
     for (const v of veics || []) porModal.set(v.modal, (porModal.get(v.modal) || 0) + 1);
 
+    // `accepts_combos` viaja junto: a tela mostra os meios operados e o perfil
+    // de combo no mesmo bloco, que é como a decisão é tomada.
+    const { data: perfil } = await supabase
+      .from('users').select('accepts_combos').eq('id', operatorId).maybeSingle();
+
+    res.set('X-Accepts-Combos', String(perfil?.accepts_combos !== false));
     res.json((modais || []).map((m) => ({
       modal_id:      m.id,
+      accepts_combos: perfil?.accepts_combos !== false,
       slug:          m.slug,
       name:          m.name,
       description:   m.description,
@@ -1383,6 +1390,44 @@ router.get('/operators/:operatorId/modals', requireAdmin, async (req, res, next)
       is_active:     porId.has(m.id) ? porId.get(m.id).is_active !== false : true,
     })));
   } catch (err) { next(err); }
+});
+
+// ── PUT /api/admin/operators/:operatorId/combos ────────
+// Perfil da cooperativa quanto a COMBO (migration 077): o pedido com veículos
+// de modais diferentes vai INTEIRO para uma cooperativa só — a universal.
+// Sem isso o combo exigiria duas cooperativas, e aí o motor de pernas e o
+// split entre 2+ contas, que segue bloqueado em payments.js.
+const operatorComboSchema = z.object({ accepts_combos: z.boolean() });
+
+router.put('/operators/:operatorId/combos', requireAdmin, async (req, res, next) => {
+  try {
+    const { operatorId } = req.params;
+    const body = operatorComboSchema.parse(req.body);
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ accepts_combos: body.accepts_combos })
+      .eq('id', operatorId)
+      .eq('user_type', 'operator')
+      .select('id, accepts_combos')
+      .maybeSingle();
+    if (error) {
+      if (error.code === '42703') {
+        return res.status(400).json({
+          error: 'O banco ainda não tem o campo de combo. '
+               + 'Rode a migration 077_operador_universal.sql no Supabase.',
+        });
+      }
+      throw error;
+    }
+    if (!data) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+    res.json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
 });
 
 // ── PUT /api/admin/operators/:operatorId/modals/:modalId ──
