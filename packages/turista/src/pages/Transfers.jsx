@@ -520,14 +520,16 @@ export default function Transfers() {
   const [routeOrigin,   setRouteOrigin]   = useState('')     // '' = todas as saídas
   const [showAllRoutes, setShowAllRoutes] = useState(false)
 
-  // Locais de saída com pelo menos uma rota, ordenados por quantidade.
+  // Locais de saída com pelo menos uma rota, ordenados por quantidade. Conta
+  // as comuns E as exclusivas: o filtro vale para os dois carrosséis ao mesmo
+  // tempo, então a contagem do chip precisa refletir tudo que ele revela.
   const originOptions = useMemo(() => {
     const m = new Map()
-    for (const r of routes) m.set(r.origin_name, (m.get(r.origin_name) || 0) + 1)
+    for (const r of todasRotas) m.set(r.origin_name, (m.get(r.origin_name) || 0) + 1)
     return [...m.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([name, count]) => ({ name, count }))
-  }, [routes])
+  }, [todasRotas])
 
   // Filtrar por saída já é um pedido explícito: mostra todas daquela origem.
   const routesShown = useMemo(() => {
@@ -544,6 +546,18 @@ export default function Transfers() {
   }, [routes, routeOrigin, showAllRoutes, popularRoutes])
 
   const routesExpanded = !!routeOrigin || showAllRoutes
+
+  // O mesmo filtro de saída recorta os carrosséis exclusivos — sem isso o
+  // turista filtrava "Jeri" e continuava vendo voos partindo de outro lugar.
+  // Categoria que fica sem nenhuma rota naquela saída some junto com o título.
+  const categoriasExclusivasShown = useMemo(() => {
+    if (!routeOrigin) return categoriasExclusivas
+    return categoriasExclusivas
+      .map(cat => ({ ...cat, rotas: cat.rotas.filter(r => r.origin_name === routeOrigin) }))
+      .filter(cat => cat.rotas.length > 0)
+  }, [categoriasExclusivas, routeOrigin])
+
+  const exclusivasShown = categoriasExclusivasShown.flatMap(c => c.rotas)
 
   // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
   // anteriores a "agora + N horas". Padrão 4h; a rota selecionada pode definir
@@ -942,9 +956,13 @@ export default function Transfers() {
           )}
 
           {routesShown.length === 0 ? (
-            <p className="text-[12px] text-gray-400 bg-white/60 rounded-xl px-3 py-3">
-              Nenhuma rota saindo daqui por enquanto.
-            </p>
+            // Silencia o aviso quando a saída só tem voo exclusivo — ele
+            // aparece logo abaixo, e dizer "nenhuma rota" seria mentira.
+            exclusivasShown.length === 0 && (
+              <p className="text-[12px] text-gray-400 bg-white/60 rounded-xl px-3 py-3">
+                Nenhuma rota saindo daqui por enquanto.
+              </p>
+            )
           ) : routesExpanded ? (
             // Expandida: grade, para dar pra bater o olho em todas de uma vez.
             <div className="grid grid-cols-2 gap-3">
@@ -977,7 +995,7 @@ export default function Transfers() {
 
         {/* TRANSLADOS EXCLUSIVOS (helicóptero) — carrossel separado, para não
             misturar com as rotas comuns nem no preço nem na operação. */}
-        {categoriasExclusivas.map((cat) => (
+        {categoriasExclusivasShown.map((cat) => (
           <div key={cat.id}>
             <div className="flex items-baseline justify-between mb-2.5">
               {/* O título é o NOME DA CATEGORIA cadastrada no admin: criar uma
