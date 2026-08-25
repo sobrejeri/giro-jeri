@@ -28,6 +28,26 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-23 · Agente B (tela de pagamento travada — regressão MINHA)** — O
+  dono relatou que "Pagar agora" não prosseguia. **Causa: eu.** Ao tornar as
+  formas de pagamento configuráveis, fiz o Brick esperar
+  `/api/settings/public`; enquanto a API acordava (cold start do Render leva
+  dezenas de segundos), a tela ficava presa em "Preparando pagamento seguro…"
+  e o formulário nunca aparecia. Preferência de EXIBIÇÃO segurando o
+  PAGAMENTO — inversão de prioridade.
+  **Corrigido:** a busca ganhou prazo de 2s; passado o prazo segue no padrão
+  (todas as formas ligadas) e **ignora a resposta atrasada** — aplicá-la
+  remontaria o Brick, e o Mercado Pago duplica o formulário quando remontado no
+  mesmo container.
+  **Junto:** o estado de erro do Brick só dizia "atualize a página" — sem botão.
+  Num app instalado não há botão de atualizar à vista, então quem caísse ali
+  ficava com a reserva aceita e sem conseguir pagar. Agora tem "Tentar de novo"
+  e link do WhatsApp.
+  **Lição de método:** o primeiro teste NÃO reproduziu porque eu registrei a
+  rota genérica `**/api/**` DEPOIS da específica no Playwright — a última
+  registrada vence, e o atraso nunca era aplicado. Quase reportei "não
+  reproduz". Ordem importa: genérica primeiro, específica depois.
+
 - **2026-08-23 · Agente B (formas de pagamento configuráveis)** — O dono passa a
   escolher o que o cliente vê no checkout: PIX, crédito, débito e o máximo de
   parcelas. **Sem migration** (as chaves nascem no upsert de settings).

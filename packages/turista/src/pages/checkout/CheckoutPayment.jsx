@@ -126,8 +126,28 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
 
   if (phase === 'error') {
     return (
-      <div className="px-4 py-4 text-[13px] text-red-600 bg-red-50 rounded-2xl border border-red-100">
-        Não foi possível carregar o pagamento. Atualize a página e tente novamente.
+      // Beco sem saída antes: só dizia "atualize a página", e num app instalado
+      // não existe botão de atualizar à vista. Quem chegava aqui ficava com a
+      // reserva aceita e sem conseguir pagar.
+      <div className="px-4 py-4 bg-red-50 rounded-2xl border border-red-100">
+        <p className="text-[13px] text-red-700 font-semibold">Não foi possível carregar o pagamento.</p>
+        <p className="text-[12px] text-red-600/80 mt-1 leading-snug">
+          Costuma ser conexão instável. Sua reserva está guardada — pode tentar de novo.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-brand text-white font-bold rounded-full px-4 py-2 text-[13px] active:scale-95 transition-transform"
+          >
+            Tentar de novo
+          </button>
+          <a
+            href="https://wa.me/5588981222990"
+            className="text-[12.5px] font-semibold text-gray-600 underline"
+          >
+            Falar no WhatsApp
+          </a>
+        </div>
       </div>
     )
   }
@@ -159,16 +179,26 @@ export default function CheckoutPayment() {
   const navigate   = useNavigate()
   const { state }  = useLocation()
   const { t }      = useTranslation()
-  // Formas de pagamento configuradas pelo dono no admin. Best-effort: se a
-  // consulta falhar, `settings` fica indefinido e o checkout cai no padrão
-  // (todas as formas ligadas) — nunca deixa o cliente sem como pagar.
+  // Formas de pagamento configuradas pelo dono no admin.
+  //
+  // COM PRAZO. Isto é preferência de exibição — NÃO pode segurar a tela de
+  // pagamento. Sem o prazo, a primeira versão deixava o cliente preso em
+  // "Preparando pagamento seguro…" enquanto a API acordava (cold start do
+  // Render leva dezenas de segundos), e o formulário nunca aparecia.
+  //
+  // Passados 2 segundos, segue com o padrão (todas as formas ligadas) e IGNORA
+  // a resposta atrasada — aplicá-la depois remontaria o Brick, e o Mercado Pago
+  // duplica o formulário quando remontado no mesmo container.
   const [settings, setSettings] = useState(undefined)
   useEffect(() => {
-    let vivo = true
+    let decidido = false
+    const decidir = (v) => { if (!decidido) { decidido = true; setSettings(v) } }
+    const prazo = setTimeout(() => decidir({}), 2000)
     api.getPublicSettings()
-      .then((s) => { if (vivo) setSettings(s || {}) })
-      .catch(() => { if (vivo) setSettings({}) })
-    return () => { vivo = false }
+      .then((s) => decidir(s || {}))
+      .catch(() => decidir({}))
+      .finally(() => clearTimeout(prazo))
+    return () => { decidido = true; clearTimeout(prazo) }
   }, [])
   // Chave pública da cooperativa atribuída (split). Buscada para reservas já
   // existentes (pagamento pós-aceite). keyChecked evita montar o Brick antes.
