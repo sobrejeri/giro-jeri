@@ -17,7 +17,14 @@ export function draftFromTour(tour, { region_id = null } = {}) {
     id:   tour.id,
     kind: 'tour',
     name: tour.name,
-    mode: 'private',
+    // Privativo x compartilhado é escolhido no carrinho. O rascunho nasce no
+    // modo que o passeio realmente aceita — há passeio só compartilhado (voo
+    // panorâmico) e comprá-lo como privativo daria valor e modo errados.
+    mode: tour.is_private_enabled === false && tour.is_shared_enabled ? 'shared' : 'private',
+    allows_private: tour.is_private_enabled !== false,
+    allows_shared:  !!tour.is_shared_enabled,
+    shared_price_per_person: tour.shared_price_per_person != null
+      ? Number(tour.shared_price_per_person) : null,
     cover_image_url: tour.cover_image_url || null,
     // A API devolve o passeio ora com `region_id`, ora com o join `regions`.
     region_id: tour.region_id || tour.regions?.id || region_id,

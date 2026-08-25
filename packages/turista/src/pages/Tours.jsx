@@ -18,7 +18,6 @@ import {
   Flame, Sparkles, ShoppingCart, ChevronDown,
   ShieldCheck, MessageCircle, Lock, User as UserIcon,
 } from 'lucide-react'
-import SegmentedControl from '../components/tours/SegmentedControl'
 import FilterChip from '../components/tours/FilterChip'
 import SectionHeader from '../components/tours/SectionHeader'
 import TourCard from '../components/tours/TourCard'
@@ -691,7 +690,14 @@ export default function Tours() {
     return {
       id:      selectedTour.id,
       kind:    'tour',
-      mode:    'private',
+      // Privativo x compartilhado é escolhido no carrinho; aqui só viaja o que
+      // o passeio aceita, para o carrinho não oferecer um modo que não existe.
+      mode:    existing?.mode
+                 || (selectedTour.is_private_enabled === false && selectedTour.is_shared_enabled ? 'shared' : 'private'),
+      allows_private: selectedTour.is_private_enabled !== false,
+      allows_shared:  !!selectedTour.is_shared_enabled,
+      shared_price_per_person: selectedTour.shared_price_per_person != null
+                                 ? Number(selectedTour.shared_price_per_person) : null,
       name:    selectedTour.name,
       cover_image_url: selectedTour.cover_image_url || null,
       booking_cutoff_time: selectedTour.booking_cutoff_time || null,
@@ -852,16 +858,6 @@ export default function Tours() {
       </div>
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
-
-        {/* ── Privativo / Compartilhado ─────────────────────── */}
-        <SegmentedControl
-          value={mode}
-          onChange={setMode}
-          options={[
-            { id: 'private', label: t('toursPg.mode.private'), icon: UserIcon },
-            { id: 'shared',  label: t('toursPg.mode.shared'),  icon: Users },
-          ]}
-        />
 
         {/* Saída, data e pessoas saíram DESTA tela.
             A vitrine só apresenta os passeios; quem cobra os dados da reserva é
@@ -1116,17 +1112,9 @@ export default function Tours() {
         inCart={sheetTour ? cartIds.has(sheetTour.id) : false}
         onClose={() => setSheetTourId(null)}
         onAdd={() => {
-          // Compartilhado segue para o Resumo (não entra no carrinho, que hoje
-          // exige veículos) e precisa de saída e data — que ficam no bloco
-          // abaixo, agora que saíram do topo da tela. Fecha a folha e leva
-          // direto ao campo que falta; antes o botão só fechava a folha e o
-          // cliente não recebia nenhuma pista do que fazer em seguida.
-          if (mode === 'shared' && sheetTour?.shared_price_per_person) {
-            setSheetTourId(null)
-            if (!origin) { setShowOriginPicker(true); return }
-            if (!dataEscolhida) { setShowDatePicker(true); return }
-            return
-          }
+          // Todo passeio passa pelo carrinho — privativo e compartilhado. O
+          // modo é escolhido lá, junto dos veículos, porque é ele que decide
+          // se há veículo a escolher.
           saveCartItem(buildCartDraft())
           setSheetTourId(null)
           navigate('/carrinho')
@@ -1134,67 +1122,6 @@ export default function Tours() {
       />
 
       {/* ── CTA fixo (modo compartilhado) ───────────────────────── */}
-      {mode === 'shared' && selectedTour?.shared_price_per_person && createPortal((() => {
-        const pricePerPerson = Number(selectedTour.shared_price_per_person)
-        const sharedTotal    = pricePerPerson * people
-        return (
-          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40 pointer-events-none">
-            <div className="pointer-events-auto bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-              <div className="flex-1 min-w-0 mr-3">
-                <div className="flex items-center gap-1">
-                  <Users size={11} className="text-gray-400" />
-                  <span className="text-[12px] text-gray-500">
-                    {people} {people === 1 ? t('toursPg.common.passenger') : t('toursPg.common.passengersWord')}
-                  </span>
-                </div>
-                <p className="text-[16px] font-extrabold text-brand mt-0.5">
-                  R$ {sharedTotal.toLocaleString('pt-BR')}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  // Leva ao campo que falta em vez de só ficar apagado: com os
-                  // dois seletores agora abaixo do passeio, um botão inerte não
-                  // diria o que está pendente.
-                  if (!origin) { setShowOriginPicker(true); return }
-                  if (!dataEscolhida) { setShowDatePicker(true); return }
-                  navigate('/checkout/resumo', {
-                    state: {
-                      service_name:     selectedTour.name,
-                      short_description: selectedTour.short_description || null,
-                      service_type:     'tour',
-                      booking_mode:     'shared',
-                      service_date:     isToday(date) ? t('toursPg.date.today')
-                                          : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('toursPg.date.tomorrow')
-                                          : format(date, "d 'de' MMMM", { locale: ptBR }),
-                      service_date_iso: format(date, 'yyyy-MM-dd'),
-                      service_time:     t('toursPg.common.toBeConfirmed'),
-                      people_count:     people,
-                      price_per_person: pricePerPerson,
-                      origin_text:      origin.name,
-                      origin_latitude:  origin.latitude,
-                      origin_longitude: origin.longitude,
-                      total_price:      sharedTotal,
-                      breakdown:        { [t('toursPg.breakdown.perPerson', { count: people })]: sharedTotal },
-                      cover_image_url:       selectedTour.cover_image_url || null,
-                      region_id:             selectedTour.regions?.id,
-                      service_id:            selectedTour.id,
-                      vehicles:              [],
-                      booking_cutoff_time:   selectedTour.booking_cutoff_time || null,
-                      min_advance_hours:     selectedTour.min_advance_hours ?? null,
-                    },
-                  })
-                }}
-                className={`font-bold rounded-xl px-5 py-2.5 text-[13px] transition-transform shrink-0 ${
-                  origin && dataEscolhida ? 'bg-brand text-white active:scale-95' : 'bg-gray-200 text-gray-400'
-                }`}
-              >
-                {t('toursPg.actions.continue')}
-              </button>
-            </div>
-          </div>
-        )
-      })(), document.body)}
 
       <OriginPicker
         open={showOriginPicker}

@@ -35,8 +35,13 @@ export function itemMissing(item) {
   if (!item.dateIso) miss.push('data')
   if (!item.time) miss.push('horário')
   if (!(Number(item.people) >= 1)) miss.push('pessoas')
+  // No compartilhado não se escolhe veículo: paga-se por pessoa e a vaga é
+  // no veículo que a cooperativa já opera. Exigir veículo aqui deixaria o
+  // item eternamente incompleto.
+  const compartilhado = item.kind !== 'transfer' && item.mode === 'shared'
   const chosen = (item.vehicles || []).filter((v) => v.qty > 0)
-  if (!chosen.length) miss.push('veículo')
+  if (compartilhado) { /* sem veículo */ }
+  else if (!chosen.length) miss.push('veículo')
   else if (chosen.every((v) => Number(v.cap) > 0)) {
     // Regra de capacidade: só valida quando TODOS os veículos escolhidos têm
     // capacidade conhecida (rascunhos antigos sem `cap` são hidratados na
@@ -65,7 +70,7 @@ export function requestPayloadFor(item) {
     people_count:     item.people || 1,
     region_id:        item.region_id || undefined,
     total_price:      Number(item.total) || 0,
-    vehicles: (item.vehicles || []).filter((v) => v.qty > 0).map((v) => ({
+    vehicles: item.mode === 'shared' ? [] : (item.vehicles || []).filter((v) => v.qty > 0).map((v) => ({
       vehicle_id: v.id, qty: v.qty, unit_price: Number(v.price) || 0,
     })),
   }

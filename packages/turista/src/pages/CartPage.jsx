@@ -64,6 +64,11 @@ function EditSheet({ item, onSave, onClose }) {
   const [people, setPeople]     = useState(item.people || 1)
   const [originText, setOrigin] = useState(item.origin_text || '')
   const [vehicles, setVehicles] = useState(() => (item.vehicles || []).map((v) => ({ ...v })))
+  // Privativo x compartilhado mudou de lugar: era um seletor no topo da tela
+  // de Passeios, hoje é decisão por item, aqui, junto do que ela muda.
+  const [mode, setMode] = useState(item.mode === 'shared' ? 'shared' : 'private')
+  const compartilhado = !isTransfer && mode === 'shared'
+  const podeEscolherModo = !isTransfer && item.allows_private !== false && !!item.allows_shared
   // Com os veículos saindo da vitrine, o carrinho virou o único lugar de
   // escolha: rascunho sem veículo já abre com a lista aberta, senão o turista
   // via só um link discreto e não sabia onde escolher.
@@ -122,11 +127,14 @@ function EditSheet({ item, onSave, onClose }) {
 
   const extras = available.filter((a) => !vehicles.some((v) => v.id === a.id))
 
-  const total = vehicles.reduce((s, v) => s + (Number(v.price) || 0) * (v.qty || 0), 0)
+  // Compartilhado cobra por pessoa; privativo soma os veículos escolhidos.
+  const precoPorPessoa = Number(item.shared_price_per_person) || 0
+  const totalVeiculos = vehicles.reduce((s, v) => s + (Number(v.price) || 0) * (v.qty || 0), 0)
+  const total = compartilhado ? precoPorPessoa * people : totalVeiculos
   const qtyTotal = vehicles.reduce((s, v) => s + (v.qty || 0), 0)
   const capsKnown = vehicles.length > 0 && vehicles.every((v) => Number(v.cap) > 0)
   const capacity  = capsKnown ? vehicles.reduce((s, v) => s + (Number(v.cap) || 0) * (v.qty || 0), 0) : null
-  const capacityOk = !capsKnown || capacity >= people
+  const capacityOk = compartilhado || !capsKnown || capacity >= people
 
   // Sugestão quando falta lugar: o menor veículo que cobre o déficit
   // (senão o maior disponível) — existente ou do catálogo.
@@ -217,7 +225,7 @@ function EditSheet({ item, onSave, onClose }) {
   if (!time) missing.push(t('cartPg.editSheet.missingTime'))
   else if (!timeOk) missing.push(t('cartPg.editSheet.missingTimeLead'))
   if (!(people >= 1)) missing.push(t('cartPg.editSheet.missingPeople'))
-  if (qtyTotal < 1) missing.push(t('cartPg.editSheet.missingVehicle'))
+  if (!compartilhado && qtyTotal < 1) missing.push(t('cartPg.editSheet.missingVehicle'))
   if (!isTransfer && !originText.trim()) missing.push(t('cartPg.editSheet.missingOrigin'))
   const canSave = missing.length === 0 && capacityOk
 
@@ -230,8 +238,10 @@ function EditSheet({ item, onSave, onClose }) {
     onSave({
       ...item,
       dateIso, time, people,
-      ...(isTransfer ? {} : { origin_text: originText.trim() }),
-      vehicles,
+      ...(isTransfer ? {} : { origin_text: originText.trim(), mode }),
+      // No compartilhado o veículo não faz parte do pedido — guardar os que
+      // sobraram de uma passagem pelo privativo mandaria veículo no payload.
+      vehicles: compartilhado ? [] : vehicles,
       total,
     })
   }
@@ -256,6 +266,33 @@ function EditSheet({ item, onSave, onClose }) {
         </div>
 
         <div className="overflow-y-auto px-5 py-4 space-y-4 flex-1">
+          {podeEscolherModo && (
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Tipo de passeio</label>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                {[
+                  { id: 'private', label: t('toursPg.mode.private'), Icon: Car,
+                    hint: 'Veículo só para o seu grupo' },
+                  { id: 'shared',  label: t('toursPg.mode.shared'),  Icon: Users,
+                    hint: precoPorPessoa ? `${fmt(precoPorPessoa)} por pessoa` : 'Preço por pessoa' },
+                ].map(({ id, label, Icon, hint }) => (
+                  <button
+                    key={id}
+                    onClick={() => setMode(id)}
+                    className={`rounded-2xl border px-3 py-2.5 text-left transition-colors ${
+                      mode === id ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <span className={`inline-flex items-center gap-1.5 text-[13px] font-bold ${mode === id ? 'text-brand' : 'text-gray-700'}`}>
+                      <Icon size={14} /> {label}
+                    </span>
+                    <span className="block text-[10.5px] text-gray-400 leading-snug mt-0.5">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {isTransfer && (
             <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 text-[12.5px] text-gray-700">
               <MapPin size={13} className="text-brand shrink-0" />
@@ -332,6 +369,19 @@ function EditSheet({ item, onSave, onClose }) {
             </div>
           </div>
 
+          {compartilhado ? (
+            <div className="bg-gray-50 rounded-2xl px-4 py-3">
+              <p className="text-[12.5px] text-gray-600 leading-snug">
+                No compartilhado você paga por pessoa e viaja com outros hóspedes —
+                o veículo é definido pela cooperativa que atender.
+              </p>
+              {precoPorPessoa > 0 && (
+                <p className="text-[12.5px] text-gray-700 font-semibold mt-1.5">
+                  {fmt(precoPorPessoa)} × {people} {people === 1 ? 'pessoa' : 'pessoas'} = {fmt(total)}
+                </p>
+              )}
+            </div>
+          ) : (
           <div>
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.vehiclesLabel')}</label>
             <div className="mt-1 space-y-2">
@@ -409,6 +459,7 @@ function EditSheet({ item, onSave, onClose }) {
               </div>
             )}
           </div>
+          )}
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2 shrink-0">
