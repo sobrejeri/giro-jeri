@@ -71,7 +71,7 @@ export default function Login() {
           <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-16 h-16 rounded-2xl" />
           <div className="text-center">
             <p className="font-giro font-semibold text-[24px] text-gray-900 leading-tight tracking-[0.09em]">TURIVA</p>
-            <p className="text-gray-500 text-sm mt-0.5">Painel da Cooperativa</p>
+            <p className="text-gray-500 text-sm mt-0.5">Painel do Operador</p>
           </div>
         </div>
 

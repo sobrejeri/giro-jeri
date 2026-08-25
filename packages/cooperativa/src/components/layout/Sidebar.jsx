@@ -32,7 +32,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
           <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
           <div>
             <p className="font-giro font-semibold text-[14px] text-gray-900 leading-tight tracking-[0.09em]">TURIVA</p>
-            <p className="text-[9px] text-gray-400 leading-none">Cooperativa</p>
+            <p className="text-[9px] text-gray-400 leading-none">Operador</p>
           </div>
           <button
             onClick={onClose}

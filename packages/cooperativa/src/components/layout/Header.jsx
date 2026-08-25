@@ -15,7 +15,7 @@ const TITLES = {
 
 export default function Header({ onMenu = () => {} }) {
   const { pathname } = useLocation()
-  const title = TITLES[pathname] || 'Cooperativa'
+  const title = TITLES[pathname] || 'Operador'
 
   return (
     <header className="h-16 flex items-center gap-2 px-4 sm:px-6 bg-white border-b border-gray-100 flex-shrink-0">
