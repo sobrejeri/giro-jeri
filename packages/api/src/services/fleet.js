@@ -241,12 +241,28 @@ export async function vehiclePrefs(supabase, vehicleIds, operatorIds) {
 // A cooperativa `opId` atende uma reserva que exige `vehicleIds`?
 // Regra por veículo: restrito → precisa de opt-in explícito; comum → basta não
 // ter desativado. Precisa valer para TODOS os veículos da reserva.
-export function operatorServesVehicles(opId, vehicleIds, optIn, prefs) {
+//
+// `combo` afrouxa o OPT-IN, e só ele. Decisão do dono: serviço aéreo avulso vai
+// para a cooperativa que voa (Frisonfly); combo que INCLUI aéreo vai para o
+// operador universal, que fecha o pedido inteiro e subcontrata o trecho.
+//
+// Sem essa distinção a regra do dono era inexprimível: o opt-in do helicóptero
+// bloquearia o universal no combo, a lista sairia vazia e o pedido cairia na
+// rede de segurança — indo para TODAS as cooperativas, o contrário do que se
+// queria. Dar opt-in ao universal também não serve: ele passaria a receber os
+// voos avulsos.
+//
+// Não é um buraco: no combo quem faz o corte é o MODAL. Só chega ali quem o
+// admin marcou como operando TODOS os meios do pedido e como aceitando combo
+// (`operatorServesModals`). Uma cooperativa só de buggy não opera aéreo e
+// continua fora. O que se dispensa é o opt-in POR VEÍCULO, que existe para o
+// avulso e continua valendo lá.
+export function operatorServesVehicles(opId, vehicleIds, optIn, prefs, combo = false) {
   if (!vehicleIds || vehicleIds.length === 0) return true; // sem veículo → fail-open
   const dis = prefs.disabled.get(opId);
   const ena = prefs.enabled.get(opId);
   return vehicleIds.every((vId) =>
-    optIn.has(vId) ? !!ena?.has(vId) : !dis?.has(vId));
+    (optIn.has(vId) && !combo) ? !!ena?.has(vId) : !dis?.has(vId));
 }
 
 // Operadores ativos ELEGÍVEIS para uma reserva. Retorna [{ id, phone }].
@@ -286,7 +302,7 @@ export async function eligibleOperatorsForBooking(supabase, bookingId) {
     // para o ajuste fino dentro do mesmo modal.
     const elegiveis = operators.filter((op) =>
       operatorServesModals(op.id, modalIds, modaisDesativados, aceitaCombo)
-      && operatorServesVehicles(op.id, vehicleIds, optIn, prefs));
+      && operatorServesVehicles(op.id, vehicleIds, optIn, prefs, combo));
 
     // REDE DE SEGURANÇA. Lista vazia = ninguém recebe WhatsApp
     // (`notifyOperatorsNewBooking` faz skipped), e o pedido fica parado em

@@ -618,7 +618,7 @@ router.get('/bookings', async (req, res, next) => {
         // todos os meios E aceita combo — o "operador universal" da 077.
         const {
           requiredVehiclesByBooking, optInVehicleIds, vehiclePrefs, operatorServesVehicles,
-          modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals, comboPrefs,
+          modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals, comboPrefs, ehCombo,
         } = await import('../services/fleet.js');
 
         const byBooking = await requiredVehiclesByBooking(supabase, acceptanceRows);
@@ -639,8 +639,12 @@ router.get('/bookings', async (req, res, next) => {
           acceptanceRows = acceptanceRows.filter((b) => {
             const veics = byBooking.get(b.id) || [];
             const modais = modalIdsOf(veics, modalPorVeiculo);
+            // `ehCombo` também aqui: no combo o opt-in por veículo é dispensado,
+            // e o corte fica com o modal. Mesma regra da notificação — divergir
+            // faria a coop receber WhatsApp de pedido que não aparece na tela.
+            const combo = ehCombo(modais);
             return operatorServesModals(req.user.id, modais, modaisDesativados, aceitaCombo)
-                && operatorServesVehicles(req.user.id, veics, optIn, prefs);
+                && operatorServesVehicles(req.user.id, veics, optIn, prefs, combo);
           });
         }
       } catch (err) {

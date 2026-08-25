@@ -47,6 +47,25 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (voo avulso × voo dentro de combo)** — Regra do dono:
+  "a Frisonfly trabalha só com aéreo; combo que inclua aéreo vai para o operador
+  universal". Do jeito que estava, essa regra era **inexprimível**: o
+  `requires_opt_in` do helicóptero (066) bloquearia o universal no combo, a
+  lista sairia vazia e o pedido cairia na rede de segurança — indo para TODAS as
+  cooperativas, o oposto do pedido. Dar opt-in ao universal também não servia:
+  ele passaria a receber os voos avulsos.
+  Solução: `operatorServesVehicles` ganhou o parâmetro `combo`, que afrouxa **só
+  o opt-in**. Nada mais muda — desativação explícita por veículo continua
+  valendo, e no combo quem faz o corte é o MODAL: só chega ali quem o admin
+  marcou operando TODOS os meios do pedido e aceitando combo. Cooperativa só de
+  buggy não opera aéreo e segue fora.
+  Aplicado nos DOIS caminhos (notificação e feed), como o resto do filtro.
+  Conferido com a configuração exata que o dono vai usar — Frisonfly só aéreo e
+  sem combo, JeriTur universal, BuggyTour só terrestre — nos 6 casos:
+  voo avulso → só Frisonfly; buggy avulso → terrestres + universal; barco
+  avulso → universal; e os três combos (buggy+voo, buggy+barco, barco+voo) →
+  só o universal. Os testes anteriores seguem passando.
+
 - **2026-08-25 · Agente B (correção de dados: voo só com helicóptero)** — APLICADO
   no banco do dono (`supabase/voo_somente_helicoptero.sql`). Não é migration.
   Diagnóstico saiu do próprio banco, não de suposição: `HELICOPTERO [buggy-2]`
