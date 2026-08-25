@@ -3,7 +3,7 @@ import { Menu } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 
 const TITLES = {
-  '/dashboard':  'Painel Operacional',
+  '/dashboard':  'Operações',
   '/despacho':   'Despacho',
   '/veiculos':   'Gestão de Veículos',
   '/financeiro': 'Relatório Financeiro',
@@ -15,7 +15,7 @@ const TITLES = {
 
 export default function Header({ onMenu = () => {} }) {
   const { pathname } = useLocation()
-  const title = TITLES[pathname] || 'Operador'
+  const title = TITLES[pathname] || 'Painel Operacional'
 
   return (
     <header className="h-16 flex items-center gap-2 px-4 sm:px-6 bg-white border-b border-gray-100 flex-shrink-0">
