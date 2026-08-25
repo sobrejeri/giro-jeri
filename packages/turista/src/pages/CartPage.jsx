@@ -898,9 +898,26 @@ export default function CartPage() {
         </div>
       )}
 
-      {/* Rodapé fixo */}
-      {(items.length > 0 || done) && (
-        <div ref={footerRef} className="fixed bottom-[64px] left-0 right-0 bg-white border-t border-gray-100 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] max-w-[430px] mx-auto space-y-2.5 z-30 lg:bottom-0 lg:max-w-2xl lg:rounded-t-2xl lg:border lg:shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+      {/* Resumo FLUTUANTE — cartão solto sobre a página, não uma faixa colada
+          na borda de baixo. Continua sempre visível (o Total não pode sumir na
+          rolagem), mas com cantos arredondados, margem nas laterais e sombra,
+          para se ler como algo POR CIMA do conteúdo — e não como o fim da tela.
+          Mesmo desenho do resumo flutuante da tela de Passeios.
+          `pointer-events-none` no invólucro: a folga em volta do cartão não
+          pode roubar o toque do que está atrás dela.
+
+          PORTAL para o document.body, e não é detalhe: o wrapper do
+          PullToRefresh usa `transform`, e um ancestral com transform vira o
+          bloco de contenção do `position: fixed` — o "fixo" passa a se prender
+          à PÁGINA, não à tela. Media era isso: com a lista mais longa o cartão
+          ia parar embaixo do menu, com o botão cortado. A tela de Passeios já
+          tinha resolvido assim; o carrinho ficou para trás. */}
+      {(items.length > 0 || done) && createPortal(
+        <div
+          ref={footerRef}
+          className="fixed bottom-[64px] left-1/2 -translate-x-1/2 w-full max-w-[430px] px-3 pb-3 z-30 pointer-events-none lg:bottom-0 lg:max-w-2xl lg:px-0 lg:pb-5"
+        >
+        <div className="pointer-events-auto bg-white rounded-3xl border border-gray-100 shadow-[0_10px_34px_rgba(0,0,0,0.16)] px-4 py-3.5 space-y-2.5">
           {done ? (
             <>
               <p className="text-[13px] text-gray-600 text-center">
@@ -986,6 +1003,8 @@ export default function CartPage() {
             </>
           )}
         </div>
+        </div>,
+        document.body,
       )}
 
       {editing && (

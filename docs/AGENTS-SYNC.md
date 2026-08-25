@@ -47,6 +47,24 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (resumo do carrinho vira cartão flutuante)** — Pedido
+  do dono: "quero que essa parte seja flutuante e não fixa abaixo". Era uma
+  faixa branca de ponta a ponta colada na borda; virou cartão solto (cantos de
+  24px, margem lateral, sombra), no mesmo desenho do resumo flutuante da tela de
+  Passeios. Continua sempre visível — o Total não pode sumir na rolagem.
+  **E achei um defeito escondido:** o `position: fixed` NÃO estava valendo. O
+  wrapper do PullToRefresh usa `transform`, e ancestral com transform vira o
+  bloco de contenção do fixed — o "fixo" se prendia à PÁGINA, não à tela. Com a
+  lista mais longa o bloco ia parar embaixo do menu, com o botão cortado
+  (reproduzido: `bottom` do invólucro em 963 com viewport de 932). Resolvido com
+  `createPortal(document.body)`, exatamente como a tela de Passeios já fazia —
+  o carrinho tinha ficado para trás. É o TERCEIRO caso do mesmo transform nesta
+  base; ao criar qualquer elemento fixo dentro do Layout, portar para o body.
+  `pointer-events-none` no invólucro e `auto` no cartão: a folga em volta não
+  rouba o toque do conteúdo atrás (conferido com `elementFromPoint`).
+  Conferido: cartão 651–856 com menu em 858 e posição idêntica em três alturas
+  de rolagem; sugestões continuam inteiras acima dele. Sem erros de página.
+
 - **2026-08-25 · Agente B ("Complete sua viagem" vai para o fim do carrinho)** —
   Pedido do dono: a vitrine de sugestões atrapalhava na hora de finalizar. Ela
   ficava colada nos itens, no meio da leitura "confiro o que pedi → solicito".
