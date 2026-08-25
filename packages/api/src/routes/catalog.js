@@ -79,6 +79,19 @@ router.get('/categories', async (req, res, next) => {
 // Antes só existia o GET: dava para LIGAR um passeio a uma categoria, mas não
 // para criar categoria alguma pelo painel — a lista vinha do seed e ficava
 // congelada.
+
+// RLS: `categories` só ganhou policy de escrita na migration 072 (a 034 criou a
+// dos outros catálogos e esqueceu esta). Sem ela, o Postgres devolve 42501 e o
+// painel mostrava "new row violates row-level security policy" — mensagem que
+// não diz a quem lê o que fazer. Traduzida para o que resolve.
+function erroDeCategoria(error) {
+  if (error?.code === '42501' || /row-level security/i.test(error?.message || '')) {
+    return 'O banco ainda não autoriza o admin a gravar categorias. '
+         + 'Rode a migration 072_categories_admin_write_rls.sql no Supabase.';
+  }
+  if (error?.code === '23505') return 'Já existe uma categoria com este nome.';
+  return null;
+}
 router.post('/categories', requireAdmin, async (req, res, next) => {
   try {
     const body = pick(req.body, CATEGORY_COLS);
@@ -100,7 +113,11 @@ router.post('/categories', requireAdmin, async (req, res, next) => {
       ({ data, error } = await req.supabase
         .from('categories').insert(semMarca).select().single());
     }
-    if (error) throw error;
+    if (error) {
+      const amigavel = erroDeCategoria(error);
+      if (amigavel) return res.status(400).json({ error: amigavel });
+      throw error;
+    }
     res.status(201).json(data);
   } catch (err) { next(err); }
 });
@@ -117,6 +134,8 @@ router.put('/categories/:id', requireAdmin, async (req, res, next) => {
       ({ data, error } = await req.supabase
         .from('categories').update(semMarca).eq('id', req.params.id).select().single());
     }
+    const amigavel = erroDeCategoria(error);
+    if (amigavel) return res.status(400).json({ error: amigavel });
     if (error || !data) return res.status(404).json({ error: 'Categoria não encontrada' });
     res.json(data);
   } catch (err) { next(err); }
@@ -128,7 +147,11 @@ router.delete('/categories/:id', requireAdmin, async (req, res, next) => {
   try {
     const { error } = await req.supabase
       .from('categories').update({ is_active: false }).eq('id', req.params.id);
-    if (error) throw error;
+    if (error) {
+      const amigavel = erroDeCategoria(error);
+      if (amigavel) return res.status(400).json({ error: amigavel });
+      throw error;
+    }
     res.status(204).end();
   } catch (err) { next(err); }
 });

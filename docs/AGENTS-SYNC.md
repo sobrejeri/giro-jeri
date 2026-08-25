@@ -16,9 +16,18 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 072.**
-   (069, 070 e 071 já estão criadas — a linha ficou desatualizada por duas
-   sessões seguidas; confirme sempre com `ls supabase/migrations/ | tail -3`.)
+   registre aqui o número reservado. **Próximo número livre: 073.**
+   (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
+   com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
+
+   ⚠️ **Tabela nova que o admin grava precisa de policy de escrita.** RLS está
+   ligado em quase tudo, mas quase sempre só com SELECT público. A API grava
+   com o JWT do usuário (`req.supabase`), então sem uma policy `admin_write_*`
+   o INSERT bate em *"new row violates row-level security policy"*. Já
+   aconteceu com `categories` (072) porque a 034 cobriu os outros catálogos e
+   esqueceu essa. Para achar o próximo caso:
+   `grep -rn "req.supabase" packages/api/src/routes/ -A3 | grep -E "\.(insert|update|delete)\("`
+   e confira se cada tabela listada tem policy de escrita nas migrations.
 
    ⚠️ **OITO números já foram usados DUAS vezes** por agentes diferentes:
    015, 016, 017, 021, 022, 023, 065 e 066. Isso já causou estrago real: quem
@@ -37,6 +46,24 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (RLS: admin não podia gravar categorias)** — Com a 071
+  rodada, criar categoria falhava com *"new row violates row-level security
+  policy for table categories"*. **Migration 072.**
+  Nada a ver com a 071: `categories` tem RLS desde a 001 com **só** a policy de
+  SELECT público, e a **migration 034** — que criou as policies de escrita do
+  admin para `vehicles`, `tours`, `transfers` e `transfer_routes` — **pulou
+  `categories`**. Ninguém gravava nela na época (a lista vinha do seed), então a
+  falta só apareceu agora que o painel cria categoria.
+  A 072 é a policy que faltava, cópia palavra por palavra do padrão da 034.
+  Conferido em Postgres 16, cenário completo: antes da 072 o INSERT do admin
+  reproduz o erro exato do print; depois, o admin cria, edita, desativa e
+  **enxerga a inativa** (precisa, para reativar); o turista continua barrado no
+  INSERT e seu UPDATE afeta 0 linhas; a leitura pública segue valendo; re-rodar
+  é idempotente.
+  Também: 42501 e 23505 agora viram mensagem que diz o que fazer, em vez do
+  texto cru do Postgres. **Varri as demais tabelas gravadas via `req.supabase`
+  — `categories` era a única sem policy de escrita.**
 
 - **2026-08-25 · Agente B (categorias de PASSEIO com carrossel próprio)** —
   Pedido do dono: "quero que os passeios funcionem assim tbm, por categoria e
