@@ -412,8 +412,25 @@ async function fetchPendingLegs({ isAdmin, operatorId }) {
       if (prefErr) throw prefErr;
       const disabled = new Set((prefs || []).map((r) => r.entity_id));
       legs = legs.filter((l) => !disabled.has(l.vehicle_id));
+
+      // MODAL (076) — e AQUI ele funciona sem a ressalva do combo: a perna tem
+      // um veículo só, logo um modal só. É o lugar natural deste filtro. Um
+      // pedido buggy + barco vira duas pernas, cada uma para a coop do seu
+      // meio; nenhuma cooperativa precisa operar os dois.
+      const { modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals } =
+        await import('../services/fleet.js');
+      const veicIds = [...new Set(legs.map((l) => l.vehicle_id).filter(Boolean))];
+      if (veicIds.length > 0) {
+        const modalPorVeiculo = await modalIdByVehicle(supabase, veicIds);
+        const todos = modalIdsOf(veicIds, modalPorVeiculo);
+        if (todos.size > 0) {
+          const desativados = await modalPrefs(supabase, [...todos], [operatorId]);
+          legs = legs.filter((l) =>
+            operatorServesModals(operatorId, modalIdsOf([l.vehicle_id], modalPorVeiculo), desativados));
+        }
+      }
     } catch (err) {
-      console.error('[operator/legs] filtro por veículo falhou op=%s err=%s — fail-open, sem filtrar',
+      console.error('[operator/legs] filtro por veículo/modal falhou op=%s err=%s — fail-open, sem filtrar',
         operatorId, err?.message);
     }
   }
@@ -753,6 +770,25 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
       if (prefErr) throw prefErr;
       if (disabled) {
         return res.status(403).json({ error: 'Este veículo não é operado por você' });
+      }
+
+      // Mesma checagem no MODAL: a coop não aceita perna de um meio que não
+      // opera. Sem isto, ela não veria a perna no feed mas conseguiria aceitar
+      // por link direto — e a execução cairia em quem não tem o veículo.
+      try {
+        const { modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals } =
+          await import('../services/fleet.js');
+        const modalPorVeiculo = await modalIdByVehicle(supabase, [legRow.vehicle_id]);
+        const doVeiculo = modalIdsOf([legRow.vehicle_id], modalPorVeiculo);
+        if (doVeiculo.size > 0) {
+          const desativados = await modalPrefs(supabase, [...doVeiculo], [req.user.id]);
+          if (!operatorServesModals(req.user.id, doVeiculo, desativados)) {
+            return res.status(403).json({ error: 'Este meio de operação não é atendido por você' });
+          }
+        }
+      } catch (err) {
+        // Fail-open: erro na checagem não bloqueia aceite legítimo.
+        console.error('[operator/legs] checagem de modal falhou op=%s err=%s', req.user.id, err?.message);
       }
     }
 

@@ -47,6 +47,24 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (modal também nas PERNAS)** — Onde o filtro por modal
+  funciona sem ressalva nenhuma: a perna (`booking_legs`) tem UM veículo, logo
+  UM modal. Um pedido buggy + barco vira duas pernas, cada uma para a coop do
+  seu meio — nenhuma cooperativa precisa operar os dois, e o problema do combo
+  simplesmente deixa de existir.
+  Aplicado no feed de pernas E no `POST /legs/:legId/accept`. Só no feed, a coop
+  não veria a perna mas conseguiria aceitar por link direto, e a execução cairia
+  em quem não tem o veículo.
+  Conferido: perna do buggy → só a coop terrestre; perna do barco → só a
+  aquática. Continua tudo atrás de `booking_legs_engine_enabled`.
+  **Estado real do motor de pernas, levantado agora:** tabela, trigger, feed por
+  perna, aceite por perna, prazo de pagamento ancorado no passeio, varredura de
+  expiradas e idempotência contábil — tudo implementado (042/046/047/048). O
+  split nativo N-recebedores também está escrito. O que trava é uma linha
+  deliberada em `payments.js`: 2+ cooperativas devolve `mode:'multi'` para o
+  chamador BLOQUEAR, "até validar o split nativo do MP em staging". Com as
+  credenciais do dono sendo de valor real, essa validação é a decisão que falta.
+
 - **2026-08-25 · Agente B (combo não pode ficar sem cooperativa)** — Furo que o
   próprio filtro por modal (076) abriu: reserva com veículos de modais
   DIFERENTES (buggy + barco) exigiria uma cooperativa que opera os dois. Se
