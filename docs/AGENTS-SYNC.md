@@ -47,6 +47,24 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B ("Complete sua viagem" vai para o fim do carrinho)** —
+  Pedido do dono: a vitrine de sugestões atrapalhava na hora de finalizar. Ela
+  ficava colada nos itens, no meio da leitura "confiro o que pedi → solicito".
+  Agora vem depois do pedido, separada por linha e respiro grande — convite para
+  DEPOIS de fechar, não parte do pedido.
+  **Junto veio um defeito real de layout:** o container usava `pb-40` (160px)
+  fixo, mas o rodapé fica 64px acima do menu e cresce com cupom aplicado, aviso
+  de pendência e mensagem de erro — passa fácil de 200px. O último bloco da
+  página aparecia CORTADO por baixo do "Total" (dá para ver no print do dono, o
+  terceiro cartão de helicóptero cortado). Agora a altura é medida do elemento
+  real (`ResizeObserver` + `innerHeight - rect.top`), o que cobre celular
+  (`bottom-16`) e desktop (`bottom-0`) e acompanha o rodapé mudando de tamanho.
+  Conferido em 430px e 1280px: carrossel inteiro visível acima do rodapé e a
+  sugestão depois do último item. Sem erros de página.
+  **Limite conhecido:** o bloco de finalizar é `fixed`, então está sempre na
+  tela — a sugestão não tem como ficar literalmente ABAIXO dele sem tirar o
+  rodapé da fixação, o que mudaria a ergonomia do checkout inteiro.
+
 - **2026-08-25 · Agente B (saída/data/pessoas saem da tela de Passeios)** —
   Pedido do dono: a barra "Saída · Data · Pessoas" do topo sai da vitrine e os
   campos ficam obrigatórios no carrinho, "tbm" — como já tinha sido feito com os

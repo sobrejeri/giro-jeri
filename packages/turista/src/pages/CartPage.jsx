@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -602,6 +602,28 @@ export default function CartPage() {
   const [submitError, setSubmitError] = useState(null)
   const [done, setDone] = useState(false)
 
+  // Altura REAL do rodapé fixo, para o conteúdo terminar acima dele.
+  // Era `pb-40` (160px) no chute, mas o rodapé passa disso: fica 64px acima da
+  // barra de menu e ainda cresce com o cupom aplicado, o aviso de pendência e a
+  // mensagem de erro. O resultado era o último bloco da página aparecendo
+  // cortado por baixo do "Total". Medido, não estimado.
+  const footerRef = useRef(null)
+  const [footerH, setFooterH] = useState(0)
+  useEffect(() => {
+    const el = footerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    // `innerHeight - top` é o quanto o rodapé come da tela por baixo — vale
+    // tanto no celular (bottom-16, acima do menu) quanto no desktop (bottom-0).
+    const medir = () => setFooterH(Math.max(0, window.innerHeight - el.getBoundingClientRect().top))
+    medir()
+    const ro = new ResizeObserver(medir)
+    ro.observe(el)
+    window.addEventListener('resize', medir)
+    return () => { ro.disconnect(); window.removeEventListener('resize', medir) }
+    // Só quando o rodapé entra ou sai da tela: mudanças de ALTURA (cupom
+    // aplicado, aviso de pendência, erro) já chegam pelo ResizeObserver.
+  }, [items.length > 0, done])
+
   // Sugestões (cross-sell): incentiva o cliente a adicionar passeios. Mostra
   // passeios que ainda não estão no carrinho — aparece quando já há um item
   // (transfer ou passeio) para estimular a montar mais da viagem.
@@ -723,7 +745,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen pb-40">
+    <div className="min-h-screen" style={{ paddingBottom: footerH ? footerH + 16 : 160 }}>
       <PageHeader title={items.length ? t('cartPg.titleCount', { count: items.length }) : t('cartPg.title')} />
 
       {list.length === 0 && !done ? (
@@ -839,9 +861,14 @@ export default function CartPage() {
         </div>
       )}
 
-      {/* ── Sugestões: complete a viagem com passeios ── */}
+      {/* ── Sugestões: complete a viagem com passeios ──
+          Fica no FIM da tela, depois do pedido e separada dele por uma linha e
+          um respiro grande. Colada nos itens, ela entrava no meio da leitura
+          "confiro o que pedi → finalizo", e uma vitrine de outros passeios bem
+          na hora de solicitar tira o cliente do fluxo em vez de ajudar.
+          É um convite para DEPOIS de fechar, não parte do pedido. */}
       {items.length > 0 && !done && suggestedTours.length > 0 && (
-        <div className="mt-6 lg:max-w-2xl lg:mx-auto">
+        <div className="mt-10 pt-6 border-t border-gray-200/70 lg:max-w-2xl lg:mx-auto">
           <div className="px-4 flex items-center gap-2">
             <Sparkles size={15} className="text-brand" />
             <p className="text-[14px] font-extrabold text-gray-900">{t('cartPg.suggestions.title')}</p>
@@ -873,7 +900,7 @@ export default function CartPage() {
 
       {/* Rodapé fixo */}
       {(items.length > 0 || done) && (
-        <div className="fixed bottom-[64px] left-0 right-0 bg-white border-t border-gray-100 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] max-w-[430px] mx-auto space-y-2.5 z-30 lg:bottom-0 lg:max-w-2xl lg:rounded-t-2xl lg:border lg:shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div ref={footerRef} className="fixed bottom-[64px] left-0 right-0 bg-white border-t border-gray-100 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] max-w-[430px] mx-auto space-y-2.5 z-30 lg:bottom-0 lg:max-w-2xl lg:rounded-t-2xl lg:border lg:shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           {done ? (
             <>
               <p className="text-[13px] text-gray-600 text-center">
