@@ -918,7 +918,9 @@
       "save": "Guardar",
       "adjustVehicles": "Ajusta los vehículos para que quepa el grupo.",
       "fillMissing": "Completa: {{missing}}.",
-      "insufficientCapacity": "Capacidad insuficiente: {{count}} plazas para {{people}} personas"
+      "insufficientCapacity": "Capacidad insuficiente: {{count}} plazas para {{people}} personas",
+      "vehiclesLoading": "Cargando los vehículos disponibles para este servicio…",
+      "vehiclesNone": "Ningún vehículo está configurado para este servicio. Escríbenos por WhatsApp y lo resolvemos."
     },
     "add": "Agregar",
     "invalidCoupon": "Cupón inválido",

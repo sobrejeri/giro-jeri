@@ -102,7 +102,26 @@ function EditSheet({ item, onSave, onClose }) {
   // o app estava com defeito.
   const mostraModo = !isTransfer && (allowsPrivate || allowsShared)
 
-  const needAll = isTransfer || (tvFetched && (tourVehiclesData || []).length === 0)
+  // Frota da ROTA (matriz veículo × rota), não a frota inteira.
+  //
+  // O carrinho listava todo veículo com `is_transfer_allowed`, para qualquer
+  // rota: no trecho aéreo apareciam Hilux e Jardineira ao lado do helicóptero.
+  // Além de confundir, a solicitação seguia para a cooperativa errada — o
+  // filtro de frota olha os veículos da reserva. A vitrine de Translados já
+  // consultava esta rota (`/routes/:id/vehicles`); o carrinho ficou para trás,
+  // e agora ele é o único lugar onde se escolhe veículo.
+  const { data: routeVehiclesData, isFetched: rvFetched } = useQuery({
+    queryKey: ['cart-edit-route-vehicles', item.id],
+    queryFn:  () => api.getRouteVehicles(item.id),
+    enabled:  isTransfer,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // A lista geral só socorre o PASSEIO sem matriz própria. Para transfer não há
+  // recuo: a própria API já devolve a frota comum quando a rota não tem regra
+  // (tirando os veículos restritos, como o helicóptero). Cair na lista geral
+  // aqui traria o problema de volta.
+  const needAll = !isTransfer && tvFetched && (tourVehiclesData || []).length === 0
   const { data: allVehiclesData } = useQuery({
     queryKey: ['cart-edit-all-vehicles'],
     queryFn:  () => api.getVehicles({ is_active: 'true' }),
@@ -118,7 +137,10 @@ function EditSheet({ item, onSave, onClose }) {
   const available = useMemo(() => {
     const all = Array.isArray(allVehiclesData) ? allVehiclesData : (allVehiclesData?.vehicles || [])
     if (isTransfer) {
-      return all
+      const daRota = Array.isArray(routeVehiclesData) ? routeVehiclesData : (routeVehiclesData?.vehicles || [])
+      // Preço continua sendo o da ROTA, não o do veículo: no transfer cada
+      // veículo escolhido custa o valor do trecho. Só a LISTA mudou.
+      return daRota
         .filter((v) => v.is_transfer_allowed !== false && v.is_active !== false)
         .map((v) => ({ id: v.id, name: v.name, price: unitPrice, cap: v.seat_capacity || null }))
     }
@@ -126,7 +148,7 @@ function EditSheet({ item, onSave, onClose }) {
     return list
       .filter((v) => v.is_tour_allowed !== false && v.is_private_allowed !== false && v.is_active !== false)
       .map((v) => ({ id: v.id, name: v.name, price: Number(v.base_price) || 0, cap: v.seat_capacity || null }))
-  }, [isTransfer, tourVehiclesData, allVehiclesData, unitPrice])
+  }, [isTransfer, tourVehiclesData, routeVehiclesData, allVehiclesData, unitPrice])
 
   // Preenche capacidade/preço que faltarem nos veículos já escolhidos
   useEffect(() => {
@@ -459,6 +481,17 @@ function EditSheet({ item, onSave, onClose }) {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* A frota agora vem da rota/passeio, então "lista vazia" virou um
+                desfecho possível — e sem aviso o cliente ficaria olhando um
+                campo obrigatório sem nenhuma opção e sem saber por quê. */}
+            {available.length === 0 && vehicles.length === 0 && (
+              <p className="mt-2 text-[12px] text-gray-500 leading-snug">
+                {(isTransfer ? !rvFetched : !tvFetched)
+                  ? t('cartPg.editSheet.vehiclesLoading')
+                  : t('cartPg.editSheet.vehiclesNone')}
+              </p>
             )}
 
             {extras.length > 0 && (

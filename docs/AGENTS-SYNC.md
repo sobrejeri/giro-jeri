@@ -47,6 +47,27 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (frota por serviço também no carrinho)** — O dono viu
+  Hilux e Jardineira ao lado do helicóptero num trecho aéreo. A regra já
+  existia: `GET /api/transfers/routes/:id/vehicles` devolve a matriz
+  veículo × rota, e a vitrine de Translados já usava. **O carrinho ficou para
+  trás** — chamava `/api/vehicles` e listava TODA a frota com
+  `is_transfer_allowed`. Como os veículos saíram da vitrine, o carrinho virou o
+  único lugar de escolha, e o furo passou a ser o único caminho.
+  Não é só estético: o filtro de frota das cooperativas olha os veículos da
+  reserva, então um buggy escolhido num trecho de helicóptero mandaria a
+  solicitação para a cooperativa errada.
+  Agora o carrinho consulta a rota. **Sem recuo para a lista geral**: a própria
+  API já devolve a frota comum quando a rota não tem regra (tirando os
+  restritos, como o helicóptero) — cair na lista geral traria o problema de
+  volta. A lista geral segue existindo só para PASSEIO sem matriz própria.
+  Preço não mudou: no transfer continua sendo o valor da ROTA por veículo.
+  Como "lista vazia" virou desfecho possível, entrou aviso de carregando/vazio —
+  antes o cliente veria um campo obrigatório sem nenhuma opção e sem explicação.
+  Conferido com duas rotas: aérea → só helicóptero; comum → só Hilux e
+  Jardineira; `/api/vehicles` **não é mais chamado** (0 vezes); rota sem frota
+  mostra o aviso. Sem erros de página.
+
 - **2026-08-25 · Agente B (resumo do carrinho vira cartão flutuante)** — Pedido
   do dono: "quero que essa parte seja flutuante e não fixa abaixo". Era uma
   faixa branca de ponta a ponta colada na borda; virou cartão solto (cantos de
