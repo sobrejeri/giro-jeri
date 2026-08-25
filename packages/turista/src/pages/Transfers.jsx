@@ -14,6 +14,7 @@ import TransfersDesktop from './TransfersDesktop'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
+  Plane,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -214,6 +215,56 @@ function PresetCard({ route, bg, active, onSelect, full = false }) {
   )
 }
 
+
+/* ── Card de translado exclusivo (helicóptero) ──────────────────
+ * Mesma linguagem visual das rotas comuns — foto de capa, rótulo sobre a
+ * imagem e preço no rodapé —, com o selo "Exclusivo" e o preço por voo em vez
+ * do "a partir de". Sem foto cadastrada, cai num gradiente de céu com o ícone
+ * do avião, para não virar um cartão vazio no meio dos que têm imagem.
+ */
+function ExclusiveCard({ route, active, onSelect }) {
+  const img = route.cover_image_url
+  return (
+    <button
+      onClick={onSelect}
+      className={`flex-none w-[190px] rounded-2xl overflow-hidden bg-white shadow-sm border active:scale-[0.97] transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
+    >
+      <div className="relative h-[104px] overflow-hidden">
+        {img ? (
+          <img src={img} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-sky-400 to-indigo-300 flex items-center justify-center">
+            <Plane size={34} className="text-white/30" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+
+        <span className="absolute top-2 left-2 text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full">
+          Exclusivo
+        </span>
+
+        <div className="absolute bottom-2 left-2.5 right-2.5">
+          <p className="text-[9.5px] text-white/80 leading-none [text-shadow:0_1px_2px_rgba(0,0,0,.4)]">
+            {shortPlace(route.origin_name)}
+          </p>
+          <p className="text-white font-bold text-[12.5px] leading-tight mt-0.5 [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
+            {shortPlace(route.destination_name)}
+          </p>
+        </div>
+      </div>
+
+      <div className="px-3 py-2 flex items-end justify-between gap-1">
+        <div className="min-w-0">
+          <p className="text-[14px] font-extrabold text-brand leading-tight">
+            R$ {Number(route.default_price).toLocaleString('pt-BR')}
+          </p>
+          <p className="text-[9px] text-gray-400 leading-none mt-0.5">por voo · até 3 pax</p>
+        </div>
+        <ChevronRight size={14} className="text-brand shrink-0 mb-0.5" />
+      </div>
+    </button>
+  )
+}
 
 /* ── Route picker (bottom sheet) ────────────────────────────── */
 function RouteSheet({ title, options, selected, onSelect, onClose }) {
@@ -920,24 +971,12 @@ export default function Transfers() {
           </div>
           <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
             {rotasExclusivas.map((r) => (
-              <button
+              <ExclusiveCard
                 key={r.id}
-                onClick={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
-                className={`shrink-0 w-[190px] text-left rounded-2xl p-3.5 border transition-colors ${
-                  origin === r.origin_name && dest === r.destination_name
-                    ? 'border-brand bg-brand/5'
-                    : 'border-gray-100 bg-white active:bg-gray-50'
-                }`}
-              >
-                <p className="text-[10px] text-gray-400 leading-tight">{r.origin_name}</p>
-                <p className="text-[14px] font-bold text-gray-900 leading-snug mt-0.5">
-                  {r.destination_name}
-                </p>
-                <p className="text-[15px] font-extrabold text-brand mt-2">
-                  R$ {Number(r.default_price).toLocaleString('pt-BR')}
-                </p>
-                <p className="text-[10px] text-gray-400">por voo · até 3 pax</p>
-              </button>
+                route={r}
+                active={origin === r.origin_name && dest === r.destination_name}
+                onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+              />
             ))}
           </div>
         </div>
