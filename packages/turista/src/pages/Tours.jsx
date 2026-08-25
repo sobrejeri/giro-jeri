@@ -130,6 +130,128 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
   )
 }
 
+
+/* ── Folha do passeio ─────────────────────────────────────────────
+   Tocar num cartão abre esta folha com o que o cliente precisa para decidir —
+   foto, duração, dificuldade, o que inclui e o preço — e o botão de adicionar
+   logo abaixo. Antes o toque só marcava o cartão e a ação ficava numa barra no
+   rodapé, longe do que tinha acabado de ser tocado.
+   Veículos, data e horário não aparecem aqui: são definidos no carrinho. */
+function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
+  const { t } = useTranslation()
+  if (!tour) return null
+
+  const dur = Number(tour.duration_hours) || null
+  const durLabel = dur ? (dur < 1 ? `${Math.round(dur * 60)}min` : Number.isInteger(dur) ? `${dur}h` : `${Math.floor(dur)}h${String(Math.round((dur % 1) * 60)).padStart(2, '0')}`) : null
+  const cap = Number(tour.max_people) || null
+  const compartilhado = mode === 'shared' && tour.shared_price_per_person
+  const preco = compartilhado ? Number(tour.shared_price_per_person) : Number(tour.from_price) || null
+  const precoLabel = compartilhado ? t('toursPg.card.perPerson') : t('toursPg.card.startingAt')
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 bg-black/45 z-[70]" onClick={onClose} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[88dvh] flex flex-col shadow-2xl">
+        <div className="relative shrink-0">
+          <div className="h-[168px] bg-gradient-to-br from-orange-400 to-amber-300 rounded-t-3xl overflow-hidden">
+            {tour.cover_image_url && (
+              <img src={tour.cover_image_url} alt="" className="w-full h-full object-cover" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+          </div>
+          <button
+            onClick={onClose}
+            aria-label={t('toursPg.calendar.close', 'Fechar')}
+            className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+          >
+            <X size={16} className="text-gray-700" />
+          </button>
+          {tour.is_exclusive && (
+            <span className="absolute top-3 left-3 bg-brand text-white text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-full">
+              {t('toursPg.card.badgeExclusive')}
+            </span>
+          )}
+        </div>
+
+        <div className="overflow-y-auto px-5 pt-4 pb-4 flex-1">
+          <p className="text-[19px] font-extrabold text-gray-900 leading-tight">{tour.name}</p>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+            {durLabel && (
+              <span className="inline-flex items-center gap-1 text-[12.5px] text-gray-600">
+                <Clock size={13} className="text-brand" /> {durLabel}
+              </span>
+            )}
+            {tour.difficulty_level && (
+              <span className="text-[12.5px] text-gray-600">{tour.difficulty_level}</span>
+            )}
+            {cap && (
+              <span className="inline-flex items-center gap-1 text-[12.5px] text-gray-600">
+                <Users size={13} className="text-gray-400" /> {t('toursPg.card.capacity', { count: cap })}
+              </span>
+            )}
+          </div>
+
+          {(tour.full_description || tour.short_description) && (
+            <p className="text-[13px] text-gray-600 leading-relaxed mt-3 whitespace-pre-line">
+              {tour.full_description || tour.short_description}
+            </p>
+          )}
+
+          {/* Pessoas: é o único dado que muda o preço mostrado aqui. O resto
+              (veículos, data, horário, saída) fica para o carrinho. */}
+          <div className="mt-4">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+              {t('toursPg.common.peopleWord')}
+            </p>
+            <div className="mt-1.5 inline-flex items-center gap-3 bg-gray-50 rounded-2xl px-2 py-1.5">
+              <button
+                onClick={() => onPeople(Math.max(1, people - 1))}
+                aria-label="Menos uma pessoa"
+                className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center active:scale-95"
+              >
+                <Minus size={14} className="text-gray-600" />
+              </button>
+              <span className="text-[16px] font-bold text-gray-900 w-6 text-center tabular-nums">{people}</span>
+              <button
+                onClick={() => onPeople(people + 1)}
+                aria-label="Mais uma pessoa"
+                className="w-9 h-9 rounded-full bg-brand flex items-center justify-center active:scale-95"
+              >
+                <Plus size={14} className="text-white" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="shrink-0 border-t border-gray-100 px-5 pt-3 flex items-center gap-3"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+        >
+          <div className="min-w-0">
+            <p className="text-[10.5px] text-gray-400 leading-none">
+              {preco ? precoLabel : ''}
+            </p>
+            <p className="text-[18px] font-extrabold text-brand leading-tight mt-0.5">
+              {preco
+                ? `R$ ${(compartilhado ? preco * people : preco).toLocaleString('pt-BR')}`
+                : t('toursPg.card.onRequest')}
+            </p>
+          </div>
+          <button
+            onClick={onAdd}
+            className="flex-1 inline-flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
+          >
+            {inCart ? <Check size={16} strokeWidth={3} /> : <ShoppingCart size={16} />}
+            {compartilhado ? t('toursPg.actions.continue') : t('toursPg.actions.addToCart')}
+          </button>
+        </div>
+      </div>
+    </>,
+    document.body,
+  )
+}
+
 /* ── Calendário (bottom sheet) ──────────────────────────────── */
 function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeasonMonths }) {
   const { t } = useTranslation()
@@ -273,6 +395,7 @@ export default function Tours() {
 
   const [mode, setMode] = useState(locationState?.mode || 'private')
   const [selectedId, setSelectedId] = useState(locationState?.selectedId || null)
+  const [sheetTourId, setSheetTourId] = useState(null)  // passeio aberto na folha
   const [people, setPeople] = useState(restoredItem?.people || 2)
   const [date, setDate] = useState(() => {
     // dateIso pode vir do rascunho do carrinho OU dos atalhos da home
@@ -442,6 +565,9 @@ export default function Tours() {
   const selectedTour = [...tradTours, ...exclusiveTours, ...emCategorias]
     .find((t) => t.id === selectedId) || null
 
+  const sheetTour = [...tradTours, ...exclusiveTours, ...emCategorias]
+    .find((t) => t.id === sheetTourId) || null
+
   // Nem todo passeio aceita os dois modos — o voo panorâmico, por exemplo, só
   // existe COMPARTILHADO. A tela abria sempre em "Privativo" e o toggle não
   // consultava as flags do passeio, então dava para comprar como privativo um
@@ -610,7 +736,7 @@ export default function Tours() {
             tour={tour}
             mode={mode}
             selected={selectedTour?.id === tour.id}
-            onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
+            onSelect={() => { setSelectedId(tour.id); setSheetTourId(tour.id); setCart({}) }}
             isFav={favs.has(tour.id)}
             onFav={() => toggleFav(tour.id)}
             inCart={cartIds.has(tour.id)}
@@ -640,7 +766,7 @@ export default function Tours() {
               tour={tour}
               mode={mode}
               selected={selectedTour?.id === tour.id}
-              onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
+              onSelect={() => { setSelectedId(tour.id); setSheetTourId(tour.id); setCart({}) }}
               isFav={favs.has(tour.id)}
               onFav={() => toggleFav(tour.id)}
             />
@@ -843,7 +969,7 @@ export default function Tours() {
                   tour={tour}
                   mode={mode}
                   selected={selectedTour?.id === tour.id}
-                  onSelect={() => { setSelectedId((prev) => prev === tour.id ? null : tour.id); setCart({}) }}
+                  onSelect={() => { setSelectedId(tour.id); setSheetTourId(tour.id); setCart({}) }}
                   isFav={favs.has(tour.id)}
                   onFav={() => toggleFav(tour.id)}
                   inCart={cartIds.has(tour.id)}
@@ -971,32 +1097,29 @@ export default function Tours() {
           Portal p/ document.body: o wrapper do PullToRefresh usa transform/
           will-change e prenderia o position:fixed na página (a barra sumia no
           fim do conteúdo ao rolar). Pelo portal ela cola no rodapé da tela. ── */}
-      {mode === 'private' && selectedTour && createPortal((() => {
-        // A barra aparece assim que um passeio é escolhido. Veículos, data,
-        // horário e local de saída passaram a ser definidos no carrinho, então
-        // aqui não há mais nada a validar antes de guardar o rascunho.
-        return (
-          <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-3 z-40 pointer-events-none">
-            <div className="pointer-events-auto bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 flex items-center justify-between px-4 py-3">
-              <div className="flex-1 min-w-0 mr-3">
-                <p className="text-[13px] font-bold text-gray-900 truncate">{selectedTour.name}</p>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Users size={11} className="text-gray-400" />
-                  <span className="text-[11px] text-gray-500">
-                    {people} {people === 1 ? t('toursPg.common.person') : t('toursPg.common.peopleWord')}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => { saveCartItem(buildCartDraft()); navigate('/carrinho') }}
-                className="shrink-0 font-bold rounded-xl px-4 py-2.5 text-[13px] bg-brand text-white active:scale-95 transition-transform"
-              >
-                {t('toursPg.actions.addToCart')}
-              </button>
-            </div>
-          </div>
-        )
-      })(), document.body)}
+
+      {/* Folha do passeio: abre ao tocar num cartão. Substitui a antiga barra
+          flutuante do modo privativo — a ação agora fica junto da informação. */}
+      <TourSheet
+        tour={sheetTour}
+        mode={mode}
+        people={people}
+        onPeople={setPeople}
+        inCart={sheetTour ? cartIds.has(sheetTour.id) : false}
+        onClose={() => setSheetTourId(null)}
+        onAdd={() => {
+          // Compartilhado segue para o Resumo (precisa do local de saída e não
+          // entra no carrinho, que hoje exige veículos). Privativo vai ao
+          // carrinho, onde veículos, data e horário são definidos.
+          if (mode === 'shared' && sheetTour?.shared_price_per_person) {
+            setSheetTourId(null)
+            return
+          }
+          saveCartItem(buildCartDraft())
+          setSheetTourId(null)
+          navigate('/carrinho')
+        }}
+      />
 
       {/* ── CTA fixo (modo compartilhado) ───────────────────────── */}
       {mode === 'shared' && selectedTour?.shared_price_per_person && createPortal((() => {
