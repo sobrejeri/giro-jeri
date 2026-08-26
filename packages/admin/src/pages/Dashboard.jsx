@@ -9,7 +9,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   CalendarCheck, Clock, XCircle, TrendingUp, DollarSign,
   Plus, User, Phone, Mail, Calendar, Users, Banknote, Check,
-  Filter, Car, MapPin, Briefcase, Trophy, ArrowDown,
+  Filter, Car, MapPin, Briefcase, Trophy, ArrowDown, Hourglass,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -668,11 +668,22 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* "Ag. cooperativa" é a fila que faltava: pedido esperando alguém
+          aceitar. É a PRIMEIRA parada do fluxo (cliente pede → coop aceita →
+          cliente paga) e não aparecia em lugar nenhum do painel. */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard icon={CalendarCheck} label="Reservas hoje"       value={stats?.reservas_hoje ?? '—'}  color="text-blue-400" />
+        <KpiCard icon={Hourglass}     label="Ag. cooperativa"     value={stats?.aguardando_aceite ?? '—'} color="text-purple-400" />
         <KpiCard icon={Clock}         label="Ag. pagamento"       value={stats?.pendencias ?? '—'}      color="text-amber-400" />
         <KpiCard icon={XCircle}       label="Cancelamentos hoje"  value={stats?.cancelamentos ?? '—'}   color="text-red-400" />
-        <KpiCard icon={DollarSign}    label="Receita hoje"        value={fmt(stats?.valor_bruto_hoje)}  sub={`Mês: ${fmt(stats?.valor_bruto_mes)}`} color="text-brand" />
+        {/* O líquido agora vem do razão. Quando não há lançamento líquido do
+            dia, mostra "—" em vez do antigo bruto × 0,93, que era um número
+            inventado no código. */}
+        <KpiCard icon={DollarSign}    label="Receita hoje"        value={fmt(stats?.valor_bruto_hoje)}
+          sub={stats?.valor_liquido_hoje != null
+                 ? `Líquido: ${fmt(stats.valor_liquido_hoje)} · Mês: ${fmt(stats?.valor_bruto_mes)}`
+                 : `Mês: ${fmt(stats?.valor_bruto_mes)}`}
+          color="text-brand" />
       </div>
 
       {/* Acompanhamento operacional — filtro por cooperativa / passeio / transfer */}

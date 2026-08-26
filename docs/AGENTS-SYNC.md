@@ -47,6 +47,23 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (Dashboard não mostrava a movimentação real)** —
+  Observação do dono, e procedia. Dois problemas em `GET /api/admin/stats`:
+  1. **Líquido inventado.** `valor_liquido_hoje` era `bruto * 0,93` — 7%
+     chutados no código, enquanto a comissão real é configurável por
+     cooperativa (`platform_split_pct`) ou global (`payment_split_admin_pct`), e
+     a taxa do gateway varia por meio de pagamento. Pior: o número certo já
+     estava gravado em `financial_ledger` como `booking_net`; o painel só não o
+     lia. Agora vem do razão, e sem lançamento líquido mostra só o bruto em vez
+     de um valor fabricado. Mesma regra que o dono deu para preços.
+  2. **A fila mais importante era invisível.** "Pendências" contava só
+     `awaiting_payment`. No fluxo atual o pedido nasce em `awaiting_acceptance`
+     (035) — cliente pede, coop aceita, e SÓ ENTÃO o cliente paga. Pedido parado
+     esperando cooperativa não aparecia em canto nenhum. Virou KPI próprio,
+     "Ag. cooperativa"; o painel foi de 4 para 5 cartões.
+  Conferido no navegador: os cinco números aparecem certos, e com o líquido nulo
+  a linha "Líquido" some em vez de mostrar valor inventado.
+
 - **2026-08-25 · Agente B (COTAÇÃO ia para todas as cooperativas)** — O dono
   perguntou se as solicitações estavam mesmo sendo distribuídas certo, e a
   resposta honesta era "testei a lógica, não os caminhos". Auditando os pontos

@@ -25,6 +25,7 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
     const [
       { count: reservasHoje },
       { count: pendentes },
+      { count: aguardandoAceite },
       { count: cancelamentos },
       financeiroHoje,
       financeiroMes,
@@ -34,6 +35,14 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
 
       supabase.from('bookings').select('*', { count: 'exact', head: true })
         .eq('status_commercial', 'awaiting_payment'),
+
+      // AGUARDANDO ACEITE da cooperativa (`awaiting_acceptance`, migration 035).
+      // É a primeira parada do pedido no fluxo atual — cliente solicita, a coop
+      // aceita, e SÓ ENTÃO o cliente paga. Estava fora do painel inteiro: a
+      // fila mais importante da operação era a única invisível, e o admin não
+      // tinha como ver pedido parado esperando alguém aceitar.
+      supabase.from('bookings').select('*', { count: 'exact', head: true })
+        .eq('status_commercial', 'awaiting_acceptance'),
 
       supabase.from('bookings').select('*', { count: 'exact', head: true })
         .eq('status_commercial', 'cancelled').eq('booking_date', today),
@@ -54,13 +63,31 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
     const valorBrutoMes  = (financeiroMes.data || [])
       .reduce((s, r) => s + Number(r.amount), 0);
 
+    // LÍQUIDO REAL, do próprio razão. Era `bruto * 0,93` — 7% chutados no
+    // código, enquanto a comissão de verdade é configurável por cooperativa
+    // (`platform_split_pct`) ou global (`payment_split_admin_pct`), e a taxa do
+    // gateway varia por meio de pagamento. O número certo já estava gravado em
+    // `financial_ledger` como `booking_net`; o painel só não o lia.
+    // Null quando não há lançamento líquido: melhor não mostrar do que mostrar
+    // um valor inventado.
+    let valorLiquidoHoje = null;
+    try {
+      const { data: liq } = await supabase.from('financial_ledger').select('amount')
+        .eq('entry_type', 'booking_net')
+        .or(`effective_date.gte.${today},and(effective_date.is.null,created_at.gte.${today})`);
+      if (liq?.length) valorLiquidoHoje = liq.reduce((s, r) => s + Number(r.amount), 0);
+    } catch (e) {
+      console.error('[stats] líquido do razão falhou:', e.message);
+    }
+
     res.json({
-      reservas_hoje:    reservasHoje || 0,
-      pendencias:       pendentes || 0,
-      cancelamentos:    cancelamentos || 0,
-      valor_bruto_hoje: valorBrutoHoje,
-      valor_liquido_hoje: valorBrutoHoje * 0.93,
-      valor_bruto_mes:  valorBrutoMes,
+      reservas_hoje:      reservasHoje || 0,
+      pendencias:         pendentes || 0,
+      aguardando_aceite:  aguardandoAceite || 0,
+      cancelamentos:      cancelamentos || 0,
+      valor_bruto_hoje:   valorBrutoHoje,
+      valor_liquido_hoje: valorLiquidoHoje,
+      valor_bruto_mes:    valorBrutoMes,
     });
   } catch (err) { next(err); }
 });
