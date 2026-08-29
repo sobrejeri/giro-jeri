@@ -39,12 +39,53 @@ app.set('trust proxy', 1);
 
 // ── Segurança ──────────────────────────────────────────
 app.use(helmet());
+
+// Quem pode chamar esta API pelo navegador.
+//
+// `new URL(u).origin` normaliza: as variáveis podem vir com caminho
+// (https://site.com/operador), e o navegador compara só o origin.
+//
+// `CORS_ORIGINS` (lista separada por vírgula) existe para os casos que não
+// cabem nas três variáveis — um domínio antigo durante a migração, um preview.
+//
+// As portas locais só entram FORA de produção: com `credentials: true`, deixar
+// localhost autorizado num servidor público é abrir uma porta que ninguém
+// precisa.
+function origensPermitidas() {
+  const brutas = [
+    process.env.TURISTA_URL,
+    process.env.COOP_URL,
+    process.env.ADMIN_URL,
+    ...(process.env.CORS_ORIGINS || '').split(','),
+  ];
+  if (process.env.NODE_ENV !== 'production') {
+    brutas.push('http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175');
+  }
+  const origens = new Set();
+  for (const u of brutas) {
+    const s = (u || '').trim();
+    if (!s) continue;
+    try { origens.add(new URL(s).origin); } catch { origens.add(s); }
+  }
+  return [...origens];
+}
+
+const ORIGENS_OK = origensPermitidas();
+console.log('[cors] origens autorizadas: %s', ORIGENS_OK.join(', ') || '(NENHUMA — o app não vai conseguir chamar a API)');
+
 app.use(cors({
-  origin: [
-    process.env.TURISTA_URL || 'http://localhost:5173',
-    process.env.COOP_URL    || 'http://localhost:5174',
-    process.env.ADMIN_URL   || 'http://localhost:5175',
-  ].map(u => { try { return new URL(u).origin } catch { return u } }),
+  origin(origin, cb) {
+    // Sem cabeçalho Origin: curl, health check do Render, webhook do Mercado
+    // Pago. Não é chamada de navegador e CORS não se aplica.
+    if (!origin || ORIGENS_OK.includes(origin)) return cb(null, true);
+    // Sem este aviso, um bloqueio de CORS só aparece no console do NAVEGADOR e
+    // o servidor não registra nada — o diagnóstico vira adivinhação. Aqui o log
+    // diz a origem recusada e quais estavam valendo.
+    console.warn('[cors] origem recusada: %s · autorizadas: %s', origin, ORIGENS_OK.join(', '));
+    // `false`, não um Error: recusar sem cabeçalho é a resposta correta. Um
+    // Error viraria 500 e mascararia o motivo real.
+    cb(null, false);
+  },
   credentials: true,
 }));
 
