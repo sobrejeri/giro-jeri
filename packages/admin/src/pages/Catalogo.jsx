@@ -100,7 +100,34 @@ const MODAIS_PADRAO = [
   { slug: 'aereo',     name: 'Aéreo' },
   { slug: 'aquatico',  name: 'Aquático' },
 ]
-const MODAL_EMPTY = { name: '', description: '', is_active: true, sort_order: 99 }
+const MODAL_EMPTY = {
+  name: '', description: '', is_active: true, sort_order: 99,
+  // Executor fixo (078): uma empresa executa TODO serviço deste meio, e quem
+  // aceitar fica só com a comissão. Vazio = comportamento normal.
+  executor_operator_id: '', acceptor_commission_pct: 0, platform_commission_pct: '',
+}
+
+// Simulação do rateio — os mesmos números que o pagamento usaria. Existe para o
+// dono VER antes de ligar: o split de N recebedores do Mercado Pago nunca foi
+// validado, e aqui o valor é alto.
+function simularRateio(total, aceitePct, plataformaPct, comExecutor, executorAceitou) {
+  const cent = Math.round(Number(total || 0) * 100)
+  const plat = Number(plataformaPct) || 0
+  const aceite = comExecutor && !executorAceitou ? (Number(aceitePct) || 0) : 0
+  const pesos = comExecutor
+    ? [aceite, plat, 100 - aceite - plat]
+    : [plat, 100 - plat]
+  const soma = pesos.reduce((a, b) => a + b, 0) || 1
+  const bruto = pesos.map((w) => (cent * w) / soma)
+  const cents = bruto.map((x) => Math.floor(x))
+  const resto = cent - cents.reduce((a, b) => a + b, 0)
+  const ordem = bruto.map((x, i) => ({ i, f: x - Math.floor(x) })).sort((a, b) => b.f - a.f)
+  for (let k = 0; k < resto; k++) cents[ordem[k % cents.length].i] += 1
+  const rotulos = comExecutor
+    ? ['Quem aceitou', 'Plataforma', 'Executor']
+    : ['Plataforma', 'Quem aceitou (executa)']
+  return rotulos.map((r, i) => ({ rotulo: r, valor: cents[i] / 100 })).filter((x) => x.valor > 0)
+}
 
 const VEHICLE_TYPES = [
   { value: 'buggy',      label: 'Buggy' },
@@ -190,6 +217,13 @@ export default function Catalogo() {
     queryKey: ['admin-modals'],
     queryFn:  () => api.getModals(),
   })
+  // Cooperativas para escolher o executor fixo do modal.
+  const { data: usuariosOp } = useQuery({
+    queryKey: ['admin-operators-para-modal'],
+    queryFn:  () => api.getUsers({ user_type: 'operator', limit: 200 }),
+  })
+  const cooperativas = (usuariosOp?.data || usuariosOp || [])
+    .filter((u) => u?.id && u.is_active !== false)
   const modais = (Array.isArray(modaisBrutos) && modaisBrutos.length ? modaisBrutos : MODAIS_PADRAO)
   const modaisAtivos = modais.filter((m) => m.is_active !== false)
   // Nome do modal para exibir; cai no slug se o cadastro sumiu.
@@ -328,6 +362,13 @@ export default function Catalogo() {
       description: modalForm.description || null,
       is_active:   !!modalForm.is_active,
       sort_order:  Number(modalForm.sort_order) || 99,
+      executor_operator_id:    modalForm.executor_operator_id || null,
+      // Sem executor fixo as comissões não têm significado — zeradas para não
+      // ficar valor órfão guardado que reapareceria ao religar o executor.
+      acceptor_commission_pct: modalForm.executor_operator_id
+                                 ? (Number(modalForm.acceptor_commission_pct) || 0) : 0,
+      platform_commission_pct: modalForm.executor_operator_id && modalForm.platform_commission_pct !== ''
+                                 ? Number(modalForm.platform_commission_pct) : null,
     })
   }
 
@@ -855,6 +896,9 @@ export default function Catalogo() {
                     <p className="text-xs text-gray-500">
                       {usoVeiculos} veículo{usoVeiculos === 1 ? '' : 's'}
                       {m.description ? ` · ${m.description}` : ''}
+                      {m.executor?.full_name && (
+                        <span className="text-amber-400/80"> · executor fixo: {m.executor.full_name}</span>
+                      )}
                     </p>
                   </div>
                   <Badge value={String(m.is_active !== false)} />
@@ -1335,6 +1379,81 @@ export default function Catalogo() {
             />
             <span className="text-sm text-gray-300">Ativo (aparece na lista de escolha)</span>
           </label>
+
+          {/* ── Executor fixo (078) ─────────────────────────────
+              Para o aéreo: uma empresa voa, e quem aceitar fica só com a
+              comissão. Vazio = normal (quem aceita executa e recebe). */}
+          <div className="border-t border-gray-800 pt-4 space-y-3">
+            <div>
+              <Select
+                label="Executor fixo (opcional)"
+                value={modalForm.executor_operator_id || ''}
+                onChange={(e) => setModalForm({ ...modalForm, executor_operator_id: e.target.value })}
+              >
+                <option value="">Sem executor fixo — quem aceita executa</option>
+                {cooperativas.map((c) => (
+                  <option key={c.id} value={c.id}>{c.full_name}</option>
+                ))}
+              </Select>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Todo serviço deste meio é executado por ela, independente de quem aceitar.
+              </p>
+            </div>
+
+            {modalForm.executor_operator_id && (
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="% de quem aceita" type="number" min={0} max={100} step={0.5}
+                  value={modalForm.acceptor_commission_pct ?? 0}
+                  onChange={(e) => setModalForm({ ...modalForm, acceptor_commission_pct: e.target.value })}
+                />
+                <Input
+                  label="% da plataforma" type="number" min={0} max={100} step={0.5}
+                  placeholder="usa a geral"
+                  value={modalForm.platform_commission_pct ?? ''}
+                  onChange={(e) => setModalForm({ ...modalForm, platform_commission_pct: e.target.value })}
+                />
+              </div>
+            )}
+
+            {/* SIMULAÇÃO — os mesmos números que o pagamento usaria. */}
+            {modalForm.executor_operator_id && (() => {
+              const plat = Number(modalForm.platform_commission_pct) || 0
+              const aceite = Number(modalForm.acceptor_commission_pct) || 0
+              const excede = aceite + plat > 100
+              return (
+                <div className="rounded-xl bg-gray-900/60 border border-gray-800 p-3">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    Simulação — serviço de R$ 7.600
+                  </p>
+                  {excede ? (
+                    <p className="text-[12px] text-red-400">
+                      As comissões somam {aceite + plat}% — passam de 100% e o executor ficaria negativo.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {[['Outro operador aceitou', false], ['O próprio executor aceitou', true]].map(([titulo, exec]) => (
+                        <div key={titulo}>
+                          <p className="text-[11px] text-gray-500">{titulo}</p>
+                          {simularRateio(7600, aceite, plat, true, exec).map((l) => (
+                            <div key={l.rotulo} className="flex justify-between text-[12px] text-gray-300">
+                              <span>{l.rotulo}</span>
+                              <span className="tabular-nums">
+                                {l.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10.5px] text-amber-500/80 mt-2">
+                    Só demonstração: o pagamento ainda não usa esta regra.
+                  </p>
+                </div>
+              )
+            })()}
+          </div>
           <p className="text-[11px] text-gray-500">
             Modal em uso não pode ser removido nem desativado — o painel diz quantos
             veículos e categorias dependem dele.

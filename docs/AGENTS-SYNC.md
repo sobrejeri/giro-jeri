@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 078.**
+   registre aqui o número reservado. **Próximo número livre: 079.**
    (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
    com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
 
@@ -46,6 +46,32 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (executor fixo do modal — PASSO 1, só configuração)**
+  — Regra do dono para o aéreo: uma empresa executa tudo (Frisonfly); quem
+  aceitar fica só com a comissão e o restante vai para quem voa.
+  Fica no MODAL e não na categoria — "tudo que for aéreo é um único executor" —,
+  então categoria aérea nova herda a regra sem ninguém lembrar de configurar.
+  **Migration 078**: `service_modals.executor_operator_id`,
+  `acceptor_commission_pct`, `platform_commission_pct` (nulo = usa a geral). O
+  CHECK barra comissões somando >100%, que deixariam o executor NEGATIVO e
+  fariam o MP recusar o pagamento inteiro.
+  `services/splitModal.js` calcula a divisão, com repartição em centavos
+  inteiros pelo maior resto — o split nativo do MP recusa se Σ(partes) não bater
+  exatamente com o cobrado. Testado em **20.000 valores aleatórios**: diferença
+  máxima ZERO. Casos cobertos: outro aceitou (3 recebedores), executor aceitou
+  (2), modal sem executor (comportamento atual), valor que não divide redondo,
+  comissões somando 100%, e 1 centavo.
+  Admin: campos no cadastro do modal + **simulação ao vivo de R$ 7.600** com os
+  dois cenários, e aviso de que o pagamento ainda não usa a regra.
+  **NADA DE PAGAMENTO FOI LIGADO.** `executor_operator_id` nulo é o padrão de
+  todos os modais = comportamento atual. Faltam: validar o split de N
+  recebedores com o MP (nunca foi), e a tela da cooperativa deixar claro
+  "executado pela Frisonfly · sua comissão", senão quem aceitou aparece no local
+  achando que vai executar.
+  **Limite conhecido:** split multi-recebedor só funciona em PIX. Cartão está
+  bloqueado com 422 ("pague via PIX") — e num voo de R$ 7.600 muita gente quer
+  parcelar.
 
 - **2026-08-25 · Agente B (categoria vira o controle principal da cooperativa)**
   — O dono propôs limitar por CATEGORIA (terrestre/aéreo/aquático) em vez de por

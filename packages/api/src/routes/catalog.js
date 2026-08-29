@@ -66,14 +66,26 @@ function vaziosViramNulo(body, campos) {
 // 073/074): cada modal novo exigia migration e deploy. Virou cadastro na
 // migration 075, e as três colunas apontam para cá por chave estrangeira.
 
-const MODAL_COLS = ['slug', 'name', 'description', 'is_active', 'sort_order']
+const MODAL_COLS = ['slug', 'name', 'description', 'is_active', 'sort_order',
+  // Executor fixo e comissões (078). Sem estar aqui, o `pick` descartaria a
+  // escolha do admin em silêncio — já aconteceu com `is_exclusive`.
+  'executor_operator_id', 'acceptor_commission_pct', 'platform_commission_pct']
 
 router.get('/modals', async (req, res, next) => {
   try {
-    const { data, error } = await req.supabase
-      .from('service_modals').select('*')
+    const montar = (colunas) => req.supabase
+      .from('service_modals').select(colunas)
       .order('sort_order', { ascending: true })
       .order('name');
+
+    // O join do executor só existe a partir da 078. Sem ela, a consulta com o
+    // join falharia e o modal cairia no atalho dos três fixos lá embaixo —
+    // sumindo com os modais que o dono cadastrou. Tenta com, cai para sem.
+    let { data, error } = await montar('*, executor:executor_operator_id ( id, full_name )');
+    if (error) {
+      console.warn('[catalog] executor do modal indisponível (migration 078):', error.message);
+      ({ data, error } = await montar('*'));
+    }
     // Sem a 075 aplicada a tabela não existe. Devolve os três de sempre em vez
     // de 500 — o painel continua funcionando com a lista de antes.
     if (error) {
@@ -140,6 +152,23 @@ router.put('/modals/:id', requireAdmin, async (req, res, next) => {
     // CASCADE) — mas renomear é o caso comum, e para isso basta `name`.
     const body = pick(req.body, MODAL_COLS.filter((c) => c !== 'slug'));
     if (body.sort_order === '') body.sort_order = 99;
+    if (body.executor_operator_id === '') body.executor_operator_id = null;
+    for (const c of ['acceptor_commission_pct', 'platform_commission_pct']) {
+      if (body[c] === '' || body[c] === undefined) {
+        if (c === 'acceptor_commission_pct' && body[c] === '') body[c] = 0;
+        else if (body[c] === '') body[c] = null;
+      }
+    }
+    // As duas comissões juntas passando de 100% deixariam o executor com valor
+    // NEGATIVO, e o Mercado Pago recusa o pagamento inteiro. O banco também
+    // barra (CHECK da 078), mas aqui a mensagem diz o que fazer.
+    const somaPct = (Number(body.acceptor_commission_pct) || 0)
+                  + (Number(body.platform_commission_pct) || 0);
+    if (somaPct > 100) {
+      return res.status(400).json({
+        error: `As comissões somam ${somaPct}% — passam de 100% e deixariam o executor com valor negativo.`,
+      });
+    }
 
     // Desativar um modal em uso esconde a opção e deixa registros apontando
     // para algo que sumiu da tela. Melhor recusar dizendo quem usa.
