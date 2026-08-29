@@ -26,14 +26,27 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    # O domínio é público — o lugar dele é em Variables. Mas aceitar também um
-    # Secret evita a falha mais chata daqui: `vars.` não enxerga o que foi
-    # criado em Secrets, o deploy passa VERDE e publica os caminhos antigos.
-    # O site abre em branco e nada no log diz o motivo.
-    env:
-      CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN || secrets.CUSTOM_DOMAIN }}
     steps:
       - uses: actions/checkout@v4
+
+      # O domínio é público — o lugar dele é em Variables. Aceitar também um
+      # Secret evita a falha mais chata daqui: `vars.` não enxerga o que foi
+      # criado em Secrets, o deploy passa VERDE e publica os caminhos antigos.
+      # O site abre em branco e nada no log diz o motivo.
+      #
+      # Precisa ser num PASSO, não no `env:` do job: com `environment:`
+      # declarado, o env do job é avaliado ANTES de o ambiente ser resolvido, e
+      # o GitHub recusa o workflow inteiro se ele citar `secrets` ali — falha na
+      # largada, sem criar job nenhum e sem log de passo para explicar.
+      - name: Resolve custom domain
+        env:
+          FROM_VAR:    ${{ vars.CUSTOM_DOMAIN }}
+          FROM_SECRET: ${{ secrets.CUSTOM_DOMAIN }}
+        run: |
+          DOMINIO="${FROM_VAR:-$FROM_SECRET}"
+          echo "CUSTOM_DOMAIN=$DOMINIO" >> "$GITHUB_ENV"
+          if [ -n "$DOMINIO" ]; then echo "Domínio próprio ativo."
+          else echo "Sem domínio próprio — publicando em /giro-jeri/."; fi
 
       - uses: actions/setup-node@v4
         with:
