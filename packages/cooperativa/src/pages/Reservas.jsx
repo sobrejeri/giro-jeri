@@ -13,6 +13,7 @@ import { useAuth } from '../contexts/AuthContext'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 import { elevatedModeCopy } from '../copy/fleet'
+import ConfirmarExecutor from '../components/ConfirmarExecutor'
 
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }
 
@@ -597,6 +598,8 @@ export default function Reservas() {
   const [accepting,  setAccepting] = useState(null)
   const [acceptingCombo, setAcceptingCombo] = useState(null)
   const [confirming, setConfirming]= useState(null)
+  // Corrida esperando a confirmação de quem executou, antes de concluir (081).
+  const [concluindo, setConcluindo] = useState(null)
   const [myGroupGid, setMyGroupGid]= useState(null) // pedido (grupo) aberto em "Minhas corridas"
   const [quoteModal, setQuoteModal]= useState(null)
   const [price,      setPrice]     = useState('')
@@ -609,6 +612,16 @@ export default function Reservas() {
     refetchInterval: 6000,
     staleTime:       3000,
   })
+
+  // Quem esta cooperativa já mandou a campo, para preencher a confirmação de
+  // executor sem redigitar chave PIX. Falha vira lista vazia — nunca atrapalha.
+  const { data: executoresData } = useQuery({
+    queryKey:  ['executores'],
+    queryFn:   () => api.getExecutores(),
+    staleTime: 5 * 60_000,
+    retry:     false,
+  })
+  const executores = Array.isArray(executoresData) ? executoresData : []
 
   // Cotações de rota personalizada (mesma tela das corridas) —
   // a view v_quotes_dashboard já traz todas as cotações ativas (não pagas/canceladas)
@@ -792,12 +805,22 @@ export default function Reservas() {
     }
   }
 
-  async function handleComplete(booking) {
+  // Concluir abre a confirmação de quem executou (081): é o dado que a tela de
+  // repasses do admin usa para saber a quem pagar.
+  function handleComplete(booking) {
     if (confirming) return
+    setConcluindo(booking)
+  }
+
+  async function confirmarConclusao(executor) {
+    const booking = concluindo
+    if (!booking || confirming) return
     setConfirming(booking.id)
     try {
-      await api.completeBooking(booking.id)
+      await api.completeBooking(booking.id, executor)
       queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      queryClient.invalidateQueries({ queryKey: ['executores'] })
+      setConcluindo(null)
       setToast({ message: 'Corrida concluída! 🎉', type: 'success' })
     } catch (err) {
       setToast({ message: err.message || 'Erro ao concluir corrida', type: 'error' })
@@ -1068,6 +1091,14 @@ export default function Reservas() {
           </div>
         )}
       </Modal>
+
+      <ConfirmarExecutor
+        booking={concluindo}
+        executores={executores}
+        isSending={!!confirming}
+        onCancel={() => setConcluindo(null)}
+        onConfirm={confirmarConclusao}
+      />
     </div>
   )
 }

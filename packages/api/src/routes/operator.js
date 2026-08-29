@@ -1115,7 +1115,106 @@ router.post('/bookings/:id/confirm', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── Executor da corrida (081) ─────────────────────────
+// Grava, no despacho da reserva, quem de fato executou — com documento e chave
+// PIX, que é o que falta para o admin fazer o repasse (079/080).
+//
+// Escreve no `operational_assignments` de propósito, em vez de criar um cadastro
+// próprio: o despacho JÁ é o registro de quem foi a campo (nome, WhatsApp e
+// veículo, obrigatórios desde a 017). Uma tabela paralela divergiria dele.
+const CAMPOS_EXECUTOR = {
+  driver_name:         'name',
+  driver_phone:        'phone',
+  driver_document:     'document',
+  driver_pix_key:      'pix_key',
+  driver_pix_key_type: 'pix_key_type',
+}
+
+async function registrarExecutor(req, bookingId) {
+  if (!bookingId) return
+
+  const patch = {}
+  for (const [coluna, campo] of Object.entries(CAMPOS_EXECUTOR)) {
+    const v = req.body?.executor?.[campo]
+    if (v !== undefined) patch[coluna] = (typeof v === 'string' ? v.trim() : v) || null
+  }
+  // Nada informado: a conclusão continua valendo, só não confirma executor.
+  // Não é erro — a cooperativa pode concluir e acertar o repasse depois.
+  if (Object.keys(patch).length === 0) return
+
+  patch.executed_confirmed_at = new Date().toISOString()
+  patch.executed_confirmed_by = req.user.id
+  patch.updated_at            = new Date().toISOString()
+
+  // Pega o despacho mais recente da reserva. Nada impede duas linhas para a
+  // mesma reserva (não há UNIQUE em booking_id), e `.maybeSingle()` daria erro
+  // em vez de escolher — o que derrubaria a confirmação por um detalhe.
+  const { data: despachos, error: eBusca } = await supabase
+    .from('operational_assignments')
+    .select('id')
+    .eq('booking_id', bookingId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+  if (eBusca) throw eBusca
+
+  const alvo = despachos?.[0]
+  const { error } = alvo
+    ? await supabase.from('operational_assignments').update(patch).eq('id', alvo.id)
+    : await supabase.from('operational_assignments').insert({
+        ...patch,
+        booking_id:                bookingId,
+        assigned_operator_user_id: req.user.id,
+        assignment_status:         'completed',
+      })
+
+  // 42703 = coluna ausente (migration 081 pendente). Não é erro de operação:
+  // a corrida foi concluída e o resto do despacho continua intacto.
+  if (error && error.code !== '42703') throw error
+}
+
+// ── GET /api/operator/executores ──────────────────────
+// Quem esta cooperativa já mandou a campo antes, para preencher de novo sem
+// redigitar. Redigitar chave PIX a cada corrida é onde o dinheiro vai para a
+// conta errada.
+router.get('/executores', async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('operational_assignments')
+      .select('driver_name, driver_phone, driver_document, driver_pix_key, driver_pix_key_type, updated_at')
+      .eq('assigned_operator_user_id', req.user.id)
+      .not('driver_name', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(200)
+    // Sem a 081 as colunas não existem: devolve vazio em vez de 500, e a tela
+    // segue funcionando com digitação manual.
+    if (error) {
+      if (error.code === '42703') return res.json([])
+      throw error
+    }
+
+    // Um por nome, ficando com o registro MAIS RECENTE — se o motorista trocou
+    // de chave PIX, é a nova que deve aparecer.
+    const porNome = new Map()
+    for (const a of data || []) {
+      const nome = (a.driver_name || '').trim()
+      if (!nome || porNome.has(nome.toLowerCase())) continue
+      porNome.set(nome.toLowerCase(), {
+        name:         nome,
+        phone:        a.driver_phone    || '',
+        document:     a.driver_document || '',
+        pix_key:      a.driver_pix_key  || '',
+        pix_key_type: a.driver_pix_key_type || '',
+      })
+    }
+    res.json([...porNome.values()].slice(0, 30))
+  } catch (err) { next(err) }
+})
+
 // ── POST /api/operator/bookings/:id/complete ──────────
+// Aceita, opcionalmente, a CONFIRMAÇÃO de quem executou (081): nome, documento
+// e chave PIX. É o que a tela de repasses mostra para o admin saber a quem
+// pagar. Vem aqui, e não só no despacho, porque quem foi a campo pode não ser
+// quem foi escalado — e o que interessa para o repasse é quem rodou.
 router.post('/bookings/:id/complete', async (req, res, next) => {
   try {
     const { data, error } = await supabase
@@ -1134,6 +1233,12 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
       return res.status(409).json({ error: 'Esta corrida ainda não foi paga pelo cliente.' })
     }
     const b = data?.[0]
+
+    // Best-effort de propósito: a corrida JÁ foi concluída acima e o cliente já
+    // foi avisado. Falhar em gravar o executor não pode desfazer isso — o dado
+    // que se perde o admin consegue lançar na mão, a conclusão não.
+    await registrarExecutor(req, b?.id).catch((err) =>
+      console.error('[executor] registro na conclusão falhou:', err.message))
     if (b) notifyUser({
       userId:      b.user_id,
       bookingId:   b.id,

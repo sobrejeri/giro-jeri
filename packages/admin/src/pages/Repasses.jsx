@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Wallet, Check, Undo2, Car, Phone, Calendar } from 'lucide-react'
+import { Wallet, Check, Undo2, Car, Phone, Calendar, Copy, UserCheck } from 'lucide-react'
 import { format } from 'date-fns'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -17,6 +17,42 @@ const FILTROS = [
   { id: 'cancelled', label: 'Cancelados'},
   { id: 'all',       label: 'Todos'     },
 ]
+
+const ROTULO_PIX = {
+  cpf: 'CPF', cnpj: 'CNPJ', email: 'e-mail', phone: 'telefone', random_key: 'aleatória',
+}
+
+// Chave PIX com cópia em um clique. Ler uma chave da tela e redigitar no banco
+// é onde o dinheiro vai para a conta errada — o botão existe para isso.
+function ChavePix({ chave, tipo, className = '' }) {
+  const [copiado, setCopiado] = useState(false)
+
+  if (!chave) {
+    return (
+      <span className={`text-[11.5px] text-amber-500/90 ${className}`}>
+        sem chave PIX cadastrada
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // clipboard exige contexto seguro; sem ele o clique não pode falhar em
+        // silêncio e deixar o admin achando que copiou.
+        navigator.clipboard?.writeText(chave)
+          .then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1500) })
+          .catch(() => alert(`Copie a chave manualmente:\n\n${chave}`))
+      }}
+      title="Copiar chave PIX"
+      className={`inline-flex items-center gap-1.5 text-[11.5px] font-mono text-gray-300 hover:text-brand transition-colors max-w-full ${className}`}
+    >
+      {copiado ? <Check size={12} className="text-emerald-400 shrink-0" /> : <Copy size={12} className="shrink-0" />}
+      <span className="truncate">{chave}</span>
+      {tipo && <span className="text-gray-600 font-sans shrink-0">({ROTULO_PIX[tipo] || tipo})</span>}
+    </button>
+  )
+}
 
 // Duas naturezas de repasse, e não se misturam:
 //   • COOPERATIVAS — comissão de quem aceitou e valor de quem executou, gerados
@@ -119,7 +155,10 @@ function RepassesCooperativas() {
                   <p className="text-xs text-gray-500">
                     {t.itens} reserva{t.itens === 1 ? '' : 's'}
                     {t.phone ? ` · ${t.phone}` : ''}
+                    {t.documento ? ` · ${t.documento}` : ''}
                   </p>
+                  {/* Para onde mandar o PIX que cobre todas as reservas dela. */}
+                  {t.payee_id && <ChavePix chave={t.pix_key} tipo={t.pix_key_type} className="mt-0.5" />}
                 </div>
                 <p className="text-lg font-bold text-brand tabular-nums">{fmtBRL(t.total)}</p>
                 <button
@@ -150,6 +189,26 @@ function RepassesCooperativas() {
                             {p.bookings?.service_date ? ` · ${fmtDia(p.bookings.service_date)}` : ''}
                           </span>
                         </p>
+                        {/* Quem foi a campo (081). Não é necessariamente quem
+                            recebe: aparece para o admin conferir o serviço e,
+                            quando for pagar direto a essa pessoa, ter a chave. */}
+                        {p.executor?.driver_name && (
+                          <div className="mt-1 pl-2 border-l-2 border-gray-800 space-y-0.5">
+                            <p className="text-[11.5px] text-gray-400 flex items-center gap-1.5 flex-wrap">
+                              <UserCheck
+                                size={11}
+                                className={p.executor.executed_confirmed_at ? 'text-emerald-500' : 'text-gray-600'}
+                              />
+                              executou: <span className="text-gray-300">{p.executor.driver_name}</span>
+                              {p.executor.driver_document ? <span className="text-gray-600">· {p.executor.driver_document}</span> : null}
+                              {p.executor.driver_phone ? <span className="text-gray-600">· {p.executor.driver_phone}</span> : null}
+                              {!p.executor.executed_confirmed_at && (
+                                <span className="text-amber-600/80">(do despacho, não confirmado)</span>
+                              )}
+                            </p>
+                            <ChavePix chave={p.executor.driver_pix_key} tipo={p.executor.driver_pix_key_type} />
+                          </div>
+                        )}
                         {p.paid_at && (
                           <p className="text-[11px] text-emerald-500/80">pago em {fmtDia(p.paid_at)}</p>
                         )}

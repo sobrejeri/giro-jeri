@@ -183,7 +183,11 @@ export const api = {
   acceptLeg:           (legId) => request(`/api/operator/legs/${legId}/accept`, { method: 'POST', body: {} }),
   startBooking:        (id) => request(`/api/operator/bookings/${id}/start`,    { method: 'POST', body: {} }),
   confirmBooking:      (id) => request(`/api/operator/bookings/${id}/confirm`,  { method: 'POST', body: {} }),
-  completeBooking:     (id) => request(`/api/operator/bookings/${id}/complete`, { method: 'POST', body: {} }),
+  // `executor` confirma quem de fato rodou (081) e é o que a tela de repasses
+  // do admin mostra. Opcional: sem ele a conclusão funciona como sempre.
+  completeBooking:     (id, executor) => request(`/api/operator/bookings/${id}/complete`,
+                                                 { method: 'POST', body: executor ? { executor } : {} }),
+  getExecutores:       () => request('/api/operator/executores'),
 
   // Mercado Pago (split de pagamentos / marketplace)
   getMpStatus:     () => request('/api/mp/status'),

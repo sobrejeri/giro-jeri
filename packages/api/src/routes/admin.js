@@ -679,6 +679,14 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       payload.driver_payout_amount = Number(driver_payout_amount);
     }
 
+    // Identificação de quem executa (081). Mesma regra do valor acima: só entra
+    // quando veio no corpo, senão um redespacho que não mexeu na chave PIX a
+    // apagaria — e o repasse ficaria sem destino sem ninguém perceber.
+    for (const campo of ['driver_document', 'driver_pix_key', 'driver_pix_key_type']) {
+      const v = req.body?.[campo];
+      if (v !== undefined) payload[campo] = (typeof v === 'string' ? v.trim() : v) || null;
+    }
+
     // Verifica se já existe um assignment para essa reserva
     const { data: existing } = await supabase
       .from('operational_assignments')
@@ -1395,19 +1403,41 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
   try {
     const { status = 'pending', payee } = req.query;
 
-    let q = supabase
-      .from('booking_payouts')
-      .select(`
-        id, kind, amount, status, paid_at, notes, created_at,
-        payee:payee_user_id ( id, full_name, phone ),
-        bookings ( booking_code, service_type, service_date, total_amount )
-      `)
-      .order('created_at', { ascending: false })
-      .limit(500);
-    if (status && status !== 'todos') q = q.eq('status', status);
-    if (payee) q = q.eq('payee_user_id', payee);
+    // O destino do dinheiro vem junto (081): a chave PIX cadastrada de quem
+    // recebe, e quem de fato executou. Sem isso a tela dizia QUANTO e para
+    // QUEM, mas não para ONDE — e o admin ia caçar a chave em outro lugar.
+    //
+    // `operational_assignments` vem aninhado (array): nada impede duas linhas
+    // para a mesma reserva, e um join achatado duplicaria o repasse, dobrando
+    // o total a pagar na conferência.
+    const EXECUTOR = 'driver_name, driver_phone, driver_document, driver_pix_key, '
+                   + 'driver_pix_key_type, real_vehicle_text, executed_confirmed_at, updated_at';
+    const montar = (colsExecutor) => {
+      let q = supabase
+        .from('booking_payouts')
+        .select(`
+          id, kind, amount, status, paid_at, notes, created_at,
+          payee:payee_user_id ( id, full_name, phone, pix_key, pix_key_type,
+                                document_type, document_number ),
+          bookings ( booking_code, service_type, service_date, total_amount
+                     ${colsExecutor ? `, operational_assignments ( ${colsExecutor} )` : ''} )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (status && status !== 'todos') q = q.eq('status', status);
+      if (payee) q = q.eq('payee_user_id', payee);
+      return q;
+    };
 
-    const { data, error } = await q;
+    let { data, error } = await montar(EXECUTOR);
+    // Sem a 081 as colunas do executor não existem e a consulta INTEIRA falha.
+    // Cai para a versão sem executor em QUALQUER erro dela — a tela perde o
+    // destino do dinheiro, não a lista de repasses. Errar para o lado de
+    // mostrar menos é melhor que derrubar a única tela que diz o que se deve.
+    if (error) {
+      console.warn('[admin] executor do repasse indisponível (migration 081?):', error.message);
+      ({ data, error } = await montar(null));
+    }
     // Sem a 080 a tabela não existe: devolve vazio com um aviso, em vez de 500.
     if (error) {
       if (error.code === '42P01') {
@@ -1416,14 +1446,34 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
       throw error;
     }
 
+    // Achata para UM executor por repasse — o despacho mais recente da reserva.
+    for (const p of data || []) {
+      const lista = p.bookings?.operational_assignments;
+      if (Array.isArray(lista)) {
+        p.executor = [...lista].sort((a, b) =>
+          String(b.updated_at || '').localeCompare(String(a.updated_at || '')))[0] || null;
+        delete p.bookings.operational_assignments;
+      } else {
+        p.executor = lista || null;
+      }
+    }
+
     // Total por cooperativa — é assim que o repasse é feito na prática: um PIX
     // por cooperativa, não um por reserva.
     const porQuem = new Map();
     for (const p of data || []) {
       const id = p.payee?.id || 'sem-destinatario';
       if (!porQuem.has(id)) {
-        porQuem.set(id, { payee_id: p.payee?.id || null, nome: p.payee?.full_name || '(sem destinatário)',
-                          phone: p.payee?.phone || null, itens: 0, total: 0 });
+        porQuem.set(id, {
+          payee_id: p.payee?.id || null,
+          nome:     p.payee?.full_name || '(sem destinatário)',
+          phone:    p.payee?.phone || null,
+          // Para onde mandar o PIX que cobre todas as reservas dela (081).
+          pix_key:      p.payee?.pix_key      || null,
+          pix_key_type: p.payee?.pix_key_type || null,
+          documento:    p.payee?.document_number || null,
+          itens: 0, total: 0,
+        });
       }
       const t = porQuem.get(id);
       t.itens += 1;

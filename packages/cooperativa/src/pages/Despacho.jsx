@@ -11,10 +11,11 @@ import Badge from '../components/ui/Badge'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
-import Input, { Textarea } from '../components/ui/Input'
+import Input, { Textarea, Select } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import { downloadOrderPDF } from '../lib/orderPDF'
 import SendOsButton from '../components/SendOsButton'
+import ConfirmarExecutor, { TIPOS_PIX } from '../components/ConfirmarExecutor'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -182,10 +183,21 @@ function GroupedList({ list, onDispatch, onStart, onComplete, cooperativa }) {
   )
 }
 
+// Documento e chave PIX (081) entram aqui porque é onde o motorista já é
+// nomeado. São OPCIONAIS: sem a chave o despacho segue e a corrida sai — o que
+// fica pendente é o repasse, que o admin resolve depois. Travar a operação por
+// causa de um dado de pagamento seria pior que pagar com um dia de atraso.
+const FORM_VAZIO = {
+  real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '',
+  driver_document: '', driver_pix_key: '', driver_pix_key_type: '',
+}
+
 export default function Despacho() {
   const [date, setDate]       = useState('all')
   const [modal, setModal]     = useState(null)
-  const [form, setForm]       = useState({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
+  const [form, setForm]       = useState(FORM_VAZIO)
+  // Corrida aguardando a confirmação de quem executou, antes de concluir (081).
+  const [concluindo, setConcluindo] = useState(null)
   // Erro do despacho visível na tela (antes falhava em silêncio).
   const [errMsg, setErrMsg] = useState('')
   const qc                    = useQueryClient()
@@ -201,6 +213,17 @@ export default function Despacho() {
     queryFn:  () => api.getProfile(),
     staleTime: 5 * 60_000,
   })
+
+  // Quem esta cooperativa já mandou a campo, para reaproveitar os dados de
+  // repasse. Falha aqui não atrapalha o despacho: vira lista vazia e a pessoa
+  // digita, como antes.
+  const { data: executoresData } = useQuery({
+    queryKey: ['executores'],
+    queryFn:  () => api.getExecutores(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+  const executores = Array.isArray(executoresData) ? executoresData : []
 
   const cooperativa = profile ? {
     full_name:         profile.full_name,
@@ -230,7 +253,7 @@ export default function Despacho() {
         }
       })()
       setModal(null)
-      setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '' })
+      setForm(FORM_VAZIO)
       setErrMsg('')
     },
     // Sem isto, uma falha no despacho não mostrava NADA na tela: o modal ficava
@@ -240,9 +263,19 @@ export default function Despacho() {
 
   // Ciclo da corrida no Despacho (item 13): iniciar após o despacho, depois concluir.
   const startMut    = useMutation({ mutationFn: (id) => api.startBooking(id),    onSuccess: () => qc.invalidateQueries({ queryKey: ['dispatch'] }) })
-  const completeMut = useMutation({ mutationFn: (id) => api.completeBooking(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['dispatch'] }) })
+  const completeMut = useMutation({
+    mutationFn: ({ id, executor }) => api.completeBooking(id, executor),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dispatch'] })
+      // O executor confirmado agora alimenta a lista de reaproveitáveis.
+      qc.invalidateQueries({ queryKey: ['executores'] })
+      setConcluindo(null)
+    },
+  })
   function handleStart(b)    { if (!startMut.isPending) startMut.mutate(b.id) }
-  function handleComplete(b) { if (!completeMut.isPending) completeMut.mutate(b.id) }
+  // Concluir passa pela confirmação de quem executou (081) — é o único momento
+  // em que dá para saber quem realmente rodou, e é o que o repasse precisa.
+  function handleComplete(b) { if (!completeMut.isPending) setConcluindo(b) }
 
   function changeDate(days) {
     const base = date === 'all' ? format(new Date(), 'yyyy-MM-dd') : date
@@ -261,11 +294,30 @@ export default function Despacho() {
       .join(' + ')
     setModal(booking)
     setForm({
-      real_vehicle_text: assign?.real_vehicle_text || selectedVehicle || '',
-      driver_name:       assign?.driver_name       || '',
-      dispatch_notes:    assign?.dispatch_notes    || '',
-      driver_phone:      assign?.driver_phone      || '',
+      ...FORM_VAZIO,
+      real_vehicle_text:   assign?.real_vehicle_text   || selectedVehicle || '',
+      driver_name:         assign?.driver_name         || '',
+      dispatch_notes:      assign?.dispatch_notes      || '',
+      driver_phone:        assign?.driver_phone        || '',
+      driver_document:     assign?.driver_document     || '',
+      driver_pix_key:      assign?.driver_pix_key      || '',
+      driver_pix_key_type: assign?.driver_pix_key_type || '',
     })
+  }
+
+  // Preenche tudo a partir de quem já rodou antes — inclusive a chave PIX, que
+  // é justamente o campo em que um dígito errado manda o dinheiro para outra
+  // conta. Não sobrescreve o veículo: o carro muda, o motorista não.
+  function usarExecutor(ex) {
+    if (!ex) return
+    setForm((f) => ({
+      ...f,
+      driver_name:         ex.name         || '',
+      driver_phone:        ex.phone        || f.driver_phone,
+      driver_document:     ex.document     || '',
+      driver_pix_key:      ex.pix_key      || '',
+      driver_pix_key_type: ex.pix_key_type || '',
+    }))
   }
 
   function handleSubmit(e) {
@@ -380,6 +432,27 @@ export default function Despacho() {
           <Input label="Veículo (modelo / placa / cor) *" placeholder="Ex: Hilux Branca · GKR-1234"
             value={form.real_vehicle_text} required
             onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })} />
+          {/* Quem já rodou por esta cooperativa. Um toque traz nome, telefone,
+              documento e chave PIX — sem redigitar chave a cada corrida. */}
+          {executores.length > 0 && (
+            <div>
+              <p className="text-[11px] font-medium text-gray-500 mb-1.5">Quem já rodou com vocês</p>
+              <div className="flex flex-wrap gap-1.5">
+                {executores.map((ex) => (
+                  <button
+                    key={ex.name} type="button" onClick={() => usarExecutor(ex)}
+                    className={`px-2.5 py-1 rounded-full text-[12px] border transition-colors ${
+                      form.driver_name === ex.name
+                        ? 'bg-brand text-white border-brand'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-brand hover:text-brand'
+                    }`}
+                  >
+                    {ex.name}{ex.pix_key ? '' : ' · sem PIX'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <Input label="Nome do motorista *" placeholder="Ex: João da Silva"
             value={form.driver_name} required
             onChange={(e) => setForm({ ...form, driver_name: e.target.value })} />
@@ -392,6 +465,31 @@ export default function Despacho() {
                 className="flex-1 text-sm text-gray-900 bg-transparent outline-none placeholder-gray-400" />
             </div>
           </div>
+
+          {/* ── Para onde vai o repasse (081) ───────────────────
+              A plataforma recebe 100% e repassa depois. Sem estes dados o
+              admin vê o valor a pagar mas não tem para onde mandar. */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2.5">
+            <div>
+              <p className="text-[12px] font-bold text-gray-800">Dados para o repasse</p>
+              <p className="text-[11px] text-gray-500">
+                Opcional — sem isso a corrida sai igual, só o pagamento fica pendente.
+              </p>
+            </div>
+            <Input label="CPF / CNPJ de quem executa" placeholder="000.000.000-00"
+              value={form.driver_document}
+              onChange={(e) => setForm({ ...form, driver_document: e.target.value })} />
+            <div className="grid grid-cols-[1fr_9rem] gap-2">
+              <Input label="Chave PIX" placeholder="chave para receber"
+                value={form.driver_pix_key}
+                onChange={(e) => setForm({ ...form, driver_pix_key: e.target.value })} />
+              <Select label="Tipo" value={form.driver_pix_key_type}
+                onChange={(e) => setForm({ ...form, driver_pix_key_type: e.target.value })}>
+                {TIPOS_PIX.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </Select>
+            </div>
+          </div>
+
           <Textarea label="Observações para o motorista" rows={2} value={form.dispatch_notes}
             onChange={(e) => setForm({ ...form, dispatch_notes: e.target.value })} />
           {(() => {
@@ -413,6 +511,13 @@ export default function Despacho() {
         </form>
       </Modal>
 
+      <ConfirmarExecutor
+        booking={concluindo}
+        executores={executores}
+        isSending={completeMut.isPending}
+        onCancel={() => setConcluindo(null)}
+        onConfirm={(executor) => completeMut.mutate({ id: concluindo.id, executor })}
+      />
     </div>
   )
 }
