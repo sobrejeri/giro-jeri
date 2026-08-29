@@ -47,6 +47,25 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (o 7% inventado estava em QUATRO lugares)** — Varrendo
+  a plataforma atrás de outros ajustes, achei que a correção do Dashboard tinha
+  pegado só um quarto do problema. `bruto × 0,93` também estava em:
+  • **`/api/admin/operator-performance`** (`PLATFORM_COMMISSION = 0.07`) — e este
+    é o **REPASSE DE CADA COOPERATIVA**. Estimar dinheiro que se deve a terceiro
+    é pior do que não mostrar: vira base de conversa sobre pagamento;
+  • `Financeiro.jsx`, a linha "Líquido" do gráfico;
+  • `Dashboard.jsx`, o líquido do mês.
+  Todos passam a ler `financial_ledger`: `booking_net` para o líquido e
+  `payout_operator` para o repasse por cooperativa. Sem lançamento, vem `null` e
+  a tela mostra "—".
+  Detalhe que quase passou: `fmt(null)` devolvia **R$ 0,00**, o que afirmaria
+  "esta cooperativa não tem nada a receber" quando a verdade é "não temos o
+  dado". As duas células do ranking tratam null explicitamente agora.
+  `financial-daily` passou a devolver `net` por dia e `/stats` ganhou
+  `valor_liquido_mes` — foi o cálculo NA TELA que produziu os números fabricados.
+  Conferido no navegador: coop com repasse mostra o valor, sem repasse mostra
+  "—" e não zero, e o líquido do mês nulo também mostra "—".
+
 - **2026-08-25 · Agente B (Dashboard não mostrava a movimentação real)** —
   Observação do dono, e procedia. Dois problemas em `GET /api/admin/stats`:
   1. **Líquido inventado.** `valor_liquido_hoje` era `bruto * 0,93` — 7%

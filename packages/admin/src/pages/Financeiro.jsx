@@ -72,7 +72,11 @@ export default function Financeiro() {
       try { return format(parseISO(d.date), 'd MMM', { locale: ptBR }) } catch { return d.date }
     })(),
     bruto: Number(d.total),
-    liquido: Number(d.total) * 0.93,
+    // O líquido vem do razão (`booking_net`). Era `bruto * 0,93` calculado
+    // aqui — 7% chutados, enquanto a comissão real é configurável por
+    // cooperativa e a taxa do gateway varia. Sem lançamento líquido no dia, a
+    // série fica sem ponto em vez de inventar um.
+    liquido: d.net == null ? null : Number(d.net),
   }))
 
   if (l1 || l2) return <PageSpinner />

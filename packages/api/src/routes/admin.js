@@ -71,11 +71,17 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
     // Null quando não há lançamento líquido: melhor não mostrar do que mostrar
     // um valor inventado.
     let valorLiquidoHoje = null;
+    let valorLiquidoMes  = null;
     try {
-      const { data: liq } = await supabase.from('financial_ledger').select('amount')
-        .eq('entry_type', 'booking_net')
-        .or(`effective_date.gte.${today},and(effective_date.is.null,created_at.gte.${today})`);
-      if (liq?.length) valorLiquidoHoje = liq.reduce((s, r) => s + Number(r.amount), 0);
+      const somaLiquido = async (desde) => {
+        const { data } = await supabase.from('financial_ledger').select('amount')
+          .eq('entry_type', 'booking_net')
+          .or(`effective_date.gte.${desde},and(effective_date.is.null,created_at.gte.${desde})`);
+        return data?.length ? data.reduce((s, r) => s + Number(r.amount), 0) : null;
+      };
+      [valorLiquidoHoje, valorLiquidoMes] = await Promise.all([
+        somaLiquido(today), somaLiquido(monthStart),
+      ]);
     } catch (e) {
       console.error('[stats] líquido do razão falhou:', e.message);
     }
@@ -88,6 +94,7 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
       valor_bruto_hoje:   valorBrutoHoje,
       valor_liquido_hoje: valorLiquidoHoje,
       valor_bruto_mes:    valorBrutoMes,
+      valor_liquido_mes:  valorLiquidoMes,
     });
   } catch (err) { next(err); }
 });
@@ -1269,15 +1276,36 @@ router.get('/operator-performance', requireAdmin, async (req, res, next) => {
       if (b.status_operational === 'completed') row.completed += 1;
     }
 
-    // Repasse líquido = bruto − comissão da plataforma (7%), mesma convenção
-    // do resto do admin (líquido = bruto × 0,93).
-    const PLATFORM_COMMISSION = 0.07;
+    // REPASSE do razão, não estimativa. Era `bruto × 0,93` — 7% chutados no
+    // código. Isto aqui é o valor que cada cooperativa TEM A RECEBER: estimar
+    // é pior do que não mostrar, porque vira base de conversa sobre dinheiro.
+    // `payout_operator` é o lançamento do repasse; sem ele, `net` vem null e a
+    // tela mostra "—".
+    const repassePorOperador = new Map();
+    try {
+      const idsOps = [...map.keys()].filter(Boolean);
+      if (idsOps.length) {
+        const { data: repasses } = await supabase
+          .from('financial_ledger')
+          .select('amount, booking_id, bookings ( operator_id )')
+          .eq('entry_type', 'payout_operator');
+        for (const r of repasses || []) {
+          const opId = r.bookings?.operator_id;
+          if (!opId) continue;
+          repassePorOperador.set(opId, (repassePorOperador.get(opId) || 0) + Number(r.amount));
+        }
+      }
+    } catch (e) {
+      console.error('[operator-performance] repasse do razão falhou:', e.message);
+    }
 
     const operators = [...map.values()]
       .map((r) => ({
         ...r,
         revenue:    Math.round(r.revenue * 100) / 100,
-        net:        Math.round(r.revenue * (1 - PLATFORM_COMMISSION) * 100) / 100,
+        net:        repassePorOperador.has(r.id)
+                      ? Math.round(repassePorOperador.get(r.id) * 100) / 100
+                      : null,
         ticket_avg: r.total ? Math.round((r.revenue / r.total) * 100) / 100 : 0,
       }))
       .sort((a, b) => b.revenue - a.revenue);
@@ -1285,7 +1313,9 @@ router.get('/operator-performance', requireAdmin, async (req, res, next) => {
     const totals = operators.reduce(
       (t, o) => ({
         revenue:   Math.round((t.revenue + o.revenue) * 100) / 100,
-        net:       Math.round((t.net + o.net) * 100) / 100,
+        // `net` pode ser null (sem repasse lançado) — somar null viraria NaN
+        // no total e a tela mostraria "R$ NaN".
+        net:       Math.round((t.net + (o.net || 0)) * 100) / 100,
         tours:     t.tours + o.tours,
         transfers: t.transfers + o.transfers,
         total:     t.total + o.total,
@@ -1637,10 +1667,14 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
 
     // Lançamentos antigos podem ter effective_date NULL — nesse caso vale
     // a data de criação (senão o gráfico ignora a linha e fica "Sem dados").
+    // Bruto E líquido, os dois do razão. O líquido vinha sendo calculado na
+    // TELA como `bruto * 0,93` — 7% chutados, enquanto a comissão real é
+    // configurável por cooperativa e a taxa do gateway varia por meio de
+    // pagamento. `booking_net` já é o valor certo, gravado no fechamento.
     const { data, error } = await supabase
       .from('financial_ledger')
-      .select('amount, effective_date, created_at')
-      .eq('entry_type', 'booking_gross')
+      .select('amount, entry_type, effective_date, created_at')
+      .in('entry_type', ['booking_gross', 'booking_net'])
       .eq('direction', 'inflow')
       .or(`effective_date.gte.${since},and(effective_date.is.null,created_at.gte.${since})`)
       .order('created_at');
@@ -1652,12 +1686,14 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
     for (const row of data || []) {
       const d = (row.effective_date || row.created_at || '').slice(0, 10);
       if (!d) continue;
-      byDay[d] = (byDay[d] || 0) + Number(row.amount);
+      if (!byDay[d]) byDay[d] = { total: 0, net: null };
+      if (row.entry_type === 'booking_gross') byDay[d].total += Number(row.amount);
+      else byDay[d].net = (byDay[d].net || 0) + Number(row.amount);
     }
 
     const series = Object.entries(byDay)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, total]) => ({ date, total }));
+      .map(([date, v]) => ({ date, total: v.total, net: v.net }));
 
     res.json(series);
   } catch (err) { next(err); }

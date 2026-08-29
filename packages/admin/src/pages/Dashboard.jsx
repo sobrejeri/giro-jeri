@@ -598,7 +598,12 @@ function RankingCooperativas() {
                       </div>
                     </td>
                     <td className="py-2.5 px-2 text-right font-bold text-brand whitespace-nowrap">{fmt(o.revenue)}</td>
-                    <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">{fmt(o.net)}</td>
+                    {/* "—" e não R$ 0,00 quando não há repasse lançado: zero
+                        afirmaria que a cooperativa não tem nada a receber, e o
+                        que temos é ausência do dado. */}
+                    <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">
+                      {o.net != null ? fmt(o.net) : <span className="text-gray-600">—</span>}
+                    </td>
                     <td className="py-2.5 px-2 text-center text-gray-300">{o.tours}</td>
                     <td className="py-2.5 px-2 text-center text-gray-300">{o.transfers}</td>
                     <td className="py-2.5 px-2 text-center text-gray-300">{o.total}</td>
@@ -613,7 +618,9 @@ function RankingCooperativas() {
                     <td></td>
                     <td className="py-2.5 text-[12px] text-gray-500">Total · {sorted.length} coop.</td>
                     <td className="py-2.5 px-2 text-right text-brand whitespace-nowrap">{fmt(totals.revenue)}</td>
-                    <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">{fmt(totals.net)}</td>
+                    <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">
+                      {totals.net ? fmt(totals.net) : <span className="text-gray-600">—</span>}
+                    </td>
                     <td className="py-2.5 px-2 text-center">{totals.tours}</td>
                     <td className="py-2.5 px-2 text-center">{totals.transfers}</td>
                     <td className="py-2.5 px-2 text-center">{totals.total}</td>
@@ -731,7 +738,10 @@ export default function Dashboard() {
         </Card>
         <Card className="p-5">
           <p className="text-xs text-gray-500 mb-1">Receita líquida (mês)</p>
-          <p className="text-xl font-bold text-green-400">{fmt((stats?.valor_bruto_mes || 0) * 0.93)}</p>
+          {/* Do razão, não estimado. Sem lançamento líquido, mostra "—". */}
+          <p className="text-xl font-bold text-green-400">
+            {stats?.valor_liquido_mes != null ? fmt(stats.valor_liquido_mes) : '—'}
+          </p>
         </Card>
       </div>
 
