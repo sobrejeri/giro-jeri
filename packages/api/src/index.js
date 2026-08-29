@@ -170,6 +170,12 @@ app.get('/health', async (_req, res) => {
     timestamp:    new Date().toISOString(),
     supabase_key: keyRole,
     rls_bypass:   rlsBypass,
+    // Quem pode chamar esta API pelo navegador. Fica aqui porque diagnosticar
+    // CORS pelo log do servidor exige acesso ao painel, e o erro só aparece no
+    // console de quem está navegando. Com isto, abrir /health no navegador
+    // responde de uma vez: o deploy pegou? as variáveis chegaram?
+    // Não expõe nada sensível — são domínios públicos do próprio produto.
+    cors_origins: ORIGENS_OK,
   });
 });
 
