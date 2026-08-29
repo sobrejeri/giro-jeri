@@ -26,7 +26,7 @@ Legenda: ✅ pronto e validado · 🟡 pronto, falta validar em produção ·
 |---|------|--------|-------------|
 | 1.1 | PIX reserva única (solicitar → aceitar → pagar) | 🟡 | Passeio de R$ 1: turista solicita, coop aceita, pagar PIX real, conferir `paid` + notificações + ledger |
 | 1.2 | Cartão reserva única | 🟡 | Mesmo fluxo com cartão |
-| 1.3 | Split para conta MP da cooperativa | 🔴 | Coop com MP conectado: conferir se o valor cai na conta DELA (application_fee) e não na plataforma |
+| 1.3 | Split para conta MP do operador | 🔴 | Coop com MP conectado: conferir se o valor cai na conta DELA (application_fee) e não na plataforma |
 | 1.4 | **Pagamento único de grupo (carrinho)** — Fatia B | 🔴 | Backend pronto e NÃO deployado no fluxo do front ("Pagar tudo" não existe ainda). Decidir: lançar com pagamento por reserva (funciona hoje) e grupo depois? |
 | 1.5 | Expiração de PIX + repagamento | 🟡 | Deixar PIX vencer e pagar de novo |
 | 1.6 | Reembolso/cancelamento pós-pagamento | 🔴 | Não há fluxo de estorno na plataforma — definir processo manual p/ agosto |
@@ -38,7 +38,7 @@ Legenda: ✅ pronto e validado · 🟡 pronto, falta validar em produção ·
 | # | Item | Status | Nota |
 |---|------|--------|------|
 | 2.1 | Todas as 16 páginas abrem sem crash | ✅ | Testado no navegador com dados vazios (12/07) |
-| 2.1b | **Turista (14 págs) e Cooperativa (9 págs) sem crash** | ✅ | Varredura 12/07, logado e deslogado; chamadas × rotas dos 3 apps conferidas |
+| 2.1b | **Turista (14 págs) e Operador (9 págs) sem crash** | ✅ | Varredura 12/07, logado e deslogado; chamadas × rotas dos 3 apps conferidas |
 | 2.2 | Todas as chamadas têm rota na API | ✅ | Cruzamento cliente×servidor 12/07; `getTour` morto removido |
 | 2.3 | **Stories: escrita estava SEM auth** | ✅ | Corrigido 12/07 — criar/editar/apagar destaque agora exige admin |
 | 2.4 | Usuários: criar coop (CNPJ), liberar frota, reset senha | 🟡 | Testar em produção com usuário real |
@@ -63,12 +63,12 @@ Legenda: ✅ pronto e validado · 🟡 pronto, falta validar em produção ·
 | 3.6 | Solicitar tudo → N reservas em grupo | 🟡 | |
 | 3.7 | Minhas Reservas: acompanhar, pagar após aceite | 🟡 | |
 | 3.8 | Afiliado: ativar, link `/giro-jeri/a/CÓD`, painel, chave PIX | 🟡 | Depende de 0.1; link corrigido 12/07 (base path) |
-| 3.9 | Link de cooperativa `/c/slug` (venda direta) | 🟡 | |
+| 3.9 | Link de operador `/c/slug` (venda direta) | 🟡 | |
 | 3.10 | Telefone com DDI internacional (dropdown bandeira) | ✅ | Perfil + cadastro |
 | 3.11 | i18n (pt/en/es) nas telas novas | ⚪ | Carrinho/afiliado estão só em pt — decidir se lança assim |
 | 3.12 | PWA: instalar, ícone, offline básico | 🟡 | |
 
-## 4. COOPERATIVA
+## 4. OPERADOR
 
 | # | Item | Status | Nota |
 |---|------|--------|------|

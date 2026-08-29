@@ -11,7 +11,7 @@ import PullToRefresh from '../PullToRefresh'
 import { getPartner, clearPartner } from '../../lib/partner'
 
 // Selo de venda direta: enquanto ativo, toda solicitação vai atribuída à
-// cooperativa do link (sem fila). O X remove a atribuição.
+// operador do link (sem fila). O X remove a atribuição.
 function PartnerBadge() {
   const [partner, setPartnerState] = useState(getPartner)
   if (!partner) return null
@@ -25,7 +25,7 @@ function PartnerBadge() {
       </p>
       <button
         onClick={() => { clearPartner(); setPartnerState(null) }}
-        aria-label="Sair do link da cooperativa"
+        aria-label="Sair do link do operador"
         className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center active:scale-95"
       >
         <X size={12} />

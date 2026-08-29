@@ -78,7 +78,7 @@ export default function Veiculos() {
   const operating = vehicles.filter((v) => prefMap[v.id] !== false)
   const blocked    = vehicles.filter((v) => prefMap[v.id] === false)
 
-  const waMsg = encodeURIComponent('Olá! Gostaria de solicitar uma mudança na frota liberada para minha cooperativa.')
+  const waMsg = encodeURIComponent('Olá! Gostaria de solicitar uma mudança na frota liberada para meu operador.')
 
   return (
     <div className="space-y-4">

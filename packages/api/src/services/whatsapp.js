@@ -8,7 +8,7 @@ const ZAPI_BASE = process.env.ZAPI_BASE_URL || 'https://api.z-api.io';
 // URLs dos apps para os deep links das notificações. Defaults já apontam pra
 // produção — podem ser sobrescritos por env se o domínio mudar.
 const TURISTA_APP = (process.env.TURISTA_APP_URL || 'https://sobrejeri.github.io/giro-jeri').replace(/\/$/, '');
-const COOP_APP    = (process.env.COOP_APP_URL    || 'https://sobrejeri.github.io/giro-jeri/cooperativa').replace(/\/$/, '');
+const COOP_APP    = (process.env.COOP_APP_URL    || 'https://sobrejeri.github.io/giro-jeri/operador').replace(/\/$/, '');
 
 // Deep links prontos.
 const linkBookingPay  = (id) => `${TURISTA_APP}/minhas-reservas/${id}`;
@@ -120,7 +120,7 @@ async function sendDocument(phone, document, fileName, caption) {
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       console.error('[whatsapp] envio de PDF falhou', res.status, body.slice(0, 300))
-      // `detail` volta para a tela da cooperativa: sem a resposta crua do Z-API
+      // `detail` volta para a tela do operador: sem a resposta crua do Z-API
       // não dá para saber se o problema é credencial, formato ou o número.
       return { error: true, status: res.status, detail: body.slice(0, 300) }
     }
@@ -237,14 +237,14 @@ export async function notifyAffiliateCommissionCancelled(supabase, { affiliateId
 }
 
 /**
- * WhatsApp para TODAS as cooperativas ativas — solicitação nova.
+ * WhatsApp para TODAS os operadores ativos — solicitação nova.
  * Admin não recebe aqui; só após a expiração (notifyAdminExpiredBooking).
  * Fire-and-forget: erros logados, nunca derrubam o fluxo.
  */
 export async function notifyOperatorsNewBooking(supabase, booking) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
 
-  // Item 17: só as cooperativas com a FROTA compatível (não desabilitaram os
+  // Item 17: só os operadores com a FROTA compatível (não desabilitaram os
   // veículos da reserva). Ex.: helicóptero/UTV não notificam quem não opera.
   const { eligibleOperatorsForBooking } = await import('./fleet.js')
   const operators = await eligibleOperatorsForBooking(supabase, booking.id)
@@ -259,7 +259,7 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
     `🗓 ${data}\n` +
     `🔖 ${booking.booking_code || '-'}\n` +
     `\n` +
-    `Você tem *24h* para aceitar antes que passe para outra cooperativa.\n` +
+    `Você tem *24h* para aceitar antes que passe para outro operador.\n` +
     `👉 Aceitar agora: ${linkCoopRides()}`
 
   await sendToMany(operators.map((op) => op.phone), message)
@@ -272,7 +272,7 @@ export async function notifyOperatorsNewBooking(supabase, booking) {
 const MODAL_DA_COTACAO = 'terrestre'
 
 /**
- * WhatsApp pras cooperativas — nova cotação de translado personalizado.
+ * WhatsApp pras operadores — nova cotação de translado personalizado.
  * Diferente da reserva: a coop precisa abrir e enviar o PREÇO, não só aceitar.
  */
 export async function notifyOperatorsNewQuote(supabase, quote) {
@@ -280,7 +280,7 @@ export async function notifyOperatorsNewQuote(supabase, quote) {
 
   // Cotação nasce SEM veículo — o cliente só diz de onde, para onde e quando —
   // então o filtro por veículo não tem no que se apoiar. O corte é o MODAL:
-  // translado personalizado é de rua, e a cooperativa que só voa não deve
+  // translado personalizado é de rua, e o operador que só voa não deve
   // receber pedido de buggy. Fail-open dentro do helper.
   const { eligibleOperatorsForModal } = await import('./fleet.js')
   const operators = await eligibleOperatorsForModal(supabase, MODAL_DA_COTACAO)
@@ -324,9 +324,9 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
 
   const { tipo, rota, data } = bookingSummary(booking)
   const message =
-    `*TURIVA* · Solicitação sem cooperativa ⚠️\n` +
+    `*TURIVA* · Solicitação sem operador ⚠️\n` +
     `\n` +
-    `Nenhuma cooperativa aceitou em 24h.\n` +
+    `Nenhum operador aceitou em 24h.\n` +
     `${tipo}${rota ? `\n${rota}` : ''}\n` +
     `🗓 ${data}\n` +
     `🔖 ${booking.booking_code || '-'}\n` +
@@ -343,7 +343,7 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
 // Envia o PDF da Ordem de Serviço ao cliente e ao motorista. Chamado por um
 // endpoint PRÓPRIO (/operational/:id/os-pdf), depois que o despacho já
 // aconteceu — o anexo nunca entra no caminho crítico do despacho.
-// O PDF é gerado no app da cooperativa (orderPDF.js) e chega em base64, então o
+// O PDF é gerado no app do operador (orderPDF.js) e chega em base64, então o
 // documento enviado é exatamente o que a coop vê, sem duplicar layout aqui.
 export async function sendOsPdf(supabase, { booking, driverPhone, pdfBase64 }) {
   if (!isWhatsappEnabled()) return { skipped: true, reason: 'whatsapp desligado' }
@@ -458,7 +458,7 @@ export async function notifyPasswordReset(phone, token) {
 }
 
 // ── CLIENTE ────────────────────────────────────────────
-// Cooperativa aceitou → cliente precisa PAGAR pra confirmar. Gatilho de
+// Operador aceitou → cliente precisa PAGAR pra confirmar. Gatilho de
 // conversão mais crítico: sem isso o cliente não sabe que pode pagar.
 export async function notifyClientBookingAccepted(supabase, booking) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
@@ -468,7 +468,7 @@ export async function notifyClientBookingAccepted(supabase, booking) {
   const message =
     `*TURIVA* · Reserva aceita 🎉\n` +
     `\n` +
-    `Uma cooperativa aceitou seu ${tipo.toLowerCase()}!\n` +
+    `Um operador aceitou seu ${tipo.toLowerCase()}!\n` +
     `${rota ? `${rota}\n` : ''}` +
     `🗓 ${data}\n` +
     `💰 *${fmtBRL(booking.total_amount)}*\n` +
@@ -479,7 +479,7 @@ export async function notifyClientBookingAccepted(supabase, booking) {
   await sendButtonLink(phone, message, 'Pagar agora', linkBookingPay(booking.id))
 }
 
-// ── CICLO DA CORRIDA (cooperativa) ─────────────────────
+// ── CICLO DA CORRIDA (operador) ─────────────────────
 // Item 3: ao INICIAR a corrida, avisa o cliente que o motorista está a caminho.
 export async function notifyClientRideStarted(supabase, booking) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
@@ -518,7 +518,7 @@ export async function notifyClientReviewRequest(supabase, booking) {
   const message =
     `*TURIVA* · Conte como foi! ⭐\n\n` +
     `Que tal avaliar seu ${tipo.toLowerCase()} (${booking.booking_code || '-'})? ` +
-    `Sua opinião ajuda a cooperativa e outros viajantes. Leva 1 minutinho. 🙏`
+    `Sua opinião ajuda o operador e outros viajantes. Leva 1 minutinho. 🙏`
   await sendButtonLink(phone, message, 'Avaliar agora', linkBookingPay(booking.id))
 }
 
@@ -554,12 +554,12 @@ export async function notifyClientPaymentConfirmed(supabase, booking) {
     `🗓 ${data}\n` +
     `🔖 ${booking.booking_code || '-'}\n` +
     `\n` +
-    `A cooperativa já vai cuidar do seu atendimento. Boa viagem! 🚗\n` +
+    `O operador já vai cuidar do seu atendimento. Boa viagem! 🚗\n` +
     `👉 Ver reserva: ${linkBookingPay(booking.id)}`
   await sendToMany([phone], message)
 }
 
-// ── COOPERATIVA ────────────────────────────────────────
+// ── OPERADOR ────────────────────────────────────────
 // Cliente pagou → a coop que aceitou precisa confirmar/despachar. Momento
 // em que a coop tem que AGIR, por isso vale o WhatsApp (além da central).
 export async function notifyOperatorPaymentReceived(supabase, booking) {

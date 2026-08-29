@@ -55,8 +55,8 @@ async function conciliarUm(pagamento, { aoAprovar, resolverToken, consultarStatu
       const { getMpPaymentStatus } = await import('./mercadoPago.js');
       return getMpPaymentStatus(mpId, token);
     });
-    // Com split, a cobrança vive na conta da cooperativa: consulta com o token
-    // dela. Sem cooperativa (ou sem token), cai no token da plataforma.
+    // Com split, a cobrança vive na conta do operador: consulta com o token
+    // dela. Sem operador (ou sem token), cai no token da plataforma.
     const token = await resolverToken(pagamento.bookings?.operator_id);
     mpStatus = await consulta(pagamento.gateway_transaction_id, token);
   } catch (err) {

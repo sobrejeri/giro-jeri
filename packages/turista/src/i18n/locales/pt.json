@@ -361,14 +361,14 @@
     "success": {
       "title": "Pagamento confirmado!",
       "subtitle": "Seu pagamento foi aprovado com sucesso.",
-      "awaitingCoop": "Aguardando cooperativa aceitar",
-      "awaitingCoopSub": "Sua solicitação foi enviada. Uma cooperativa irá aceitar em breve e você receberá a confirmação.",
-      "statusTag": "Ag. cooperativa",
+      "awaitingCoop": "Aguardando operador aceitar",
+      "awaitingCoopSub": "Sua solicitação foi enviada. Um operador irá aceitar em breve e você receberá a confirmação.",
+      "statusTag": "Ag. operador",
       "code": "Código",
       "totalPaid": "Total pago",
       "person": "pessoa",
       "people": "pessoas",
-      "followHint": "Acompanhe o status da sua reserva em \"Minhas Reservas\". Você será avisado assim que a cooperativa confirmar.",
+      "followHint": "Acompanhe o status da sua reserva em \"Minhas Reservas\". Você será avisado assim que o operador confirmar.",
       "trackBtn": "Acompanhar reserva",
       "homeBtn": "Voltar ao início"
     }
@@ -583,7 +583,7 @@
     "affiliateTitle": "DIVULGOU, GANHOU",
     "affiliateDesc": "Indique amigos e ganhe comissão a cada reserva paga",
     "howItWorksTitle": "Como funciona?",
-    "partnersTitle": "Cooperativas parceiras",
+    "partnersTitle": "Operadores parceiros",
     "partnersDescMobile": "Operadores locais que realizam seus passeios",
     "finalCtaTitle": "Bora pro paraíso? 🌅",
     "finalCtaDesc": "Reserve seu passeio em poucos minutos",
@@ -791,12 +791,12 @@
     "modeRoute": "Rota definida",
     "modeCustom": "Translado personalizado",
     "quoteRequestedTitle": "Cotação solicitada!",
-    "quoteSuccessDesc": "A cooperativa irá analisar e enviar um valor para você confirmar.",
-    "quoteSuccessDescDesktop": "A cooperativa vai analisar sua rota e enviar uma proposta de valor. Você poderá aprovar e pagar, ou recusar, em \"Minhas reservas\".",
+    "quoteSuccessDesc": "O operador irá analisar e enviar um valor para você confirmar.",
+    "quoteSuccessDescDesktop": "O operador vai analisar sua rota e enviar uma proposta de valor. Você poderá aprovar e pagar, ou recusar, em \"Minhas reservas\".",
     "viewQuotes": "Ver minhas cotações",
     "requestAnother": "Solicitar outra corrida",
-    "customIntro": "Informe os pontos de embarque e destino. A cooperativa confirma e envia o valor da corrida para você.",
-    "customIntroDesktop": "Informe a rota e a cooperativa envia o valor para você aprovar.",
+    "customIntro": "Informe os pontos de embarque e destino. O operador confirma e envia o valor da corrida para você.",
+    "customIntroDesktop": "Informe a rota e o operador envia o valor para você aprovar.",
     "routeSection": "Rota",
     "pickup": "Embarque",
     "placeSearchPlaceholder": "Buscar endereço, hotel, ponto...",
@@ -815,8 +815,8 @@
     "passengersNote": "Passageiros adicionais a combinar",
     "notesSection": "Observações",
     "notesPlaceholderCustom": "Ex: 2 malas grandes, voo às 14h, precisamos de cadeirinha...",
-    "priceNoteCustom": "Valor a combinar. A cooperativa irá confirmar a corrida e enviar o preço para sua aprovação.",
-    "priceNoteCustomDesktop": "Valor a combinar. A cooperativa confirma a corrida e envia o preço para sua aprovação — o pagamento só acontece depois que você aceitar a proposta.",
+    "priceNoteCustom": "Valor a combinar. O operador irá confirmar a corrida e enviar o preço para sua aprovação.",
+    "priceNoteCustomDesktop": "Valor a combinar. O operador confirma a corrida e envia o preço para sua aprovação — o pagamento só acontece depois que você aceitar a proposta.",
     "popularRoutes": "Rotas populares",
     "privateBadge": "Privativo",
     "upTo4": "Até 4",
@@ -842,7 +842,7 @@
     "vehiclesTotal": "Total dos veículos",
     "summaryFootnote": "Data, horário e eventuais acréscimos de temporada são definidos ao continuar, no carrinho.",
     "driverInfoRoute": "Motorista aparecerá no local de embarque com placa identificada. Cancelamento gratuito até 24h antes.",
-    "driverInfoDesktop": "Motorista aparecerá no local de embarque com placa identificada. Cancelamento gratuito até 24h antes. Sua reserva será enviada à cooperativa após o pagamento.",
+    "driverInfoDesktop": "Motorista aparecerá no local de embarque com placa identificada. Cancelamento gratuito até 24h antes. Sua reserva será enviada ao operador após o pagamento.",
     "selectVehicle": "Selecione um veículo",
     "selectVehicleOption": "Selecione o veículo",
     "selectRoute": "Selecione a rota",
@@ -981,7 +981,7 @@
       "cancelReservation": "Cancelar reserva"
     },
     "timeline": {
-      "waitingAcceptance": "Aguardando uma cooperativa aceitar",
+      "waitingAcceptance": "Aguardando um operador aceitar",
       "payment": "Pagamento",
       "confirmed": "Confirmada",
       "inProgress": "Em andamento",
@@ -1021,15 +1021,15 @@
       "copied": "Copiado!"
     },
     "statusBanner": {
-      "waitingAcceptance": "Assim que uma cooperativa aceitar, você poderá pagar",
-      "waitingPayment": "Cooperativa aceitou — pague para confirmar",
+      "waitingAcceptance": "Assim que um operador aceitar, você poderá pagar",
+      "waitingPayment": "Operador aceitou — pague para confirmar",
       "cancelled": "Esta reserva foi cancelada"
     },
     "partial": {
       "acceptedCount": "{{accepted}} de {{total}} veículos aceitos",
       "confirmPrompt": "Confirme para pagar só o que foi aceito.",
-      "pendingWarningPlural": "{{count}} veículos sem cooperativa serão cancelados.",
-      "pendingWarningSingular": "{{count}} veículo sem cooperativa será cancelado.",
+      "pendingWarningPlural": "{{count}} veículos sem operador serão cancelados.",
+      "pendingWarningSingular": "{{count}} veículo sem operador será cancelado.",
       "toConfirm": "para confirmar",
       "expired": "Prazo expirado — atualize a página.",
       "confirming": "Confirmando…",
@@ -1037,16 +1037,16 @@
       "cancelRide": "Cancelar corrida"
     },
     "payCta": {
-      "title": "Cooperativa aceitou! 🎉",
+      "title": "Operador aceitou! 🎉",
       "subtitle": "Pague para confirmar sua reserva.",
       "button": "Pagar agora · {{amount}}"
     },
     "operatorCard": {
-      "title": "Cooperativa confirmada"
+      "title": "Operador confirmada"
     },
     "waitingPulse": {
-      "title": "Aguardando cooperativa aceitar",
-      "subtitle": "Você será notificado assim que uma cooperativa aceitar"
+      "title": "Aguardando operador aceitar",
+      "subtitle": "Você será notificado assim que um operador aceitar"
     },
     "timelineSection": {
       "title": "Progresso da reserva"
@@ -1145,7 +1145,7 @@
     },
     "price": {
       "title": "Resumo de preços",
-      "notConfigured": "Preço não configurado para este passeio. Contate a cooperativa.",
+      "notConfigured": "Preço não configurado para este passeio. Contate o operador.",
       "perPerson": "{{count}}x por pessoa",
       "surcharge": "Alta temporada / feriado",
       "total": "Total",
@@ -1163,7 +1163,7 @@
       "description": "Cancelamento gratuito até 24h antes. Após esse prazo, pode haver cobrança de taxa."
     },
     "notice": {
-      "sentToCoops": "Sua reserva será enviada às cooperativas. Você só paga depois que uma aceitar."
+      "sentToCoops": "Sua reserva será enviada aos operadores. Você só paga depois que uma aceitar."
     },
     "footer": {
       "estimatedTotal": "Total estimado · paga após o aceite",
@@ -1171,7 +1171,7 @@
       "noPriceConfigured": "Sem preço configurado",
       "selectTime": "Selecione o horário",
       "requestBooking": "Solicitar reserva",
-      "note": "Você só paga depois que uma cooperativa aceitar. Acompanhe o andamento em Minhas Reservas."
+      "note": "Você só paga depois que um operador aceitar. Acompanhe o andamento em Minhas Reservas."
     },
     "error": {
       "requestFailed": "Erro ao enviar solicitação. Tente novamente."
@@ -1182,11 +1182,11 @@
     },
     "solicitado": {
       "title": "Solicitação enviada!",
-      "subtitle": "Enviamos seu pedido para as cooperativas. Assim que uma aceitar, você recebe um aviso para pagar e confirmar a reserva."
+      "subtitle": "Enviamos seu pedido para os operadores. Assim que uma aceitar, você recebe um aviso para pagar e confirmar a reserva."
     },
     "step": {
       "sent": "Pedido enviado",
-      "waiting": "Aguardando uma cooperativa aceitar",
+      "waiting": "Aguardando um operador aceitar",
       "pay": "Pagar para confirmar"
     },
     "badge": {
@@ -1211,8 +1211,8 @@
   },
   "reviewsPg": {
     "title": "Avaliações verificadas",
-    "subtitle": "Só quem realizou o serviço avalia. As notas medem a reputação de cada cooperativa.",
-    "filterByCoop": "Cooperativa",
+    "subtitle": "Só quem realizou o serviço avalia. As notas medem a reputação de cada operador.",
+    "filterByCoop": "Operador",
     "all": "Todas",
     "minRating": "Nota mínima",
     "ratingPlus": "{{n}}+",
@@ -1306,7 +1306,7 @@
     "terms": {
       "section1": {
         "title": "1. Sobre o Turiva",
-        "body": "O Turiva é uma plataforma de intermediação que conecta turistas a operadores locais de passeios e transfers em Jericoacoara e região (Preá, Jijoca, Lagoa do Paraíso e arredores). Os serviços são executados por operadores e cooperativas parceiras devidamente cadastradas."
+        "body": "O Turiva é uma plataforma de intermediação que conecta turistas a operadores locais de passeios e transfers em Jericoacoara e região (Preá, Jijoca, Lagoa do Paraíso e arredores). Os serviços são executados por operadores e operadores parceiros devidamente cadastradas."
       },
       "section2": {
         "title": "2. Cadastro e conta",
@@ -1345,7 +1345,7 @@
       },
       "section3": {
         "title": "3. Com quem compartilhamos",
-        "body": "Compartilhamos o necessário com: o operador/cooperativa que executará seu passeio ou transfer (nome, contato, ponto de embarque); o gateway de pagamento (dados da transação); e provedores de infraestrutura (hospedagem e banco de dados). Não vendemos seus dados a terceiros."
+        "body": "Compartilhamos o necessário com: o operador/operador que executará seu passeio ou transfer (nome, contato, ponto de embarque); o gateway de pagamento (dados da transação); e provedores de infraestrutura (hospedagem e banco de dados). Não vendemos seus dados a terceiros."
       },
       "section4": {
         "title": "4. Seus direitos (LGPD)",

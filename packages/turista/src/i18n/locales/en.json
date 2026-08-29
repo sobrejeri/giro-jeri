@@ -583,7 +583,7 @@
     "affiliateTitle": "REFER & EARN",
     "affiliateDesc": "Refer friends and earn a commission on every paid booking",
     "howItWorksTitle": "How it works",
-    "partnersTitle": "Partner cooperatives",
+    "partnersTitle": "Partner operators",
     "partnersDescMobile": "Local operators who run your tours",
     "finalCtaTitle": "Ready for paradise? 🌅",
     "finalCtaDesc": "Book your tour in minutes",
@@ -791,12 +791,12 @@
     "modeRoute": "Fixed route",
     "modeCustom": "Custom transfer",
     "quoteRequestedTitle": "Quote requested!",
-    "quoteSuccessDesc": "The cooperative will review it and send you a price to confirm.",
-    "quoteSuccessDescDesktop": "The cooperative will review your route and send a price proposal. You can approve and pay, or decline, in \"My bookings\".",
+    "quoteSuccessDesc": "The operator will review it and send you a price to confirm.",
+    "quoteSuccessDescDesktop": "The operator will review your route and send a price proposal. You can approve and pay, or decline, in \"My bookings\".",
     "viewQuotes": "View my quotes",
     "requestAnother": "Request another ride",
-    "customIntro": "Enter the pickup and drop-off points. The cooperative will confirm and send you the ride price.",
-    "customIntroDesktop": "Enter the route and the cooperative will send the price for you to approve.",
+    "customIntro": "Enter the pickup and drop-off points. The operator will confirm and send you the ride price.",
+    "customIntroDesktop": "Enter the route and the operator will send the price for you to approve.",
     "routeSection": "Route",
     "pickup": "Pickup",
     "placeSearchPlaceholder": "Search address, hotel, place...",
@@ -815,8 +815,8 @@
     "passengersNote": "Additional passengers to be arranged",
     "notesSection": "Notes",
     "notesPlaceholderCustom": "E.g.: 2 large suitcases, flight at 2pm, we need a child seat...",
-    "priceNoteCustom": "Price to be arranged. The cooperative will confirm the ride and send the price for your approval.",
-    "priceNoteCustomDesktop": "Price to be arranged. The cooperative confirms the ride and sends the price for your approval — payment only happens after you accept the proposal.",
+    "priceNoteCustom": "Price to be arranged. The operator will confirm the ride and send the price for your approval.",
+    "priceNoteCustomDesktop": "Price to be arranged. The operator confirms the ride and sends the price for your approval — payment only happens after you accept the proposal.",
     "popularRoutes": "Popular routes",
     "privateBadge": "Private",
     "upTo4": "Up to 4",
@@ -842,7 +842,7 @@
     "vehiclesTotal": "Vehicles total",
     "summaryFootnote": "Date, time and any seasonal surcharges are set when you continue, in the cart.",
     "driverInfoRoute": "The driver will be at the pickup location with an identified sign. Free cancellation up to 24h before.",
-    "driverInfoDesktop": "The driver will be at the pickup location with an identified sign. Free cancellation up to 24h before. Your booking will be sent to the cooperative after payment.",
+    "driverInfoDesktop": "The driver will be at the pickup location with an identified sign. Free cancellation up to 24h before. Your booking will be sent to the operator after payment.",
     "selectVehicle": "Select a vehicle",
     "selectVehicleOption": "Select the vehicle",
     "selectRoute": "Select the route",
@@ -981,7 +981,7 @@
       "cancelReservation": "Cancel booking"
     },
     "timeline": {
-      "waitingAcceptance": "Waiting for a cooperative to accept",
+      "waitingAcceptance": "Waiting for a operator to accept",
       "payment": "Payment",
       "confirmed": "Confirmed",
       "inProgress": "In progress",
@@ -1021,15 +1021,15 @@
       "copied": "Copied!"
     },
     "statusBanner": {
-      "waitingAcceptance": "As soon as a cooperative accepts, you'll be able to pay",
-      "waitingPayment": "Cooperative accepted — pay to confirm",
+      "waitingAcceptance": "As soon as a operator accepts, you'll be able to pay",
+      "waitingPayment": "Operator accepted — pay to confirm",
       "cancelled": "This booking has been cancelled"
     },
     "partial": {
       "acceptedCount": "{{accepted}} of {{total}} vehicles accepted",
       "confirmPrompt": "Confirm to pay only what was accepted.",
-      "pendingWarningPlural": "{{count}} vehicles without a cooperative will be cancelled.",
-      "pendingWarningSingular": "{{count}} vehicle without a cooperative will be cancelled.",
+      "pendingWarningPlural": "{{count}} vehicles without a operator will be cancelled.",
+      "pendingWarningSingular": "{{count}} vehicle without a operator will be cancelled.",
       "toConfirm": "to confirm",
       "expired": "Deadline expired — refresh the page.",
       "confirming": "Confirming…",
@@ -1037,16 +1037,16 @@
       "cancelRide": "Cancel ride"
     },
     "payCta": {
-      "title": "Cooperative accepted! 🎉",
+      "title": "Operator accepted! 🎉",
       "subtitle": "Pay to confirm your booking.",
       "button": "Pay now · {{amount}}"
     },
     "operatorCard": {
-      "title": "Cooperative confirmed"
+      "title": "Operator confirmed"
     },
     "waitingPulse": {
-      "title": "Waiting for cooperative to accept",
-      "subtitle": "You'll be notified as soon as a cooperative accepts"
+      "title": "Waiting for operator to accept",
+      "subtitle": "You'll be notified as soon as a operator accepts"
     },
     "timelineSection": {
       "title": "Booking progress"
@@ -1145,7 +1145,7 @@
     },
     "price": {
       "title": "Price summary",
-      "notConfigured": "Price not configured for this tour. Contact the cooperative.",
+      "notConfigured": "Price not configured for this tour. Contact the operator.",
       "perPerson": "{{count}}x per person",
       "surcharge": "High season / holiday",
       "total": "Total",
@@ -1163,7 +1163,7 @@
       "description": "Free cancellation up to 24h before. After that, a fee may apply."
     },
     "notice": {
-      "sentToCoops": "Your booking will be sent to the cooperatives. You only pay after one accepts."
+      "sentToCoops": "Your booking will be sent to the operators. You only pay after one accepts."
     },
     "footer": {
       "estimatedTotal": "Estimated total · pay after acceptance",
@@ -1171,7 +1171,7 @@
       "noPriceConfigured": "No price configured",
       "selectTime": "Select a time",
       "requestBooking": "Request booking",
-      "note": "You only pay after a cooperative accepts. Track the progress in My Bookings."
+      "note": "You only pay after a operator accepts. Track the progress in My Bookings."
     },
     "error": {
       "requestFailed": "Error sending request. Please try again."
@@ -1182,11 +1182,11 @@
     },
     "solicitado": {
       "title": "Request sent!",
-      "subtitle": "We've sent your request to the cooperatives. As soon as one accepts, you'll get a notice to pay and confirm the booking."
+      "subtitle": "We've sent your request to the operators. As soon as one accepts, you'll get a notice to pay and confirm the booking."
     },
     "step": {
       "sent": "Request sent",
-      "waiting": "Waiting for a cooperative to accept",
+      "waiting": "Waiting for a operator to accept",
       "pay": "Pay to confirm"
     },
     "badge": {
@@ -1211,8 +1211,8 @@
   },
   "reviewsPg": {
     "title": "Verified reviews",
-    "subtitle": "Only customers who completed the service can leave a review. Ratings measure each cooperative's reputation.",
-    "filterByCoop": "Cooperative",
+    "subtitle": "Only customers who completed the service can leave a review. Ratings measure each operator's reputation.",
+    "filterByCoop": "Operator",
     "all": "All",
     "minRating": "Minimum rating",
     "ratingPlus": "{{n}}+",
@@ -1306,7 +1306,7 @@
     "terms": {
       "section1": {
         "title": "1. About Turiva",
-        "body": "Turiva is an intermediation platform that connects tourists to local operators of tours and transfers in Jericoacoara and the surrounding area (Preá, Jijoca, Lagoa do Paraíso and nearby areas). The services are carried out by registered partner operators and cooperatives."
+        "body": "Turiva is an intermediation platform that connects tourists to local operators of tours and transfers in Jericoacoara and the surrounding area (Preá, Jijoca, Lagoa do Paraíso and nearby areas). The services are carried out by registered partner operators and operators."
       },
       "section2": {
         "title": "2. Registration and account",
@@ -1345,7 +1345,7 @@
       },
       "section3": {
         "title": "3. Who we share it with",
-        "body": "We share what is necessary with: the operator/cooperative that will carry out your tour or transfer (name, contact, pickup point); the payment gateway (transaction data); and infrastructure providers (hosting and database). We do not sell your data to third parties."
+        "body": "We share what is necessary with: the operator/operator that will carry out your tour or transfer (name, contact, pickup point); the payment gateway (transaction data); and infrastructure providers (hosting and database). We do not sell your data to third parties."
       },
       "section4": {
         "title": "4. Your rights (LGPD)",

@@ -7,7 +7,7 @@ conceito novo de "pedido"; as reservas são **agrupadas por um `order_group_id`*
 O split de pagamento já construído para o **motor de pernas** (disbursements do
 Mercado Pago, `allocateCents`, contabilidade por perna idempotente) é
 **reaproveitado** — o pagamento único apenas soma as pernas aceitas de **todas**
-as reservas do grupo e reparte entre as cooperativas envolvidas.
+as reservas do grupo e reparte entre os operadores envolvidas.
 
 ---
 
@@ -34,7 +34,7 @@ Não há tabela `orders`: o grupo é só a chave compartilhada. Simples e revers
 1. **Solicitar tudo** → uma chamada cria as **N reservas** de uma vez, todas com
    o **mesmo `order_group_id`**. Cada reserva explode em pernas (motor) e vai a
    `awaiting_acceptance`.
-2. **Cooperativas aceitam** as pernas de cada serviço (individual, como hoje).
+2. **Operadores aceitam** as pernas de cada serviço (individual, como hoje).
 3. **Notificação ao cliente** (nível do grupo): "X de Y veículos aceitos no seu
    pedido — pague o que foi aceito ou aguarde". Prazo do grupo = **o MENOR**
    `service_datetime − 15min` entre as reservas (a mais próxima manda).
@@ -42,7 +42,7 @@ Não há tabela `orders`: o grupo é só a chave compartilhada. Simples e revers
    - Cancela as pernas ainda pendentes de todas as reservas do grupo (parcial),
      ou o cliente aguarda o combo fechar.
    - Soma as pernas **aceitas** de todas as reservas → **total combinado**.
-   - Monta **1 pagamento** com `disbursements` agregando por cooperativa
+   - Monta **1 pagamento** com `disbursements` agregando por operador
      (a mesma coop em serviços diferentes recebe uma fatia só).
 5. **Aprovado (webhook)** → marca **todas** as reservas do grupo como `paid`,
    cancela pendentes remanescentes, lança a contabilidade por perna de todas

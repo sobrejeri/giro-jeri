@@ -1,5 +1,5 @@
 // ── ConfirmarExecutor ───────────────────────────────────
-// Ao concluir a corrida, a cooperativa confirma QUEM de fato executou — com
+// Ao concluir a corrida, o operador confirma QUEM de fato executou — com
 // documento e chave PIX. É o que a tela de repasses do admin mostra para saber
 // a quem pagar (migrations 079/080/081).
 //
@@ -33,7 +33,7 @@ export default function ConfirmarExecutor({ booking, executores = [], onCancel, 
   const [form, setForm] = useState(VAZIO)
 
   // Recarrega a cada corrida aberta — sem isto o formulário manteria os dados
-  // da corrida anterior e a cooperativa confirmaria o motorista errado.
+  // da corrida anterior e o operador confirmaria o motorista errado.
   useEffect(() => {
     const a = booking?.operational_assignments?.[0]
     setForm({

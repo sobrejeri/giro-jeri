@@ -239,8 +239,8 @@ function TabSistema({ settings, qc }) {
   )
 }
 
-// ── Split por Cooperativa ─────────────────────────────────
-function SplitPorCooperativa({ globalAdminPct, qc }) {
+// ── Split por Operador ─────────────────────────────────
+function SplitPorOperador({ globalAdminPct, qc }) {
   const [overrides, setOverrides] = useState({})
   const [saved, setSaved]         = useState(null)
 
@@ -292,17 +292,17 @@ function SplitPorCooperativa({ globalAdminPct, qc }) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <SplitSquareHorizontal size={16} className="text-gray-500" />
-          <h2 className="text-sm font-semibold text-gray-200">Split por Cooperativa</h2>
+          <h2 className="text-sm font-semibold text-gray-200">Split por Operador</h2>
         </div>
       </CardHeader>
       <CardBody>
         <p className="text-xs text-gray-500 mb-4">
-          Percentual da plataforma por cooperativa. Quando não definido, usa o padrão global ({globalAdminPct}%).
+          Percentual da plataforma por operador. Quando não definido, usa o padrão global ({globalAdminPct}%).
         </p>
         {isLoading ? (
-          <p className="text-xs text-gray-600">Carregando cooperativas…</p>
+          <p className="text-xs text-gray-600">Carregando operadores…</p>
         ) : operators.length === 0 ? (
-          <p className="text-xs text-gray-600">Nenhuma cooperativa cadastrada.</p>
+          <p className="text-xs text-gray-600">Nenhum operador cadastrado.</p>
         ) : (
           <div className="space-y-2">
             {operators.map((op) => {
@@ -380,7 +380,7 @@ function SplitPorCooperativa({ globalAdminPct, qc }) {
                             <span className="text-brand font-semibold">{adminPct}%</span>
                             {' '}admin ·{' '}
                             <span className="text-green-400 font-semibold">{operatorPct}%</span>
-                            {' '}cooperativa
+                            {' '}operador
                           </p>
                           {hasOverride ? (
                             <p className="text-xs text-amber-500">personalizado</p>
@@ -615,8 +615,8 @@ function TabPagamentos({ settings, qc }) {
         <CardBody>
           <div className="space-y-4">
             <p className="text-xs text-gray-500">
-              Define como cada pagamento é dividido entre a plataforma e a cooperativa.
-              A cooperativa repassa seus motoristas manualmente.
+              Define como cada pagamento é dividido entre a plataforma e o operador.
+              O operador repassa seus motoristas manualmente.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -631,7 +631,7 @@ function TabPagamentos({ settings, qc }) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Cooperativa % (calculado)
+                  Operador % (calculado)
                 </label>
                 <div className="h-10 flex items-center px-3 rounded-lg bg-gray-800 border border-gray-700 text-sm font-semibold text-brand">
                   {operatorPct}%
@@ -641,7 +641,7 @@ function TabPagamentos({ settings, qc }) {
             <div className="bg-gray-900 rounded-lg p-3 text-xs text-gray-500 space-y-1">
               <p>Exemplo: reserva de <span className="text-gray-300">R$ 500</span></p>
               <p>→ Plataforma recebe <span className="text-brand">R$ {(500 * adminPct / 100).toFixed(2)}</span></p>
-              <p>→ Cooperativa recebe <span className="text-green-400">R$ {(500 * operatorPct / 100).toFixed(2)}</span></p>
+              <p>→ Operador recebe <span className="text-green-400">R$ {(500 * operatorPct / 100).toFixed(2)}</span></p>
             </div>
             <SaveRow
               onSave={() => saveSection(['payment_split_admin_pct'], 'split')}
@@ -652,8 +652,8 @@ function TabPagamentos({ settings, qc }) {
         </CardBody>
       </Card>
 
-      {/* Split por cooperativa */}
-      <SplitPorCooperativa globalAdminPct={adminPct} qc={qc} />
+      {/* Split por operador */}
+      <SplitPorOperador globalAdminPct={adminPct} qc={qc} />
 
       {/* Conta de recebimento da plataforma */}
       <Card>

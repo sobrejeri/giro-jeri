@@ -73,7 +73,7 @@ const requestSchema = z.object({
   service_name:     z.string().max(300).optional(),
   cover_image_url:  z.string().url().optional().nullable().or(z.literal('')),
   coupon_code:      z.string().max(50).optional(),
-  // Link direto de cooperativa (/c/<slug>): o servidor resolve o slug e a
+  // Link direto de operador (/c/<slug>): o servidor resolve o slug e a
   // reserva nasce atribuída (sem fila, sem aceite). NUNCA aceitar operator_id
   // cru do cliente — só o slug, validado aqui.
   partner_slug:     z.string().max(80).optional(),
@@ -182,7 +182,7 @@ async function computeChargedTotal({ data, userId }) {
     } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
       // Rota tabelada: recalcula a partir do preço da rota × veículos + acréscimo
       // de data. Cotações (translado personalizado) têm preço fechado pela
-      // cooperativa e não casam com nenhuma rota → mantém o total enviado.
+      // operador e não casam com nenhuma rota → mantém o total enviado.
       const { data: route } = await supabase
         .from('transfer_routes').select('id, default_price').eq('id', service_id).maybeSingle()
       if (route) {
@@ -212,9 +212,9 @@ async function computeChargedTotal({ data, userId }) {
   return { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional }
 }
 
-// Credenciais Mercado Pago da cooperativa (com refresh automático se o token
+// Credenciais Mercado Pago do operador (com refresh automático se o token
 // estiver expirando). Retorna { token, publicKey, platformPct } ou null quando
-// a cooperativa não conectou a conta dela.
+// o operador não conectou a conta dela.
 export async function getOperatorMp(operatorId) {
   if (!operatorId) return null
   const { data: op } = await supabase
@@ -246,7 +246,7 @@ export async function getOperatorMp(operatorId) {
   return { token, publicKey, platformPct: op.platform_split_pct }
 }
 
-// Contexto de split de um pagamento: token da cooperativa + comissão da
+// Contexto de split de um pagamento: token do operador + comissão da
 // plataforma (application_fee). Null quando não há split (cai na plataforma).
 // Plataforma recebe 100%? (migration 079) Quando sim, NENHUM pagamento leva
 // split: o valor inteiro cai na conta da plataforma e a comissão do operador e
@@ -318,9 +318,9 @@ function allocateCents(totalCents, weights) {
 
 // Contexto de split "consciente de pernas": se o pedido não tem pernas (Onda B
 // ainda não implementada — compartilhado/cotação) ou tem pernas mas só 1
-// cooperativa aceitou, retorna o MESMO formato de getSplitContext (caminho de
+// operador aceitou, retorna o MESMO formato de getSplitContext (caminho de
 // 1 recebedor intacto, sem chamada diferente ao MP). Só quando há 2+
-// cooperativas distintas entre as pernas aceitas é que monta o split nativo
+// operadores distintas entre as pernas aceitas é que monta o split nativo
 // com `disbursements` (N recebedores em 1 pagamento).
 async function getSplitContextForBooking(booking, chargedTotal, cfg) {
   if (plataformaRecebeTudo(cfg)) return null
@@ -339,11 +339,11 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
     return legacy ? { ...legacy, mode: 'single' } : null
   }
 
-  // N recebedores — todas as cooperativas precisam ter conta MP conectada
+  // N recebedores — todas os operadores precisam ter conta MP conectada
   // (pré-requisito do desenho, migration 036/OAuth). Sem token/mp_user_id de
   // alguma delas, aborta com erro claro em vez de cobrar sem repassar.
   // Particiona o TOTAL COBRADO (chargedTotal) — não a soma dos leg_price —
-  // proporcionalmente ao leg_price de cada cooperativa, em centavos inteiros e
+  // proporcionalmente ao leg_price de cada operador, em centavos inteiros e
   // somando exato ao total. Assim Σ(disbursements.amount) == transaction_amount
   // (invariante do split nativo do MP) mesmo com surcharge de data/feriado
   // embutida no total e sem drift de arredondamento entre recebedores.
@@ -358,11 +358,11 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
     const [operatorId] = entries[idx]
     const opMp = await getOperatorMp(operatorId)
     if (!opMp?.token) {
-      throw new Error(`Cooperativa ${operatorId} sem conta Mercado Pago conectada — split multi-cooperativa exige todas as pernas aceitas conectadas.`)
+      throw new Error(`Operador ${operatorId} sem conta Mercado Pago conectada — split multi-operador exige todas as pernas aceitas conectadas.`)
     }
     const { data: op } = await supabase.from('users').select('mp_user_id').eq('id', operatorId).single()
     if (!op?.mp_user_id) {
-      throw new Error(`Cooperativa ${operatorId} sem mp_user_id (reconecte a conta Mercado Pago) — split multi-cooperativa bloqueado.`)
+      throw new Error(`Operador ${operatorId} sem mp_user_id (reconecte a conta Mercado Pago) — split multi-operador bloqueado.`)
     }
     const pct      = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
     const amtCents = shareCents[idx]
@@ -382,7 +382,7 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
 }
 
 // Split do GRUPO (carrinho universal): agrega as pernas aceitas de TODAS as
-// reservas do grupo por cooperativa. Opção 2 (segura): resolve só o caminho de
+// reservas do grupo por operador. Opção 2 (segura): resolve só o caminho de
 // recebedor ÚNICO (1 coop) ou sem split (motor OFF/compartilhado); 2+ coops
 // devolve mode:'multi' para o chamador BLOQUEAR — split multi-coop de grupo
 // fica para depois de validar o split nativo do MP em staging.
@@ -395,7 +395,7 @@ async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
   }
   if (byOperator.size === 0) {
     // Sem pernas (motor OFF — reserva inteira): se TODAS as reservas do grupo
-    // estão com a MESMA cooperativa (combo aceito ou venda direta por link),
+    // estão com a MESMO operador (combo aceito ou venda direta por link),
     // o pagamento único cai na conta dela, como no fluxo de reserva única.
     const ops = [...new Set(bookings.map((b) => b.operator_id).filter(Boolean))]
     if (ops.length === 1 && bookings.every((b) => b.operator_id)) {
@@ -547,7 +547,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       const payable = all.filter((b) => b.status_commercial === 'awaiting_payment')
       if (payable.length === 0) {
         return res.status(409).json({
-          error: 'Nenhuma reserva do grupo está pronta para pagamento. Aguarde o aceite das cooperativas.',
+          error: 'Nenhuma reserva do grupo está pronta para pagamento. Aguarde o aceite dos operadores.',
         })
       }
       // Motor de pernas ligado: cada reserva precisa ter TODAS as pernas (não
@@ -589,7 +589,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       if (existing.status_commercial !== 'awaiting_payment') {
         const s = existing.status_commercial
         const msg =
-          s === 'awaiting_acceptance' ? 'Esta reserva ainda não foi aceita por uma cooperativa. Aguarde o aceite para pagar.' :
+          s === 'awaiting_acceptance' ? 'Esta reserva ainda não foi aceita por um operador. Aguarde o aceite para pagar.' :
           s === 'paid'                ? 'Esta reserva já foi paga.' :
           s === 'cancelled'           ? 'Esta reserva foi cancelada.' :
                                         `Esta reserva não está aguardando pagamento (status: ${s}).`
@@ -616,7 +616,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
           const allAccepted = relevant.length > 0 && relevant.every((l) => l.status_leg === 'accepted')
           if (!allAccepted) {
             return res.status(409).json({
-              error: 'Ainda há perna(s) deste pedido aguardando aceite de cooperativa. Aguarde o combo fechar ou pague só o que já foi aceito (checkout parcial).',
+              error: 'Ainda há perna(s) deste pedido aguardando aceite de operador. Aguarde o combo fechar ou pague só o que já foi aceito (checkout parcial).',
             })
           }
         }
@@ -684,10 +684,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
     } else if (gateway === 'mercado_pago') {
       const isCard = ['credit_card', 'debit_card'].includes(payment_method)
 
-      // Split automático: se a cooperativa atribuída está conectada ao Mercado
+      // Split automático: se o operador atribuído está conectado ao Mercado
       // Pago, o pagamento cai NA conta dela e a comissão da plataforma vira
       // application_fee. Sem conexão → cai na conta da plataforma (sem split).
-      // Motor de pernas (Onda A) ligado: quando o pedido tem 2+ cooperativas
+      // Motor de pernas (Onda A) ligado: quando o pedido tem 2+ operadores
       // com pernas aceitas, monta split nativo N-recebedores; com 1 (ou sem
       // pernas), cai no MESMO caminho de sempre (mode:'single').
       const split = isGroup
@@ -697,22 +697,22 @@ router.post('/intent', authenticate, async (req, res, next) => {
           : await getSplitContext(booking, chargedTotal, cfg)
 
       // Opção 2: pagamento único de GRUPO só para recebedor único (1 coop) ou
-      // sem split. Grupo multi-cooperativa fica bloqueado até validar o split
+      // sem split. Grupo multi-operador fica bloqueado até validar o split
       // nativo do MP — o cliente paga por reserva nesse caso.
       if (isGroup && split?.mode === 'multi') {
         return res.status(422).json({
-          error: 'Este grupo tem cooperativas diferentes entre as reservas. O pagamento único multi-cooperativa ainda não é suportado — pague cada reserva separadamente.',
+          error: 'Este grupo tem operadores diferentes entre as reservas. O pagamento único multi-operador ainda não é suportado — pague cada reserva separadamente.',
         })
       }
 
       if (isCard) {
-        // Split multi-recebedor (N cooperativas) via cartão ainda não
+        // Split multi-recebedor (N operadores) via cartão ainda não
         // implementado nesta Onda — o mecanismo de `disbursements` do MP foi
         // validado aqui só para PIX. Bloqueia com mensagem clara em vez de
         // cobrar sem conseguir repassar corretamente. Ver Riscos/Objeções.
         if (split?.mode === 'multi') {
           return res.status(422).json({
-            error: 'Este pedido tem cooperativas diferentes por perna. Pagamento com cartão para pedidos multi-cooperativa ainda não é suportado — pague via PIX.',
+            error: 'Este pedido tem operadores diferentes por perna. Pagamento com cartão para pedidos multi-operador ainda não é suportado — pague via PIX.',
           })
         }
 
@@ -757,7 +757,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         try {
           if (split?.mode === 'multi') {
             // Split nativo N-recebedores: 1 pagamento com `disbursements` — um
-            // por cooperativa com perna aceita. Ver Riscos/Objeções (a validar
+            // por operador com perna aceita. Ver Riscos/Objeções (a validar
             // em staging com app marketplace com Split habilitado).
             pixData = await createPixPaymentSplit({
               amount:       chargedTotal,
@@ -914,7 +914,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
 // ── POST /api/payments/request ─────────────────────────
 // Cria a reserva SEM pagamento (fluxo solicitar → aceitar → pagar). A reserva
-// nasce em 'awaiting_acceptance' e as cooperativas são notificadas para aceitar.
+// nasce em 'awaiting_acceptance' e os operadores são notificadas para aceitar.
 // O pagamento acontece depois, via POST /intent com existing_booking_id.
 // ── POST /api/payments/validate-coupon ──────────────────
 // Valida um cupom ANTES da solicitação, para o app mostrar o desconto na
@@ -967,7 +967,7 @@ router.post('/request', authenticate, async (req, res, next) => {
     const windowErr = await checkServiceWindow({ service_type, service_id, service_time })
     if (windowErr) return res.status(400).json({ error: windowErr })
 
-    // Link direto de cooperativa: resolve o slug no SERVIDOR. Reserva nasce
+    // Link direto de operador: resolve o slug no SERVIDOR. Reserva nasce
     // atribuída (operator_id) e pronta para pagar — mesmo estado que o aceite
     // produz (awaiting_payment + assigned). Slug inválido/inativo → fluxo normal.
     const { resolvePartner } = await import('./partner.js')
@@ -1010,7 +1010,7 @@ router.post('/request', authenticate, async (req, res, next) => {
       }),
       payment_status:     'pending',
     }
-    // 24h para alguma cooperativa aceitar; depois passa só pro admin. Se a
+    // 24h para algum operador aceitar; depois passa só pro admin. Se a
     // migration 037 ainda não rodou (coluna ausente = 42703), reusa o insert
     // sem o campo pra não bloquear novas solicitações.
     let { data: booking, error: bErr } = await supabase
@@ -1046,7 +1046,7 @@ router.post('/request', authenticate, async (req, res, next) => {
     const rota = [origin_text, destination_text].filter(Boolean).join(' → ')
 
     if (partner) {
-      // Venda direta: só a cooperativa dona do link é avisada — nada de fila.
+      // Venda direta: só o operador dona do link é avisada — nada de fila.
       notifyUser({
         userId:      partner.id,
         bookingId:   booking.id,
@@ -1055,10 +1055,10 @@ router.post('/request', authenticate, async (req, res, next) => {
         body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)} (${bookingCode}). O cliente já pode pagar.`,
       })
     } else {
-      // Notifica as cooperativas da nova solicitação (ANTES do pagamento) —
+      // Notifica os operadores da nova solicitação (ANTES do pagamento) —
       // elas aceitam e só então o cliente paga.
       notifyOperatorsNewBooking(supabase, booking).catch((err) =>
-        console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+        console.error('[whatsapp] notificação de operadores falhou:', err.message))
       notifyOperatorsAndAdmin({
         bookingId:   booking.id,
         fleetBookingId: booking.id,
@@ -1094,7 +1094,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     }
     const { items, partner_slug, affiliate_code } = parsed.data
 
-    // Link direto de cooperativa: o grupo INTEIRO nasce atribuído e pronto
+    // Link direto de operador: o grupo INTEIRO nasce atribuído e pronto
     // para pagar (sem fila, sem aceite) — mesmo estado do combo aceito.
     const { resolvePartner } = await import('./partner.js')
     const partner = partner_slug ? await resolvePartner(partner_slug) : null
@@ -1223,7 +1223,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       }
       if (partner) continue // venda direta: sem fila; um aviso único abaixo
       notifyOperatorsNewBooking(supabase, b).catch((err) =>
-        console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+        console.error('[whatsapp] notificação de operadores falhou:', err.message))
       const isTransfer = b.service_type === 'transfer'
       const rota = [b.origin_text, b.destination_text].filter(Boolean).join(' → ')
       notifyOperatorsAndAdmin({
@@ -1314,7 +1314,7 @@ router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, nex
 
     const accepted = (remainingLegs || []).filter((l) => l.status_leg === 'accepted')
     if (accepted.length === 0) {
-      return res.status(400).json({ error: 'Nenhuma perna foi aceita ainda — não há o que pagar. Aguarde uma cooperativa aceitar.' })
+      return res.status(400).json({ error: 'Nenhuma perna foi aceita ainda — não há o que pagar. Aguarde um operador aceitar.' })
     }
 
     const dynamicTotal = Math.round(accepted.reduce((s, l) => s + Number(l.leg_price), 0) * 100) / 100
@@ -1364,8 +1364,8 @@ router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, nex
 })
 
 // ── GET /api/payments/booking/:id/checkout-key ─────────
-// Devolve a public_key do Mercado Pago da cooperativa atribuída à reserva, para
-// o checkout tokenizar o cartão NA conta dela (split). Sem cooperativa conectada
+// Devolve a public_key do Mercado Pago do operador atribuído à reserva, para
+// o checkout tokenizar o cartão NA conta dela (split). Sem operador conectado
 // → null (o app usa a chave da plataforma, sem split).
 router.get('/booking/:id/checkout-key', authenticate, async (req, res, next) => {
   try {
@@ -1426,7 +1426,7 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
     if (payment.status === 'pending' && payment.gateway_name === 'mercado_pago' && payment.gateway_transaction_id && !payment.gateway_transaction_id.startsWith('TEST-')) {
       try {
         const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
-        // Pagamento com split vive na conta da cooperativa → consulta com o token dela.
+        // Pagamento com split vive na conta do operador → consulta com o token dela.
         const opMp = await getOperatorMp(payment.bookings?.operator_id)
         const mpStatus = await getMpPaymentStatus(payment.gateway_transaction_id, opMp?.token)
         if (mpStatus === 'approved') {
@@ -1577,7 +1577,7 @@ router.post('/webhook', async (req, res, next) => {
       let mpStatus = null
       try {
         const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
-        // Com split, o pagamento vive na conta da cooperativa — consulta com o
+        // Com split, o pagamento vive na conta do operador — consulta com o
         // token dela, como já faz o polling.
         const opMp = await getOperatorMp(paymentForEvent.bookings?.operator_id)
         mpStatus = await getMpPaymentStatus(paymentForEvent.gateway_transaction_id, opMp?.token)
@@ -1672,7 +1672,7 @@ router.post('/manual-confirm', authenticate, async (req, res, next) => {
 // Registra 1 par de lançamentos (commission_platform/payout_operator) em
 // financial_ledger + 1 linha em commissions POR PERNA aceita, cada uma com
 // leg_id/operator_id (migration 042). Sem isso, /operator/financial não
-// consegue separar receita entre cooperativas diferentes no mesmo pedido —
+// consegue separar receita entre operadores diferentes no mesmo pedido —
 // risco já registrado no design (seção 10). NÃO mexe nos lançamentos de nível
 // pedido (booking_gross/gateway_fee/booking_net, leg_id NULL).
 async function recordLegAccounting(booking, payment) {
@@ -1701,7 +1701,7 @@ async function recordLegAccounting(booking, payment) {
 
     ledgerRows.push(
       { booking_id: booking.id, payment_id: payment.id, leg_id: leg.id, entry_type: 'commission_platform', description: `Comissão plataforma — perna ${leg.id} (${booking.booking_code})`, amount: commission, direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
-      { booking_id: booking.id, payment_id: payment.id, leg_id: leg.id, entry_type: 'payout_operator',     description: `Repasse cooperativa — perna ${leg.id} (${booking.booking_code})`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+      { booking_id: booking.id, payment_id: payment.id, leg_id: leg.id, entry_type: 'payout_operator',     description: `Repasse operador — perna ${leg.id} (${booking.booking_code})`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
     )
     commissionRows.push({
       booking_id:         booking.id,
@@ -1732,7 +1732,7 @@ async function recordLegAccounting(booking, payment) {
   }
 }
 
-// Comissão da plataforma + repasse à cooperativa NO NÍVEL DO PEDIDO — usado
+// Comissão da plataforma + repasse ao operador NO NÍVEL DO PEDIDO — usado
 // quando o motor de pernas está DESLIGADO (fluxo atual). Sem isso, o ledger
 // nunca recebe commission_platform/payout_operator e o Dashboard do admin mostra
 // "Comissão plataforma" e "Repasses" zerados. Retorna as linhas para entrarem no
@@ -1755,7 +1755,7 @@ async function orderCommissionRows(booking, payment, effectiveDate, cfg) {
   const payout     = Math.round((total - commission) * 100) / 100
   return [
     { booking_id: booking.id, payment_id: payment.id, entry_type: 'commission_platform', description: `Comissão plataforma — ${booking.booking_code}`, amount: commission, direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
-    { booking_id: booking.id, payment_id: payment.id, entry_type: 'payout_operator',     description: `Repasse cooperativa — ${booking.booking_code}`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+    { booking_id: booking.id, payment_id: payment.id, entry_type: 'payout_operator',     description: `Repasse operador — ${booking.booking_code}`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
   ]
 }
 
@@ -1773,7 +1773,7 @@ export async function onPaymentApproved(payment) {
   await supabase.from('payments').update({ status: 'approved', paid_at: new Date().toISOString() }).eq('id', payment.id)
 
   // Carrega a reserva COMPLETA antes de atualizar (precisa saber se a
-  // cooperativa já aceitou).
+  // operador já aceitou).
   //
   // Antes isto era `payment.bookings || (busca)`, confiando no join de quem
   // chamou — e o polling de /status seleciona só três colunas da reserva
@@ -1787,7 +1787,7 @@ export async function onPaymentApproved(payment) {
   const { data: booking } = await supabase
     .from('bookings').select('*').eq('id', payment.booking_id).maybeSingle()
 
-  // Fluxo novo (solicitar→aceitar→pagar): a cooperativa já está atribuída, então
+  // Fluxo novo (solicitar→aceitar→pagar): o operador já está atribuída, então
   // a reserva permanece 'assigned' e segue direto para o atendimento. Fluxo
   // antigo (paga primeiro): vai para a fila de despacho para alguém aceitar.
   const bookingUpdate = { status_commercial: 'paid', payment_status: 'approved' }
@@ -1901,8 +1901,8 @@ function notifyBookingPaid(booking) {
     templateKey: 'payment_confirmed',
     title:       'Pagamento confirmado ✅',
     body:        booking.operator_id
-      ? `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). A cooperativa já vai cuidar de tudo! 🎉`
-      : `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar uma cooperativa aceitar.`,
+      ? `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). O operador já vai cuidar de tudo! 🎉`
+      : `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar um operador aceitar.`,
   })
 
   // WhatsApp pro cliente: pagamento confirmado (segurança de que deu certo).
@@ -1910,7 +1910,7 @@ function notifyBookingPaid(booking) {
     console.error('[whatsapp] aviso cliente pagamento falhou:', err.message))
 
   if (booking.operator_id) {
-    // Fluxo novo: a cooperativa que aceitou é avisada de que o pagamento entrou.
+    // Fluxo novo: o operador que aceitou é avisada de que o pagamento entrou.
     notifyUser({
       userId:      booking.operator_id,
       bookingId:   booking.id,
@@ -1922,9 +1922,9 @@ function notifyBookingPaid(booking) {
     notifyOperatorPaymentReceived(supabase, booking).catch((err) =>
       console.error('[whatsapp] aviso coop pagamento falhou:', err.message))
   } else {
-    // Fluxo antigo: a reserva paga fica disponível para as cooperativas.
+    // Fluxo antigo: a reserva paga fica disponível para os operadores.
     notifyOperatorsNewBooking(supabase, booking).catch((err) =>
-      console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
+      console.error('[whatsapp] notificação de operadores falhou:', err.message))
     notifyOperatorsAndAdmin({
       bookingId:   booking.id,
       fleetBookingId: booking.id,

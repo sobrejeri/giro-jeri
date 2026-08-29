@@ -111,7 +111,7 @@ export default function TransfersDesktop() {
   const [customOrigin,  setCustomOrigin]  = useState('')
   const [customDest,    setCustomDest]    = useState('')
   // Metadados do place escolhido na busca (place_id + coordenadas) — enviados
-  // à cooperativa junto da solicitação, igual ao mobile.
+  // ao operador junto da solicitação, igual ao mobile.
   const [customOriginMeta, setCustomOriginMeta] = useState(null)
   const [customDestMeta,   setCustomDestMeta]   = useState(null)
   const [customDate,    setCustomDate]    = useState(todayIso)

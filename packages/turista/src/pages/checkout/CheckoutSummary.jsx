@@ -230,7 +230,7 @@ function CheckoutSummaryInner() {
 
   // Translado tabelado: alta temporada/feriado calculado sobre o subtotal real
   // (preço da rota × veículos). Translado personalizado (vem com quote_id) já
-  // tem preço fechado pela cooperativa, então não recebe acréscimo automático.
+  // tem preço fechado pelo operador, então não recebe acréscimo automático.
   const transferQty      = calcVehicles.reduce((s, v) => s + v.quantity, 0)
   const transferSubtotal = isTransfer
     ? Math.round(Number(ls?.transfer_unit_price || 0) * transferQty * 100) / 100
@@ -378,7 +378,7 @@ function CheckoutSummaryInner() {
     display_total:   displayTotal,
     service_name:    ls.service_name,
     cover_image_url: ls.cover_image_url || undefined,
-    // Venda direta (link /c/<slug>): a reserva nasce atribuída à cooperativa
+    // Venda direta (link /c/<slug>): a reserva nasce atribuída ao operador
     // e pronta para pagar — o servidor valida o slug.
     partner_slug:    getPartnerAttribution()?.slug || undefined,
     // Indicação de afiliado (/a/<código>): 5% de comissão quando a reserva
@@ -386,7 +386,7 @@ function CheckoutSummaryInner() {
     affiliate_code:  getAffiliateAttribution()?.code || undefined,
   }
 
-  // Solicita a reserva (SEM pagar). A reserva fica aguardando uma cooperativa
+  // Solicita a reserva (SEM pagar). A reserva fica aguardando um operador
   // aceitar; o pagamento acontece depois, em Minhas Reservas.
   async function handleRequest() {
     if (requesting || !canProceed) return
@@ -414,7 +414,7 @@ function CheckoutSummaryInner() {
         return
       }
 
-      // Venda direta (link da cooperativa): a reserva já nasce aceita — vai
+      // Venda direta (link do operador): a reserva já nasce aceita — vai
       // direto para o pagamento, sem passar pela tela "aguardando aceite".
       if (result.status_commercial === 'awaiting_payment' && !doneResults) {
         navigate('/checkout/pagamento', {

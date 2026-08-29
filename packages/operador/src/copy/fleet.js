@@ -1,5 +1,5 @@
-// Copy centralizada da tela "Minha Frota" (cooperativa).
-// O app cooperativa não usa react-i18next (é 100% PT hardcoded); em vez de
+// Copy centralizada da tela "Minha Frota" (operador).
+// O app operador não usa react-i18next (é 100% PT hardcoded); em vez de
 // espalhar strings, concentramos aqui para facilitar revisão de UX e uma
 // eventual migração futura para i18n (ver comentários EN/ES abaixo de cada
 // bloco, apenas como referência — não usados em runtime).
@@ -31,9 +31,9 @@ export const fleetCopy = {
   emptyReleasedTitle: 'Nenhum veículo liberado ainda',
   // EN: "No vehicle released yet" / ES: "Ningún vehículo liberado todavía"
 
-  emptyReleasedDesc: 'Assim que a administração liberar um veículo para sua cooperativa, ele aparece aqui.',
+  emptyReleasedDesc: 'Assim que a administração liberar um veículo para seu operador, ele aparece aqui.',
   // EN: "As soon as the administration releases a vehicle to your cooperative, it appears here."
-  // ES: "En cuanto la administración libere un vehículo para tu cooperativa, aparecerá aquí."
+  // ES: "En cuanto la administración libere un vehículo para tu operador, aparecerá aquí."
 
   emptyCatalogTitle: 'Nenhum veículo no catálogo ainda.',
   emptyCatalogDesc:   'Aguarde o administrador cadastrar os veículos.',
@@ -46,7 +46,7 @@ export const fleetCopy = {
 }
 
 // Faixa "modo administrador" (Reservas.jsx) — reaproveita o mesmo módulo de
-// copy centralizada do app cooperativa em vez de espalhar strings soltas.
+// copy centralizada do app operador em vez de espalhar strings soltas.
 export const elevatedModeCopy = {
   badge: 'Modo administrador',
   // EN: "Admin mode" / ES: "Modo administrador"

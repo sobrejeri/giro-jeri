@@ -1,4 +1,4 @@
-// Copy centralizada da gestão de "Frota liberada" por cooperativa (admin).
+// Copy centralizada da gestão de "Frota liberada" por operador (admin).
 // O app admin não usa react-i18next (é 100% PT hardcoded); concentramos as
 // strings aqui em vez de espalhar pelo componente. EN/ES ficam comentados
 // como referência para uma eventual migração futura para i18n.
@@ -16,9 +16,9 @@ export const fleetCopy = {
   modalTitle: (name) => `Frota de ${name}`,
   // EN: (name) => `${name}'s fleet` / ES: (name) => `Flota de ${name}`
 
-  modalHint: 'Marque os veículos que esta cooperativa pode operar. As mudanças são salvas na hora.',
+  modalHint: 'Marque os veículos que este operador pode operar. As mudanças são salvas na hora.',
   // EN: "Check the vehicles this cooperative can operate. Changes save instantly."
-  // ES: "Marca los vehículos que esta cooperativa puede operar. Los cambios se guardan al instante."
+  // ES: "Marca los vehículos que este operador puede operar. Los cambios se guardan al instante."
 
   search: 'Buscar veículo…',
   // EN: "Search vehicle…" / ES: "Buscar vehículo…"

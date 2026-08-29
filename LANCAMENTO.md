@@ -81,7 +81,7 @@ Faça este roteiro completo **em produção** antes de divulgar:
 - [ ] Pagar o PIX real (valor baixo)
 - [ ] Conferir: status muda para **confirmada** + e-mail de confirmação chega
 - [ ] Ver a reserva em **Minhas Reservas**
-- [ ] No painel cooperativa: a reserva aparece para despacho
+- [ ] No painel operador: a reserva aparece para despacho
 - [ ] Na aba **Descubra a Vila**: curtir um post, comentar e avaliar um estabelecimento
 - [ ] Testar "Esqueci minha senha"
 - [ ] Abrir `/termos` e `/privacidade`
@@ -106,4 +106,4 @@ Faça este roteiro completo **em produção** antes de divulgar:
 As páginas de **Termos de Uso** e **Política de Privacidade** (`/termos` e `/privacidade`) foram
 escritas como ponto de partida realista para a operação (intermediação, cancelamento 24h/72h,
 LGPD). **Recomendo validar com um advogado** antes de escalar a operação — principalmente as
-regras de cancelamento/reembolso, que precisam bater com o combinado com as cooperativas.
+regras de cancelamento/reembolso, que precisam bater com o combinado com os operadores.

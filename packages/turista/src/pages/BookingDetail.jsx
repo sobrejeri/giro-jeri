@@ -33,7 +33,7 @@ function resolveStatus(booking) {
   if (o === 'completed') return 'completed'
   if (o === 'in_progress') return 'in_progress'
   // Fluxo solicitar → aceitar → pagar:
-  if (c === 'awaiting_acceptance') return 'waiting_acceptance' // aguardando cooperativa
+  if (c === 'awaiting_acceptance') return 'waiting_acceptance' // aguardando operador
   if (c === 'awaiting_payment' || c === 'payment_failed') return 'waiting_payment' // aceita → pague
   // Pago = dinheiro recebido, já passou da aceitação. Independente do
   // sub-estado operacional (assigned/awaiting_dispatch/new), pro cliente é
@@ -102,7 +102,7 @@ export default function BookingDetail() {
   const navigate     = useNavigate()
   const queryClient  = useQueryClient()
 
-  // Ordem do fluxo: solicitar → (cooperativa aceita) → pagar → confirmada → ...
+  // Ordem do fluxo: solicitar → (operador aceita) → pagar → confirmada → ...
   const TIMELINE = [
     { key: 'waiting_acceptance', label: t('bookingDetailPg.timeline.waitingAcceptance') },
     { key: 'waiting_payment',    label: t('bookingDetailPg.timeline.payment')            },
@@ -377,7 +377,7 @@ export default function BookingDetail() {
           </div>
         )}
 
-        {/* Pay CTA — cooperativa aceitou, falta pagar */}
+        {/* Pay CTA — operador aceitou, falta pagar */}
         {status === 'waiting_payment' && (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-brand/20">
             <div className="flex items-start gap-3 mb-3">

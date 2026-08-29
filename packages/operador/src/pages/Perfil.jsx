@@ -8,7 +8,7 @@ import Input, { Select } from '../components/ui/Input'
 import Button from '../components/ui/Button'
 
 // ── Meu link de vendas (venda direta, sem fila) ────────────────
-// Reservas feitas por este link nascem atribuídas à cooperativa e já vão
+// Reservas feitas por este link nascem atribuídas ao operador e já vão
 // direto para o pagamento — sem disputa com as demais.
 const TURISTA_URL = import.meta.env.VITE_TURISTA_URL || 'https://sobrejeri.github.io/giro-jeri'
 
@@ -37,7 +37,7 @@ function MeuLink({ slug }) {
         <p className="text-xs text-gray-500 mb-3">
           Compartilhe com seus clientes: as reservas feitas por este link chegam
           <span className="font-semibold"> direto para você</span> — sem entrar na fila
-          das outras cooperativas — e o cliente já paga na hora.
+          das outros operadores — e o cliente já paga na hora.
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -69,7 +69,7 @@ function MeuLink({ slug }) {
 }
 
 // ── Recebimento via Mercado Pago (split de pagamentos) ─────────
-// A cooperativa conecta a própria conta MP por OAuth; depois disso, sua parte de
+// O operador conecta a própria conta MP por OAuth; depois disso, sua parte de
 // cada reserva cai direto na conta dela, já com a comissão da plataforma
 // descontada automaticamente.
 function MercadoPagoConnect() {

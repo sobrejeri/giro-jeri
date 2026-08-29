@@ -28,7 +28,7 @@ function hasDispatch(b) {
   return !!(a && (a.real_vehicle_text || a.driver_name))
 }
 
-function BookingRow({ b, onDispatch, onStart, onComplete, cooperativa }) {
+function BookingRow({ b, onDispatch, onStart, onComplete, operador }) {
   const dateStr = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), "dd/MM", { locale: ptBR }) : ''
   const local        = b.pickup_place_name || b.origin_text || ''
@@ -99,7 +99,7 @@ function BookingRow({ b, onDispatch, onStart, onComplete, cooperativa }) {
         {isDispatched && (
           <div className="flex items-center gap-2 pt-2 border-t border-green-100 flex-wrap">
             <button
-              onClick={() => downloadOrderPDF(b, formForOS, cooperativa)}
+              onClick={() => downloadOrderPDF(b, formForOS, operador)}
               className="flex items-center gap-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg px-3 py-1.5 transition-colors"
             >
               <FileText size={12} /> Baixar PDF
@@ -107,7 +107,7 @@ function BookingRow({ b, onDispatch, onStart, onComplete, cooperativa }) {
             {/* Um botão só: envia a OS em PDF para o cliente E o motorista pelo
                 Z-API. Substituiu os dois antigos, que apenas abriam a conversa
                 e obrigavam a anexar o arquivo à mão. */}
-            <SendOsButton booking={b} form={formForOS} cooperativa={cooperativa} />
+            <SendOsButton booking={b} form={formForOS} operador={operador} />
 
             {/* Ciclo da corrida (item 13): iniciar depois do despacho, depois concluir */}
             {b.status_operational !== 'in_progress' && b.status_operational !== 'completed' && (
@@ -156,7 +156,7 @@ function groupByOrder(list) {
 
 // Lista com os serviços do mesmo pedido agrupados sob um cabeçalho. O despacho
 // segue POR serviço (cada um pode ter veículo/motorista diferente).
-function GroupedList({ list, onDispatch, onStart, onComplete, cooperativa }) {
+function GroupedList({ list, onDispatch, onStart, onComplete, operador }) {
   return (
     <div className="space-y-3">
       {groupByOrder(list).map((it) => it.type === 'group' ? (
@@ -172,12 +172,12 @@ function GroupedList({ list, onDispatch, onStart, onComplete, cooperativa }) {
           </div>
           <div className="p-2 space-y-2 bg-brand/[0.02]">
             {it.items.map((b) => (
-              <BookingRow key={b.id} b={b} onDispatch={onDispatch} onStart={onStart} onComplete={onComplete} cooperativa={cooperativa} />
+              <BookingRow key={b.id} b={b} onDispatch={onDispatch} onStart={onStart} onComplete={onComplete} operador={operador} />
             ))}
           </div>
         </div>
       ) : (
-        <BookingRow key={it.item.id} b={it.item} onDispatch={onDispatch} onStart={onStart} onComplete={onComplete} cooperativa={cooperativa} />
+        <BookingRow key={it.item.id} b={it.item} onDispatch={onDispatch} onStart={onStart} onComplete={onComplete} operador={operador} />
       ))}
     </div>
   )
@@ -214,7 +214,7 @@ export default function Despacho() {
     staleTime: 5 * 60_000,
   })
 
-  // Quem esta cooperativa já mandou a campo, para reaproveitar os dados de
+  // Quem este operador já mandou a campo, para reaproveitar os dados de
   // repasse. Falha aqui não atrapalha o despacho: vira lista vazia e a pessoa
   // digita, como antes.
   const { data: executoresData } = useQuery({
@@ -225,7 +225,7 @@ export default function Despacho() {
   })
   const executores = Array.isArray(executoresData) ? executoresData : []
 
-  const cooperativa = profile ? {
+  const operador = profile ? {
     full_name:         profile.full_name,
     document_type:     profile.document_type,
     document_number:   profile.document_number,
@@ -246,7 +246,7 @@ export default function Despacho() {
       const formSnap = { ...form }
       ;(async () => {
         try {
-          const pdf = await orderPDFBase64(snapshot, formSnap, cooperativa)
+          const pdf = await orderPDFBase64(snapshot, formSnap, operador)
           if (pdf) await api.sendOsPdf(vars.id, pdf)
         } catch (err) {
           console.warn('[despacho] envio do PDF da OS falhou:', err?.message)
@@ -398,7 +398,7 @@ export default function Despacho() {
             </CardBody>
           </Card>
         ) : (
-          <GroupedList list={pending} onDispatch={handleDispatch} onStart={handleStart} onComplete={handleComplete} cooperativa={cooperativa} />
+          <GroupedList list={pending} onDispatch={handleDispatch} onStart={handleStart} onComplete={handleComplete} operador={operador} />
         )}
       </div>
 
@@ -408,7 +408,7 @@ export default function Despacho() {
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
             Despachados / Em andamento ({dispatched.length})
           </h3>
-          <GroupedList list={dispatched} onDispatch={handleDispatch} onStart={handleStart} onComplete={handleComplete} cooperativa={cooperativa} />
+          <GroupedList list={dispatched} onDispatch={handleDispatch} onStart={handleStart} onComplete={handleComplete} operador={operador} />
         </div>
       )}
 
@@ -432,7 +432,7 @@ export default function Despacho() {
           <Input label="Veículo (modelo / placa / cor) *" placeholder="Ex: Hilux Branca · GKR-1234"
             value={form.real_vehicle_text} required
             onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })} />
-          {/* Quem já rodou por esta cooperativa. Um toque traz nome, telefone,
+          {/* Quem já rodou por este operador. Um toque traz nome, telefone,
               documento e chave PIX — sem redigitar chave a cada corrida. */}
           {executores.length > 0 && (
             <div>

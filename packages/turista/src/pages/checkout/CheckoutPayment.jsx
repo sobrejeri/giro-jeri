@@ -12,7 +12,7 @@ function fmt(v) {
 
 // ─── getMercadoPago ──────────────────────────────────────────
 // Instancia o SDK somente quando o script já carregou. Com `publicKey` (chave
-// da cooperativa atribuída), tokeniza o cartão NA conta dela para o split;
+// do operador atribuído), tokeniza o cartão NA conta dela para o split;
 // sem ela, usa a chave da plataforma (VITE_MP_PUBLIC_KEY, sem split).
 function getMercadoPago(publicKey) {
   if (typeof window.MercadoPago === 'undefined') return null
@@ -34,7 +34,7 @@ function getUserEmail() {
 // ─── PaymentBrick ────────────────────────────────────────────
 // Brick unificado do Mercado Pago: cartão (crédito/débito) E PIX na mesma tela
 // embutida. Tokeniza com segurança (PCI) e devolve os dados no onSubmit; a API
-// cria o pagamento (com split quando a cooperativa está conectada).
+// cria o pagamento (com split quando o operador está conectada).
 function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
   const { t }    = useTranslation()
   const brickRef = useRef(null)
@@ -200,7 +200,7 @@ export default function CheckoutPayment() {
       .finally(() => clearTimeout(prazo))
     return () => { decidido = true; clearTimeout(prazo) }
   }, [])
-  // Chave pública da cooperativa atribuída (split). Buscada para reservas já
+  // Chave pública do operador atribuído (split). Buscada para reservas já
   // existentes (pagamento pós-aceite). keyChecked evita montar o Brick antes.
   const [sellerKey,  setSellerKey]  = useState(null)
   const [keyChecked, setKeyChecked] = useState(() => !state?.existing_booking_id)

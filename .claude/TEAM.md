@@ -10,7 +10,7 @@
   `tsconfig`. O projeto é ESM (`"type": "module"`): use `import`/`export`, não `require`.
 - **Backend**: Express 4 em `packages/api` (Node 20+). Rotas estilo Express, validação com
   **Zod**, segurança com Helmet/CORS/rate-limit já configurados em `src/index.js`.
-- **Frontends**: React 18 + Vite + **JSX** (3 SPAs: `turista`, `admin`, `cooperativa`).
+- **Frontends**: React 18 + Vite + **JSX** (3 SPAs: `turista`, `admin`, `operador`).
   - Data-fetching **sempre** via **TanStack Query** (`useQuery`/`useMutation`). Não criar
     `fetch` solto em componentes — usar o cliente em `lib/api.js`.
   - Estado compartilhado via **Context API** (ex.: `AuthContext`, `RegionContext`). Sem Redux.
@@ -38,7 +38,7 @@
 | Área | Caminho | Dono principal |
 |---|---|---|
 | API / backend | `packages/api/src` | Engenheiro Senior |
-| SPA turista/admin/cooperativa | `packages/{turista,admin,cooperativa}/src` | Frontend Expert |
+| SPA turista/admin/operador | `packages/{turista,admin,operador}/src` | Frontend Expert |
 | Banco / migrations / seeds | `supabase/` | DBA |
 | Contratos de API, decisões cross-package | (transversal) | Arquiteto |
 | Specs, critérios de aceite | (docs) | Product Owner |
@@ -55,7 +55,7 @@ Frontend **não** cria migrations; DBA **não** escreve componentes React.
 - **Auth e papéis** (`requireAdmin`, `requireOperator`...): `packages/api/src/middleware/auth.js`.
 - **Cliente HTTP do frontend** (axios + interceptors + auth header): `packages/turista/src/lib/api.js`.
 - **Setup/portas/deploy**: `README.md`, `LANCAMENTO.md`, `render.yaml`,
-  `.github/workflows/deploy-turista.yml`. Portas dev: turista 5173, cooperativa 5174, admin 5175,
+  `.github/workflows/deploy-turista.yml`. Portas dev: turista 5173, operador 5174, admin 5175,
   API 3001.
 
 ## 5. Verificação (não há testes nem lint hoje)

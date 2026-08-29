@@ -54,14 +54,14 @@ export async function notifyUser({ userId, bookingId = null, templateKey = null,
   firePush(userId, { title: title || 'Turiva', body, bookingId, templateKey })
 }
 
-// Notifica TODAS as cooperativas ativas + admins (ex.: nova solicitação).
+// Notifica TODAS os operadores ativos + admins (ex.: nova solicitação).
 export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = null, title, body, fleetBookingId = null, fleetModalSlug = null }) {
   if (!body) return
   try {
     let recipients
     if (fleetModalSlug) {
       // Cotação personalizada: nasce sem veículo, então o corte é o MODAL.
-      // Sem isto ela caía no `else` abaixo e ia para TODA cooperativa ativa —
+      // Sem isto ela caía no `else` abaixo e ia para TODO operador ativo —
       // a que só voa recebia pedido de translado de rua.
       const { eligibleOperatorsForModal } = await import('./fleet.js')
       const [ops, adminsRes] = await Promise.all([

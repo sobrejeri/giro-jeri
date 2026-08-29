@@ -1,5 +1,5 @@
 // ── fleet.js ────────────────────────────────────────────
-// Elegibilidade de cooperativas por FROTA.
+// Elegibilidade de operadores por FROTA.
 //
 // DOIS MODELOS, por veículo (coluna vehicles.requires_opt_in, migration 066):
 //   • opt-out (padrão, requires_opt_in=false): a coop recebe a solicitação a
@@ -20,7 +20,7 @@
 //      booking_vehicles —, cai nas regras de preço do serviço
 //      (vehicle_pricing_rules), que é onde mora "quais veículos fazem este
 //      passeio". Sem esse passo, um voo compartilhado ficava "sem veículo" e
-//      escapava do filtro, indo para todas as cooperativas.
+//      escapava do filtro, indo para todas os operadores.
 // Retorna Map<bookingId, string[] vehicleIds>.
 export async function requiredVehiclesByBooking(supabase, bookings) {
   const result = new Map();
@@ -87,17 +87,17 @@ export async function optInVehicleIds(supabase, vehicleIds) {
 
 // ── MODAL (migrations 075/076) ──────────────────────────
 // Segundo eixo do roteamento, e o mais simples de operar: em vez de ligar
-// veículo a veículo, o admin diz que a cooperativa opera terrestre, aéreo,
+// veículo a veículo, o admin diz que o operador opera terrestre, aéreo,
 // aquático… A solicitação só chega a quem opera o modal dela.
 //
-// Opt-out, igual ao de veículo: sem linha, a cooperativa recebe. Assim ligar o
+// Opt-out, igual ao de veículo: sem linha, o operador recebe. Assim ligar o
 // recurso não cala ninguém — só quem for desmarcado deixa de receber.
 
 // Modal de cada veículo, já no id de `service_modals` — que é o que a
 // preferência guarda em `entity_id`. Map<vehicleId, modalId>.
 //
 // Vem do VEÍCULO (e não da categoria do serviço) de propósito: é o veículo que
-// a cooperativa opera, e ele já está resolvido aqui para o filtro antigo.
+// o operador opera, e ele já está resolvido aqui para o filtro antigo.
 export async function modalIdByVehicle(supabase, vehicleIds) {
   const out = new Map();
   const ids = [...new Set((vehicleIds || []).filter(Boolean))];
@@ -138,7 +138,7 @@ export function modalIdsOf(vehicleIds, modalPorVeiculo) {
   return out;
 }
 
-// Modais que cada cooperativa DESATIVOU. Map<opId, Set<modalId>>.
+// Modais que cada operador DESATIVOU. Map<opId, Set<modalId>>.
 export async function modalPrefs(supabase, modalIds, operatorIds) {
   const disabled = new Map();
   const ids = [...new Set((modalIds || []).filter(Boolean))];
@@ -166,10 +166,10 @@ export async function modalPrefs(supabase, modalIds, operatorIds) {
 
 // COMBO: reserva que exige veículos de modais DIFERENTES (buggy + barco).
 //
-// O combo vai INTEIRO para UMA cooperativa — a "universal", que opera os dois
-// meios e aceita fechar o pedido combinado (migration 077). Uma cooperativa,
+// O combo vai INTEIRO para UM operador — a "universal", que opera os dois
+// meios e aceita fechar o pedido combinado (migration 077). Um operador,
 // um recebedor: o split de recebedor único já funciona, e não é preciso ligar o
-// motor de pernas nem liberar o split entre 2+ cooperativas.
+// motor de pernas nem liberar o split entre 2+ operadores.
 //
 // Os dois perfis saem do que já está cadastrado:
 //   • categoria única → opera um modal só; nunca casa com um combo, porque não
@@ -179,7 +179,7 @@ export function ehCombo(modalIds) {
   return !!modalIds && modalIds.size > 1;
 }
 
-// A cooperativa opera TODOS os modais que a reserva exige?
+// O operador opera TODOS os modais que a reserva exige?
 // `aceitaCombo` é consultado só quando a reserva É um combo — serviço de modal
 // único chega normalmente a quem não aceita combo.
 export function operatorServesModals(opId, modalIds, disabledByOp, aceitaCombo = null) {
@@ -191,7 +191,7 @@ export function operatorServesModals(opId, modalIds, disabledByOp, aceitaCombo =
   return true;
 }
 
-// accepts_combos de cada cooperativa. Map<opId, boolean>.
+// accepts_combos de cada operador. Map<opId, boolean>.
 // Ausência da coluna (077 pendente) devolve mapa vazio → ninguém é barrado por
 // ela, e o combo volta a depender só dos modais operados.
 export async function comboPrefs(supabase, operatorIds) {
@@ -210,7 +210,7 @@ export async function comboPrefs(supabase, operatorIds) {
   return out;
 }
 
-// Preferências de veículo de um conjunto de cooperativas.
+// Preferências de veículo de um conjunto de operadores.
 // Retorna { disabled: Map<opId, Set<vehicleId>>, enabled: Map<opId, Set<vehicleId>> }.
 export async function vehiclePrefs(supabase, vehicleIds, operatorIds) {
   const disabled = new Map();
@@ -238,23 +238,23 @@ export async function vehiclePrefs(supabase, vehicleIds, operatorIds) {
   return { disabled, enabled };
 }
 
-// A cooperativa `opId` atende uma reserva que exige `vehicleIds`?
+// O operador `opId` atende uma reserva que exige `vehicleIds`?
 // Regra por veículo: restrito → precisa de opt-in explícito; comum → basta não
 // ter desativado. Precisa valer para TODOS os veículos da reserva.
 //
 // `combo` afrouxa o OPT-IN, e só ele. Decisão do dono: serviço aéreo avulso vai
-// para a cooperativa que voa (Frisonfly); combo que INCLUI aéreo vai para o
+// para o operador que voa (Frisonfly); combo que INCLUI aéreo vai para o
 // operador universal, que fecha o pedido inteiro e subcontrata o trecho.
 //
 // Sem essa distinção a regra do dono era inexprimível: o opt-in do helicóptero
 // bloquearia o universal no combo, a lista sairia vazia e o pedido cairia na
-// rede de segurança — indo para TODAS as cooperativas, o contrário do que se
+// rede de segurança — indo para TODAS os operadores, o contrário do que se
 // queria. Dar opt-in ao universal também não serve: ele passaria a receber os
 // voos avulsos.
 //
 // Não é um buraco: no combo quem faz o corte é o MODAL. Só chega ali quem o
 // admin marcou como operando TODOS os meios do pedido e como aceitando combo
-// (`operatorServesModals`). Uma cooperativa só de buggy não opera aéreo e
+// (`operatorServesModals`). Um operador só de buggy não opera aéreo e
 // continua fora. O que se dispensa é o opt-in POR VEÍCULO, que existe para o
 // avulso e continua valendo lá.
 export function operatorServesVehicles(opId, vehicleIds, optIn, prefs, combo = false) {
@@ -269,7 +269,7 @@ export function operatorServesVehicles(opId, vehicleIds, optIn, prefs, combo = f
 //
 // Serve para a COTAÇÃO de translado personalizado: ela nasce sem veículo — o
 // cliente só diz de onde, para onde e quando —, então não há o que filtrar por
-// veículo. Sem isso a cotação era disparada para TODAS as cooperativas ativas,
+// veículo. Sem isso a cotação era disparada para TODAS os operadores ativos,
 // e a que só opera helicóptero recebia pedido de translado de rua.
 //
 // Fail-open em qualquer erro: notificar demais é melhor do que a cotação não
@@ -292,7 +292,7 @@ export async function eligibleOperatorsForModal(supabase, modalSlug) {
     const desativados = await modalPrefs(supabase, [modal.id], operators.map((o) => o.id));
     const filtrados = operators.filter((op) => !desativados.get(op.id)?.has(modal.id));
     if (filtrados.length === 0) {
-      console.warn('[fleet] nenhuma cooperativa opera o modal %s — notificando todas', modalSlug);
+      console.warn('[fleet] nenhum operador opera o modal %s — notificando todas', modalSlug);
       return operators;
     }
     return filtrados;
@@ -344,10 +344,10 @@ export async function eligibleOperatorsForBooking(supabase, bookingId) {
     // REDE DE SEGURANÇA. Lista vazia = ninguém recebe WhatsApp
     // (`notifyOperatorsNewBooking` faz skipped), e o pedido fica parado em
     // silêncio até alguém reparar. Isso é pior do que avisar demais.
-    // Acontece de verdade num combo sem cooperativa universal que cubra
+    // Acontece de verdade num combo sem operador universal que cubra
     // aqueles meios — cadastro incompleto, não regra de negócio.
     if (elegiveis.length === 0) {
-      console.warn('[fleet] reserva %s%s sem NENHUMA cooperativa elegível — notificando todas. '
+      console.warn('[fleet] reserva %s%s sem NENHUM operador elegível — notificando todas. '
         + 'Confira os meios operados e quem aceita combo no admin.',
         bookingId, combo ? ` (COMBO, ${modalIds.size} modais)` : '');
       return operators;

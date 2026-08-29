@@ -101,7 +101,7 @@ function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
 }
 
 // ── Linha da tabela ────────────────────────────────────
-function BookingRow({ b, onAssign, cooperativa }) {
+function BookingRow({ b, onAssign, operador }) {
   const st       = STATUS[b.status_operational] || STATUS.new
   const name     = b.users?.full_name || '—'
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?'
@@ -185,7 +185,7 @@ function BookingRow({ b, onAssign, cooperativa }) {
         <div className="flex items-center justify-end gap-1">
           {dispatched && (
             <button
-              onClick={() => downloadOrderPDF(b, formForOS, cooperativa)}
+              onClick={() => downloadOrderPDF(b, formForOS, operador)}
               className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               title="Baixar OS em PDF"
             >
@@ -211,7 +211,7 @@ function BookingRow({ b, onAssign, cooperativa }) {
 }
 
 // ── Card mobile (mesma info da linha da tabela) ────────
-function BookingCardMobile({ b, onAssign, cooperativa }) {
+function BookingCardMobile({ b, onAssign, operador }) {
   const st       = STATUS[b.status_operational] || STATUS.new
   const name     = b.users?.full_name || '—'
   const dateStr  = b.service_date
@@ -258,7 +258,7 @@ function BookingCardMobile({ b, onAssign, cooperativa }) {
         <div className="flex items-center gap-1.5">
           {dispatched && (
             <button
-              onClick={() => downloadOrderPDF(b, formForOS, cooperativa)}
+              onClick={() => downloadOrderPDF(b, formForOS, operador)}
               className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               title="Baixar OS em PDF"
             >
@@ -357,7 +357,7 @@ export default function Dashboard() {
   })
   const repSummary = reputation?.summary
 
-  const cooperativa = profile ? {
+  const operador = profile ? {
     full_name:         profile.full_name,
     document_type:     profile.document_type,
     document_number:   profile.document_number,
@@ -520,7 +520,7 @@ export default function Dashboard() {
               </span>
             </div>
           </div>
-          <p className="text-[13px] text-gray-500 hidden sm:block">Reputação da sua cooperativa</p>
+          <p className="text-[13px] text-gray-500 hidden sm:block">Reputação da seu operador</p>
           <span className="ml-auto text-[13px] font-semibold text-brand flex items-center gap-1">
             Ver avaliações <ChevronRight size={15} />
           </span>
@@ -581,7 +581,7 @@ export default function Dashboard() {
         {/* Cards (mobile) */}
         <div className="md:hidden divide-y divide-gray-100">
           {pageItems.map((b) => (
-            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} cooperativa={cooperativa} />
+            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} operador={operador} />
           ))}
           {pageItems.length === 0 && (
             <div className="py-16 text-center">
@@ -605,7 +605,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} cooperativa={cooperativa} />)}
+              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} operador={operador} />)}
             </tbody>
           </table>
 
@@ -660,7 +660,7 @@ export default function Dashboard() {
             <p className="text-sm text-gray-500 text-center">Ordem de Serviço</p>
 
             <button
-              onClick={() => downloadOrderPDF(dispatchedBooking, savedForm, cooperativa)}
+              onClick={() => downloadOrderPDF(dispatchedBooking, savedForm, operador)}
               className="w-full flex items-center gap-3 p-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors text-left"
             >
               <div className="w-9 h-9 bg-gray-200 rounded-lg flex items-center justify-center shrink-0">
@@ -678,7 +678,7 @@ export default function Dashboard() {
             <SendOsButton
               booking={dispatchedBooking}
               form={savedForm}
-              cooperativa={cooperativa}
+              operador={operador}
               variant="block"
             />
 

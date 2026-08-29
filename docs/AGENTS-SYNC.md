@@ -64,16 +64,16 @@ enxerga o trabalho do outro no próximo `git fetch`.
   Geração fica FORA do gate `ledger_created` (os dois são idempotentes por conta
   própria) e é best-effort: o cliente já pagou, a reserva tem de confirmar de
   qualquer jeito.
-  Admin: Repasses ganhou duas abas — **Cooperativas** (novo) e Motoristas (066,
+  Admin: Repasses ganhou duas abas — **Operadores** (novo) e Motoristas (066,
   que é outra coisa: pagamento ao motorista de corrida despachada pela casa).
-  A tela agrupa POR COOPERATIVA porque é assim que o repasse acontece: um PIX
-  cobrindo várias reservas. Tem "dar baixa em tudo" por cooperativa e baixa
+  A tela agrupa POR OPERADOR porque é assim que o repasse acontece: um PIX
+  cobrindo várias reservas. Tem "dar baixa em tudo" por operador e baixa
   individual com desfazer.
-  RLS: admin gerencia; cooperativa lê SÓ os repasses dela. As duas policies
+  RLS: admin gerencia; operador lê SÓ os repasses dela. As duas policies
   nasceram juntas — a 034 esqueceu uma e custou meses (072).
   Conferido: 080 em Postgres (duplicata barrada, tipo inválido barrado,
   idempotente, 2 policies) e a tela no navegador (agrupamento, totais por
-  cooperativa e geral, detalhe, baixa em lote enviando a cooperativa certa).
+  operador e geral, detalhe, baixa em lote enviando o operador certa).
 
 - **2026-08-25 · Agente B (VIRADA DE MODELO: plataforma recebe 100%)** —
   O dono não sabia que o split multi-recebedor do MP **só funciona com PIX**
@@ -87,7 +87,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   vazia ou inesperada assume `true`, sem split. Errar para "o dinheiro fica com
   a plataforma" se conserta com um repasse; errar para o outro lado manda
   dinheiro para conta de terceiro e não volta. Testado em 8 leituras.
-  **Efeito colateral bom:** `mpGate` deixa de bloquear. Hoje a cooperativa não
+  **Efeito colateral bom:** `mpGate` deixa de bloquear. Hoje o operador não
   conseguia ACEITAR nada sem conectar Mercado Pago — operador novo ficava
   parado. Sem split não há para onde mandar a parte dela, e a exigência perdeu
   sentido. A comissão vira repasse manual, que não depende de MP.
@@ -98,14 +98,14 @@ enxerga o trabalho do outro no próximo `git fetch`.
   não tem de onde sair. Hoje o razão só grava bruto/líquido.
 
 - **2026-08-25 · DESENHO ACORDADO (ainda NÃO implementado): combo aberto a
-  qualquer cooperativa, DEPOIS do split** — Observação do dono: com executor
+  qualquer operador, DEPOIS do split** — Observação do dono: com executor
   fixo configurado, quem aceita não precisa executar, então o combo pode ir para
-  qualquer cooperativa. Está certo, e a regra é:
-  *uma cooperativa pode receber um combo se, para CADA modal do pedido, ela
+  qualquer operador. Está certo, e a regra é:
+  *um operador pode receber um combo se, para CADA modal do pedido, ela
   opera aquele modal OU aquele modal tem executor fixo.*
   **ORDEM OBRIGATÓRIA — não inverter.** Hoje o pagamento manda o valor INTEIRO
   para quem aceitou (split de recebedor único, que funciona). Se o combo for
-  liberado antes do split de N recebedores estar valendo, uma cooperativa de
+  liberado antes do split de N recebedores estar valendo, um operador de
   buggy aceita um combo com voo de R$ 7.600, **recebe os R$ 7.600**, e a
   Frisonfly voa sem receber. Não é hipótese: é o comportamento atual.
   Sequência: split validado com o MP → depois abrir o roteamento.
@@ -132,16 +132,16 @@ enxerga o trabalho do outro no próximo `git fetch`.
   dois cenários, e aviso de que o pagamento ainda não usa a regra.
   **NADA DE PAGAMENTO FOI LIGADO.** `executor_operator_id` nulo é o padrão de
   todos os modais = comportamento atual. Faltam: validar o split de N
-  recebedores com o MP (nunca foi), e a tela da cooperativa deixar claro
+  recebedores com o MP (nunca foi), e a tela do operador deixar claro
   "executado pela Frisonfly · sua comissão", senão quem aceitou aparece no local
   achando que vai executar.
   **Limite conhecido:** split multi-recebedor só funciona em PIX. Cartão está
   bloqueado com 422 ("pague via PIX") — e num voo de R$ 7.600 muita gente quer
   parcelar.
 
-- **2026-08-25 · Agente B (categoria vira o controle principal da cooperativa)**
+- **2026-08-25 · Agente B (categoria vira o controle principal do operador)**
   — O dono propôs limitar por CATEGORIA (terrestre/aéreo/aquático) em vez de por
-  frota, com várias por cooperativa e o universal com todas. Isso já existia
+  frota, com várias por operador e o universal com todas. Isso já existia
   desde a 076 — faltava a TELA dizer isso: o bloco de meios ficava acima de uma
   lista longa de veículos, e a lista roubava a atenção do controle que importa.
   Agora a lista de veículos nasce RECOLHIDA, atrás de "Ajuste fino por veículo
@@ -150,7 +150,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   está configurado (opt-out = todos operam tudo). A única coisa restringindo voo
   agora é o opt-in do helicóptero, aplicado no script de dados. Tirar o filtro
   por veículo antes de o dono marcar os meios faria o voo voltar a sair para
-  todas as cooperativas. Configurado o modal, ele cobre o caso e o nível do
+  todas os operadores. Configurado o modal, ele cobre o caso e o nível do
   veículo vira só ajuste fino — pode ser aposentado então.
   Conferido no navegador: os três meios aparecem, o perfil é calculado
   ("universal — recebe os serviços de cada meio e os combos"), a lista de
@@ -160,15 +160,15 @@ enxerga o trabalho do outro no próximo `git fetch`.
   a plataforma atrás de outros ajustes, achei que a correção do Dashboard tinha
   pegado só um quarto do problema. `bruto × 0,93` também estava em:
   • **`/api/admin/operator-performance`** (`PLATFORM_COMMISSION = 0.07`) — e este
-    é o **REPASSE DE CADA COOPERATIVA**. Estimar dinheiro que se deve a terceiro
+    é o **REPASSE DE CADA OPERADOR**. Estimar dinheiro que se deve a terceiro
     é pior do que não mostrar: vira base de conversa sobre pagamento;
   • `Financeiro.jsx`, a linha "Líquido" do gráfico;
   • `Dashboard.jsx`, o líquido do mês.
   Todos passam a ler `financial_ledger`: `booking_net` para o líquido e
-  `payout_operator` para o repasse por cooperativa. Sem lançamento, vem `null` e
+  `payout_operator` para o repasse por operador. Sem lançamento, vem `null` e
   a tela mostra "—".
   Detalhe que quase passou: `fmt(null)` devolvia **R$ 0,00**, o que afirmaria
-  "esta cooperativa não tem nada a receber" quando a verdade é "não temos o
+  "este operador não tem nada a receber" quando a verdade é "não temos o
   dado". As duas células do ranking tratam null explicitamente agora.
   `financial-daily` passou a devolver `net` por dia e `/stats` ganhou
   `valor_liquido_mes` — foi o cálculo NA TELA que produziu os números fabricados.
@@ -179,7 +179,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   Observação do dono, e procedia. Dois problemas em `GET /api/admin/stats`:
   1. **Líquido inventado.** `valor_liquido_hoje` era `bruto * 0,93` — 7%
      chutados no código, enquanto a comissão real é configurável por
-     cooperativa (`platform_split_pct`) ou global (`payment_split_admin_pct`), e
+     operador (`platform_split_pct`) ou global (`payment_split_admin_pct`), e
      a taxa do gateway varia por meio de pagamento. Pior: o número certo já
      estava gravado em `financial_ledger` como `booking_net`; o painel só não o
      lia. Agora vem do razão, e sem lançamento líquido mostra só o bruto em vez
@@ -187,20 +187,19 @@ enxerga o trabalho do outro no próximo `git fetch`.
   2. **A fila mais importante era invisível.** "Pendências" contava só
      `awaiting_payment`. No fluxo atual o pedido nasce em `awaiting_acceptance`
      (035) — cliente pede, coop aceita, e SÓ ENTÃO o cliente paga. Pedido parado
-     esperando cooperativa não aparecia em canto nenhum. Virou KPI próprio,
-     "Ag. cooperativa"; o painel foi de 4 para 5 cartões.
+     esperando operador não aparecia em canto nenhum. Virou KPI próprio,
+     "Ag. operador"; o painel foi de 4 para 5 cartões.
   Conferido no navegador: os cinco números aparecem certos, e com o líquido nulo
   a linha "Líquido" some em vez de mostrar valor inventado.
 
-- **2026-08-25 · Agente B (COTAÇÃO ia para todas as cooperativas)** — O dono
+- **2026-08-25 · Agente B (COTAÇÃO ia para todas os operadores)** — O dono
   perguntou se as solicitações estavam mesmo sendo distribuídas certo, e a
   resposta honesta era "testei a lógica, não os caminhos". Auditando os pontos
   de notificação, achei um que **não passava pelo filtro**:
   a cotação de translado personalizado (`POST` de `transfer_quotes`) notificava
-  **todas** as cooperativas ativas, nos DOIS canais — `notifyOperatorsNewQuote`
+  **todas** os operadores ativos, nos DOIS canais — `notifyOperatorsNewQuote`
   buscava operadores direto, e `notifyOperatorsAndAdmin` era chamado **sem**
-  `fleetBookingId`, caindo no `else` que pega todo mundo. Resultado: a
-  cooperativa que só voa recebia pedido de translado de rua.
+  `fleetBookingId`, caindo no `else` que pega todo mundo. Resultado: o operador que só voa recebia pedido de translado de rua.
   Por que escapou: a cotação nasce SEM veículo (o cliente só diz de onde, para
   onde e quando), então o filtro por veículo não tinha no que se apoiar.
   Agora o corte é o MODAL, via `eligibleOperatorsForModal`. Translado
@@ -234,13 +233,12 @@ enxerga o trabalho do outro no próximo `git fetch`.
   "a Frisonfly trabalha só com aéreo; combo que inclua aéreo vai para o operador
   universal". Do jeito que estava, essa regra era **inexprimível**: o
   `requires_opt_in` do helicóptero (066) bloquearia o universal no combo, a
-  lista sairia vazia e o pedido cairia na rede de segurança — indo para TODAS as
-  cooperativas, o oposto do pedido. Dar opt-in ao universal também não servia:
+  lista sairia vazia e o pedido cairia na rede de segurança — indo para TODAS os operadores, o oposto do pedido. Dar opt-in ao universal também não servia:
   ele passaria a receber os voos avulsos.
   Solução: `operatorServesVehicles` ganhou o parâmetro `combo`, que afrouxa **só
   o opt-in**. Nada mais muda — desativação explícita por veículo continua
   valendo, e no combo quem faz o corte é o MODAL: só chega ali quem o admin
-  marcou operando TODOS os meios do pedido e aceitando combo. Cooperativa só de
+  marcou operando TODOS os meios do pedido e aceitando combo. Operador só de
   buggy não opera aéreo e segue fora.
   Aplicado nos DOIS caminhos (notificação e feed), como o resto do filtro.
   Conferido com a configuração exata que o dono vai usar — Frisonfly só aéreo e
@@ -258,9 +256,9 @@ enxerga o trabalho do outro no próximo `git fetch`.
   sorte acertou: ele está mesmo nos voos da 065. Mas o episódio mostra o limite
   de backfill por nome quando o cadastro foi reaproveitado.
   **O furo maior não era esse:** `requires_opt_in` estava ligado no helicóptero
-  oficial e NENHUMA cooperativa tinha opt-in — a regra "voo só para quem opera
+  oficial e NENHUM operador tinha opt-in — a regra "voo só para quem opera
   voo" nunca esteve em vigor. E o buggy-2 estava com `requires_opt_in = false`,
-  então as 2 reservas dele iam para todas as cooperativas, buggy inclusive.
+  então as 2 reservas dele iam para todas os operadores, buggy inclusive.
   O script transferiu as regras onde o buggy-2 era o ÚNICO veículo (desativar
   direto deixaria o voo sem veículo, calado), desativou as duplicadas, marcou a
   Frisonfly nos dois registros — nos dois por causa das reservas antigas —,
@@ -273,9 +271,9 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 - **2026-08-25 · Agente B (operador universal — combo sem motor de pernas)** —
   Proposta do dono, e é melhor que o caminho que eu ia seguir: em vez de partir
-  o combo em duas cooperativas (motor de pernas + split entre 2+ contas, hoje
-  bloqueado em payments.js), o combo vai **inteiro para UMA** cooperativa — a
-  universal. Uma cooperativa, um recebedor, split de recebedor único que já
+  o combo em dois operadores (motor de pernas + split entre 2+ contas, hoje
+  bloqueado em payments.js), o combo vai **inteiro para UMA** operador — a
+  universal. Um operador, um recebedor, split de recebedor único que já
   funciona. **Migration 077**: `users.accepts_combos`, default TRUE.
   Os dois perfis saem da combinação do que já existia, sem cadastro novo:
   • categoria única = opera um modal (076) → nunca casa com combo;
@@ -283,9 +281,9 @@ enxerga o trabalho do outro no próximo `git fetch`.
   A flag é separada de "opera 2+ modais" de propósito: atender barco e buggy não
   é o mesmo que topar FECHAR os dois no mesmo passeio, com uma logística só.
   Default TRUE + modal opt-out = nada muda ao aplicar; aperta conforme o admin
-  marca os meios de cada cooperativa.
+  marca os meios de cada operador.
   **Rede de segurança nova em `eligibleOperatorsForBooking`:** lista de
-  elegíveis vazia passou a devolver TODAS as cooperativas, com `console.warn`
+  elegíveis vazia passou a devolver TODAS os operadores, com `console.warn`
   nomeando a reserva. Sem isso, um combo sem universal que o cubra (ex.:
   terrestre+aéreo, que ninguém opera junto) sairia para ninguém — e
   `notifyOperatorsNewBooking` faz `skipped` com lista vazia, então o pedido
@@ -296,12 +294,12 @@ enxerga o trabalho do outro no próximo `git fetch`.
   todas, com o aviso no log. Em Postgres 16: default TRUE, a consulta de perfil
   do comentário funciona, desmarcar grava e re-rodar preserva.
   O motor de pernas continua desligado e agora não é mais pré-requisito para
-  combo — segue disponível se um dia o split multi-cooperativa for liberado.
+  combo — segue disponível se um dia o split multi-operador for liberado.
 
 - **2026-08-25 · Agente B (modal também nas PERNAS)** — Onde o filtro por modal
   funciona sem ressalva nenhuma: a perna (`booking_legs`) tem UM veículo, logo
   UM modal. Um pedido buggy + barco vira duas pernas, cada uma para a coop do
-  seu meio — nenhuma cooperativa precisa operar os dois, e o problema do combo
+  seu meio — nenhum operador precisa operar os dois, e o problema do combo
   simplesmente deixa de existir.
   Aplicado no feed de pernas E no `POST /legs/:legId/accept`. Só no feed, a coop
   não veria a perna mas conseguiria aceitar por link direto, e a execução cairia
@@ -312,13 +310,13 @@ enxerga o trabalho do outro no próximo `git fetch`.
   perna, aceite por perna, prazo de pagamento ancorado no passeio, varredura de
   expiradas e idempotência contábil — tudo implementado (042/046/047/048). O
   split nativo N-recebedores também está escrito. O que trava é uma linha
-  deliberada em `payments.js`: 2+ cooperativas devolve `mode:'multi'` para o
+  deliberada em `payments.js`: 2+ operadores devolve `mode:'multi'` para o
   chamador BLOQUEAR, "até validar o split nativo do MP em staging". Com as
   credenciais do dono sendo de valor real, essa validação é a decisão que falta.
 
-- **2026-08-25 · Agente B (combo não pode ficar sem cooperativa)** — Furo que o
+- **2026-08-25 · Agente B (combo não pode ficar sem operador)** — Furo que o
   próprio filtro por modal (076) abriu: reserva com veículos de modais
-  DIFERENTES (buggy + barco) exigiria uma cooperativa que opera os dois. Se
+  DIFERENTES (buggy + barco) exigiria um operador que opera os dois. Se
   nenhuma opera, a lista de elegíveis sai vazia — e aí **ninguém é notificado**,
   em silêncio, porque `notifyOperatorsNewBooking` faz `skipped: true` com lista
   vazia. O cliente pediria e nada se moveria até um admin reparar.
@@ -327,9 +325,9 @@ enxerga o trabalho do outro no próximo `git fetch`.
   `console.warn` nomeando a reserva. Melhor avisar demais do que não avisar.
   A regra mora numa função só (`ehCombo`), usada pela notificação E pelo feed —
   se as duas divergirem, a coop recebe WhatsApp de pedido que não enxerga.
-  Conferido: combo buggy+barco volta a sair para as 4 cooperativas; modal único
+  Conferido: combo buggy+barco volta a sair para as 4 operadores; modal único
   segue filtrado certo.
-  **PENDENTE DE DECISÃO DO DONO:** o combo real precisa de duas cooperativas,
+  **PENDENTE DE DECISÃO DO DONO:** o combo real precisa de dois operadores,
   uma por trecho. O motor de pernas (`booking_legs`, migration 042) já está
   desenhado e implementado para isso — 1 veículo = 1 perna, cada uma roteável a
   UMA coop — mas está atrás da flag `booking_legs_engine_enabled = false` desde
@@ -355,7 +353,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   diferentes.
   Fail-open em tudo: 075/076 pendentes, tabela ausente ou erro de leitura →
   ninguém é filtrado por modal. Nunca deixar de notificar por causa deste filtro.
-  Admin: bloco "Em que meios esta cooperativa opera" no topo do modal de frota,
+  Admin: bloco "Em que meios este operador opera" no topo do modal de frota,
   com contagem de veículos por modal. Some sozinho se a 075 não rodou.
   Conferido com Supabase falso, nos casos que decidem quem recebe: voo → só
   Frisonfly; buggy → só Buggy Tour; barco → só Marina; **combo buggy+barco → só
@@ -455,9 +453,9 @@ enxerga o trabalho do outro no próximo `git fetch`.
   trás** — chamava `/api/vehicles` e listava TODA a frota com
   `is_transfer_allowed`. Como os veículos saíram da vitrine, o carrinho virou o
   único lugar de escolha, e o furo passou a ser o único caminho.
-  Não é só estético: o filtro de frota das cooperativas olha os veículos da
+  Não é só estético: o filtro de frota dos operadores olha os veículos da
   reserva, então um buggy escolhido num trecho de helicóptero mandaria a
-  solicitação para a cooperativa errada.
+  solicitação para o operador errado.
   Agora o carrinho consulta a rota. **Sem recuo para a lista geral**: a própria
   API já devolve a frota comum quando a rota não tem regra (tirando os
   restritos, como o helicóptero) — cair na lista geral traria o problema de
@@ -882,7 +880,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   **Verificado:** migration aplicada em Postgres 16 real (idempotente; a UNIQUE
   de disparo ativo e a de destinatário barram o clique duplo e o reenvio), regra
   de elegibilidade conferida com 8 casos (opt-out, sem WhatsApp, inativo, sem
-  telefone, cooperativa, já recebeu → sobram só os 2 certos), token de
+  telefone, operador, já recebeu → sobram só os 2 certos), token de
   descadastro recusando adulteração/truncamento/vazio/nulo.
   **Pendente:** ninguém testou um envio real ainda — o dono precisa disparar
   para um cupom de teste antes de usar na base inteira.
@@ -1016,7 +1014,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   coisas que o fundo cinza escondia: no Descubra a fileira de filtros tinha
   faixa branca (virava listra atravessando a areia) e os links de rodapé do
   Perfil eram `gray-300/400` (quase apagados). `Login.jsx` NÃO foi tocado —
-  não é importado em lugar nenhum, é código morto. Admin e cooperativa ficam
+  não é importado em lugar nenhum, é código morto. Admin e operador ficam
   como estão, por decisão do dono.
 
 - **2026-08-19 · Agente B (home nova em avaliação — turista)** — O dono mandou
@@ -1070,7 +1068,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   `/os/:token` (lá quem lê é o passageiro). **(b) Status em inglês:**
   `awaiting_acceptance` entrou no enum por migration posterior e ninguém
   atualizou o mapa do Badge — a tela mostrava a chave crua ao lado de "Pago".
-  Corrigido em admin e cooperativa ('Ag. Aceite', com estilo em cada paleta) e o
+  Corrigido em admin e operador ('Ag. Aceite', com estilo em cada paleta) e o
   fallback deixou de imprimir a chave: humaniza o snake_case. Conferido por
   script contra os 5 enums do schema — nenhum status sem rótulo em português.
 
@@ -1105,8 +1103,8 @@ enxerga o trabalho do outro no próximo `git fetch`.
 - **2026-07-25 · Agente B (PDF da OS no WhatsApp ao despachar)** — Ao clicar em
   "Despachar", o cliente e o motorista passam a receber a **Ordem de Serviço em
   PDF** anexada, além das mensagens de texto que já existiam.
-  Decisão de design: o PDF é gerado no APP DA COOPERATIVA
-  (`packages/cooperativa/src/lib/orderPDF.js`, jsPDF, que já existia e alimenta
+  Decisão de design: o PDF é gerado no APP DA OPERADOR
+  (`packages/operador/src/lib/orderPDF.js`, jsPDF, que já existia e alimenta
   os botões Baixar/Compartilhar) e vai em base64 no corpo do despacho. Assim o
   documento enviado é EXATAMENTE o mesmo que a coop vê — sem duplicar 518 linhas
   de layout no servidor nem adicionar stack de PDF na API.
@@ -1119,12 +1117,12 @@ enxerga o trabalho do outro no próximo `git fetch`.
     ou data URI) e `notifyDispatchOS` ganhou `pdfBase64` — envia o anexo ao
     cliente e ao motorista depois do texto. Best-effort: erro só é logado.
   Testado: PDF gerado com dados reais = 15 KB, assinatura `%PDF-` válida (cabe
-  folgado no limite de 5mb do express). Build da cooperativa ok. NÃO foi possível
+  folgado no limite de 5mb do express). Build do operador ok. NÃO foi possível
   testar contra o Z-API real (o proxy do sandbox bloqueia).
 
 - **2026-07-25 · Agente B (frota opt-in + nome do serviço na coop)** — Três
   correções vindas de teste real com os voos de helicóptero.
-  **(1) Solicitação de helicóptero ia para TODAS as cooperativas.** O filtro de
+  **(1) Solicitação de helicóptero ia para TODAS os operadores.** O filtro de
   frota era opt-out (aparecia para todos, menos quem desativou) e, pior, reserva
   COMPARTILHADA não gera `booking_vehicles` — caía no fail-open e escapava do
   filtro. **migration 066**: `vehicles.requires_opt_in` (true no helicóptero) —
@@ -1146,7 +1144,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   como privativo um serviço que só existe compartilhado (foi o que aconteceu no
   voo panorâmico). Agora o modo é alinhado ao que o passeio aceita ao abri-lo.
   Validado: 7/7 casos da regra de elegibilidade, migrations 065+066 rodadas em
-  Postgres 16 real (idempotentes), builds turista e cooperativa ok.
+  Postgres 16 real (idempotentes), builds turista e operador ok.
 
 - **2026-07-24 · Agente B (catálogo: voos de helicóptero Frisonfly como exclusivos)**
   — `065_heli_frisonfly_exclusivos.sql`: os 11 voos panorâmicos da tabela
@@ -1235,7 +1233,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   por `recordLegAccounting` (motor de pernas), que está DESLIGADO. E a **comissão
   de afiliado** (tabela `commissions`) nunca aparecia no resumo. Fixes: (1)
   `orderCommissionRows(booking,payment,...)` grava comissão da plataforma +
-  repasse à cooperativa no nível do pedido quando o motor de pernas está off
+  repasse ao operador no nível do pedido quando o motor de pernas está off
   (dentro do insert protegido por `ledger_created`, idempotente; % vem do
   `platform_split_pct` da coop ou do `payment_split_admin_pct` global) — ligado
   nos dois fluxos de aprovação (single + grupo). (2) `/api/admin/financial` passou
@@ -1302,7 +1300,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   tolerante). ÚNICA exceção fail-open: 2FA ainda NÃO provisionado (coluna
   `mfa_enabled` 42703 ou tabela `mfa_challenges` 42P01) → segue sem 2º fator para
   não brickar o acesso entre o deploy e o `migrate`. **Só TURISTAS**: admin e
-  cooperativa (operator, login por CNPJ) NÃO passam pelo 2º fator. Escape de
+  operador (operator, login por CNPJ) NÃO passam pelo 2º fator. Escape de
   operação: `UPDATE users SET mfa_enabled=false` destrava um turista específico.
   Turista sem telefone continua passando (não há canal p/ o código).
   **Turista**: Auth.jsx ganha o passo `VerifyMfa` (tela de código no login) e
@@ -1317,7 +1315,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   sem parcial, sem parte pega por outra coop. Backend: novo
   `POST /api/operator/bookings/group/:groupId/accept` (um único UPDATE atribui
   todas as reservas awaiting_acceptance do grupo à coop; guard 409 se outra coop
-  já pegou parte). Cooperativa: `handleAcceptCombo` chama `acceptGroup` (não mais
+  já pegou parte). Operador: `handleAcceptCombo` chama `acceptGroup` (não mais
   loop item-a-item), removido o botão "Aceitar" por item do ComboCard, rótulos
   "Combo"→"Pedido" e "Aceitar todos"→"Aceitar pedido". api.js coop: `acceptGroup`.
 
@@ -1337,16 +1335,16 @@ enxerga o trabalho do outro no próximo `git fetch`.
   (paridade total, sem fallback); build ok. Ainda em pt fixo: telas já
   parcialmente traduzidas antes (Bookings, Auth) podem ter sobras pontuais.
 
-- **2026-07-15 · Agente B (reputação no app da cooperativa)** — Complemento
+- **2026-07-15 · Agente B (reputação no app do operador)** — Complemento
   das avaliações: a coop agora vê a própria reputação. API:
   `GET /api/operator/reviews` (autenticado, `operator_id = req.user.id`) →
   `{ summary: {rating_average, rating_count, distribution 1..5}, reviews[] }`
   com autor + nome do serviço; tolerante à 060 ausente (42703 → vazio).
-  Front (cooperativa): nova página `/reputacao` (nota grande + barras de
+  Front (operador): nova página `/reputacao` (nota grande + barras de
   distribuição + comentários), item "Reputação" na Sidebar, e faixa-resumo
   clicável no Dashboard (aparece só com ≥1 avaliação). api.js: `getReviews`.
 
-- **2026-07-15 · Agente B (avaliações REAIS por cooperativa)** — Substituí os
+- **2026-07-15 · Agente B (avaliações REAIS por operador)** — Substituí os
   depoimentos fake da home por avaliações verificadas. **Migration 060**
   (`060_coop_reviews.sql`): adiciona `reviews.operator_id` (coop que executou,
   desnormalizado da reserva), backfill, índices e policy `reviews_public_read`
@@ -1376,10 +1374,10 @@ enxerga o trabalho do outro no próximo `git fetch`.
   (pt/en/es). Flag OFF = comportamento atual intacto. ⚠️ Ligar exige
   migration 023 + envio WhatsApp ok (checklist 0.6).
 
-- **2026-07-12 · Agente A (auditoria turista + cooperativa)** — Extensão da
+- **2026-07-12 · Agente A (auditoria turista + operador)** — Extensão da
   auditoria aos outros 2 apps: chamadas × rotas (turista 73, coop 41 — tudo
   casa) e varredura de crash: turista 14 páginas (logado/deslogado) e
-  cooperativa 9 páginas — **zero erro**. StoryPublisher do turista confere
+  operador 9 páginas — **zero erro**. StoryPublisher do turista confere
   com o guard novo (UI só admin, rota exige admin). Hardening:
   `/affiliate/activate` com rate-limit (authLimiter); `Register.jsx` legado
   removido (era órfão — o cadastro real é o `Auth.jsx`). Checklist atualizado.
@@ -1483,7 +1481,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   ⚠️ Rodar **migration 055** no Supabase antes de usar. Convive com o
   partner_slug (indicação ≠ venda direta; podem coexistir na mesma reserva).
 
-- **2026-07-10 · Agente B (link de vendas direto por cooperativa — migration 054)**
+- **2026-07-10 · Agente B (link de vendas direto por operador — migration 054)**
   — Cada coop ganha `users.partner_slug` (único; backfill p/ operadores ativos).
   Novo `GET /api/partner/:slug` (público, só nome/foto). `/payments/request` e
   `/cart-request` aceitam `partner_slug` (NUNCA operator_id cru): o servidor
@@ -1493,7 +1491,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
   `/c/:slug` (grava atribuição 7 dias em localStorage), selo verde "Reservando
   com X" no Layout (X remove), Resumo → se nascer awaiting_payment vai DIRETO
   pro pagamento; carrinho envia partner_slug (grupo inteiro atribuído).
-  Cooperativa: card "Meu link de vendas" no Perfil (copiar + WhatsApp);
+  Operador: card "Meu link de vendas" no Perfil (copiar + WhatsApp);
   `GET /operator/profile` devolve partner_slug (⚠️ exige migration 054 ANTES do
   deploy da API — senão o Perfil da coop quebra com 42703). BÔNUS: split de
   pagamento de GRUPO com motor OFF agora reconhece grupo 100% de uma coop
@@ -1517,13 +1515,13 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 - **2026-07-09 · Agente B (passeios: tradicionais vs exclusivos)** — Novo campo
   `tours.is_exclusive` (migration **051**). **Tradicional** (padrão): carrinho/
-  combo, 1 pagamento, aceito como **reserva inteira por 1 cooperativa**.
+  combo, 1 pagamento, aceito como **reserva inteira por 1 operador**.
   **Exclusivo**: venda direta, 1 por vez, **sem carrinho** — o card leva direto
   a `/passeios/:id` (TourDetail → Resumo da reserva). Turista `Tours.jsx`: dois
   carrosseis ("Passeios tradicionais" + "Passeios exclusivos"). Admin: toggle
   "Passeio exclusivo" no catálogo. Backend: `catalog.js` grava, `tours.js`
   devolve o campo. **Decisão (1a): motor de pernas fica DESLIGADO** — reserva
-  inteira, 1 coop (o fluxo legado já existe; a cooperativa já entende itens
+  inteira, 1 coop (o fluxo legado já existe; o operador já entende itens
   `kind:'booking'`). ⚠️ Rodar no Supabase: migration 051 **e**
   `UPDATE system_settings SET setting_value='false' WHERE setting_key='booking_legs_engine_enabled';`
   \+ limpar pernas de teste. Próx. migration livre: **052**.
@@ -1700,7 +1698,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 ## Estado da plataforma (resumo p/ contexto rápido)
 
 - Flag `booking_legs_engine_enabled` = **OFF** (decisão de produto 2026-07-10:
-  reserva INTEIRA aceita por 1 cooperativa, sem divisão por pernas; passeios
+  reserva INTEIRA aceita por 1 operador, sem divisão por pernas; passeios
   exclusivos = venda direta). O motor de pernas continua no código, atrás da
   flag, caso volte a ser necessário.
 - Última migration aplicada em prod: **048** (cancel_overdue_leg_bookings).

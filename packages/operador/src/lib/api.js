@@ -1,6 +1,6 @@
 const BASE = import.meta.env.VITE_API_URL || ''
 
-// Prefixo próprio: turista/cooperativa/admin compartilham o mesmo domínio
+// Prefixo próprio: turista/operador/admin compartilham o mesmo domínio
 // (sobrejeri.github.io/<subpath>) e localStorage é por origem, não por path —
 // sem prefixo, logar num app sobrescrevia a sessão dos outros.
 const STORAGE = {
@@ -12,7 +12,7 @@ const STORAGE = {
 function getToken()   { return localStorage.getItem(STORAGE.token)   }
 function getRefresh() { return localStorage.getItem(STORAGE.refresh) }
 
-// Renova o token via API. A cooperativa autentica pela API (não pelo client
+// Renova o token via API. O operador autentica pela API (não pelo client
 // do Supabase no browser), então NÃO existe sessão de client para
 // refreshSession() usar — tentar isso fazia todo refresh falhar e derrubava o
 // login. O refresh token guardado é a fonte de verdade, igual ao app turista.
@@ -137,7 +137,7 @@ export const api = {
   deleteVehicle: (id)          => request(`/api/vehicles/${id}`, { method: 'DELETE' }),
 
   // Financeiro
-  // Endpoints operator-scoped (filtram pelas reservas da própria cooperativa).
+  // Endpoints operator-scoped (filtram pelas reservas da próprio operador).
   // NÃO usar /api/admin/financial* aqui — aquilo é só admin (403 para coop).
   getFinancial:      (params = {}) => request(`/api/operator/financial?${new URLSearchParams(params)}`),
   getFinancialDaily: (params = {}) => request(`/api/operator/financial-daily?${new URLSearchParams(params)}`),
@@ -155,7 +155,7 @@ export const api = {
   // Catálogo — Transfers (serviços-pai das rotas)
   getCatalogTransfers: () => request('/api/catalog/transfers'),
 
-  // Catálogo — Rotas de Transfer (somente leitura para cooperativa)
+  // Catálogo — Rotas de Transfer (somente leitura para operador)
   getCatalogRoutes: () => request('/api/catalog/transfer-routes'),
 
   // Perfil do operador + conta de recebimento
@@ -163,10 +163,10 @@ export const api = {
   updateProfile: (body)       => request('/api/operator/profile', { method: 'PATCH', body }),
   uploadPhoto:   (photo_data) => request('/api/auth/me/photo', { method: 'POST', body: { photo_data } }),
 
-  // Reputação: avaliações verificadas recebidas por esta cooperativa
+  // Reputação: avaliações verificadas recebidas por este operador
   getReviews:    ()           => request('/api/operator/reviews'),
 
-  // Preferências da cooperativa (opt-in por serviço)
+  // Preferências do operador (opt-in por serviço)
   getPreferences: () => request('/api/operator/preferences'),
   setPreference:  (type, entityId, isActive) =>
     request(`/api/operator/preferences/${type}/${entityId}`, {

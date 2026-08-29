@@ -21,7 +21,7 @@ const fmtBRL = (v) =>
 export async function cancelAffiliateCommission(booking) {
   if (!booking?.id) return { cancelled: 0, skipped: 'sem reserva' };
 
-  // Comissões de AFILIADO desta reserva (as de cooperativa têm affiliate_id nulo).
+  // Comissões de AFILIADO desta reserva (as de operador têm affiliate_id nulo).
   const { data: rows, error } = await supabase
     .from('commissions')
     .select('id, affiliate_id, commission_amount, payout_status')

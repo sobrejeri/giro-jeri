@@ -13,7 +13,7 @@
 Giro Jeri is a tourism and transportation coordination platform for Jericoacoara, CE, Brazil. It connects three user audiences in a two-sided marketplace:
 
 - **Turista (Tourist):** Browse, book, and pay for tours and transfers. Track reservations in real-time.
-- **Cooperativa (Driver Cooperative):** Accept bookings, manage vehicle availability, quote custom routes, track earnings.
+- **Operador (Driver Cooperative):** Accept bookings, manage vehicle availability, quote custom routes, track earnings.
 - **Admin:** Manage catalog (tours/transfers/vehicles/pricing), financial ledger, seasons/holidays, users, operational dashboard.
 
 ### User Flows
@@ -25,7 +25,7 @@ Giro Jeri is a tourism and transportation coordination platform for Jericoacoara
 4. Book & pay (Mercado Pago webhook)
 5. Receive booking code, track status → review post-service
 
-**Cooperativa:**
+**Operador:**
 1. Accept auto-dispatch bookings (system-assigned)
 2. Quote custom transfer routes (Maps origin→destination)
 3. Turista accepts/rejects quote within 2h
@@ -46,7 +46,7 @@ Giro Jeri is a tourism and transportation coordination platform for Jericoacoara
 ┌─────────────────────────────────────────────────────────────┐
 │                   3 Vite/React SPAs                         │
 ├─────────────────────┬──────────────────┬────────────────────┤
-│  turista (5173)     │  cooperativa      │  admin (5175)      │
+│  turista (5173)     │  operador      │  admin (5175)      │
 │  - Browse           │  (5174)           │  - Catalog CRUD    │
 │  - Book             │  - Quote mgmt     │  - Pricing         │
 │  - Pay              │  - Dispatch       │  - Financial       │
@@ -933,7 +933,7 @@ External APIs:
 | special_notes | TEXT | | "Need car seat for child" |
 | source_channel | source_channel | DEFAULT 'app' | |
 | status | quote_status | DEFAULT 'pending_quote' | Workflow: pending_quote → quoted → accepted → paid OR rejected/expired/cancelled |
-| quoted_price | DECIMAL(10,2) | | Cooperativa's offer |
+| quoted_price | DECIMAL(10,2) | | Operador's offer |
 | quoted_by_user_id | UUID | FK | Which operator quoted |
 | quoted_at | TIMESTAMPTZ | | |
 | quote_notes | TEXT | | "Needs extra stop: Preá" |
@@ -955,8 +955,8 @@ External APIs:
 
 **Workflow:**
 1. POST /api/transfers/quotes → creates quote in `pending_quote` status
-2. Notifies cooperativa (internal notification)
-3. Cooperativa PATCH /api/transfers/quotes/:id/quote → sets quoted_price, status = `quoted`, expires_at = now + 2h
+2. Notifies operador (internal notification)
+3. Operador PATCH /api/transfers/quotes/:id/quote → sets quoted_price, status = `quoted`, expires_at = now + 2h
 4. If turista accepts (POST /api/transfers/quotes/:id/accept): status = `accepted`
 5. Turista pays → booking created → status = `paid`
 6. Or turista rejects (POST /api/transfers/quotes/:id/reject): status = `rejected`
@@ -986,7 +986,7 @@ External APIs:
 ### 2.3 Views (Denormalized Queries)
 
 #### **v_quotes_dashboard**
-Used by cooperativa to see pending quotes (migration 002, lines 304–338)
+Used by operador to see pending quotes (migration 002, lines 304–338)
 
 Columns:
 - id, status, client_name, client_phone
@@ -1149,8 +1149,8 @@ Columns:
 | POST | /calculate | No | - | {region_id, route_id, service_date, service_time, coupon_code?} | {subtotalAmount, seasonAdditional, ...} | Calc tabbed transfer price |
 | POST | /quotes | Yes | tourist | {region_id, origin_place_id?, origin_place_name, origin_lat?, origin_lon?, destination_place_id?, destination_place_name, destination_lat?, destination_lon?, service_date, service_time, people_count, luggage_count?, special_notes?} | {id, status: "pending_quote", ...} | Request custom route quote |
 | GET | /quotes | Yes | tourist | - | [{id, status, origin_place_name, destination_place_name, quoted_price, expires_at, ...}] | User's quotes |
-| GET | /quotes/pending | Yes | operator | - | {view from v_quotes_dashboard: status, client_name, is_urgent, hours_to_expire, ...} | Cooperativa sees pending quotes |
-| PATCH | /quotes/:id/quote | Yes | operator | {quoted_price, quote_notes?} | {updated quote: status: "quoted", expires_at, ...} | Cooperativa submits price |
+| GET | /quotes/pending | Yes | operator | - | {view from v_quotes_dashboard: status, client_name, is_urgent, hours_to_expire, ...} | Operador sees pending quotes |
+| PATCH | /quotes/:id/quote | Yes | operator | {quoted_price, quote_notes?} | {updated quote: status: "quoted", expires_at, ...} | Operador submits price |
 | POST | /quotes/:id/accept | Yes | tourist | - | {status: "accepted"} | Turista accepts quote |
 | POST | /quotes/:id/reject | Yes | tourist | {rejection_reason?} | {status: "rejected"} | Turista rejects quote |
 | POST | / | Yes | admin | {region_id, name, slug, ...} | {created transfer} | Create transfer |
@@ -1444,7 +1444,7 @@ Review post-service
 
 ---
 
-## 5. Frontend Cooperativa (packages/cooperativa)
+## 5. Frontend Operador (packages/operador)
 
 ### Main User Flow
 
@@ -1547,7 +1547,7 @@ Login (user_type = 'admin') → Dashboard
 - Tours (private): sum of vehicle base_prices × quantity
 - Tours (shared): shared_price_per_person × people_count
 - Transfers (tabbed): transfer_route.default_price
-- Transfers (quoted): cooperativa sets price manually
+- Transfers (quoted): operador sets price manually
 
 **High Season Addition:**
 - Date range: July 1 – January 31 (annual rule)
@@ -1663,7 +1663,7 @@ margin_percent = ((gross - fee - commissions) / gross) × 100
 - After X days (configurable), status → 'ready'
 - Batch payout to driver's bank account → 'paid'
 
-**Driver View (Cooperativa App):**
+**Driver View (Operador App):**
 - Earnings dashboard: sum of commissions (pending + ready + paid)
 - Payout schedule: next payout date, total amount
 
@@ -1675,10 +1675,10 @@ margin_percent = ((gross - fee - commissions) / gross) × 100
 
 ```
 T=0s          T=request           T=quote+2h              T=quote+3h
-User submits  Cooperativa         Client has 2h to decide Expires (auto)
+User submits  Operador         Client has 2h to decide Expires (auto)
               notified            
               ↓
-              ~T=5min: Cooperativa reviews & proposes price
+              ~T=5min: Operador reviews & proposes price
               ↓
               T=request+2h: Client accepts or rejects
                 ├─ Accept: status = 'accepted', awaits payment
@@ -1695,7 +1695,7 @@ User submits  Cooperativa         Client has 2h to decide Expires (auto)
 - Enforced in POST /api/transfers/quotes & POST /api/bookings
 
 **Quote Expiry:**
-- Cooperativa submits price at T=0
+- Operador submits price at T=0
 - Client has `quote_expiry_hours` (default 2h) to respond
 - Automation job runs every 15min: sets status = 'expired' if expires_at < now
 
@@ -1805,7 +1805,7 @@ MERCADO_PAGO_ACCESS_TOKEN=...
 
 # CORS Origins
 TURISTA_URL=https://turista.giro-jeri.com
-COOP_URL=https://cooperativa.giro-jeri.com
+COOP_URL=https://operador.giro-jeri.com
 ADMIN_URL=https://admin.giro-jeri.com
 
 # Email/Notifications
@@ -1824,7 +1824,7 @@ VITE_SUPABASE_ANON_KEY=...
 VITE_GOOGLE_MAPS_API_KEY=...
 ```
 
-### Cooperativa Frontend (packages/cooperativa/.env)
+### Operador Frontend (packages/operador/.env)
 
 ```bash
 VITE_API_URL=https://api.giro-jeri.com
@@ -1858,7 +1858,7 @@ VITE_SUPABASE_ANON_KEY=...
 | **BOOKING_VEHICLES** | List field on Booking or separate thing | ✅ Native | Store snapshot of selected vehicles |
 | **PAYMENTS** | `Thing: Payment` (child of Booking) | ✅ Native | MP integration via plugin or webhook |
 | **FINANCIAL_LEDGER** | `Thing: LedgerEntry` | ✅ Native | Repeating group to view all; filters for daily/monthly |
-| **COMMISSIONS** | `Thing: Commission` (child of Booking) | ✅ Native | Calculated on payment; displayed in cooperativa earnings |
+| **COMMISSIONS** | `Thing: Commission` (child of Booking) | ✅ Native | Calculated on payment; displayed in operador earnings |
 | **HIGH_SEASON_RULES** | `Thing: SeasonRule` | ✅ Native | Admin form to create; date range, % increase stored |
 | **COUPONS** | `Thing: Coupon` | ✅ Native | Code, discount %, date range, usage limits |
 | **COUPON_REDEMPTIONS** | `Thing: CouponRedemption` | ✅ Native | Audit log; linked to booking |
@@ -2029,7 +2029,7 @@ VITE_SUPABASE_ANON_KEY=...
 3. Track (status updates)
 4. Review (post-service)
 
-**Cooperativa:**
+**Operador:**
 1. Accept dispatch
 2. Quote routes
 3. Execute (mark status)

@@ -11,7 +11,7 @@ import { api } from '../lib/api'
 //
 // variant='inline' → botãozinho da lista de despacho
 // variant='block'  → item grande do modal pós-despacho
-export default function SendOsButton({ booking, form, cooperativa, variant = 'inline' }) {
+export default function SendOsButton({ booking, form, operador, variant = 'inline' }) {
   const [state, setState] = useState('idle')   // idle | sending | ok | error
   const [msg, setMsg]     = useState('')
 

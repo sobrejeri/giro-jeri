@@ -246,7 +246,7 @@ export default function HomeDesktop({
   const routes = Array.isArray(routesData?.routes) ? routesData.routes
                : Array.isArray(routesData) ? routesData : []
 
-  // Avaliações REAIS (mais recentes) — reputação das cooperativas. Se ainda
+  // Avaliações REAIS (mais recentes) — reputação dos operadores. Se ainda
   // não houver nenhuma, a seção some (nada de depoimento inventado).
   const { data: reviewsData } = useQuery({
     queryKey: ['home-reviews'],
@@ -582,7 +582,7 @@ export default function HomeDesktop({
         </div>
       </section>
 
-      {/* ── COOPERATIVAS PARCEIRAS ───────────────────────────── */}
+      {/* ── OPERADORES PARCEIRAS ───────────────────────────── */}
       {partners.length > 0 && (
         <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">

@@ -13,7 +13,7 @@ Plataforma digital de reservas para passeios e transfers em Jericoacoara.
 | App | URL | Acesso |
 |-----|-----|--------|
 | Turista | https://sobrejeri.github.io/giro-jeri/ | Público |
-| Cooperativa | https://sobrejeri.github.io/giro-jeri/cooperativa/ | `operator` ou `admin` |
+| Operador | https://sobrejeri.github.io/giro-jeri/operador/ | `operator` ou `admin` |
 | Admin | https://sobrejeri.github.io/giro-jeri/admin/ | `admin` |
 | API | https://giro-jeri-api.onrender.com | Backend (Render) |
 
@@ -25,7 +25,7 @@ Plataforma digital de reservas para passeios e transfers em Jericoacoara.
 giro-jeri/
 ├── packages/
 │   ├── turista/        # App do turista (React + Vite, mobile-first)
-│   ├── cooperativa/    # Dashboard da cooperativa (React + Vite)
+│   ├── operador/    # Dashboard do operador (React + Vite)
 │   ├── admin/          # Dashboard administrativo (React + Vite)
 │   └── api/            # Backend Node.js + Express
 │       └── src/
@@ -109,7 +109,7 @@ ADMIN_URL=http://localhost:5175
 ```
 
 ```bash
-# packages/cooperativa/.env e packages/admin/.env
+# packages/operador/.env e packages/admin/.env
 VITE_SUPABASE_URL=https://poqiioyadddbuxcohwjy.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon_key>
 VITE_API_URL=http://localhost:3001
@@ -119,13 +119,13 @@ VITE_API_URL=http://localhost:3001
 
 ```bash
 npm install
-npm run dev:all       # API + turista + cooperativa + admin
+npm run dev:all       # API + turista + operador + admin
 ```
 
 | App | URL local |
 |-----|-----------|
 | Turista | http://localhost:5173 |
-| Cooperativa | http://localhost:5174 |
+| Operador | http://localhost:5174 |
 | Admin | http://localhost:5175 |
 | API | http://localhost:3001 |
 
@@ -144,7 +144,7 @@ SELECT id, 'Nome', 'email@exemplo.com', 'admin'
 FROM auth.users WHERE email = 'email@exemplo.com'
 ON CONFLICT (email) DO UPDATE SET user_type = 'admin', auth_id = EXCLUDED.auth_id;
 
--- Operador (cooperativa)
+-- Operador (operador)
 INSERT INTO users (auth_id, full_name, email, user_type)
 SELECT id, 'Nome', 'email@exemplo.com', 'operator'
 FROM auth.users WHERE email = 'email@exemplo.com'
@@ -181,7 +181,7 @@ Secrets obrigatórios no repositório GitHub:
 | Perfil | Acesso |
 |--------|--------|
 | `tourist` | App turista — reservas, pagamentos |
-| `operator` | Dashboard cooperativa — operação, despacho, cotações |
+| `operator` | Dashboard operador — operação, despacho, cotações |
 | `admin` | Acesso total — catálogo, usuários, financeiro |
 
 ---
@@ -231,7 +231,7 @@ GET    /api/admin/operational      (operator+)
 - [x] Schema completo (30+ tabelas) + RLS
 - [x] API com motor de preços e cotações
 - [x] App turista mobile-first com design de aplicativo
-- [x] Dashboard cooperativa (kanban, cotações, veículos)
+- [x] Dashboard operador (kanban, cotações, veículos)
 - [x] Dashboard administrativo (catálogo, usuários, financeiro)
 - [x] Deploy automático GitHub Pages + Render
 - [x] Auth via Supabase direto no frontend

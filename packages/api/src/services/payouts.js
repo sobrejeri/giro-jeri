@@ -71,7 +71,7 @@ export function calcularRepasses(total, operador, modal, pctPlataformaGeral = 0)
     out.push({ kind: 'commission', payee_user_id: operador, amount: partes.comissao / 100 });
   }
   // A execução só sai AQUI quando o executor é conhecido no pagamento — o
-  // executor fixo do modal. Quando quem executa é o motorista que a cooperativa
+  // executor fixo do modal. Quando quem executa é o motorista que o operador
   // manda a campo, ninguém sabe quem é ainda: essa linha nasce na conclusão,
   // em `calcularRepasseExecucao`.
   if (partes.execucao > 0 && partes.executorFixo) {
@@ -113,7 +113,7 @@ export function repartirReserva(total, operador, modal, pctPlataformaGeral = 0) 
   //
   // Isto é deliberadamente fail-closed: a migration 082 sozinha não pode mudar
   // para onde vai o dinheiro de nenhuma reserva. Se um modal com comissão
-  // zerada passasse a dividir, a cooperativa receberia ZERO e o valor inteiro
+  // zerada passasse a dividir, o operador receberia ZERO e o valor inteiro
   // iria para um motorista — do dia para a noite, sem ninguém pedir.
   const divide = executorFixo != null || pctAceite > 0;
   if (!divide) {
@@ -144,7 +144,7 @@ async function contextoDoRateio(booking) {
 }
 
 /**
- * Lança o repasse de EXECUÇÃO quando a cooperativa declara, na conclusão, quem
+ * Lança o repasse de EXECUÇÃO quando o operador declara, na conclusão, quem
  * foi a campo. Só existe separado do resto porque no momento do pagamento essa
  * pessoa ainda é desconhecida — o serviço nem aconteceu.
  *
@@ -219,7 +219,7 @@ export async function gerarRepasseExecucao(bookingId, executor) {
 export async function gerarRepasses(booking, total) {
   try {
     if (!booking?.id) return { skipped: 'sem reserva' };
-    if (!booking.operator_id) return { skipped: 'reserva sem cooperativa' };
+    if (!booking.operator_id) return { skipped: 'reserva sem operador' };
 
     const { modal, geral } = await contextoDoRateio(booking);
     const repasses = calcularRepasses(total, booking.operator_id, modal, geral);

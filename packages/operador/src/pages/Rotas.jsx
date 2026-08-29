@@ -49,7 +49,7 @@ export default function Rotas() {
       <div>
         <h2 className="text-base font-semibold text-gray-900">Rotas de Transfer</h2>
         <p className="text-xs text-gray-500 mt-0.5">
-          Selecione as rotas que sua cooperativa atende.
+          Selecione as rotas que seu operador atende.
           Apenas administradores podem criar ou editar rotas.
         </p>
       </div>

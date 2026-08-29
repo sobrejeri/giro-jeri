@@ -461,7 +461,7 @@ router.post('/:id/cancel', authenticate, async (req, res, next) => {
     const canceledByTourist = req.user.user_type === 'tourist';
     const tipo = serviceLabelBk(booking.service_type);
     if (canceledByTourist) {
-      // Cliente cancelou → avisa cooperativas + admin (relevante se já estava paga)
+      // Cliente cancelou → avisa operadores + admin (relevante se já estava paga)
       if (booking.status_commercial === 'paid' || booking.operator_id) {
         notifyOperatorsAndAdmin({
           bookingId:   booking.id,

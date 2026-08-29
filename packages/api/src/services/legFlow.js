@@ -57,10 +57,10 @@ export async function ensurePaymentDeadlineAndNotify(bookingId, { comboComplete 
   if (upErr) throw upErr
   if (!upd?.length) return booking // outro aceite ganhou a corrida; já notificado
 
-  const title = comboComplete ? 'Cooperativa(s) aceitaram! 🎉' : 'Um veículo foi aceito 🚗'
+  const title = comboComplete ? 'Operador(s) aceitaram! 🎉' : 'Um veículo foi aceito 🚗'
   const body  = comboComplete
     ? `Seu pedido (${booking.booking_code}) foi aceito. Pague até 15 min antes do passeio para confirmar.`
-    : `Uma cooperativa aceitou parte do seu pedido (${booking.booking_code}). Confirme e pague o veículo aceito, ou cancele — até 15 min antes do passeio.`
+    : `Um operador aceitou parte do seu pedido (${booking.booking_code}). Confirme e pague o veículo aceito, ou cancele — até 15 min antes do passeio.`
 
   await notifyUser({
     userId:      booking.user_id,

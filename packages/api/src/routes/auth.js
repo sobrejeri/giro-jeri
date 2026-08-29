@@ -315,7 +315,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     if (body.cnpj) {
-      // Documento do operador: CNPJ (cooperativa) OU CPF (operador pessoa
+      // Documento do operador: CNPJ (operador) OU CPF (operador pessoa
       // física). Os dois usam o MESMO painel e o mesmo user_type 'operator' —
       // muda só o documento. O campo continua chamando `cnpj` no corpo por
       // compatibilidade com as versões já instaladas do app.

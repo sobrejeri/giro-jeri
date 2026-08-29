@@ -241,7 +241,7 @@ router.get('/routes', async (req, res, next) => {
 // Antes o app listava TODOS os veículos com is_transfer_allowed, para qualquer
 // rota. Com o translado aéreo isso quebra dos dois lados: o cliente podia
 // escolher um buggy num trecho de helicóptero (e a solicitação ia para as
-// cooperativas de buggy, porque o filtro de frota olha os veículos da reserva),
+// operadores de buggy, porque o filtro de frota olha os veículos da reserva),
 // e o helicóptero aparecia como opção num translado comum.
 //
 // Regra:
@@ -426,7 +426,7 @@ router.post('/quotes', authenticate, async (req, res, next) => {
 
     if (error) throw error;
 
-    // Avisa cooperativas + admin sobre a nova solicitação de translado personalizado
+    // Avisa operadores + admin sobre a nova solicitação de translado personalizado
     await notifyOperatorsAndAdmin({
       // Mesmo corte do WhatsApp logo abaixo: translado personalizado é de rua.
       fleetModalSlug: 'terrestre',
@@ -435,7 +435,7 @@ router.post('/quotes', authenticate, async (req, res, next) => {
       body:        `${req.user.full_name} pediu um translado personalizado: ${body.origin_place_name} → ${body.destination_place_name} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
     });
 
-    // WhatsApp pras cooperativas (fire-and-forget) — mesma estratégia da
+    // WhatsApp pras operadores (fire-and-forget) — mesma estratégia da
     // solicitação normal, mas com mensagem indicando que é cotação personalizada
     // e que precisa enviar valor (não só aceitar).
     notifyOperatorsNewQuote(supabase, data).catch((err) =>
@@ -464,7 +464,7 @@ router.get('/quotes', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── GET /api/transfers/quotes/pending — cooperativa ────
+// ── GET /api/transfers/quotes/pending — operador ────
 router.get('/quotes/pending', authenticate, requireOperator, async (req, res, next) => {
   try {
     const { data, error } = await supabase
@@ -507,7 +507,7 @@ router.get('/quotes/history', authenticate, requireOperator, async (req, res, ne
   } catch (err) { next(err); }
 });
 
-// ── PATCH /api/transfers/quotes/:id/quote — cooperativa define preço
+// ── PATCH /api/transfers/quotes/:id/quote — operador define preço
 router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res, next) => {
   try {
     const quoted_price = Number(req.body.quoted_price);
@@ -560,7 +560,7 @@ router.patch('/quotes/:id/quote', authenticate, requireOperator, async (req, res
       .single();
 
     if (error) { console.error('[quote] update falhou:', error); return res.status(500).json({ error: error.message }); }
-    if (!data)  return res.status(409).json({ error: 'Cotação já respondida por outra cooperativa.' });
+    if (!data)  return res.status(409).json({ error: 'Cotação já respondida por outro operador.' });
 
     // Notifica o cliente na central do app (best-effort)
     notifyUser({
@@ -607,7 +607,7 @@ router.post('/quotes/:id/accept', authenticate, async (req, res, next) => {
       .update({ status: 'accepted', client_responded_at: new Date().toISOString() })
       .eq('id', quote.id);
 
-    // Cria a reserva já atribuída à cooperativa que cotou — pula a fila geral
+    // Cria a reserva já atribuída ao operador que cotou — pula a fila geral
     // de aceite, pois o preço e o prestador já foram negociados na cotação.
     // Janela: cliente tem 24h pra pagar; depois disso o sweep do admin vê
     // como expirada e libera a agenda da coop (sem isso, ficava preso).

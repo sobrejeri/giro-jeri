@@ -8,14 +8,14 @@
 ## 1. Visão
 
 Uma reserva com vários veículos vira um **pedido** com várias **pernas** (modelo
-carrinho multi-seller). Cada perna é roteável a **uma** cooperativa de forma
+carrinho multi-seller). Cada perna é roteável a **uma** operador de forma
 independente; o pedido é a unidade **tudo-ou-nada** (dono do cliente, do total e
 do pagamento).
 
-- **Cada cooperativa** vê cada perna como uma solicitação isolada (não vê as
+- **Cada operador** vê cada perna como uma solicitação isolada (não vê as
   irmãs nem o total).
 - **O cliente** vê **uma** solicitação com o status de confirmação por perna.
-- **O admin** é a rede de segurança: opera na SPA da cooperativa em **modo
+- **O admin** é a rede de segurança: opera na SPA do operador em **modo
   elevado** (Etapa 1), com uma "Central de combos incompletos".
 
 ## 2. Conceitos
@@ -65,7 +65,7 @@ do pagamento).
 Como o pagamento só ocorre **depois** de todas as pernas aceitas (R3), na hora de
 cobrar **todos os recebedores já são conhecidos** — então usa-se o **split nativo
 do Mercado Pago** (múltiplos recebedores num único pagamento, `application_fee`
-no Checkout Bricks). Cada cooperativa recebe **direto na própria conta MP** a
+no Checkout Bricks). Cada operador recebe **direto na própria conta MP** a
 fatia da(s) perna(s) que executou; a plataforma retém a comissão.
 
 - **Ninguém recebe dinheiro de passagem.** O valor não transita por uma conta

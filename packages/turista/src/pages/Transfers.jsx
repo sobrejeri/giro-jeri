@@ -440,7 +440,7 @@ export default function Transfers() {
   const [customOrigin,   setCustomOrigin]   = useState('')
   const [customDest,     setCustomDest]     = useState('')
   // Metadados do place picado (place_id + coordenadas) — quando o usuário escolhe
-  // um item da busca do Maps, guardamos pra mandar para a cooperativa junto da
+  // um item da busca do Maps, guardamos pra mandar para o operador junto da
   // solicitação. Se digitar livre sem selecionar, segue só com o texto mesmo.
   const [customOriginMeta, setCustomOriginMeta] = useState(null)
   const [customDestMeta,   setCustomDestMeta]   = useState(null)
@@ -499,7 +499,7 @@ export default function Transfers() {
 
   // Translado EXCLUSIVO (ex.: helicóptero) sai da lista comum e ganha carrossel
   // próprio: misturar um trecho de R$ 3.000 com um de R$ 200 na mesma lista
-  // confunde o cliente — e a cooperativa que só opera helicóptero recebe
+  // confunde o cliente — e o operador que só opera helicóptero recebe
   // solicitação de buggy. Mesma separação dos passeios exclusivos.
   const rotasExclusivas = todasRotas.filter((r) => r.transfers?.is_exclusive)
   const routes          = todasRotas.filter((r) => !r.transfers?.is_exclusive)

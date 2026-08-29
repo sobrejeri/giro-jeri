@@ -51,7 +51,7 @@ app.use(cors({
 // Webhook do gateway: precisa do body raw, não parseado
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 
-// 8mb: o maior corpo é a OS em PDF (base64) que a cooperativa envia no
+// 8mb: o maior corpo é a OS em PDF (base64) que o operador envia no
 // WhatsApp. O app já reduz o logo e refaz sem ele quando passa de ~3mb — este
 // limite é só a folga para o caso de um PDF fora do padrão.
 app.use(express.json({ limit: '8mb' }));

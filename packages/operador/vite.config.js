@@ -27,7 +27,7 @@ function emitVersionJson() {
 export default defineConfig({
   plugins: [react(), emitVersionJson()],
   define:  { __BUILD_ID__: JSON.stringify(buildId) },
-  base: isProd ? `${SITE_ROOT}/cooperativa/` : '/',
+  base: isProd ? `${SITE_ROOT}/operador/` : '/',
   server: {
     port: 5174,
     proxy: {

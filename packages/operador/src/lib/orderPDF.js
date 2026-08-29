@@ -106,7 +106,7 @@ function dataField(doc, label, value, x, y, maxW) {
 }
 
 // ── Gerador principal (síncrono — logo já em base64) ───
-export function generateOrderPDF(booking, form, cooperativa = null) {
+export function generateOrderPDF(booking, form, operador = null) {
   const doc   = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -126,16 +126,16 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   const modo     = booking.booking_mode  === 'shared' ? 'Compartilhado' : 'Privativo'
   const colW2    = CW / 2 - 4
 
-  const coopName    = cooperativa?.full_name      || 'Turiva Passeios & Transfers'
-  const coopCNPJ    = cooperativa?.document_number
-  const coopPhone   = cooperativa?.phone
-  const coopAddress = cooperativa?.address
-  const coopCEP     = cooperativa?.cep
-  const coopLogoB64 = cooperativa?.logoBase64 || null
+  const coopName    = operador?.full_name      || 'Turiva Passeios & Transfers'
+  const coopCNPJ    = operador?.document_number
+  const coopPhone   = operador?.phone
+  const coopAddress = operador?.address
+  const coopCEP     = operador?.cep
+  const coopLogoB64 = operador?.logoBase64 || null
 
   let y = 0
 
-  // ── Cabeçalho branco — Cooperativa ────────────────────
+  // ── Cabeçalho branco — Operador ────────────────────
   const HEADER_H = 30
   doc.setFillColor(...WHITE)
   doc.rect(0, 0, pageW, HEADER_H, 'F')
@@ -163,7 +163,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
     drawLogoPlaceholder(doc, coopName, LOGO_X, LOGO_Y, LOGO_SZ)
   }
 
-  // Nome da cooperativa
+  // Nome do operador
   const availW = COL - TEXT_X - 4
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
@@ -177,7 +177,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   doc.setTextColor(...GRAY)
 
   if (coopCNPJ) {
-    const docLabel = cooperativa?.document_type === 'cnpj' ? 'CNPJ' : 'CPF'
+    const docLabel = operador?.document_type === 'cnpj' ? 'CNPJ' : 'CPF'
     doc.text(`${docLabel}: ${coopCNPJ}`, TEXT_X, infoY)
     infoY += 4.5
   }
@@ -442,7 +442,7 @@ export function generateOrderPDF(booking, form, cooperativa = null) {
   y += 9
 
   // ── Termos de Responsabilidade ─────────────────────────
-  const coopRef = coopName !== 'Turiva Passeios & Transfers' ? `"${coopName}"` : 'a cooperativa parceira credenciada'
+  const coopRef = coopName !== 'Turiva Passeios & Transfers' ? `"${coopName}"` : 'o operador parceiro credenciado'
   const termsText =
     `TERMOS DE RESPONSABILIDADE: Este serviço será executado integralmente por ${coopRef}, ` +
     `que assume plena responsabilidade pela qualidade, segurança e cumprimento do contratado. ` +
@@ -501,10 +501,10 @@ function drawLogoPlaceholder(doc, name, x, y, size) {
 
 // PDF da OS em base64 (sem o prefixo data:) para o backend anexar no WhatsApp
 // do cliente e do motorista ao despachar. Usa exatamente o mesmo layout do PDF
-// que a cooperativa baixa/compartilha — uma única fonte de verdade.
+// que o operador baixa/compartilha — uma única fonte de verdade.
 // opts.noLogo → gera sem o logo (bem menor). Usado como segunda tentativa
 // quando a API recusa o corpo por tamanho.
-export async function orderPDFBase64(booking, form, cooperativa = null, opts = {}) {
+export async function orderPDFBase64(booking, form, operador = null, opts = {}) {
   const { noLogo = false, timeoutMs = 6000 } = opts
   // O anexo é um EXTRA: o despacho é a operação que não pode falhar. Por isso,
   // além do try/catch, há um teto de tempo — se o PDF não ficar pronto a tempo,
@@ -515,8 +515,8 @@ export async function orderPDFBase64(booking, form, cooperativa = null, opts = {
   const MAX_B64 = 3 * 1024 * 1024   // ~3 MB de base64 (~2,2 MB de PDF)
 
   const build = (async () => {
-    const enriched = noLogo ? { ...(cooperativa || {}), logoBase64: null }
-                            : await _enrichWithLogo(cooperativa)
+    const enriched = noLogo ? { ...(operador || {}), logoBase64: null }
+                            : await _enrichWithLogo(operador)
     const toB64 = (coop) => {
       const out = generateOrderPDF(booking, form, coop).output('datauristring')
       return out.slice(out.indexOf(',') + 1)
@@ -541,13 +541,13 @@ export async function orderPDFBase64(booking, form, cooperativa = null, opts = {
 }
 
 // ── Exportações públicas (assíncronas — carregam logo) ──
-export async function downloadOrderPDF(booking, form, cooperativa = null) {
-  const enriched = await _enrichWithLogo(cooperativa)
+export async function downloadOrderPDF(booking, form, operador = null) {
+  const enriched = await _enrichWithLogo(operador)
   generateOrderPDF(booking, form, enriched).save(`OS-${booking.booking_code}.pdf`)
 }
 
-export async function shareOrderPDF(booking, form, target = 'driver', cooperativa = null) {
-  const enriched = await _enrichWithLogo(cooperativa)
+export async function shareOrderPDF(booking, form, target = 'driver', operador = null) {
+  const enriched = await _enrichWithLogo(operador)
   const doc      = generateOrderPDF(booking, form, enriched)
   const blob     = doc.output('blob')
   const file     = new File([blob], `OS-${booking.booking_code}.pdf`, { type: 'application/pdf' })
@@ -578,13 +578,13 @@ export async function shareOrderPDF(booking, form, target = 'driver', cooperativ
   return 'downloaded'
 }
 
-async function _enrichWithLogo(cooperativa) {
-  if (!cooperativa) return null
-  const original   = await fetchBase64(cooperativa.profile_photo_url)
+async function _enrichWithLogo(operador) {
+  if (!operador) return null
+  const original   = await fetchBase64(operador.profile_photo_url)
   // Reduz antes de embutir; se a redução falhar, prefere ficar SEM logo a
   // inflar o PDF (o placeholder com as iniciais é desenhado no lugar).
   const logoBase64 = original ? await downscaleDataUrl(original) : null
-  return { ...cooperativa, logoBase64 }
+  return { ...operador, logoBase64 }
 }
 
 function buildDriverMessage(booking, form) {
@@ -638,6 +638,6 @@ function buildClientMessage(booking, form) {
     `_Obrigado por escolher a Turiva! Qualquer dúvida estamos à disposição._`,
     `_Sua Ordem de Serviço está em anexo._`,
     ``,
-    `⚠️ *AVISO DE RESPONSABILIDADE:* O serviço contratado será executado integralmente pela cooperativa parceira credenciada responsável por este atendimento. A plataforma TURIVA atua exclusivamente como intermediária tecnológica e não se responsabiliza pela execução do serviço, por imprevistos, danos ou ocorrências durante a sua realização.`,
+    `⚠️ *AVISO DE RESPONSABILIDADE:* O serviço contratado será executado integralmente pelo operador parceiro credenciado responsável por este atendimento. A plataforma TURIVA atua exclusivamente como intermediária tecnológica e não se responsabiliza pela execução do serviço, por imprevistos, danos ou ocorrências durante a sua realização.`,
   ].filter(Boolean).join('\n')
 }

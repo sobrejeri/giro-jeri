@@ -29,7 +29,7 @@ const VEHICLE_TYPE_LABEL = {
 
 const USER_TYPE_LABELS = {
   tourist:   'Turista',
-  operator:  'Operador (Cooperativa)',
+  operator:  'Operador (Operador)',
   agency:    'Agência',
   admin:     'Administrador',
   finance:   'Financeiro',
@@ -445,7 +445,7 @@ export default function Usuarios() {
                 label="CNPJ ou CPF"
                 value={importForm.cnpj}
                 onChange={(e) => setImportForm({ ...importForm, cnpj: e.target.value })}
-                placeholder="CNPJ (cooperativa) ou CPF (operador pessoa física)"
+                placeholder="CNPJ (operador) ou CPF (operador pessoa física)"
                 inputMode="numeric"
                 required
               />
@@ -488,7 +488,7 @@ export default function Usuarios() {
               label="CNPJ ou CPF"
               value={createForm.cnpj}
               onChange={(e) => setCreateForm({ ...createForm, cnpj: e.target.value })}
-              placeholder="CNPJ (cooperativa) ou CPF (operador pessoa física)"
+              placeholder="CNPJ (operador) ou CPF (operador pessoa física)"
               inputMode="numeric"
               required
             />
@@ -579,7 +579,7 @@ export default function Usuarios() {
                       <>
                         <div className="flex items-center gap-1.5 text-xs text-gray-400">
                           <AlertCircle size={12} className="text-amber-400 shrink-0" />
-                          Cooperativa não registrada no gateway
+                          Operador não registrada no gateway
                         </div>
                         <p className="text-[11px] text-gray-600">
                           Chave PIX: <span className="text-gray-300 font-mono">{modal.user.pix_key}</span>
@@ -599,7 +599,7 @@ export default function Usuarios() {
                       </>
                     ) : (
                       <p className="text-xs text-gray-600">
-                        Cooperativa ainda não cadastrou sua chave PIX no perfil.
+                        Operador ainda não cadastrou sua chave PIX no perfil.
                       </p>
                     )}
                   </div>
@@ -723,7 +723,7 @@ export default function Usuarios() {
         )}
       </Modal>
 
-      {/* Modal nível 2: gerenciar frota liberada da cooperativa */}
+      {/* Modal nível 2: gerenciar frota liberada do operador */}
       <FleetManagerModal
         open={modal?.mode === 'fleet'}
         operatorId={modal?.mode === 'fleet' ? modal.user.id : null}
@@ -734,7 +734,7 @@ export default function Usuarios() {
   )
 }
 
-// ── Modal nível 2: gerencia a frota liberada de uma cooperativa ───────────
+// ── Modal nível 2: gerencia a frota liberada de um operador ───────────
 // Auto-save por linha (otimista): cada toggle dispara sua própria mutation;
 // erro reverte o cache e mostra mensagem na linha; sucesso mostra micro-texto
 // que some em ~1.5s. O contador do rodapé reflete o cache ao vivo.
@@ -758,7 +758,7 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
   })
 
   // MODAIS operados — o corte grosso. Fica ACIMA da lista de veículos porque é
-  // por aqui que a escolha começa: "esta cooperativa faz terrestre" resolve
+  // por aqui que a escolha começa: "este operador faz terrestre" resolve
   // numa chave o que antes eram dezenas.
   const modalsKey = ['admin-operator-modals', operatorId]
   const { data: modais = [] } = useQuery({
@@ -847,9 +847,9 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
             devolve lista vazia), e aí a tela fica como era antes. */}
         {modais.length > 0 && (
           <div className="rounded-xl border border-gray-700 bg-gray-900/40 p-3">
-            <p className="text-xs font-semibold text-gray-300">Em que meios esta cooperativa opera</p>
+            <p className="text-xs font-semibold text-gray-300">Em que meios este operador opera</p>
             <p className="text-[11px] text-gray-500 mt-0.5 mb-2">
-              Desmarcar um meio já tira a cooperativa de todas as solicitações dele —
+              Desmarcar um meio já tira o operador de todas as solicitações dele —
               sem precisar mexer veículo por veículo abaixo.
             </p>
             <div className="space-y-1.5">
@@ -888,7 +888,7 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
             </div>
 
             {/* Perfil de COMBO — pedido que junta meios diferentes (buggy +
-                barco). Ele vai INTEIRO para uma cooperativa só, então só faz
+                barco). Ele vai INTEIRO para um operador só, então só faz
                 sentido para quem opera mais de um meio. */}
             <div className="mt-3 pt-3 border-t border-gray-800">
               <div className="flex items-center gap-3">
@@ -896,7 +896,7 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
                   <p className="text-sm text-gray-200">Aceita pedidos combinados</p>
                   <p className="text-[11px] text-gray-500">
                     {meiosOperados > 1
-                      ? 'Pedido que junta meios diferentes (ex.: buggy + barco) vai inteiro para esta cooperativa.'
+                      ? 'Pedido que junta meios diferentes (ex.: buggy + barco) vai inteiro para este operador.'
                       : 'Só vale para quem opera mais de um meio — marque os meios acima primeiro.'}
                   </p>
                   {errorRow?.id === 'combo' && (

@@ -11,7 +11,7 @@ import { downloadOrderPDF } from '../lib/orderPDF'
 //
 // Substitui o envio do PDF como anexo pelo Z-API, que esbarrava no limite de
 // tamanho do corpo. Aqui o arquivo é gerado no próprio aparelho de quem abre,
-// no botão "Baixar PDF" — usando o MESMO gerador da cooperativa.
+// no botão "Baixar PDF" — usando o MESMO gerador do operador.
 const BASE = import.meta.env.VITE_API_URL || ''
 
 const fmtMoney = (v) =>
@@ -68,7 +68,7 @@ export default function OsPublica() {
     if (!data || baixando) return
     setBaixando(true)
     try {
-      const { booking, assignment, cooperativa } = data
+      const { booking, assignment, operador } = data
       await downloadOrderPDF(
         { ...booking, booking_vehicles: (data.vehicles || []).map((v) => ({
             quantity: v.quantity, vehicle_name_snapshot: v.vehicle_name_snapshot })) },
@@ -78,7 +78,7 @@ export default function OsPublica() {
           driver_phone:      assignment?.driver_phone      || '',
           dispatch_notes:    assignment?.dispatch_notes    || '',
         },
-        cooperativa,
+        operador,
       )
     } catch {
       setErro('Não foi possível gerar o PDF neste aparelho.')
@@ -92,7 +92,7 @@ export default function OsPublica() {
           <AlertCircle size={28} className="text-red-500 mx-auto mb-3" />
           <p className="text-[14px] font-semibold text-gray-900">{erro}</p>
           <p className="text-[12px] text-gray-500 mt-2">
-            Peça um novo link à cooperativa.
+            Peça um novo link ao operador.
           </p>
         </div>
       </div>
@@ -107,7 +107,7 @@ export default function OsPublica() {
     )
   }
 
-  const { booking, assignment, cooperativa, vehicles } = data
+  const { booking, assignment, operador, vehicles } = data
   const veiculoCliente = (vehicles || [])
     .map((v) => `${v.quantity > 1 ? v.quantity + 'x ' : ''}${v.vehicle_name_snapshot || ''}`.trim())
     .filter(Boolean).join(' + ')
@@ -123,8 +123,8 @@ export default function OsPublica() {
           <span className="text-[12px] font-bold uppercase tracking-wider opacity-90">Ordem de Serviço</span>
         </div>
         <p className="text-[24px] font-extrabold leading-tight">{booking.booking_code}</p>
-        {cooperativa?.name && (
-          <p className="text-[13px] opacity-90 mt-1">{cooperativa.name}</p>
+        {operador?.name && (
+          <p className="text-[13px] opacity-90 mt-1">{operador.name}</p>
         )}
       </div>
 

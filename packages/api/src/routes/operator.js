@@ -1,5 +1,5 @@
 /**
- * /api/operator — Perfil e preferências de serviço do operador/cooperativa
+ * /api/operator — Perfil e preferências de serviço do operador/operador
  * GET   /api/operator/profile               — dados pessoais + conta de recebimento
  * PATCH /api/operator/profile               — atualiza dados pessoais + conta
  * GET   /api/operator/preferences           — lista preferências de serviço
@@ -28,7 +28,7 @@ async function mpGate(operatorId) {
   if (!isMarketplaceConfigured()) return null;
 
   // Plataforma recebendo 100% (migration 079): não há split, logo não há para
-  // onde mandar a parte da cooperativa — e exigir conta conectada só impediria
+  // onde mandar a parte do operador — e exigir conta conectada só impediria
   // operador novo de trabalhar sem nenhum ganho. A comissão dela vira repasse
   // manual, que não depende de Mercado Pago.
   try {
@@ -94,7 +94,7 @@ const profileSchema = z.object({
 const router = Router();
 
 // ── GET /api/operator/partners ─────────────────────────
-// Público: cooperativas/operadores ativos (só nome + foto) para a vitrine
+// Público: operadores/operadores ativos (só nome + foto) para a vitrine
 // de parceiros na home. Não expõe e-mail, telefone, documento nem dados
 // bancários. Fica ANTES do middleware de auth de propósito.
 router.get('/partners', async (_req, res, next) => {
@@ -138,7 +138,7 @@ router.get('/partners', async (_req, res, next) => {
 router.use(authenticate, requireOperator);
 
 // ── GET /api/operator/reviews ──────────────────────────
-// Reputação DESTA cooperativa: resumo (média, total, distribuição de estrelas)
+// Reputação DESTA operador: resumo (média, total, distribuição de estrelas)
 // + as avaliações recebidas, com autor e serviço. operator_id = req.user.id
 // (a coop só vê as próprias). Tolerante à migration 060 ausente.
 router.get('/reviews', async (req, res, next) => {
@@ -215,7 +215,7 @@ router.get('/profile', async (req, res, next) => {
       .single();
     if (error?.code === '42703') {
       // Migration 054 (partner_slug) ainda não rodou — devolve o perfil sem o
-      // campo em vez de quebrar a tela da cooperativa.
+      // campo em vez de quebrar a tela do operador.
       const retry = await supabase
         .from('users')
         .select(PROFILE_FIELDS.replace(', partner_slug', ''))
@@ -271,7 +271,7 @@ router.patch('/profile', async (req, res, next) => {
 });
 
 // GET /api/operator/preferences
-// Preferências são opcionais (opt-in de quais serviços a cooperativa executa).
+// Preferências são opcionais (opt-in de quais serviços o operador executa).
 // Qualquer falha aqui — tabela faltando, RLS, coluna divergente — NÃO deve
 // quebrar as telas de Veículos/Passeios/Rotas: devolvemos lista vazia e o
 // frontend trata todos os serviços como "disponíveis" por padrão. O erro
@@ -357,7 +357,7 @@ async function attachCustomers(bookings) {
   }))
 }
 
-// Nome do serviço solicitado. Sem isto a cooperativa via só "Passeio ·
+// Nome do serviço solicitado. Sem isto o operador via só "Passeio ·
 // Privativo" e não sabia QUAL passeio estava aceitando. `service_id` aponta
 // para tours OU para transfer_routes/transfer_quotes conforme service_type.
 // Best-effort: falha de leitura não derruba o feed (só fica sem o nome).
@@ -431,7 +431,7 @@ async function fetchPendingLegs({ isAdmin, operatorId }) {
       // MODAL (076) — e AQUI ele funciona sem a ressalva do combo: a perna tem
       // um veículo só, logo um modal só. É o lugar natural deste filtro. Um
       // pedido buggy + barco vira duas pernas, cada uma para a coop do seu
-      // meio; nenhuma cooperativa precisa operar os dois.
+      // meio; nenhum operador precisa operar os dois.
       const { modalIdByVehicle, modalIdsOf, modalPrefs, operatorServesModals } =
         await import('../services/fleet.js');
       const veicIds = [...new Set(legs.map((l) => l.vehicle_id).filter(Boolean))];
@@ -867,7 +867,7 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
 })
 
 // ── POST /api/operator/bookings/group/:groupId/accept ──
-// Carrinho universal: o pedido inteiro é UMA solicitação. A cooperativa aceita
+// Carrinho universal: o pedido inteiro é UMA solicitação. O operador aceita
 // TODOS os serviços do grupo de uma vez (atômico, tudo-ou-nada) — nada de item
 // aceito solto, pendente, ou pego por outra coop. A coop que aceita executa o
 // pedido inteiro. Motor de pernas OFF: os itens são bookings (sem pernas).
@@ -898,10 +898,10 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
       (b) => !['cancelled', 'expired'].includes(b.status_commercial) && b.status_operational !== 'cancelled'
     )
 
-    // Tudo-ou-nada: se qualquer parte já está com OUTRA cooperativa, ninguém
+    // Tudo-ou-nada: se qualquer parte já está com OUTRO operador, ninguém
     // mais pega — o pedido é uma unidade só.
     if (alive.some((b) => b.operator_id && b.operator_id !== req.user.id)) {
-      return res.status(409).json({ error: 'Este pedido já foi aceito por outra cooperativa.' })
+      return res.status(409).json({ error: 'Este pedido já foi aceito por outro operador.' })
     }
 
     // Aceite atômico: um único UPDATE atribui TODAS as reservas aguardando
@@ -940,8 +940,8 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
         userId:      anyB.user_id,
         bookingId:   anyB.id,
         templateKey: 'booking_accepted',
-        title:       'Cooperativa aceitou seu pedido! 🎉',
-        body:        `Uma cooperativa aceitou os ${accepted.length} serviço(s) do seu pedido. Pague tudo junto para confirmar.`,
+        title:       'Operador aceitou seu pedido! 🎉',
+        body:        `Um operador aceitou os ${accepted.length} serviço(s) do seu pedido. Pague tudo junto para confirmar.`,
       })
     }
 
@@ -950,9 +950,9 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
 })
 
 // ── POST /api/operator/bookings/:id/accept ─────────────
-// Aceite atômico: a primeira cooperativa a aceitar pega a solicitação (ANTES do
+// Aceite atômico: a primeira operador a aceitar pega a solicitação (ANTES do
 // pagamento). A reserva passa para 'awaiting_payment' e o cliente é avisado para
-// pagar. O split automático será possível porque a cooperativa já está definida.
+// pagar. O split automático será possível porque o operador já está definida.
 router.post('/bookings/:id/accept', async (req, res, next) => {
   try {
     const SELECT = 'id, booking_code, user_id, service_type'
@@ -1034,9 +1034,9 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
       alreadyPaid = true
     }
 
-    // Array vazio = outra cooperativa aceitou primeiro (condição de corrida)
+    // Array vazio = outro operador aceitou primeiro (condição de corrida)
     if (!data || data.length === 0) {
-      return res.status(409).json({ error: 'Reserva já foi aceita por outra cooperativa' })
+      return res.status(409).json({ error: 'Reserva já foi aceita por outro operador' })
     }
 
     const b = data[0]
@@ -1044,10 +1044,10 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
       userId:      b.user_id,
       bookingId:   b.id,
       templateKey: 'booking_accepted',
-      title:       alreadyPaid ? 'Reserva confirmada 🎉' : 'Cooperativa aceitou! 🎉',
+      title:       alreadyPaid ? 'Reserva confirmada 🎉' : 'Operador aceitou! 🎉',
       body:        alreadyPaid
-        ? `Uma cooperativa aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Tudo certo para a data marcada!`
-        : `Uma cooperativa aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Pague para confirmar a reserva.`,
+        ? `Um operador aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Tudo certo para a data marcada!`
+        : `Um operador aceitou seu ${serviceLabel(b.service_type)} (${b.booking_code}). Pague para confirmar a reserva.`,
     })
 
     // WhatsApp pro cliente: só no fluxo novo (aguardava aceite → agora paga).
@@ -1139,7 +1139,7 @@ async function registrarExecutor(req, bookingId) {
     if (v !== undefined) patch[coluna] = (typeof v === 'string' ? v.trim() : v) || null
   }
   // Nada informado: a conclusão continua valendo, só não confirma executor.
-  // Não é erro — a cooperativa pode concluir e acertar o repasse depois.
+  // Não é erro — o operador pode concluir e acertar o repasse depois.
   if (Object.keys(patch).length === 0) return
 
   patch.executed_confirmed_at = new Date().toISOString()
@@ -1184,7 +1184,7 @@ async function registrarExecutor(req, bookingId) {
   // própria função decide, e não faz nada quando não é o caso.
   // Vale o que ficou gravado: o que veio na confirmação, e para o que ela não
   // mencionou, o que o despacho já tinha. Usar só o `patch` mandaria o repasse
-  // sem chave PIX quando a cooperativa confirmou o nome sem reabrir o resto.
+  // sem chave PIX quando o operador confirmou o nome sem reabrir o resto.
   const executor = {
     name:         patch.driver_name         ?? alvo?.driver_name,
     document:     patch.driver_document     ?? alvo?.driver_document,
@@ -1196,7 +1196,7 @@ async function registrarExecutor(req, bookingId) {
 }
 
 // ── GET /api/operator/executores ──────────────────────
-// Quem esta cooperativa já mandou a campo antes, para preencher de novo sem
+// Quem este operador já mandou a campo antes, para preencher de novo sem
 // redigitar. Redigitar chave PIX a cada corrida é onde o dinheiro vai para a
 // conta errada.
 router.get('/executores', async (req, res, next) => {
@@ -1283,7 +1283,7 @@ router.post('/bookings/:id/complete', async (req, res, next) => {
 // =============================================================================
 // FINANCEIRO — escopo do operador (não confundir com /api/admin/financial,
 // que é a visão consolidada da plataforma). Aqui filtramos pelos lançamentos
-// das reservas atribuídas à própria cooperativa.
+// das reservas atribuídas à próprio operador.
 // =============================================================================
 
 function sumByType(rows, entryType, direction) {
@@ -1297,7 +1297,7 @@ function sumByStatus(rows, direction, status) {
     .reduce((s, r) => s + Number(r.amount), 0);
 }
 
-// IDs das reservas dessa cooperativa. Retorna [] se ela ainda não tem nenhuma.
+// IDs das reservas dessa operador. Retorna [] se ela ainda não tem nenhuma.
 async function operatorBookingIds(operatorId) {
   const { data, error } = await supabase
     .from('bookings')
@@ -1308,7 +1308,7 @@ async function operatorBookingIds(operatorId) {
 }
 
 // ── GET /api/operator/financial ─────────────────────────
-// Resumo financeiro do período para a cooperativa logada.
+// Resumo financeiro do período para o operador logado.
 router.get('/financial', async (req, res, next) => {
   try {
     const { period = 'month' } = req.query;

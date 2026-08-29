@@ -29,7 +29,7 @@ export default function Avaliacoes() {
   const [operatorId, setOperatorId] = useState(searchParams.get('operator') || '') // '' = todas
   const [minRating,  setMinRating]  = useState(0)     // 0 = qualquer nota
 
-  // Reputação por cooperativa — vira os chips de filtro
+  // Reputação por operador — vira os chips de filtro
   const { data: summary } = useQuery({
     queryKey: ['reviews-summary'],
     queryFn:  () => api.getCoopReviewsSummary(),
@@ -66,7 +66,7 @@ export default function Avaliacoes() {
         </p>
       </div>
 
-      {/* Filtro por cooperativa */}
+      {/* Filtro por operador */}
       {coops.length > 0 && (
         <div className="mb-4">
           <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2 flex items-center gap-1">

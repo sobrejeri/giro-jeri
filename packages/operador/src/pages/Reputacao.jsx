@@ -43,7 +43,7 @@ export default function Reputacao() {
           <ShieldCheck size={24} className="text-brand" /> Reputação
         </h1>
         <p className="text-sm text-gray-400 mt-1">
-          Avaliações verificadas dos clientes que realizaram serviços com a sua cooperativa.
+          Avaliações verificadas dos clientes que realizaram serviços com a seu operador.
         </p>
       </div>
 
@@ -53,8 +53,7 @@ export default function Reputacao() {
             <Award size={40} className="mx-auto text-gray-300 mb-3" />
             <p className="text-gray-500 font-semibold">Ainda não há avaliações.</p>
             <p className="text-sm text-gray-400 mt-1">
-              Assim que os clientes avaliarem os serviços realizados, a nota da sua
-              cooperativa aparece aqui.
+              Assim que os clientes avaliarem os serviços realizados, a nota da seu operador aparece aqui.
             </p>
           </CardBody>
         </Card>

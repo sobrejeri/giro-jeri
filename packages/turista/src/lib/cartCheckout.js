@@ -36,7 +36,7 @@ export function itemMissing(item) {
   if (!item.time) miss.push('horário')
   if (!(Number(item.people) >= 1)) miss.push('pessoas')
   // No compartilhado não se escolhe veículo: paga-se por pessoa e a vaga é
-  // no veículo que a cooperativa já opera. Exigir veículo aqui deixaria o
+  // no veículo que o operador já opera. Exigir veículo aqui deixaria o
   // item eternamente incompleto.
   const compartilhado = item.kind !== 'transfer' && item.mode === 'shared'
   const chosen = (item.vehicles || []).filter((v) => v.qty > 0)

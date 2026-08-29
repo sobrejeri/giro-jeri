@@ -76,7 +76,7 @@ function buildRequestInfoMsg(b) {
   const name = b.users?.full_name?.split(' ')[0] || 'Cliente'
   const type = b.service_type === 'tour' ? 'passeio' : 'transfer'
   return encodeURIComponent([
-    `🌴 *Olá, ${name}!* Aqui é da cooperativa que vai realizar o seu ${type} (${b.booking_code}).`,
+    `🌴 *Olá, ${name}!* Aqui é do operador que vai realizar o seu ${type} (${b.booking_code}).`,
     ``,
     `Para deixar tudo certo, você poderia confirmar:`,
     `📍 Local de embarque (hotel/pousada + ponto de referência)`,
@@ -613,7 +613,7 @@ export default function Reservas() {
     staleTime:       3000,
   })
 
-  // Quem esta cooperativa já mandou a campo, para preencher a confirmação de
+  // Quem este operador já mandou a campo, para preencher a confirmação de
   // executor sem redigitar chave PIX. Falha vira lista vazia — nunca atrapalha.
   const { data: executoresData } = useQuery({
     queryKey:  ['executores'],
@@ -638,7 +638,7 @@ export default function Reservas() {
   const pending = data?.pending || []
   const mine    = data?.mine    || []
   // A view /quotes/pending traz TODAS as cotações não-pagas (pending, quoted,
-  // accepted...). Aqui mantemos só as que a cooperativa ainda precisa cotar —
+  // accepted...). Aqui mantemos só as que o operador ainda precisa cotar —
   // senão as já respondidas/aceitas reaparecem com o botão (duplicando e dando
   // erro "já respondida"). As 'quoted' vêm da seção de histórico abaixo.
   const pendingQuotes = (Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || []))
@@ -926,7 +926,7 @@ export default function Reservas() {
           </div>
         ) : (
           // Disponíveis = corridas (passeio/translado fixo) + cotações pendentes.
-          // Mantém os dois tipos de card lado a lado pra cooperativa não precisar
+          // Mantém os dois tipos de card lado a lado pra operador não precisar
           // pular de aba pra ver tudo que tem em aberto.
           <div className="space-y-4">
             {pendingGroups.map((g) => g.type === 'combo' ? (

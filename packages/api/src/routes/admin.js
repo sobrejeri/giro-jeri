@@ -36,7 +36,7 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
       supabase.from('bookings').select('*', { count: 'exact', head: true })
         .eq('status_commercial', 'awaiting_payment'),
 
-      // AGUARDANDO ACEITE da cooperativa (`awaiting_acceptance`, migration 035).
+      // AGUARDANDO ACEITE do operador (`awaiting_acceptance`, migration 035).
       // É a primeira parada do pedido no fluxo atual — cliente solicita, a coop
       // aceita, e SÓ ENTÃO o cliente paga. Estava fora do painel inteiro: a
       // fila mais importante da operação era a única invisível, e o admin não
@@ -64,7 +64,7 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
       .reduce((s, r) => s + Number(r.amount), 0);
 
     // LÍQUIDO REAL, do próprio razão. Era `bruto * 0,93` — 7% chutados no
-    // código, enquanto a comissão de verdade é configurável por cooperativa
+    // código, enquanto a comissão de verdade é configurável por operador
     // (`platform_split_pct`) ou global (`payment_split_admin_pct`), e a taxa do
     // gateway varia por meio de pagamento. O número certo já estava gravado em
     // `financial_ledger` como `booking_net`; o painel só não o lia.
@@ -275,7 +275,7 @@ router.post('/users', requireAdmin, async (req, res, next) => {
     let docType   = null;
 
     if (body.user_type === 'operator' && body.cnpj) {
-      // Operador entra por documento: CNPJ (cooperativa, 14 dígitos) ou CPF
+      // Operador entra por documento: CNPJ (operador, 14 dígitos) ou CPF
       // (operador pessoa física, 11). Os dois usam o mesmo painel — muda só o
       // documento. O campo segue chamando `cnpj` no corpo por compatibilidade.
       const digits = String(body.cnpj).replace(/\D/g, '');
@@ -419,7 +419,7 @@ router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next
 
     if (uErr || !user) return res.status(404).json({ error: 'Usuário não encontrado' });
     if (user.user_type !== 'operator') {
-      return res.status(400).json({ error: 'Apenas cooperativas podem ser registradas como recebedoras' });
+      return res.status(400).json({ error: 'Apenas operadores podem ser registradas como recebedoras' });
     }
 
     // Lê gateway ativo das configurações
@@ -546,9 +546,9 @@ router.post('/operational/:id/os-link', requireOperator, async (req, res, next) 
       .eq('id', req.params.id).maybeSingle();
     if (!bk) return res.status(404).json({ error: 'Reserva não encontrada.' });
 
-    // Cooperativa só reenvia OS da própria reserva; admin pode qualquer uma.
+    // Operador só reenvia OS da própria reserva; admin pode qualquer uma.
     if (req.user.user_type !== 'admin' && bk.operator_id && bk.operator_id !== req.user.id) {
-      return res.status(403).json({ error: 'Reserva de outra cooperativa.' });
+      return res.status(403).json({ error: 'Reserva de outro operador.' });
     }
 
     const { data: assignment } = await supabase.from('operational_assignments')
@@ -587,10 +587,10 @@ router.get('/operational', requireOperator, async (req, res, next) => {
     if (targetDate)    query = query.eq('service_date', targetDate);
     if (service_type)  query = query.eq('service_type', service_type);
 
-    // Escopo por cooperativa: um operador (não-admin) só enxerga as PRÓPRIAS
+    // Escopo por operador: um operador (não-admin) só enxerga as PRÓPRIAS
     // reservas no painel operacional/despacho — nunca solicitações que ele ainda
-    // não aceitou (operator_id nulo) nem reservas de outras cooperativas. Sem
-    // isso, uma corrida "sem cooperativa" aparecia com "Despachar" para todos.
+    // não aceitou (operator_id nulo) nem reservas de outros operadores. Sem
+    // isso, uma corrida "sem operador" aparecia com "Despachar" para todos.
     // Admin vê tudo (ou filtra por operator_id quando quiser).
     const isAdmin = req.user?.user_type === 'admin';
     if (!isAdmin)         query = query.eq('operator_id', req.user.id);
@@ -647,7 +647,7 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
 
     const bookingId = req.params.id;
 
-    // Só o dono da reserva despacha. Sem isto, uma cooperativa despachava a
+    // Só o dono da reserva despacha. Sem isto, um operador despachava a
     // reserva de OUTRA e a plataforma mandava o itinerário do cliente para o
     // telefone informado por ela. Admin passa direto.
     const { data: alvo } = await supabase
@@ -1243,7 +1243,7 @@ router.delete('/holidays/:id', requireAdmin, async (req, res, next) => {
 });
 
 // ── GET /api/admin/operator-performance ────────────────
-// Compara o desempenho de TODAS as cooperativas: receita gerada, nº de
+// Compara o desempenho de TODAS os operadores: receita gerada, nº de
 // passeios e transfers aceitos, total e concluídas. Filtro opcional por data.
 router.get('/operator-performance', requireAdmin, async (req, res, next) => {
   try {
@@ -1285,7 +1285,7 @@ router.get('/operator-performance', requireAdmin, async (req, res, next) => {
     }
 
     // REPASSE do razão, não estimativa. Era `bruto × 0,93` — 7% chutados no
-    // código. Isto aqui é o valor que cada cooperativa TEM A RECEBER: estimar
+    // código. Isto aqui é o valor que cada operador TEM A RECEBER: estimar
     // é pior do que não mostrar, porque vira base de conversa sobre dinheiro.
     // `payout_operator` é o lançamento do repasse; sem ele, `net` vem null e a
     // tela mostra "—".
@@ -1336,7 +1336,7 @@ router.get('/operator-performance', requireAdmin, async (req, res, next) => {
 });
 
 // =============================================================================
-// VEÍCULOS OPERADOS POR COOPERATIVA (Etapa 1 — roteamento do feed, Model B)
+// VEÍCULOS OPERADOS POR OPERADOR (Etapa 1 — roteamento do feed, Model B)
 // Catálogo de vehicles é global; cada operator pode ter linhas em
 // operator_service_preferences (entity_type='vehicle') desativando um
 // veículo específico. Sem linha = veículo operado (default opt-out).
@@ -1355,7 +1355,7 @@ router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, nex
       .eq('user_type', 'operator')
       .maybeSingle();
     if (opErr) throw opErr;
-    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+    if (!operator) return res.status(404).json({ error: 'Operador não encontrada' });
 
     const { data: vehicles, error: vErr } = await supabase
       .from('vehicles')
@@ -1469,8 +1469,8 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
     // Total por destinatário — é assim que o repasse acontece: um PIX cobrindo
     // várias reservas, não um por reserva.
     //
-    // Dois tipos de destinatário e um só agrupamento: a cooperativa/operador,
-    // que tem cadastro, e o motorista avulso que a cooperativa mandou a campo
+    // Dois tipos de destinatário e um só agrupamento: o operador/operador,
+    // que tem cadastro, e o motorista avulso que o operador mandou a campo
     // (082), identificado pelo nome. Cada linha carrega a CHAVE que vale para
     // ela — a do cadastro ou a copiada do despacho.
     const porQuem = new Map();
@@ -1572,14 +1572,14 @@ router.put('/payouts/:id', requireAdmin, async (req, res, next) => {
 // Marca TODOS os pendentes de um destinatário como pagos, de uma vez — é como
 // o repasse acontece de verdade: um PIX cobrindo várias reservas.
 //
-// Aceita `payee_user_id` (cooperativa/operador, que tem cadastro) OU
+// Aceita `payee_user_id` (operador/operador, que tem cadastro) OU
 // `payee_name` (motorista avulso declarado no despacho, migration 082).
 router.post('/payouts/pay-all', requireAdmin, async (req, res, next) => {
   try {
     const { payee_user_id, payee_name, notes } = req.body || {};
     const nome = (payee_name || '').trim();
     if (!payee_user_id && !nome) {
-      return res.status(400).json({ error: 'Informe a cooperativa ou o nome de quem recebe.' });
+      return res.status(400).json({ error: 'Informe o operador ou o nome de quem recebe.' });
     }
 
     let q = supabase
@@ -1607,9 +1607,9 @@ router.post('/payouts/pay-all', requireAdmin, async (req, res, next) => {
 });
 
 // =============================================================================
-// MODAIS OPERADOS POR COOPERATIVA (migrations 075/076)
+// MODAIS OPERADOS POR OPERADOR (migrations 075/076)
 // O corte grosso do roteamento: em vez de ligar veículo a veículo, o admin diz
-// que a cooperativa opera terrestre, aéreo, aquático… Opt-out como o de
+// que o operador opera terrestre, aéreo, aquático… Opt-out como o de
 // veículo: sem linha = opera. O filtro por veículo continua valendo por cima,
 // para o ajuste fino dentro do mesmo modal.
 // =============================================================================
@@ -1623,7 +1623,7 @@ router.get('/operators/:operatorId/modals', requireAdmin, async (req, res, next)
       .from('users').select('id').eq('id', operatorId)
       .eq('user_type', 'operator').maybeSingle();
     if (opErr) throw opErr;
-    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+    if (!operator) return res.status(404).json({ error: 'Operador não encontrada' });
 
     const { data: modais, error: mErr } = await supabase
       .from('service_modals')
@@ -1631,7 +1631,7 @@ router.get('/operators/:operatorId/modals', requireAdmin, async (req, res, next)
       .eq('is_active', true)
       .order('sort_order', { ascending: true });
     // Sem a 075 aplicada a tabela não existe: devolve lista vazia e a tela
-    // some, em vez de quebrar o cadastro inteiro da cooperativa.
+    // some, em vez de quebrar o cadastro inteiro do operador.
     if (mErr) {
       console.warn('[admin] service_modals indisponível (migration 075):', mErr.message);
       return res.json([]);
@@ -1672,9 +1672,9 @@ router.get('/operators/:operatorId/modals', requireAdmin, async (req, res, next)
 });
 
 // ── PUT /api/admin/operators/:operatorId/combos ────────
-// Perfil da cooperativa quanto a COMBO (migration 077): o pedido com veículos
-// de modais diferentes vai INTEIRO para uma cooperativa só — a universal.
-// Sem isso o combo exigiria duas cooperativas, e aí o motor de pernas e o
+// Perfil do operador quanto a COMBO (migration 077): o pedido com veículos
+// de modais diferentes vai INTEIRO para um operador só — a universal.
+// Sem isso o combo exigiria dois operadores, e aí o motor de pernas e o
 // split entre 2+ contas, que segue bloqueado em payments.js.
 const operatorComboSchema = z.object({ accepts_combos: z.boolean() });
 
@@ -1699,7 +1699,7 @@ router.put('/operators/:operatorId/combos', requireAdmin, async (req, res, next)
       }
       throw error;
     }
-    if (!data) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+    if (!data) return res.status(404).json({ error: 'Operador não encontrada' });
     res.json(data);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -1721,7 +1721,7 @@ router.put('/operators/:operatorId/modals/:modalId', requireAdmin, async (req, r
       .from('users').select('id').eq('id', operatorId)
       .eq('user_type', 'operator').maybeSingle();
     if (opErr) throw opErr;
-    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+    if (!operator) return res.status(404).json({ error: 'Operador não encontrada' });
 
     const { data: modal, error: mErr } = await supabase
       .from('service_modals').select('id').eq('id', modalId).maybeSingle();
@@ -1780,7 +1780,7 @@ router.put('/operators/:operatorId/vehicles/:vehicleId', requireAdmin, async (re
       .eq('user_type', 'operator')
       .maybeSingle();
     if (opErr) throw opErr;
-    if (!operator) return res.status(404).json({ error: 'Cooperativa não encontrada' });
+    if (!operator) return res.status(404).json({ error: 'Operador não encontrada' });
 
     const { data: vehicle, error: vErr } = await supabase
       .from('vehicles')
@@ -1891,7 +1891,7 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
     // a data de criação (senão o gráfico ignora a linha e fica "Sem dados").
     // Bruto E líquido, os dois do razão. O líquido vinha sendo calculado na
     // TELA como `bruto * 0,93` — 7% chutados, enquanto a comissão real é
-    // configurável por cooperativa e a taxa do gateway varia por meio de
+    // configurável por operador e a taxa do gateway varia por meio de
     // pagamento. `booking_net` já é o valor certo, gravado no fechamento.
     const { data, error } = await supabase
       .from('financial_ledger')

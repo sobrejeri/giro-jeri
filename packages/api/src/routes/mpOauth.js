@@ -1,6 +1,6 @@
 // ── mpOauth.js ─────────────────────────────────────────
 // OAuth do Mercado Pago para o split de pagamentos (marketplace).
-// A cooperativa conecta a própria conta MP; guardamos os tokens para criar os
+// O operador conecta a própria conta MP; guardamos os tokens para criar os
 // pagamentos NA conta dela com a comissão da plataforma (application_fee).
 import { Router } from 'express'
 import crypto     from 'node:crypto'
@@ -12,7 +12,7 @@ import {
 
 const router = Router()
 
-// Segredo para assinar o `state` do OAuth (anti-CSRF e identifica a cooperativa).
+// Segredo para assinar o `state` do OAuth (anti-CSRF e identifica o operador).
 const STATE_SECRET = process.env.MP_OAUTH_STATE_SECRET
   || process.env.SUPABASE_SERVICE_ROLE_KEY
   || 'giro-jeri-mp-oauth-state'
@@ -39,11 +39,11 @@ function verifyState(state) {
 
 const apiBase     = () => (process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || '').replace(/\/$/, '')
 const redirectUri = () => `${apiBase()}/api/mp/callback`
-// Para onde a cooperativa volta depois de autorizar (tela de Perfil do app dela).
+// Para onde o operador volta depois de autorizar (tela de Perfil do app dela).
 const returnUrl   = () => (process.env.MP_OAUTH_RETURN_URL || process.env.COOP_URL || '').replace(/\/$/, '')
 
 // ── GET /api/mp/connect-url ────────────────────────────
-// Devolve a URL de autorização do Mercado Pago para a cooperativa logada.
+// Devolve a URL de autorização do Mercado Pago para o operador logado.
 router.get('/connect-url', authenticate, requireOperator, (req, res) => {
   const missing = []
   if (!process.env.MP_CLIENT_ID && !process.env.MP_MARKETPLACE_CLIENT_ID)         missing.push('MP_CLIENT_ID')
@@ -104,7 +104,7 @@ router.post('/disconnect', authenticate, requireOperator, async (req, res, next)
 
 // ── GET /api/mp/callback ───────────────────────────────
 // Redirecionamento do Mercado Pago (público). Troca o `code` por tokens e guarda
-// na cooperativa identificada pelo `state`. No fim, volta para o app dela.
+// no operador identificada pelo `state`. No fim, volta para o app dela.
 router.get('/callback', async (req, res) => {
   const dest = returnUrl()
   const back = (params) => res.redirect(`${dest}/perfil?${new URLSearchParams(params).toString()}`)

@@ -9,15 +9,15 @@
 ## 1. O que é o Giro Jeri
 
 Plataforma digital de reservas de **passeios** e **transfers** em Jericoacoara
-(Ceará) e região. Conecta **turistas** a **cooperativas** de transporte/turismo,
-com pagamento online e split automático (cada cooperativa recebe sua parte
+(Ceará) e região. Conecta **turistas** a **operadores** de transporte/turismo,
+com pagamento online e split automático (cada operador recebe sua parte
 direto, a plataforma fica com uma comissão).
 
 **Modelo de operação (estilo Uber / marketplace):**
 1. Turista **solicita** um passeio/transfer (sem pagar ainda).
-2. A primeira **cooperativa** disponível **aceita** a corrida.
+2. A primeira **operador** disponível **aceita** a corrida.
 3. O turista é avisado e **paga** (PIX ou cartão via Mercado Pago).
-4. A cooperativa **confirma**, **inicia** e **conclui** o serviço.
+4. O operador **confirma**, **inicia** e **conclui** o serviço.
 
 ---
 
@@ -26,7 +26,7 @@ direto, a plataforma fica com uma comissão).
 | App | URL | Quem acessa |
 |-----|-----|-------------|
 | **Turista** | https://sobrejeri.github.io/giro-jeri/ | Público |
-| **Cooperativa** | https://sobrejeri.github.io/giro-jeri/cooperativa/ | `operator` / `admin` |
+| **Operador** | https://sobrejeri.github.io/giro-jeri/operador/ | `operator` / `admin` |
 | **Admin** | https://sobrejeri.github.io/giro-jeri/admin/ | `admin` |
 | **API** | https://giro-jeri-api.onrender.com | Backend (Render) |
 
@@ -63,7 +63,7 @@ direto, a plataforma fica com uma comissão).
 giro-jeri/
 ├── packages/
 │   ├── turista/        # App do turista (mobile-first)
-│   ├── cooperativa/    # Painel da cooperativa/operador
+│   ├── operador/    # Painel do operador/operador
 │   ├── admin/          # Painel administrativo
 │   └── api/            # Backend Express
 │       └── src/
@@ -91,7 +91,7 @@ ToursDesktop, TourDetail, Transfers / TransfersDesktop, Bookings, BookingDetail,
 Feed, Profile / ProfileDesktop, Auth, Login, Register, Legal, `checkout/`.
 Contexts: `AuthContext`, `RegionContext` (detecção de município por GPS).
 
-**Cooperativa** (`packages/cooperativa/src/pages/`): Dashboard, Reservas
+**Operador** (`packages/operador/src/pages/`): Dashboard, Reservas
 (corridas: Disponíveis / Cotações / Minhas), Despacho, Veiculos, Financeiro,
 Passeios, Rotas, Perfil (incl. conexão Mercado Pago), Login.
 
@@ -114,11 +114,11 @@ Stories, Feed, Configuracoes, Auditoria, Perfil, Login.
 | Perfil | Acesso | Login |
 |--------|--------|-------|
 | `tourist` | App turista — reservas, pagamentos | e-mail/telefone + senha |
-| `operator` | Painel cooperativa — operação, despacho, cotações | **CNPJ** + senha |
+| `operator` | Painel operador — operação, despacho, cotações | **CNPJ** + senha |
 | `admin` | Acesso total — catálogo, usuários, financeiro | e-mail + senha |
 | `agency`, `finance`, `affiliate` | reservados (pouco/não usados) | — |
 
-- **Operador faz login por CNPJ**: o admin cadastra a cooperativa e o sistema
+- **Operador faz login por CNPJ**: o admin cadastra o operador e o sistema
   gera um e-mail sintético interno `<cnpj>@op.girojeri.app`. O login traduz o
   CNPJ para esse e-mail.
 - **Cadastro de turista é direto** (sem código de verificação), controlado pela
@@ -134,8 +134,8 @@ Reformulado para **solicitar → aceitar → pagar** (migration 035).
 `status_commercial` (ciclo comercial):
 ```
 draft
-awaiting_acceptance   ← solicitada, aguardando uma cooperativa aceitar
-awaiting_payment      ← cooperativa aceitou; turista precisa pagar
+awaiting_acceptance   ← solicitada, aguardando um operador aceitar
+awaiting_payment      ← operador aceitou; turista precisa pagar
 paid                  ← pago
 payment_failed | cancelled | refunded
 ```
@@ -188,7 +188,7 @@ multi-região, stories + highlights, **034 RLS de escrita do catálogo (admin)**
 |-----------|----------|-----------------|
 | **Supabase** | Banco, Auth, Storage | painel Supabase → Settings → API |
 | **Mercado Pago** | Pagamento PIX/cartão (Payment Brick) | mercadopago.com.br → Suas integrações |
-| **Mercado Pago Marketplace (OAuth)** | Split: cada cooperativa recebe direto; plataforma cobra `application_fee` | app marketplace no painel MP |
+| **Mercado Pago Marketplace (OAuth)** | Split: cada operador recebe direto; plataforma cobra `application_fee` | app marketplace no painel MP |
 | **Geoapify** | Diretório "Descubra a Vila" (POIs OSM) | myprojects.geoapify.com |
 | **Google Maps** | Geocoding / reverse geocoding (município) | Google Cloud Console |
 | **Resend** | E-mails transacionais (confirmação de reserva) | resend.com |
@@ -198,7 +198,7 @@ multi-região, stories + highlights, **034 RLS de escrita do catálogo (admin)**
 ### Mercado Pago — split marketplace (estado)
 - Código pronto (`services/mercadoPago.js`, `routes/mpOauth.js`, migration 036).
 - Para **ativar o split** falta (lado config): definir no Render `MP_CLIENT_ID`,
-  `MP_CLIENT_SECRET`, `MP_OAUTH_RETURN_URL`; cada cooperativa **conecta** a conta
+  `MP_CLIENT_SECRET`, `MP_OAUTH_RETURN_URL`; cada operador **conecta** a conta
   MP em **Perfil → Conectar Mercado Pago**; admin define o **percentual de
   comissão** da plataforma. Sem isso, paga-se na conta única da plataforma.
 
@@ -243,7 +243,7 @@ VITE_SUPABASE_URL         # URL do Supabase
 VITE_SUPABASE_ANON_KEY    # anon key (pública)
 VITE_MP_PUBLIC_KEY        # public key do Mercado Pago (pública)
 VITE_GOOGLE_MAPS_KEY      # chave Maps do front (restrinja por domínio!)
-VITE_ADMIN_WHATSAPP       # (cooperativa) WhatsApp do admin p/ "esqueci a senha"
+VITE_ADMIN_WHATSAPP       # (operador) WhatsApp do admin p/ "esqueci a senha"
 ```
 
 ---
@@ -302,7 +302,7 @@ pagar), `GET /booking/:id/checkout-key`, `GET /:id/status`,
   Free tier "dorme" — há `keep-api-warm.yml` para manter quente.
 - **Frontends → GitHub Pages** (`.github/workflows/deploy-turista.yml`): em push
   para `main` ou `claude/giro-jeri-platform-GFBFR`, builda os 3 apps, mescla em
-  `dist/` (turista na raiz, `/cooperativa`, `/admin`), cria `404.html` p/ SPA, e
+  `dist/` (turista na raiz, `/operador`, `/admin`), cria `404.html` p/ SPA, e
   publica em `gh-pages` via `peaceiris/actions-gh-pages`.
 - **CI** `ci.yml` roda checagens. Testes E2E em `e2e/` (Playwright).
 
@@ -316,7 +316,7 @@ pagar), `GET /booking/:id/checkout-key`, `GET /:id/status`,
   escolhida à mão tem prioridade sobre o GPS.
 - `fix`: solicitar transfer falhava com "Expected number, received NaN"
   (`unit_price` virou opcional no backend e é enviado pelo front).
-- `fix(api)`: cooperativa não via reservas `awaiting_acceptance` (a query `.or()`
+- `fix(api)`: operador não via reservas `awaiting_acceptance` (a query `.or()`
   aninhada foi trocada por duas consultas explícitas).
 - `fix(auth)`: middleware passou a buscar o perfil via **service_role** (evita
   403 por RLS) + logs de diagnóstico.
@@ -325,9 +325,9 @@ pagar), `GET /booking/:id/checkout-key`, `GET /:id/status`,
 
 **Pendências conhecidas:**
 - Confirmar no Supabase que **034/035/036** estão aplicadas (e avaliar a 023).
-- **Ativar o split** do Mercado Pago (env no Render + cooperativas conectarem a
+- **Ativar o split** do Mercado Pago (env no Render + operadores conectarem a
   conta + % de comissão) — ver §8.
-- 403 da cooperativa: se persistir após deploy, checar nos logs do Render
+- 403 do operador: se persistir após deploy, checar nos logs do Render
   `[auth] conta inativa` (campo `is_active=false` em `users`) ou
   `[auth] perfil não encontrado` (vínculo `auth_id`).
 
@@ -339,10 +339,10 @@ pagar), `GET /booking/:id/checkout-key`, `GET /:id/status`,
 # 1. Banco: rode as migrations no SQL Editor do Supabase (001 → 036, em ordem)
 # 2. Variáveis:
 cp packages/api/.env.example packages/api/.env          # preencha SUPABASE_*
-# crie packages/cooperativa/.env e packages/admin/.env com VITE_SUPABASE_* e VITE_API_URL
+# crie packages/operador/.env e packages/admin/.env com VITE_SUPABASE_* e VITE_API_URL
 # 3. Instalar e rodar tudo:
 npm install
-npm run dev:all     # API(3001) + turista(5173) + cooperativa(5174) + admin(5175)
+npm run dev:all     # API(3001) + turista(5173) + operador(5174) + admin(5175)
 ```
 
 ---

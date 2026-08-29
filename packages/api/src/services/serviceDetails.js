@@ -3,7 +3,7 @@
 // reservas.
 //
 // Por que existe: a reserva guarda `service_id` + `service_type`, mas nem a
-// tela da cooperativa nem a Ordem de Serviço mostravam QUAL passeio/rota foi
+// tela do operador nem a Ordem de Serviço mostravam QUAL passeio/rota foi
 // contratado — a OS dizia apenas "Passeio — Privativo". O motorista recebia a
 // OS sem saber o roteiro, e a coop despachava às cegas.
 //

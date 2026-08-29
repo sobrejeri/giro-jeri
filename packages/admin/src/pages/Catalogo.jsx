@@ -217,12 +217,12 @@ export default function Catalogo() {
     queryKey: ['admin-modals'],
     queryFn:  () => api.getModals(),
   })
-  // Cooperativas para escolher o executor fixo do modal.
+  // Operadores para escolher o executor fixo do modal.
   const { data: usuariosOp } = useQuery({
     queryKey: ['admin-operators-para-modal'],
     queryFn:  () => api.getUsers({ user_type: 'operator', limit: 200 }),
   })
-  const cooperativas = (usuariosOp?.data || usuariosOp || [])
+  const operadores = (usuariosOp?.data || usuariosOp || [])
     .filter((u) => u?.id && u.is_active !== false)
   const modais = (Array.isArray(modaisBrutos) && modaisBrutos.length ? modaisBrutos : MODAIS_PADRAO)
   const modaisAtivos = modais.filter((m) => m.is_active !== false)
@@ -370,7 +370,7 @@ export default function Catalogo() {
                                  ? Number(modalForm.platform_commission_pct) : null,
       // A % DE QUEM ACEITA também vale sempre (082): com ela acima de zero, o
       // resto vira repasse para quem executou, mesmo sem executor fixo — é o
-      // motorista que a cooperativa declara na conclusão que recebe.
+      // motorista que o operador declara na conclusão que recebe.
       acceptor_commission_pct: Number(modalForm.acceptor_commission_pct) || 0,
     })
   }
@@ -1394,7 +1394,7 @@ export default function Catalogo() {
                 onChange={(e) => setModalForm({ ...modalForm, executor_operator_id: e.target.value })}
               >
                 <option value="">Sem executor fixo — quem aceita executa</option>
-                {cooperativas.map((c) => (
+                {operadores.map((c) => (
                   <option key={c.id} value={c.id}>{c.full_name}</option>
                 ))}
               </Select>
@@ -1469,7 +1469,7 @@ export default function Catalogo() {
                   )}
                   <p className="text-[10.5px] text-gray-500 mt-2">
                     O cliente paga tudo na plataforma; estes valores viram repasses
-                    em <span className="text-gray-400">Repasses → Cooperativas</span>.
+                    em <span className="text-gray-400">Repasses → Operadores</span>.
                   </p>
                 </div>
               )

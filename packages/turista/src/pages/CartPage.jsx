@@ -106,7 +106,7 @@ function EditSheet({ item, onSave, onClose }) {
   //
   // O carrinho listava todo veículo com `is_transfer_allowed`, para qualquer
   // rota: no trecho aéreo apareciam Hilux e Jardineira ao lado do helicóptero.
-  // Além de confundir, a solicitação seguia para a cooperativa errada — o
+  // Além de confundir, a solicitação seguia para o operador errado — o
   // filtro de frota olha os veículos da reserva. A vitrine de Translados já
   // consultava esta rota (`/routes/:id/vehicles`); o carrinho ficou para trás,
   // e agora ele é o único lugar onde se escolhe veículo.
@@ -427,7 +427,7 @@ function EditSheet({ item, onSave, onClose }) {
             <div className="bg-gray-50 rounded-2xl px-4 py-3">
               <p className="text-[12.5px] text-gray-600 leading-snug">
                 No compartilhado você paga por pessoa e viaja com outros hóspedes —
-                o veículo é definido pela cooperativa que atender.
+                o veículo é definido pelo operador que atender.
               </p>
               {precoPorPessoa > 0 && (
                 <p className="text-[12.5px] text-gray-700 font-semibold mt-1.5">
@@ -741,7 +741,7 @@ export default function CartPage() {
     setResults({ ...res })
     try {
       // Carrinho universal: 1 chamada → N reservas no MESMO grupo (atômico).
-      // Com link de cooperativa ativo, o grupo inteiro nasce atribuído a ela.
+      // Com link de operador ativo, o grupo inteiro nasce atribuído a ela.
       const partner = getPartnerAttribution()
       const affiliate = getAffiliateAttribution()
       const created = await api.cartRequest(

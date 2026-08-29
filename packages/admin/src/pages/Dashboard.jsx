@@ -29,7 +29,7 @@ const fmtDateShort = (iso) => {
 // Andamento operacional (status_operational) — rótulos e cores
 const OP_STATUS = {
   new:               { label: 'Nova',                   dot: 'bg-gray-400',   text: 'text-gray-300',   chip: 'bg-gray-700/60' },
-  awaiting_dispatch: { label: 'Aguardando cooperativa', dot: 'bg-amber-400',  text: 'text-amber-300',  chip: 'bg-amber-900/40' },
+  awaiting_dispatch: { label: 'Aguardando operador', dot: 'bg-amber-400',  text: 'text-amber-300',  chip: 'bg-amber-900/40' },
   confirmed:         { label: 'Confirmada',             dot: 'bg-blue-400',   text: 'text-blue-300',   chip: 'bg-blue-900/40' },
   assigned:          { label: 'Atribuída',              dot: 'bg-indigo-400', text: 'text-indigo-300', chip: 'bg-indigo-900/40' },
   en_route:          { label: 'A caminho',              dot: 'bg-cyan-400',   text: 'text-cyan-300',   chip: 'bg-cyan-900/40' },
@@ -331,7 +331,7 @@ function NovaReservaModal({ open, onClose, onSuccess }) {
   )
 }
 
-// ── Acompanhamento operacional (filtro por cooperativa / passeio / transfer) ──
+// ── Acompanhamento operacional (filtro por operador / passeio / transfer) ──
 function AcompanhamentoOperacional() {
   const [operatorId,  setOperatorId]  = useState('')
   const [serviceType, setServiceType] = useState('')   // '' | 'tour' | 'transfer'
@@ -399,7 +399,7 @@ function AcompanhamentoOperacional() {
           {/* Filtros */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             <select value={operatorId} onChange={(e) => setOperatorId(e.target.value)} className={selectCls}>
-              <option value="">Todas as cooperativas</option>
+              <option value="">Todas os operadores</option>
               {operators.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
             </select>
             <select
@@ -466,7 +466,7 @@ function AcompanhamentoOperacional() {
                       </p>
                       <p className="text-[11px] text-gray-500 truncate flex items-center gap-1">
                         <Briefcase size={10} />
-                        {b.operator?.full_name || <span className="text-gray-600 italic">sem cooperativa</span>}
+                        {b.operator?.full_name || <span className="text-gray-600 italic">sem operador</span>}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
@@ -486,8 +486,8 @@ function AcompanhamentoOperacional() {
   )
 }
 
-// ── Ranking comparativo de cooperativas ──────────────────────
-function RankingCooperativas() {
+// ── Ranking comparativo de operadores ──────────────────────
+function RankingOperadores() {
   const [period, setPeriod] = useState('month') // 'month' | '30d' | 'all'
   const [sortBy, setSortBy] = useState('revenue')
 
@@ -531,7 +531,7 @@ function RankingCooperativas() {
       <CardHeader>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <Trophy size={15} className="text-amber-400" /> Ranking de cooperativas
+            <Trophy size={15} className="text-amber-400" /> Ranking de operadores
             {isFetching && <span className="text-[11px] text-gray-600 font-normal">atualizando…</span>}
           </h2>
           <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5">
@@ -548,7 +548,7 @@ function RankingCooperativas() {
         {isLoading ? (
           <div className="py-10 text-center text-gray-600 text-sm">Carregando…</div>
         ) : sorted.length === 0 ? (
-          <div className="py-10 text-center text-gray-600 text-sm">Nenhuma reserva atribuída a cooperativas neste período.</div>
+          <div className="py-10 text-center text-gray-600 text-sm">Nenhuma reserva atribuída a operadores neste período.</div>
         ) : (
           <div className="overflow-x-auto">
             {chartData.length > 0 && (
@@ -576,7 +576,7 @@ function RankingCooperativas() {
               <thead>
                 <tr className="text-gray-500 text-[11px] uppercase tracking-wide border-b border-gray-800">
                   <th className="text-left font-medium py-2 pl-1 w-7">#</th>
-                  <th className="text-left font-medium py-2">Cooperativa</th>
+                  <th className="text-left font-medium py-2">Operador</th>
                   {COLS.map((c) => (
                     <th key={c.key} onClick={() => setSortBy(c.key)}
                         className={`font-medium py-2 px-2 whitespace-nowrap cursor-pointer select-none hover:text-gray-300 ${c.money ? 'text-right' : 'text-center'} ${sortBy === c.key ? 'text-brand' : ''}`}>
@@ -599,7 +599,7 @@ function RankingCooperativas() {
                     </td>
                     <td className="py-2.5 px-2 text-right font-bold text-brand whitespace-nowrap">{fmt(o.revenue)}</td>
                     {/* "—" e não R$ 0,00 quando não há repasse lançado: zero
-                        afirmaria que a cooperativa não tem nada a receber, e o
+                        afirmaria que o operador não tem nada a receber, e o
                         que temos é ausência do dado. */}
                     <td className="py-2.5 px-2 text-right text-green-400 whitespace-nowrap">
                       {o.net != null ? fmt(o.net) : <span className="text-gray-600">—</span>}
@@ -675,12 +675,12 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs */}
-      {/* "Ag. cooperativa" é a fila que faltava: pedido esperando alguém
+      {/* "Ag. operador" é a fila que faltava: pedido esperando alguém
           aceitar. É a PRIMEIRA parada do fluxo (cliente pede → coop aceita →
           cliente paga) e não aparecia em lugar nenhum do painel. */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard icon={CalendarCheck} label="Reservas hoje"       value={stats?.reservas_hoje ?? '—'}  color="text-blue-400" />
-        <KpiCard icon={Hourglass}     label="Ag. cooperativa"     value={stats?.aguardando_aceite ?? '—'} color="text-purple-400" />
+        <KpiCard icon={Hourglass}     label="Ag. operador"     value={stats?.aguardando_aceite ?? '—'} color="text-purple-400" />
         <KpiCard icon={Clock}         label="Ag. pagamento"       value={stats?.pendencias ?? '—'}      color="text-amber-400" />
         <KpiCard icon={XCircle}       label="Cancelamentos hoje"  value={stats?.cancelamentos ?? '—'}   color="text-red-400" />
         {/* O líquido agora vem do razão. Quando não há lançamento líquido do
@@ -693,11 +693,11 @@ export default function Dashboard() {
           color="text-brand" />
       </div>
 
-      {/* Acompanhamento operacional — filtro por cooperativa / passeio / transfer */}
+      {/* Acompanhamento operacional — filtro por operador / passeio / transfer */}
       <AcompanhamentoOperacional />
 
-      {/* Ranking comparativo de cooperativas */}
-      <RankingCooperativas />
+      {/* Ranking comparativo de operadores */}
+      <RankingOperadores />
 
       {/* Gráfico de faturamento — 30 dias */}
       <Card>

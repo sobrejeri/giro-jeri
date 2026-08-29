@@ -1,4 +1,4 @@
-// Atribuição de venda direta por link de cooperativa (/c/<slug>).
+// Atribuição de venda direta por link de operador (/c/<slug>).
 // Guardada em localStorage para sobreviver à navegação; expira em 7 dias.
 const KEY = 'turiva_partner_v1'
 const TTL_MS = 7 * 24 * 60 * 60 * 1000

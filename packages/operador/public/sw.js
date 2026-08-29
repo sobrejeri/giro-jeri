@@ -1,4 +1,4 @@
-/* Giro Jeri Cooperativa — Service Worker (Web Push) */
+/* Giro Jeri Operador — Service Worker (Web Push) */
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 

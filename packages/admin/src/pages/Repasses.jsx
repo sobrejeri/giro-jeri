@@ -55,17 +55,17 @@ function ChavePix({ chave, tipo, className = '' }) {
 }
 
 // Duas naturezas de repasse, e não se misturam:
-//   • COOPERATIVAS — comissão de quem aceitou e valor de quem executou, gerados
+//   • OPERADORES — comissão de quem aceitou e valor de quem executou, gerados
 //     automaticamente quando o pagamento é aprovado (migration 080). É o
 //     grosso do dinheiro no modelo em que a plataforma recebe 100% (079).
 //   • MOTORISTA — pagamento de uma corrida despachada pela casa, com valor
 //     combinado à mão (migration 066). Já existia.
 export default function Repasses() {
-  const [aba, setAba] = useState('cooperativas')
+  const [aba, setAba] = useState('operadores')
   return (
     <div className="space-y-4">
       <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
-        {[['cooperativas', 'Cooperativas'], ['motoristas', 'Motoristas']].map(([id, label]) => (
+        {[['operadores', 'Operadores'], ['motoristas', 'Motoristas']].map(([id, label]) => (
           <button key={id} onClick={() => setAba(id)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               aba === id ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'
@@ -74,7 +74,7 @@ export default function Repasses() {
           </button>
         ))}
       </div>
-      {aba === 'cooperativas' ? <RepassesCooperativas /> : <RepassesMotorista />}
+      {aba === 'operadores' ? <RepassesOperadores /> : <RepassesMotorista />}
     </div>
   )
 }
@@ -126,13 +126,13 @@ function ValorRepasse({ payout, onSalvar }) {
   )
 }
 
-// ── Repasses às COOPERATIVAS ────────────────────────────
+// ── Repasses às OPERADORES ────────────────────────────
 // Gerados sozinhos quando o pagamento é aprovado. A tela agrupa por
-// cooperativa porque é assim que o repasse acontece: um PIX cobrindo várias
+// operador porque é assim que o repasse acontece: um PIX cobrindo várias
 // reservas, não um por reserva.
-function RepassesCooperativas() {
+function RepassesOperadores() {
   const [status, setStatus] = useState('pending')
-  const [aberto, setAberto] = useState(null)   // cooperativa expandida
+  const [aberto, setAberto] = useState(null)   // operador expandida
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -207,7 +207,7 @@ function RepassesCooperativas() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-200 flex items-center gap-2 flex-wrap">
                     {t.nome}
-                    {/* Sem cadastro na plataforma: motorista que a cooperativa
+                    {/* Sem cadastro na plataforma: motorista que o operador
                         mandou a campo. O admin paga direto a ele. */}
                     {t.avulso && t.payee_name && (
                       <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500 border border-gray-700 rounded px-1.5 py-px">

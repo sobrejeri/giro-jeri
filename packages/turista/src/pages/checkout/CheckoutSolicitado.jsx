@@ -6,8 +6,8 @@ function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigi
 
 /**
  * CheckoutSolicitado — tela exibida logo após o cliente SOLICITAR a reserva
- * (fluxo solicitar → cooperativa aceita → pagar). Ainda não há pagamento: a
- * reserva fica aguardando uma cooperativa aceitar. Quando aceitarem, o cliente
+ * (fluxo solicitar → operador aceita → pagar). Ainda não há pagamento: a
+ * reserva fica aguardando um operador aceitar. Quando aceitarem, o cliente
  * é avisado para pagar (em Minhas Reservas).
  */
 export default function CheckoutSolicitado() {

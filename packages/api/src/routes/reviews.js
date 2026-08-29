@@ -1,7 +1,7 @@
 // ── reviews.js ─────────────────────────────────────────
 // Avaliações REAIS e verificadas: só quem tem reserva PAGA e já realizada
 // (concluída pela coop ou com a data do serviço passada) pode avaliar — 1 por
-// reserva (UNIQUE booking_id). A nota vale para a COOPERATIVA que executou
+// reserva (UNIQUE booking_id). A nota vale para a OPERADOR que executou
 // (reputação por coop) e alimenta a média do passeio.
 import { Router } from 'express';
 import { z } from 'zod';
@@ -83,7 +83,7 @@ reviewsRouter.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── GET /api/reviews/summary — reputação por cooperativa ─
+// ── GET /api/reviews/summary — reputação por operador ─
 reviewsRouter.get('/summary', async (_req, res, next) => {
   try {
     const { data, error } = await supabase
@@ -107,7 +107,7 @@ reviewsRouter.get('/summary', async (_req, res, next) => {
 
     res.json(ids.map((id) => ({
       operator_id:   id,
-      operator_name: coopById.get(id)?.full_name || 'Cooperativa',
+      operator_name: coopById.get(id)?.full_name || 'Operador',
       operator_photo: coopById.get(id)?.profile_photo_url || null,
       rating_average: Math.round((agg.get(id).sum / agg.get(id).count) * 10) / 10,
       rating_count:   agg.get(id).count,
@@ -192,7 +192,7 @@ reviewsRouter.post('/', authenticate, async (req, res, next) => {
       }
     }
 
-    // Avisa a cooperativa: reputação chegando.
+    // Avisa o operador: reputação chegando.
     if (booking.operator_id) {
       notifyUser({
         userId:      booking.operator_id,

@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback } from 'react'
 
 const AuthContext = createContext(null)
 
-// Prefixo próprio: turista, cooperativa e admin compartilham o mesmo domínio
+// Prefixo próprio: turista, operador e admin compartilham o mesmo domínio
 // (sobrejeri.github.io/<subpath>) e localStorage é por origem, não por path —
 // sem prefixo, logar num app sobrescrevia a sessão dos outros.
 const STORAGE = {

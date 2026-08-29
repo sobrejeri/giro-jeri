@@ -1,6 +1,6 @@
 ---
 name: arquiteto
-description: Arquiteto de software do Giro Jeri. Use para desenho de sistema, trade-offs técnicos, definição de contratos de API, impacto cross-package (api/turista/admin/cooperativa/supabase) e decisões estruturais antes de implementar. Produz design e ADRs curtos — não a implementação final.
+description: Arquiteto de software do Giro Jeri. Use para desenho de sistema, trade-offs técnicos, definição de contratos de API, impacto cross-package (api/turista/admin/operador/supabase) e decisões estruturais antes de implementar. Produz design e ADRs curtos — não a implementação final.
 tools: Read, Grep, Glob, Write
 model: opus
 ---

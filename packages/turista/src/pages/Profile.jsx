@@ -366,7 +366,7 @@ export default function Profile() {
                 <div className="flex items-center gap-2 mt-3">
                   <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-orange-50 text-brand">
                     {user.user_type === 'admin' ? 'Admin'
-                      : user.user_type === 'operator' ? 'Cooperativa'
+                      : user.user_type === 'operator' ? 'Operador'
                       : user.affiliate_code ? 'Turista · Afiliado' : 'Turista'}
                   </span>
                   {user.whatsapp_valid === true && (
@@ -522,7 +522,7 @@ export default function Profile() {
                             <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${Math.max(pct, 6)}%` }} />
                           </div>
                           <p className="text-[10.5px] text-gray-500 mt-1.5">
-                            Perfil completo agiliza suas reservas e o contato da cooperativa.
+                            Perfil completo agiliza suas reservas e o contato do operador.
                           </p>
                         </button>
                       )}

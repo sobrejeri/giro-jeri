@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 
-// Máscara de documento: aceita CNPJ (cooperativa) e CPF (operador pessoa
+// Máscara de documento: aceita CNPJ (operador) e CPF (operador pessoa
 // física). Até 11 dígitos formata como CPF; a partir do 12º vira CNPJ — assim
 // quem digita um CNPJ vê a máscara certa conforme avança, sem escolher o tipo.
 function formatDoc(v) {
@@ -81,7 +81,7 @@ export default function Login() {
               label="CNPJ ou CPF"
               value={form.cnpj}
               onChange={handleDoc}
-              placeholder="CNPJ da cooperativa ou seu CPF"
+              placeholder="CNPJ do operador ou seu CPF"
               inputMode="numeric"
               required
               autoFocus

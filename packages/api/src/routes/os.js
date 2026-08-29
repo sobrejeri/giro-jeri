@@ -4,7 +4,7 @@
 // Aberto de propósito — quem abre é o passageiro ou o motorista, que não têm
 // conta. O acesso é controlado pelo token assinado (lib/osToken.js), não por
 // sessão. Devolve SÓ o que a OS mostra; nada de dados financeiros da
-// cooperativa, cadastro do cliente ou outras reservas.
+// operador, cadastro do cliente ou outras reservas.
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
 import { verifyOsToken } from '../lib/osToken.js';
@@ -39,15 +39,15 @@ router.get('/:token', async (req, res, next) => {
     const { data: cliente } = await supabase
       .from('users').select('full_name, phone').eq('id', booking.user_id).maybeSingle();
 
-    // Cooperativa responsável (cabeçalho da OS).
-    let cooperativa = null;
+    // Operador responsável (cabeçalho da OS).
+    let operador = null;
     if (booking.operator_id) {
       const { data: op } = await supabase
         .from('users')
         .select('full_name, document_number, phone, profile_photo_url')
         .eq('id', booking.operator_id).maybeSingle();
       if (op) {
-        cooperativa = {
+        operador = {
           name:              op.full_name,
           cnpj:              op.document_number,
           phone:             op.phone,
@@ -70,7 +70,7 @@ router.get('/:token', async (req, res, next) => {
     res.json({
       booking: { ...comServico, users: cliente || null },
       assignment: assignment || null,
-      cooperativa,
+      operador,
       vehicles: veiculos || [],
     });
   } catch (err) { next(err); }

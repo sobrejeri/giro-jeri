@@ -37,7 +37,7 @@ export default function CheckoutSucesso() {
           {t('payment.success.subtitle')}
         </p>
 
-        {/* Status aguardando cooperativa */}
+        {/* Status aguardando operador */}
         <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 flex items-start gap-3">
           <div className="relative shrink-0 mt-0.5">
             <div className="w-8 h-8 rounded-full bg-amber-300 animate-ping absolute inset-0 opacity-50" />

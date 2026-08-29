@@ -56,7 +56,7 @@ export default function Passeios() {
       <div>
         <h2 className="text-base font-semibold text-gray-900">Passeios que Executo</h2>
         <p className="text-xs text-gray-500 mt-0.5">
-          Selecione quais passeios sua cooperativa realiza.
+          Selecione quais passeios seu operador realiza.
           Apenas administradores podem criar ou editar passeios.
         </p>
       </div>

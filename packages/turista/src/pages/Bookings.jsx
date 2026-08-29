@@ -23,9 +23,9 @@ function resolveStatus(b) {
   if (o === 'completed')                       return 'completed'
   if (o === 'in_progress')                     return 'in_progress'
   // Fluxo solicitar → aceitar → pagar:
-  if (c === 'awaiting_acceptance')             return 'waiting_acceptance' // aguardando cooperativa aceitar
+  if (c === 'awaiting_acceptance')             return 'waiting_acceptance' // aguardando operador aceitar
   if (c === 'awaiting_payment')                return 'waiting_payment'    // aceita → pague agora
-  // Pago: se a cooperativa já está cuidando (aceita/confirmada/despachada),
+  // Pago: se o operador já está cuidando (aceita/confirmada/despachada),
   // está confirmado; senão (fluxo antigo, sem coop ainda) aguarda uma aceitar.
   // 'awaiting_dispatch' é o estado após a coop clicar "Confirmar" — continua
   // confirmado para o cliente (não é "aguardando aceite").
@@ -453,7 +453,7 @@ function ReviewSheet({ booking, onClose, onDone }) {
             onChange={(e) => setComment(e.target.value)}
             maxLength={1000}
             rows={4}
-            placeholder="Conte como foi o passeio, o atendimento da cooperativa, o motorista… (opcional)"
+            placeholder="Conte como foi o passeio, o atendimento do operador, o motorista… (opcional)"
             className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-[14px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none"
           />
 
@@ -523,7 +523,7 @@ function QuoteDetailDialog({ quote, onClose }) {
           ))}
           {quote.quote_notes && (
             <div className="bg-gray-50 rounded-xl px-3 py-2 mt-1">
-              <p className="text-[11px] text-gray-400 mb-0.5">Observação da cooperativa</p>
+              <p className="text-[11px] text-gray-400 mb-0.5">Observação do operador</p>
               <p className="text-[12px] text-gray-700">{quote.quote_notes}</p>
             </div>
           )}
@@ -596,7 +596,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
           ))}
         </div>
 
-        {/* Observação da cooperativa */}
+        {/* Observação do operador */}
         {quote.status === 'quoted' && quote.quote_notes && (
           <div className="flex items-start gap-2 bg-blue-50 rounded-xl px-3 py-2">
             <MessageSquare size={12} className="text-blue-400 shrink-0 mt-0.5" />
@@ -608,7 +608,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
         {quote.status === 'pending_quote' && (
           <div className="flex items-center gap-2 bg-amber-50 rounded-xl px-3 py-2">
             <Loader2 size={13} className="text-amber-500 shrink-0 animate-spin" />
-            <p className="text-[12px] text-amber-700">Aguardando a cooperativa enviar o valor.</p>
+            <p className="text-[12px] text-amber-700">Aguardando o operador enviar o valor.</p>
           </div>
         )}
 
@@ -700,7 +700,7 @@ export default function Bookings() {
     queryKey: ['my-quotes'],
     queryFn:  () => api.getMyQuotes(),
     // Atualiza enquanto houver cotação aguardando preço/proposta, para o cliente
-    // ver a oferta da cooperativa sem precisar atualizar a tela.
+    // ver a oferta do operador sem precisar atualizar a tela.
     refetchInterval: (query) => {
       const list = Array.isArray(query.state.data) ? query.state.data : []
       return list.some(qq => qq.status === 'pending_quote' || qq.status === 'quoted') ? 12000 : false
@@ -768,7 +768,7 @@ export default function Bookings() {
     setQuoteActing(quote.id)
     try {
       const result = await api.acceptQuote(quote.id)
-      // A cotação aceita já criou a reserva (atribuída à cooperativa que cotou) —
+      // A cotação aceita já criou a reserva (atribuída ao operador que cotou) —
       // paga direto via existing_booking_id, sem reentrar na fila de solicitação.
       navigate('/checkout/pagamento', {
         state: {

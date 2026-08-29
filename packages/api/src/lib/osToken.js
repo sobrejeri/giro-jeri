@@ -1,7 +1,7 @@
 // ── lib/osToken.js ──────────────────────────────────────
 // Token do LINK PÚBLICO da Ordem de Serviço, enviado no WhatsApp do cliente e
 // do motorista. Quem tem o link vê a OS daquela reserva — não exige login
-// (o passageiro e o motorista não têm conta na cooperativa).
+// (o passageiro e o motorista não têm conta no operador).
 //
 // Por que token assinado e não o id da reserva na URL: o id é sequencialmente
 // descobrível em outros endpoints e a OS traz telefone e nome do cliente. Com

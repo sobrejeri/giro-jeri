@@ -74,7 +74,7 @@ export default function Financeiro() {
     bruto: Number(d.total),
     // O líquido vem do razão (`booking_net`). Era `bruto * 0,93` calculado
     // aqui — 7% chutados, enquanto a comissão real é configurável por
-    // cooperativa e a taxa do gateway varia. Sem lançamento líquido no dia, a
+    // operador e a taxa do gateway varia. Sem lançamento líquido no dia, a
     // série fica sem ponto em vez de inventar um.
     liquido: d.net == null ? null : Number(d.net),
   }))
@@ -159,7 +159,7 @@ export default function Financeiro() {
             <dl className="space-y-3">
               {[
                 { label: 'Receita Bruta',            value: summary?.bruto,                            cls: 'text-gray-100 font-bold' },
-                { label: '(-) Repasse cooperativas', value: `- ${fmt(summary?.repasses)}`,             cls: 'text-red-400'  },
+                { label: '(-) Repasse operadores', value: `- ${fmt(summary?.repasses)}`,             cls: 'text-red-400'  },
                 { label: '(-) Taxa gateway',         value: `- ${fmt(summary?.taxas)}`,                cls: 'text-red-400'  },
                 { label: '(-) Comissão afiliados',   value: `- ${fmt(summary?.comissoes_afiliados)}`,  cls: 'text-red-400'  },
                 { label: '= Resultado plataforma',

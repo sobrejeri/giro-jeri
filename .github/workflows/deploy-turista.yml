@@ -45,8 +45,8 @@ jobs:
           VITE_MP_PUBLIC_KEY: ${{ secrets.VITE_MP_PUBLIC_KEY }}
           VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
 
-      - name: Build cooperativa
-        run: npm run build --workspace=packages/cooperativa
+      - name: Build operador
+        run: npm run build --workspace=packages/operador
         env:
           NODE_ENV: production
           CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
@@ -68,8 +68,8 @@ jobs:
         run: |
           mkdir -p dist
           cp -r packages/turista/dist/. dist/
-          mkdir -p dist/cooperativa
-          cp -r packages/cooperativa/dist/. dist/cooperativa/
+          mkdir -p dist/operador
+          cp -r packages/operador/dist/. dist/operador/
           mkdir -p dist/admin
           cp -r packages/admin/dist/. dist/admin/
 
@@ -93,7 +93,7 @@ jobs:
             var p = l.pathname;
             sessionStorage.setItem('spa_redirect', p + l.search + l.hash);
             if      (p.indexOf('/admin')       !== -1) l.replace(l.protocol+'//'+l.host+'$ROOT/admin/');
-            else if (p.indexOf('/cooperativa') !== -1) l.replace(l.protocol+'//'+l.host+'$ROOT/cooperativa/');
+            else if (p.indexOf('/operador') !== -1) l.replace(l.protocol+'//'+l.host+'$ROOT/operador/');
             else                                       l.replace(l.protocol+'//'+l.host+'$ROOT/');
           })();
           </script>

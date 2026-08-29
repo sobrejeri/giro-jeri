@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { setPartner } from '../lib/partner'
 
-// /c/<slug> — entrada do link direto de uma cooperativa. Resolve o slug,
+// /c/<slug> — entrada do link direto de um operador. Resolve o slug,
 // grava a atribuição e manda para a Home com o selo "Reservando com X".
 // Slug inválido → segue para a Home sem atribuição (não bloqueia o cliente).
 export default function PartnerLink() {

@@ -17,7 +17,7 @@ export function isMarketplaceConfigured() {
 }
 
 // Cria um cliente de pagamento. Com sellerAccessToken, opera NA conta da
-// cooperativa (split); sem ele, usa o token da plataforma.
+// operador (split); sem ele, usa o token da plataforma.
 function paymentClientFor(sellerAccessToken) {
   if (sellerAccessToken) {
     const cfg = new MercadoPagoConfig({ accessToken: sellerAccessToken, options: { timeout: 10000 } })
@@ -41,7 +41,7 @@ function mpDate(d) {
 
 export async function createPixPayment({ amount, description, payerEmail, payerName, payerDoc, externalRef, sellerAccessToken, applicationFee }) {
   const client = paymentClientFor(sellerAccessToken)
-  // Sem token nenhum (nem da plataforma, nem da cooperativa) = configuração
+  // Sem token nenhum (nem da plataforma, nem do operador) = configuração
   // ausente. Erro claro em vez de um PIX falso que só "expira".
   if (!client) throw new Error('Mercado Pago não configurado: falta o Access Token (MP_ACCESS_TOKEN) no servidor.')
 
@@ -65,7 +65,7 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
       ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
     },
   }
-  // Split: comissão da plataforma quando o pagamento cai na conta da cooperativa
+  // Split: comissão da plataforma quando o pagamento cai na conta do operador
   if (sellerAccessToken && applicationFee > 0) {
     body.application_fee = Math.round(applicationFee * 100) / 100
   }
@@ -169,7 +169,7 @@ export async function createCardPayment({
   sellerAccessToken,
   applicationFee,
 }) {
-  // Com split, opera na conta da cooperativa; sem split, na conta da plataforma.
+  // Com split, opera na conta do operador; sem split, na conta da plataforma.
   // Sem fallback fake para cartão — erro propaga para o caller.
   const client = paymentClientFor(sellerAccessToken)
   if (!client) throw new Error('Mercado Pago não configurado (access token ausente)')
@@ -191,7 +191,7 @@ export async function createCardPayment({
   // issuer_id é opcional — não enviar quando undefined para evitar rejeição MP
   if (issuerId) body.issuer_id = String(issuerId)
 
-  // Split: comissão da plataforma quando o pagamento cai na conta da cooperativa
+  // Split: comissão da plataforma quando o pagamento cai na conta do operador
   if (sellerAccessToken && applicationFee > 0) {
     body.application_fee = Math.round(applicationFee * 100) / 100
   }
@@ -222,7 +222,7 @@ export async function createCardPayment({
 }
 
 export async function getMpPaymentStatus(mpId, sellerAccessToken) {
-  // Pagamento com split vive na conta da cooperativa → consultar com o token dela.
+  // Pagamento com split vive na conta do operador → consultar com o token dela.
   const client = paymentClientFor(sellerAccessToken)
   if (!client) return null
   const r = await client.get({ id: mpId })

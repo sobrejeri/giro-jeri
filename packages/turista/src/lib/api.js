@@ -145,10 +145,10 @@ export const api = {
   // Configurações públicas (banner da home etc.)
   getPublicSettings: () => request('/api/settings/public'),
 
-  // Cooperativas parceiras (vitrine na home) — público
+  // Operadores parceiras (vitrine na home) — público
   getPartners: () => request('/api/operator/partners'),
 
-  // Avaliações REAIS por cooperativa (reputação) — públicas + criação autenticada
+  // Avaliações REAIS por operador (reputação) — públicas + criação autenticada
   getCoopReviews:        (params = {}) => request(`/api/reviews?${new URLSearchParams(params)}`),
   getCoopReviewsSummary: ()            => request('/api/reviews/summary'),
   getMyCoopReviews:      ()            => request('/api/reviews/mine'),
