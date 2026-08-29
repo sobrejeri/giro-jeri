@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 079.**
+   registre aqui o número reservado. **Próximo número livre: 080.**
    (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
    com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
 
@@ -46,6 +46,28 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (VIRADA DE MODELO: plataforma recebe 100%)** —
+  O dono não sabia que o split multi-recebedor do MP **só funciona com PIX**
+  (cartão devolve 422). Como voo de R$ 7.600 precisa de cartão parcelado, ele
+  mudou o modelo: **pagamento inteiro na conta da plataforma**, comissão do
+  operador por CATEGORIA, e repasse manual ao executor. Para TODOS os serviços.
+  **Migration 079**: `system_settings.payment_platform_receives_all = 'true'`.
+  `getSplitContext`, `...ForBooking` e `...ForGroup` devolvem null quando ligado
+  — nenhum pagamento leva split.
+  **Fail-CLOSED de propósito** (`plataformaRecebeTudo`): configuração ausente,
+  vazia ou inesperada assume `true`, sem split. Errar para "o dinheiro fica com
+  a plataforma" se conserta com um repasse; errar para o outro lado manda
+  dinheiro para conta de terceiro e não volta. Testado em 8 leituras.
+  **Efeito colateral bom:** `mpGate` deixa de bloquear. Hoje a cooperativa não
+  conseguia ACEITAR nada sem conectar Mercado Pago — operador novo ficava
+  parado. Sem split não há para onde mandar a parte dela, e a exigência perdeu
+  sentido. A comissão vira repasse manual, que não depende de MP.
+  `acceptor_commission_pct` (078) passa a significar a comissão do operador
+  naquele modal, valendo para todo serviço — não só intermediação de aéreo.
+  **FALTA (próximo passo):** registrar no razão o que a plataforma DEVE — a
+  comissão de quem aceitou e o pagamento do executor — senão o repasse manual
+  não tem de onde sair. Hoje o razão só grava bruto/líquido.
 
 - **2026-08-25 · DESENHO ACORDADO (ainda NÃO implementado): combo aberto a
   qualquer cooperativa, DEPOIS do split** — Observação do dono: com executor

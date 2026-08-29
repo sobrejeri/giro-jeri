@@ -248,7 +248,25 @@ export async function getOperatorMp(operatorId) {
 
 // Contexto de split de um pagamento: token da cooperativa + comissão da
 // plataforma (application_fee). Null quando não há split (cai na plataforma).
+// Plataforma recebe 100%? (migration 079) Quando sim, NENHUM pagamento leva
+// split: o valor inteiro cai na conta da plataforma e a comissão do operador e
+// o pagamento do executor viram repasses manuais.
+//
+// Decisão do dono depois de descobrir que split multi-recebedor só funciona com
+// PIX — e voo de R$ 7.600 precisa de cartão parcelado.
+//
+// Fail-CLOSED de propósito: erro ao ler a configuração assume `true`, ou seja,
+// sem split. Errar para o lado de "o dinheiro fica com a plataforma" é
+// recuperável com um repasse; errar para o outro manda dinheiro para a conta de
+// terceiro e não tem volta.
+export function plataformaRecebeTudo(cfg) {
+  const v = cfg?.payment_platform_receives_all
+  if (v === undefined || v === null || v === '') return true
+  return String(v) !== 'false'
+}
+
 async function getSplitContext(booking, chargedTotal, cfg) {
+  if (plataformaRecebeTudo(cfg)) return null
   const opMp = await getOperatorMp(booking?.operator_id)
   if (!opMp) return null
   const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
@@ -305,6 +323,7 @@ function allocateCents(totalCents, weights) {
 // cooperativas distintas entre as pernas aceitas é que monta o split nativo
 // com `disbursements` (N recebedores em 1 pagamento).
 async function getSplitContextForBooking(booking, chargedTotal, cfg) {
+  if (plataformaRecebeTudo(cfg)) return null
   const byOperator = await getAcceptedLegRecipients(booking.id)
 
   if (byOperator.size === 0) {
@@ -368,6 +387,7 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
 // devolve mode:'multi' para o chamador BLOQUEAR — split multi-coop de grupo
 // fica para depois de validar o split nativo do MP em staging.
 async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
+  if (plataformaRecebeTudo(cfg)) return null
   const byOperator = new Map()
   for (const b of bookings) {
     const m = await getAcceptedLegRecipients(b.id)

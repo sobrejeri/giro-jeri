@@ -27,6 +27,21 @@ import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
 async function mpGate(operatorId) {
   if (!isMarketplaceConfigured()) return null;
 
+  // Plataforma recebendo 100% (migration 079): não há split, logo não há para
+  // onde mandar a parte da cooperativa — e exigir conta conectada só impediria
+  // operador novo de trabalhar sem nenhum ganho. A comissão dela vira repasse
+  // manual, que não depende de Mercado Pago.
+  try {
+    const { data } = await supabase
+      .from('system_settings').select('setting_value')
+      .eq('setting_key', 'payment_platform_receives_all').maybeSingle();
+    // Mesma leitura tolerante do payments.js: ausente = plataforma recebe tudo.
+    if (String(data?.setting_value ?? 'true') !== 'false') return null;
+  } catch (e) {
+    console.error('[mpGate] leitura de payment_platform_receives_all falhou:', e.message);
+    return null;   // na dúvida, não bloqueia a coop de trabalhar
+  }
+
   // Checa mp_access_token — é ele que o split usa de fato (getOperatorMp).
   // Usar mp_user_id aqui bloquearia quem tem token válido mas ficou sem
   // user_id (o MP nem sempre devolve), impedindo de trabalhar alguém que
