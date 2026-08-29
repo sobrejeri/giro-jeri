@@ -63,32 +63,151 @@ export function repartir(totalCents, pesos) {
  * @param {number} pctPlataformaGeral  usado quando o modal não define o seu
  */
 export function calcularRepasses(total, operador, modal, pctPlataformaGeral = 0) {
-  const cents = Math.round(Number(total || 0) * 100);
-  if (!Number.isFinite(cents) || cents <= 0) return [];
+  const partes = repartirReserva(total, operador, modal, pctPlataformaGeral);
+  if (!partes) return [];
 
-  const executor = modal?.executor_operator_id || null;
+  const out = [];
+  if (partes.comissao > 0 && operador) {
+    out.push({ kind: 'commission', payee_user_id: operador, amount: partes.comissao / 100 });
+  }
+  // A execução só sai AQUI quando o executor é conhecido no pagamento — o
+  // executor fixo do modal. Quando quem executa é o motorista que a cooperativa
+  // manda a campo, ninguém sabe quem é ainda: essa linha nasce na conclusão,
+  // em `calcularRepasseExecucao`.
+  if (partes.execucao > 0 && partes.executorFixo) {
+    out.push({ kind: 'execution', payee_user_id: partes.executorFixo, amount: partes.execucao / 100 });
+  }
+  return out;
+}
+
+/**
+ * Reparte a reserva em centavos entre quem aceitou, a plataforma e quem
+ * executa. Uma função só, usada no pagamento E na conclusão — se as duas
+ * fizessem a conta por conta própria, a soma das partes poderia não fechar com
+ * o valor recebido.
+ *
+ * @returns {null|{comissao:number, plataforma:number, execucao:number,
+ *                 executorFixo:string|null, divideComExecutor:boolean}}
+ */
+export function repartirReserva(total, operador, modal, pctPlataformaGeral = 0) {
+  const cents = Math.round(Number(total || 0) * 100);
+  if (!Number.isFinite(cents) || cents <= 0) return null;
+
+  const executorFixo = modal?.executor_operator_id || null;
   const pctPlat = modal?.platform_commission_pct != null
     ? Number(modal.platform_commission_pct)
     : Number(pctPlataformaGeral) || 0;
+  const pctAceite = Number(modal?.acceptor_commission_pct) || 0;
 
-  // Sem executor fixo: quem aceitou executa. A comissão dele é tudo menos a
-  // parte da plataforma — não o percentual de comissão, que só faz sentido
-  // quando ele é intermediário.
-  if (!executor || executor === operador) {
-    const [, doOperador] = repartir(cents, [pctPlat, 100 - pctPlat]);
-    return doOperador > 0 && operador
-      ? [{ kind: 'commission', payee_user_id: operador, amount: doOperador / 100 }]
-      : [];
+  // Executor fixo que TAMBÉM aceitou (a Frisonfly pegando o próprio voo): não
+  // há intermediação, ele fica com tudo menos a plataforma. Sem este caso ele
+  // receberia em duas linhas separadas sem motivo.
+  if (executorFixo && executorFixo === operador) {
+    const [plataforma, doOperador] = repartir(cents, [pctPlat, 100 - pctPlat]);
+    return { comissao: doOperador, plataforma, execucao: 0, executorFixo: null, divideComExecutor: false };
   }
 
-  // Executor fixo e quem aceitou é OUTRO: comissão de intermediação para quem
-  // aceitou, resto para quem executa.
-  const pctAceite = Number(modal?.acceptor_commission_pct) || 0;
-  const [comissao, , execucao] = repartir(cents, [pctAceite, pctPlat, 100 - pctAceite - pctPlat]);
-  const out = [];
-  if (comissao > 0 && operador) out.push({ kind: 'commission', payee_user_id: operador, amount: comissao / 100 });
-  if (execucao > 0)             out.push({ kind: 'execution',  payee_user_id: executor, amount: execucao / 100 });
-  return out;
+  // A divisão em três só vale quando o admin CONFIGUROU a comissão de aceite
+  // do modal. Sem isso, quem aceitou recebe tudo menos a parte da plataforma —
+  // o comportamento de sempre.
+  //
+  // Isto é deliberadamente fail-closed: a migration 082 sozinha não pode mudar
+  // para onde vai o dinheiro de nenhuma reserva. Se um modal com comissão
+  // zerada passasse a dividir, a cooperativa receberia ZERO e o valor inteiro
+  // iria para um motorista — do dia para a noite, sem ninguém pedir.
+  const divide = executorFixo != null || pctAceite > 0;
+  if (!divide) {
+    const [plataforma, doOperador] = repartir(cents, [pctPlat, 100 - pctPlat]);
+    return { comissao: doOperador, plataforma, execucao: 0, executorFixo: null, divideComExecutor: false };
+  }
+
+  const [comissao, plataforma, execucao] =
+    repartir(cents, [pctAceite, pctPlat, 100 - pctAceite - pctPlat]);
+  return { comissao, plataforma, execucao, executorFixo, divideComExecutor: true };
+}
+
+// Carrega o modal do serviço e o percentual geral — os dois insumos da conta.
+async function contextoDoRateio(booking) {
+  const slug = await modalDaReserva(booking);
+  let modal = null;
+  if (slug) {
+    const { data } = await supabase
+      .from('service_modals')
+      .select('executor_operator_id, acceptor_commission_pct, platform_commission_pct')
+      .eq('slug', slug).maybeSingle();
+    modal = data || null;
+  }
+  const { data: cfg } = await supabase
+    .from('system_settings').select('setting_value')
+    .eq('setting_key', 'payment_split_admin_pct').maybeSingle();
+  return { modal, geral: Number(cfg?.setting_value) || 0 };
+}
+
+/**
+ * Lança o repasse de EXECUÇÃO quando a cooperativa declara, na conclusão, quem
+ * foi a campo. Só existe separado do resto porque no momento do pagamento essa
+ * pessoa ainda é desconhecida — o serviço nem aconteceu.
+ *
+ * Não mexe na comissão: ela já nasceu no valor certo (`repartirReserva` reserva
+ * a fatia do executor desde o pagamento quando o modal divide em três). Reescrever
+ * um repasse que o admin pode já ter pago seria bem pior que uma linha a menos.
+ *
+ * @param {object} executor  { name, document, pix_key, pix_key_type }
+ */
+export async function gerarRepasseExecucao(bookingId, executor) {
+  try {
+    if (!bookingId) return { skipped: 'sem reserva' };
+    const nome = (executor?.name || '').trim();
+    if (!nome) return { skipped: 'executor sem nome' };
+
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id, operator_id, service_type, service_id, total_amount')
+      .eq('id', bookingId).maybeSingle();
+    if (!booking) return { skipped: 'reserva não encontrada' };
+
+    const { modal, geral } = await contextoDoRateio(booking);
+    const partes = repartirReserva(booking.total_amount, booking.operator_id, modal, geral);
+
+    // Modal sem comissão de aceite configurada: quem aceitou recebe tudo menos
+    // a plataforma, e não há fatia sobrando para o executor. O dado de quem
+    // rodou fica registrado no despacho de qualquer forma (081) — o que não
+    // acontece é criar dívida que ninguém combinou.
+    if (!partes?.divideComExecutor || partes.execucao <= 0) {
+      return { skipped: 'modal não divide com o executor' };
+    }
+    // Executor fixo já recebeu a linha dele no pagamento, e ele é quem manda:
+    // é o sentido de "fixo". O motorista declarado não a substitui.
+    if (partes.executorFixo) return { skipped: 'modal tem executor fixo' };
+
+    const linha = {
+      booking_id:         bookingId,
+      kind:               'execution',
+      payee_user_id:      null,
+      payee_name:         nome,
+      payee_document:     executor?.document     || null,
+      payee_pix_key:      executor?.pix_key      || null,
+      payee_pix_key_type: executor?.pix_key_type || null,
+      amount:             partes.execucao / 100,
+      status:             'pending',
+    };
+
+    // `ignoreDuplicates` faz a reconfirmação do executor NÃO reescrever um
+    // repasse já lançado — que o admin pode ter pago. Trocar o destinatário
+    // depois de pago é o admin que resolve, na tela, vendo o que aconteceu.
+    const { error } = await supabase
+      .from('booking_payouts')
+      .upsert([linha], { onConflict: 'booking_id,kind', ignoreDuplicates: true });
+    if (error) throw error;
+
+    return { criado: true, valor: linha.amount };
+  } catch (err) {
+    // 42P01/42703 = migration 080/082 pendente. Não é erro de operação.
+    if (!['42P01', '42703'].includes(err?.code)) {
+      console.error('[payouts] execução falhou para a reserva %s: %s', bookingId, err?.message);
+    }
+    return { erro: err?.message };
+  }
 }
 
 /**
@@ -102,23 +221,8 @@ export async function gerarRepasses(booking, total) {
     if (!booking?.id) return { skipped: 'sem reserva' };
     if (!booking.operator_id) return { skipped: 'reserva sem cooperativa' };
 
-    const slug = await modalDaReserva(booking);
-    let modal = null;
-    if (slug) {
-      const { data } = await supabase
-        .from('service_modals')
-        .select('executor_operator_id, acceptor_commission_pct, platform_commission_pct')
-        .eq('slug', slug).maybeSingle();
-      modal = data || null;
-    }
-
-    const { data: cfg } = await supabase
-      .from('system_settings').select('setting_value')
-      .eq('setting_key', 'payment_split_admin_pct').maybeSingle();
-
-    const repasses = calcularRepasses(
-      total, booking.operator_id, modal, Number(cfg?.setting_value) || 0,
-    );
+    const { modal, geral } = await contextoDoRateio(booking);
+    const repasses = calcularRepasses(total, booking.operator_id, modal, geral);
     if (repasses.length === 0) return { skipped: 'nada a repassar' };
 
     const linhas = repasses.map((r) => ({ ...r, booking_id: booking.id, status: 'pending' }));

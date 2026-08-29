@@ -1412,15 +1412,17 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
     // o total a pagar na conferência.
     const EXECUTOR = 'driver_name, driver_phone, driver_document, driver_pix_key, '
                    + 'driver_pix_key_type, real_vehicle_text, executed_confirmed_at, updated_at';
-    const montar = (colsExecutor) => {
+    const AVULSO = 'payee_name, payee_document, payee_pix_key, payee_pix_key_type,';
+    const montar = ({ comExecutor, comAvulso }) => {
       let q = supabase
         .from('booking_payouts')
         .select(`
           id, kind, amount, status, paid_at, notes, created_at,
+          ${comAvulso ? AVULSO : ''}
           payee:payee_user_id ( id, full_name, phone, pix_key, pix_key_type,
                                 document_type, document_number ),
           bookings ( booking_code, service_type, service_date, total_amount
-                     ${colsExecutor ? `, operational_assignments ( ${colsExecutor} )` : ''} )
+                     ${comExecutor ? `, operational_assignments ( ${EXECUTOR} )` : ''} )
         `)
         .order('created_at', { ascending: false })
         .limit(500);
@@ -1429,14 +1431,20 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
       return q;
     };
 
-    let { data, error } = await montar(EXECUTOR);
-    // Sem a 081 as colunas do executor não existem e a consulta INTEIRA falha.
-    // Cai para a versão sem executor em QUALQUER erro dela — a tela perde o
-    // destino do dinheiro, não a lista de repasses. Errar para o lado de
-    // mostrar menos é melhor que derrubar a única tela que diz o que se deve.
+    // Degrada em camadas: 082 (destinatário avulso) → 081 (executor) → básico.
+    // Cada migration pendente tira uma informação da tela, nunca a tela. Errar
+    // para o lado de mostrar menos é melhor que derrubar a única tela que diz
+    // o que a plataforma deve.
+    let { data, error } = await montar({ comExecutor: true, comAvulso: true });
     if (error) {
-      console.warn('[admin] executor do repasse indisponível (migration 081?):', error.message);
-      ({ data, error } = await montar(null));
+      console.warn('[admin] repasse completo indisponível (migration 081/082?):', error.message);
+      ({ data, error } = await montar({ comExecutor: true, comAvulso: false }));
+    }
+    if (error) {
+      ({ data, error } = await montar({ comExecutor: false, comAvulso: true }));
+    }
+    if (error) {
+      ({ data, error } = await montar({ comExecutor: false, comAvulso: false }));
     }
     // Sem a 080 a tabela não existe: devolve vazio com um aviso, em vez de 500.
     if (error) {
@@ -1458,26 +1466,48 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
       }
     }
 
-    // Total por cooperativa — é assim que o repasse é feito na prática: um PIX
-    // por cooperativa, não um por reserva.
+    // Total por destinatário — é assim que o repasse acontece: um PIX cobrindo
+    // várias reservas, não um por reserva.
+    //
+    // Dois tipos de destinatário e um só agrupamento: a cooperativa/operador,
+    // que tem cadastro, e o motorista avulso que a cooperativa mandou a campo
+    // (082), identificado pelo nome. Cada linha carrega a CHAVE que vale para
+    // ela — a do cadastro ou a copiada do despacho.
     const porQuem = new Map();
     for (const p of data || []) {
-      const id = p.payee?.id || 'sem-destinatario';
-      if (!porQuem.has(id)) {
-        porQuem.set(id, {
-          payee_id: p.payee?.id || null,
-          nome:     p.payee?.full_name || '(sem destinatário)',
-          phone:    p.payee?.phone || null,
-          // Para onde mandar o PIX que cobre todas as reservas dela (081).
-          pix_key:      p.payee?.pix_key      || null,
-          pix_key_type: p.payee?.pix_key_type || null,
-          documento:    p.payee?.document_number || null,
+      const avulso = !p.payee?.id;
+      const nome   = p.payee?.full_name || p.payee_name || null;
+      // Chave do agrupamento: quem tem cadastro agrupa por id; sem cadastro,
+      // por nome normalizado. Usar o nome cru juntaria "João" e "joão " em
+      // grupos diferentes, e o admin faria dois PIX para a mesma pessoa.
+      const chave = avulso
+        ? (nome ? `nome:${nome.trim().toLowerCase()}` : 'sem-destinatario')
+        : p.payee.id;
+
+      if (!porQuem.has(chave)) {
+        porQuem.set(chave, {
+          chave,
+          payee_id:     p.payee?.id || null,
+          payee_name:   avulso ? (nome || null) : null,
+          avulso,
+          nome:         nome || '(sem destinatário)',
+          phone:        p.payee?.phone || null,
+          pix_key:      p.payee?.pix_key      || p.payee_pix_key      || null,
+          pix_key_type: p.payee?.pix_key_type || p.payee_pix_key_type || null,
+          documento:    p.payee?.document_number || p.payee_document  || null,
           itens: 0, total: 0,
         });
       }
-      const t = porQuem.get(id);
+      const t = porQuem.get(chave);
       t.itens += 1;
       t.total = Math.round((t.total + Number(p.amount)) * 100) / 100;
+      // A chave pode faltar na primeira reserva e vir na seguinte — sem isto o
+      // grupo inteiro apareceria como "sem chave PIX" por causa da mais antiga.
+      if (!t.pix_key && p.payee_pix_key) {
+        t.pix_key      = p.payee_pix_key;
+        t.pix_key_type = p.payee_pix_key_type || null;
+      }
+      if (!t.documento && p.payee_document) t.documento = p.payee_document;
     }
 
     res.json({
@@ -1491,6 +1521,10 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
 const payoutSchema = z.object({
   status: z.enum(['pending', 'paid', 'cancelled']),
   notes:  z.string().max(500).optional().nullable(),
+  // O rateio por percentual é um ponto de partida. A diária combinada com o
+  // motorista raramente é uma fração exata da reserva, e quem fecha o acerto é
+  // o admin — por isso o valor é editável.
+  amount: z.coerce.number().min(0).max(1_000_000).optional(),
 });
 
 router.put('/payouts/:id', requireAdmin, async (req, res, next) => {
@@ -1498,13 +1532,29 @@ router.put('/payouts/:id', requireAdmin, async (req, res, next) => {
     const body = payoutSchema.parse(req.body);
     const patch = {
       status:     body.status,
-      notes:      body.notes ?? null,
       // Carimba quando vira pago e LIMPA ao voltar para pendente: sem isso um
       // repasse desmarcado ficaria com data de pagamento, e a conferência
       // mostraria "pago em tal dia" para algo que ninguém pagou.
       paid_at:    body.status === 'paid' ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     };
+    // Só mexe nas observações quando vieram. Antes, qualquer PUT sem `notes` —
+    // marcar pago, ajustar valor — apagava o que o admin tinha anotado ali.
+    if (body.notes !== undefined) patch.notes = body.notes ?? null;
+
+    // Mudar o valor de algo JÁ PAGO reescreveria o histórico: a tela passaria a
+    // dizer que se pagou R$ X quando saiu R$ Y da conta. Só enquanto pendente.
+    if (body.amount !== undefined) {
+      const { data: atual } = await supabase
+        .from('booking_payouts').select('status').eq('id', req.params.id).maybeSingle();
+      if (atual && atual.status !== 'pending') {
+        return res.status(400).json({
+          error: 'Este repasse já foi baixado. Volte para "a pagar" antes de mudar o valor.',
+        });
+      }
+      patch.amount = body.amount;
+    }
+
     const { data, error } = await supabase
       .from('booking_payouts').update(patch).eq('id', req.params.id).select().maybeSingle();
     if (error) throw error;
@@ -1519,20 +1569,36 @@ router.put('/payouts/:id', requireAdmin, async (req, res, next) => {
 });
 
 // ── POST /api/admin/payouts/pay-all ────────────────────
-// Marca TODOS os pendentes de uma cooperativa como pagos, de uma vez — é como
+// Marca TODOS os pendentes de um destinatário como pagos, de uma vez — é como
 // o repasse acontece de verdade: um PIX cobrindo várias reservas.
+//
+// Aceita `payee_user_id` (cooperativa/operador, que tem cadastro) OU
+// `payee_name` (motorista avulso declarado no despacho, migration 082).
 router.post('/payouts/pay-all', requireAdmin, async (req, res, next) => {
   try {
-    const { payee_user_id, notes } = req.body || {};
-    if (!payee_user_id) return res.status(400).json({ error: 'Informe a cooperativa.' });
+    const { payee_user_id, payee_name, notes } = req.body || {};
+    const nome = (payee_name || '').trim();
+    if (!payee_user_id && !nome) {
+      return res.status(400).json({ error: 'Informe a cooperativa ou o nome de quem recebe.' });
+    }
 
-    const { data, error } = await supabase
+    let q = supabase
       .from('booking_payouts')
       .update({ status: 'paid', paid_at: new Date().toISOString(),
                 notes: notes || null, updated_at: new Date().toISOString() })
-      .eq('payee_user_id', payee_user_id)
-      .eq('status', 'pending')     // só os pendentes: não reescreve histórico
-      .select('id, amount');
+      .eq('status', 'pending');    // só os pendentes: não reescreve histórico
+
+    if (payee_user_id) {
+      q = q.eq('payee_user_id', payee_user_id);
+    } else {
+      // `is('payee_user_id', null)` é essencial: sem ele, um cadastrado cujo
+      // nome coincidisse com o do motorista teria os repasses dele baixados
+      // junto. `ilike` sem curinga casa o nome inteiro, ignorando maiúsculas —
+      // o mesmo critério do agrupamento da tela.
+      q = q.is('payee_user_id', null).ilike('payee_name', nome);
+    }
+
+    const { data, error } = await q.select('id, amount');
     if (error) throw error;
 
     const total = (data || []).reduce((s, r) => s + Number(r.amount), 0);

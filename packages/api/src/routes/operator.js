@@ -1149,12 +1149,20 @@ async function registrarExecutor(req, bookingId) {
   // Pega o despacho mais recente da reserva. Nada impede duas linhas para a
   // mesma reserva (não há UNIQUE em booking_id), e `.maybeSingle()` daria erro
   // em vez de escolher — o que derrubaria a confirmação por um detalhe.
-  const { data: despachos, error: eBusca } = await supabase
+  let { data: despachos, error: eBusca } = await supabase
     .from('operational_assignments')
-    .select('id')
+    .select('id, driver_name, driver_document, driver_pix_key, driver_pix_key_type')
     .eq('booking_id', bookingId)
     .order('updated_at', { ascending: false })
     .limit(1)
+  // Sem a 081 as colunas novas não existem: busca só o id, que é o necessário
+  // para atualizar. O repasse ao executor fica de fora, como deve.
+  if (eBusca?.code === '42703') {
+    ({ data: despachos, error: eBusca } = await supabase
+      .from('operational_assignments')
+      .select('id').eq('booking_id', bookingId)
+      .order('updated_at', { ascending: false }).limit(1))
+  }
   if (eBusca) throw eBusca
 
   const alvo = despachos?.[0]
@@ -1170,6 +1178,21 @@ async function registrarExecutor(req, bookingId) {
   // 42703 = coluna ausente (migration 081 pendente). Não é erro de operação:
   // a corrida foi concluída e o resto do despacho continua intacto.
   if (error && error.code !== '42703') throw error
+
+  // Agora que se sabe quem foi a campo, lança o que a plataforma deve a essa
+  // pessoa (082). Só sai em modais que o admin configurou para dividir — a
+  // própria função decide, e não faz nada quando não é o caso.
+  // Vale o que ficou gravado: o que veio na confirmação, e para o que ela não
+  // mencionou, o que o despacho já tinha. Usar só o `patch` mandaria o repasse
+  // sem chave PIX quando a cooperativa confirmou o nome sem reabrir o resto.
+  const executor = {
+    name:         patch.driver_name         ?? alvo?.driver_name,
+    document:     patch.driver_document     ?? alvo?.driver_document,
+    pix_key:      patch.driver_pix_key      ?? alvo?.driver_pix_key,
+    pix_key_type: patch.driver_pix_key_type ?? alvo?.driver_pix_key_type,
+  }
+  const { gerarRepasseExecucao } = await import('../services/payouts.js')
+  await gerarRepasseExecucao(bookingId, executor)
 }
 
 // ── GET /api/operator/executores ──────────────────────

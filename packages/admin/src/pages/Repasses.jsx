@@ -79,6 +79,53 @@ export default function Repasses() {
   )
 }
 
+// Valor do repasse, editável enquanto pendente. O rateio por percentual é um
+// ponto de partida: a diária combinada com o motorista raramente é uma fração
+// exata da reserva, e quem fecha o acerto é o admin. Já baixado vira texto —
+// mudar o valor de algo pago faria a tela mentir sobre o que saiu da conta.
+function ValorRepasse({ payout, onSalvar }) {
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState('')
+
+  if (payout.status !== 'pending') {
+    return <span className="text-[13px] font-semibold text-gray-200 tabular-nums">{fmtBRL(payout.amount)}</span>
+  }
+
+  if (!editando) {
+    return (
+      <button
+        onClick={() => { setValor(String(payout.amount ?? '')); setEditando(true) }}
+        title="Ajustar o valor"
+        className="text-[13px] font-semibold text-gray-200 tabular-nums hover:text-brand transition-colors"
+      >
+        {fmtBRL(payout.amount)}
+      </button>
+    )
+  }
+
+  function confirmar() {
+    const n = Number(String(valor).replace(',', '.'))
+    // Valor inválido não pode virar 0 em silêncio: seria uma dívida apagada.
+    if (!Number.isFinite(n) || n < 0) { setEditando(false); return }
+    if (n !== Number(payout.amount)) onSalvar(n)
+    setEditando(false)
+  }
+
+  return (
+    <input
+      autoFocus type="number" step="0.01" min="0"
+      value={valor}
+      onChange={(e) => setValor(e.target.value)}
+      onBlur={confirmar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') confirmar()
+        if (e.key === 'Escape') setEditando(false)
+      }}
+      className="w-24 bg-gray-900 border border-brand/50 rounded px-2 py-1 text-[13px] text-gray-100 tabular-nums outline-none"
+    />
+  )
+}
+
 // ── Repasses às COOPERATIVAS ────────────────────────────
 // Gerados sozinhos quando o pagamento é aprovado. A tela agrupa por
 // cooperativa porque é assim que o repasse acontece: um PIX cobrindo várias
@@ -99,7 +146,9 @@ function RepassesCooperativas() {
     onError:    (e) => alert(e?.message || 'Erro ao atualizar o repasse.'),
   })
   const pagarTudoMut = useMutation({
-    mutationFn: (payee_user_id) => api.payAllPayouts({ payee_user_id }),
+    // Quem tem cadastro é baixado pelo id; o motorista avulso (082), pelo nome.
+    mutationFn: (t) => api.payAllPayouts(
+      t.payee_id ? { payee_user_id: t.payee_id } : { payee_name: t.payee_name }),
     onSuccess:  (r) => {
       qc.invalidateQueries({ queryKey: ['admin-payouts'] })
       alert(`${r.marcados} repasse(s) marcados como pagos — ${fmtBRL(r.total)}.`)
@@ -144,34 +193,50 @@ function RepassesCooperativas() {
           </p>
         </CardBody></Card>
       ) : totais.map((t) => {
-        const itens = payouts.filter((p) => (p.payee?.id || 'sem-destinatario') === (t.payee_id || 'sem-destinatario'))
-        const expandido = aberto === (t.payee_id || 'sem-destinatario')
+        // Mesma chave que a API usou para somar o grupo — sem isso os itens
+        // detalhados não bateriam com o total mostrado logo acima deles.
+        const chaveDe = (p) => (p.payee?.id
+          ? p.payee.id
+          : (p.payee_name ? `nome:${p.payee_name.trim().toLowerCase()}` : 'sem-destinatario'))
+        const itens = payouts.filter((p) => chaveDe(p) === t.chave)
+        const expandido = aberto === t.chave
         return (
-          <Card key={t.payee_id || 'sem'}>
+          <Card key={t.chave}>
             <CardBody>
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-200">{t.nome}</p>
+                  <p className="text-sm font-semibold text-gray-200 flex items-center gap-2 flex-wrap">
+                    {t.nome}
+                    {/* Sem cadastro na plataforma: motorista que a cooperativa
+                        mandou a campo. O admin paga direto a ele. */}
+                    {t.avulso && t.payee_name && (
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500 border border-gray-700 rounded px-1.5 py-px">
+                        executor
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-gray-500">
                     {t.itens} reserva{t.itens === 1 ? '' : 's'}
                     {t.phone ? ` · ${t.phone}` : ''}
                     {t.documento ? ` · ${t.documento}` : ''}
                   </p>
-                  {/* Para onde mandar o PIX que cobre todas as reservas dela. */}
-                  {t.payee_id && <ChavePix chave={t.pix_key} tipo={t.pix_key_type} className="mt-0.5" />}
+                  {/* Para onde mandar o PIX que cobre todas as reservas dele. */}
+                  {(t.payee_id || t.payee_name) && (
+                    <ChavePix chave={t.pix_key} tipo={t.pix_key_type} className="mt-0.5" />
+                  )}
                 </div>
                 <p className="text-lg font-bold text-brand tabular-nums">{fmtBRL(t.total)}</p>
                 <button
-                  onClick={() => setAberto(expandido ? null : (t.payee_id || 'sem-destinatario'))}
+                  onClick={() => setAberto(expandido ? null : t.chave)}
                   className="text-xs font-semibold text-gray-400 hover:text-gray-200 px-2 py-1"
                 >
                   {expandido ? 'Ocultar' : 'Detalhar'}
                 </button>
-                {status === 'pending' && t.payee_id && (
+                {status === 'pending' && (t.payee_id || t.payee_name) && (
                   <Button size="sm"
                     disabled={pagarTudoMut.isPending}
                     onClick={() => confirm(`Marcar ${fmtBRL(t.total)} como pago para ${t.nome}?`)
-                      && pagarTudoMut.mutate(t.payee_id)}>
+                      && pagarTudoMut.mutate(t)}>
                     <Check size={14} /> Dar baixa em tudo
                   </Button>
                 )}
@@ -213,7 +278,11 @@ function RepassesCooperativas() {
                           <p className="text-[11px] text-emerald-500/80">pago em {fmtDia(p.paid_at)}</p>
                         )}
                       </div>
-                      <span className="text-[13px] font-semibold text-gray-200 tabular-nums">{fmtBRL(p.amount)}</span>
+                      <ValorRepasse
+                        payout={p}
+                        onSalvar={(amount) =>
+                          baixaMut.mutate({ id: p.id, body: { status: p.status, amount } })}
+                      />
                       {p.status === 'pending' ? (
                         <button onClick={() => baixaMut.mutate({ id: p.id, body: { status: 'paid' } })}
                           className="text-[11.5px] font-bold text-emerald-400 hover:underline">marcar pago</button>

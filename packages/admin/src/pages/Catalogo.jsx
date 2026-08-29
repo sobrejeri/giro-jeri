@@ -124,7 +124,7 @@ function simularRateio(total, aceitePct, plataformaPct, comExecutor, executorAce
   const ordem = bruto.map((x, i) => ({ i, f: x - Math.floor(x) })).sort((a, b) => b.f - a.f)
   for (let k = 0; k < resto; k++) cents[ordem[k % cents.length].i] += 1
   const rotulos = comExecutor
-    ? ['Quem aceitou', 'Plataforma', 'Executor']
+    ? ['Quem aceitou', 'Plataforma', 'Quem executou']
     : ['Plataforma', 'Quem aceitou (executa)']
   return rotulos.map((r, i) => ({ rotulo: r, valor: cents[i] / 100 })).filter((x) => x.valor > 0)
 }
@@ -368,11 +368,10 @@ export default function Catalogo() {
       // geral (`payment_split_admin_pct`).
       platform_commission_pct: modalForm.platform_commission_pct !== '' && modalForm.platform_commission_pct != null
                                  ? Number(modalForm.platform_commission_pct) : null,
-      // A % DE QUEM ACEITA só tem significado com executor fixo — é comissão de
-      // intermediação. Zerada sem executor para não ficar valor órfão guardado
-      // que reapareceria ao religar o executor.
-      acceptor_commission_pct: modalForm.executor_operator_id
-                                 ? (Number(modalForm.acceptor_commission_pct) || 0) : 0,
+      // A % DE QUEM ACEITA também vale sempre (082): com ela acima de zero, o
+      // resto vira repasse para quem executou, mesmo sem executor fixo — é o
+      // motorista que a cooperativa declara na conclusão que recebe.
+      acceptor_commission_pct: Number(modalForm.acceptor_commission_pct) || 0,
     })
   }
 
@@ -1404,17 +1403,16 @@ export default function Catalogo() {
               </p>
             </div>
 
-            {/* A % da plataforma vale COM ou SEM executor: é ela que decide o
-                que sobra de comissão para quem aceitou. A % de quem aceita só
-                aparece com executor fixo — aí é comissão de intermediação. */}
-            <div className={modalForm.executor_operator_id ? 'grid grid-cols-2 gap-3' : ''}>
-              {modalForm.executor_operator_id && (
-                <Input
-                  label="% de quem aceita" type="number" min={0} max={100} step={0.5}
-                  value={modalForm.acceptor_commission_pct ?? 0}
-                  onChange={(e) => setModalForm({ ...modalForm, acceptor_commission_pct: e.target.value })}
-                />
-              )}
+            {/* As duas porcentagens valem com ou sem executor fixo. É a "% de
+                quem aceita" que LIGA a divisão em três: com ela em zero, quem
+                aceitou recebe tudo menos a plataforma e o executor não gera
+                repasse — o comportamento de antes da 082. */}
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="% de quem aceita" type="number" min={0} max={100} step={0.5}
+                value={modalForm.acceptor_commission_pct ?? 0}
+                onChange={(e) => setModalForm({ ...modalForm, acceptor_commission_pct: e.target.value })}
+              />
               <Input
                 label="% da plataforma" type="number" min={0} max={100} step={0.5}
                 placeholder="usa a geral"
@@ -1422,21 +1420,25 @@ export default function Catalogo() {
                 onChange={(e) => setModalForm({ ...modalForm, platform_commission_pct: e.target.value })}
               />
             </div>
-            {!modalForm.executor_operator_id && (
-              <p className="text-[11px] text-gray-500 -mt-1">
-                O resto é a comissão de quem aceita — ele executa e recebe.
-              </p>
-            )}
+            <p className="text-[11px] text-gray-500 -mt-1">
+              {Number(modalForm.acceptor_commission_pct) > 0 || modalForm.executor_operator_id
+                ? 'O resto vai para quem EXECUTOU — a plataforma repassa direto a ele.'
+                : 'Com 0% de aceite, quem aceitou fica com tudo menos a parte da plataforma e paga o próprio motorista.'}
+            </p>
 
             {/* SIMULAÇÃO — os mesmos números que o repasse vai usar. */}
             {(() => {
-              const comExecutor = !!modalForm.executor_operator_id
+              const execFixo = !!modalForm.executor_operator_id
               const plat = Number(modalForm.platform_commission_pct) || 0
-              const aceite = comExecutor ? (Number(modalForm.acceptor_commission_pct) || 0) : 0
+              const aceite = Number(modalForm.acceptor_commission_pct) || 0
+              // A divisão em três existe com executor fixo OU com comissão de
+              // aceite configurada — aí o terceiro é o motorista declarado na
+              // conclusão. É a mesma regra de `repartirReserva` no servidor.
+              const divide = execFixo || aceite > 0
               const excede = aceite + plat > 100
-              // Sem executor há um cenário só; com executor, dois — o executor
-              // pode ser justamente quem aceitou, e aí não há intermediação.
-              const cenarios = comExecutor
+              // Só o executor FIXO pode ser quem aceitou (a Frisonfly pegando o
+              // próprio voo). Motorista declarado nunca é quem aceita.
+              const cenarios = execFixo
                 ? [['Outro operador aceitou', false], ['O próprio executor aceitou', true]]
                 : [[null, false]]
               return (
@@ -1453,7 +1455,7 @@ export default function Catalogo() {
                       {cenarios.map(([titulo, exec]) => (
                         <div key={titulo || 'unico'}>
                           {titulo && <p className="text-[11px] text-gray-500">{titulo}</p>}
-                          {simularRateio(7600, aceite, plat, comExecutor, exec).map((l) => (
+                          {simularRateio(7600, aceite, plat, divide, exec).map((l) => (
                             <div key={l.rotulo} className="flex justify-between text-[12px] text-gray-300">
                               <span>{l.rotulo}</span>
                               <span className="tabular-nums">
