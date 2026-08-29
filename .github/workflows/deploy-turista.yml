@@ -94,7 +94,6 @@ jobs:
       # A raiz vem da MESMA variável do build — se divergissem, o 404 mandaria
       # para um caminho que não existe mais e o link compartilhado morreria.
       - name: Create SPA 404.html
-        env:
         run: |
           ROOT=""
           [ -z "$CUSTOM_DOMAIN" ] && ROOT="/giro-jeri"
