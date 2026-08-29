@@ -26,6 +26,12 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # O domínio é público — o lugar dele é em Variables. Mas aceitar também um
+    # Secret evita a falha mais chata daqui: `vars.` não enxerga o que foi
+    # criado em Secrets, o deploy passa VERDE e publica os caminhos antigos.
+    # O site abre em branco e nada no log diz o motivo.
+    env:
+      CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN || secrets.CUSTOM_DOMAIN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,7 +46,6 @@ jobs:
         run: npm run build --workspace=packages/turista
         env:
           NODE_ENV: production
-          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_MP_PUBLIC_KEY: ${{ secrets.VITE_MP_PUBLIC_KEY }}
           VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
@@ -49,7 +54,6 @@ jobs:
         run: npm run build --workspace=packages/operador
         env:
           NODE_ENV: production
-          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -58,7 +62,6 @@ jobs:
         run: npm run build --workspace=packages/admin
         env:
           NODE_ENV: production
-          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -79,7 +82,6 @@ jobs:
       # para um caminho que não existe mais e o link compartilhado morreria.
       - name: Create SPA 404.html
         env:
-          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
         run: |
           ROOT=""
           [ -z "$CUSTOM_DOMAIN" ] && ROOT="/giro-jeri"
@@ -104,12 +106,18 @@ jobs:
       # cada publicação e, sem ele aqui, o domínio próprio é desconfigurado no
       # deploy seguinte — o site volta para o endereço github.io sozinho.
       - name: Publish CNAME
-        if: vars.CUSTOM_DOMAIN != ''
         run: |
-          echo "${{ vars.CUSTOM_DOMAIN }}" > dist/CNAME
+          if [ -z "$CUSTOM_DOMAIN" ]; then
+            echo "::warning::CUSTOM_DOMAIN vazio — publicando em /giro-jeri/. \
+          Se o domínio próprio já está configurado, o site abrirá em branco: \
+          crie CUSTOM_DOMAIN em Settings > Secrets and variables > Actions."
+            exit 0
+          fi
+          echo "$CUSTOM_DOMAIN" > dist/CNAME
+          echo "CNAME publicado: $CUSTOM_DOMAIN"
           # og:url é meta fixa no HTML e não segue a base do Vite.
           find dist -name '*.html' -exec \
-            sed -i "s#https://sobrejeri.github.io/giro-jeri/#https://${{ vars.CUSTOM_DOMAIN }}/#g" {} +
+            sed -i "s#https://sobrejeri.github.io/giro-jeri/#https://$CUSTOM_DOMAIN/#g" {} +
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
