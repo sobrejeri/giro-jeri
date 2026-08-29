@@ -47,6 +47,22 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · DESENHO ACORDADO (ainda NÃO implementado): combo aberto a
+  qualquer cooperativa, DEPOIS do split** — Observação do dono: com executor
+  fixo configurado, quem aceita não precisa executar, então o combo pode ir para
+  qualquer cooperativa. Está certo, e a regra é:
+  *uma cooperativa pode receber um combo se, para CADA modal do pedido, ela
+  opera aquele modal OU aquele modal tem executor fixo.*
+  **ORDEM OBRIGATÓRIA — não inverter.** Hoje o pagamento manda o valor INTEIRO
+  para quem aceitou (split de recebedor único, que funciona). Se o combo for
+  liberado antes do split de N recebedores estar valendo, uma cooperativa de
+  buggy aceita um combo com voo de R$ 7.600, **recebe os R$ 7.600**, e a
+  Frisonfly voa sem receber. Não é hipótese: é o comportamento atual.
+  Sequência: split validado com o MP → depois abrir o roteamento.
+  Consequência: com isso, `accepts_combos` (077) deixa de ser necessário para
+  combo que envolva modal COM executor fixo. Continua valendo para combo de dois
+  modais SEM executor fixo (buggy + barco), onde quem aceita executa os dois.
+
 - **2026-08-25 · Agente B (executor fixo do modal — PASSO 1, só configuração)**
   — Regra do dono para o aéreo: uma empresa executa tudo (Frisonfly); quem
   aceitar fica só com a comissão e o restante vai para quem voa.
