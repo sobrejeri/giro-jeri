@@ -40,6 +40,7 @@ jobs:
         run: npm run build --workspace=packages/turista
         env:
           NODE_ENV: production
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_MP_PUBLIC_KEY: ${{ secrets.VITE_MP_PUBLIC_KEY }}
           VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
@@ -48,6 +49,7 @@ jobs:
         run: npm run build --workspace=packages/cooperativa
         env:
           NODE_ENV: production
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -56,6 +58,7 @@ jobs:
         run: npm run build --workspace=packages/admin
         env:
           NODE_ENV: production
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -70,9 +73,17 @@ jobs:
           mkdir -p dist/admin
           cp -r packages/admin/dist/. dist/admin/
 
+      # O 404 é o roteador do SPA no GitHub Pages: qualquer URL profunda cai
+      # aqui, e ele devolve para a raiz do app certo guardando o destino.
+      # A raiz vem da MESMA variável do build — se divergissem, o 404 mandaria
+      # para um caminho que não existe mais e o link compartilhado morreria.
       - name: Create SPA 404.html
+        env:
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
         run: |
-          cat > dist/404.html << 'EOF'
+          ROOT=""
+          [ -z "$CUSTOM_DOMAIN" ] && ROOT="/giro-jeri"
+          cat > dist/404.html << EOF
           <!DOCTYPE html>
           <html>
           <head><meta charset="utf-8"><title>Turiva</title></head>
@@ -81,13 +92,24 @@ jobs:
             var l = window.location;
             var p = l.pathname;
             sessionStorage.setItem('spa_redirect', p + l.search + l.hash);
-            if      (p.indexOf('/admin')       !== -1) l.replace(l.protocol+'//'+l.host+'/giro-jeri/admin/');
-            else if (p.indexOf('/cooperativa') !== -1) l.replace(l.protocol+'//'+l.host+'/giro-jeri/cooperativa/');
-            else                                       l.replace(l.protocol+'//'+l.host+'/giro-jeri/');
+            if      (p.indexOf('/admin')       !== -1) l.replace(l.protocol+'//'+l.host+'$ROOT/admin/');
+            else if (p.indexOf('/cooperativa') !== -1) l.replace(l.protocol+'//'+l.host+'$ROOT/cooperativa/');
+            else                                       l.replace(l.protocol+'//'+l.host+'$ROOT/');
           })();
           </script>
           </html>
           EOF
+
+      # O CNAME precisa estar DENTRO do artefato: o Pages recria o arquivo a
+      # cada publicação e, sem ele aqui, o domínio próprio é desconfigurado no
+      # deploy seguinte — o site volta para o endereço github.io sozinho.
+      - name: Publish CNAME
+        if: vars.CUSTOM_DOMAIN != ''
+        run: |
+          echo "${{ vars.CUSTOM_DOMAIN }}" > dist/CNAME
+          # og:url é meta fixa no HTML e não segue a base do Vite.
+          find dist -name '*.html' -exec \
+            sed -i "s#https://sobrejeri.github.io/giro-jeri/#https://${{ vars.CUSTOM_DOMAIN }}/#g" {} +
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
