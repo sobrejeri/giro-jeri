@@ -1,7 +1,12 @@
 /* Turiva — Service Worker (PWA offline + Web Push) */
 
 // Suba a versão para invalidar os caches antigos num deploy.
-const VERSION      = 'v3'
+//
+// v4: a mudança para domínio próprio trocou a base dos assets de /giro-jeri/
+// para a raiz. Quem abriu turivabrasil.com antes disso ficou com um shell
+// apontando para caminhos que não existem mais — tela branca e 404 no console.
+// Mudar a versão renomeia os caches, e o `activate` apaga os que sobraram.
+const VERSION      = 'v4'
 const SHELL_CACHE  = `turiva-shell-${VERSION}`
 const ASSET_CACHE  = `turiva-assets-${VERSION}`
 const KEEP         = [SHELL_CACHE, ASSET_CACHE]
