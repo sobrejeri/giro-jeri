@@ -47,6 +47,23 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-08-25 · Agente B (categoria vira o controle principal da cooperativa)**
+  — O dono propôs limitar por CATEGORIA (terrestre/aéreo/aquático) em vez de por
+  frota, com várias por cooperativa e o universal com todas. Isso já existia
+  desde a 076 — faltava a TELA dizer isso: o bloco de meios ficava acima de uma
+  lista longa de veículos, e a lista roubava a atenção do controle que importa.
+  Agora a lista de veículos nasce RECOLHIDA, atrás de "Ajuste fino por veículo
+  (opcional)", com o contador de liberados no próprio botão.
+  **Não removi o nível do veículo, e o motivo é concreto:** hoje NENHUM modal
+  está configurado (opt-out = todos operam tudo). A única coisa restringindo voo
+  agora é o opt-in do helicóptero, aplicado no script de dados. Tirar o filtro
+  por veículo antes de o dono marcar os meios faria o voo voltar a sair para
+  todas as cooperativas. Configurado o modal, ele cobre o caso e o nível do
+  veículo vira só ajuste fino — pode ser aposentado então.
+  Conferido no navegador: os três meios aparecem, o perfil é calculado
+  ("universal — recebe os serviços de cada meio e os combos"), a lista de
+  veículos vem recolhida e abre ao clicar. Sem erros de página.
+
 - **2026-08-25 · Agente B (o 7% inventado estava em QUATRO lugares)** — Varrendo
   a plataforma atrás de outros ajustes, achei que a correção do Dashboard tinha
   pegado só um quarto do problema. `bruto × 0,93` também estava em:

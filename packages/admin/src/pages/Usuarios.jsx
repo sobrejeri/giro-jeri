@@ -742,6 +742,10 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
   const qc = useQueryClient()
   const [search, setSearch]   = useState('')
   const [savedId, setSavedId] = useState(null)
+  // A escolha do dia a dia é por CATEGORIA (migration 076). O veículo a veículo
+  // vira ajuste fino e nasce recolhido: com a frota crescendo era uma lista
+  // longa de chaves competindo com o controle que realmente importa.
+  const [mostrarVeiculos, setMostrarVeiculos] = useState(false)
   const [errorRow, setErrorRow] = useState(null) // { id, message }
   const savedTimer = useRef(null)
 
@@ -922,7 +926,20 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
           </div>
         )}
 
-        {vehicles.length > 8 && (
+        {/* Ajuste fino DENTRO do meio já liberado: a coop que faz terrestre mas
+            não tem jardineira. Quem opera só por categoria nunca precisa abrir. */}
+        <button
+          type="button"
+          onClick={() => setMostrarVeiculos((v) => !v)}
+          className="w-full flex items-center justify-between text-left px-3 py-2 rounded-xl border border-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
+        >
+          <span className="text-xs font-semibold">
+            Ajuste fino por veículo (opcional) · {releasedCount} de {vehicles.length} liberados
+          </span>
+          <span className="text-xs">{mostrarVeiculos ? 'Ocultar' : 'Mostrar'}</span>
+        </button>
+
+        {mostrarVeiculos && vehicles.length > 8 && (
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
@@ -934,7 +951,7 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
           </div>
         )}
 
-        {isLoading ? (
+        {mostrarVeiculos && (isLoading ? (
           <p className="text-sm text-gray-500 py-8 text-center">{fleetCopy.loading}</p>
         ) : isError ? (
           <div className="text-center py-8">
@@ -989,7 +1006,7 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
               )
             })}
           </div>
-        )}
+        ))}
 
         {/* Rodapé — contador vivo */}
         {!isLoading && !isError && vehicles.length > 0 && (
