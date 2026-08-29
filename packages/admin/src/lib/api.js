@@ -118,6 +118,10 @@ export const api = {
   importAuthUser:    (body)        => request('/api/admin/import-auth-user', { method: 'POST', body }),
 
   // Frota liberada por cooperativa (roteamento por veículo operado)
+  // Repasses a pagar (080): comissões e valores de executor.
+  getPayouts:          (params = {})                   => request(`/api/admin/payouts?${new URLSearchParams(params)}`),
+  updatePayout:        (id, body)                      => request(`/api/admin/payouts/${id}`, { method: 'PUT', body }),
+  payAllPayouts:       (body)                          => request('/api/admin/payouts/pay-all', { method: 'POST', body }),
   getOperatorVehicles: (operatorId)                    => request(`/api/admin/operators/${operatorId}/vehicles`),
   setOperatorVehicle:  (operatorId, vehicleId, body)   => request(`/api/admin/operators/${operatorId}/vehicles/${vehicleId}`, { method: 'PUT', body }),
   // Modais operados pela cooperativa (076): o corte grosso do roteamento.

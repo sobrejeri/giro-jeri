@@ -18,14 +18,164 @@ const FILTROS = [
   { id: 'all',       label: 'Todos'     },
 ]
 
-// Repasse ao motorista.
-//
-// Quando a plataforma opera as corridas (operador da casa, sem Mercado Pago
-// conectado), o valor da reserva cai inteiro na conta da plataforma e o
-// pagamento ao motorista é feito FORA do sistema (PIX/dinheiro). Esta tela é o
-// controle: mostra motorista, veículo, data e valor do serviço, permite
-// registrar quanto foi combinado e dar baixa quando o repasse é feito.
+// Duas naturezas de repasse, e não se misturam:
+//   • COOPERATIVAS — comissão de quem aceitou e valor de quem executou, gerados
+//     automaticamente quando o pagamento é aprovado (migration 080). É o
+//     grosso do dinheiro no modelo em que a plataforma recebe 100% (079).
+//   • MOTORISTA — pagamento de uma corrida despachada pela casa, com valor
+//     combinado à mão (migration 066). Já existia.
 export default function Repasses() {
+  const [aba, setAba] = useState('cooperativas')
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
+        {[['cooperativas', 'Cooperativas'], ['motoristas', 'Motoristas']].map(([id, label]) => (
+          <button key={id} onClick={() => setAba(id)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              aba === id ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {aba === 'cooperativas' ? <RepassesCooperativas /> : <RepassesMotorista />}
+    </div>
+  )
+}
+
+// ── Repasses às COOPERATIVAS ────────────────────────────
+// Gerados sozinhos quando o pagamento é aprovado. A tela agrupa por
+// cooperativa porque é assim que o repasse acontece: um PIX cobrindo várias
+// reservas, não um por reserva.
+function RepassesCooperativas() {
+  const [status, setStatus] = useState('pending')
+  const [aberto, setAberto] = useState(null)   // cooperativa expandida
+  const qc = useQueryClient()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-payouts', status],
+    queryFn:  () => api.getPayouts({ status }),
+  })
+
+  const baixaMut = useMutation({
+    mutationFn: ({ id, body }) => api.updatePayout(id, body),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-payouts'] }),
+    onError:    (e) => alert(e?.message || 'Erro ao atualizar o repasse.'),
+  })
+  const pagarTudoMut = useMutation({
+    mutationFn: (payee_user_id) => api.payAllPayouts({ payee_user_id }),
+    onSuccess:  (r) => {
+      qc.invalidateQueries({ queryKey: ['admin-payouts'] })
+      alert(`${r.marcados} repasse(s) marcados como pagos — ${fmtBRL(r.total)}.`)
+    },
+    onError: (e) => alert(e?.message || 'Erro ao dar baixa.'),
+  })
+
+  if (isLoading) return <PageSpinner />
+
+  const payouts = data?.payouts || []
+  const totais  = data?.totais  || []
+  const totalGeral = totais.reduce((s, t) => s + t.total, 0)
+
+  return (
+    <div className="space-y-4">
+      {data?.aviso && (
+        <div className="rounded-xl border border-amber-700/50 bg-amber-900/20 px-4 py-3">
+          <p className="text-sm text-amber-300">{data.aviso}</p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
+          {[['pending','A pagar'],['paid','Pagos'],['cancelled','Cancelados'],['todos','Todos']].map(([id,label]) => (
+            <button key={id} onClick={() => setStatus(id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                status === id ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'
+              }`}>{label}</button>
+          ))}
+        </div>
+        {status === 'pending' && totalGeral > 0 && (
+          <p className="text-sm text-gray-400">
+            Total a pagar: <span className="font-bold text-brand">{fmtBRL(totalGeral)}</span>
+          </p>
+        )}
+      </div>
+
+      {totais.length === 0 ? (
+        <Card><CardBody>
+          <p className="text-sm text-gray-500 text-center py-6">
+            {status === 'pending' ? 'Nenhum repasse pendente.' : 'Nada aqui.'}
+          </p>
+        </CardBody></Card>
+      ) : totais.map((t) => {
+        const itens = payouts.filter((p) => (p.payee?.id || 'sem-destinatario') === (t.payee_id || 'sem-destinatario'))
+        const expandido = aberto === (t.payee_id || 'sem-destinatario')
+        return (
+          <Card key={t.payee_id || 'sem'}>
+            <CardBody>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-200">{t.nome}</p>
+                  <p className="text-xs text-gray-500">
+                    {t.itens} reserva{t.itens === 1 ? '' : 's'}
+                    {t.phone ? ` · ${t.phone}` : ''}
+                  </p>
+                </div>
+                <p className="text-lg font-bold text-brand tabular-nums">{fmtBRL(t.total)}</p>
+                <button
+                  onClick={() => setAberto(expandido ? null : (t.payee_id || 'sem-destinatario'))}
+                  className="text-xs font-semibold text-gray-400 hover:text-gray-200 px-2 py-1"
+                >
+                  {expandido ? 'Ocultar' : 'Detalhar'}
+                </button>
+                {status === 'pending' && t.payee_id && (
+                  <Button size="sm"
+                    disabled={pagarTudoMut.isPending}
+                    onClick={() => confirm(`Marcar ${fmtBRL(t.total)} como pago para ${t.nome}?`)
+                      && pagarTudoMut.mutate(t.payee_id)}>
+                    <Check size={14} /> Dar baixa em tudo
+                  </Button>
+                )}
+              </div>
+
+              {expandido && (
+                <div className="mt-3 pt-3 border-t border-gray-800 divide-y divide-gray-800">
+                  {itens.map((p) => (
+                    <div key={p.id} className="flex items-center gap-3 py-2.5 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] text-gray-300">
+                          {p.bookings?.booking_code || '—'}
+                          <span className="text-gray-500">
+                            {' · '}{p.kind === 'commission' ? 'comissão' : 'execução'}
+                            {p.bookings?.service_date ? ` · ${fmtDia(p.bookings.service_date)}` : ''}
+                          </span>
+                        </p>
+                        {p.paid_at && (
+                          <p className="text-[11px] text-emerald-500/80">pago em {fmtDia(p.paid_at)}</p>
+                        )}
+                      </div>
+                      <span className="text-[13px] font-semibold text-gray-200 tabular-nums">{fmtBRL(p.amount)}</span>
+                      {p.status === 'pending' ? (
+                        <button onClick={() => baixaMut.mutate({ id: p.id, body: { status: 'paid' } })}
+                          className="text-[11.5px] font-bold text-emerald-400 hover:underline">marcar pago</button>
+                      ) : (
+                        <button onClick={() => baixaMut.mutate({ id: p.id, body: { status: 'pending' } })}
+                          className="text-[11.5px] font-bold text-gray-500 hover:text-gray-300">desfazer</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
+// Repasse ao motorista (migration 066).
+function RepassesMotorista() {
   const [status, setStatus] = useState('pending')
   const [from, setFrom]     = useState('')
   const [to, setTo]         = useState('')

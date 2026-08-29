@@ -1854,6 +1854,19 @@ export async function onPaymentApproved(payment) {
     }
   }
 
+  // REPASSES a pagar (migration 080). Fica FORA do gate `ledger_created`: os
+  // dois são idempotentes por conta própria, e o repasse precisa existir mesmo
+  // que o razão já tivesse sido lançado numa tentativa anterior.
+  // Best-effort — o cliente já pagou e a reserva tem de ser confirmada de
+  // qualquer forma; o que se perde é a linha do repasse, que dá para lançar
+  // depois pelo admin.
+  try {
+    const { gerarRepasses } = await import('../services/payouts.js')
+    await gerarRepasses(booking, Number(payment.amount) || 0)
+  } catch (e) {
+    console.error('[payouts] não foi possível gerar os repasses:', e?.message)
+  }
+
   // Contabilidade por perna (Etapa 2, Onda A) — só roda quando o motor está
   // ligado E o pedido tem pernas aceitas. Fora do gate ledger_created e
   // idempotente (upsert, migration 046): se falhar aqui, a próxima aprovação/

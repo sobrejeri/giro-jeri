@@ -1385,6 +1385,112 @@ router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, nex
 });
 
 // =============================================================================
+// REPASSES A PAGAR (migration 080)
+// No modelo em que a plataforma recebe 100%, é aqui que se vê o que ela DEVE:
+// comissão de quem aceitou e valor de quem executou, por reserva.
+// =============================================================================
+
+// ── GET /api/admin/payouts ─────────────────────────────
+router.get('/payouts', requireAdmin, async (req, res, next) => {
+  try {
+    const { status = 'pending', payee } = req.query;
+
+    let q = supabase
+      .from('booking_payouts')
+      .select(`
+        id, kind, amount, status, paid_at, notes, created_at,
+        payee:payee_user_id ( id, full_name, phone ),
+        bookings ( booking_code, service_type, service_date, total_amount )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (status && status !== 'todos') q = q.eq('status', status);
+    if (payee) q = q.eq('payee_user_id', payee);
+
+    const { data, error } = await q;
+    // Sem a 080 a tabela não existe: devolve vazio com um aviso, em vez de 500.
+    if (error) {
+      if (error.code === '42P01') {
+        return res.json({ payouts: [], totais: [], aviso: 'Rode a migration 080_repasses_por_reserva.sql no Supabase.' });
+      }
+      throw error;
+    }
+
+    // Total por cooperativa — é assim que o repasse é feito na prática: um PIX
+    // por cooperativa, não um por reserva.
+    const porQuem = new Map();
+    for (const p of data || []) {
+      const id = p.payee?.id || 'sem-destinatario';
+      if (!porQuem.has(id)) {
+        porQuem.set(id, { payee_id: p.payee?.id || null, nome: p.payee?.full_name || '(sem destinatário)',
+                          phone: p.payee?.phone || null, itens: 0, total: 0 });
+      }
+      const t = porQuem.get(id);
+      t.itens += 1;
+      t.total = Math.round((t.total + Number(p.amount)) * 100) / 100;
+    }
+
+    res.json({
+      payouts: data || [],
+      totais: [...porQuem.values()].sort((a, b) => b.total - a.total),
+    });
+  } catch (err) { next(err); }
+});
+
+// ── PUT /api/admin/payouts/:id ─────────────────────────
+const payoutSchema = z.object({
+  status: z.enum(['pending', 'paid', 'cancelled']),
+  notes:  z.string().max(500).optional().nullable(),
+});
+
+router.put('/payouts/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const body = payoutSchema.parse(req.body);
+    const patch = {
+      status:     body.status,
+      notes:      body.notes ?? null,
+      // Carimba quando vira pago e LIMPA ao voltar para pendente: sem isso um
+      // repasse desmarcado ficaria com data de pagamento, e a conferência
+      // mostraria "pago em tal dia" para algo que ninguém pagou.
+      paid_at:    body.status === 'paid' ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await supabase
+      .from('booking_payouts').update(patch).eq('id', req.params.id).select().maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Repasse não encontrado' });
+    res.json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
+});
+
+// ── POST /api/admin/payouts/pay-all ────────────────────
+// Marca TODOS os pendentes de uma cooperativa como pagos, de uma vez — é como
+// o repasse acontece de verdade: um PIX cobrindo várias reservas.
+router.post('/payouts/pay-all', requireAdmin, async (req, res, next) => {
+  try {
+    const { payee_user_id, notes } = req.body || {};
+    if (!payee_user_id) return res.status(400).json({ error: 'Informe a cooperativa.' });
+
+    const { data, error } = await supabase
+      .from('booking_payouts')
+      .update({ status: 'paid', paid_at: new Date().toISOString(),
+                notes: notes || null, updated_at: new Date().toISOString() })
+      .eq('payee_user_id', payee_user_id)
+      .eq('status', 'pending')     // só os pendentes: não reescreve histórico
+      .select('id, amount');
+    if (error) throw error;
+
+    const total = (data || []).reduce((s, r) => s + Number(r.amount), 0);
+    res.json({ marcados: data?.length || 0, total: Math.round(total * 100) / 100 });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
 // MODAIS OPERADOS POR COOPERATIVA (migrations 075/076)
 // O corte grosso do roteamento: em vez de ligar veículo a veículo, o admin diz
 // que a cooperativa opera terrestre, aéreo, aquático… Opt-out como o de

@@ -16,7 +16,7 @@ enxerga o trabalho do outro no próximo `git fetch`.
 3. **Ao concluir**: mova a linha para o "Diário", com data e commits.
 4. **Migrations**: a numeração em `supabase/migrations/` é o maior risco de
    colisão. Antes de criar uma, confira o último número no branch remoto e
-   registre aqui o número reservado. **Próximo número livre: 080.**
+   registre aqui o número reservado. **Próximo número livre: 081.**
    (a linha já ficou desatualizada por duas sessões seguidas; confirme sempre
    com `ls supabase/migrations/ | tail -3` antes de confiar nela.)
 
@@ -46,6 +46,34 @@ enxerga o trabalho do outro no próximo `git fetch`.
 | — | — | — | — |
 
 ## Diário (mais recente primeiro)
+
+- **2026-08-25 · Agente B (área de controle de repasses)** — Fecha o modelo da
+  079: a plataforma recebe 100%, e agora existe onde ver o que ela DEVE.
+  **Migration 080**: `booking_payouts` — até dois repasses por reserva,
+  `commission` (quem aceitou) e `execution` (quem executou, quando o modal tem
+  executor fixo), cada um com status próprio. Tabela em vez de colunas na
+  reserva porque são dois destinatários com baixas independentes.
+  `UNIQUE (booking_id, kind)` **é a proteção de dinheiro**: o webhook do MP
+  reentrega eventos, e sem ela a mesma comissão seria lançada duas vezes —
+  pagamento em dobro. Mesma lição do `ledger_created` (046).
+  `services/payouts.js` calcula: sem executor fixo, quem aceitou leva tudo menos
+  a plataforma; com executor fixo e outro aceitando, comissão para quem aceitou
+  e RESTO para quem executa (resto, não terceiro percentual — assim as partes
+  somam exato). Testado em 20.000 valores: **em nenhum o repasse excedeu o
+  recebido**.
+  Geração fica FORA do gate `ledger_created` (os dois são idempotentes por conta
+  própria) e é best-effort: o cliente já pagou, a reserva tem de confirmar de
+  qualquer jeito.
+  Admin: Repasses ganhou duas abas — **Cooperativas** (novo) e Motoristas (066,
+  que é outra coisa: pagamento ao motorista de corrida despachada pela casa).
+  A tela agrupa POR COOPERATIVA porque é assim que o repasse acontece: um PIX
+  cobrindo várias reservas. Tem "dar baixa em tudo" por cooperativa e baixa
+  individual com desfazer.
+  RLS: admin gerencia; cooperativa lê SÓ os repasses dela. As duas policies
+  nasceram juntas — a 034 esqueceu uma e custou meses (072).
+  Conferido: 080 em Postgres (duplicata barrada, tipo inválido barrado,
+  idempotente, 2 policies) e a tela no navegador (agrupamento, totais por
+  cooperativa e geral, detalhe, baixa em lote enviando a cooperativa certa).
 
 - **2026-08-25 · Agente B (VIRADA DE MODELO: plataforma recebe 100%)** —
   O dono não sabia que o split multi-recebedor do MP **só funciona com PIX**
