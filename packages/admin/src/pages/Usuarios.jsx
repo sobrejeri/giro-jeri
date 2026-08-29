@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle,
+  Ban, Trash2,
   KeyRound, Copy, UserCheck, Settings2, ToggleRight, ToggleLeft, Car, Users,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
@@ -13,6 +14,7 @@ import Modal from '../components/ui/Modal'
 import Input, { Select } from '../components/ui/Input'
 import Card from '../components/ui/Card'
 import { fleetCopy } from '../copy/fleet'
+import { useAuth } from '../contexts/AuthContext'
 
 const USER_TYPES = ['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']
 
@@ -45,6 +47,10 @@ function genPassword(len = 10) {
 }
 
 export default function Usuarios() {
+  // Para desabilitar o botão de apagar na própria linha — a API também recusa,
+  // mas deixar o botão clicável para depois dar erro é uma armadilha à toa.
+  const { user: eu } = useAuth()
+  const meuId = eu?.id
   const [page, setPage]           = useState(1)
   const [search, setSearch]       = useState('')
   const [typeFilter, setType]     = useState('')
@@ -85,6 +91,45 @@ export default function Usuarios() {
       setCreateForm(CREATE_EMPTY)
     },
   })
+
+  // Desativar/reativar reusa o PATCH que já existe — `is_active` sempre esteve
+  // na lista de campos permitidos da API; faltava só o botão.
+  const ativarMut = useMutation({
+    mutationFn: ({ id, is_active }) => api.updateUser(id, { is_active }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onError:    (e) => alert(e?.message || 'Não foi possível alterar o status.'),
+  })
+
+  const apagarMut = useMutation({
+    mutationFn: (id) => api.deleteUser(id),
+    onSuccess:  (r) => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      alert(`Conta de ${r?.apagado || 'usuário'} apagada.`)
+    },
+    // A API recusa conta com histórico e explica o motivo com a contagem. A
+    // mensagem dela é melhor que qualquer texto genérico daqui.
+    onError: (e) => alert(e?.message || 'Não foi possível apagar.'),
+  })
+
+  function alternarAtivo(u) {
+    const acao = u.is_active ? 'Desativar' : 'Reativar'
+    const aviso = u.is_active
+      ? `\n\nO acesso é bloqueado imediatamente. O histórico continua intacto e dá para reativar depois.`
+      : ''
+    if (!confirm(`${acao} a conta de ${u.full_name || 'usuário'}?${aviso}`)) return
+    ativarMut.mutate({ id: u.id, is_active: !u.is_active })
+  }
+
+  function apagar(u) {
+    // Dois avisos porque a ação não tem volta: o perfil some, o login some, e
+    // as tabelas em cascata (endereços, favoritos, preferências) vão junto.
+    if (!confirm(
+      `Apagar DEFINITIVAMENTE a conta de ${u.full_name || 'usuário'}?\n\n`
+      + 'Isso remove o perfil e o login. Não tem como desfazer.\n\n'
+      + 'Se a conta tem histórico, prefira DESATIVAR — bloqueia o acesso do mesmo jeito.'
+    )) return
+    apagarMut.mutate(u.id)
+  }
 
   const resetMut = useMutation({
     mutationFn: ({ id, new_password }) => api.resetUserPassword(id, new_password),
@@ -288,13 +333,38 @@ export default function Usuarios() {
                     {u.created_at ? format(parseISO(u.created_at), 'dd/MM/yyyy') : '—'}
                   </td>
                   <td className="px-5 py-3">
-                    <button
-                      onClick={() => openEdit(u)}
-                      className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg transition-colors"
-                      title="Editar usuário"
-                    >
-                      <Pencil size={14} />
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => openEdit(u)}
+                        className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg transition-colors"
+                        title="Editar usuário"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      {/* Desativar é a ação do dia a dia: bloqueia o acesso na
+                          hora e mantém o histórico. Fica antes de apagar, e é a
+                          única que serve para conta com movimento. */}
+                      <button
+                        onClick={() => alternarAtivo(u)}
+                        disabled={ativarMut.isPending}
+                        className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                          u.is_active
+                            ? 'text-gray-600 hover:text-amber-400 hover:bg-gray-700'
+                            : 'text-emerald-500 hover:text-emerald-400 hover:bg-gray-700'
+                        }`}
+                        title={u.is_active ? 'Desativar (bloqueia o acesso)' : 'Reativar'}
+                      >
+                        {u.is_active ? <Ban size={14} /> : <CheckCircle2 size={14} />}
+                      </button>
+                      <button
+                        onClick={() => apagar(u)}
+                        disabled={apagarMut.isPending || u.id === meuId}
+                        className="p-1.5 text-gray-700 hover:text-red-400 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-30 disabled:hover:text-gray-700"
+                        title={u.id === meuId ? 'Você não pode apagar a sua própria conta' : 'Apagar definitivamente'}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

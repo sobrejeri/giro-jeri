@@ -381,6 +381,92 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) =>
   }
 });
 
+// ── DELETE /api/admin/users/:id ────────────────────────
+// Apagar de vez, e só quando é seguro.
+//
+// DESATIVAR é quase sempre o certo: `is_active = false` já barra o acesso no
+// middleware de autenticação, e preserva o histórico. Esta rota existe para o
+// outro caso — o cadastro de teste que nunca deveria ter existido.
+//
+// O banco protege o histórico sozinho (`ON DELETE RESTRICT` em bookings,
+// reviews, cotações e resgates de cupom), mas um erro de FK cru vira "500" na
+// tela. Aqui a checagem vem antes, com a contagem e o motivo.
+//
+// O que o banco NÃO protege são as 9 tabelas em CASCATA (endereços, favoritos,
+// notificações, preferências de operação…). Some tudo junto, em silêncio — mais
+// um motivo para só permitir em conta sem movimento.
+const VINCULOS_QUE_BLOQUEIAM = [
+  { tabela: 'bookings',            coluna: 'user_id',     rotulo: 'reserva(s) como cliente' },
+  { tabela: 'bookings',            coluna: 'operator_id', rotulo: 'reserva(s) como operador' },
+  { tabela: 'reviews',             coluna: 'user_id',     rotulo: 'avaliação(ões)' },
+  { tabela: 'transfer_quotes',     coluna: 'user_id',     rotulo: 'cotação(ões)' },
+  { tabela: 'coupon_redemptions',  coluna: 'user_id',     rotulo: 'cupom(ns) resgatado(s)' },
+];
+
+router.delete('/users/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const alvoId = req.params.id;
+
+    // Apagar a própria conta deixaria a plataforma sem quem administra — e o
+    // admin logado perderia o acesso no meio da própria ação.
+    if (alvoId === req.user.id) {
+      return res.status(400).json({ error: 'Você não pode apagar a sua própria conta.' });
+    }
+
+    const { data: alvo } = await supabase
+      .from('users').select('id, full_name, user_type, auth_id').eq('id', alvoId).maybeSingle();
+    if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    // Movimento em qualquer uma dessas tabelas = conta com história. Desativar,
+    // não apagar.
+    const impedimentos = [];
+    for (const v of VINCULOS_QUE_BLOQUEIAM) {
+      const { count, error } = await supabase
+        .from(v.tabela).select('id', { count: 'exact', head: true }).eq(v.coluna, alvoId);
+      if (error) continue;                       // tabela ausente não bloqueia
+      if ((count || 0) > 0) impedimentos.push(`${count} ${v.rotulo}`);
+    }
+    if (impedimentos.length > 0) {
+      return res.status(409).json({
+        error: `Esta conta tem histórico e não pode ser apagada: ${impedimentos.join(', ')}. `
+             + 'Desative-a — o acesso é bloqueado na hora e os registros continuam existindo.',
+        impedimentos,
+      });
+    }
+
+    const { error: delErr } = await supabase.from('users').delete().eq('id', alvoId);
+    if (delErr) {
+      // 23503 = alguma FK que a checagem acima não cobre. Melhor dizer isso do
+      // que devolver 500 sem explicação.
+      if (delErr.code === '23503') {
+        return res.status(409).json({
+          error: 'Esta conta está vinculada a outros registros do sistema. Desative-a em vez de apagar.',
+        });
+      }
+      throw delErr;
+    }
+
+    // A conta de login vive no Auth do Supabase, separada do perfil. Sem apagar
+    // aqui, sobra um login órfão: não entra (o middleware não acha o perfil),
+    // mas continua ocupando o e-mail/documento e impede recadastrar.
+    // Best-effort: o perfil já foi apagado e não dá para desfazer.
+    if (alvo.auth_id) {
+      const { error: authErr } = await supabase.auth.admin.deleteUser(alvo.auth_id);
+      if (authErr) console.error('[admin] perfil apagado mas o login ficou: %s', authErr.message);
+    }
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'users',
+      entity_id:       alvoId,
+      action_type:     'delete',
+      old_values_json: { full_name: alvo.full_name, user_type: alvo.user_type },
+    });
+
+    res.json({ ok: true, apagado: alvo.full_name });
+  } catch (err) { next(err); }
+});
+
 // ── PATCH /api/admin/users/:id ─────────────────────────
 router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   try {

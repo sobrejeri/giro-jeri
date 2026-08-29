@@ -112,6 +112,9 @@ export const api = {
   getUsers:          (params = {}) => request(`/api/admin/users?${new URLSearchParams(params)}`),
   createUser:        (body)        => request('/api/admin/users', { method: 'POST', body }),
   updateUser:        (id, body)    => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
+  // Recusado com 409 quando a conta tem histórico — a mensagem da API diz o
+  // que impede e sugere desativar.
+  deleteUser:        (id)          => request(`/api/admin/users/${id}`, { method: 'DELETE' }),
   resetUserPassword: (id, new_password) => request(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: { new_password } }),
   registerRecipient: (id)          => request(`/api/admin/users/${id}/register-recipient`, { method: 'POST', body: {} }),
   getAuthOrphans:    ()            => request('/api/admin/auth-orphans'),
