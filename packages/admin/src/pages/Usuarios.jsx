@@ -18,6 +18,16 @@ import { useAuth } from '../contexts/AuthContext'
 
 const USER_TYPES = ['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']
 
+// Só os três que existem de verdade na operação. Os outros papéis do enum
+// (agency, finance, affiliate) continuam válidos no cadastro, mas dar uma aba a
+// cada um encheria a barra de abas vazias.
+const ABAS = [
+  { id: '',         label: 'Todos'      },
+  { id: 'operator', label: 'Operadores' },
+  { id: 'tourist',  label: 'Turistas'   },
+  { id: 'admin',    label: 'Admins'     },
+]
+
 const VEHICLE_TYPE_LABEL = {
   buggy:      'Buggy',
   jardineira: 'Jardineira',
@@ -63,12 +73,22 @@ export default function Usuarios() {
   const [importForm, setImportForm]   = useState(IMPORT_EMPTY)
   const qc                            = useQueryClient()
 
+  // A busca esperava o servidor a cada TECLA: digitar "Denilson" disparava oito
+  // requisições, e a resposta de uma podia chegar depois da outra e repintar a
+  // lista com o resultado errado. 350ms é o suficiente para uma pausa de
+  // digitação sem parecer travado.
+  const [buscaAplicada, setBuscaAplicada] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaAplicada(search.trim()), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
   const { data, isLoading } = useQuery({
-    queryKey: ['users', page, search, typeFilter, activeFilter],
+    queryKey: ['users', page, buscaAplicada, typeFilter, activeFilter],
     queryFn:  () => api.getUsers({
       page,
       limit: 30,
-      ...(search      ? { search }           : {}),
+      ...(buscaAplicada ? { search: buscaAplicada } : {}),
       ...(typeFilter  ? { user_type: typeFilter } : {}),
       ...(activeFilter !== '' ? { is_active: activeFilter } : {}),
     }),
@@ -251,6 +271,7 @@ export default function Usuarios() {
 
   const users  = data?.data || []
   const total  = data?.total || 0
+  const counts = data?.counts || {}
   const pages  = Math.ceil(total / 30)
 
   if (isLoading) return <PageSpinner />
@@ -259,24 +280,42 @@ export default function Usuarios() {
     <div className="space-y-4">
       {/* Filtros */}
       <Card className="p-4">
+        {/* Abas por tipo. Substituem o seletor "Todos os tipos", que passava
+            despercebido: aqui a divisão fica visível e cada aba já mostra
+            quantos existem — sem precisar filtrar para descobrir. */}
+        <div className="flex flex-wrap gap-1 mb-3 bg-gray-900/60 p-1 rounded-xl w-fit">
+          {ABAS.map(({ id, label }) => {
+            const n = id === '' ? counts.todos : counts[id]
+            const ativa = typeFilter === id
+            return (
+              <button
+                key={id || 'todos'}
+                onClick={() => { setType(id); setPage(1) }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                  ativa ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                {label}
+                <span className={`text-[11px] tabular-nums px-1.5 py-px rounded ${
+                  ativa ? 'bg-gray-900 text-gray-300' : 'bg-gray-800 text-gray-600'
+                }`}>
+                  {n ?? '—'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-48">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-              placeholder="Buscar por nome, e-mail ou telefone…"
+              placeholder="Buscar por nome, e-mail, telefone ou CNPJ/CPF…"
               className="w-full h-9 pl-9 pr-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-brand"
             />
           </div>
-          <select
-            value={typeFilter}
-            onChange={(e) => { setType(e.target.value); setPage(1) }}
-            className="h-9 pl-3 pr-8 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
-          >
-            <option value="">Todos os tipos</option>
-            {USER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
           <select
             value={activeFilter}
             onChange={(e) => { setActive(e.target.value); setPage(1) }}

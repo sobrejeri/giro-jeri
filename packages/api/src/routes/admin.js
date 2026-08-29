@@ -235,19 +235,52 @@ router.get('/users', requireAdmin, async (req, res, next) => {
     const { user_type, is_active, search, page = 1, limit = 30 } = req.query;
     const offset = (page - 1) * limit;
 
-    let query = supabase
-      .from('users')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    // Vírgula e parênteses são a sintaxe do próprio `or()` do PostgREST: um
+    // nome com vírgula quebraria o filtro inteiro e a busca voltaria vazia sem
+    // erro visível. `%` e `_` são curingas do ILIKE — quem digita "100%" quer
+    // o texto, não um curinga.
+    const termo = String(search || '').trim().replace(/[,()%_\\]/g, ' ').trim();
 
+    // Operador aparece na lista pelo DOCUMENTO, não por e-mail — buscar por
+    // CNPJ é justamente como se acha um. Sem `document_number` aqui, procurar o
+    // operador pelo número que a tela mostra não devolvia nada.
+    const filtroBusca = termo
+      ? `full_name.ilike.%${termo}%,email.ilike.%${termo}%,phone.ilike.%${termo}%,`
+        + `document_number.ilike.%${termo}%`
+      : null;
+
+    const comFiltros = (q) => {
+      if (is_active !== undefined) q = q.eq('is_active', is_active === 'true');
+      if (filtroBusca) q = q.or(filtroBusca);
+      return q;
+    };
+
+    let query = comFiltros(
+      supabase.from('users').select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1)
+    );
     if (user_type) query = query.eq('user_type', user_type);
-    if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
-    if (search)    query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
 
-    const { data, error, count } = await query;
+    // Contagem por tipo, para as abas. Respeita busca e status — senão a aba
+    // diria "12 turistas" e a lista mostraria 2, e o número viraria ruído.
+    // NÃO respeita `user_type`: é o que cada aba está escolhendo.
+    const TIPOS = ['tourist', 'operator', 'admin'];
+    const contar = (tipo) => comFiltros(
+      supabase.from('users').select('id', { count: 'exact', head: true })
+    ).eq('user_type', tipo);
+
+    const [{ data, error, count }, ...contagens] = await Promise.all([
+      query,
+      ...TIPOS.map((t) => contar(t)),
+      comFiltros(supabase.from('users').select('id', { count: 'exact', head: true })),
+    ]);
     if (error) throw error;
-    res.json({ data, total: count, page: Number(page), limit: Number(limit) });
+
+    const counts = { todos: contagens[TIPOS.length]?.count || 0 };
+    TIPOS.forEach((t, i) => { counts[t] = contagens[i]?.count || 0; });
+
+    res.json({ data, total: count, counts, page: Number(page), limit: Number(limit) });
   } catch (err) { next(err); }
 });
 
