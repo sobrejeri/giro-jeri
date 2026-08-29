@@ -363,12 +363,16 @@ export default function Catalogo() {
       is_active:   !!modalForm.is_active,
       sort_order:  Number(modalForm.sort_order) || 99,
       executor_operator_id:    modalForm.executor_operator_id || null,
-      // Sem executor fixo as comissões não têm significado — zeradas para não
-      // ficar valor órfão guardado que reapareceria ao religar o executor.
+      // A % DA PLATAFORMA vale sempre (079): com a plataforma recebendo 100%, é
+      // ela que define o que sobra de comissão para quem aceitou. Vazio = cai na
+      // geral (`payment_split_admin_pct`).
+      platform_commission_pct: modalForm.platform_commission_pct !== '' && modalForm.platform_commission_pct != null
+                                 ? Number(modalForm.platform_commission_pct) : null,
+      // A % DE QUEM ACEITA só tem significado com executor fixo — é comissão de
+      // intermediação. Zerada sem executor para não ficar valor órfão guardado
+      // que reapareceria ao religar o executor.
       acceptor_commission_pct: modalForm.executor_operator_id
                                  ? (Number(modalForm.acceptor_commission_pct) || 0) : 0,
-      platform_commission_pct: modalForm.executor_operator_id && modalForm.platform_commission_pct !== ''
-                                 ? Number(modalForm.platform_commission_pct) : null,
     })
   }
 
@@ -1400,27 +1404,41 @@ export default function Catalogo() {
               </p>
             </div>
 
-            {modalForm.executor_operator_id && (
-              <div className="grid grid-cols-2 gap-3">
+            {/* A % da plataforma vale COM ou SEM executor: é ela que decide o
+                que sobra de comissão para quem aceitou. A % de quem aceita só
+                aparece com executor fixo — aí é comissão de intermediação. */}
+            <div className={modalForm.executor_operator_id ? 'grid grid-cols-2 gap-3' : ''}>
+              {modalForm.executor_operator_id && (
                 <Input
                   label="% de quem aceita" type="number" min={0} max={100} step={0.5}
                   value={modalForm.acceptor_commission_pct ?? 0}
                   onChange={(e) => setModalForm({ ...modalForm, acceptor_commission_pct: e.target.value })}
                 />
-                <Input
-                  label="% da plataforma" type="number" min={0} max={100} step={0.5}
-                  placeholder="usa a geral"
-                  value={modalForm.platform_commission_pct ?? ''}
-                  onChange={(e) => setModalForm({ ...modalForm, platform_commission_pct: e.target.value })}
-                />
-              </div>
+              )}
+              <Input
+                label="% da plataforma" type="number" min={0} max={100} step={0.5}
+                placeholder="usa a geral"
+                value={modalForm.platform_commission_pct ?? ''}
+                onChange={(e) => setModalForm({ ...modalForm, platform_commission_pct: e.target.value })}
+              />
+            </div>
+            {!modalForm.executor_operator_id && (
+              <p className="text-[11px] text-gray-500 -mt-1">
+                O resto é a comissão de quem aceita — ele executa e recebe.
+              </p>
             )}
 
-            {/* SIMULAÇÃO — os mesmos números que o pagamento usaria. */}
-            {modalForm.executor_operator_id && (() => {
+            {/* SIMULAÇÃO — os mesmos números que o repasse vai usar. */}
+            {(() => {
+              const comExecutor = !!modalForm.executor_operator_id
               const plat = Number(modalForm.platform_commission_pct) || 0
-              const aceite = Number(modalForm.acceptor_commission_pct) || 0
+              const aceite = comExecutor ? (Number(modalForm.acceptor_commission_pct) || 0) : 0
               const excede = aceite + plat > 100
+              // Sem executor há um cenário só; com executor, dois — o executor
+              // pode ser justamente quem aceitou, e aí não há intermediação.
+              const cenarios = comExecutor
+                ? [['Outro operador aceitou', false], ['O próprio executor aceitou', true]]
+                : [[null, false]]
               return (
                 <div className="rounded-xl bg-gray-900/60 border border-gray-800 p-3">
                   <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
@@ -1432,10 +1450,10 @@ export default function Catalogo() {
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {[['Outro operador aceitou', false], ['O próprio executor aceitou', true]].map(([titulo, exec]) => (
-                        <div key={titulo}>
-                          <p className="text-[11px] text-gray-500">{titulo}</p>
-                          {simularRateio(7600, aceite, plat, true, exec).map((l) => (
+                      {cenarios.map(([titulo, exec]) => (
+                        <div key={titulo || 'unico'}>
+                          {titulo && <p className="text-[11px] text-gray-500">{titulo}</p>}
+                          {simularRateio(7600, aceite, plat, comExecutor, exec).map((l) => (
                             <div key={l.rotulo} className="flex justify-between text-[12px] text-gray-300">
                               <span>{l.rotulo}</span>
                               <span className="tabular-nums">
@@ -1447,8 +1465,9 @@ export default function Catalogo() {
                       ))}
                     </div>
                   )}
-                  <p className="text-[10.5px] text-amber-500/80 mt-2">
-                    Só demonstração: o pagamento ainda não usa esta regra.
+                  <p className="text-[10.5px] text-gray-500 mt-2">
+                    O cliente paga tudo na plataforma; estes valores viram repasses
+                    em <span className="text-gray-400">Repasses → Cooperativas</span>.
                   </p>
                 </div>
               )
