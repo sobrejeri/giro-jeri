@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { Search, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
@@ -8,7 +8,11 @@ import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Input from '../components/ui/Input'
 
+// Na ordem do ciclo de vida da reserva, não alfabética: é assim que a fila é
+// lida. `awaiting_acceptance` entrou no enum na migration 035 e nunca chegou
+// aqui — o filtro simplesmente não oferecia a fila de aceite.
 const STATUS_LABELS = {
+  awaiting_acceptance: 'Ag. aceite',
   draft:            'Rascunho',
   awaiting_payment: 'Ag. pagamento',
   paid:             'Pago',
@@ -16,6 +20,19 @@ const STATUS_LABELS = {
   cancelled:        'Cancelado',
   refunded:         'Reembolsado',
 }
+
+// `sempre: true` = aparece mesmo zerada. Ver "0 aguardando aceite" é uma
+// informação útil; uma aba de "Reembolsado" vazia é só ruído.
+const ABAS_STATUS = [
+  { id: '',                    label: 'Todas',         sempre: true },
+  { id: 'awaiting_acceptance', label: 'Ag. aceite',    sempre: true },
+  { id: 'awaiting_payment',    label: 'Ag. pagamento', sempre: true },
+  { id: 'paid',                label: 'Pagas',         sempre: true },
+  { id: 'cancelled',           label: 'Canceladas' },
+  { id: 'payment_failed',      label: 'Pgto. falhou' },
+  { id: 'refunded',            label: 'Reembolsadas' },
+  { id: 'draft',               label: 'Rascunho' },
+]
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -28,12 +45,20 @@ export default function Reservas() {
   const [dateFrom, setDateFrom]   = useState('')
   const [dateTo, setDateTo]       = useState('')
 
+  // Uma requisição por tecla fazia respostas chegarem fora de ordem e repintar
+  // a lista com o resultado de uma busca anterior. Espera a pausa.
+  const [buscaAplicada, setBuscaAplicada] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaAplicada(search.trim()), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-bookings', page, search, statusFilter, typeFilter, dateFrom, dateTo],
+    queryKey: ['admin-bookings', page, buscaAplicada, statusFilter, typeFilter, dateFrom, dateTo],
     queryFn: () => api.getAdminBookings({
       page,
       limit: 30,
-      ...(search       ? { search }                : {}),
+      ...(buscaAplicada ? { search: buscaAplicada } : {}),
       ...(statusFilter ? { status: statusFilter }  : {}),
       ...(typeFilter   ? { service_type: typeFilter } : {}),
       ...(dateFrom     ? { date_from: dateFrom }   : {}),
@@ -44,6 +69,7 @@ export default function Reservas() {
 
   const bookings = data?.data || []
   const total    = data?.total || 0
+  const counts   = data?.counts || {}
   const pages    = Math.ceil(total / 30)
 
   if (isLoading) return <PageSpinner />
@@ -52,6 +78,35 @@ export default function Reservas() {
     <div className="space-y-4">
       {/* Filtros */}
       <Card className="p-4">
+        {/* Abas por status. Os três primeiros aparecem sempre — são a operação
+            do dia: o que espera aceite, o que espera pagamento e o que já
+            entrou. Os demais só quando existem, para a barra não encher de
+            abas zeradas. */}
+        <div className="flex flex-wrap gap-1 mb-3 bg-gray-900/60 p-1 rounded-xl w-fit">
+          {ABAS_STATUS
+            .filter(({ id, sempre }) => sempre || id === '' || (counts[id] || 0) > 0 || statusFilter === id)
+            .map(({ id, label }) => {
+              const n = id === '' ? counts.todos : counts[id]
+              const ativa = statusFilter === id
+              return (
+                <button
+                  key={id || 'todos'}
+                  onClick={() => { setStatus(id); setPage(1) }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                    ativa ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  {label}
+                  <span className={`text-[11px] tabular-nums px-1.5 py-px rounded ${
+                    ativa ? 'bg-gray-900 text-gray-300' : 'bg-gray-800 text-gray-600'
+                  }`}>
+                    {n ?? '—'}
+                  </span>
+                </button>
+              )
+            })}
+        </div>
+
         <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
           {/* Busca */}
           <div className="relative w-full lg:flex-1 lg:min-w-52">
@@ -66,17 +121,6 @@ export default function Reservas() {
 
           {/* Status + Tipo: 2 colunas no mobile, automático no desktop */}
           <div className="grid grid-cols-2 gap-3 lg:flex lg:gap-3">
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatus(e.target.value); setPage(1) }}
-              className="w-full lg:w-auto h-10 pl-3 pr-8 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
-            >
-              <option value="">Todos os status</option>
-              {Object.entries(STATUS_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
-              ))}
-            </select>
-
             <select
               value={typeFilter}
               onChange={(e) => { setType(e.target.value); setPage(1) }}

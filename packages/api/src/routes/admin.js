@@ -2058,14 +2058,40 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
 
-    if (status)       query = query.eq('status_commercial', status);
-    if (service_type) query = query.eq('service_type', service_type);
-    if (date_from)    query = query.gte('service_date', date_from);
-    if (date_to)      query = query.lte('service_date', date_to);
-    if (search)       query = query.ilike('booking_code', `%${search}%`);
+    // Os filtros que NÃO são status ficam separados: as abas contam quantas
+    // reservas há em cada status dentro do recorte atual (tipo, período, busca),
+    // e para isso a contagem não pode levar o próprio status junto.
+    const semStatus = (q) => {
+      if (service_type) q = q.eq('service_type', service_type);
+      if (date_from)    q = q.gte('service_date', date_from);
+      if (date_to)      q = q.lte('service_date', date_to);
+      // `%` e `_` são curingas do ILIKE; um código de reserva não os contém.
+      if (search)       q = q.ilike('booking_code', `%${String(search).replace(/[%_\\]/g, '')}%`);
+      return q;
+    };
 
-    const { data, error, count } = await query;
+    query = semStatus(query);
+    if (status) query = query.eq('status_commercial', status);
+
+    // `awaiting_acceptance` entrou no enum na migration 035 e ficou de fora do
+    // filtro da tela — não dava para listar a fila de aceite, que é justamente
+    // a que precisa de ação.
+    const STATUS = ['awaiting_acceptance', 'awaiting_payment', 'paid',
+                    'cancelled', 'payment_failed', 'refunded', 'draft'];
+    const contar = (st) => semStatus(
+      supabase.from('bookings').select('id', { count: 'exact', head: true })
+    ).eq('status_commercial', st);
+
+    const [principal, ...contagens] = await Promise.all([
+      query,
+      ...STATUS.map(contar),
+      semStatus(supabase.from('bookings').select('id', { count: 'exact', head: true })),
+    ]);
+    const { data, error, count } = principal;
     if (error) throw error;
+
+    const counts = { todos: contagens[STATUS.length]?.count || 0 };
+    STATUS.forEach((st, i) => { counts[st] = contagens[i]?.count || 0; });
 
     // Sem embed por FK (frágil) — busca clientes à parte e junta em memória.
     const userIds = [...new Set((data || []).map((b) => b.user_id).filter(Boolean))];
@@ -2078,7 +2104,7 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
     }
     const enriched = (data || []).map((b) => ({ ...b, users: byId.get(b.user_id) || null }));
 
-    res.json({ data: enriched, total: count || 0, page: Number(page) });
+    res.json({ data: enriched, total: count || 0, counts, page: Number(page) });
   } catch (err) { next(err); }
 });
 
