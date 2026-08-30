@@ -303,16 +303,36 @@ router.put('/categories/:id', requireAdmin, async (req, res, next) => {
 
 // Desativa em vez de apagar: passeios apontam para a categoria
 // (`tours.category_id`), e remover a linha deixaria o vínculo pendurado.
+// Categoria com passeios não pode sumir em silêncio: `tours.category_id` tem
+// ON DELETE SET NULL, então o banco aceitaria — e os passeios cairiam todos em
+// "Sem categoria" sem ninguém perceber, quebrando o carrossel da vitrine.
 router.delete('/categories/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await req.supabase
-      .from('categories').update({ is_active: false }).eq('id', req.params.id);
+    const id = req.params.id;
+    const { data: categoria } = await req.supabase
+      .from('categories').select('id, name').eq('id', id).maybeSingle();
+    if (!categoria) return res.status(404).json({ error: 'Categoria não encontrada' });
+
+    const { count } = await req.supabase
+      .from('tours').select('id', { count: 'exact', head: true }).eq('category_id', id);
+
+    if ((count || 0) > 0) {
+      return res.status(409).json({
+        error: `"${categoria.name}" tem ${count} passeio(s). Apagá-la jogaria todos em "Sem categoria" `
+             + 'e o carrossel dela sumiria da vitrine. Mova os passeios para outra categoria antes, ou desative esta.',
+      });
+    }
+
+    const { error } = await req.supabase.from('categories').delete().eq('id', id);
     if (error) {
       const amigavel = erroDeCategoria(error);
       if (amigavel) return res.status(400).json({ error: amigavel });
+      if (error.code === '23503') {
+        return res.status(409).json({ error: 'Esta categoria está em uso. Desative-a em vez de apagar.' });
+      }
       throw error;
     }
-    res.status(204).end();
+    res.json({ ok: true, apagado: categoria.name });
   } catch (err) { next(err); }
 });
 
@@ -413,12 +433,57 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Apaga de verdade — antes isto só gravava `is_active = false` e devolvia 204,
+// então a tela dizia "apagado" e o passeio continuava lá, inativo. Quem queria
+// só desativar já tem o botão de desativar; quem clica em apagar espera sumir.
+//
+// `bookings.service_id` e `reviews.service_id` NÃO têm chave estrangeira (a
+// coluna aponta para tours OU transfer_routes conforme o tipo). Ou seja: o
+// banco não impede nada aqui. Sem esta checagem, apagar um passeio vendido
+// deixaria reservas apontando para um serviço inexistente — a lista de reservas
+// passaria a mostrar linhas sem nome e o histórico ficaria impossível de
+// auditar.
 router.delete('/tours/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await req.supabase
-      .from('tours').update({ is_active: false }).eq('id', req.params.id);
-    if (error) throw error;
-    res.status(204).end();
+    const id = req.params.id;
+
+    const { data: passeio } = await req.supabase
+      .from('tours').select('id, name').eq('id', id).maybeSingle();
+    if (!passeio) return res.status(404).json({ error: 'Passeio não encontrado' });
+
+    const contar = async (tabela) => {
+      const { count, error } = await req.supabase
+        .from(tabela).select('id', { count: 'exact', head: true })
+        .eq('service_type', 'tour').eq('service_id', id);
+      return error ? 0 : (count || 0);
+    };
+    const [reservas, avaliacoes] = await Promise.all([contar('bookings'), contar('reviews')]);
+
+    if (reservas > 0 || avaliacoes > 0) {
+      const partes = [];
+      if (reservas > 0)   partes.push(`${reservas} reserva(s)`);
+      if (avaliacoes > 0) partes.push(`${avaliacoes} avaliação(ões)`);
+      return res.status(409).json({
+        error: `"${passeio.name}" tem ${partes.join(' e ')} e não pode ser apagado — o histórico `
+             + 'ficaria sem referência. Desative-o: some da vitrine e das buscas, e os registros continuam válidos.',
+        reservas, avaliacoes,
+      });
+    }
+
+    // Sem FK, estes não somem sozinhos. `tour_schedules` some (tem CASCADE).
+    await req.supabase.from('services_availability')
+      .delete().eq('service_type', 'tour').eq('service_id', id);
+
+    const { error } = await req.supabase.from('tours').delete().eq('id', id);
+    if (error) {
+      if (error.code === '23503') {
+        return res.status(409).json({
+          error: 'Este passeio está vinculado a outros registros. Desative-o em vez de apagar.',
+        });
+      }
+      throw error;
+    }
+    res.json({ ok: true, apagado: passeio.name });
   } catch (err) { next(err); }
 });
 
@@ -469,12 +534,43 @@ router.put('/transfers/:id', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Apagar um transfer CASCATEIA as rotas dele (`transfer_routes.transfer_id`
+// tem ON DELETE CASCADE). Então a checagem tem que olhar as reservas de TODAS
+// as rotas — não as do transfer, que não existem: a reserva aponta para a rota.
 router.delete('/transfers/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await req.supabase
-      .from('transfers').update({ is_active: false }).eq('id', req.params.id);
-    if (error) throw error;
-    res.status(204).end();
+    const id = req.params.id;
+    const { data: transfer } = await req.supabase
+      .from('transfers').select('id, name').eq('id', id).maybeSingle();
+    if (!transfer) return res.status(404).json({ error: 'Transfer não encontrado' });
+
+    const { data: rotas } = await req.supabase
+      .from('transfer_routes').select('id').eq('transfer_id', id);
+    const idsRota = (rotas || []).map((r) => r.id);
+
+    let reservas = 0;
+    if (idsRota.length > 0) {
+      const { count } = await req.supabase
+        .from('bookings').select('id', { count: 'exact', head: true })
+        .eq('service_type', 'transfer').in('service_id', idsRota);
+      reservas = count || 0;
+    }
+
+    if (reservas > 0) {
+      return res.status(409).json({
+        error: `"${transfer.name}" tem ${reservas} reserva(s) nas suas rotas e não pode ser apagado — `
+             + 'apagá-lo levaria as rotas junto e deixaria o histórico sem referência. Desative-o.',
+      });
+    }
+
+    const { error } = await req.supabase.from('transfers').delete().eq('id', id);
+    if (error) {
+      if (error.code === '23503') {
+        return res.status(409).json({ error: 'Este transfer está vinculado a outros registros. Desative-o em vez de apagar.' });
+      }
+      throw error;
+    }
+    res.json({ ok: true, apagado: transfer.name, rotas_removidas: idsRota.length });
   } catch (err) { next(err); }
 });
 
@@ -515,12 +611,34 @@ router.put('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// A ROTA é o que a reserva de translado referencia em `service_id` — e sem FK,
+// como no passeio. Apagar uma rota vendida deixaria reservas órfãs.
 router.delete('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await req.supabase
-      .from('transfer_routes').update({ is_active: false }).eq('id', req.params.id);
-    if (error) throw error;
-    res.status(204).end();
+    const id = req.params.id;
+    const { data: rota } = await req.supabase
+      .from('transfer_routes').select('id, origin_name, destination_name').eq('id', id).maybeSingle();
+    if (!rota) return res.status(404).json({ error: 'Rota não encontrada' });
+
+    const { count } = await req.supabase
+      .from('bookings').select('id', { count: 'exact', head: true })
+      .eq('service_type', 'transfer').eq('service_id', id);
+
+    if ((count || 0) > 0) {
+      return res.status(409).json({
+        error: `A rota ${rota.origin_name} → ${rota.destination_name} tem ${count} reserva(s) e não pode `
+             + 'ser apagada — o histórico ficaria sem referência. Desative-a: some da vitrine e os registros continuam válidos.',
+      });
+    }
+
+    const { error } = await req.supabase.from('transfer_routes').delete().eq('id', id);
+    if (error) {
+      if (error.code === '23503') {
+        return res.status(409).json({ error: 'Esta rota está vinculada a outros registros. Desative-a em vez de apagar.' });
+      }
+      throw error;
+    }
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

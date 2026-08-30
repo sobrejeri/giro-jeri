@@ -43,6 +43,7 @@ export default function Cupons() {
   const deleteMut = useMutation({
     mutationFn: (id) => api.deleteCoupon(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['coupons'] }),
+    onError:    (err) => alert(err?.message || 'Não foi possível apagar o cupom.'),
   })
 
   function openNew()  { setForm(EMPTY); setModal({ isNew: true }) }

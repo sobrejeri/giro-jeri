@@ -74,13 +74,37 @@ router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// DELETE /api/vehicles/:id — desativa veículo (operador/admin)
+// DELETE /api/vehicles/:id — apaga o veículo (operador/admin)
+//
+// Antes isto gravava `is_active = false` e devolvia 204: a tela dizia
+// "removido" e o veículo continuava no cadastro, inativo.
+//
+// Aqui o banco protege sozinho — `booking_vehicles.vehicle_id` tem ON DELETE
+// RESTRICT, então veículo já usado em reserva recusa a exclusão. Basta traduzir
+// o erro de chave estrangeira, que sem isso chegaria como "500".
 router.delete('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await req.supabase
-      .from('vehicles').update({ is_active: false }).eq('id', req.params.id);
-    if (error) throw error;
-    res.status(204).end();
+    const id = req.params.id;
+    const { data: veiculo } = await req.supabase
+      .from('vehicles').select('id, name').eq('id', id).maybeSingle();
+    if (!veiculo) return res.status(404).json({ error: 'Veículo não encontrado' });
+
+    // Preferências de operação guardam o id sem chave estrangeira (a coluna
+    // serve para veículo, modal e categoria). Ficariam apontando para o nada.
+    await req.supabase.from('operator_service_preferences')
+      .delete().eq('entity_type', 'vehicle').eq('entity_id', id);
+
+    const { error } = await req.supabase.from('vehicles').delete().eq('id', id);
+    if (error) {
+      if (error.code === '23503') {
+        return res.status(409).json({
+          error: `"${veiculo.name}" já foi usado em reservas e não pode ser apagado — o histórico `
+               + 'ficaria sem referência. Desative-o: some das opções e os registros continuam válidos.',
+        });
+      }
+      throw error;
+    }
+    res.json({ ok: true, apagado: veiculo.name });
   } catch (err) { next(err); }
 });
 

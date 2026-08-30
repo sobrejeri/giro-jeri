@@ -270,6 +270,9 @@ export default function Catalogo() {
   const deleteTourMut = useMutation({
     mutationFn: (id) => api.deleteTour(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-tours'] }),
+    // Sem isto o 409 ("tem reservas, desative") morria em silêncio: o clique
+    // não fazia nada visível e parecia que a tela tinha travado.
+    onError:    (err) => alert(err?.message || 'Não foi possível apagar o passeio.'),
   })
 
   /* ── Modal (meio de operação) mutations ──────────────────── */
@@ -308,7 +311,7 @@ export default function Catalogo() {
       qc.invalidateQueries({ queryKey: ['admin-categories'] })
       qc.invalidateQueries({ queryKey: ['admin-tours'] })
     },
-    onError: (err) => alert(err?.message || 'Erro ao desativar a categoria.'),
+    onError: (err) => alert(err?.message || 'Não foi possível apagar a categoria.'),
   })
 
   /* ── Transfer mutations ──────────────────────────────────── */
@@ -327,6 +330,7 @@ export default function Catalogo() {
   const deleteRouteMut = useMutation({
     mutationFn: (id) => api.deleteTransferRoute(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-routes'] }),
+    onError:    (err) => alert(err?.message || 'Não foi possível apagar a rota.'),
   })
 
   /* ── Vehicle mutations ───────────────────────────────────── */
@@ -341,6 +345,7 @@ export default function Catalogo() {
   const deleteVehicleMut = useMutation({
     mutationFn: (id) => api.deleteVehicle(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['vehicles'] }),
+    onError:    (err) => alert(err?.message || 'Não foi possível apagar o veículo.'),
   })
 
   /* ── Open/close handlers ─────────────────────────────────── */
@@ -643,7 +648,7 @@ export default function Catalogo() {
                   </button>
                   {c.is_active && (
                     <button
-                      onClick={() => confirm(`Desativar a categoria "${c.name}"? Os passeios dela continuam ativos.`) && deleteCatMut.mutate(c.id)}
+                      onClick={() => confirm(`Apagar a categoria "${c.name}"?\n\nSó é possível se ela não tiver nenhum passeio.`) && deleteCatMut.mutate(c.id)}
                       className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
                     >
                       <Trash2 size={13} />
@@ -724,7 +729,7 @@ export default function Catalogo() {
                     <Pencil size={13} />
                   </button>
                   <button
-                    onClick={() => confirm('Desativar passeio?') && deleteTourMut.mutate(t.id)}
+                    onClick={() => confirm(`Apagar o passeio "${t.name}"?\n\nNão tem como desfazer. Passeio com reservas ou avaliações é recusado — nesse caso, desative pelo editar.`) && deleteTourMut.mutate(t.id)}
                     className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
                   >
                     <Trash2 size={13} />
@@ -860,7 +865,7 @@ export default function Catalogo() {
                       <Pencil size={13} />
                     </button>
                     <button
-                      onClick={() => confirm('Remover rota?') && deleteRouteMut.mutate(r.id)}
+                      onClick={() => confirm('Apagar esta rota?\n\nNão tem como desfazer. Rota com reservas é recusada — nesse caso, desative.') && deleteRouteMut.mutate(r.id)}
                       className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
                     >
                       <Trash2 size={13} />

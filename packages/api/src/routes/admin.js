@@ -1183,12 +1183,28 @@ router.put('/coupons/:id', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Apaga o cupom. `coupon_redemptions.coupon_id` tem ON DELETE RESTRICT, então
+// cupom já usado por algum cliente recusa a exclusão — e é o certo: o resgate
+// é parte do histórico da reserva. Antes isto só desativava e devolvia 204, e a
+// tela dava a exclusão como feita.
 router.delete('/coupons/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { error } = await supabase
-      .from('coupons').update({ is_active: false }).eq('id', req.params.id);
-    if (error) throw error;
-    res.status(204).end();
+    const id = req.params.id;
+    const { data: cupom } = await supabase
+      .from('coupons').select('id, code').eq('id', id).maybeSingle();
+    if (!cupom) return res.status(404).json({ error: 'Cupom não encontrado' });
+
+    const { error } = await supabase.from('coupons').delete().eq('id', id);
+    if (error) {
+      if (error.code === '23503') {
+        return res.status(409).json({
+          error: `O cupom ${cupom.code} já foi resgatado por algum cliente e não pode ser apagado — `
+               + 'o resgate faz parte do histórico da reserva. Desative-o: para de valer e o histórico fica.',
+        });
+      }
+      throw error;
+    }
+    res.json({ ok: true, apagado: cupom.code });
   } catch (err) { next(err); }
 });
 
