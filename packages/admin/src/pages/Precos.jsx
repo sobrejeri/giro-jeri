@@ -36,6 +36,7 @@ export default function Precos() {
   const [saving, setSaving]   = useState(false)
   const [search, setSearch]   = useState('')
   const [regionId, setRegionId] = useState('')
+  const [catId, setCatId]       = useState('')  // '' = todas · '__sem' = sem categoria
   const qc = useQueryClient()
 
   const { data: rules = [],    isLoading: l1 } = useQuery({ queryKey: ['pricing-rules'], queryFn: () => api.getPricingRules() })
@@ -73,17 +74,46 @@ export default function Precos() {
   const eligibleVehicles = vehicles.filter((v) => v.is_tour_allowed && v.is_active)
   const eligibleTours    = tours.filter((t) => t.is_active !== false)
 
-  const q = search.trim().toLowerCase()
-  const visibleTours = q ? eligibleTours.filter((t) => t.name.toLowerCase().includes(q)) : eligibleTours
+  // Categorias que realmente têm passeio ativo, com a contagem. 19 colunas numa
+  // grade só não deixam achar nada; por categoria, cada recorte cabe na tela.
+  const categorias = useMemo(() => {
+    const m = new Map()
+    let semCategoria = 0
+    for (const t of eligibleTours) {
+      const c = t.categories
+      if (!c?.id) { semCategoria++; continue }
+      const atual = m.get(c.id) || { id: c.id, name: c.name, count: 0 }
+      atual.count++
+      m.set(c.id, atual)
+    }
+    const lista = [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
+    if (semCategoria) lista.push({ id: '__sem', name: 'Sem categoria', count: semCategoria })
+    return lista
+  }, [eligibleTours])
 
-  // Estatísticas de cobertura (sobre a matriz da região, não filtrada por busca)
-  const allRules    = Object.values(matrix).flatMap((o) => Object.values(o))
+  const q = search.trim().toLowerCase()
+  const visibleTours = useMemo(() => {
+    let lista = eligibleTours
+    if (catId === '__sem')  lista = lista.filter((t) => !t.categories?.id)
+    else if (catId)         lista = lista.filter((t) => t.categories?.id === catId)
+    if (q) lista = lista.filter((t) => t.name.toLowerCase().includes(q))
+    return lista
+  }, [eligibleTours, catId, q])
+
+  // Estatísticas acompanham o recorte à vista: com um filtro ligado, "54/133"
+  // do catálogo inteiro não diz nada sobre a categoria que está sendo ajustada.
+  const filtrando   = !!catId || !!q
+  const idsVisiveis = useMemo(() => new Set(visibleTours.map((t) => t.id)), [visibleTours])
+  const allRules    = Object.values(matrix)
+    .flatMap((o) => Object.entries(o))
+    .filter(([tourId]) => !filtrando || idsVisiveis.has(tourId))
+    .map(([, r]) => r)
   const configured  = allRules.length
   const activeRules  = allRules.filter((r) => r.is_active)
   const avgPrice     = activeRules.length
     ? activeRules.reduce((s, r) => s + Number(r.base_price || 0), 0) / activeRules.length
     : 0
-  const totalCombos  = eligibleVehicles.length * eligibleTours.length
+  const totalCombos  = eligibleVehicles.length * (filtrando ? visibleTours.length : eligibleTours.length)
   const coveragePct  = totalCombos ? Math.round((configured / totalCombos) * 100) : 0
 
   function openCell(vehicle, tour, rule) {
@@ -233,12 +263,39 @@ export default function Precos() {
         </div>
       </div>
 
+      {/* Filtro por categoria — só aparece se houver categoria cadastrada */}
+      {categorias.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          <button
+            onClick={() => setCatId('')}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+              catId === '' ? 'bg-brand text-white border-brand' : 'bg-gray-900 text-gray-300 border-gray-700 hover:border-gray-600'
+            }`}
+          >
+            Todas <span className={catId === '' ? 'text-white/70' : 'text-gray-500'}>{eligibleTours.length}</span>
+          </button>
+          {categorias.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCatId((v) => (v === c.id ? '' : c.id))}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+                catId === c.id ? 'bg-brand text-white border-brand' : 'bg-gray-900 text-gray-300 border-gray-700 hover:border-gray-600'
+              }`}
+            >
+              {c.name} <span className={catId === c.id ? 'text-white/70' : 'text-gray-500'}>{c.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Barra de cobertura */}
       <div className="flex items-center gap-3">
         <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
           <div className="h-full bg-gradient-to-r from-brand to-amber-400" style={{ width: `${coveragePct}%` }} />
         </div>
-        <span className="text-[11px] text-gray-500 shrink-0">{coveragePct}% da grade preenchida</span>
+        <span className="text-[11px] text-gray-500 shrink-0">
+          {coveragePct}% {filtrando ? 'deste recorte preenchido' : 'da grade preenchida'}
+        </span>
       </div>
 
       <Card>
@@ -250,10 +307,18 @@ export default function Precos() {
                 {visibleTours.map((t) => (
                   <th key={t.id} className={`sticky top-0 z-20 ${thBase} w-[150px] min-w-[150px] max-w-[150px] align-bottom`}>
                     <span className="block line-clamp-2 leading-snug" title={t.name}>{t.name}</span>
+                    {t.categories?.name && (
+                      <span className="block mt-0.5 text-[9.5px] font-normal text-gray-500 normal-case truncate" title={t.categories.name}>
+                        {t.categories.name}
+                      </span>
+                    )}
                   </th>
                 ))}
                 {visibleTours.length === 0 && (
-                  <th className={`sticky top-0 z-20 ${thBase} text-gray-600 normal-case`}>Nenhum passeio para “{search}”.</th>
+                  <th className={`sticky top-0 z-20 ${thBase} text-gray-600 normal-case`}>
+                    {q ? `Nenhum passeio para “${search}”` : 'Nenhum passeio nesta categoria'}
+                    {catId && q ? ' nesta categoria.' : '.'}
+                  </th>
                 )}
               </tr>
             </thead>
