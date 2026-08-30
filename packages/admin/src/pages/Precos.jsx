@@ -28,6 +28,10 @@ function getSeasonPct(seasons) {
   return null
 }
 
+// Um passeio pode estar em várias categorias (migration 083); sem o array, a
+// categoria única de sempre.
+const catsDoPasseio = (t) => (t.category_ids?.length ? t.category_ids : (t.category_id ? [t.category_id] : []))
+
 export default function Precos() {
   const [editing, setEditing] = useState(null) // { vehicle, tour, rule? }
   const [base, setBase]       = useState('')
@@ -44,6 +48,7 @@ export default function Precos() {
   const { data: tours = [],    isLoading: l3 } = useQuery({ queryKey: ['admin-tours'],   queryFn: () => api.getTours().then((r) => r.data || r) })
   const { data: regions = [],  isLoading: l4 } = useQuery({ queryKey: ['regions'],       queryFn: () => api.getRegions() })
   const { data: seasons = [] }                  = useQuery({ queryKey: ['seasons'],       queryFn: () => api.getSeasons() })
+  const { data: catsCadastro = [] }             = useQuery({ queryKey: ['categories'],    queryFn: () => api.getCategories() })
 
   const season = useMemo(() => getSeasonPct(seasons), [seasons])
 
@@ -77,25 +82,30 @@ export default function Precos() {
   // Categorias que realmente têm passeio ativo, com a contagem. 19 colunas numa
   // grade só não deixam achar nada; por categoria, cada recorte cabe na tela.
   const categorias = useMemo(() => {
+    const nomes = new Map(catsCadastro.map((c) => [c.id, c.name]))
     const m = new Map()
     let semCategoria = 0
     for (const t of eligibleTours) {
-      const c = t.categories
-      if (!c?.id) { semCategoria++; continue }
-      const atual = m.get(c.id) || { id: c.id, name: c.name, count: 0 }
-      atual.count++
-      m.set(c.id, atual)
+      const ids = catsDoPasseio(t)
+      if (!ids.length) { semCategoria++; continue }
+      for (const id of ids) {
+        const nome = nomes.get(id) || (t.categories?.id === id ? t.categories.name : null)
+        if (!nome) continue
+        const atual = m.get(id) || { id, name: nome, count: 0 }
+        atual.count++
+        m.set(id, atual)
+      }
     }
     const lista = [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
     if (semCategoria) lista.push({ id: '__sem', name: 'Sem categoria', count: semCategoria })
     return lista
-  }, [eligibleTours])
+  }, [eligibleTours, catsCadastro])
 
   const q = search.trim().toLowerCase()
   const visibleTours = useMemo(() => {
     let lista = eligibleTours
-    if (catId === '__sem')  lista = lista.filter((t) => !t.categories?.id)
-    else if (catId)         lista = lista.filter((t) => t.categories?.id === catId)
+    if (catId === '__sem')  lista = lista.filter((t) => catsDoPasseio(t).length === 0)
+    else if (catId)         lista = lista.filter((t) => catsDoPasseio(t).includes(catId))
     if (q) lista = lista.filter((t) => t.name.toLowerCase().includes(q))
     return lista
   }, [eligibleTours, catId, q])
@@ -307,11 +317,16 @@ export default function Precos() {
                 {visibleTours.map((t) => (
                   <th key={t.id} className={`sticky top-0 z-20 ${thBase} w-[150px] min-w-[150px] max-w-[150px] align-bottom`}>
                     <span className="block line-clamp-2 leading-snug" title={t.name}>{t.name}</span>
-                    {t.categories?.name && (
-                      <span className="block mt-0.5 text-[9.5px] font-normal text-gray-500 normal-case truncate" title={t.categories.name}>
-                        {t.categories.name}
-                      </span>
-                    )}
+                    {(() => {
+                      const nomes = new Map(catsCadastro.map((c) => [c.id, c.name]))
+                      const rotulo = catsDoPasseio(t).map((id) => nomes.get(id)).filter(Boolean).join(' · ')
+                        || t.categories?.name || ''
+                      return rotulo ? (
+                        <span className="block mt-0.5 text-[9.5px] font-normal text-gray-500 normal-case truncate" title={rotulo}>
+                          {rotulo}
+                        </span>
+                      ) : null
+                    })()}
                   </th>
                 ))}
                 {visibleTours.length === 0 && (

@@ -90,6 +90,40 @@ router.get('/', async (req, res, next) => {
       console.error('[tours] preço "a partir de" falhou:', e.message);
     }
 
+    // Todas as categorias do passeio (migration 083). O join `categories` só
+    // traz a principal (`category_id`); um passeio que é "Voos Panorâmicos" e
+    // também "Compartilhado" precisa aparecer nas duas vitrines.
+    // Best-effort e em duas consultas: sem a migration, `category_ids` não
+    // existe e a lista sai como sempre, com uma categoria só.
+    try {
+      const ids = (filtered || []).map((t) => t.id).filter(Boolean);
+      if (ids.length) {
+        const { data: vinculos, error: eVinc } = await supabase
+          .from('tours').select('id, category_ids').in('id', ids);
+        if (eVinc?.code === '42703') throw new Error('category_ids ausente (083 pendente)');
+        if (eVinc) throw eVinc;
+
+        const todosIds = [...new Set((vinculos || []).flatMap((v) => v.category_ids || []))];
+        const porId = new Map();
+        if (todosIds.length) {
+          const { data: cats } = await supabase
+            .from('categories')
+            .select('id, name, slug, sort_order, is_exclusive')
+            .in('id', todosIds);
+          for (const c of cats || []) porId.set(c.id, c);
+        }
+        const porPasseio = new Map((vinculos || []).map((v) => [v.id, v.category_ids || []]));
+        filtered = filtered.map((t) => {
+          const lista = (porPasseio.get(t.id) || []).map((cid) => porId.get(cid)).filter(Boolean);
+          // Sem vínculo no array, a categoria única continua valendo.
+          return { ...t, categorias: lista.length ? lista : (t.categories ? [t.categories] : []) };
+        });
+      }
+    } catch (e) {
+      console.warn('[tours] categorias múltiplas indisponíveis:', e.message);
+      filtered = (filtered || []).map((t) => ({ ...t, categorias: t.categories ? [t.categories] : [] }));
+    }
+
     res.json(filtered);
   } catch (err) { next(err); }
 });

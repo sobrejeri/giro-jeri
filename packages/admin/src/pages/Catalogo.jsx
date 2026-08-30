@@ -10,6 +10,12 @@ import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 
 // Horários pré-definidos para o limite de solicitação (30 em 30 min, 06h–22h).
+// Categorias de um passeio: o array da 083 quando existe, senão a categoria
+// única de sempre. Filtro e contagem precisam achar o passeio por QUALQUER uma
+// delas — senão marcar duas categorias sumiria com ele de uma das listas.
+const catsDoPasseio = (t) => (t.category_ids?.length ? t.category_ids : (t.category_id ? [t.category_id] : []))
+const temCategoria  = (t, id) => catsDoPasseio(t).includes(id)
+
 const CUTOFF_TIME_OPTIONS = (() => {
   const opts = []
   for (let h = 6; h <= 22; h++) {
@@ -55,6 +61,7 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
 
 const TOUR_EMPTY = {
   category_id: '',
+  category_ids: [],
   name: '', short_description: '', duration_hours: 2, max_people: 10,
   is_private_enabled: true, is_shared_enabled: false,
   shared_price_per_person: '', cover_image_url: '', is_active: true,
@@ -240,14 +247,14 @@ export default function Catalogo() {
   // Desativada some da lista, mas continua no <select> se algum passeio ainda
   // aponta para ela — senão editar esse passeio apagaria a categoria em silêncio.
   const categoriasAtivas = categorias.filter((c) => c.is_active)
-  const passeiosPorCategoria = (id) => tours.filter((t) => t.category_id === id).length
+  const passeiosPorCategoria = (id) => tours.filter((t) => temCategoria(t, id)).length
 
   const byRegion = (item) => !filterRegion || (item.region_ids || []).includes(filterRegion)
   const filteredTours     = tours.filter(byRegion)
   const passeiosVisiveis =
     catPasseio === 'todos' ? filteredTours
-      : catPasseio === '__sem' ? filteredTours.filter((t) => !t.category_id)
-      : filteredTours.filter((t) => t.category_id === catPasseio)
+      : catPasseio === '__sem' ? filteredTours.filter((t) => catsDoPasseio(t).length === 0)
+      : filteredTours.filter((t) => temCategoria(t, catPasseio))
   const filteredTransfers = transfers.filter(byRegion)
   const filteredVehicles  = vehicles.filter(byRegion)
 
@@ -354,7 +361,12 @@ export default function Catalogo() {
     setModal({ isNew: true })
   }
   function openEditTour(t) {
-    setForm({ ...t, region_ids: t.region_ids || [] }); setImageFile(null); setImagePreview(t.cover_image_url || null)
+    setForm({
+      ...t,
+      region_ids: t.region_ids || [],
+      // Passeio salvo antes da 083 só tem a categoria única — vira o array.
+      category_ids: (t.category_ids?.length ? t.category_ids : (t.category_id ? [t.category_id] : [])),
+    }); setImageFile(null); setImagePreview(t.cover_image_url || null)
     setModal(t)
   }
   function openNewModal()   { setModalForm(MODAL_EMPTY); setModalModal({ isNew: true }) }
@@ -684,9 +696,9 @@ export default function Catalogo() {
                 {[{ id: 'todos', name: `Todos (${filteredTours.length})` },
                   ...categoriasAtivas.map((c) => ({
                     id: c.id,
-                    name: `${c.name} (${filteredTours.filter((t) => t.category_id === c.id).length})`,
+                    name: `${c.name} (${filteredTours.filter((t) => temCategoria(t, c.id)).length})`,
                   })),
-                  { id: '__sem', name: `Sem categoria (${filteredTours.filter((t) => !t.category_id).length})` },
+                  { id: '__sem', name: `Sem categoria (${filteredTours.filter((t) => catsDoPasseio(t).length === 0).length})` },
                 ].map((op) => (
                   <button
                     key={op.id}
@@ -1200,26 +1212,64 @@ export default function Catalogo() {
             {/* Faltava por completo: a coluna `tours.category_id` existe desde a
                 001 e a API já a grava, mas não havia como escolher a categoria
                 pelo painel. É ela que decide em qual carrossel o passeio entra. */}
+            {/* Várias categorias por passeio (migration 083): o voo panorâmico é
+                "Voos Panorâmicos" e também entra na vitrine de compartilhado.
+                A PRIMEIRA marcada é a principal — é a que aparece como rótulo
+                onde só cabe uma. */}
             <div>
-              <Select
-                label="Categoria"
-                value={form.category_id || ''}
-                onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-              >
-                <option value="">Sem categoria</option>
-                {categoriasAtivas.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}{c.is_exclusive ? ' (carrossel próprio)' : ''}</option>
-                ))}
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">Categorias</label>
+              <div className="space-y-1.5 max-h-52 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900 p-2">
+                {categoriasAtivas.length === 0 && (
+                  <p className="text-[12px] text-gray-500 px-1 py-1">Nenhuma categoria ativa cadastrada.</p>
+                )}
+                {categoriasAtivas.map((c) => {
+                  const marcadas = form.category_ids || []
+                  const on = marcadas.includes(c.id)
+                  const principal = marcadas[0] === c.id
+                  return (
+                    <label key={c.id} className="flex items-center gap-2.5 px-1.5 py-1 rounded hover:bg-gray-800/60 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => setForm((f) => {
+                          const atual = f.category_ids || []
+                          const proximo = on ? atual.filter((x) => x !== c.id) : [...atual, c.id]
+                          // category_id acompanha a principal para o app e o
+                          // admin, que ainda leem a categoria única.
+                          return { ...f, category_ids: proximo, category_id: proximo[0] || '' }
+                        })}
+                        className="accent-brand w-4 h-4 shrink-0"
+                      />
+                      <span className="text-sm text-gray-200">{c.name}</span>
+                      {c.is_exclusive && <span className="text-[10px] text-brand">carrossel próprio</span>}
+                      {principal && <span className="text-[10px] text-gray-500 ml-auto">principal</span>}
+                    </label>
+                  )
+                })}
                 {/* Categoria desativada só aparece se ESTE passeio já usa ela —
                     senão salvar o passeio apagaria o vínculo sem avisar. */}
-                {form.category_id && !categoriasAtivas.some((c) => c.id === form.category_id) && (
-                  <option value={form.category_id}>
-                    {categorias.find((c) => c.id === form.category_id)?.name || 'Categoria atual'} (inativa)
-                  </option>
-                )}
-              </Select>
+                {(form.category_ids || [])
+                  .filter((id) => !categoriasAtivas.some((c) => c.id === id))
+                  .map((id) => (
+                    <label key={id} className="flex items-center gap-2.5 px-1.5 py-1 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked
+                        onChange={() => setForm((f) => {
+                          const proximo = (f.category_ids || []).filter((x) => x !== id)
+                          return { ...f, category_ids: proximo, category_id: proximo[0] || '' }
+                        })}
+                        className="accent-brand w-4 h-4 shrink-0"
+                      />
+                      <span className="text-sm text-gray-400">
+                        {categorias.find((c) => c.id === id)?.name || 'Categoria atual'} (inativa)
+                      </span>
+                    </label>
+                  ))}
+              </div>
               <p className="text-[11px] text-gray-500 mt-1">
-                Categoria com carrossel próprio ganha uma vitrine só dela no app. Sem categoria, o passeio segue na lista comum.
+                O passeio aparece na vitrine de cada categoria marcada. Categoria com carrossel próprio ganha
+                uma vitrine só dela no app; sem nenhuma marcada, o passeio segue na lista comum.
               </p>
             </div>
 

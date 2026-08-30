@@ -338,6 +338,18 @@ router.delete('/categories/:id', requireAdmin, async (req, res, next) => {
 
 // ── Tours ─────────────────────────────────────────────────
 
+// Categorias de um passeio. O admin manda `category_ids`; versões antigas da
+// tela (e integrações) mandam só `category_id`. A primeira do array é a
+// PRINCIPAL e vai também para `category_id`, que continua existindo para quem
+// só sabe ler uma categoria.
+function normalizarCategorias({ category_ids, category_id }) {
+  const lista = Array.isArray(category_ids)
+    ? category_ids.filter(Boolean)
+    : (category_id ? [category_id] : [])
+  const unicos = [...new Set(lista)]
+  return { category_ids: unicos, category_id: unicos[0] || null }
+}
+
 router.get('/tours', async (req, res, next) => {
   try {
     const { data, error } = await req.supabase
@@ -358,14 +370,14 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
     const {
       name, short_description, duration_hours, max_people,
       is_private_enabled, is_shared_enabled, shared_price_per_person,
-      cover_image_url, category_id, region_ids, is_featured, display_order,
+      cover_image_url, category_id, category_ids, region_ids, is_featured, display_order,
       booking_cutoff_time, min_advance_hours, is_exclusive,
       service_window_start, service_window_end,
     } = req.body;
 
     const slug = `${slugify(name)}-${Date.now().toString(36)}`;
 
-    const { data, error } = await req.supabase.from('tours').insert({
+    const linha = {
       region_id:               region.id,
       name,
       slug,
@@ -376,7 +388,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       is_shared_enabled:       !!is_shared_enabled,
       shared_price_per_person: shared_price_per_person ? Number(shared_price_per_person) : null,
       cover_image_url:         cover_image_url  || null,
-      category_id:             category_id      || null,
+      ...normalizarCategorias({ category_ids, category_id }),
       region_ids:              Array.isArray(region_ids) ? region_ids : [],
       is_featured:             !!is_featured,
       display_order:           display_order ? Number(display_order) : 0,
@@ -385,8 +397,17 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       is_exclusive:            !!is_exclusive,
       service_window_start:    service_window_start || null,
       service_window_end:      service_window_end   || null,
-    }).select().single();
+    };
+    const { data, error } = await req.supabase.from('tours').insert(linha).select().single();
 
+    // Banco ainda sem a migration 083: insere sem o array e mantém a categoria
+    // única. Melhor um passeio com uma categoria do que erro ao cadastrar.
+    if (error?.code === '42703') {
+      const { category_ids: _drop, ...semArray } = linha;
+      const retry = await req.supabase.from('tours').insert(semArray).select().single();
+      if (retry.error) throw retry.error;
+      return res.status(201).json(retry.data);
+    }
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -397,7 +418,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     const {
       name, short_description, duration_hours, max_people,
       is_private_enabled, is_shared_enabled, shared_price_per_person,
-      cover_image_url, category_id, is_active, display_order, is_featured,
+      cover_image_url, category_id, category_ids, is_active, display_order, is_featured,
       latitude, longitude, service_radius_km, region_ids,
       booking_cutoff_time, min_advance_hours, is_exclusive,
       service_window_start, service_window_end,
@@ -417,7 +438,11 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (is_shared_enabled  !== undefined) update.is_shared_enabled       = is_shared_enabled;
     if (shared_price_per_person !== undefined) update.shared_price_per_person = shared_price_per_person ? Number(shared_price_per_person) : null;
     if (cover_image_url    !== undefined) update.cover_image_url         = cover_image_url;
-    if (category_id        !== undefined) update.category_id             = category_id || null;
+    // As duas colunas andam juntas: gravar só uma deixaria o passeio numa
+    // categoria pela vitrine e em outra pelo rótulo.
+    if (category_ids !== undefined || category_id !== undefined) {
+      Object.assign(update, normalizarCategorias({ category_ids, category_id }));
+    }
     if (is_active          !== undefined) update.is_active               = is_active;
     if (is_featured        !== undefined) update.is_featured             = is_featured;
     if (display_order      !== undefined) update.display_order           = Number(display_order) || 0;
@@ -426,8 +451,13 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (service_radius_km  !== undefined) update.service_radius_km       = service_radius_km === '' || service_radius_km === null ? null : Number(service_radius_km);
     if (region_ids         !== undefined) update.region_ids              = Array.isArray(region_ids) ? region_ids : [];
 
-    const { data, error } = await req.supabase
+    let { data, error } = await req.supabase
       .from('tours').update(update).eq('id', req.params.id).select().single();
+    if (error?.code === '42703' && update.category_ids !== undefined) {
+      const { category_ids: _drop, ...semArray } = update;
+      ({ data, error } = await req.supabase
+        .from('tours').update(semArray).eq('id', req.params.id).select().single());
+    }
     if (error || !data) return res.status(404).json({ error: 'Passeio não encontrado' });
     res.json(data);
   } catch (err) { next(err); }

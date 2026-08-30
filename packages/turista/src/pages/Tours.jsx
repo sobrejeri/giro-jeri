@@ -532,23 +532,30 @@ export default function Tours() {
   // É independente de `tours.is_exclusive`: aquele decide o FLUXO DE VENDA
   // (venda direta, sem carrinho); este decide apenas ONDE o passeio aparece.
   // Um passeio pode ter os dois, um só, ou nenhum.
-  const temCarrosselProprio = (x) => !!x.categories?.is_exclusive
+  // Um passeio pode estar em VÁRIAS categorias (migration 083): o voo
+  // panorâmico é "Voos Panorâmicos" e também entra na vitrine de
+  // compartilhado. `categorias` vem da API; sem ela, cai na categoria única.
+  const categoriasDe = (x) => (x.categorias?.length ? x.categorias : (x.categories ? [x.categories] : []))
 
   const categoriasCarrossel = useMemo(() => {
     const porId = new Map()
     for (const x of tours) {
-      if (!temCarrosselProprio(x)) continue
-      const id = x.category_id || x.categories?.id || x.categories?.name
-      if (!id) continue
-      if (!porId.has(id)) {
-        porId.set(id, {
-          id,
-          nome:  x.categories?.name || '',
-          ordem: Number(x.categories?.sort_order) || 0,
-          passeios: [],
-        })
+      for (const cat of categoriasDe(x)) {
+        // Só a categoria marcada como vitrine própria cria carrossel; as
+        // demais do mesmo passeio continuam servindo de rótulo e filtro.
+        if (!cat?.is_exclusive) continue
+        const id = cat.id || cat.name
+        if (!id) continue
+        if (!porId.has(id)) {
+          porId.set(id, {
+            id,
+            nome:  cat.name || '',
+            ordem: Number(cat.sort_order) || 0,
+            passeios: [],
+          })
+        }
+        porId.get(id).passeios.push(x)
       }
-      porId.get(id).passeios.push(x)
     }
     // Ordem definida no admin; empate resolvido pelo nome para a vitrine não
     // trocar de posição a cada carregamento.
@@ -566,7 +573,11 @@ export default function Tours() {
   // passeio apareceria duas vezes na tela.
   const tradTours      = tours.filter((t) => !t.is_exclusive && !idsEmCarrossel.has(t.id))
   const exclusiveTours = tours.filter((t) =>  t.is_exclusive && !idsEmCarrossel.has(t.id))
-  const emCategorias   = categoriasCarrossel.flatMap((c) => c.passeios)
+  // Passeio em duas vitrines aparece nas duas — mas aqui a lista serve para
+  // ACHAR o passeio selecionado, então precisa ser sem repetição.
+  const emCategorias   = [...new Map(
+    categoriasCarrossel.flatMap((c) => c.passeios).map((p) => [p.id, p]),
+  ).values()]
   // Nada vem pré-selecionado: o cliente escolhe um passeio (tradicional OU
   // exclusivo) e só então os veículos aparecem. Clicar no selecionado desmarca.
   const selectedTour = [...tradTours, ...exclusiveTours, ...emCategorias]
