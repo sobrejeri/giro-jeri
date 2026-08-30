@@ -2102,7 +2102,58 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
       if (uErr) throw uErr;
       byId = new Map((users || []).map((u) => [u.id, u]));
     }
-    const enriched = (data || []).map((b) => ({ ...b, users: byId.get(b.user_id) || null }));
+    // ── Qual serviço, de que categoria, e se veio num combo ──────────────
+    // `service_id` não tem FK (aponta para tours OU transfer_routes conforme o
+    // tipo), então o join é feito aqui, em duas consultas em lote.
+    const linhas = data || [];
+    const idsTour  = [...new Set(linhas.filter((b) => b.service_type === 'tour')
+                                       .map((b) => b.service_id).filter(Boolean))];
+    const idsRota  = [...new Set(linhas.filter((b) => b.service_type === 'transfer')
+                                       .map((b) => b.service_id).filter(Boolean))];
+
+    // Reservas criadas juntas pelo carrinho compartilham `order_group_id`
+    // (migration 050). Sozinha no grupo — ou sem grupo — é solo; com companhia,
+    // é combo. Contar as do grupo INTEIRO, não as desta página: o combo pode
+    // estar dividido entre duas páginas da listagem.
+    const grupos = [...new Set(linhas.map((b) => b.order_group_id).filter(Boolean))];
+
+    const [rTours, rRotas, rGrupos] = await Promise.all([
+      idsTour.length
+        ? supabase.from('tours').select('id, name, categories ( name, modal )').in('id', idsTour)
+        : Promise.resolve({ data: [] }),
+      idsRota.length
+        ? supabase.from('transfer_routes')
+            .select('id, origin_name, destination_name, transfers ( name, modal )').in('id', idsRota)
+        : Promise.resolve({ data: [] }),
+      grupos.length
+        ? supabase.from('bookings').select('id, order_group_id').in('order_group_id', grupos)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const porTour = new Map((rTours.data || []).map((t) => [t.id, t]));
+    const porRota = new Map((rRotas.data || []).map((r) => [r.id, r]));
+    const tamanhoDoGrupo = new Map();
+    for (const b of rGrupos.data || []) {
+      tamanhoDoGrupo.set(b.order_group_id, (tamanhoDoGrupo.get(b.order_group_id) || 0) + 1);
+    }
+
+    const enriched = linhas.map((b) => {
+      const t = b.service_type === 'tour' ? porTour.get(b.service_id) : null;
+      const r = b.service_type === 'tour' ? null : porRota.get(b.service_id);
+      const noGrupo = b.order_group_id ? (tamanhoDoGrupo.get(b.order_group_id) || 1) : 1;
+      return {
+        ...b,
+        users: byId.get(b.user_id) || null,
+        service_name: t?.name
+          || (r ? `${r.origin_name} → ${r.destination_name}` : null),
+        // Passeio tem categoria própria; no translado, o "tipo de translado"
+        // (`transfers.name`) cumpre o mesmo papel de agrupador.
+        category_name: t?.categories?.name || r?.transfers?.name || null,
+        modal:         t?.categories?.modal || r?.transfers?.modal || null,
+        combo:         noGrupo > 1,
+        combo_total:   noGrupo,
+      };
+    });
 
     res.json({ data: enriched, total: count || 0, counts, page: Number(page) });
   } catch (err) { next(err); }

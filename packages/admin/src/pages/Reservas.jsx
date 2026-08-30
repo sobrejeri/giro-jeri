@@ -182,6 +182,12 @@ export default function Reservas() {
                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${b.service_type === 'tour' ? 'bg-blue-900/40 text-blue-400' : 'bg-purple-900/40 text-purple-400'}`}>
                   {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
                 </span>
+                {b.combo && (
+                  <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400">
+                    Combo {b.combo_total}
+                  </span>
+                )}
+                {b.category_name && <span className="text-gray-400">{b.category_name}</span>}
                 <span>{b.people_count} pax</span>
                 <span>· {b.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'}</span>
                 <span className="ml-auto">
@@ -221,10 +227,39 @@ export default function Reservas() {
                     <p className="text-xs text-gray-500">{b.users?.phone || b.users?.email || '—'}</p>
                   </td>
                   <td className="px-5 py-3">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${b.service_type === 'tour' ? 'bg-blue-900/40 text-blue-400' : 'bg-purple-900/40 text-purple-400'}`}>
-                      {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-0.5">{b.people_count} pax</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${b.service_type === 'tour' ? 'bg-blue-900/40 text-blue-400' : 'bg-purple-900/40 text-purple-400'}`}>
+                        {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
+                      </span>
+                      {/* COMBO = reserva criada junto com outras no mesmo
+                          carrinho. Muda a operação: cancelar ou remarcar uma
+                          mexe no pedido inteiro do cliente. */}
+                      {b.combo ? (
+                        <span
+                          className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400"
+                          title={`Pedido combinado — ${b.combo_total} serviços comprados juntos`}
+                        >
+                          Combo {b.combo_total}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-500">
+                          Solo
+                        </span>
+                      )}
+                      {b.modal && b.modal !== 'terrestre' && (
+                        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 capitalize">
+                          {b.modal}
+                        </span>
+                      )}
+                    </div>
+                    {b.service_name && (
+                      <p className="text-xs text-gray-300 mt-1 max-w-56 truncate" title={b.service_name}>
+                        {b.service_name}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {b.category_name ? `${b.category_name} · ` : ''}{b.people_count} pax
+                    </p>
                   </td>
                   <td className="px-5 py-3 text-xs text-gray-400">
                     {b.service_date ? format(parseISO(b.service_date), 'dd/MM/yyyy') : '—'}
