@@ -332,12 +332,23 @@ function NovaReservaModal({ open, onClose, onSuccess }) {
 }
 
 // ── Acompanhamento operacional (filtro por operador / passeio / transfer) ──
+// dd/mm — o painel é operacional, o ano polui e raramente muda o entendimento.
+const dataBR = (iso) => {
+  if (!iso) return ''
+  const [a, m, d] = iso.split('-')
+  return `${d}/${m}`
+}
+
 function AcompanhamentoOperacional() {
   const [operatorId,  setOperatorId]  = useState('')
   const [serviceType, setServiceType] = useState('')   // '' | 'tour' | 'transfer'
   const [tourId,      setTourId]      = useState('')
   const [status,      setStatus]      = useState('')    // '' = todos
-  const [date,        setDate]        = useState('')    // '' = todas as datas
+  // Período em vez de um dia só: quem acompanha a operação pergunta "como foi a
+  // semana" e "o que vem pela frente", não só "o que tem no dia 01".
+  const [desde,       setDesde]       = useState('')
+  const [ate,         setAte]         = useState('')
+  const [periodo,     setPeriodo]     = useState('all')  // atalho ativo
 
   const { data: operatorsData } = useQuery({
     queryKey: ['admin-operators'],
@@ -351,9 +362,11 @@ function AcompanhamentoOperacional() {
   })
   const tourName = (id) => tours.find((t) => t.id === id)?.name
 
-  const params = { date: date || 'all' }
-  if (operatorId)  params.operator_id  = operatorId
-  if (serviceType) params.service_type = serviceType
+  const params = { date: 'all' }
+  if (desde)       params.from          = desde
+  if (ate)         params.to            = ate
+  if (operatorId)  params.operator_id   = operatorId
+  if (serviceType) params.service_type  = serviceType
 
   const { data: op, isLoading, isFetching } = useQuery({
     queryKey: ['admin-operational', params],
@@ -380,6 +393,23 @@ function AcompanhamentoOperacional() {
         .filter(Boolean).join(' → ') || 'Transfer'
     }
     return tourName(b.service_id) || 'Passeio'
+  }
+
+  // Atalhos com o dia de HOJE como âncora. Sem eles, ver a semana exige digitar
+  // duas datas — trabalho demais para a pergunta mais frequente do painel.
+  const iso = (d) => d.toISOString().slice(0, 10)
+  const maisDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d) }
+  const PERIODOS = [
+    { id: 'all',      label: 'Tudo',        range: () => ['', ''] },
+    { id: 'hoje',     label: 'Hoje',        range: () => [iso(new Date()), iso(new Date())] },
+    { id: 'amanha',   label: 'Amanhã',      range: () => [maisDias(1), maisDias(1)] },
+    { id: 'prox7',    label: 'Próx. 7 dias', range: () => [iso(new Date()), maisDias(7)] },
+    { id: 'ult7',     label: 'Últimos 7',   range: () => [maisDias(-7), iso(new Date())] },
+    { id: 'ult30',    label: 'Últimos 30',  range: () => [maisDias(-30), iso(new Date())] },
+  ]
+  function aplicarPeriodo(p) {
+    const [d, a] = p.range()
+    setDesde(d); setAte(a); setPeriodo(p.id)
   }
 
   const selectCls = 'bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-brand/60'
@@ -420,7 +450,45 @@ function AcompanhamentoOperacional() {
               <option value="">Todos os passeios</option>
               {tours.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={selectCls} title="Filtrar por data (vazio = todas)" />
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={desde}
+                max={ate || undefined}
+                onChange={(e) => { setDesde(e.target.value); setPeriodo('') }}
+                className={`${selectCls} w-full`}
+                title="A partir de (vazio = sem limite)"
+              />
+              <span className="text-gray-600 text-xs shrink-0">até</span>
+              <input
+                type="date"
+                value={ate}
+                min={desde || undefined}
+                onChange={(e) => { setAte(e.target.value); setPeriodo('') }}
+                className={`${selectCls} w-full`}
+                title="Até (vazio = sem limite)"
+              />
+            </div>
+          </div>
+
+          {/* Atalhos de período */}
+          <div className="flex flex-wrap gap-1.5">
+            {PERIODOS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => aplicarPeriodo(p)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                  periodo === p.id ? 'bg-brand text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+            {(desde || ate) && (
+              <span className="px-2.5 py-1 text-[11px] text-gray-500">
+                {desde ? dataBR(desde) : 'início'} → {ate ? dataBR(ate) : 'sem fim'}
+              </span>
+            )}
           </div>
 
           {/* Chips de status (andamento) */}

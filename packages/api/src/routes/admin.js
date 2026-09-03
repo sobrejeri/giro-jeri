@@ -683,9 +683,15 @@ router.post('/operational/:id/os-link', requireOperator, async (req, res, next) 
 // Painel kanban da operação
 router.get('/operational', requireOperator, async (req, res, next) => {
   try {
-    const { date, service_type, operator_id } = req.query;
-    const showAll    = !date || date === 'all';
-    const targetDate = showAll ? null : date;
+    // `date` continua valendo (um dia só ou 'all'). `from`/`to` chegaram depois,
+    // para o painel filtrar por PERÍODO — só um dia não responde "como foi a
+    // semana" nem "o que vem pela frente".
+    const { date, from, to, service_type, operator_id } = req.query;
+    const ISO = /^\d{4}-\d{2}-\d{2}$/;
+    const desde = ISO.test(from || '') ? from : null;
+    const ate   = ISO.test(to   || '') ? to   : null;
+    const showAll    = !desde && !ate && (!date || date === 'all');
+    const targetDate = (desde || ate) ? null : (showAll ? null : date);
 
     let query = supabase
       .from('bookings')
@@ -704,6 +710,10 @@ router.get('/operational', requireOperator, async (req, res, next) => {
       .order('service_date', { ascending: true });
 
     if (targetDate)    query = query.eq('service_date', targetDate);
+    // Intervalo aberto de um lado é válido: "de hoje em diante" e "até ontem"
+    // são as duas perguntas mais comuns de quem acompanha a operação.
+    if (desde)         query = query.gte('service_date', desde);
+    if (ate)           query = query.lte('service_date', ate);
     if (service_type)  query = query.eq('service_type', service_type);
 
     // Escopo por operador: um operador (não-admin) só enxerga as PRÓPRIAS
@@ -747,7 +757,13 @@ router.get('/operational', requireOperator, async (req, res, next) => {
       if (grouped[key]) grouped[key].push(b);
     }
 
-    res.json({ date: targetDate || 'all', total: data?.length || 0, columns: grouped });
+    res.json({
+      date: targetDate || 'all',
+      from: desde || null,
+      to:   ate   || null,
+      total: data?.length || 0,
+      columns: grouped,
+    });
   } catch (err) { next(err); }
 });
 
