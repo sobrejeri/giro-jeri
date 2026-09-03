@@ -283,75 +283,109 @@ export function plataformaRecebeTudo(cfg) {
 // repassa na mão. Fail-closed: errar para "fica com a plataforma" se corrige
 // com um repasse; errar para o outro lado manda dinheiro para conta de
 // terceiro e não tem como desfazer.
-async function podeDividirComOperadorUnico(booking, cfg) {
-  if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return false
-  if (!booking?.operator_id) return false
-
-  // Combo: reservas irmãs no mesmo carrinho podem ter operadores diferentes, e
-  // aí o pagamento do grupo teria vários recebedores. Fora do escopo.
-  if (booking.order_group_id) {
-    const { count } = await supabase
-      .from('bookings').select('id', { count: 'exact', head: true })
-      .eq('order_group_id', booking.order_group_id)
-    if ((count || 0) > 1) return false
+// Modal de cada reserva, com o percentual da plataforma. Devolve null se
+// QUALQUER uma não puder ser resolvida — e isso é decisivo: sem saber o modal,
+// não se sabe se há executor fixo, e dividir às cegas manda dinheiro para a
+// conta errada sem volta.
+async function modaisDasReservas(bookings) {
+  const { modalDaReserva } = await import('../services/payouts.js')
+  const out = []
+  for (const b of bookings) {
+    if (!b?.service_id) return null            // reserva podada → não dá para verificar
+    const slug = await modalDaReserva(b)
+    if (!slug) return null                     // serviço sem modal → não dá para verificar
+    const { data: modal } = await supabase
+      .from('service_modals')
+      .select('executor_operator_id, platform_commission_pct')
+      .eq('slug', slug).maybeSingle()
+    if (!modal) return null
+    out.push({ booking: b, ...modal })
   }
-
-  try {
-    const { modalDaReserva } = await import('../services/payouts.js')
-    const slug = await modalDaReserva(booking)
-    if (slug) {
-      const { data: modal } = await supabase
-        .from('service_modals').select('executor_operator_id')
-        .eq('slug', slug).maybeSingle()
-      const executor = modal?.executor_operator_id
-      // Executor fixo que NÃO é quem aceitou: o dinheiro precisa chegar nele.
-      if (executor && executor !== booking.operator_id) return false
-    }
-  } catch (e) {
-    // Não deu para saber se há executor fixo → não divide. O caso duvidoso vai
-    // para o manual, que é reversível.
-    console.warn('[split] modal indisponível, mantendo manual:', e.message)
-    return false
-  }
-  return true
+  return out
 }
 
-// Percentual da plataforma para esta reserva. Vem do MODAL quando definido —
-// a mesma fonte que `repartirReserva` usa no repasse. Se o split usasse um
-// número e o repasse outro, os dois modelos discordariam sobre quanto é a
-// comissão, e a conferência de caixa nunca fecharia.
-async function pctPlataformaDaReserva(booking, cfg, opMp) {
-  try {
-    const { modalDaReserva } = await import('../services/payouts.js')
-    const slug = await modalDaReserva(booking)
-    if (slug) {
-      const { data: modal } = await supabase
-        .from('service_modals').select('platform_commission_pct')
-        .eq('slug', slug).maybeSingle()
-      if (modal?.platform_commission_pct != null) return Number(modal.platform_commission_pct)
+// Split de operador ÚNICO: dois recebedores, e por isso FUNCIONA COM CARTÃO
+// (`application_fee`). O que a 079 desligou foi o caso de vários recebedores
+// (`disbursements`), que é PIX-only — não este.
+//
+// Vale para uma reserva sozinha E para um COMBO aceito inteiro pelo mesmo
+// operador: nos dois casos o dinheiro vai para um só lugar, então continua
+// sendo dois recebedores. Combo repartido entre operadores diferentes é que
+// fica fora.
+//
+// Condições, todas obrigatórias:
+//   1. a chave `payment_split_single_operator` está ligada;
+//   2. há um operador, o mesmo em todas as reservas do pagamento;
+//   3. TODOS os modais envolvidos foram identificados;
+//   4. nenhum deles tem executor fixo diferente de quem aceitou. Este é o
+//      ponto mais importante: um split de dois recebedores só alcança quem
+//      ACEITOU. Num combo com voo, dividir pagaria o intermediário e deixaria
+//      quem voou sem nada — e não tem como desfazer.
+//
+// Falhando qualquer uma, devolve null e o valor cai inteiro na plataforma, que
+// repassa na mão. Fail-closed: errar para "fica com a plataforma" se corrige
+// com um repasse; errar para o outro lado é irreversível.
+async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg) {
+  if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return null
+
+  const lista = (bookings || []).filter(Boolean)
+  if (lista.length === 0) return null
+  const ops = [...new Set(lista.map((b) => b.operator_id).filter(Boolean))]
+  if (ops.length !== 1 || lista.some((b) => !b.operator_id)) return null
+  const operatorId = ops[0]
+
+  const modais = await modaisDasReservas(lista)
+  if (!modais) {
+    console.warn('[split] modal não identificado em alguma reserva — mantendo manual')
+    return null
+  }
+  for (const m of modais) {
+    if (m.executor_operator_id && m.executor_operator_id !== operatorId) {
+      console.warn('[split] modal com executor fixo no pagamento — mantendo manual')
+      return null
     }
-  } catch { /* cai nos fallbacks abaixo */ }
-  if (opMp?.platformPct != null) return Number(opMp.platformPct)
-  return Number(cfg?.payment_split_admin_pct) || 0
-}
+  }
 
-async function getSplitContext(booking, chargedTotal, cfg) {
-  // Sem a 079 ligada, o comportamento antigo: split para todo operador
-  // conectado. Com ela ligada, só o caso de operador único e sem executor fixo.
-  if (plataformaRecebeTudo(cfg) && !(await podeDividirComOperadorUnico(booking, cfg))) return null
-
-  const opMp = await getOperatorMp(booking?.operator_id)
+  const opMp = await getOperatorMp(operatorId)
   if (!opMp) return null
 
-  const pct = await pctPlataformaDaReserva(booking, cfg, opMp)
+  // Percentual da plataforma PONDERADO pelo valor de cada reserva. Um combo
+  // pode juntar modais com percentuais diferentes (terrestre 20%, aquático
+  // 15%), e um único application_fee precisa representar a soma das partes.
+  // Aplicado sobre o COBRADO, não sobre a soma dos totais: cupom e acréscimo
+  // de data mudam o que entrou, e a divisão tem que fechar com isso.
+  const geral = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
+  let somaValor = 0
+  let somaPeso  = 0
+  for (const m of modais) {
+    const v   = Number(m.booking.total_amount) || 0
+    const pct = m.platform_commission_pct != null ? Number(m.platform_commission_pct) : geral
+    somaValor += v
+    somaPeso  += v * pct
+  }
+  const pct = somaValor > 0 ? somaPeso / somaValor : geral
+
   const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
-  // application_fee maior que o cobrado seria recusado pelo MP; 100% deixaria o
-  // operador sem nada, o que não é split — nesses casos, manual.
+  // Comissão que zera o operador não é split, e maior que o cobrado o MP
+  // recusaria — nos dois casos, manual.
   if (!(applicationFee >= 0) || applicationFee >= chargedTotal) {
     console.warn('[split] comissão de %s%% inviável para R$ %s — mantendo manual', pct, chargedTotal)
     return null
   }
-  return { sellerAccessToken: opMp.token, applicationFee, operatorId: booking.operator_id }
+  return { sellerAccessToken: opMp.token, applicationFee, operatorId }
+}
+
+async function getSplitContext(booking, chargedTotal, cfg) {
+  // Sem a 079 ligada, o comportamento antigo: split para todo operador
+  // conectado, pelo percentual dele.
+  if (!plataformaRecebeTudo(cfg)) {
+    const opMp = await getOperatorMp(booking?.operator_id)
+    if (!opMp) return null
+    const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
+    const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
+    return { sellerAccessToken: opMp.token, applicationFee, operatorId: booking?.operator_id }
+  }
+  return contextoSplitOperadorUnico([booking], chargedTotal, cfg)
 }
 
 // =============================================================================
@@ -467,7 +501,13 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
 // devolve mode:'multi' para o chamador BLOQUEAR — split multi-coop de grupo
 // fica para depois de validar o split nativo do MP em staging.
 async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
-  if (plataformaRecebeTudo(cfg)) return null
+  // Com a 079 ligada, o único split permitido é o de operador único — inclusive
+  // quando o pagamento é de um COMBO aceito inteiro pelo mesmo operador: ainda
+  // são dois recebedores, então funciona no cartão.
+  if (plataformaRecebeTudo(cfg)) {
+    const ctx = await contextoSplitOperadorUnico(bookings, combinedTotal, cfg)
+    return ctx ? { ...ctx, mode: 'single' } : { mode: 'single' }
+  }
   const byOperator = new Map()
   for (const b of bookings) {
     const m = await getAcceptedLegRecipients(b.id)
@@ -479,7 +519,10 @@ async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
     // o pagamento único cai na conta dela, como no fluxo de reserva única.
     const ops = [...new Set(bookings.map((b) => b.operator_id).filter(Boolean))]
     if (ops.length === 1 && bookings.every((b) => b.operator_id)) {
-      const legacy = await getSplitContext({ operator_id: ops[0] }, combinedTotal, cfg)
+      // Reservas REAIS, não `{ operator_id }`: sem `service_id` não dá para
+      // saber o modal, e sem o modal não dá para saber se há executor fixo.
+      const legacy = await contextoSplitOperadorUnico(bookings, combinedTotal, cfg)
+        || await getSplitContext({ operator_id: ops[0] }, combinedTotal, cfg)
       return legacy ? { ...legacy, mode: 'single' } : { mode: 'single' }
     }
     if (ops.length > 1) return { mode: 'multi' } // coops diferentes → bloqueia (Opção 2)
@@ -487,7 +530,9 @@ async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
   }
   if (byOperator.size === 1) {
     const [operatorId] = [...byOperator.keys()]
-    const legacy = await getSplitContext({ operator_id: operatorId }, combinedTotal, cfg)
+    const legacy = await contextoSplitOperadorUnico(
+      bookings.map((b) => ({ ...b, operator_id: operatorId })), combinedTotal, cfg,
+    ) || await getSplitContext({ operator_id: operatorId }, combinedTotal, cfg)
     return legacy ? { ...legacy, mode: 'single' } : { mode: 'single' }
   }
   return { mode: 'multi' }                                       // bloqueado no chamador (Opção 2)
