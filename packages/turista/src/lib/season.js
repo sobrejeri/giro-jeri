@@ -97,3 +97,34 @@ export function highSeasonMonthSet(seasons = []) {
   }
   return set
 }
+
+/**
+ * Valor do acréscimo em reais para o dia, sobre um subtotal.
+ * MESMA CONTA DO SERVIDOR — priceEngine.js → getDateSurcharge:
+ *   • feriado tem precedência sobre a temporada, e nunca somam;
+ *   • 'fixed' é valor em reais, 'percentage' (ou nulo) é percentual;
+ *   • arredonda em centavos, como o servidor.
+ *
+ * Existe para o carrinho mostrar o mesmo total que vai ser cobrado. Antes o
+ * app somava só os veículos: o cliente via R$ 500 num feriado de +20% e o
+ * servidor cobrava R$ 600 no checkout.
+ */
+export function acrescimoDoDia(iso, regras = [], subtotal = 0) {
+  const r = regraDoDia(iso, regras)
+  const base = Number(subtotal) || 0
+  if (!r || r.additional_value == null || base <= 0) return 0
+  const v = Number(r.additional_value) || 0
+  if (r.additional_type === 'fixed') return v
+  return Math.round(base * (v / 100) * 100) / 100
+}
+
+/** Rótulo curto do que está encarecendo o dia — para mostrar na tela. */
+export function rotuloDoDia(iso, regras = []) {
+  const r = regraDoDia(iso, regras)
+  if (!r) return null
+  const tipo = r.kind === 'holiday' ? 'Feriado' : 'Alta temporada'
+  const sufixo = r.additional_value != null && r.additional_type !== 'fixed'
+    ? ` +${Number(r.additional_value)}%`
+    : ''
+  return `${tipo}${sufixo}`
+}

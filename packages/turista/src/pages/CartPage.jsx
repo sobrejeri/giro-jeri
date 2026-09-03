@@ -19,7 +19,7 @@ import { PlaceInput } from './Transfers'
 import { format, startOfDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import DateSheet from '../components/DateSheet'
-import { highSeasonMonthSet } from '../lib/season'
+import { highSeasonMonthSet, acrescimoDoDia, rotuloDoDia } from '../lib/season'
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 const todayIso = () => format(new Date(), 'yyyy-MM-dd')
@@ -177,7 +177,7 @@ function EditSheet({ item, onSave, onClose }) {
   // Compartilhado cobra por pessoa; privativo soma os veículos escolhidos.
   const precoPorPessoa = Number(tourInfo?.shared_price_per_person ?? item.shared_price_per_person) || 0
   const totalVeiculos = vehicles.reduce((s, v) => s + (Number(v.price) || 0) * (v.qty || 0), 0)
-  const total = compartilhado ? precoPorPessoa * people : totalVeiculos
+  const subtotal = compartilhado ? precoPorPessoa * people : totalVeiculos
   const qtyTotal = vehicles.reduce((s, v) => s + (v.qty || 0), 0)
   const capsKnown = vehicles.length > 0 && vehicles.every((v) => Number(v.cap) > 0)
   const capacity  = capsKnown ? vehicles.reduce((s, v) => s + (Number(v.cap) || 0) * (v.qty || 0), 0) : null
@@ -211,6 +211,15 @@ function EditSheet({ item, onSave, onClose }) {
     refetchOnWindowFocus: true,
   })
   const highSeasonMonths = highSeasonMonthSet(seasonsData || [])
+
+  // Acréscimo de data (alta temporada OU feriado) com a MESMA conta do
+  // servidor. Sem isto o carrinho somava só os veículos: o cliente via R$ 500
+  // num feriado de +20% e o servidor cobrava R$ 600 no checkout — a diferença
+  // só aparecia depois de ele decidir comprar.
+  const acrescimoData = acrescimoDoDia(dateIso, seasonsData || [], subtotal)
+  const rotuloData    = acrescimoData > 0 ? rotuloDoDia(dateIso, seasonsData || []) : null
+  const total         = Math.round((subtotal + acrescimoData) * 100) / 100
+
   const [showDate, setShowDate] = useState(false)
 
   // Regras de antecedência (mesmo relógio do servidor — America/Fortaleza):
@@ -431,7 +440,7 @@ function EditSheet({ item, onSave, onClose }) {
               </p>
               {precoPorPessoa > 0 && (
                 <p className="text-[12.5px] text-gray-700 font-semibold mt-1.5">
-                  {fmt(precoPorPessoa)} × {people} {people === 1 ? 'pessoa' : 'pessoas'} = {fmt(total)}
+                  {fmt(precoPorPessoa)} × {people} {people === 1 ? 'pessoa' : 'pessoas'} = {fmt(subtotal)}
                 </p>
               )}
             </div>
@@ -528,6 +537,17 @@ function EditSheet({ item, onSave, onClose }) {
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2 shrink-0">
+          {/* O acréscimo aparece como linha, não embutido no total: preço que
+              sobe sem explicação é o que faz o cliente desistir na hora de
+              pagar. */}
+          {acrescimoData > 0 && (
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="text-amber-600 font-semibold">{rotuloData}</span>
+              <span className="text-gray-500">
+                {fmt(subtotal)} + {fmt(acrescimoData)}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <p className="text-[11px] text-gray-400 uppercase font-bold tracking-wide">{t('cartPg.editSheet.itemTotal')}</p>
             <p className="text-[18px] font-extrabold text-brand">{fmt(total)}</p>
