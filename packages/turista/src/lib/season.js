@@ -29,12 +29,47 @@ function dentroDaRegra(iso, regra) {
     : (alvo >= ini || alvo <= fim)   // vira o ano (ex.: julho → janeiro)
 }
 
-// Um dia (ISO yyyy-MM-dd) cai em alguma regra de alta temporada ativa?
+// FERIADO é data EXATA, com ano — diferente da temporada, que é recorrente.
+// Comparar mês/dia aqui faria "Feriado 07/09/2026" cobrar em 2027 também.
+// Mesma regra do servidor: priceEngine.js → getHolidayAddition usa
+// `.eq('holiday_date', serviceDate)`.
+function ehFeriadoNaData(iso, regra) {
+  const data = regra.holiday_date || regra.start_date
+  return !!data && String(data).slice(0, 10) === String(iso).slice(0, 10)
+}
+
+// A regra vale para este dia? Feriado por data exata, temporada por mês/dia.
+function valeParaODia(iso, regra) {
+  if (!regra || regra.is_active === false) return false
+  if (regra.kind === 'holiday') return ehFeriadoNaData(iso, regra)
+  return !!(regra.start_date && regra.end_date) && dentroDaRegra(iso, regra)
+}
+
+// Um dia (ISO yyyy-MM-dd) tem acréscimo — de temporada OU de feriado?
 export function isHighSeasonIso(iso, seasons = []) {
   if (!iso) return false
-  return (seasons || []).some(
-    (s) => s?.start_date && s?.end_date && s.is_active !== false && dentroDaRegra(iso, s),
-  )
+  return (seasons || []).some((s) => valeParaODia(iso, s))
+}
+
+/**
+ * Regra que vale para o dia, com a MESMA precedência do servidor:
+ * feriado ganha da temporada, e nunca somam (priceEngine → getDateSurcharge).
+ * Devolve null quando o dia não tem acréscimo nenhum.
+ */
+export function regraDoDia(iso, regras = []) {
+  if (!iso) return null
+  const aplicaveis = (regras || []).filter((r) => valeParaODia(iso, r))
+  if (aplicaveis.length === 0) return null
+  return aplicaveis.find((r) => r.kind === 'holiday') || aplicaveis[0]
+}
+
+/** Percentual de acréscimo do dia (0 quando não há, ou quando é valor fixo). */
+export function acrescimoPctDoDia(iso, regras = []) {
+  const r = regraDoDia(iso, regras)
+  if (!r || r.additional_value == null) return 0
+  // 'fixed' é acréscimo em reais, não percentual — quem chama aqui quer o %.
+  if (r.additional_type === 'fixed') return 0
+  return Number(r.additional_value) || 0
 }
 
 // Conjunto de meses (1-12) cobertos por regras ativas. Já tratava a virada de
@@ -42,8 +77,14 @@ export function isHighSeasonIso(iso, seasons = []) {
 export function highSeasonMonthSet(seasons = []) {
   const set = new Set()
   for (const s of seasons) {
+    if (s?.is_active === false) continue
+    // Feriado ocupa um mês só — o da própria data.
+    if (s?.kind === 'holiday') {
+      const m = Number(String(s.holiday_date || s.start_date || '').slice(5, 7))
+      if (m) set.add(m)
+      continue
+    }
     if (!s?.start_date || !s?.end_date) continue
-    if (s.is_active === false) continue
     const sm = Number(String(s.start_date).slice(5, 7))
     const em = Number(String(s.end_date).slice(5, 7))
     if (!sm || !em) continue

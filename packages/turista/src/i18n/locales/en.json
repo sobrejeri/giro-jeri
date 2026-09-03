@@ -460,7 +460,7 @@
     "calendar": {
       "chooseDate": "Choose the date",
       "confirm": "Confirm",
-      "highSeasonNote": "Dates in orange: high season (may have a price increase)",
+      "highSeasonNote": "Dates in orange: high season or holiday (price may be higher)",
       "weekdaySun": "S",
       "weekdayMon": "M",
       "weekdayTue": "T",

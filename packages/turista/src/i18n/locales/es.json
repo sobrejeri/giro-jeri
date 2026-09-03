@@ -460,7 +460,7 @@
     "calendar": {
       "chooseDate": "Elige la fecha",
       "confirm": "Confirmar",
-      "highSeasonNote": "Fechas en naranja: temporada alta (puede tener un recargo)",
+      "highSeasonNote": "Fechas en naranja: temporada alta o feriado (puede tener recargo)",
       "weekdaySun": "D",
       "weekdayMon": "L",
       "weekdayTue": "M",

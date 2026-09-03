@@ -73,7 +73,7 @@ export default function DateSheet({ value, onChange, onClose, minDate, seasons, 
         {(seasons?.length > 0 || highSeasonMonths?.size > 0) && (
           <div className="flex items-center gap-2 px-5 pb-2 text-[11px] text-amber-600">
             <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-            Datas em laranja: alta temporada (pode ter acréscimo no valor)
+            Datas em laranja: alta temporada ou feriado (pode ter acréscimo no valor)
           </div>
         )}
         <div className="px-4 pb-8">

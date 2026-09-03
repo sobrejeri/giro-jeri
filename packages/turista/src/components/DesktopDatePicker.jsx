@@ -112,7 +112,7 @@ export default function DesktopDatePicker({ valueIso, onChange, minIso, seasons 
           {hasSeasons && (
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-50 text-[11px] text-amber-600">
               <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-              Datas em laranja: alta temporada (pode ter acréscimo)
+              Datas em laranja: alta temporada ou feriado (pode ter acréscimo)
             </div>
           )}
         </div>
