@@ -295,7 +295,15 @@ export default function Temporada() {
       <div className="flex items-center justify-between pt-4">
         <div>
           <h2 className="text-sm font-semibold text-gray-200">Feriados e datas especiais</h2>
-          <p className="text-xs text-gray-500">Dias específicos (feriados, datas comemorativas) com acréscimo próprio.</p>
+          <p className="text-xs text-gray-500">
+            Dias específicos (feriados, datas comemorativas) com acréscimo próprio.
+            {/* A data é EXATA, com ano — de propósito, senão um feriado de 2026
+                cobraria em 2027 também. Só que isso é fácil de esquecer, e o
+                calendário simplesmente para de ter acréscimo, em silêncio. */}
+            {' '}Cada data vale só no ano indicado — <strong className="text-gray-400">Carnaval,
+            Páscoa, Corpus Christi, Dia das Mães e dos Pais mudam todo ano</strong> e precisam ser
+            recadastrados.
+          </p>
         </div>
         <Button onClick={openNewHoliday}><Plus size={16} /> Nova Data</Button>
       </div>
