@@ -265,13 +265,93 @@ export function plataformaRecebeTudo(cfg) {
   return String(v) !== 'false'
 }
 
+// Split de UM operador: dois recebedores, e por isso FUNCIONA COM CARTÃO
+// (`application_fee`). O que a 079 desligou foi o caso de vários recebedores
+// (`disbursements`), que é PIX-only — não este.
+//
+// Quatro condições, todas obrigatórias:
+//
+//   1. a chave `payment_split_single_operator` está ligada;
+//   2. a reserva tem UM operador (o que aceitou);
+//   3. o modal NÃO tem executor fixo. Este é o mais importante: um split de
+//      dois recebedores só alcança quem ACEITOU. Se o serviço é executado por
+//      outro (o aéreo, sempre a mesma empresa), dividir no ato pagaria o
+//      intermediário e deixaria quem voou sem nada — e sem volta;
+//   4. o operador tem conta conectada no Mercado Pago.
+//
+// Falhando qualquer uma, devolve null e o valor cai inteiro na plataforma, que
+// repassa na mão. Fail-closed: errar para "fica com a plataforma" se corrige
+// com um repasse; errar para o outro lado manda dinheiro para conta de
+// terceiro e não tem como desfazer.
+async function podeDividirComOperadorUnico(booking, cfg) {
+  if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return false
+  if (!booking?.operator_id) return false
+
+  // Combo: reservas irmãs no mesmo carrinho podem ter operadores diferentes, e
+  // aí o pagamento do grupo teria vários recebedores. Fora do escopo.
+  if (booking.order_group_id) {
+    const { count } = await supabase
+      .from('bookings').select('id', { count: 'exact', head: true })
+      .eq('order_group_id', booking.order_group_id)
+    if ((count || 0) > 1) return false
+  }
+
+  try {
+    const { modalDaReserva } = await import('../services/payouts.js')
+    const slug = await modalDaReserva(booking)
+    if (slug) {
+      const { data: modal } = await supabase
+        .from('service_modals').select('executor_operator_id')
+        .eq('slug', slug).maybeSingle()
+      const executor = modal?.executor_operator_id
+      // Executor fixo que NÃO é quem aceitou: o dinheiro precisa chegar nele.
+      if (executor && executor !== booking.operator_id) return false
+    }
+  } catch (e) {
+    // Não deu para saber se há executor fixo → não divide. O caso duvidoso vai
+    // para o manual, que é reversível.
+    console.warn('[split] modal indisponível, mantendo manual:', e.message)
+    return false
+  }
+  return true
+}
+
+// Percentual da plataforma para esta reserva. Vem do MODAL quando definido —
+// a mesma fonte que `repartirReserva` usa no repasse. Se o split usasse um
+// número e o repasse outro, os dois modelos discordariam sobre quanto é a
+// comissão, e a conferência de caixa nunca fecharia.
+async function pctPlataformaDaReserva(booking, cfg, opMp) {
+  try {
+    const { modalDaReserva } = await import('../services/payouts.js')
+    const slug = await modalDaReserva(booking)
+    if (slug) {
+      const { data: modal } = await supabase
+        .from('service_modals').select('platform_commission_pct')
+        .eq('slug', slug).maybeSingle()
+      if (modal?.platform_commission_pct != null) return Number(modal.platform_commission_pct)
+    }
+  } catch { /* cai nos fallbacks abaixo */ }
+  if (opMp?.platformPct != null) return Number(opMp.platformPct)
+  return Number(cfg?.payment_split_admin_pct) || 0
+}
+
 async function getSplitContext(booking, chargedTotal, cfg) {
-  if (plataformaRecebeTudo(cfg)) return null
+  // Sem a 079 ligada, o comportamento antigo: split para todo operador
+  // conectado. Com ela ligada, só o caso de operador único e sem executor fixo.
+  if (plataformaRecebeTudo(cfg) && !(await podeDividirComOperadorUnico(booking, cfg))) return null
+
   const opMp = await getOperatorMp(booking?.operator_id)
   if (!opMp) return null
-  const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
+
+  const pct = await pctPlataformaDaReserva(booking, cfg, opMp)
   const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
-  return { sellerAccessToken: opMp.token, applicationFee }
+  // application_fee maior que o cobrado seria recusado pelo MP; 100% deixaria o
+  // operador sem nada, o que não é split — nesses casos, manual.
+  if (!(applicationFee >= 0) || applicationFee >= chargedTotal) {
+    console.warn('[split] comissão de %s%% inviável para R$ %s — mantendo manual', pct, chargedTotal)
+    return null
+  }
+  return { sellerAccessToken: opMp.token, applicationFee, operatorId: booking.operator_id }
 }
 
 // =============================================================================
@@ -673,6 +753,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
     let cardBrand          = null
     let cardHolderName     = null
     let cardGatewayFeePct  = null
+    // Fora do bloco de propósito: o `split` é calculado lá dentro, mas a linha
+    // de `payments` é montada aqui fora — e é nela que o split precisa ficar
+    // registrado, senão o repasse manual paga de novo o que o gateway pagou.
+    let splitAplicado      = null
 
     if (gateway === 'test') {
       const { createPaymentIntent: testIntent } = await import('../payments/test.js')
@@ -695,6 +779,9 @@ router.post('/intent', authenticate, async (req, res, next) => {
         : (await isBookingLegsEngineEnabled())
           ? await getSplitContextForBooking(booking, chargedTotal, cfg)
           : await getSplitContext(booking, chargedTotal, cfg)
+      // `mode:'multi'` é o split de N recebedores (motor de pernas), que tem
+      // repasse próprio — aqui só interessa o de operador único.
+      if (split?.operatorId && split.mode !== 'multi') splitAplicado = split
 
       // Opção 2: pagamento único de GRUPO só para recebedor único (1 coop) ou
       // sem split. Grupo multi-operador fica bloqueado até validar o split
@@ -844,6 +931,13 @@ router.post('/intent', authenticate, async (req, res, next) => {
         card_brand:             cardBrand,
         card_holder_name:       cardHolderName,
         gateway_fee_pct:        cardGatewayFeePct,
+      } : {}),
+      // Houve split? Registrar é o que impede `gerarRepasses` de lançar a
+      // comissão de novo — o gateway já depositou a parte do operador nesta
+      // cobrança, e o repasse manual seria pagamento em dobro (migration 087).
+      ...(splitAplicado ? {
+        split_operator_id:     splitAplicado.operatorId,
+        split_application_fee: splitAplicado.applicationFee,
       } : {}),
     }
 

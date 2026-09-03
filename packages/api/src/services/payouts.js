@@ -15,7 +15,7 @@ import { supabase } from '../supabase.js';
 
 // Modal do serviço da reserva. Vem da CATEGORIA (mesma fonte do roteamento),
 // não do veículo: o repasse é do serviço, e um serviço pode ter vários veículos.
-async function modalDaReserva(booking) {
+export async function modalDaReserva(booking) {
   try {
     if (booking?.service_type === 'transfer') {
       const { data } = await supabase
@@ -221,8 +221,28 @@ export async function gerarRepasses(booking, total) {
     if (!booking?.id) return { skipped: 'sem reserva' };
     if (!booking.operator_id) return { skipped: 'reserva sem operador' };
 
+    // O gateway já pagou o operador? Split de 2 recebedores (migration 087)
+    // deposita a parte dele na cobrança. Lançar a comissão aqui faria o admin
+    // pagar de novo o que já saiu — o erro mais caro possível nesta parte do
+    // sistema, e silencioso: as duas linhas parecem corretas isoladamente.
+    let jaPagoPeloGateway = false;
+    try {
+      const { data: pg } = await supabase
+        .from('payments').select('split_operator_id')
+        .eq('booking_id', booking.id)
+        .not('split_operator_id', 'is', null)
+        .limit(1);
+      jaPagoPeloGateway = (pg || []).some((p) => p.split_operator_id === booking.operator_id);
+    } catch (e) {
+      // 42703 = coluna ausente (087 pendente): não houve split, segue normal.
+      if (e?.code !== '42703') console.error('[payouts] leitura do split falhou:', e?.message);
+    }
+
     const { modal, geral } = await contextoDoRateio(booking);
-    const repasses = calcularRepasses(total, booking.operator_id, modal, geral);
+    let repasses = calcularRepasses(total, booking.operator_id, modal, geral);
+    if (jaPagoPeloGateway) {
+      repasses = repasses.filter((r) => r.kind !== 'commission');
+    }
     if (repasses.length === 0) return { skipped: 'nada a repassar' };
 
     const linhas = repasses.map((r) => ({ ...r, booking_id: booking.id, status: 'pending' }));
