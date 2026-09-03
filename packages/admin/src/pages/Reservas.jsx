@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
-import { Search, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, CalendarDays, Radio, Check, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card from '../components/ui/Card'
@@ -37,6 +37,104 @@ const ABAS_STATUS = [
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+// Quem recebeu esta solicitação, e por quê.
+//
+// Existe porque "a notificação foi para todo mundo" não dá para confirmar nem
+// desmentir olhando a tela: o filtro roda no servidor e não deixa rastro. Sem
+// isso, a conversa vira palpite dos dois lados.
+//
+// O servidor responde chamando as MESMAS funções do roteamento real — não uma
+// cópia da regra, que poderia divergir e fazer esta tela mentir.
+function PainelRoteamento({ booking, onClose }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['routing', booking?.id],
+    queryFn:  () => api.getBookingRouting(booking.id),
+    enabled:  !!booking?.id,
+  })
+
+  if (!booking) return null
+  const receberam = (data?.operadores || []).filter((o) => o.recebeu)
+  const barrados  = (data?.operadores || []).filter((o) => !o.recebeu)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-auto">
+        <div className="sticky top-0 bg-gray-900 border-b border-gray-800 px-5 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-200">Quem recebeu esta solicitação</p>
+            <p className="text-xs text-gray-500">{booking.booking_code}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-gray-300"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {isLoading && <p className="text-sm text-gray-500">Consultando…</p>}
+          {error && <p className="text-sm text-red-400">{error.message}</p>}
+
+          {data && (
+            <>
+              {/* O aviso vem PRIMEIRO quando o filtro não pôde ser aplicado:
+                  é a explicação de "foi para todo mundo". */}
+              {data.explicacao && (
+                <div className="rounded-xl border border-amber-700/50 bg-amber-900/20 px-4 py-3">
+                  <p className="text-[13px] text-amber-300">{data.explicacao}</p>
+                </div>
+              )}
+
+              <div className="text-[13px] text-gray-400 space-y-1">
+                <p>
+                  <span className="text-gray-500">Veículos do serviço: </span>
+                  {data.veiculos?.length
+                    ? data.veiculos.map((v) => `${v.nome}${v.modal ? ` (${v.modal})` : ''}`).join(', ')
+                    : '—'}
+                </p>
+                {data.combo && <p className="text-amber-400">Pedido combinado — exige quem opera todos os meios.</p>}
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-500 mb-1.5">
+                  Recebeu ({receberam.length})
+                </p>
+                {receberam.length === 0 && <p className="text-sm text-gray-600">Ninguém.</p>}
+                <ul className="space-y-1">
+                  {receberam.map((o) => (
+                    <li key={o.id} className="flex items-start gap-2 text-[13px]">
+                      <Check size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                      <span className="text-gray-300">{o.nome}</span>
+                      <span className="text-gray-600 text-[12px]">· {o.motivo}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">
+                  Não recebeu ({barrados.length})
+                </p>
+                {barrados.length === 0 && <p className="text-sm text-gray-600">Nenhum operador foi barrado.</p>}
+                <ul className="space-y-1">
+                  {barrados.map((o) => (
+                    <li key={o.id} className="flex items-start gap-2 text-[13px]">
+                      <X size={14} className="text-gray-600 mt-0.5 shrink-0" />
+                      <span className="text-gray-400">{o.nome}</span>
+                      <span className="text-gray-600 text-[12px]">· {o.motivo}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p className="text-[11px] text-gray-600 pt-1 border-t border-gray-800">
+                O admin recebe sempre, independente do filtro.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Reservas() {
   const [page, setPage]           = useState(1)
   const [search, setSearch]       = useState('')
@@ -44,6 +142,7 @@ export default function Reservas() {
   const [typeFilter, setType]     = useState('')
   const [dateFrom, setDateFrom]   = useState('')
   const [dateTo, setDateTo]       = useState('')
+  const [roteando, setRoteando]   = useState(null)
 
   // Uma requisição por tecla fazia respostas chegarem fora de ordem e repintar
   // a lista com o resultado de uma busca anterior. Espera a pausa.
@@ -267,7 +366,16 @@ export default function Reservas() {
                   </td>
                   <td className="px-5 py-3 font-semibold text-gray-200">{fmt(b.total_amount)}</td>
                   <td className="px-5 py-3">
-                    <Badge value={b.status_commercial} />
+                    <div className="flex items-center gap-2">
+                      <Badge value={b.status_commercial} />
+                      <button
+                        onClick={() => setRoteando(b)}
+                        title="Quem recebeu esta solicitação, e por quê"
+                        className="p-1 text-gray-600 hover:text-brand transition-colors"
+                      >
+                        <Radio size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -302,6 +410,7 @@ export default function Reservas() {
           </div>
         )}
       </Card>
+      <PainelRoteamento booking={roteando} onClose={() => setRoteando(null)} />
     </div>
   )
 }

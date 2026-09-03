@@ -358,3 +358,83 @@ export async function eligibleOperatorsForBooking(supabase, bookingId) {
     return operators; // fail-open
   }
 }
+
+// ── Por que esta solicitação foi para estes operadores? ──────────────────────
+// Devolve a MESMA decisão de `eligibleOperatorsForBooking`, mas explicada:
+// quais veículos o serviço exige, em que meios eles caem, e para cada operador
+// se recebeu ou não — com o motivo.
+//
+// Existe porque "a notificação está indo para todo mundo" é impossível de
+// confirmar ou desmentir olhando a tela: o filtro roda no servidor e não deixa
+// rastro. Sem isto, a discussão vira palpite dos dois lados.
+//
+// Usa as mesmas funções do caminho real. Se um dia divergirem, esta tela mente
+// — por isso ela chama as funções, em vez de reimplementar a regra.
+export async function explicarRoteamento(supabase, bookingId) {
+  const { data: ops } = await supabase
+    .from('users').select('id, full_name')
+    .eq('user_type', 'operator').eq('is_active', true);
+  const operators = ops || [];
+
+  const { data: bk } = await supabase
+    .from('bookings').select('id, service_id, service_type').eq('id', bookingId).maybeSingle();
+  if (!bk) return { erro: 'Reserva não encontrada' };
+
+  const byBooking  = await requiredVehiclesByBooking(supabase, [bk]);
+  const vehicleIds = byBooking.get(bookingId) || [];
+
+  // Sem veículo identificado o filtro abre para todos, de propósito: é melhor
+  // avisar demais que deixar o pedido parado. Precisa aparecer na tela.
+  if (vehicleIds.length === 0) {
+    return {
+      motivo_geral: 'sem_veiculo',
+      explicacao: 'Não foi possível identificar o veículo deste serviço, então a '
+                + 'solicitação foi para TODOS os operadores. Costuma ser preço de '
+                + 'veículo não cadastrado para este passeio no Motor de Preços.',
+      veiculos: [], modais: [], combo: false,
+      operadores: operators.map((o) => ({ id: o.id, nome: o.full_name, recebeu: true, motivo: 'filtro não pôde ser aplicado' })),
+    };
+  }
+
+  const opIds = operators.map((o) => o.id);
+  const [optIn, prefs, modalPorVeiculo, nomesVeic] = await Promise.all([
+    optInVehicleIds(supabase, vehicleIds),
+    vehiclePrefs(supabase, vehicleIds, opIds),
+    modalIdByVehicle(supabase, vehicleIds),
+    supabase.from('vehicles').select('id, name, modal').in('id', vehicleIds),
+  ]);
+  const modalIds = modalIdsOf(vehicleIds, modalPorVeiculo);
+  const combo    = ehCombo(modalIds);
+  const [modaisDesativados, aceitaCombo] = await Promise.all([
+    modalPrefs(supabase, [...modalIds], opIds),
+    combo ? comboPrefs(supabase, opIds) : Promise.resolve(new Map()),
+  ]);
+
+  const operadores = operators.map((o) => {
+    const serveModal   = operatorServesModals(o.id, modalIds, modaisDesativados, aceitaCombo);
+    const serveVeiculo = operatorServesVehicles(o.id, vehicleIds, optIn, prefs, combo);
+    let motivo;
+    if (serveModal && serveVeiculo)   motivo = 'opera o meio e o veículo';
+    else if (!serveModal && combo && aceitaCombo.get(o.id) === false) motivo = 'não aceita pedidos combinados';
+    else if (!serveModal)             motivo = 'não opera este meio';
+    else                              motivo = 'veículo desativado para este operador';
+    return { id: o.id, nome: o.full_name, recebeu: serveModal && serveVeiculo, motivo };
+  });
+
+  // A rede de segurança da rota real: ninguém elegível = todos recebem.
+  const nenhum = operadores.every((o) => !o.recebeu);
+  return {
+    motivo_geral: nenhum ? 'rede_de_seguranca' : 'filtrado',
+    explicacao: nenhum
+      ? 'Nenhum operador passou no filtro, então a solicitação foi para TODOS — '
+      + 'pedido parado em silêncio é pior que aviso a mais. Confira os meios '
+      + 'operados no cadastro de cada operador.'
+      : null,
+    veiculos: (nomesVeic.data || []).map((v) => ({ nome: v.name, modal: v.modal })),
+    modais: [...modalIds],
+    combo,
+    operadores: nenhum
+      ? operadores.map((o) => ({ ...o, recebeu: true, motivo: `${o.motivo} — mas recebeu pela rede de segurança` }))
+      : operadores,
+  };
+}

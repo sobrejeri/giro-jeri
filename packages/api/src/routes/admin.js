@@ -871,6 +871,19 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
   } catch (err) { next(err); }
 });
 
+// ── GET /api/admin/bookings/:id/routing ────────────────
+// Quem recebeu esta solicitação, e por quê. Roda as MESMAS funções do
+// caminho real (services/fleet.js) — se reimplementasse a regra aqui, a tela
+// poderia dizer uma coisa e o sistema fazer outra, que é pior que não ter tela.
+router.get('/bookings/:id/routing', requireAdmin, async (req, res, next) => {
+  try {
+    const { explicarRoteamento } = await import('../services/fleet.js');
+    const r = await explicarRoteamento(supabase, req.params.id);
+    if (r?.erro) return res.status(404).json({ error: r.erro });
+    res.json(r);
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/admin/audit-logs ──────────────────────────
 router.get('/audit-logs', requireAdmin, async (req, res, next) => {
   try {
