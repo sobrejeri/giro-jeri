@@ -47,17 +47,30 @@ const fmtDuracao = (h) => {
 }
 
 /* ── Preço ────────────────────────────────────────────────────────────────
-   NUNCA inventa valor. No compartilhado usa o preço por pessoa do passeio; no
-   privativo, o `from_price` que a API calcula como o MENOR preço de veículo
-   ligado ao passeio. Sem nenhum dos dois, diz "sob consulta" — em vez de
-   mostrar zero, que o cliente leria como grátis. */
+   O cartão mostra o MENOR valor de entrada — é o que o cliente precisa saber
+   antes de clicar, e "a partir de" já avisa que pode subir.
+
+   Passeio com compartilhado ativo: o preço por pessoa, que é a entrada por 1
+   pessoa. Só privativo: o menor preço da frota (`from_price`, calculado pela
+   API como o MENOR base_price entre as regras ativas do passeio).
+
+   O modo escolhido na página NÃO decide mais. Antes decidia, e um passeio
+   compartilhado navegado no modo privativo mostrava o preço de um veículo
+   inteiro no lugar do valor por pessoa — número bem mais alto que o real de
+   entrada, sem explicação na tela.
+
+   NUNCA inventa valor: sem nenhum dos dois, fica sem preço em vez de zero,
+   que o cliente leria como grátis. */
 function precoDe(tour, mode, t) {
-  if (mode === 'shared' && tour.shared_price_per_person) {
+  const temCompartilhado = tour.is_shared_enabled && tour.shared_price_per_person
+  if (temCompartilhado) {
     return { valor: fmtPreco(tour.shared_price_per_person), rotulo: t('toursPg.card.perPerson') }
   }
   if (tour.from_price) {
     return { valor: fmtPreco(tour.from_price), rotulo: t('toursPg.card.startingAt') }
   }
+  // Sem a flag mas com preço por pessoa cadastrado: cadastro pela metade, e
+  // mostrar o valor é melhor que deixar o cartão mudo.
   if (tour.shared_price_per_person) {
     return { valor: fmtPreco(tour.shared_price_per_person), rotulo: t('toursPg.card.perPerson') }
   }

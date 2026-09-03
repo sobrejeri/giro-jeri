@@ -40,10 +40,15 @@ const fmtPreco = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 // Preço na home: é a principal dúvida antes do clique. Compartilhado é por
 // pessoa; privativo usa o menor preço de veículo (from_price, vindo da API).
 function precoDe(tour) {
-  if (tour.shared_price_per_person) {
+  // Mesma regra do TourCard: compartilhado ativo mostra o por pessoa (entrada
+  // por 1 pessoa); só privativo mostra o menor preço da frota.
+  if (tour.is_shared_enabled && tour.shared_price_per_person) {
     return { valor: fmtPreco(tour.shared_price_per_person), selo: 'por pessoa' }
   }
   if (tour.from_price) return { valor: fmtPreco(tour.from_price), selo: 'privativo' }
+  if (tour.shared_price_per_person) {
+    return { valor: fmtPreco(tour.shared_price_per_person), selo: 'por pessoa' }
+  }
   return { valor: null, selo: null }
 }
 
