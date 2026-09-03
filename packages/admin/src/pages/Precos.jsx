@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Trash2, Tag, Car, ToggleLeft, ToggleRight, Sun, Plus, Search } from 'lucide-react'
+import { Trash2, Tag, Car, ToggleLeft, ToggleRight, Sun, Plus, Search, Download } from 'lucide-react'
 import { api } from '../lib/api'
+import { baixarXlsx } from '../lib/xlsx'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -125,6 +126,75 @@ export default function Precos() {
     : 0
   const totalCombos  = eligibleVehicles.length * (filtrando ? visibleTours.length : eligibleTours.length)
   const coveragePct  = totalCombos ? Math.round((configured / totalCombos) * 100) : 0
+
+  // Exporta o que está À VISTA — mesma categoria, mesma busca, mesma região.
+  // Baixar sempre a grade inteira seria contraintuitivo: quem filtrou "Voos
+  // Panorâmicos" e clicou em baixar espera os voos, não as 19 linhas.
+  //
+  // Duas abas de propósito. A MATRIZ é o retrato da tela, boa para conferir. A
+  // LISTA é uma linha por preço — é ela que serve para filtrar, ordenar e fazer
+  // tabela dinâmica no Excel, o que a matriz não permite.
+  function exportar() {
+    const nomeCat = new Map(catsCadastro.map((c) => [c.id, c.name]))
+    const catsNome = (t) => catsDoPasseio(t).map((id) => nomeCat.get(id)).filter(Boolean).join(', ')
+    const comSeason = (p) => (season && p ? Math.round(Number(p) * (1 + season.pct / 100)) : null)
+    const regiao = isGlobal
+      ? 'Todas as regiões (global)'
+      : (regions.find((r) => r.id === effectiveRegion)?.name || 'Padrão')
+
+    const matrizLinhas = [
+      ['Veículo', ...visibleTours.map((t) => t.name)].map((v) => ({ v, estilo: 1 })),
+      ['', ...visibleTours.map((t) => catsNome(t) || '—')],
+      ...eligibleVehicles.map((v) => [
+        v.name,
+        ...visibleTours.map((t) => {
+          const r = matrix[v.id]?.[t.id]
+          if (!r) return ''
+          // Preço desligado continua cadastrado. Sai como texto, não número:
+          // some da soma de uma coluna (que é o que se quer) e deixa claro que
+          // a célula não está simplesmente vazia.
+          if (!r.is_active) return { v: `${Number(r.base_price)} (inativo)`, tipo: 's' }
+          return { v: Number(r.base_price), estilo: 2 }
+        }),
+      ]),
+    ]
+
+    const lista = [[
+      'Veículo', 'Capacidade', 'Passeio', 'Categoria',
+      'Preço base', season ? `Alta temporada (+${season.pct}%)` : 'Alta temporada',
+      'Ativo', 'Região',
+    ].map((v) => ({ v, estilo: 1 }))]
+    for (const v of eligibleVehicles) {
+      for (const t of visibleTours) {
+        const r = matrix[v.id]?.[t.id]
+        if (!r) continue
+        const pico = comSeason(r.base_price)
+        lista.push([
+          v.name,
+          Number(v.seat_capacity) || '',
+          t.name,
+          catsNome(t) || 'Sem categoria',
+          { v: Number(r.base_price), estilo: 2 },
+          pico ? { v: pico, estilo: 2 } : '',
+          r.is_active ? 'Sim' : 'Não',
+          regiao,
+        ])
+      }
+    }
+
+    if (lista.length === 1) { alert('Não há preços cadastrados neste recorte para exportar.'); return }
+
+    const hoje = new Date().toISOString().slice(0, 10)
+    const sufixo = catId && catId !== '__sem'
+      ? `-${(categorias.find((c) => c.id === catId)?.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+      : ''
+    baixarXlsx(`motor-de-precos${sufixo}-${hoje}`, [
+      { nome: 'Lista de preços', linhas: lista,
+        larguras: [26, 12, 34, 26, 14, 20, 8, 24] },
+      { nome: 'Matriz', linhas: matrizLinhas,
+        larguras: [26, ...visibleTours.map(() => 18)] },
+    ])
+  }
 
   function openCell(vehicle, tour, rule) {
     setEditing({ vehicle, tour, rule })
@@ -266,7 +336,15 @@ export default function Precos() {
             <option value={GLOBAL_REGION}>🌐 Todas as regiões (global)</option>
           </select>
         )}
-        <div className="flex items-center gap-2 ml-auto text-[11px]">
+        <button
+          onClick={exportar}
+          title="Baixar a grade à vista em .xlsx"
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 hover:text-gray-100 hover:border-brand/60 transition-colors"
+        >
+          <Download size={14} />
+          <span className="hidden sm:inline">Baixar .xlsx</span>
+        </button>
+        <div className="flex items-center gap-2 text-[11px]">
           <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300">Configurados: <strong className="text-gray-100">{configured}</strong>/{totalCombos}</span>
           <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300">Ativos: <strong className="text-green-400">{activeRules.length}</strong></span>
           <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300">Médio: <strong className="text-brand">{fmt(avgPrice)}</strong></span>
