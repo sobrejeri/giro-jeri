@@ -21,7 +21,8 @@ UNION ALL SELECT 'despachos (ordens de serviço)', count(*) FROM operational_ass
 UNION ALL SELECT 'avaliações',                 count(*) FROM reviews
 UNION ALL SELECT 'lançamentos financeiros',    count(*) FROM financial_ledger
 UNION ALL SELECT 'notificações ligadas a reserva', count(*) FROM notifications WHERE booking_id IS NOT NULL
-UNION ALL SELECT '(fica) cotações de rota',    count(*) FROM transfer_quotes
+UNION ALL SELECT 'cotações COM reserva (saem)', count(*) FROM transfer_quotes WHERE booking_id IS NOT NULL
+UNION ALL SELECT '(fica) cotações sem reserva',  count(*) FROM transfer_quotes WHERE booking_id IS NULL
 UNION ALL SELECT '(fica) usuários',            count(*) FROM users
  ORDER BY 2 DESC;
 
@@ -54,6 +55,17 @@ DELETE FROM financial_ledger;
 -- Também SET NULL: sem isto, o sino do app fica com avisos apontando para
 -- reservas que não existem mais.
 DELETE FROM notifications WHERE booking_id IS NOT NULL;
+
+-- Cotações ligadas a alguma reserva. TÊM que sair ANTES das reservas.
+--
+-- `transfer_quotes.booking_id` é ON DELETE SET NULL, e esse SET NULL é um
+-- UPDATE — que faz o Postgres revalidar a linha inteira. A tabela tem
+-- CHECK (service_date >= CURRENT_DATE): uma cotação de julho já está inválida
+-- hoje, e o UPDATE falha com 23514, derrubando o script no meio.
+--
+-- Apagando a cotação antes, não há SET NULL e o problema não acontece. As
+-- cotações SEM reserva continuam intocadas (é o DELETE opcional no fim).
+DELETE FROM transfer_quotes WHERE booking_id IS NOT NULL;
 
 -- Repasses (migration 080). Somem por CASCADE junto com a reserva; o DELETE
 -- explícito deixa o efeito à vista na contagem. O IF existe porque a 080 pode
