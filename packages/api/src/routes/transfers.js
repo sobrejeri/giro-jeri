@@ -464,6 +464,24 @@ router.get('/quotes', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Contato do cliente numa cotação: só depois que ela vira reserva PAGA.
+//
+// A cotação é, por definição, anterior ao pagamento — o operador manda o preço
+// e o cliente decide. Com telefone em mãos nessa hora, nada impede combinar por
+// fora e a cotação simplesmente nunca ser aceita: a plataforma some do negócio
+// que ela trouxe.
+//
+// Para cotar, o operador precisa da rota, da data e do número de pessoas — não
+// do nome nem do telefone. O contato aparece depois, na reserva paga.
+function esconderContatoDaCotacao(linhas) {
+  return (linhas || []).map((q) => {
+    const liberado = q.status === 'accepted' && q.booking_id;
+    if (liberado) return q;
+    const { client_phone, client_name, client_email, ...resto } = q;
+    return { ...resto, customer_locked: true };
+  });
+}
+
 // ── GET /api/transfers/quotes/pending — operador ────
 router.get('/quotes/pending', authenticate, requireOperator, async (req, res, next) => {
   try {
@@ -474,7 +492,7 @@ router.get('/quotes/pending', authenticate, requireOperator, async (req, res, ne
       .order('service_date');
 
     if (error) throw error;
-    res.json(data);
+    res.json(esconderContatoDaCotacao(data));
   } catch (err) { next(err); }
 });
 
@@ -503,7 +521,13 @@ router.get('/quotes/history', authenticate, requireOperator, async (req, res, ne
       byId = new Map((users || []).map((u) => [u.id, u]));
     }
 
-    res.json((quotes || []).map((q) => ({ ...q, users: byId.get(q.user_id) || null })));
+    // Mesmo corte do /pending: contato só quando a cotação virou reserva paga.
+    res.json((quotes || []).map((q) => {
+      const liberado = q.status === 'accepted' && q.booking_id;
+      return liberado
+        ? { ...q, users: byId.get(q.user_id) || null }
+        : { ...q, users: null, customer_locked: true };
+    }));
   } catch (err) { next(err); }
 });
 

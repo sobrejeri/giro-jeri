@@ -342,6 +342,20 @@ const BOOKING_COLUMNS = `
   origin_text, destination_text, status_commercial, status_operational, order_group_id
 `
 
+// Contato do cliente só DEPOIS do pagamento confirmado.
+//
+// Antes disso o operador não precisa de nome nem telefone para decidir se
+// aceita: ele decide pelo serviço, data, local e valor. E com o contato em mãos
+// numa reserva ainda não paga, nada impede procurar o cliente por fora e fechar
+// direto — a solicitação é cancelada e a plataforma fica de fora do negócio que
+// ela mesma trouxe.
+//
+// Esconder só na tela não resolveria: o dado continuaria na resposta da API,
+// visível em qualquer inspetor do navegador. Por isso o corte é aqui.
+export function contatoLiberado(booking) {
+  return booking?.status_commercial === 'paid'
+}
+
 async function attachCustomers(bookings) {
   const ids = [...new Set(bookings.map((b) => b.user_id).filter(Boolean))]
   if (ids.length === 0) return bookings
@@ -351,10 +365,16 @@ async function attachCustomers(bookings) {
     .in('id', ids)
   if (error) throw error
   const byId = new Map((users || []).map((u) => [u.id, u]))
-  return bookings.map((b) => ({
-    ...b,
-    users: byId.get(b.user_id) || null,
-  }))
+  return bookings.map((b) => {
+    const liberado = contatoLiberado(b)
+    return {
+      ...b,
+      users: liberado ? (byId.get(b.user_id) || null) : null,
+      // A tela precisa distinguir "sem cadastro" de "ainda não liberado" —
+      // senão mostraria "—" e pareceria falta de dado.
+      customer_locked: !liberado,
+    }
+  })
 }
 
 // Nome do serviço solicitado. Sem isto o operador via só "Passeio ·
@@ -499,7 +519,10 @@ async function attachLegContext(legs) {
       acceptance_expires_at: l.acceptance_expires_at,
       created_at:            l.created_at,
       people_count:          l.pax_count,       // alias p/ compat. com telas antigas
-      customer:              customer ? { full_name: customer.full_name, phone: customer.phone } : null,
+      // Mesmo corte do feed: contato só depois do pagamento.
+      customer:              (b && contatoLiberado(b) && customer)
+                               ? { full_name: customer.full_name, phone: customer.phone } : null,
+      customer_locked:       !(b && contatoLiberado(b)),
     };
   });
 }

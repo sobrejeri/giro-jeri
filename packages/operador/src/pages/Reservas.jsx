@@ -4,8 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarCheck, Users, MapPin, Car, CheckCircle2, Compass,
   RefreshCw, AlertCircle, Zap, PhoneCall, MessageCircle,
-  DollarSign, Send, Clock, ShieldAlert, Package, ChevronRight, X, Truck,
-} from 'lucide-react'
+  DollarSign, Send, Clock, ShieldAlert, Package, ChevronRight, X, Truck, Lock } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
@@ -316,22 +315,36 @@ function MyCard({ booking, onConfirm, onRequestInfo, onStart, onComplete, onDisp
           <p className="text-[15px] font-bold text-gray-900 leading-snug">{booking.service_name}</p>
         )}
 
-        {/* Cliente */}
-        <div className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
-          <div>
-            <p className="text-[11px] text-gray-400">Cliente</p>
-            <p className="text-[14px] font-bold text-gray-900">{clientName}</p>
-            {clientPhone && <p className="text-[12px] text-gray-500">{clientPhone}</p>}
+        {/* Cliente — os dados só chegam da API depois do pagamento
+            confirmado. Aqui a tela explica a ausência, em vez de mostrar um
+            traço que pareceria cadastro incompleto. */}
+        {booking.customer_locked ? (
+          <div className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
+            <Lock size={14} className="text-gray-400 shrink-0" />
+            <div>
+              <p className="text-[12px] font-semibold text-gray-600">Dados do cliente</p>
+              <p className="text-[11px] text-gray-400 leading-snug">
+                Liberados assim que o pagamento for confirmado.
+              </p>
+            </div>
           </div>
-          {clientPhone && (
-            <a
-              href={`tel:${clientPhone.replace(/\D/g, '')}`}
-              className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 active:scale-95 transition-transform"
-            >
-              <PhoneCall size={16} />
-            </a>
-          )}
-        </div>
+        ) : (
+          <div className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[11px] text-gray-400">Cliente</p>
+              <p className="text-[14px] font-bold text-gray-900">{clientName}</p>
+              {clientPhone && <p className="text-[12px] text-gray-500">{clientPhone}</p>}
+            </div>
+            {clientPhone && (
+              <a
+                href={`tel:${clientPhone.replace(/\D/g, '')}`}
+                className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 active:scale-95 transition-transform"
+              >
+                <PhoneCall size={16} />
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Detalhes */}
         <div className="space-y-1.5">
