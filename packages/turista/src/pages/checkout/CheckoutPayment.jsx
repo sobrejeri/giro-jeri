@@ -205,15 +205,26 @@ export default function CheckoutPayment() {
   const [sellerKey,  setSellerKey]  = useState(null)
   const [keyChecked, setKeyChecked] = useState(() => !state?.existing_booking_id)
 
+  // COM PRAZO, pelo mesmo motivo das formas de pagamento logo acima — e a
+  // ausência dele aqui era pior: esta chamada TRAVA o formulário. Sem resposta
+  // (cold start do Render leva dezenas de segundos, e a API pode estar fora),
+  // o cliente ficava preso em "Preparando pagamento seguro…" achando que o
+  // botão não funcionou. A chave do operador é otimização de split; não pode
+  // impedir alguém de pagar.
   useEffect(() => {
     const bid = state?.existing_booking_id
     if (!bid) { setKeyChecked(true); return }
-    let active = true
+    let decidido = false
+    const seguir = () => { if (!decidido) { decidido = true; setKeyChecked(true) } }
+    const prazo = setTimeout(() => {
+      console.warn('[checkout] chave do operador demorou — seguindo com a da plataforma')
+      seguir()
+    }, 3000)
     api.getCheckoutKey(bid)
-      .then((r) => { if (active) setSellerKey(r?.public_key || null) })
+      .then((r) => { if (!decidido) setSellerKey(r?.public_key || null) })
       .catch(() => {})
-      .finally(() => { if (active) setKeyChecked(true) })
-    return () => { active = false }
+      .finally(() => { clearTimeout(prazo); seguir() })
+    return () => { decidido = true; clearTimeout(prazo) }
   }, [state?.existing_booking_id])
 
   if (!state) { navigate(-1); return null }

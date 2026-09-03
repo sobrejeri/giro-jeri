@@ -1517,11 +1517,31 @@ router.get('/booking/:id/checkout-key', authenticate, async (req, res, next) => 
     if (req.user.user_type === 'tourist' && booking.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Sem permissão' })
     }
+    // A chave do operador SÓ pode ser usada quando a cobrança vai mesmo sair na
+    // conta dele. O cartão é tokenizado com a chave pública de uma aplicação e
+    // cobrado com o access token de outra — se as duas não forem a mesma, o
+    // Mercado Pago recusa o token e o pagamento falha, com uma mensagem que não
+    // explica nada.
+    //
+    // Devolver a chave "porque o operador tem uma" era exatamente esse erro:
+    // desde a 079 o valor cai na plataforma por padrão, e o split de operador
+    // único (087) tem condições próprias. Aqui perguntamos à MESMA função que
+    // decide o split de verdade, em vez de adivinhar.
     let publicKey = null
     if (booking.operator_id) {
-      const { data: op } = await supabase
-        .from('users').select('mp_public_key').eq('id', booking.operator_id).single()
-      publicKey = op?.mp_public_key || null
+      const cfg = await getPaymentSettings().catch(() => ({}))
+      const { data: completa } = await supabase
+        .from('bookings')
+        .select('id, operator_id, service_id, service_type, total_amount, order_group_id')
+        .eq('id', booking.id).maybeSingle()
+      const ctx = completa
+        ? await getSplitContext(completa, Number(completa.total_amount) || 0, cfg)
+        : null
+      if (ctx?.sellerAccessToken) {
+        const { data: op } = await supabase
+          .from('users').select('mp_public_key').eq('id', booking.operator_id).maybeSingle()
+        publicKey = op?.mp_public_key || null
+      }
     }
     res.json({ public_key: publicKey, split: !!publicKey })
   } catch (err) { next(err) }
