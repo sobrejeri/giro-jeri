@@ -1521,11 +1521,24 @@ router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, nex
     if (opErr) throw opErr;
     if (!operator) return res.status(404).json({ error: 'Operador não encontrada' });
 
-    const { data: vehicles, error: vErr } = await supabase
+    // `requires_opt_in` (migration 066) muda a REGRA de leitura, não é enfeite:
+    // veículo restrito só é operado por quem foi liberado explicitamente. Sem
+    // trazer a coluna, esta tela calculava tudo como opt-out e mostrava o
+    // helicóptero como "liberado" para quem o roteamento barra — o admin marca
+    // Aéreo, vê tudo verde, e o voo nunca chega. Falha silenciosa dos dois lados.
+    let { data: vehicles, error: vErr } = await supabase
       .from('vehicles')
-      .select('id, name, vehicle_type, seat_capacity, image_url')
+      .select('id, name, vehicle_type, seat_capacity, image_url, requires_opt_in, modal')
       .eq('is_active', true)
       .order('display_order', { ascending: true });
+    // 42703 = coluna ausente (066 pendente): segue sem ela, tudo como opt-out.
+    if (vErr?.code === '42703') {
+      ({ data: vehicles, error: vErr } = await supabase
+        .from('vehicles')
+        .select('id, name, vehicle_type, seat_capacity, image_url')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true }));
+    }
     if (vErr) throw vErr;
 
     const { data: prefs, error: prefsErr } = await supabase
@@ -1545,9 +1558,15 @@ router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, nex
         vehicle_type:  v.vehicle_type,
         seat_capacity: v.seat_capacity,
         image_url:     v.image_url,
-        // Model B (opt-out): default é operado (true); só é false quando
-        // existe linha explícita is_active=false.
-        is_active:     pref ? pref.is_active !== false : true,
+        requires_opt_in: !!v.requires_opt_in,
+        modal:         v.modal ?? null,
+        // MESMA regra do roteamento (fleet.js → operatorServesVehicles):
+        //   restrito  → só opera quem tem liberação EXPLÍCITA;
+        //   comum     → opera por padrão, salvo bloqueio explícito.
+        // Antes esta linha usava só a segunda, e a tela contradizia o sistema.
+        is_active:     v.requires_opt_in
+                         ? pref?.is_active === true
+                         : (pref ? pref.is_active !== false : true),
         notes:         pref?.notes ?? null,
       };
     });

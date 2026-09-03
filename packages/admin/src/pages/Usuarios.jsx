@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle,
@@ -947,6 +947,22 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
     : vehicles
   const releasedCount = vehicles.filter((v) => v.is_active !== false).length
 
+  // Veículo RESTRITO (066) não segue a regra do meio: mesmo com "Opera"
+  // marcado, o roteamento só entrega a quem tem liberação explícita. Aqui
+  // agrupamos por meio os que ainda barram, para avisar na linha certa.
+  const restritosBloqueados = useMemo(() => {
+    const porModal = new Map()
+    for (const v of vehicles) {
+      if (!v.requires_opt_in || v.is_active) continue
+      const m = modais.find((x) => x.slug === v.modal || x.modal_id === v.modal_id)
+      const chave = m?.modal_id
+      if (!chave) continue
+      if (!porModal.has(chave)) porModal.set(chave, [])
+      porModal.get(chave).push(v.name)
+    }
+    return porModal
+  }, [vehicles, modais])
+
   return (
     <Modal open={open} onClose={onClose} title={fleetCopy.modalTitle(operatorName)} size="md">
       <div className="space-y-3">
@@ -978,6 +994,18 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
                       )}
                       {savedId === m.modal_id && !errorRow && (
                         <p className="text-[11px] text-emerald-400 mt-0.5">{fleetCopy.saved}</p>
+                      )}
+                      {/* Marcar o meio como "Opera" NÃO basta quando ele tem
+                          veículo restrito: o roteamento exige liberação
+                          explícita por veículo. Sem este aviso, o admin marca
+                          Aéreo, vê tudo certo, e o voo nunca chega ao operador
+                          — sem erro em lugar nenhum. */}
+                      {ligado && (restritosBloqueados.get(m.modal_id)?.length > 0) && (
+                        <p className="text-[11px] text-amber-400 mt-1 leading-snug">
+                          Falta liberar {restritosBloqueados.get(m.modal_id).join(', ')} no ajuste fino
+                          abaixo — {restritosBloqueados.get(m.modal_id).length === 1 ? 'é veículo restrito e' : 'são veículos restritos e'} só
+                          opera quem for liberado. Sem isso este operador não recebe estes serviços.
+                        </p>
                       )}
                     </div>
                     <button
