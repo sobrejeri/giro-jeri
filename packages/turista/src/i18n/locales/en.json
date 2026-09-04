@@ -880,7 +880,14 @@
     "origin": "Origin",
     "upToPeopleCapacity": "up to {{count}} people",
     "passengersCount": "{{count}} passengers",
-    "peopleCount": "{{count}} people"
+    "peopleCount": "{{count}} people",
+    "seeAllRoutes": "See all ({{total}})",
+    "seeLess": "See less",
+    "originFilterAll": "All",
+    "departingFrom": "Departing from {{place}}",
+    "noRoutesFromHere": "No routes departing from here yet.",
+    "exclusiveBadge": "Exclusive",
+    "exclusiveTransfer": "Exclusive transfer"
   },
   "cartPg": {
     "editSheet": {

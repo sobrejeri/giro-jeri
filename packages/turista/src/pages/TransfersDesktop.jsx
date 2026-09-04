@@ -9,7 +9,7 @@ import {
   Route, Zap, Clock, Users, Car, ShieldCheck, Timer, Headphones,
   Calendar, Plus, Minus, Send, CheckCircle2, Info, ChevronRight, Check,
 } from 'lucide-react'
-import { PlaceInput, suggestVehicles, VehicleRow } from './Transfers'
+import { PlaceInput, suggestVehicles, VehicleRow, shortPlace } from './Transfers'
 import { isHighSeasonIso } from '../lib/season'
 import { useCart } from '../contexts/CartContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
@@ -79,7 +79,7 @@ function RouteCard({ route, bg, active, onSelect }) {
             R$ {Number(route.default_price).toLocaleString('pt-BR')}
           </p>
         </div>
-        <span className="text-[12px] font-semibold text-brand shrink-0">Selecionar →</span>
+        <span className="text-[12px] font-semibold text-brand shrink-0">{t('transfersPg.select')} →</span>
       </div>
     </button>
   )
@@ -127,13 +127,38 @@ export default function TransfersDesktop() {
     queryKey: ['transfer-routes'],
     queryFn:  () => api.getTransferRoutes(),
   })
-  const routes = Array.isArray(routesData?.routes) ? routesData.routes
-               : Array.isArray(routesData) ? routesData : []
+  // Memoizado: é a base de todos os recortes abaixo. Sem isso ele seria um
+  // array novo a cada render e os `useMemo` que dependem dele nunca acertariam.
+  const todasRotas = useMemo(
+    () => Array.isArray(routesData?.routes) ? routesData.routes
+        : Array.isArray(routesData) ? routesData : [],
+    [routesData],
+  )
 
-  // Rota escolhida — precisa vir ANTES da consulta de veículos, que depende dela.
+  // Translado EXCLUSIVO (ex.: helicóptero) sai da lista comum e ganha vitrine
+  // própria, como no celular: misturar um trecho de R$ 15.000 com um de R$ 120
+  // na mesma grade confunde o cliente — e era exatamente o que esta tela fazia.
+  //
+  // UMA vitrine por categoria, não uma só com tudo dentro: o título é o nome da
+  // categoria cadastrada no admin, então criar uma categoria nova (lancha, 4x4)
+  // já nomeia a vitrine dela.
+  const routes = useMemo(() => todasRotas.filter(r => !r.transfers?.is_exclusive), [todasRotas])
+  const categoriasExclusivas = useMemo(() => {
+    const porId = new Map()
+    for (const r of todasRotas.filter(r => r.transfers?.is_exclusive)) {
+      const id = r.transfer_id || r.transfers?.name || 'sem-categoria'
+      if (!porId.has(id)) porId.set(id, { id, nome: r.transfers?.name || t('transfersPg.exclusiveTransfer'), rotas: [] })
+      porId.get(id).rotas.push(r)
+    }
+    return [...porId.values()]
+  }, [todasRotas, t])
+
+  // Rota escolhida — precisa vir ANTES da consulta de veículos, que depende
+  // dela. Procura em TODAS as rotas: a vitrine exclusiva também define
+  // origem/destino, e sem isso a rota aérea ficaria "não encontrada", sem preço.
   const rotaEscolhida = useMemo(
-    () => routes.find(r => r.origin_name === origin && r.destination_name === dest),
-    [routes, origin, dest],
+    () => todasRotas.find(r => r.origin_name === origin && r.destination_name === dest),
+    [todasRotas, origin, dest],
   )
 
   // Veículos: com a rota escolhida, usa os que ATENDEM aquela rota. O endereço
@@ -199,6 +224,46 @@ export default function TransfersDesktop() {
       .sort((a, b) => score(a) - score(b) || Number(a.default_price) - Number(b.default_price))
       .slice(0, 8)
   }, [routes])
+
+  // Vitrine de rotas: por padrão as populares. O catálogo inteiro ficava
+  // invisível atrás desse corte de 8 — sem "ver todas", sem filtro, sem
+  // nenhuma pista de que existiam mais. O celular já resolvia assim.
+  const [routeOrigin,   setRouteOrigin]   = useState('')   // '' = todas as saídas
+  const [showAllRoutes, setShowAllRoutes] = useState(false)
+
+  // Locais de saída com pelo menos uma rota, ordenados por quantidade. Conta as
+  // comuns E as exclusivas: o filtro recorta as duas vitrines ao mesmo tempo,
+  // então a contagem do chip precisa refletir tudo que ele revela.
+  const originOptions = useMemo(() => {
+    const m = new Map()
+    for (const r of todasRotas) m.set(r.origin_name, (m.get(r.origin_name) || 0) + 1)
+    return [...m.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ name, count }))
+  }, [todasRotas])
+
+  // Filtrar por saída já é um pedido explícito: mostra TODAS daquela origem.
+  const routesShown = useMemo(() => {
+    if (routeOrigin) {
+      return routes.filter(r => r.origin_name === routeOrigin)
+        .sort((a, b) => Number(a.default_price) - Number(b.default_price))
+    }
+    if (showAllRoutes) {
+      return [...routes].sort((a, b) =>
+        a.origin_name.localeCompare(b.origin_name) || Number(a.default_price) - Number(b.default_price))
+    }
+    return popularRoutes
+  }, [routes, routeOrigin, showAllRoutes, popularRoutes])
+
+  // O mesmo filtro recorta as vitrines exclusivas — sem isso o turista filtra
+  // "Jeri" e continua vendo voo saindo de outro lugar. Categoria que fica sem
+  // nenhuma rota naquela saída some junto com o título.
+  const categoriasExclusivasShown = useMemo(() => {
+    if (!routeOrigin) return categoriasExclusivas
+    return categoriasExclusivas
+      .map(cat => ({ ...cat, rotas: cat.rotas.filter(r => r.origin_name === routeOrigin) }))
+      .filter(cat => cat.rotas.length > 0)
+  }, [categoriasExclusivas, routeOrigin])
 
   const matched   = rotaEscolhida
   const unitPrice = matched ? Number(matched.default_price) : null
@@ -387,11 +452,86 @@ export default function TransfersDesktop() {
       {/* ── ROTA DEFINIDA ─────────────────────────────────────── */}
       {mode === 'rota' && (
         <>
-          {popularRoutes.length > 0 && (
+          {routes.length > 0 && (
             <>
-              <h2 className="text-lg font-bold text-gray-900 mt-8 mb-4">{t('transfersPg.popularRoutes')}</h2>
+              <div className="flex items-baseline justify-between mt-8 mb-4 gap-4">
+                <h2 className="text-lg font-bold text-gray-900">
+                  {routeOrigin
+                    ? t('transfersPg.departingFrom', { place: shortPlace(routeOrigin) })
+                    : t('transfersPg.popularRoutes')}
+                </h2>
+                {routes.length > popularRoutes.length && !routeOrigin && (
+                  <button
+                    onClick={() => setShowAllRoutes(v => !v)}
+                    className="text-[13px] font-bold text-brand hover:text-brand-600 transition-colors shrink-0"
+                  >
+                    {showAllRoutes ? t('transfersPg.seeLess') : t('transfersPg.seeAllRoutes', { total: routes.length })}
+                  </button>
+                )}
+              </div>
+
+              {/* Filtro por local de saída — só faz sentido com mais de uma. */}
+              {originOptions.length > 1 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <button
+                    onClick={() => { setRouteOrigin(''); setShowAllRoutes(false) }}
+                    className={`px-3.5 py-1.5 rounded-full text-[12px] font-bold border transition-colors ${
+                      routeOrigin === '' ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    {t('transfersPg.originFilterAll')}
+                  </button>
+                  {originOptions.map(({ name, count }) => (
+                    <button
+                      key={name}
+                      onClick={() => { setRouteOrigin(v => (v === name ? '' : name)); setShowAllRoutes(false) }}
+                      className={`px-3.5 py-1.5 rounded-full text-[12px] font-bold border transition-colors ${
+                        routeOrigin === name ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {shortPlace(name)}{' '}
+                      <span className={routeOrigin === name ? 'text-white/70' : 'text-gray-400'}>{count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {routesShown.length === 0 ? (
+                // Cala o aviso quando a saída só tem rota exclusiva — ela
+                // aparece logo abaixo, e dizer "nenhuma rota" seria mentira.
+                categoriasExclusivasShown.length === 0 && (
+                  <p className="text-[13px] text-gray-400 bg-white rounded-2xl border border-gray-100 px-4 py-4">
+                    {t('transfersPg.noRoutesFromHere')}
+                  </p>
+                )
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
+                  {routesShown.map((r, i) => (
+                    <RouteCard
+                      key={r.id}
+                      route={r}
+                      bg={GRADIENTS[i % GRADIENTS.length]}
+                      active={origin === r.origin_name && dest === r.destination_name}
+                      onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* TRANSLADOS EXCLUSIVOS (helicóptero) — vitrine separada, para não
+              misturar com as comuns nem no preço nem na operação. */}
+          {categoriasExclusivasShown.map((cat) => (
+            <div key={cat.id}>
+              <div className="flex items-baseline gap-3 mt-8 mb-4">
+                <h2 className="text-lg font-bold text-gray-900">{cat.nome}</h2>
+                <span className="text-[11px] font-bold text-brand bg-brand/10 px-2.5 py-0.5 rounded-full">
+                  {t('transfersPg.exclusiveBadge')}
+                </span>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-                {popularRoutes.map((r, i) => (
+                {cat.rotas.map((r, i) => (
                   <RouteCard
                     key={r.id}
                     route={r}
@@ -401,8 +541,8 @@ export default function TransfersDesktop() {
                   />
                 ))}
               </div>
-            </>
-          )}
+            </div>
+          ))}
 
           <div className="grid lg:grid-cols-3 gap-6 mt-8 items-start">
             {/* Form */}

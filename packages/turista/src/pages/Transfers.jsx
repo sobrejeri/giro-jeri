@@ -150,7 +150,9 @@ const GRADIENTS = [
   'from-emerald-400 to-green-300',
 ]
 
-const shortPlace = (s = '') =>
+// Exportado: a tela de PC usa o MESMO encurtamento nos chips de saída. Uma
+// segunda cópia divergiria — "Aeroporto JJD" aqui e o nome inteiro lá.
+export const shortPlace = (s = '') =>
   s.replace('Aeroporto de Jericoacoara (Cruz)', 'Aeroporto JJD')
    .replace('Jericoacoara', 'Jeri')
 
