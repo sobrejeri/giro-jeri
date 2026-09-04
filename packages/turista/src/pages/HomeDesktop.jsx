@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { precoDeEntrada } from '../lib/precoCartao'
 import { useRegion } from '../contexts/RegionContext'
+import { useFavorites } from '../contexts/FavoritesContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
 import {
   Star, Clock, Heart, ArrowRight, Compass, Car, Calendar, Users,
@@ -203,14 +204,53 @@ function RouteMiniCard({ route, gradient, onClick }) {
   )
 }
 
-export default function HomeDesktop({
-  tours = [], featured = [], isLoading, favs, toggleFav,
-  bannerImg = null, bannerTitle = null, bannerSubtitle = null,
-  partners = [], featuredRoutes = [],
-}) {
+// Esta tela busca os PRÓPRIOS dados. Já recebeu tudo por propriedade — nove
+// delas — e quando a home de celular foi redesenhada o `<HomeDesktop />` passou
+// a ser montado sem NENHUMA: o PC ficou meses mostrando "Nenhum passeio
+// disponível nesta região" com o catálogo cheio, porque toda propriedade tinha
+// valor padrão vazio e a tela não tinha como saber a diferença entre "não veio
+// nada" e "não existe nada".
+//
+// As consultas usam as MESMAS chaves da home de celular, então o TanStack Query
+// junta as duas: os dois blocos ficam montados ao mesmo tempo (um escondido por
+// CSS) e mesmo assim sai uma requisição só de cada coisa.
+export default function HomeDesktop() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { region, openPicker } = useRegion()
+  const { region, openPicker, userCoords, getServiceQuery } = useRegion()
+  const { favs, toggleFav } = useFavorites()
+
+  // Catálogo — a mesma chave e a mesma consulta da home de celular.
+  const geo = getServiceQuery()
+  const coarseLat = userCoords?.lat != null ? Math.round(userCoords.lat * 100) / 100 : null
+  const coarseLon = userCoords?.lon != null ? Math.round(userCoords.lon * 100) / 100 : null
+  const { data: toursData, isLoading } = useQuery({
+    queryKey: ['tours', 'home', region?.id, coarseLat, coarseLon],
+    queryFn:  () => api.getTours({ limit: 12, ...geo }),
+  })
+  const tours = Array.isArray(toursData?.tours) ? toursData.tours
+              : Array.isArray(toursData)        ? toursData
+              : []
+  const featured = (tours.filter((x) => x.is_featured).length > 0
+    ? tours.filter((x) => x.is_featured) : tours).slice(0, 10)
+
+  // Banner do admin (Configurações → Aparência).
+  const { data: settings } = useQuery({
+    queryKey: ['public-settings'],
+    queryFn:  () => api.getPublicSettings(),
+    staleTime: 5 * 60 * 1000,
+  })
+  const bannerImg      = settings?.home_banner_image_url || null
+  const bannerTitle    = settings?.home_banner_title     || null
+  const bannerSubtitle = settings?.home_banner_subtitle  || null
+
+  // Operadores parceiros — vitrine de confiança, só no PC.
+  const { data: partnersData } = useQuery({
+    queryKey: ['partners'],
+    queryFn:  () => api.getPartners(),
+    staleTime: 10 * 60 * 1000,
+  })
+  const partners = Array.isArray(partnersData) ? partnersData : []
 
   // Nome do lugar dinâmico — segue SEMPRE a região atual do app (localização
   // selecionada/detectada). O título do banner do admin fica só como reserva
@@ -254,6 +294,13 @@ export default function HomeDesktop({
   })
   const routes = Array.isArray(routesData?.routes) ? routesData.routes
                : Array.isArray(routesData) ? routesData : []
+
+  // Rotas que o admin destacou entram em "Serviços em destaque" junto dos
+  // passeios. Sai da mesma consulta acima — não é uma segunda ida ao servidor.
+  const featuredRoutes = useMemo(
+    () => routes.filter((r) => r.is_featured && r.is_active !== false).slice(0, 6),
+    [routes],
+  )
 
   // Avaliações REAIS (mais recentes) — reputação dos operadores. Se ainda
   // não houver nenhuma, a seção some (nada de depoimento inventado).
