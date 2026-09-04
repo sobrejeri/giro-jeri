@@ -2,6 +2,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRegion } from '../../contexts/RegionContext'
+import { rolarAteAncora } from '../../lib/ancora'
 import { api } from '../../lib/api'
 import { MapPin, LogOut, User, ChevronDown } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
@@ -16,6 +17,16 @@ export default function TopNav() {
     await api.logout().catch(() => {})
     logout()
     navigate('/')
+  }
+
+  // "Sobre nós" é uma SEÇÃO da home, não uma tela. Era um `<a href="#sobre">`
+  // puro: em qualquer outra tela ele só carimbava a âncora na URL
+  // (`/transfers#sobre`) e nada acontecia, porque o alvo não existe fora da
+  // home. Agora volta para a home e rola até lá — de onde quer que se clique.
+  function irParaSobre(e) {
+    e.preventDefault()
+    navigate('/#sobre')
+    rolarAteAncora('sobre')
   }
 
   const navLinkClass = ({ isActive }) =>
@@ -40,7 +51,7 @@ export default function TopNav() {
           <NavLink to="/eventos"           className={navLinkClass}>{t('nav.discoverVillage')}</NavLink>
           {token && <NavLink to="/minhas-reservas" className={navLinkClass}>{t('nav.bookings')}</NavLink>}
           {token && <NavLink to="/perfil"          className={navLinkClass}>{t('nav.profile')}</NavLink>}
-          <a href="#sobre" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">{t('nav.about')}</a>
+          <a href="/#sobre" onClick={irParaSobre} className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">{t('nav.about')}</a>
         </nav>
 
         {/* Chip de localização — desktop */}

@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
+import { rolarAteAncora } from '../lib/ancora'
 import { precoDeEntrada } from '../lib/precoCartao'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -217,8 +218,13 @@ function RouteMiniCard({ route, gradient, onClick }) {
 export default function HomeDesktop() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { hash } = useLocation()
   const { region, openPicker, userCoords, getServiceQuery } = useRegion()
   const { favs, toggleFav } = useFavorites()
+
+  // Abrir turivabrasil.com/#sobre direto (link colado, favorito, aba restaurada)
+  // também tem que cair na seção. O React Router não rola sozinho.
+  useEffect(() => { if (hash) rolarAteAncora(hash.slice(1)) }, [hash])
 
   // Catálogo — a mesma chave e a mesma consulta da home de celular.
   const geo = getServiceQuery()
@@ -624,7 +630,9 @@ export default function HomeDesktop() {
       </section>
 
       {/* ── BENEFÍCIOS ───────────────────────────────────────── */}
-      <section id="sobre" className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
+      {/* `scroll-mt-20` desconta o cabeçalho fixo: sem ele o topo da seção para
+          EMBAIXO da barra e o clique em "Sobre nós" parece não ter feito nada. */}
+      <section id="sobre" className="scroll-mt-20 mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
         <div className="grid grid-cols-4 gap-4">
           {BENEFITS.map(({ icon: Icon, titleKey, descKey }) => (
             <div key={titleKey} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
