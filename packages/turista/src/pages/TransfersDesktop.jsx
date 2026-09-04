@@ -153,13 +153,29 @@ export default function TransfersDesktop() {
     return [...porId.values()]
   }, [todasRotas, t])
 
-  // Rota escolhida — precisa vir ANTES da consulta de veículos, que depende
-  // dela. Procura em TODAS as rotas: a vitrine exclusiva também define
-  // origem/destino, e sem isso a rota aérea ficaria "não encontrada", sem preço.
-  const rotaEscolhida = useMemo(
-    () => todasRotas.find(r => r.origin_name === origin && r.destination_name === dest),
-    [todasRotas, origin, dest],
-  )
+  // Rota escolhida — precisa vir ANTES da consulta de veículos, que depende dela.
+  //
+  // Guardada por ID, não por origem/destino. Duas rotas podem ter exatamente o
+  // mesmo par de nomes: "Jericoacoara → Fortaleza" existe de carro (R$ 700) e de
+  // helicóptero (R$ 15.000). Comparando por nome, clicar em UMA acendia AS DUAS
+  // — e, pior que o destaque duplo, o `find` devolvia sempre a primeira: quem
+  // clicava no helicóptero seguia com o preço e a frota do carro.
+  const [routeId, setRouteId] = useState('')
+  const escolherRota = (r) => {
+    setRouteId(r.id)
+    setOrigin(r.origin_name)
+    setDest(r.destination_name)
+    setCart({})
+  }
+
+  const rotaEscolhida = useMemo(() => {
+    const porId = routeId ? todasRotas.find(r => r.id === routeId) : null
+    if (porId) return porId
+    // Sem id — origem/destino vieram dos seletores ou da busca da home. Procura
+    // só entre as COMUNS: rota exclusiva só se escolhe pelo cartão dela, senão
+    // um par de nomes ambíguo poderia cair no voo sem ninguém ter pedido.
+    return routes.find(r => r.origin_name === origin && r.destination_name === dest)
+  }, [todasRotas, routes, routeId, origin, dest])
 
   // Veículos: com a rota escolhida, usa os que ATENDEM aquela rota. O endereço
   // `/routes/:id/vehicles` cruza a matriz veículo × rota E o modal da categoria
@@ -511,8 +527,8 @@ export default function TransfersDesktop() {
                       key={r.id}
                       route={r}
                       bg={GRADIENTS[i % GRADIENTS.length]}
-                      active={origin === r.origin_name && dest === r.destination_name}
-                      onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                      active={rotaEscolhida?.id === r.id}
+                      onSelect={() => escolherRota(r)}
                     />
                   ))}
                 </div>
@@ -536,8 +552,8 @@ export default function TransfersDesktop() {
                     key={r.id}
                     route={r}
                     bg={GRADIENTS[i % GRADIENTS.length]}
-                    active={origin === r.origin_name && dest === r.destination_name}
-                    onSelect={() => { setOrigin(r.origin_name); setDest(r.destination_name); setCart({}) }}
+                    active={rotaEscolhida?.id === r.id}
+                    onSelect={() => escolherRota(r)}
                   />
                 ))}
               </div>
@@ -557,7 +573,7 @@ export default function TransfersDesktop() {
                       <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
                       <select
                         value={origin}
-                        onChange={e => { setOrigin(e.target.value); setDest(''); setCart({}) }}
+                        onChange={e => { setRouteId(''); setOrigin(e.target.value); setDest(''); setCart({}) }}
                         className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none cursor-pointer"
                       >
                         {!origin && <option value="">{t('transfersPg.selectOriginOption')}</option>}
@@ -571,7 +587,9 @@ export default function TransfersDesktop() {
                       <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
                       <select
                         value={dest}
-                        onChange={e => { setDest(e.target.value); setCart({}) }}
+                        // Limpa o id: mexer nos seletores é escolher pelo nome,
+                        // e um id antigo apontaria para outra rota.
+                        onChange={e => { setRouteId(''); setDest(e.target.value); setCart({}) }}
                         className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none cursor-pointer disabled:text-gray-400"
                         disabled={!dests.length}
                       >
