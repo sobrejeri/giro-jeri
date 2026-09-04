@@ -832,7 +832,7 @@
     "selectDestination": "Select the destination",
     "chooseOriginFirst": "Choose the origin first",
     "minAdvanceNotice": "Transfers require at least {{hours}}h notice — choose from {{datetime}} onward.",
-    "highSeasonNotice": "High season — the price may include a surcharge (already shown in the summary).",
+    "highSeasonNotice": "High season or holiday — the price may include a surcharge (already shown in the summary).",
     "vehicleSection": "Vehicle",
     "selected": "Selected",
     "apply": "Apply",

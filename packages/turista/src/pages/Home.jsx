@@ -9,6 +9,7 @@ import {
   UtensilsCrossed, PartyPopper, Lightbulb, Clock,
 } from 'lucide-react'
 import { api } from '../lib/api'
+import { precoDeEntrada } from '../lib/precoCartao'
 import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -37,19 +38,12 @@ const gradOf = (id = '') => {
 
 const fmtPreco = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 
-// Preço na home: é a principal dúvida antes do clique. Compartilhado é por
-// pessoa; privativo usa o menor preço de veículo (from_price, vindo da API).
+// Preço na home: é a principal dúvida antes do clique. Regra compartilhada
+// com as telas de PC — ver lib/precoCartao.js.
 function precoDe(tour) {
-  // Mesma regra do TourCard: compartilhado ativo mostra o por pessoa (entrada
-  // por 1 pessoa); só privativo mostra o menor preço da frota.
-  if (tour.is_shared_enabled && tour.shared_price_per_person) {
-    return { valor: fmtPreco(tour.shared_price_per_person), selo: 'por pessoa' }
-  }
-  if (tour.from_price) return { valor: fmtPreco(tour.from_price), selo: 'privativo' }
-  if (tour.shared_price_per_person) {
-    return { valor: fmtPreco(tour.shared_price_per_person), selo: 'por pessoa' }
-  }
-  return { valor: null, selo: null }
+  const p = precoDeEntrada(tour)
+  if (!p) return { valor: null, selo: null }
+  return { valor: fmtPreco(p.valor), selo: p.porPessoa ? 'por pessoa' : 'privativo' }
 }
 
 const fmtDuracao = (h) => {

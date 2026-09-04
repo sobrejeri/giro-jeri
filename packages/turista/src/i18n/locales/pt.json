@@ -832,7 +832,7 @@
     "selectDestination": "Selecione o destino",
     "chooseOriginFirst": "Escolha a origem primeiro",
     "minAdvanceNotice": "Transfers precisam de no mínimo {{hours}}h de antecedência — escolha a partir de {{datetime}}.",
-    "highSeasonNotice": "Alta temporada — pode ter acréscimo no valor (já mostrado no resumo).",
+    "highSeasonNotice": "Alta temporada ou feriado — pode ter acréscimo no valor (já mostrado no resumo).",
     "vehicleSection": "Veículo",
     "selected": "Selecionado",
     "apply": "Aplicar",

@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
+import { precoDeEntrada } from '../lib/precoCartao'
 import { useRegion } from '../contexts/RegionContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
 import {
@@ -56,6 +57,7 @@ function tagFor(tour, fallback) {
 
 /* ── Card grande "Mais procurados" ─────────────────────────── */
 function HeroTourCard({ tour, tag, gradient, onClick }) {
+  const precoEntrada = precoDeEntrada(tour)
   const { t } = useTranslation()
   return (
     <button
@@ -83,12 +85,18 @@ function HeroTourCard({ tour, tag, gradient, onClick }) {
       </div>
       <div className="flex items-center justify-between px-4 py-3.5">
         <div>
-          {Number(tour?.shared_price_per_person) > 0 ? (
+          {/* Passeio só privativo tem preço de entrada — o menor da frota.
+              Antes esta tela exigia compartilhado e caía em "Consultar
+              preços", enquanto o celular mostrava o valor. Mesmo passeio,
+              respostas diferentes. */}
+          {precoEntrada ? (
             <>
               <p className="text-[11px] text-gray-400 leading-none">{t('homePg.fromLabel')}</p>
               <p className="text-brand font-extrabold text-[17px] leading-tight mt-0.5">
-                {fmtPrice(tour.shared_price_per_person)}
-                <span className="text-[11px] text-gray-400 font-medium"> {t('homePg.perPerson')}</span>
+                {fmtPrice(precoEntrada.valor)}
+                {precoEntrada.porPessoa && (
+                  <span className="text-[11px] text-gray-400 font-medium"> {t('homePg.perPerson')}</span>
+                )}
               </p>
             </>
           ) : (
@@ -105,6 +113,7 @@ function HeroTourCard({ tour, tag, gradient, onClick }) {
 
 /* ── Card menor "Experiências em destaque" ─────────────────── */
 function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
+  const precoEntrada = precoDeEntrada(tour)
   const { t } = useTranslation()
   return (
     <button
@@ -135,10 +144,10 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
           )}
         </div>
         <div className="mt-2.5 pt-2.5 border-t border-gray-50 flex items-end justify-between gap-2">
-          {Number(tour?.shared_price_per_person) > 0 ? (
+          {precoEntrada ? (
             <div>
               <p className="text-[10px] text-gray-400 leading-none">{t('homePg.fromLabel')}</p>
-              <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(tour.shared_price_per_person)}</p>
+              <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(precoEntrada.valor)}</p>
             </div>
           ) : (
             <p className="text-[12px] text-brand font-bold">{t('homePg.checkPrices')}</p>

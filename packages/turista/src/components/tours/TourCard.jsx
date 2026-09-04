@@ -1,5 +1,6 @@
 import { Heart, Clock, Users, Check, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { precoDeEntrada } from '../../lib/precoCartao'
 
 /* ── Degradê de reserva para passeio sem foto ────────────────────────────── */
 const GRADS = [
@@ -47,34 +48,15 @@ const fmtDuracao = (h) => {
 }
 
 /* ── Preço ────────────────────────────────────────────────────────────────
-   O cartão mostra o MENOR valor de entrada — é o que o cliente precisa saber
-   antes de clicar, e "a partir de" já avisa que pode subir.
-
-   Passeio com compartilhado ativo: o preço por pessoa, que é a entrada por 1
-   pessoa. Só privativo: o menor preço da frota (`from_price`, calculado pela
-   API como o MENOR base_price entre as regras ativas do passeio).
-
-   O modo escolhido na página NÃO decide mais. Antes decidia, e um passeio
-   compartilhado navegado no modo privativo mostrava o preço de um veículo
-   inteiro no lugar do valor por pessoa — número bem mais alto que o real de
-   entrada, sem explicação na tela.
-
-   NUNCA inventa valor: sem nenhum dos dois, fica sem preço em vez de zero,
-   que o cliente leria como grátis. */
+   A regra vive em lib/precoCartao.js e é a MESMA das telas de PC — antes cada
+   uma tinha a sua cópia, e elas divergiram. Aqui fica só a tradução do rótulo. */
 function precoDe(tour, mode, t) {
-  const temCompartilhado = tour.is_shared_enabled && tour.shared_price_per_person
-  if (temCompartilhado) {
-    return { valor: fmtPreco(tour.shared_price_per_person), rotulo: t('toursPg.card.perPerson') }
+  const p = precoDeEntrada(tour)
+  if (!p) return { valor: null, rotulo: null }
+  return {
+    valor:  fmtPreco(p.valor),
+    rotulo: p.porPessoa ? t('toursPg.card.perPerson') : t('toursPg.card.startingAt'),
   }
-  if (tour.from_price) {
-    return { valor: fmtPreco(tour.from_price), rotulo: t('toursPg.card.startingAt') }
-  }
-  // Sem a flag mas com preço por pessoa cadastrado: cadastro pela metade, e
-  // mostrar o valor é melhor que deixar o cartão mudo.
-  if (tour.shared_price_per_person) {
-    return { valor: fmtPreco(tour.shared_price_per_person), rotulo: t('toursPg.card.perPerson') }
-  }
-  return { valor: null, rotulo: null }
 }
 
 /* ── Etiqueta sobre a foto ────────────────────────────────────────────────

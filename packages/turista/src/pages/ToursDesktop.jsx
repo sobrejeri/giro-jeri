@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { precoDeEntrada } from '../lib/precoCartao'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -23,6 +24,7 @@ const FALLBACK_GRADIENTS = [
 function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
   const { t } = useTranslation()
   const price   = Number(tour.shared_price_per_person || 0)
+  const precoEntrada = precoDeEntrada(tour)
   const shared  = tour.is_shared_enabled && price > 0
   const private_ = tour.is_private_enabled
 
@@ -84,11 +86,16 @@ function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
             )}
           </div>
           <div className="text-right shrink-0">
-            {shared ? (
+            {/* Só privativo agora mostra o menor preço da frota, em vez de
+                "Ver opções" — o cliente decide olhando valor, e esconder o
+                número no PC empurrava a dúvida para depois do clique. */}
+            {precoEntrada ? (
               <>
                 <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.card.fromLabel')}</p>
-                <p className="text-gray-900 font-extrabold text-[17px] leading-tight">{fmtPrice(price)}</p>
-                <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.card.perPersonSuffix')}</p>
+                <p className="text-gray-900 font-extrabold text-[17px] leading-tight">{fmtPrice(precoEntrada.valor)}</p>
+                {precoEntrada.porPessoa && (
+                  <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.card.perPersonSuffix')}</p>
+                )}
               </>
             ) : private_ ? (
               <>
@@ -96,7 +103,7 @@ function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
                 <p className="text-brand font-bold text-[13px] leading-tight mt-0.5">{t('toursPg.card.viewOptions')}</p>
               </>
             ) : (
-              <p className="text-gray-900 font-extrabold text-[17px]">{price > 0 ? fmtPrice(price) : '—'}</p>
+              <p className="text-gray-900 font-extrabold text-[17px]">—</p>
             )}
           </div>
         </div>
