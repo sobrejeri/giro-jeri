@@ -90,7 +90,7 @@ export default function TransfersDesktop() {
   const navigate  = useNavigate()
   const { token } = useAuth()
   const { upsertItem: saveCartItem } = useCart()
-  const { region, userCoords, getServiceQuery } = useRegion()
+  const { region } = useRegion()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
   // Última sugestão auto-aplicada — permite seguir atualizações da sugestão
@@ -127,15 +127,36 @@ export default function TransfersDesktop() {
     queryKey: ['transfer-routes'],
     queryFn:  () => api.getTransferRoutes(),
   })
-  const { data: vehiclesData } = useQuery({
-    queryKey: ['vehicles', region?.id, userCoords?.lat, userCoords?.lon],
-    queryFn:  () => api.getVehicles(getServiceQuery()),
-  })
-
   const routes = Array.isArray(routesData?.routes) ? routesData.routes
                : Array.isArray(routesData) ? routesData : []
+
+  // Rota escolhida — precisa vir ANTES da consulta de veículos, que depende dela.
+  const rotaEscolhida = useMemo(
+    () => routes.find(r => r.origin_name === origin && r.destination_name === dest),
+    [routes, origin, dest],
+  )
+
+  // Veículos: com a rota escolhida, usa os que ATENDEM aquela rota. O endereço
+  // `/routes/:id/vehicles` cruza a matriz veículo × rota E o modal da categoria
+  // (terrestre / aéreo / aquático) — é o que impede o helicóptero de aparecer
+  // num trecho de carro, e o buggy num trecho aéreo.
+  //
+  // Esta tela pedia `getVehicles` da região inteira, sempre: com uma rota
+  // terrestre selecionada, o helicóptero entrava na lista junto de Hilux e
+  // Jardineira. O celular já fazia certo; era só o PC que não perguntava pela
+  // rota. Mesma chave e mesma consulta do celular, então as duas se juntam.
+  const { data: vehiclesData } = useQuery({
+    queryKey: ['vehicles', 'transfer', region?.id, rotaEscolhida?.id || null],
+    queryFn:  () => rotaEscolhida?.id
+      ? api.getRouteVehicles(rotaEscolhida.id, region?.id ? { region_id: region.id } : {})
+      : (region?.id ? api.getVehicles({ region_id: region.id }) : Promise.resolve([])),
+    enabled:  !!region?.id || !!rotaEscolhida?.id,
+  })
+  // `!== false`, não `truthy`: quando a rota não tem matriz de preço, a API
+  // devolve a frota do modal SEM a coluna `is_transfer_allowed` no select. Com
+  // o teste de verdadeiro, `undefined` reprovava e a lista abria VAZIA.
   const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
-                    .filter(v => v.is_transfer_allowed && v.is_active !== false)
+                    .filter(v => v.is_transfer_allowed !== false && v.is_active !== false)
 
   // Alta temporada: regras (datas exatas) p/ colorir o calendário em laranja
   // e avisar quando a data escolhida cai dentro de uma delas.
@@ -179,7 +200,7 @@ export default function TransfersDesktop() {
       .slice(0, 8)
   }, [routes])
 
-  const matched   = useMemo(() => routes.find(r => r.origin_name === origin && r.destination_name === dest), [routes, origin, dest])
+  const matched   = rotaEscolhida
   const unitPrice = matched ? Number(matched.default_price) : null
 
   // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
