@@ -2391,10 +2391,14 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
 
     let query = supabase
       .from('bookings')
+      // Sem comentário dentro da string: isto vira a lista de colunas do
+      // PostgREST, não SQL. `payments` é embed — uma reserva pode ter várias
+      // tentativas, e o método que interessa é o da que foi APROVADA.
       .select(`
         id, booking_code, service_type, booking_mode, service_date, service_time,
         people_count, total_amount, status_commercial, status_operational, created_at,
-        user_id, operator_id, region_id
+        user_id, operator_id, region_id,
+        payments ( payment_method, status, paid_at, created_at )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
@@ -2447,6 +2451,25 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
     // `service_id` não tem FK (aponta para tours OU transfer_routes conforme o
     // tipo), então o join é feito aqui, em duas consultas em lote.
     const linhas = data || [];
+
+    // ── Forma de recebimento, por reserva ───────────────────────────────────
+    // Uma reserva pode ter VÁRIAS tentativas de pagamento (a GJO7NHT5 tem cinco:
+    // quatro manuais e uma no Mercado Pago). O que interessa é o método da que
+    // foi APROVADA — as outras são tentativas que não viraram dinheiro.
+    //
+    // Sem aprovada, mostra a mais recente e marca como não confirmada: é útil
+    // saber que o cliente TENTOU pagar no cartão e não passou.
+    for (const b of linhas) {
+      const tentativas = Array.isArray(b.payments) ? b.payments : [];
+      const aprovada = tentativas.find((p) => p.status === 'approved');
+      const recente  = [...tentativas].sort((a, c) =>
+        String(c.paid_at || c.created_at || '').localeCompare(String(a.paid_at || a.created_at || '')))[0];
+      const escolhida = aprovada || recente || null;
+      b.payment_method = escolhida?.payment_method || null;
+      b.payment_confirmed = !!aprovada;
+      delete b.payments;
+    }
+
     const idsTour  = [...new Set(linhas.filter((b) => b.service_type === 'tour')
                                        .map((b) => b.service_id).filter(Boolean))];
     const idsRota  = [...new Set(linhas.filter((b) => b.service_type === 'transfer')

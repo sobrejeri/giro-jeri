@@ -23,6 +23,30 @@ const STATUS_LABELS = {
 
 // `sempre: true` = aparece mesmo zerada. Ver "0 aguardando aceite" é uma
 // informação útil; uma aba de "Reembolsado" vazia é só ruído.
+// ── Forma de recebimento ─────────────────────────────────────────────────────
+// Sai da tentativa de pagamento APROVADA. Sem aprovada, mostra a última que o
+// cliente tentou, apagada e com "·" — saber que ele TENTOU no cartão e não
+// passou é informação, e confundir isso com pagamento confirmado não é.
+const PAGAMENTO = {
+  pix:         { rotulo: 'PIX',      cor: 'bg-teal-900/40 text-teal-300' },
+  credit_card: { rotulo: 'Crédito',  cor: 'bg-indigo-900/40 text-indigo-300' },
+  debit_card:  { rotulo: 'Débito',   cor: 'bg-sky-900/40 text-sky-300' },
+}
+function FormaPagamento({ metodo, confirmado }) {
+  if (!metodo) return <span className="text-gray-600 text-xs">—</span>
+  const m = PAGAMENTO[metodo] || { rotulo: metodo, cor: 'bg-gray-800 text-gray-400' }
+  return (
+    <span
+      className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
+        confirmado ? m.cor : 'bg-gray-800 text-gray-500'
+      }`}
+      title={confirmado ? 'Pagamento confirmado' : 'Tentativa não confirmada'}
+    >
+      {m.rotulo}{confirmado ? '' : ' ·'}
+    </span>
+  )
+}
+
 const ABAS_STATUS = [
   { id: '',                    label: 'Todas',         sempre: true },
   { id: 'awaiting_acceptance', label: 'Ag. aceite',    sempre: true },
@@ -278,6 +302,9 @@ export default function Reservas() {
                 <p className="font-semibold text-gray-200 text-sm shrink-0">{fmt(b.total_amount)}</p>
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                {b.payment_method && (
+                  <FormaPagamento metodo={b.payment_method} confirmado={b.payment_confirmed} />
+                )}
                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${b.service_type === 'tour' ? 'bg-blue-900/40 text-blue-400' : 'bg-purple-900/40 text-purple-400'}`}>
                   {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
                 </span>
@@ -311,6 +338,7 @@ export default function Reservas() {
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Serviço</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Data</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Valor</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Recebimento</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
               </tr>
             </thead>
@@ -365,6 +393,9 @@ export default function Reservas() {
                     {b.service_time && <p className="text-gray-600">{b.service_time.slice(0, 5)}</p>}
                   </td>
                   <td className="px-5 py-3 font-semibold text-gray-200">{fmt(b.total_amount)}</td>
+                  <td className="px-5 py-3">
+                    <FormaPagamento metodo={b.payment_method} confirmado={b.payment_confirmed} />
+                  </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
                       <Badge value={b.status_commercial} />
