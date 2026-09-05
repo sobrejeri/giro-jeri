@@ -1077,6 +1077,9 @@
     "policy": {
       "title": "Política de cancelamento",
       "text": "Cancelamento gratuito até 24h antes do passeio. Após esse prazo, pode haver cobrança de taxa."
+    },
+    "dispatchCard": {
+      "title": "Motorista designado"
     }
   },
   "checkoutPg": {

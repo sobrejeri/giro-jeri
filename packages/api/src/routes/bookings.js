@@ -357,6 +357,38 @@ router.get('/:id', authenticate, async (req, res, next) => {
       data.operator = data.operator_id ? (byId.get(data.operator_id) || null) : null;
     }
 
+    // ── Despacho, para o cliente ────────────────────────────────────────────
+    // O operador despacha (motorista, veículo, telefone) e o cliente não via
+    // NADA disso: a tela dele continuava idêntica a antes do despacho, e a
+    // impressão era de que o sistema não tinha atualizado.
+    //
+    // Só depois de PAGO, e só os campos que interessam a quem vai embarcar.
+    // `dispatch_notes` e `confirmation_notes` ficam de fora de propósito: são
+    // recado interno do operador para a equipe dele, não para o cliente.
+    if (data.status_commercial === 'paid') {
+      try {
+        const { data: desp } = await supabase
+          .from('operational_assignments')
+          .select('real_vehicle_text, driver_name, driver_phone, started_at, completed_at, created_at')
+          .eq('booking_id', data.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const d = desp?.[0];
+        if (d && (d.driver_name || d.real_vehicle_text)) {
+          data.dispatch = {
+            driver_name:  d.driver_name || null,
+            driver_phone: d.driver_phone || null,
+            vehicle_text: d.real_vehicle_text || null,
+            dispatched_at: d.created_at || null,
+          };
+        }
+      } catch (e) {
+        // 42703 = driver_name/driver_phone ausentes (migration 017 pendente).
+        // Ficar sem o bloco do motorista é bem melhor que derrubar o detalhe.
+        if (e?.code !== '42703') console.error('[bookings] despacho:', e?.message);
+      }
+    }
+
     // Adiciona link do Maps se tiver coordenadas
     if (data.pickup_latitude && data.destination_latitude) {
       data.maps_route_url =

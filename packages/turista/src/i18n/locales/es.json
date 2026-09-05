@@ -1077,6 +1077,9 @@
     "policy": {
       "title": "Política de cancelación",
       "text": "Cancelación gratuita hasta 24h antes del paseo. Después de ese plazo, puede aplicarse una tarifa."
+    },
+    "dispatchCard": {
+      "title": "Conductor asignado"
     }
   },
   "checkoutPg": {

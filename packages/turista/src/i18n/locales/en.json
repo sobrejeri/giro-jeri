@@ -1077,6 +1077,9 @@
     "policy": {
       "title": "Cancellation policy",
       "text": "Free cancellation up to 24h before the tour. After that, a fee may apply."
+    },
+    "dispatchCard": {
+      "title": "Driver assigned"
     }
   },
   "checkoutPg": {

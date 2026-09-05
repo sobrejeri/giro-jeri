@@ -423,6 +423,41 @@ export default function BookingDetail() {
           </div>
         )}
 
+        {/* ── Motorista designado (despacho do operador) ──────────────────────
+            O operador despacha e o cliente não via NADA: a tela ficava idêntica
+            a antes, e parecia que o sistema não tinha atualizado. É a
+            informação mais útil depois de pagar — quem vem buscar, em quê. */}
+        {booking.dispatch && (
+          <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+            <p className="text-xs font-bold text-blue-800 uppercase tracking-wide mb-2">
+              {t('bookingDetailPg.dispatchCard.title')}
+            </p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                {booking.dispatch.driver_name && (
+                  <p className="text-sm font-bold text-gray-900 truncate">{booking.dispatch.driver_name}</p>
+                )}
+                {booking.dispatch.vehicle_text && (
+                  <p className="text-xs text-gray-600 mt-0.5 flex items-center gap-1.5">
+                    <Car size={12} className="text-blue-500 shrink-0" />
+                    {booking.dispatch.vehicle_text}
+                  </p>
+                )}
+              </div>
+              {booking.dispatch.driver_phone && (
+                <a
+                  href={`https://wa.me/${(() => { const d = booking.dispatch.driver_phone.replace(/\D/g, ''); return d.length <= 11 ? '55' + d : d })()}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 bg-[#25D366] text-white text-xs font-bold px-3 py-2 rounded-xl active:scale-95 transition-transform shrink-0"
+                >
+                  <WhatsAppIcon /> WhatsApp
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Waiting acceptance pulse */}
         {status === 'waiting_acceptance' && (
           <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 flex items-center gap-3">
