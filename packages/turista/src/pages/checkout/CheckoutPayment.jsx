@@ -116,6 +116,10 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
                   issuer_id:         formData?.issuer_id ? String(formData.issuer_id) : undefined,
                   installments:      Number(formData?.installments) || 1,
                   payer_doc:         formData?.payer?.identification?.number,
+                  // O e-mail é opcional no cadastro (dá para se registrar só
+                  // com telefone), e o Mercado Pago EXIGE o do pagador. Quando
+                  // a conta não tem, o Brick pede — e é esse, real, que vai.
+                  payer_email:       formData?.payer?.email,
                   payment_attempt_id: tentativaRef.current,
                   // Device ID do antifraude do MP (security.js no index.html).
                   // Vai vazio se o script não tiver carregado — a cobrança
@@ -313,6 +317,7 @@ export default function CheckoutPayment() {
       existing_booking_id: existing_booking_id || undefined,
       order_group_id: order_group_id || undefined,
       payer_doc: formData?.payer?.identification?.number,
+      payer_email: formData?.payer?.email,
     })
     if (!result) throw new Error(t('payment.errorGeneric'))
 

@@ -63,6 +63,7 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
   // Sem token nenhum (nem da plataforma, nem do operador) = configuração
   // ausente. Erro claro em vez de um PIX falso que só "expira".
   if (!client) throw new Error('Mercado Pago não configurado: falta o Access Token (MP_ACCESS_TOKEN) no servidor.')
+  if (!payerEmail) throw semEmailDoComprador()
 
   // Render expõe RENDER_EXTERNAL_URL automaticamente; API_BASE_URL como fallback manual
   const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
@@ -77,9 +78,8 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
     date_of_expiration: mpDate(new Date(Date.now() + 30 * 60 * 1000)),
     ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     payer: {
-      email:      payerEmail || 'comprador@girojeri.com',
-      first_name: (payerName || 'Comprador').split(' ')[0],
-      last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'Turiva',
+      email: payerEmail,
+      ...nomeDoPagador(payerName),
       // Identificação do pagador (o Payment Brick envia o CPF/CNPJ no PIX)
       ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
     },
@@ -100,6 +100,56 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
     pix_code:      response.point_of_interaction?.transaction_data?.qr_code,
     qr_base64:     response.point_of_interaction?.transaction_data?.qr_code_base64,
     expires_at:    response.date_of_expiration,
+  }
+}
+
+// ── Snapshot do pagamento, seguro para guardar ───────────────────────────────
+// `raw_response_json` fica no banco para sempre e é lido no painel. A resposta
+// CRUA do Mercado Pago carrega o CPF completo do portador e do pagador — dado
+// que não precisamos guardar para conciliar nada. Aqui fica só o que serve para
+// cruzar com o extrato: quem recebeu, quanto, quando, e quanto o gateway
+// cobrou. Nunca token, nunca CVV, nunca número de cartão, nunca CPF.
+export function sanitizedPaymentResult(response) {
+  return {
+    payment_id:         response?.id == null ? null : String(response.id),
+    status:             response?.status || null,
+    status_detail:      response?.status_detail || null,
+    payment_method_id:  response?.payment_method_id || null,
+    payment_type_id:    response?.payment_type_id || null,
+    collector_id:       response?.collector_id == null ? null : String(response.collector_id),
+    transaction_amount: response?.transaction_amount == null ? null : Number(response.transaction_amount),
+    installments:       response?.installments == null ? null : Number(response.installments),
+    external_reference: response?.external_reference == null ? null : String(response.external_reference),
+    card_last_four:     response?.card?.last_four_digits || null,
+    // Conciliação: quando aprovou, quanto o MP cobrou de taxa e quanto sobrou
+    // líquido. Sem isto a taxa real só existia no extrato deles.
+    date_approved:      response?.date_approved || null,
+    fee_amount: Array.isArray(response?.fee_details)
+      ? Math.round(response.fee_details.reduce((soma, f) => soma + (Number(f?.amount) || 0), 0) * 100) / 100
+      : null,
+    net_received_amount: response?.transaction_details?.net_received_amount == null
+      ? null : Number(response.transaction_details.net_received_amount),
+  }
+}
+
+// O Mercado Pago exige o e-mail REAL do pagador. Identidade fictícia derruba a
+// aprovação e cega o antifraude — e ainda grava no banco um comprador que não
+// existe. Quando a conta não tem e-mail o problema é do cadastro, não do
+// servidor: 422 dizendo o que corrigir, em vez de um 500 que faz o cliente
+// repetir a tentativa para sempre.
+function semEmailDoComprador() {
+  const err = new Error('Sua conta está sem e-mail cadastrado, e o Mercado Pago exige o e-mail do pagador. Adicione um e-mail no seu perfil e tente de novo.')
+  err.status = 422
+  return err
+}
+
+// Nome do pagador como o Mercado Pago espera, sem inventar ninguém: só manda o
+// que existe de verdade.
+function nomeDoPagador(payerName) {
+  const partes = String(payerName || '').trim().split(/\s+/).filter(Boolean)
+  return {
+    ...(partes[0] ? { first_name: partes[0] } : {}),
+    ...(partes.length > 1 ? { last_name: partes.slice(1).join(' ') } : {}),
   }
 }
 
@@ -127,6 +177,7 @@ export function buildDisbursements(recipients) {
 export async function createPixPaymentSplit({ amount, description, payerEmail, payerName, payerDoc, externalRef, disbursements }) {
   if (!mp) throw new Error('Mercado Pago não configurado: falta o Access Token da plataforma (MP_ACCESS_TOKEN) para o split multi-recebedor.')
   if (!disbursements?.length) throw new Error('Split multi-recebedor exige ao menos 1 disbursement.')
+  if (!payerEmail) throw semEmailDoComprador()
 
   const client = new Payment(mp)
   const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
@@ -140,9 +191,8 @@ export async function createPixPaymentSplit({ amount, description, payerEmail, p
     date_of_expiration: mpDate(new Date(Date.now() + 30 * 60 * 1000)),
     ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     payer: {
-      email:      payerEmail || 'comprador@girojeri.com',
-      first_name: (payerName || 'Comprador').split(' ')[0],
-      last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'Turiva',
+      email: payerEmail,
+      ...nomeDoPagador(payerName),
       ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
     },
     disbursements,
@@ -185,6 +235,7 @@ export async function createCardPayment({
   cardToken,
   issuerId,
   payerEmail,
+  payerName,
   payerDoc,
   externalRef,
   idempotencyKey,
@@ -201,6 +252,7 @@ export async function createCardPayment({
   // proteção que existe contra cobrança dupla: chave nova = compra nova para o
   // Mercado Pago, e o retry de um timeout vira uma segunda cobrança real.
   if (!idempotencyKey) throw new Error('payment_attempt_id ausente; pagamento não criado.')
+  if (!payerEmail) throw semEmailDoComprador()
 
   const body = {
     transaction_amount: valorParaMP(amount),
@@ -211,7 +263,8 @@ export async function createCardPayment({
     statement_descriptor: 'TURIVA',
     external_reference: externalRef,
     payer: {
-      email:          payerEmail || 'comprador@girojeri.com',
+      email:          payerEmail,
+      ...nomeDoPagador(payerName),
       identification: { type: 'CPF', number: payerDoc },
     },
   }
@@ -282,7 +335,10 @@ export async function createCardPayment({
           creq: response.three_ds_info.creq || null,
         }
       : null,
-    raw:                    response,
+    // Quem recebeu de fato. Com split é a conta do operador; sem split, a da
+    // plataforma. É o que permite conferir se o split saiu como esperado.
+    collector_id:           response.collector_id == null ? null : String(response.collector_id),
+    raw:                    sanitizedPaymentResult(response),
   }
 }
 

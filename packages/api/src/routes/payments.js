@@ -48,6 +48,9 @@ const intentSchema = z.object({
   // Chave da TENTATIVA, gerada pelo checkout. Obrigatória para cartão (refine
   // abaixo) — o servidor nunca inventa uma: chave nova = cobrança nova no MP.
   payment_attempt_id: z.string().uuid().optional(),
+  // E-mail do pagador coletado pelo Brick. Usado quando a conta não tem e-mail
+  // (cadastro só por telefone é permitido) — nunca para inventar um.
+  payer_email:        z.string().email().max(255).optional(),
   installments:       z.number({ coerce: true }).int().min(1).max(12).default(1),
   payment_method_id:  z.string().min(1).optional(),
   issuer_id:          z.string().optional(),
@@ -840,7 +843,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       service_name, cover_image_url,
       coupon_code, existing_booking_id, order_group_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc, device_id,
-      payment_attempt_id,
+      payment_attempt_id, payer_email,
       mp_public_key,
     } = parsed.data
 
@@ -1134,7 +1137,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
         // ── Cartão: sem fallback fake — erro propaga ──────
         const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
-        const userInfo = await supabase.from('users').select('email').eq('id', req.user.id).single()
+        const userInfo = await supabase.from('users').select('email, full_name').eq('id', req.user.id).single()
 
         cardResult = await comChamadaMarcada(tentativaReservadaId, () => createCardPayment({
           amount:          chargedTotal,
@@ -1143,7 +1146,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
           paymentMethodId: payment_method_id,
           cardToken:       card_token,
           issuerId:        issuer_id,
-          payerEmail:      userInfo.data?.email,
+          payerEmail:      userInfo.data?.email || payer_email,
+          // Nome REAL do pagador. O Mercado Pago usa esses dados no antifraude;
+          // nome inventado derruba a aprovação em vez de ajudar.
+          payerName:       userInfo.data?.full_name,
           payerDoc:        payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
           externalRef:     booking.id,
           // Uma chave por TENTATIVA, não por reserva: reenvio da mesma
@@ -1214,7 +1220,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
             pixData = await createPixPaymentSplit({
               amount:       chargedTotal,
               description:  service_name || `Reserva ${bookingCode}`,
-              payerEmail:   userInfo.data?.email,
+              payerEmail:   userInfo.data?.email || payer_email,
               payerName:    userInfo.data?.full_name,
               externalRef:  booking.id,
               disbursements: buildDisbursements(split.recipients),
@@ -1223,7 +1229,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
             pixData = await createPixPayment({
               amount:      chargedTotal,
               description: service_name || `Reserva ${bookingCode}`,
-              payerEmail:  userInfo.data?.email,
+              payerEmail:  userInfo.data?.email || payer_email,
               payerName:   userInfo.data?.full_name,
               // IMPORTANTE: para PIX não envie payerDoc/entityType/entity_type.
               // O erro do Brick "entityType only receives individual or association"
