@@ -1622,6 +1622,13 @@ router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, nex
 router.get('/payouts', requireAdmin, async (req, res, next) => {
   try {
     const { status = 'pending', payee } = req.query;
+    // Recorte por período, pela data do SERVIÇO. É como o acerto acontece:
+    // "o que devo do mês passado", não "quais linhas o sistema criou". O filtro
+    // é aplicado em memória, logo abaixo — `service_date` está na tabela
+    // vizinha, e um !inner mudaria o resultado quando a reserva sumisse.
+    const ISO = /^\d{4}-\d{2}-\d{2}$/;
+    const de  = ISO.test(req.query.from || '') ? req.query.from : null;
+    const ate = ISO.test(req.query.to   || '') ? req.query.to   : null;
 
     // O destino do dinheiro vem junto (081): a chave PIX cadastrada de quem
     // recebe, e quem de fato executou. Sem isso a tela dizia QUANTO e para
@@ -1672,6 +1679,19 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
         return res.json({ payouts: [], totais: [], aviso: 'Rode a migration 080_repasses_por_reserva.sql no Supabase.' });
       }
       throw error;
+    }
+
+    // Recorte por período. Repasse sem data de serviço só aparece quando não há
+    // filtro: dentro de um intervalo ele não tem como ser classificado, e
+    // incluí-lo inflaria o total que o admin vai pagar.
+    if (de || ate) {
+      data = (data || []).filter((p) => {
+        const d = p.bookings?.service_date;
+        if (!d) return false;
+        if (de  && d < de)  return false;
+        if (ate && d > ate) return false;
+        return true;
+      });
     }
 
     // Achata para UM executor por repasse — o despacho mais recente da reserva.

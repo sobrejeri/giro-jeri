@@ -130,14 +130,46 @@ function ValorRepasse({ payout, onSalvar }) {
 // Gerados sozinhos quando o pagamento é aprovado. A tela agrupa por
 // operador porque é assim que o repasse acontece: um PIX cobrindo várias
 // reservas, não um por reserva.
+// Períodos ancorados em HOJE, pela data do SERVIÇO. O acerto é feito por
+// intervalo ("o que devo do mês passado"), não por quando a linha nasceu.
+const hojeIso   = () => new Date().toISOString().slice(0, 10)
+const maisDias  = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+const inicioMes = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10) }
+const mesPassado = () => {
+  const d = new Date()
+  const ini = new Date(d.getFullYear(), d.getMonth() - 1, 1)
+  const fim = new Date(d.getFullYear(), d.getMonth(), 0)
+  return [ini.toISOString().slice(0, 10), fim.toISOString().slice(0, 10)]
+}
+const PERIODOS = [
+  { id: 'tudo',    label: 'Tudo',        range: () => ['', ''] },
+  { id: 'mes',     label: 'Este mês',    range: () => [inicioMes(), hojeIso()] },
+  { id: 'passado', label: 'Mês passado', range: mesPassado },
+  { id: 'ult30',   label: 'Últimos 30',  range: () => [maisDias(-30), hojeIso()] },
+  { id: 'prox30',  label: 'Próximos 30', range: () => [hojeIso(), maisDias(30)] },
+]
+
 function RepassesOperadores() {
   const [status, setStatus] = useState('pending')
   const [aberto, setAberto] = useState(null)   // operador expandida
+  const [periodo, setPeriodo] = useState('tudo')
+  const [de,  setDe]  = useState('')
+  const [ate, setAte] = useState('')
   const qc = useQueryClient()
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-payouts', status],
-    queryFn:  () => api.getPayouts({ status }),
+  function aplicarPeriodo(p) {
+    const [d, a] = p.range()
+    setDe(d); setAte(a); setPeriodo(p.id)
+  }
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['admin-payouts', status, de, ate],
+    queryFn:  () => api.getPayouts({ status, ...(de ? { from: de } : {}), ...(ate ? { to: ate } : {}) }),
+    // Repasse nasce sozinho quando o pagamento é aprovado — inclusive por
+    // webhook, com esta tela aberta. Sem recarregar, o admin veria "nenhum
+    // repasse pendente" enquanto um acabou de entrar.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
 
   const baixaMut = useMutation({
@@ -182,14 +214,35 @@ function RepassesOperadores() {
         {status === 'pending' && totalGeral > 0 && (
           <p className="text-sm text-gray-400">
             Total a pagar: <span className="font-bold text-brand">{fmtBRL(totalGeral)}</span>
+            {isFetching && <span className="ml-2 text-xs text-gray-600">atualizando…</span>}
           </p>
         )}
+      </div>
+
+      {/* Período — pela data do serviço */}
+      <div className="flex flex-wrap items-center gap-2">
+        {PERIODOS.map((p) => (
+          <button key={p.id} onClick={() => aplicarPeriodo(p)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              periodo === p.id
+                ? 'bg-brand text-white border-brand'
+                : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200'
+            }`}>{p.label}</button>
+        ))}
+        <span className="text-xs text-gray-500 ml-1">De</span>
+        <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPeriodo('') }}
+          className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-200 outline-none focus:border-brand/60" />
+        <span className="text-xs text-gray-500">até</span>
+        <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPeriodo('') }}
+          className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-200 outline-none focus:border-brand/60" />
       </div>
 
       {totais.length === 0 ? (
         <Card><CardBody>
           <p className="text-sm text-gray-500 text-center py-6">
-            {status === 'pending' ? 'Nenhum repasse pendente.' : 'Nada aqui.'}
+            {status === 'pending'
+              ? (de || ate ? 'Nenhum repasse pendente neste período.' : 'Nenhum repasse pendente.')
+              : 'Nada aqui.'}
           </p>
         </CardBody></Card>
       ) : totais.map((t) => {
