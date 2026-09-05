@@ -1330,6 +1330,105 @@ async function operatorBookingIds(operatorId) {
   return (data || []).map((b) => b.id);
 }
 
+// ── GET /api/operator/meus-recebimentos ─────────────────
+// O que ESTE operador tem a receber e já recebeu, reserva por reserva.
+//
+// Por que separado do /financial: aquele resumo é o RAZÃO DA PLATAFORMA visto
+// pelo operador — "Receita Bruta", "Comissão plataforma", "Receita Líquida".
+// Nenhuma dessas linhas responde a pergunta dele, que é "quanto eu ganhei". No
+// modelo da 079 a plataforma recebe 100% e repassa depois: o que o operador
+// ganha são os `booking_payouts` dele, e só.
+//
+// Dois tipos, e valem por motivos diferentes:
+//   commission → ele ACEITOU a solicitação
+//   execution  → ele EXECUTOU o serviço
+// Um mesmo operador pode ter os dois na mesma reserva.
+//
+// Período por data da RESERVA (`service_date`), não por quando o repasse foi
+// criado: o operador raciocina por "o que rodei em setembro", não por quando o
+// lançamento nasceu no sistema.
+router.get('/meus-recebimentos', async (req, res, next) => {
+  try {
+    const ISO = /^\d{4}-\d{2}-\d{2}$/;
+    const de  = ISO.test(req.query.from || '') ? req.query.from : null;
+    const ate = ISO.test(req.query.to   || '') ? req.query.to   : null;
+
+    let q = supabase
+      .from('booking_payouts')
+      .select(`
+        id, kind, amount, status, paid_at, created_at,
+        bookings ( booking_code, service_type, service_id, service_date, service_time, people_count )
+      `)
+      .eq('payee_user_id', req.user.id)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    const { data, error } = await q;
+    if (error) {
+      // 42P01 = tabela ausente (migration 080 pendente). Tela vazia é melhor
+      // que erro: o operador não tem o que fazer a respeito.
+      if (error.code === '42P01') return res.json({ itens: [], a_receber: 0, recebido: 0, total: 0 });
+      throw error;
+    }
+
+    // Filtro de período em memória: o recorte é por `service_date`, que está na
+    // tabela vizinha — o PostgREST não filtra por coluna de embed sem !inner, e
+    // o !inner mudaria o resultado quando a reserva sumisse.
+    const dentro = (r) => {
+      const d = r.bookings?.service_date;
+      if (!d) return !de && !ate;         // sem data não entra em recorte nenhum
+      if (de  && d < de)  return false;
+      if (ate && d > ate) return false;
+      return true;
+    };
+
+    const itens = (data || []).filter(dentro).map((r) => ({
+      id:           r.id,
+      kind:         r.kind,
+      amount:       Number(r.amount) || 0,
+      status:       r.status,
+      paid_at:      r.paid_at,
+      booking_code: r.bookings?.booking_code || null,
+      service_type: r.bookings?.service_type || null,
+      service_id:   r.bookings?.service_id   || null,
+      service_name: null,
+      service_date: r.bookings?.service_date || null,
+      service_time: r.bookings?.service_time || null,
+      people_count: r.bookings?.people_count || null,
+    }));
+
+    // Nome do serviço, para a lista não ficar só com códigos. Duas consultas no
+    // total (uma por tipo), não uma por linha. Falhar aqui não tira a lista do
+    // ar — o valor a receber é o que importa; o nome é orientação.
+    try {
+      const idsTour  = [...new Set(itens.filter((i) => i.service_type === 'tour'     && i.service_id).map((i) => i.service_id))];
+      const idsRota  = [...new Set(itens.filter((i) => i.service_type === 'transfer' && i.service_id).map((i) => i.service_id))];
+      const nomes = new Map();
+      if (idsTour.length) {
+        const { data: ts } = await supabase.from('tours').select('id, name').in('id', idsTour);
+        for (const t of ts || []) nomes.set(t.id, t.name);
+      }
+      if (idsRota.length) {
+        const { data: rs } = await supabase
+          .from('transfer_routes').select('id, origin_name, destination_name').in('id', idsRota);
+        for (const r of rs || []) nomes.set(r.id, `${r.origin_name} → ${r.destination_name}`);
+      }
+      for (const i of itens) i.service_name = nomes.get(i.service_id) || null;
+    } catch (e) {
+      console.error('[recebimentos] nome do serviço:', e?.message);
+    }
+
+    const somaSe = (f) => Math.round(itens.filter(f).reduce((s, i) => s + i.amount, 0) * 100) / 100;
+    res.json({
+      itens,
+      a_receber: somaSe((i) => i.status === 'pending'),
+      recebido:  somaSe((i) => i.status === 'paid'),
+      total:     somaSe(() => true),
+    });
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/operator/financial ─────────────────────────
 // Resumo financeiro do período para o operador logado.
 router.get('/financial', async (req, res, next) => {

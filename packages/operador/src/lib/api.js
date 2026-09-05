@@ -141,6 +141,8 @@ export const api = {
   // NÃO usar /api/admin/financial* aqui — aquilo é só admin (403 para coop).
   getFinancial:      (params = {}) => request(`/api/operator/financial?${new URLSearchParams(params)}`),
   getFinancialDaily: (params = {}) => request(`/api/operator/financial-daily?${new URLSearchParams(params)}`),
+  // Os repasses DESTE operador — o que ele ganha, sem o razão da plataforma.
+  getMeusRecebimentos: (params = {}) => request(`/api/operator/meus-recebimentos?${new URLSearchParams(params)}`),
 
   // Regiões
   getRegions: () => request('/api/regions'),

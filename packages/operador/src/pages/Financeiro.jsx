@@ -9,6 +9,7 @@ import { TrendingUp, DollarSign, CreditCard, AlertCircle } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import MeusRecebimentos from '../components/MeusRecebimentos'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -139,19 +140,34 @@ export default function Financeiro() {
         </CardBody>
       </Card>
 
+      {/* O que o operador ganha — vem antes do razão da plataforma, porque é
+          a pergunta dele. O "Detalhamento" abaixo é contexto. */}
+      <MeusRecebimentos />
+
       {/* Breakdown */}
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-gray-700">Detalhamento</h2>
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">Movimentação das suas reservas</h2>
+            <p className="text-[12px] text-gray-400 mt-0.5">
+              O caminho do dinheiro do cliente até o repasse. O que você ganha está acima, em Meus recebimentos.
+            </p>
+          </div>
         </CardHeader>
         <CardBody>
+          {/* As linhas ANTES não fechavam: "Receita Bruta − taxas − comissão"
+              não dava a "Receita Líquida" mostrada, porque `booking_net` é
+              bruto MENOS GATEWAY apenas — a comissão não entra nessa conta. O
+              rótulo dizia uma subtração que o número não fazia, e numa tela de
+              dinheiro isso destrói a confiança no resto. Agora cada linha diz o
+              que é, e a subtração fecha. */}
           <dl className="space-y-3">
             {[
-              { label: 'Receita Bruta',          value: summary?.bruto,               cls: 'text-gray-900' },
-              { label: '(-) Taxas de gateway',   value: `-${fmt(summary?.taxas)}`,    cls: 'text-red-500'  },
-              { label: '(-) Comissão plataforma', value: `-${fmt(summary?.comissoes_plataforma)}`, cls: 'text-red-500' },
-              { label: 'Receita Líquida',        value: summary?.liquido,             cls: 'text-green-600 font-bold' },
-              { label: 'Repasses efetuados',     value: summary?.repasses,            cls: 'text-gray-500' },
+              { label: 'Pago pelos clientes',        value: summary?.bruto,            cls: 'text-gray-900' },
+              { label: '(-) Taxas do gateway',       value: `-${fmt(summary?.taxas)}`, cls: 'text-red-500'  },
+              { label: '= Após as taxas',            value: summary?.liquido,          cls: 'text-gray-900 font-bold' },
+              { label: 'Comissão da plataforma',     value: summary?.comissoes_plataforma, cls: 'text-gray-500' },
+              { label: 'Repasses já efetuados',      value: summary?.repasses,         cls: 'text-gray-500' },
             ].map((r) => (
               <div key={r.label} className="flex justify-between text-sm">
                 <span className="text-gray-500">{r.label}</span>
