@@ -1681,6 +1681,57 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
       throw error;
     }
 
+    // ── O que o GATEWAY já pagou direto (split) ─────────────────────────────
+    // Cobrança dividida no ato deposita a parte do operador na conta dele, e
+    // `gerarRepasses` NÃO cria a linha de repasse — senão o admin pagaria de
+    // novo (migration 087). Sem trazer essas cobranças para cá, a tela some com
+    // o histórico justamente do caso em que o dinheiro JÁ chegou ao operador, e
+    // o admin fica sem controle do que cada um recebeu.
+    //
+    // Entram como PAGAS e sem botão de baixa: não há o que pagar, já foi.
+    if (status === 'paid' || status === 'todos') {
+      try {
+        const { data: splits } = await supabase
+          .from('payments')
+          .select('id, amount_gross, split_application_fee, paid_at, created_at, split_operator_id, bookings ( booking_code, service_type, service_date, total_amount )')
+          .not('split_operator_id', 'is', null)
+          .eq('status', 'approved')
+          .limit(500);
+
+        const ids = [...new Set((splits || []).map((x) => x.split_operator_id).filter(Boolean))];
+        const donos = new Map();
+        if (ids.length) {
+          const { data: us } = await supabase
+            .from('users').select('id, full_name, phone, pix_key, pix_key_type').in('id', ids);
+          for (const u of us || []) donos.set(u.id, u);
+        }
+
+        for (const x of splits || []) {
+          if (payee && x.split_operator_id !== payee) continue;
+          const bruto = Number(x.amount_gross) || 0;
+          const daPlataforma = Number(x.split_application_fee) || 0;
+          const valor = Math.round((bruto - daPlataforma) * 100) / 100;
+          if (!(valor > 0)) continue;
+          data.push({
+            id:       `mp-${x.id}`,
+            kind:     'gateway',
+            amount:   valor,
+            status:   'paid',
+            paid_at:  x.paid_at || x.created_at,
+            notes:    null,
+            created_at: x.created_at,
+            payee:    donos.get(x.split_operator_id) || null,
+            bookings: x.bookings || null,
+            executor: null,
+            gateway_split: true,      // a tela esconde a baixa nestas linhas
+          });
+        }
+      } catch (e) {
+        // 42703 = colunas de split ausentes (087 pendente): não houve split.
+        if (e?.code !== '42703') console.error('[admin/payouts] split:', e?.message);
+      }
+    }
+
     // Recorte por período. Repasse sem data de serviço só aparece quando não há
     // filtro: dentro de um intervalo ele não tem como ser classificado, e
     // incluí-lo inflaria o total que o admin vai pagar.

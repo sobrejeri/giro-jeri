@@ -303,10 +303,26 @@ function RepassesOperadores() {
                         <p className="text-[13px] text-gray-300">
                           {p.bookings?.booking_code || '—'}
                           <span className="text-gray-500">
-                            {' · '}{p.kind === 'commission' ? 'comissão' : 'execução'}
+                            {' · '}{p.kind === 'gateway' ? 'split (direto na conta)'
+                                   : p.kind === 'commission' ? 'comissão' : 'execução'}
                             {p.bookings?.service_date ? ` · ${fmtDia(p.bookings.service_date)}` : ''}
                           </span>
                         </p>
+                        {/* Serviço x repasse na MESMA linha: é a conferência que
+                            o admin faz — quanto o cliente pagou e quanto foi
+                            para o operador. Sem os dois lado a lado, é preciso
+                            abrir a reserva para saber se o valor faz sentido. */}
+                        {p.bookings?.total_amount != null && (
+                          <p className="text-[11.5px] text-gray-500 mt-0.5">
+                            serviço <span className="text-gray-300">{fmtBRL(p.bookings.total_amount)}</span>
+                            {' · '}repasse <span className="text-gray-300">{fmtBRL(p.amount)}</span>
+                            {Number(p.bookings.total_amount) > 0 && (
+                              <span className="text-gray-600">
+                                {' ('}{Math.round((Number(p.amount) / Number(p.bookings.total_amount)) * 100)}%{')'}
+                              </span>
+                            )}
+                          </p>
+                        )}
                         {/* Quem foi a campo (081). Não é necessariamente quem
                             recebe: aparece para o admin conferir o serviço e,
                             quando for pagar direto a essa pessoa, ter a chave. */}
@@ -331,12 +347,25 @@ function RepassesOperadores() {
                           <p className="text-[11px] text-emerald-500/80">pago em {fmtDia(p.paid_at)}</p>
                         )}
                       </div>
-                      <ValorRepasse
-                        payout={p}
-                        onSalvar={(amount) =>
-                          baixaMut.mutate({ id: p.id, body: { status: p.status, amount } })}
-                      />
-                      {p.status === 'pending' ? (
+                      {/* Valor do split é o que o Mercado Pago depositou —
+                          não é editável aqui. Deixar o campo aberto convidaria a
+                          "corrigir" um número que a plataforma não controla, e o
+                          id nem existe em booking_payouts. */}
+                      {p.gateway_split ? (
+                        <span className="text-sm font-bold text-gray-200 tabular-nums">{fmtBRL(p.amount)}</span>
+                      ) : (
+                        <ValorRepasse
+                          payout={p}
+                          onSalvar={(amount) =>
+                            baixaMut.mutate({ id: p.id, body: { status: p.status, amount } })}
+                        />
+                      )}
+                      {/* Split não tem baixa: o Mercado Pago já depositou. Um
+                          botão "desfazer" aqui sugeriria que dá para reverter um
+                          depósito que a plataforma nem fez. */}
+                      {p.gateway_split ? (
+                        <span className="text-[11.5px] font-bold text-emerald-500">pago pelo gateway</span>
+                      ) : p.status === 'pending' ? (
                         <button onClick={() => baixaMut.mutate({ id: p.id, body: { status: 'paid' } })}
                           className="text-[11.5px] font-bold text-emerald-400 hover:underline">marcar pago</button>
                       ) : (
