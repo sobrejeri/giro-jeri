@@ -6,9 +6,10 @@ import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
-import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateAdvance, applyCoupon } from '../services/priceEngine.js'
+import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
 import { sweepExpiredLegBookings } from '../services/legFlow.js'
+import { approvePaymentOnce, executePaymentAttempt, PaymentAttemptInProgressError, processWebhookOnce } from '../services/paymentFlow.js'
 
 const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -35,29 +36,23 @@ const intentSchema = z.object({
   coupon_code:      z.string().max(50).optional(),
   // Campos de cartão (obrigatórios condicionalmente via .refine abaixo)
   card_token:         z.string().min(1).optional(),
-  // Device ID do antifraude do MP (security.js no front). Opcional: sem ele a
-  // cobrança segue, só perde o sinal que ajuda a aprovar.
-  device_id:          z.string().max(200).optional(),
   installments:       z.number({ coerce: true }).int().min(1).max(12).default(1),
   payment_method_id:  z.string().min(1).optional(),
   issuer_id:          z.string().optional(),
-  // Chave PÚBLICA com que o app tokenizou o cartão. Não é segredo (ela vive no
-  // navegador); serve para o servidor saber em QUAL conta o token foi criado.
-  // Sem isso não há como detectar a incompatibilidade que quebra o split — ver
-  // a checagem em `contextoSplitOperadorUnico`.
-  mp_public_key:      z.string().max(200).optional(),
   // CPF/CNPJ do pagador. Aceita com ou sem máscara e salva apenas números.
   payer_doc: z.preprocess(
     (v) => (typeof v === 'string' ? v.replace(/\D/g, '') : v),
     z.string().regex(/^\d{11,14}$/).optional(),
   ),
+  payment_attempt_id: z.string().uuid().optional(),
+  device_id: z.string().min(8).max(256).optional(),
 }).refine(
   (d) => d.order_group_id || d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
   { message: 'Dados incompletos para criar reserva' },
 ).refine(
   (d) => !['credit_card', 'debit_card'].includes(d.payment_method) ||
-          (d.card_token && d.payment_method_id && d.payer_doc),
-  { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc)' },
+          (d.card_token && d.payment_method_id && d.payer_doc && d.payment_attempt_id),
+  { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc, payment_attempt_id)' },
 )
 
 // Solicitação de reserva (sem pagamento): subconjunto do intent, sem cartão.
@@ -81,21 +76,16 @@ const requestSchema = z.object({
   service_name:     z.string().max(300).optional(),
   cover_image_url:  z.string().url().optional().nullable().or(z.literal('')),
   coupon_code:      z.string().max(50).optional(),
-  // Link direto de operador (/c/<slug>): o servidor resolve o slug e a
+  // Link direto de cooperativa (/c/<slug>): o servidor resolve o slug e a
   // reserva nasce atribuída (sem fila, sem aceite). NUNCA aceitar operator_id
   // cru do cliente — só o slug, validado aqui.
   partner_slug:     z.string().max(80).optional(),
-  // Programa de afiliados (/a/<código> ou código digitado): o servidor resolve
-  // o código e grava bookings.affiliate_id — NUNCA aceita o id cru. A comissão
-  // só nasce quando a reserva é paga (onPaymentApproved).
-  affiliate_code:   z.string().max(24).optional(),
 })
 
 // Carrinho universal: array de itens, cada um no formato do requestSchema.
 const cartRequestSchema = z.object({
   items: z.array(requestSchema).min(1, 'Carrinho vazio').max(20, 'Muitos itens no carrinho'),
   partner_slug: z.string().max(80).optional(),
-  affiliate_code: z.string().max(24).optional(),
 })
 
 const router = Router()
@@ -139,22 +129,6 @@ async function insertBookingVehicles(bookingId, vehicles) {
   if (error) throw error
 }
 
-// Taxas do Mercado Pago por método (Brasil). São o que a plataforma ASSUME
-// para lançar o custo no financeiro — a cobrança real é a do extrato, e a
-// negociada de cada conta pode ser menor.
-//
-// O PIX estava sendo lançado a 3,5%: o insert gravava taxa ZERO para tudo que
-// não fosse cartão, e o razão caía num fallback de 3,5% pensado para linhas
-// antigas. Numa cobrança real de R$ 5,75 o Mercado Pago tirou R$ 0,06 (1,04%) e
-// a plataforma lançou R$ 0,20 — mais de três vezes o custo verdadeiro, para
-// baixo no lucro e em toda conferência de caixa.
-const TAXA_MP = {
-  pix:         0.0099,   // 0,99%
-  debit_card:  0.0150,   // 1,50%
-  credit_card: 0.0498,   // 4,98% à vista
-}
-const taxaDoMetodo = (metodo) => TAXA_MP[metodo] ?? 0.035
-
 async function getPaymentSettings() {
   const { data = [] } = await supabase
     .from('system_settings')
@@ -163,22 +137,15 @@ async function getPaymentSettings() {
   return Object.fromEntries(data.map((s) => [s.setting_key, s.setting_value]))
 }
 
-// Recalcula o valor autoritativo da reserva (alta temporada / feriado / cupom)
-// a partir do serviço, data e veículos. O cliente nunca define o valor cobrado.
-// Devolve { total, couponId, discountAmount } para a reserva gravar o cupom e
-// registrar o uso (coupon_redemptions). Falha → total do cliente, sem cupom.
+// Recalcula o valor autoritativo da reserva (alta temporada / feriado) a partir
+// do serviço, data e veículos. O cliente nunca define o valor cobrado.
+// Em caso de falha, mantém o total enviado pelo cliente como fallback.
 async function computeChargedTotal({ data, userId }) {
   const {
     service_type, service_id, booking_mode, service_date_iso,
     people_count, region_id, vehicles = [], coupon_code, total_price,
   } = data
-  let chargedTotal      = Number(total_price)
-  let couponId          = null
-  let discountAmount    = 0
-  // Itemização: subtotal (antes de data/cupom) e acréscimo de data (alta
-  // temporada OU feriado). Guardados nas reservas p/ o Dashboard somar as taxas.
-  let subtotal          = Number(total_price)
-  let seasonAdditional  = 0
+  let chargedTotal = Number(total_price)
   try {
     if (service_type === 'tour' && service_id && region_id && service_date_iso) {
       let r = null
@@ -196,61 +163,44 @@ async function computeChargedTotal({ data, userId }) {
           })
         }
       }
-      if (r && typeof r.totalAmount === 'number') {
-        // Arredonda: o motor devolve o total de contas com percentual (alta
-        // temporada, feriado), e `5 * 1.15` dá 5.749999999999999 em JavaScript.
-        // Os outros caminhos deste mesmo bloco já arredondavam; este não, e era
-        // por aqui que o passeio chegava ao gateway com casas demais.
-        chargedTotal     = Math.round(Number(r.totalAmount) * 100) / 100
-        couponId         = r.couponId || null
-        discountAmount   = Number(r.discountAmount) || 0
-        seasonAdditional = Number(r.seasonAdditional) || 0
-        subtotal         = Number(r.subtotalAmount) || chargedTotal
-      }
+      if (r && typeof r.totalAmount === 'number') chargedTotal = r.totalAmount
     } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
       // Rota tabelada: recalcula a partir do preço da rota × veículos + acréscimo
       // de data. Cotações (translado personalizado) têm preço fechado pela
-      // operador e não casam com nenhuma rota → mantém o total enviado.
+      // cooperativa e não casam com nenhuma rota → mantém o total enviado.
       const { data: route } = await supabase
         .from('transfer_routes').select('id, default_price').eq('id', service_id).maybeSingle()
       if (route) {
         const vehicleCount = (vehicles || []).reduce((s, v) => s + (Number(v.qty) || 1), 0) || 1
         const baseSubtotal = Math.round(Number(route.default_price) * vehicleCount * 100) / 100
         const surcharge    = await getDateSurcharge(region_id, service_date_iso, baseSubtotal)
-        subtotal           = baseSubtotal
-        seasonAdditional   = surcharge
         chargedTotal       = Math.round((baseSubtotal + surcharge) * 100) / 100
-        // Cupom em transfer tabelado (os calculate* de passeio já aplicam)
-        if (coupon_code) {
-          const c = await applyCoupon(coupon_code, userId, region_id, 'transfer', chargedTotal)
-          couponId       = c.couponId || null
-          discountAmount = Number(c.discount) || 0
-          chargedTotal   = Math.round((chargedTotal - discountAmount) * 100) / 100
-        }
       }
     }
   } catch (e) {
     console.error('[payments] recálculo de preço falhou, usando total do cliente:', e.message)
-    chargedTotal     = Number(total_price)
-    couponId         = null
-    discountAmount   = 0
-    subtotal         = Number(total_price)
-    seasonAdditional = 0
+    chargedTotal = Number(total_price)
   }
-  return { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional }
+  return chargedTotal
 }
 
-// Credenciais Mercado Pago do operador (com refresh automático se o token
+// Credenciais Mercado Pago da cooperativa (com refresh automático se o token
 // estiver expirando). Retorna { token, publicKey, platformPct } ou null quando
-// o operador não conectou a conta dela.
-export async function getOperatorMp(operatorId) {
+// a cooperativa não conectou a conta dela.
+async function getOperatorMp(operatorId) {
   if (!operatorId) return null
   const { data: op } = await supabase
     .from('users')
-    .select('mp_access_token, mp_refresh_token, mp_token_expires_at, mp_public_key, platform_split_pct')
+    .select('mp_user_id, mp_access_token, mp_refresh_token, mp_token_expires_at, mp_public_key, platform_split_pct')
     .eq('id', operatorId)
     .single()
   if (!op?.mp_access_token) return null
+
+  const tokenEnv = op.mp_access_token.startsWith('TEST-') ? 'sandbox' : 'production'
+  const keyEnv = op.mp_public_key?.startsWith('TEST-') ? 'sandbox' : 'production'
+  if (op.mp_public_key && tokenEnv !== keyEnv) {
+    throw new Error('Configuração Mercado Pago inconsistente: Public Key e Access Token pertencem a ambientes diferentes.')
+  }
 
   let token     = op.mp_access_token
   let publicKey = op.mp_public_key
@@ -271,187 +221,81 @@ export async function getOperatorMp(operatorId) {
       console.error('[split] refresh de token MP falhou:', e.message)
     }
   }
-  return { token, publicKey, platformPct: op.platform_split_pct }
+  return { token, publicKey, platformPct: op.platform_split_pct, collectorId: op.mp_user_id, environment: tokenEnv }
 }
 
-// Contexto de split de um pagamento: token do operador + comissão da
+// Contexto de split de um pagamento: token da cooperativa + comissão da
 // plataforma (application_fee). Null quando não há split (cai na plataforma).
-// Plataforma recebe 100%? (migration 079) Quando sim, NENHUM pagamento leva
-// split: o valor inteiro cai na conta da plataforma e a comissão do operador e
-// o pagamento do executor viram repasses manuais.
-//
-// Decisão do dono depois de descobrir que split multi-recebedor só funciona com
-// PIX — e voo de R$ 7.600 precisa de cartão parcelado.
-//
-// Fail-CLOSED de propósito: erro ao ler a configuração assume `true`, ou seja,
-// sem split. Errar para o lado de "o dinheiro fica com a plataforma" é
-// recuperável com um repasse; errar para o outro manda dinheiro para a conta de
-// terceiro e não tem volta.
-export function plataformaRecebeTudo(cfg) {
-  const v = cfg?.payment_platform_receives_all
-  if (v === undefined || v === null || v === '') return true
-  return String(v) !== 'false'
-}
-
-// Split de UM operador: dois recebedores, e por isso FUNCIONA COM CARTÃO
-// (`application_fee`). O que a 079 desligou foi o caso de vários recebedores
-// (`disbursements`), que é PIX-only — não este.
-//
-// Quatro condições, todas obrigatórias:
-//
-//   1. a chave `payment_split_single_operator` está ligada;
-//   2. a reserva tem UM operador (o que aceitou);
-//   3. o modal NÃO tem executor fixo. Este é o mais importante: um split de
-//      dois recebedores só alcança quem ACEITOU. Se o serviço é executado por
-//      outro (o aéreo, sempre a mesma empresa), dividir no ato pagaria o
-//      intermediário e deixaria quem voou sem nada — e sem volta;
-//   4. o operador tem conta conectada no Mercado Pago.
-//
-// Falhando qualquer uma, devolve null e o valor cai inteiro na plataforma, que
-// repassa na mão. Fail-closed: errar para "fica com a plataforma" se corrige
-// com um repasse; errar para o outro lado manda dinheiro para conta de
-// terceiro e não tem como desfazer.
-// Modal de cada reserva, com o percentual da plataforma. Devolve null se
-// QUALQUER uma não puder ser resolvida — e isso é decisivo: sem saber o modal,
-// não se sabe se há executor fixo, e dividir às cegas manda dinheiro para a
-// conta errada sem volta.
-async function modaisDasReservas(bookings) {
-  const { modalDaReserva } = await import('../services/payouts.js')
-  const out = []
-  for (const b of bookings) {
-    if (!b?.service_id) return null            // reserva podada → não dá para verificar
-    const slug = await modalDaReserva(b)
-    if (!slug) return null                     // serviço sem modal → não dá para verificar
-    const { data: modal } = await supabase
-      .from('service_modals')
-      .select('executor_operator_id, platform_commission_pct')
-      .eq('slug', slug).maybeSingle()
-    if (!modal) return null
-    out.push({ booking: b, ...modal })
-  }
-  return out
-}
-
-// Split de operador ÚNICO: dois recebedores, e por isso FUNCIONA COM CARTÃO
-// (`application_fee`). O que a 079 desligou foi o caso de vários recebedores
-// (`disbursements`), que é PIX-only — não este.
-//
-// Vale para uma reserva sozinha E para um COMBO aceito inteiro pelo mesmo
-// operador: nos dois casos o dinheiro vai para um só lugar, então continua
-// sendo dois recebedores. Combo repartido entre operadores diferentes é que
-// fica fora.
-//
-// Condições, todas obrigatórias:
-//   1. a chave `payment_split_single_operator` está ligada;
-//   2. há um operador, o mesmo em todas as reservas do pagamento;
-//   3. TODOS os modais envolvidos foram identificados;
-//   4. nenhum deles tem executor fixo diferente de quem aceitou. Este é o
-//      ponto mais importante: um split de dois recebedores só alcança quem
-//      ACEITOU. Num combo com voo, dividir pagaria o intermediário e deixaria
-//      quem voou sem nada — e não tem como desfazer.
-//
-// Falhando qualquer uma, devolve null e o valor cai inteiro na plataforma, que
-// repassa na mão. Fail-closed: errar para "fica com a plataforma" se corrige
-// com um repasse; errar para o outro lado é irreversível.
-// `metodo` decide a taxa que a plataforma absorve. O padrão é o cartão à vista
-// — a maior — porque quem não informa o método (a tela que só pergunta a chave
-// pública) deve receber a resposta mais conservadora.
-async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg, metodo = 'credit_card') {
-  if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return null
-
-  const lista = (bookings || []).filter(Boolean)
-  if (lista.length === 0) return null
-  const ops = [...new Set(lista.map((b) => b.operator_id).filter(Boolean))]
-  if (ops.length !== 1 || lista.some((b) => !b.operator_id)) return null
-  const operatorId = ops[0]
-
-  const modais = await modaisDasReservas(lista)
-  if (!modais) {
-    console.warn('[split] modal não identificado em alguma reserva — mantendo manual')
-    return null
-  }
-  for (const m of modais) {
-    if (m.executor_operator_id && m.executor_operator_id !== operatorId) {
-      console.warn('[split] modal com executor fixo no pagamento — mantendo manual')
-      return null
-    }
-  }
-
-  const opMp = await getOperatorMp(operatorId)
+async function getSplitContext(booking, chargedTotal, cfg) {
+  const opMp = await getOperatorMp(booking?.operator_id)
   if (!opMp) return null
-
-  // Percentual da plataforma PONDERADO pelo valor de cada reserva. Um combo
-  // pode juntar modais com percentuais diferentes (terrestre 20%, aquático
-  // 15%), e um único application_fee precisa representar a soma das partes.
-  // Aplicado sobre o COBRADO, não sobre a soma dos totais: cupom e acréscimo
-  // de data mudam o que entrou, e a divisão tem que fechar com isso.
-  const geral = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
-  let somaValor = 0
-  let somaPeso  = 0
-  for (const m of modais) {
-    const v   = Number(m.booking.total_amount) || 0
-    const pct = m.platform_commission_pct != null ? Number(m.platform_commission_pct) : geral
-    somaValor += v
-    somaPeso  += v * pct
-  }
-  const pct = somaValor > 0 ? somaPeso / somaValor : geral
-
-  // ── A PLATAFORMA ABSORVE A TAXA DO GATEWAY ────────────────────────────────
-  //
-  // No split, a cobrança nasce na conta do OPERADOR, e o Mercado Pago desconta
-  // a taxa dele de quem recebeu — ou seja, do operador. Cobrando a comissão
-  // cheia da plataforma, a conta não fecha:
-  //
-  //     R$ 5,00 recebidos − R$ 4,85 (97%) − R$ 0,25 (taxa) = −R$ 0,10
-  //
-  // O MP recusa a venda inteira, e a mensagem fala do VALOR, não da comissão.
-  //
-  // A saída não é baixar a comissão: é a plataforma deixar a taxa NA CONTA do
-  // operador, tirando menos para si. Em vez de `comissão = 97%`, tira
-  // `97% − taxa`. O operador recebe a fatia dele LIMPA, do valor cheio, e quem
-  // paga o gateway é a plataforma — que é o que o dono quer, e o que já
-  // acontece hoje no modelo manual.
-  //
-  //     comissão da plataforma = total × (pctPlataforma − taxa%)
-  //     operador recebe        = total × pctOperador, líquido
-  //
-  // Com R$ 5,00 a 97% e cartão a 4,98%: a plataforma tira R$ 4,60 em vez de
-  // R$ 4,85, o MP tira R$ 0,25, e o operador fica com R$ 0,15 — exatamente os
-  // 3%. A plataforma abriu mão de R$ 0,25, que é a taxa. Mesma conta do modelo
-  // manual, onde ela também paga o gateway.
-  // A conta é feita PELO ALVO, não por percentual: primeiro o que o operador
-  // tem de receber limpo, depois a taxa, e a comissão é o que sobra. Derivar da
-  // subtração de dois percentuais arredondados deixava o operador um centavo
-  // abaixo do combinado em alguns valores — pouco, mas sistemático, e é a conta
-  // que ele confere.
-  const taxaMP        = Math.round(chargedTotal * taxaDoMetodo(metodo) * 100) / 100
-  const liquidoOp     = Math.round(chargedTotal * ((100 - pct) / 100) * 100) / 100
-  const brutoOp       = Math.round((liquidoOp + taxaMP) * 100) / 100
-  const applicationFee = Math.round((chargedTotal - brutoOp) * 100) / 100
-
-  // Comissão negativa (a taxa come a comissão inteira) ou maior que o cobrado:
-  // nos dois casos o split não representa o combinado — manual.
-  if (!(applicationFee > 0) || applicationFee >= chargedTotal) {
-    console.warn(
-      '[split] comissão de %s%% menos a taxa (R$ %s) não fecha em R$ %s — mantendo manual',
-      pct, taxaMP, chargedTotal,
-    )
-    return null
-  }
-  return { sellerAccessToken: opMp.token, applicationFee, operatorId, publicKey: opMp.publicKey }
+  const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
+  const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
+  return { sellerAccessToken: opMp.token, applicationFee, collectorId: opMp.collectorId, environment: opMp.environment }
 }
 
-async function getSplitContext(booking, chargedTotal, cfg, metodo = 'credit_card') {
-  // Sem a 079 ligada, o comportamento antigo: split para todo operador
-  // conectado, pelo percentual dele.
-  if (!plataformaRecebeTudo(cfg)) {
-    const opMp = await getOperatorMp(booking?.operator_id)
-    if (!opMp) return null
-    const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
-    const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
-    return { sellerAccessToken: opMp.token, applicationFee, operatorId: booking?.operator_id, publicKey: opMp.publicKey }
+async function claimCardAttempt(attemptId, bookingId) {
+  const inserted = await supabase.from('payment_attempts').insert({ id: attemptId, booking_id: bookingId })
+    .select('*').maybeSingle()
+  if (!inserted.error && inserted.data) return { claimed: true, attempt: inserted.data }
+  if (inserted.error?.code !== '23505') throw inserted.error
+  const existing = await supabase.from('payment_attempts').select('*').eq('id', attemptId).single()
+  if (existing.error) throw existing.error
+  if (existing.data.booking_id !== bookingId) throw new Error('payment_attempt_id pertence a outra reserva')
+  return { claimed: false, attempt: existing.data }
+}
+
+async function saveCardAttemptGatewayResult(attemptId, response) {
+  const safe = response?.diagnostic || response
+  const gatewayId = response?.mp_id || response?.payment_id || response?.id
+  const { error } = await supabase.from('payment_attempts').update({
+    gateway_transaction_id: gatewayId ? String(gatewayId) : null,
+    attempt_status: response?.status || safe?.status || 'processing',
+    gateway_result_json: safe,
+    updated_at: new Date().toISOString(),
+  }).eq('id', attemptId)
+  if (error) throw error
+}
+
+async function claimPaymentApproval(paymentId) {
+  const { data, error } = await supabase.rpc('claim_payment_approval', { p_payment_id: paymentId })
+  if (error) throw error
+  return data === true
+}
+
+async function approveAndRunEffects(payment) {
+  return approvePaymentOnce({ payment, claimApproval: claimPaymentApproval, runEffects: runPaymentApprovalEffects })
+}
+
+async function reconcileOfficialPayment(payment, gatewayId) {
+  const opMp = await getOperatorMp(payment.bookings?.operator_id)
+  const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
+  const official = await getMpPaymentStatus(gatewayId, opMp?.token)
+  if (!official) return null
+  await supabase.from('payments').update({
+    status_detail: official.status_detail || null,
+    collector_id: official.collector_id || null,
+    raw_response_json: official,
+  }).eq('id', payment.id)
+  if (official.status === 'approved') {
+    await approveAndRunEffects(payment)
+  } else if (['rejected', 'cancelled'].includes(official.status)) {
+    await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+    await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', payment.booking_id)
   }
-  return contextoSplitOperadorUnico([booking], chargedTotal, cfg, metodo)
+  return official
+}
+
+async function reconcilePendingWebhookEvents(payment) {
+  if (!payment.gateway_transaction_id) return
+  await supabase.from('payment_events').update({ payment_id: payment.id })
+    .eq('gateway_transaction_id', payment.gateway_transaction_id).is('payment_id', null)
+  const { data: events = [] } = await supabase.from('payment_events').select('gateway_event_id')
+    .eq('gateway_transaction_id', payment.gateway_transaction_id).eq('processing_status', 'pending')
+  if (!events.length) return
+  await reconcileOfficialPayment(payment, payment.gateway_transaction_id)
+  await supabase.from('payment_events').update({ processing_status: 'processed', processed_at: new Date().toISOString() })
+    .eq('gateway_transaction_id', payment.gateway_transaction_id).eq('processing_status', 'pending')
 }
 
 // =============================================================================
@@ -498,12 +342,11 @@ function allocateCents(totalCents, weights) {
 
 // Contexto de split "consciente de pernas": se o pedido não tem pernas (Onda B
 // ainda não implementada — compartilhado/cotação) ou tem pernas mas só 1
-// operador aceitou, retorna o MESMO formato de getSplitContext (caminho de
+// cooperativa aceitou, retorna o MESMO formato de getSplitContext (caminho de
 // 1 recebedor intacto, sem chamada diferente ao MP). Só quando há 2+
-// operadores distintas entre as pernas aceitas é que monta o split nativo
+// cooperativas distintas entre as pernas aceitas é que monta o split nativo
 // com `disbursements` (N recebedores em 1 pagamento).
 async function getSplitContextForBooking(booking, chargedTotal, cfg) {
-  if (plataformaRecebeTudo(cfg)) return null
   const byOperator = await getAcceptedLegRecipients(booking.id)
 
   if (byOperator.size === 0) {
@@ -519,11 +362,11 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
     return legacy ? { ...legacy, mode: 'single' } : null
   }
 
-  // N recebedores — todas os operadores precisam ter conta MP conectada
+  // N recebedores — todas as cooperativas precisam ter conta MP conectada
   // (pré-requisito do desenho, migration 036/OAuth). Sem token/mp_user_id de
   // alguma delas, aborta com erro claro em vez de cobrar sem repassar.
   // Particiona o TOTAL COBRADO (chargedTotal) — não a soma dos leg_price —
-  // proporcionalmente ao leg_price de cada operador, em centavos inteiros e
+  // proporcionalmente ao leg_price de cada cooperativa, em centavos inteiros e
   // somando exato ao total. Assim Σ(disbursements.amount) == transaction_amount
   // (invariante do split nativo do MP) mesmo com surcharge de data/feriado
   // embutida no total e sem drift de arredondamento entre recebedores.
@@ -538,11 +381,11 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
     const [operatorId] = entries[idx]
     const opMp = await getOperatorMp(operatorId)
     if (!opMp?.token) {
-      throw new Error(`Operador ${operatorId} sem conta Mercado Pago conectada — split multi-operador exige todas as pernas aceitas conectadas.`)
+      throw new Error(`Cooperativa ${operatorId} sem conta Mercado Pago conectada — split multi-cooperativa exige todas as pernas aceitas conectadas.`)
     }
     const { data: op } = await supabase.from('users').select('mp_user_id').eq('id', operatorId).single()
     if (!op?.mp_user_id) {
-      throw new Error(`Operador ${operatorId} sem mp_user_id (reconecte a conta Mercado Pago) — split multi-operador bloqueado.`)
+      throw new Error(`Cooperativa ${operatorId} sem mp_user_id (reconecte a conta Mercado Pago) — split multi-cooperativa bloqueado.`)
     }
     const pct      = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
     const amtCents = shareCents[idx]
@@ -562,18 +405,11 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
 }
 
 // Split do GRUPO (carrinho universal): agrega as pernas aceitas de TODAS as
-// reservas do grupo por operador. Opção 2 (segura): resolve só o caminho de
+// reservas do grupo por cooperativa. Opção 2 (segura): resolve só o caminho de
 // recebedor ÚNICO (1 coop) ou sem split (motor OFF/compartilhado); 2+ coops
 // devolve mode:'multi' para o chamador BLOQUEAR — split multi-coop de grupo
 // fica para depois de validar o split nativo do MP em staging.
 async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
-  // Com a 079 ligada, o único split permitido é o de operador único — inclusive
-  // quando o pagamento é de um COMBO aceito inteiro pelo mesmo operador: ainda
-  // são dois recebedores, então funciona no cartão.
-  if (plataformaRecebeTudo(cfg)) {
-    const ctx = await contextoSplitOperadorUnico(bookings, combinedTotal, cfg)
-    return ctx ? { ...ctx, mode: 'single' } : { mode: 'single' }
-  }
   const byOperator = new Map()
   for (const b of bookings) {
     const m = await getAcceptedLegRecipients(b.id)
@@ -581,14 +417,11 @@ async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
   }
   if (byOperator.size === 0) {
     // Sem pernas (motor OFF — reserva inteira): se TODAS as reservas do grupo
-    // estão com a MESMO operador (combo aceito ou venda direta por link),
+    // estão com a MESMA cooperativa (combo aceito ou venda direta por link),
     // o pagamento único cai na conta dela, como no fluxo de reserva única.
     const ops = [...new Set(bookings.map((b) => b.operator_id).filter(Boolean))]
     if (ops.length === 1 && bookings.every((b) => b.operator_id)) {
-      // Reservas REAIS, não `{ operator_id }`: sem `service_id` não dá para
-      // saber o modal, e sem o modal não dá para saber se há executor fixo.
-      const legacy = await contextoSplitOperadorUnico(bookings, combinedTotal, cfg)
-        || await getSplitContext({ operator_id: ops[0] }, combinedTotal, cfg)
+      const legacy = await getSplitContext({ operator_id: ops[0] }, combinedTotal, cfg)
       return legacy ? { ...legacy, mode: 'single' } : { mode: 'single' }
     }
     if (ops.length > 1) return { mode: 'multi' } // coops diferentes → bloqueia (Opção 2)
@@ -596,9 +429,7 @@ async function getSplitContextForGroup(bookings, combinedTotal, cfg) {
   }
   if (byOperator.size === 1) {
     const [operatorId] = [...byOperator.keys()]
-    const legacy = await contextoSplitOperadorUnico(
-      bookings.map((b) => ({ ...b, operator_id: operatorId })), combinedTotal, cfg,
-    ) || await getSplitContext({ operator_id: operatorId }, combinedTotal, cfg)
+    const legacy = await getSplitContext({ operator_id: operatorId }, combinedTotal, cfg)
     return legacy ? { ...legacy, mode: 'single' } : { mode: 'single' }
   }
   return { mode: 'multi' }                                       // bloqueado no chamador (Opção 2)
@@ -617,78 +448,6 @@ function fortalezaNowParts() {
   }).formatToParts(new Date()).reduce((acc, x) => { acc[x.type] = x.value; return acc }, {})
   return { todayIso: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) }
 }
-
-// ── Gravação do pagamento, à prova de coluna faltando ──────────────────────
-//
-// O cartão é cobrado no Mercado Pago ANTES desta linha existir — não há como
-// inverter a ordem, porque só a resposta do gateway traz o id da transação, a
-// bandeira e as parcelas. Isso torna esta inserção o ponto mais perigoso do
-// fluxo: se ela falhar, o dinheiro saiu e a plataforma não tem registro nenhum.
-//
-// Foi o que aconteceu. A migration 024 não tinha sido rodada, o PostgREST
-// recusou o INSERT com PGRST204 ("Could not find the 'card_brand' column"), o
-// request estourou — e a cobrança ficou órfã: cliente cobrado, reserva sem
-// pagamento, nada no painel.
-//
-// Agora, quando o banco não tem uma coluna, tiramos EXATAMENTE a coluna que
-// ele reclamou (o erro traz o nome) e tentamos de novo. Perder a bandeira do
-// cartão é um arranhão; perder o rastro do dinheiro, não. As colunas removidas
-// voltam no log, para completar a linha à mão depois de rodar a migration.
-//
-// Só tira coluna por causa de "coluna inexistente". Qualquer outro erro sobe
-// como sempre — mascarar um CHECK ou um FK aqui seria pior que o problema.
-const COLUNA_AUSENTE = new Set(['PGRST204', '42703'])
-const nomeDaColunaNoErro = (msg = '') =>
-  (msg.match(/'([^']+)' column/) || msg.match(/column "([^"]+)"/) || [])[1] || null
-
-// Identificador da tentativa de pagamento, derivado do token do cartão sem
-// carregá-lo: mesmo token → mesmo id; token novo → id novo. Serve para compor
-// a chave de idempotência sem colocar credencial em cabeçalho nem em log.
-function idDaTentativa(cardToken) {
-  return crypto.createHash('sha256').update(String(cardToken || '')).digest('hex').slice(0, 16)
-}
-
-async function inserirPagamento(row) {
-  let tentativa = { ...row }
-  const camposPerdidos = []
-  // Uma transação do gateway = UMA linha. `upsert` com onConflict roda
-  // INSERT ... ON CONFLICT DO UPDATE num comando só: se a mesma transação
-  // chegar duas vezes (retentativa do cliente, cobrança que o MP repetiu,
-  // webhook e polling ao mesmo tempo), a segunda ATUALIZA em vez de estourar
-  // a unicidade. SELECT-e-depois-INSERT não serviria: entre os dois há corrida.
-  //
-  // Sem id de gateway (manual, PIX sem retorno) segue INSERT: a coluna é nula
-  // e nulo não conflita com nulo no Postgres — todo upsert viraria uma linha
-  // nova de qualquer forma.
-  const temIdDoGateway = !!row.gateway_transaction_id
-  const gravar = (linha) => (temIdDoGateway
-    ? supabase.from('payments').upsert(linha, { onConflict: 'gateway_transaction_id' }).select().single()
-    : supabase.from('payments').insert(linha).select().single())
-
-  // No máximo uma volta por campo removível — nunca um laço aberto.
-  for (let i = 0; i <= Object.keys(row).length; i++) {
-    const { data, error } = await gravar(tentativa)
-    if (!error) return { payment: data, error: null, camposPerdidos }
-    if (!COLUNA_AUSENTE.has(error.code)) return { payment: null, error, camposPerdidos }
-
-    const coluna = nomeDaColunaNoErro(error.message)
-    // Sem saber QUAL coluna, ou se ela é obrigatória para o registro fazer
-    // sentido, é melhor falhar alto do que gravar uma linha capenga.
-    if (!coluna || !(coluna in tentativa) || CAMPOS_ESSENCIAIS.has(coluna)) {
-      return { payment: null, error, camposPerdidos }
-    }
-    delete tentativa[coluna]
-    camposPerdidos.push(coluna)
-  }
-  return { payment: null, error: { message: 'não foi possível gravar o pagamento' }, camposPerdidos }
-}
-
-// Sem estes campos a linha não serve para conciliar dinheiro: é melhor o erro
-// aparecer do que existir um pagamento que ninguém consegue cruzar com o extrato.
-const CAMPOS_ESSENCIAIS = new Set([
-  'booking_id', 'amount_gross', 'status', 'payment_method',
-  'gateway_name', 'gateway_transaction_id',
-])
 
 async function checkBookingCutoff({ service_type, service_id, service_date_iso }) {
   if (!service_id || !service_date_iso) return null
@@ -717,40 +476,6 @@ async function checkBookingCutoff({ service_type, service_id, service_date_iso }
   return null
 }
 
-// Janela de operação do serviço (migration 069): o horário escolhido precisa
-// estar entre service_window_start e service_window_end. Nulo = sem restrição.
-// Validado no SERVIDOR porque regra só na tela é contornável chamando a API.
-async function checkServiceWindow({ service_type, service_id, service_time }) {
-  if (!service_id || !service_time) return null
-
-  let win = null
-  if (service_type === 'tour') {
-    const { data, error } = await supabase.from('tours')
-      .select('service_window_start, service_window_end').eq('id', service_id).maybeSingle()
-    if (error?.code === '42703') return null   // migration 069 pendente
-    win = data
-  } else if (service_type === 'transfer') {
-    // service_id é um transfer_route; a janela mora no transfer pai.
-    const { data, error } = await supabase.from('transfer_routes')
-      .select('transfers ( service_window_start, service_window_end )').eq('id', service_id).maybeSingle()
-    if (error?.code === '42703') return null
-    win = data?.transfers
-  }
-  if (!win?.service_window_start && !win?.service_window_end) return null
-
-  const toMin = (t) => Number(String(t).slice(0, 2)) * 60 + Number(String(t).slice(3, 5))
-  const hhmm  = (t) => `${String(t).slice(0, 2)}h${String(t).slice(3, 5)}`
-  const alvo  = toMin(service_time)
-
-  if (win.service_window_start && alvo < toMin(win.service_window_start)) {
-    return `Este serviço começa a partir das ${hhmm(win.service_window_start)}. Escolha um horário dentro do período de operação.`
-  }
-  if (win.service_window_end && alvo > toMin(win.service_window_end)) {
-    return `Este serviço só opera até as ${hhmm(win.service_window_end)}. Escolha um horário dentro do período de operação.`
-  }
-  return null
-}
-
 // ── POST /api/payments/intent ───────────────────────────
 router.post('/intent', authenticate, async (req, res, next) => {
   try {
@@ -767,8 +492,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
       total_price, payment_method = 'pix',
       service_name, cover_image_url,
       coupon_code, existing_booking_id, order_group_id,
-      card_token, installments = 1, payment_method_id, issuer_id, payer_doc, device_id,
-      mp_public_key,
+      card_token, installments = 1, payment_method_id, issuer_id, payer_doc,
+      payment_attempt_id, device_id,
     } = parsed.data
 
     const isGroup = !!order_group_id
@@ -778,8 +503,6 @@ router.post('/intent', authenticate, async (req, res, next) => {
     if (!existing_booking_id && !isGroup) {
       const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
       if (cutoffErr) return res.status(400).json({ error: cutoffErr })
-      const windowErr = await checkServiceWindow({ service_type, service_id, service_time })
-      if (windowErr) return res.status(400).json({ error: windowErr })
     }
 
     // ── Total autoritativo: o SERVIDOR é a fonte de verdade do valor cobrado.
@@ -788,7 +511,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
     //    dos totais já gravados das reservas do grupo (definido abaixo). ───────
     let chargedTotal = existing_booking_id
       ? Number(total_price)
-      : isGroup ? 0 : (await computeChargedTotal({ data: parsed.data, userId: req.user.id })).total
+      : isGroup ? 0 : await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     // ── 1. Lê configurações do gateway ─────────────────
     const cfg     = await getPaymentSettings()
@@ -811,7 +534,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       const payable = all.filter((b) => b.status_commercial === 'awaiting_payment')
       if (payable.length === 0) {
         return res.status(409).json({
-          error: 'Nenhuma reserva do grupo está pronta para pagamento. Aguarde o aceite dos operadores.',
+          error: 'Nenhuma reserva do grupo está pronta para pagamento. Aguarde o aceite das cooperativas.',
         })
       }
       // Motor de pernas ligado: cada reserva precisa ter TODAS as pernas (não
@@ -853,7 +576,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       if (existing.status_commercial !== 'awaiting_payment') {
         const s = existing.status_commercial
         const msg =
-          s === 'awaiting_acceptance' ? 'Esta reserva ainda não foi aceita por um operador. Aguarde o aceite para pagar.' :
+          s === 'awaiting_acceptance' ? 'Esta reserva ainda não foi aceita por uma cooperativa. Aguarde o aceite para pagar.' :
           s === 'paid'                ? 'Esta reserva já foi paga.' :
           s === 'cancelled'           ? 'Esta reserva foi cancelada.' :
                                         `Esta reserva não está aguardando pagamento (status: ${s}).`
@@ -880,7 +603,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
           const allAccepted = relevant.length > 0 && relevant.every((l) => l.status_leg === 'accepted')
           if (!allAccepted) {
             return res.status(409).json({
-              error: 'Ainda há perna(s) deste pedido aguardando aceite de operador. Aguarde o combo fechar ou pague só o que já foi aceito (checkout parcial).',
+              error: 'Ainda há perna(s) deste pedido aguardando aceite de cooperativa. Aguarde o combo fechar ou pague só o que já foi aceito (checkout parcial).',
             })
           }
         }
@@ -937,11 +660,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
     let cardBrand          = null
     let cardHolderName     = null
     let cardGatewayFeePct  = null
-    let cardThreeDs        = null // desafio 3DS do emissor (débito)
-    // Fora do bloco de propósito: o `split` é calculado lá dentro, mas a linha
-    // de `payments` é montada aqui fora — e é nela que o split precisa ficar
-    // registrado, senão o repasse manual paga de novo o que o gateway pagou.
-    let splitAplicado      = null
+    let cardAttemptId      = null
 
     if (gateway === 'test') {
       const { createPaymentIntent: testIntent } = await import('../payments/test.js')
@@ -953,109 +672,76 @@ router.post('/intent', authenticate, async (req, res, next) => {
     } else if (gateway === 'mercado_pago') {
       const isCard = ['credit_card', 'debit_card'].includes(payment_method)
 
-      // Split automático: se o operador atribuído está conectado ao Mercado
+      // Split automático: se a cooperativa atribuída está conectada ao Mercado
       // Pago, o pagamento cai NA conta dela e a comissão da plataforma vira
       // application_fee. Sem conexão → cai na conta da plataforma (sem split).
-      // Motor de pernas (Onda A) ligado: quando o pedido tem 2+ operadores
+      // Motor de pernas (Onda A) ligado: quando o pedido tem 2+ cooperativas
       // com pernas aceitas, monta split nativo N-recebedores; com 1 (ou sem
       // pernas), cai no MESMO caminho de sempre (mode:'single').
-      // `let`, não `const`: a checagem da chave do cartão logo abaixo pode
-      // anular o split, e anular é o caminho seguro.
-      let split = isGroup
+      const split = isGroup
         ? await getSplitContextForGroup(groupBookings, chargedTotal, cfg)
         : (await isBookingLegsEngineEnabled())
           ? await getSplitContextForBooking(booking, chargedTotal, cfg)
-          : await getSplitContext(booking, chargedTotal, cfg, payment_method)
-      // `mode:'multi'` é o split de N recebedores (motor de pernas), que tem
-      // repasse próprio — aqui só interessa o de operador único.
-      if (split?.operatorId && split.mode !== 'multi') splitAplicado = split
+          : await getSplitContext(booking, chargedTotal, cfg)
 
       // Opção 2: pagamento único de GRUPO só para recebedor único (1 coop) ou
-      // sem split. Grupo multi-operador fica bloqueado até validar o split
+      // sem split. Grupo multi-cooperativa fica bloqueado até validar o split
       // nativo do MP — o cliente paga por reserva nesse caso.
       if (isGroup && split?.mode === 'multi') {
         return res.status(422).json({
-          error: 'Este grupo tem operadores diferentes entre as reservas. O pagamento único multi-operador ainda não é suportado — pague cada reserva separadamente.',
+          error: 'Este grupo tem cooperativas diferentes entre as reservas. O pagamento único multi-cooperativa ainda não é suportado — pague cada reserva separadamente.',
         })
       }
 
       if (isCard) {
-        // Split multi-recebedor (N operadores) via cartão ainda não
+        // Split multi-recebedor (N cooperativas) via cartão ainda não
         // implementado nesta Onda — o mecanismo de `disbursements` do MP foi
         // validado aqui só para PIX. Bloqueia com mensagem clara em vez de
         // cobrar sem conseguir repassar corretamente. Ver Riscos/Objeções.
         if (split?.mode === 'multi') {
           return res.status(422).json({
-            error: 'Este pedido tem operadores diferentes por perna. Pagamento com cartão para pedidos multi-operador ainda não é suportado — pague via PIX.',
+            error: 'Este pedido tem cooperativas diferentes por perna. Pagamento com cartão para pedidos multi-cooperativa ainda não é suportado — pague via PIX.',
           })
         }
 
-        // ── Token do cartão x conta que vai cobrar ────────
-        // O cartão é tokenizado com a chave PÚBLICA de uma aplicação e cobrado
-        // com o access token de outra. Se as duas não forem a mesma, o Mercado
-        // Pago recusa o token — com uma mensagem que não explica nada.
-        //
-        // O app só busca a chave do operador quando a reserva JÁ EXISTE. Numa
-        // reserva criada e paga no mesmo passo — o link direto do operador
-        // (/c/<slug>), que nasce atribuída — ele tokeniza com a chave da
-        // PLATAFORMA e o split cobraria na conta do operador. Cartão recusado,
-        // sem explicação, e só em produção.
-        //
-        // Então: cartão só é dividido quando a chave que tokenizou é a mesma do
-        // operador que vai receber. Não batendo, cai no modelo manual — o
-        // dinheiro fica com a plataforma e o repasse é lançado. Fail-closed: a
-        // venda acontece, e o acerto se resolve depois.
-        // A regra é de IGUALDADE COMPROVADA, não de diferença detectada: só
-        // divide quando dá para afirmar que as duas chaves são a mesma. Se
-        // faltar qualquer um dos lados — o app não informou, ou o operador está
-        // conectado sem `mp_public_key` gravada — não há como verificar, e não
-        // verificar é motivo suficiente para não dividir.
-        if (split) {
-          const mesmaConta = !!split.publicKey && !!mp_public_key && split.publicKey === mp_public_key
-          if (!mesmaConta) {
-            console.warn(
-              '[split] não dá para afirmar que o cartão foi tokenizado na conta do operador ' +
-              '(operador=%s app=%s) — cobrando sem split, reserva %s',
-              split.publicKey ? 'com chave' : 'SEM chave',
-              mp_public_key ? 'informou' : 'NÃO informou',
-              booking.id,
-            )
-            split = null
-          }
-        }
-
         // ── Cartão: sem fallback fake — erro propaga ──────
-        const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
-        const userInfo = await supabase.from('users').select('email').eq('id', req.user.id).single()
+        const { createCardPayment, findMpPaymentByExternalReference, getMpPayment, normalizeCardPaymentResponse } = await import('../services/mercadoPago.js')
+        const userInfo = await supabase.from('users').select('email, full_name').eq('id', req.user.id).single()
+        const attemptId = payment_attempt_id
+        cardAttemptId = attemptId
+        const nameParts = String(userInfo.data?.full_name || '').trim().split(/\s+/).filter(Boolean)
 
-        cardResult = await createCardPayment({
-          amount:          chargedTotal,
-          description:     service_name || `Reserva ${bookingCode}`,
-          installments:    cardInstallments,
-          paymentMethodId: payment_method_id,
-          cardToken:       card_token,
-          issuerId:        issuer_id,
-          payerEmail:      userInfo.data?.email,
-          payerDoc:        payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
-          externalRef:     booking.id,
-          // Uma chave por TENTATIVA, não por reserva: reenvio da mesma
-          // tentativa (timeout, toque duplo) não cobra duas vezes, e uma
-          // tentativa nova — cartão corrigido — é de fato uma cobrança nova.
-          // Com a chave fixa por reserva, o MP repetia a cobrança recusada
-          // anterior sem tocar no cartão novo.
-          //
-          // O identificador da tentativa é um HASH do token, nunca o token: a
-          // chave viaja em cabeçalho e aparece em log, e credencial de
-          // pagamento não deve estar em nenhum dos dois. O hash é estável para
-          // a mesma tentativa e diferente para outra, que é tudo que a
-          // idempotência precisa.
-          idempotencyKey:  `turiva:${booking.id}:${idDaTentativa(card_token)}`,
-          deviceId:        device_id || undefined,
-          sellerAccessToken: split?.sellerAccessToken,
-          applicationFee:    split?.applicationFee,
-          // Débito no Brasil exige autenticação do emissor. Ver mercadoPago.js.
-          threeDSecure:      payment_method === 'debit_card',
+        if (!device_id) console.warn('[MP INTEGRATION WARNING] booking_id=%s device_id_present=false', booking.id)
+
+        const attemptExecution = await executePaymentAttempt({
+          attemptId,
+          claim: (id) => claimCardAttempt(id, booking.id),
+          createPayment: () => createCardPayment({
+            amount: chargedTotal, description: service_name || `Reserva ${bookingCode}`,
+            installments: cardInstallments, paymentMethodId: payment_method_id,
+            cardToken: card_token, issuerId: issuer_id, payerEmail: userInfo.data?.email,
+            payerDoc: payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
+            externalRef: attemptId, bookingId: booking.id, idempotencyKey: attemptId,
+            deviceId: device_id, payerFirstName: nameParts[0],
+            payerLastName: nameParts.slice(1).join(' ') || undefined,
+            item: { id: String(service_id || booking.id), title: service_name || `Reserva ${bookingCode}`,
+              quantity: 1, unit_price: chargedTotal },
+            sellerAccessToken: split?.sellerAccessToken, applicationFee: split?.applicationFee,
+          }),
+          findOfficialPayment: async (attempt) => {
+            const official = attempt.gateway_transaction_id
+              ? await getMpPayment(attempt.gateway_transaction_id, split?.sellerAccessToken)
+              : await findMpPaymentByExternalReference(attemptId, split?.sellerAccessToken)
+            return official ? normalizeCardPaymentResponse(official, cardInstallments) : null
+          },
+          saveGatewayResult: saveCardAttemptGatewayResult,
         })
+        cardResult = attemptExecution.payment
+
+        const collectorRole = split?.collectorId && String(split.collectorId) === String(cardResult.collector_id)
+          ? 'operator' : split?.sellerAccessToken ? 'unexpected' : 'turiva'
+        console.info('[MP COLLECTOR] booking_id=%s collector_role=%s environment=%s',
+          booking.id, collectorRole, split?.environment || cfg.payment_gateway_env || 'unknown')
 
         gatewayTransactionId = cardResult.mp_id
         cardPaymentStatus    = cardResult.status
@@ -1065,23 +751,6 @@ router.post('/intent', authenticate, async (req, res, next) => {
         cardLastFour         = cardResult.card_last_four
         cardBrand            = cardResult.card_brand
         cardHolderName       = cardResult.card_holder_name
-        cardThreeDs          = cardResult.three_ds
-
-        // Motivo da recusa no log do servidor. Sem isto, uma recusa só deixava
-        // rastro na tela do cliente e a causa real ficava invisível para quem
-        // opera. Nada sensível: id da cobrança, status e motivo do MP.
-        // `cc_rejected_high_risk` costuma ser antifraude — e a causa mais comum
-        // em teste é pagador e recebedor serem a MESMA pessoa (o dono da conta
-        // pagando com o próprio cartão).
-        console[cardPaymentStatus === 'rejected' ? 'warn' : 'log'](
-          '[payments] cartão booking=%s mp_id=%s status=%s detail=%s split=%s',
-          booking.id, gatewayTransactionId, cardPaymentStatus,
-          cardStatusDetail || '-', split ? 'sim' : 'não',
-        )
-        if (!device_id) {
-          console.warn('[payments] cobrança booking=%s SEM device id — o antifraude do MP ' +
-            'recusa mais sem esse sinal (security.js não carregou no navegador?)', booking.id)
-        }
 
         // Taxa real por método: cartão à vista 4.98%, débito 1.50%
         if (payment_method === 'debit_card') {
@@ -1097,7 +766,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         try {
           if (split?.mode === 'multi') {
             // Split nativo N-recebedores: 1 pagamento com `disbursements` — um
-            // por operador com perna aceita. Ver Riscos/Objeções (a validar
+            // por cooperativa com perna aceita. Ver Riscos/Objeções (a validar
             // em staging com app marketplace com Split habilitado).
             pixData = await createPixPaymentSplit({
               amount:       chargedTotal,
@@ -1167,17 +836,17 @@ router.post('/intent', authenticate, async (req, res, next) => {
       ...(isGroup ? { order_group_id } : {}),
       gateway_name:           effectiveGateway,
       gateway_transaction_id: gatewayTransactionId,
+      ...(isCard ? { payment_attempt_id: cardAttemptId, status_detail: cardStatusDetail,
+        collector_id: cardResult?.collector_id } : {}),
       payment_method,
       payment_type:           'full',
       amount_gross:           chargedTotal,
-      // Antes: taxa ZERO para tudo que não fosse cartão. PIX tem custo (~0,99%)
-      // e lançá-lo como zero fazia o razão cair no fallback de 3,5% depois.
-      gateway_fee_amount:     Math.round(chargedTotal * (cardGatewayFeePct || taxaDoMetodo(payment_method)) * 100) / 100,
+      gateway_fee_amount:     isCard ? Math.round(chargedTotal * (cardGatewayFeePct || 0.035) * 100) / 100 : 0,
       currency:               'BRL',
       status:                 initialPaymentStatus,
       expires_at:             expiresAt,
-      // raw response para cartão (inclui dados completos do MP)
-      ...(isCard && cardResult ? { raw_response_json: cardResult.raw } : {}),
+      // Snapshot estritamente diagnóstico; nunca persiste token/cartão/CPF.
+      ...(isCard && cardResult ? { raw_response_json: cardResult.diagnostic } : {}),
       // colunas de cartão (nullable em PIX/manual)
       ...(isCard ? {
         installments:           cardInstallments,
@@ -1187,47 +856,24 @@ router.post('/intent', authenticate, async (req, res, next) => {
         card_holder_name:       cardHolderName,
         gateway_fee_pct:        cardGatewayFeePct,
       } : {}),
-      // Fora do bloco de cartão: o PIX também tem taxa, e gravá-la aqui é o que
-      // impede o razão de chutar 3,5% mais tarde.
-      ...(isCard ? {} : { gateway_fee_pct: taxaDoMetodo(payment_method) }),
-      // Houve split? Registrar é o que impede `gerarRepasses` de lançar a
-      // comissão de novo — o gateway já depositou a parte do operador nesta
-      // cobrança, e o repasse manual seria pagamento em dobro (migration 087).
-      ...(splitAplicado ? {
-        split_operator_id:     splitAplicado.operatorId,
-        split_application_fee: splitAplicado.applicationFee,
-      } : {}),
     }
 
-    const { payment, error: pErr, camposPerdidos } = await inserirPagamento(paymentInsertRow)
-    if (pErr) {
-      // A cobrança pode já existir no gateway. Nunca deixe o erro de gravação
-      // virar "pagamento recusado": quem decide isso é o Mercado Pago.
-      console.error('[payments] falha ao gravar pagamento booking=%s tx=%s code=%s msg=%s',
-        booking.id, gatewayTransactionId || '(sem id)', pErr.code, pErr.message)
-      if (gatewayTransactionId) {
-        const e = new Error(
-          'Não foi possível concluir a confirmação do pagamento. Estamos verificando o status da transação — ' +
-          'confira em Minhas Reservas antes de tentar de novo.',
-        )
-        e.status = 502
-        e.gatewayTransactionId = gatewayTransactionId
-        throw e
-      }
-      throw pErr
-    }
-    if (camposPerdidos.length) {
-      console.error(
-        '[payments] reserva %s gravada SEM as colunas %s (migration pendente). ' +
-        'Cobrança no gateway: %s. Rode as migrations e complete a linha à mão.',
-        booking.id, camposPerdidos.join(', '), gatewayTransactionId || '(sem id)',
-      )
+    const { data: payment, error: pErr } = await supabase
+      .from('payments')
+      .upsert(paymentInsertRow, { onConflict: 'gateway_transaction_id' })
+      .select()
+      .single()
+
+    if (pErr) throw pErr
+
+    if (gatewayTransactionId) {
+      await reconcilePendingWebhookEvents({ ...payment, bookings: booking })
     }
 
     // ── Pós-inserção: ação imediata para cartão ────────
     if (isCard && cardPaymentStatus === 'approved') {
       // approved: dispara onPaymentApproved dentro do mesmo request
-      await onPaymentApproved(payment)
+      await approveAndRunEffects(payment)
     } else if (isCard && cardPaymentStatus === 'rejected') {
       // rejected: booking permanece awaiting_payment (não altera status_commercial)
       // O status 'failed' já foi gravado em payments acima
@@ -1240,33 +886,19 @@ router.post('/intent', authenticate, async (req, res, next) => {
     // ── Resposta final ─────────────────────────────────
     // Cartão rejected → HTTP 200 com status: 'rejected' (nunca 402)
     if (isCard && cardPaymentStatus === 'rejected') {
-      const { mapRejectionKey } = await import('../services/mercadoPago.js')
+      const { mapRejectionKey, rejectionUserMessage } = await import('../services/mercadoPago.js')
       return res.json({
+        success:      false,
+        gateway:      'mercado_pago',
         booking_id:   booking.id,
         booking_code: bookingCode,
         payment_id:   payment.id,
         amount:       chargedTotal,
         status:       'rejected',
+        status_detail: cardStatusDetail,
         error_code:   cardStatusDetail,
+        user_message: rejectionUserMessage(cardStatusDetail),
         message_key:  mapRejectionKey(cardStatusDetail),
-      })
-    }
-
-    // Desafio 3DS pendente: o pagamento existe e está 'pending', mas só sai do
-    // lugar depois que o cliente autenticar no banco dele. Precisa de um status
-    // PRÓPRIO — sem ele o app via 'pending', não casava com 'approved' nem com
-    // 'in_process', e caía no galho de recusa: o cliente levava "pagamento
-    // recusado" num pagamento que nem tinha sido tentado ainda.
-    if (isCard && cardThreeDs?.url) {
-      return res.json({
-        booking_id:      booking.id,
-        booking_code:    bookingCode,
-        payment_id:      payment.id,
-        amount:          chargedTotal,
-        status:          'challenge',
-        challenge_url:   cardThreeDs.url,
-        challenge_creq:  cardThreeDs.creq,
-        payment_method,
       })
     }
 
@@ -1296,39 +928,27 @@ router.post('/intent', authenticate, async (req, res, next) => {
       bank_account:     manual ? (cfg.payment_admin_bank_account || null) : null,
       bank_account_type:manual ? (cfg.payment_admin_bank_account_type || null) : null,
     })
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (err instanceof PaymentAttemptInProgressError) {
+      return res.status(409).json({ success: false, gateway: 'mercado_pago', status: 'processing',
+        status_detail: 'payment_attempt_in_progress', user_message: err.message, error: err.message })
+    }
+    console.error('[payment intent] application_error code=%s', err?.code || err?.cause?.code || 'unknown')
+    return res.status(500).json({
+      success: false,
+      gateway: 'mercado_pago',
+      status: 'application_error',
+      status_detail: null,
+      user_message: 'Não conseguimos confirmar o pagamento agora. Tente novamente em instantes.',
+      error: 'Não conseguimos confirmar o pagamento agora. Tente novamente em instantes.',
+    })
+  }
 })
 
 // ── POST /api/payments/request ─────────────────────────
 // Cria a reserva SEM pagamento (fluxo solicitar → aceitar → pagar). A reserva
-// nasce em 'awaiting_acceptance' e os operadores são notificadas para aceitar.
+// nasce em 'awaiting_acceptance' e as cooperativas são notificadas para aceitar.
 // O pagamento acontece depois, via POST /intent com existing_booking_id.
-// ── POST /api/payments/validate-coupon ──────────────────
-// Valida um cupom ANTES da solicitação, para o app mostrar o desconto na
-// hora (Resumo e Carrinho). A aplicação autoritativa continua no servidor
-// na criação da reserva — isto aqui é só feedback.
-router.post('/validate-coupon', authenticate, async (req, res, next) => {
-  try {
-    const { coupon_code, service_type, region_id, subtotal } = req.body || {}
-    if (!coupon_code || typeof coupon_code !== 'string') {
-      return res.status(400).json({ error: 'Informe o código do cupom' })
-    }
-    const sub = Number(subtotal) || 0
-    const { discount, couponId } = await applyCoupon(
-      coupon_code.trim(), req.user.id, region_id || null, service_type || null, sub,
-    )
-    const { data: c } = await supabase
-      .from('coupons')
-      .select('code, title, discount_type, discount_value, applicable_service_type')
-      .eq('id', couponId)
-      .single()
-    res.json({ valid: true, discount, coupon: c })
-  } catch (err) {
-    if (err?.status) return res.status(err.status).json({ error: err.message })
-    next(err)
-  }
-})
-
 router.post('/request', authenticate, async (req, res, next) => {
   try {
     const parsed = requestSchema.safeParse(nullToUndefined(req.body))
@@ -1342,34 +962,23 @@ router.post('/request', authenticate, async (req, res, next) => {
       vehicles = [], origin_text, destination_text, partner_slug,
     } = parsed.data
 
-    // Antecedência mínima. Vale para PASSEIO e para TRANSLADO: a regra do
-    // passeio (tours.min_advance_hours) existia no cadastro desde a 049 e não
-    // era conferida em lugar nenhum — o admin preenchia e não acontecia nada.
-    // Passeio sem regra própria segue sem mínimo, freado só pelo cutoff.
-    if (service_date_iso) {
-      await validateAdvance(service_type, service_date_iso, service_time || '00:00', { serviceId: service_id })
+    // Antecedência mínima para transfers (rota definida) — mesma regra do
+    // translado personalizado. Bloqueia agendamento "ao vivo"/imediato.
+    if (service_type === 'transfer' && service_date_iso) {
+      await validateTransferAdvance(service_date_iso, service_time || '00:00', { serviceId: service_id })
     }
 
     // R6: respeita o horário limite de solicitação do serviço.
     const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
     if (cutoffErr) return res.status(400).json({ error: cutoffErr })
-    const windowErr = await checkServiceWindow({ service_type, service_id, service_time })
-    if (windowErr) return res.status(400).json({ error: windowErr })
 
-    // Link direto de operador: resolve o slug no SERVIDOR. Reserva nasce
+    // Link direto de cooperativa: resolve o slug no SERVIDOR. Reserva nasce
     // atribuída (operator_id) e pronta para pagar — mesmo estado que o aceite
     // produz (awaiting_payment + assigned). Slug inválido/inativo → fluxo normal.
     const { resolvePartner } = await import('./partner.js')
     const partner = partner_slug ? await resolvePartner(partner_slug) : null
 
-    // Afiliado: resolve o código no servidor; autoindicação é ignorada em
-    // silêncio (o cliente comprando por si não gera comissão pra si mesmo).
-    const { resolveAffiliate } = await import('./affiliate.js')
-    const aff = parsed.data.affiliate_code ? await resolveAffiliate(parsed.data.affiliate_code) : null
-    const affiliateId = aff && aff.id !== req.user.id ? aff.id : null
-
-    const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional } =
-      await computeChargedTotal({ data: parsed.data, userId: req.user.id })
+    const chargedTotal = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
 
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
     const baseBooking = {
@@ -1384,11 +993,7 @@ router.post('/request', authenticate, async (req, res, next) => {
       people_count:       Number(people_count) || 1,
       origin_text:        origin_text || null,
       destination_text:   destination_text || null,
-      subtotal_amount:          subtotal,
-      season_additional_amount: seasonAdditional,
       total_amount:       chargedTotal,
-      ...(couponId ? { coupon_id: couponId, discount_amount: discountAmount } : {}),
-      ...(affiliateId ? { affiliate_id: affiliateId, source_channel: 'affiliate_link' } : {}),
       ...(partner ? {
         operator_id:        partner.id,
         status_commercial:  'awaiting_payment',
@@ -1399,7 +1004,7 @@ router.post('/request', authenticate, async (req, res, next) => {
       }),
       payment_status:     'pending',
     }
-    // 24h para algum operador aceitar; depois passa só pro admin. Se a
+    // 24h para alguma cooperativa aceitar; depois passa só pro admin. Se a
     // migration 037 ainda não rodou (coluna ausente = 42703), reusa o insert
     // sem o campo pra não bloquear novas solicitações.
     let { data: booking, error: bErr } = await supabase
@@ -1421,21 +1026,11 @@ router.post('/request', authenticate, async (req, res, next) => {
       await insertBookingVehicles(booking.id, vehicles)
     }
 
-    // Registra o uso do cupom (limites total/por usuário contam sobre isto)
-    if (couponId) {
-      await supabase.from('coupon_redemptions').insert({
-        coupon_id:               couponId,
-        user_id:                 req.user.id,
-        booking_id:              booking.id,
-        discount_applied_amount: discountAmount,
-      })
-    }
-
     const isTransfer = service_type === 'transfer'
     const rota = [origin_text, destination_text].filter(Boolean).join(' → ')
 
     if (partner) {
-      // Venda direta: só o operador dona do link é avisada — nada de fila.
+      // Venda direta: só a cooperativa dona do link é avisada — nada de fila.
       notifyUser({
         userId:      partner.id,
         bookingId:   booking.id,
@@ -1444,13 +1039,12 @@ router.post('/request', authenticate, async (req, res, next) => {
         body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)} (${bookingCode}). O cliente já pode pagar.`,
       })
     } else {
-      // Notifica os operadores da nova solicitação (ANTES do pagamento) —
+      // Notifica as cooperativas da nova solicitação (ANTES do pagamento) —
       // elas aceitam e só então o cliente paga.
       notifyOperatorsNewBooking(supabase, booking).catch((err) =>
-        console.error('[whatsapp] notificação de operadores falhou:', err.message))
+        console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
       notifyOperatorsAndAdmin({
         bookingId:   booking.id,
-        fleetBookingId: booking.id,
         templateKey: 'new_booking',
         title:       'Nova solicitação disponível',
         body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
@@ -1481,51 +1075,28 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
     }
-    const { items, partner_slug, affiliate_code } = parsed.data
+    const { items, partner_slug } = parsed.data
 
-    // Link direto de operador: o grupo INTEIRO nasce atribuído e pronto
+    // Link direto de cooperativa: o grupo INTEIRO nasce atribuído e pronto
     // para pagar (sem fila, sem aceite) — mesmo estado do combo aceito.
     const { resolvePartner } = await import('./partner.js')
     const partner = partner_slug ? await resolvePartner(partner_slug) : null
 
-    // Afiliado: o grupo inteiro leva a indicação (anti-autoindicação).
-    const { resolveAffiliate } = await import('./affiliate.js')
-    const aff = affiliate_code ? await resolveAffiliate(affiliate_code) : null
-    const affiliateId = aff && aff.id !== req.user.id ? aff.id : null
-
-    // Cupom de valor FIXO desconta uma vez só (no 1º item elegível) — o
-    // percentual vale para todos os itens elegíveis. Detecta o tipo antes.
-    const cartCouponCode = items.find((it) => it.coupon_code)?.coupon_code || null
-    let couponIsFixed = false
-    if (cartCouponCode) {
-      const { data: cRow } = await supabase
-        .from('coupons').select('discount_type').ilike('code', cartCouponCode).maybeSingle()
-      couponIsFixed = cRow?.discount_type && cRow.discount_type !== 'percentage'
-    }
-
     // 1) Valida TODOS os itens (antecedência, cutoff, total autoritativo) antes
     //    de criar qualquer reserva. Falha → índice + motivo, nada é inserido.
     const prepared = []
-    let couponApplied = false
     for (let i = 0; i < items.length; i++) {
       const it = items[i]
       try {
-        if (it.service_date_iso) {
-          await validateAdvance(it.service_type, it.service_date_iso, it.service_time || '00:00', { serviceId: it.service_id })
+        if (it.service_type === 'transfer' && it.service_date_iso) {
+          await validateTransferAdvance(it.service_date_iso, it.service_time || '00:00', { serviceId: it.service_id })
         }
         const cutoffErr = await checkBookingCutoff({
           service_type: it.service_type, service_id: it.service_id, service_date_iso: it.service_date_iso,
         })
         if (cutoffErr) throw { status: 400, message: cutoffErr }
-        const windowErr = await checkServiceWindow({
-          service_type: it.service_type, service_id: it.service_id, service_time: it.service_time,
-        })
-        if (windowErr) throw { status: 400, message: windowErr }
-        const itemData = (couponIsFixed && couponApplied) ? { ...it, coupon_code: undefined } : it
-        const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional } =
-          await computeChargedTotal({ data: itemData, userId: req.user.id })
-        if (couponId) couponApplied = true
-        prepared.push({ it, chargedTotal, couponId, discountAmount, subtotal, seasonAdditional })
+        const chargedTotal = await computeChargedTotal({ data: it, userId: req.user.id })
+        prepared.push({ it, chargedTotal })
       } catch (err) {
         return res.status(err?.status || 400).json({
           error: err?.message || 'Item inválido no carrinho', item_index: i, service_id: it.service_id,
@@ -1538,7 +1109,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     const orderGroupId = crypto.randomUUID()
     const now = Date.now()
     const acceptanceExpiresAt = new Date(now + 24 * 60 * 60 * 1000).toISOString()
-    const rows = prepared.map(({ it, chargedTotal, couponId, discountAmount, subtotal, seasonAdditional }, i) => ({
+    const rows = prepared.map(({ it, chargedTotal }, i) => ({
       booking_code:       `GJ${(now + i).toString(36).toUpperCase().slice(-6)}`,
       user_id:            req.user.id,
       order_group_id:     orderGroupId,
@@ -1551,11 +1122,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       people_count:       Number(it.people_count) || 1,
       origin_text:        it.origin_text || null,
       destination_text:   it.destination_text || null,
-      subtotal_amount:          subtotal,
-      season_additional_amount: seasonAdditional,
       total_amount:       chargedTotal,
-      ...(couponId ? { coupon_id: couponId, discount_amount: discountAmount } : {}),
-      ...(affiliateId ? { affiliate_id: affiliateId, source_channel: 'affiliate_link' } : {}),
       ...(partner ? {
         operator_id:        partner.id,
         status_commercial:  'awaiting_payment',
@@ -1568,8 +1135,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     }))
     // Casa cada linha ao item de origem por booking_code (a ordem do RETURNING
     // não é garantida pelo SQL — não confiar no índice do array).
-    const bySrc     = new Map(rows.map((r, i) => [r.booking_code, prepared[i].it]))
-    const prepByCode = new Map(rows.map((r, i) => [r.booking_code, prepared[i]]))
+    const bySrc = new Map(rows.map((r, i) => [r.booking_code, prepared[i].it]))
 
     let { data: bookings, error: bErr } = await supabase
       .from('bookings')
@@ -1598,26 +1164,13 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
         await insertBookingVehicles(b.id, vehicles).catch((err) =>
           console.error('[cart-request] veículos falharam:', err.message))
       }
-      // Registra o uso do cupom desta reserva (limites contam sobre isto)
-      const prep = prepByCode.get(b.booking_code)
-      if (prep?.couponId) {
-        await supabase.from('coupon_redemptions').insert({
-          coupon_id:               prep.couponId,
-          user_id:                 req.user.id,
-          booking_id:              b.id,
-          discount_applied_amount: prep.discountAmount,
-        }).then(({ error }) => {
-          if (error) console.error('[cart-request] redemption falhou:', error.message)
-        })
-      }
       if (partner) continue // venda direta: sem fila; um aviso único abaixo
       notifyOperatorsNewBooking(supabase, b).catch((err) =>
-        console.error('[whatsapp] notificação de operadores falhou:', err.message))
+        console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
       const isTransfer = b.service_type === 'transfer'
       const rota = [b.origin_text, b.destination_text].filter(Boolean).join(' → ')
       notifyOperatorsAndAdmin({
         bookingId:   b.id,
-        fleetBookingId: b.id,
         templateKey: 'new_booking',
         title:       'Nova solicitação disponível',
         body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(b.service_date)}. Abra para aceitar.`,
@@ -1703,7 +1256,7 @@ router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, nex
 
     const accepted = (remainingLegs || []).filter((l) => l.status_leg === 'accepted')
     if (accepted.length === 0) {
-      return res.status(400).json({ error: 'Nenhuma perna foi aceita ainda — não há o que pagar. Aguarde um operador aceitar.' })
+      return res.status(400).json({ error: 'Nenhuma perna foi aceita ainda — não há o que pagar. Aguarde uma cooperativa aceitar.' })
     }
 
     const dynamicTotal = Math.round(accepted.reduce((s, l) => s + Number(l.leg_price), 0) * 100) / 100
@@ -1753,8 +1306,8 @@ router.post('/booking/:id/checkout-accepted', authenticate, async (req, res, nex
 })
 
 // ── GET /api/payments/booking/:id/checkout-key ─────────
-// Devolve a public_key do Mercado Pago do operador atribuído à reserva, para
-// o checkout tokenizar o cartão NA conta dela (split). Sem operador conectado
+// Devolve a public_key do Mercado Pago da cooperativa atribuída à reserva, para
+// o checkout tokenizar o cartão NA conta dela (split). Sem cooperativa conectada
 // → null (o app usa a chave da plataforma, sem split).
 router.get('/booking/:id/checkout-key', authenticate, async (req, res, next) => {
   try {
@@ -1767,31 +1320,11 @@ router.get('/booking/:id/checkout-key', authenticate, async (req, res, next) => 
     if (req.user.user_type === 'tourist' && booking.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Sem permissão' })
     }
-    // A chave do operador SÓ pode ser usada quando a cobrança vai mesmo sair na
-    // conta dele. O cartão é tokenizado com a chave pública de uma aplicação e
-    // cobrado com o access token de outra — se as duas não forem a mesma, o
-    // Mercado Pago recusa o token e o pagamento falha, com uma mensagem que não
-    // explica nada.
-    //
-    // Devolver a chave "porque o operador tem uma" era exatamente esse erro:
-    // desde a 079 o valor cai na plataforma por padrão, e o split de operador
-    // único (087) tem condições próprias. Aqui perguntamos à MESMA função que
-    // decide o split de verdade, em vez de adivinhar.
     let publicKey = null
     if (booking.operator_id) {
-      const cfg = await getPaymentSettings().catch(() => ({}))
-      const { data: completa } = await supabase
-        .from('bookings')
-        .select('id, operator_id, service_id, service_type, total_amount, order_group_id')
-        .eq('id', booking.id).maybeSingle()
-      const ctx = completa
-        ? await getSplitContext(completa, Number(completa.total_amount) || 0, cfg)
-        : null
-      if (ctx?.sellerAccessToken) {
-        const { data: op } = await supabase
-          .from('users').select('mp_public_key').eq('id', booking.operator_id).maybeSingle()
-        publicKey = op?.mp_public_key || null
-      }
+      const { data: op } = await supabase
+        .from('users').select('mp_public_key').eq('id', booking.operator_id).single()
+      publicKey = op?.mp_public_key || null
     }
     res.json({ public_key: publicKey, split: !!publicKey })
   } catch (err) { next(err) }
@@ -1811,7 +1344,7 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
 
     // Gateway de teste: aprova na primeira consulta de status
     if (payment.status === 'pending' && payment.gateway_name === 'test') {
-      await onPaymentApproved(payment)
+      await approveAndRunEffects(payment)
       return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
     }
 
@@ -1835,12 +1368,16 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
     if (payment.status === 'pending' && payment.gateway_name === 'mercado_pago' && payment.gateway_transaction_id && !payment.gateway_transaction_id.startsWith('TEST-')) {
       try {
         const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
-        // Pagamento com split vive na conta do operador → consulta com o token dela.
+        // Pagamento com split vive na conta da cooperativa → consulta com o token dela.
         const opMp = await getOperatorMp(payment.bookings?.operator_id)
-        const mpStatus = await getMpPaymentStatus(payment.gateway_transaction_id, opMp?.token)
-        if (mpStatus === 'approved') {
-          await onPaymentApproved(payment)
+        const mpResult = await getMpPaymentStatus(payment.gateway_transaction_id, opMp?.token)
+        if (mpResult?.status === 'approved') {
+          await approveAndRunEffects(payment)
           return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
+        }
+        if (mpResult?.status === 'rejected') {
+          await supabase.from('payments').update({ status: 'failed', status_detail: mpResult.status_detail }).eq('id', payment.id)
+          return res.json({ status: 'rejected', status_detail: mpResult.status_detail, booking_id: payment.booking_id })
         }
       } catch { /* ignora erros de rede no polling */ }
     }
@@ -1859,25 +1396,8 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
 // Em desenvolvimento, aceita sem secret pra facilitar testes locais. Em
 // produção, BLOQUEIA quando secret ausente — sem isso, qualquer um poderia
 // mandar um POST /webhook forjado aprovando pagamentos.
-async function verifyMpSignature(req, event) {
-  // Duas fontes, e a ordem importa: a variável de ambiente do Render é a
-  // canônica; o campo "Webhook Secret" do painel entra como reserva.
-  //
-  // Sem essa reserva havia uma armadilha cara: o admin TEM o campo, diz que
-  // "as chaves são armazenadas no banco", e a API nunca lia esse valor —
-  // preenchê-lo não fazia nada. Em produção, sem a env var, o webhook rejeita
-  // TODOS os eventos: pagamento aprovado no Mercado Pago e reserva que não
-  // confirma sozinha, em silêncio.
-  let secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET
-  if (!secret) {
-    try {
-      const cfg = await getPaymentSettings()
-      secret = cfg?.payment_gateway_webhook_secret || null
-      if (secret) console.warn('[webhook] usando o secret do painel (MERCADO_PAGO_WEBHOOK_SECRET ausente)')
-    } catch (e) {
-      console.error('[webhook] falha ao ler o secret do painel:', e.message)
-    }
-  }
+function verifyMpSignature(req, event) {
+  const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET
   if (!secret) {
     if (process.env.NODE_ENV === 'production') {
       console.error('[webhook] MERCADO_PAGO_WEBHOOK_SECRET ausente em produção — REJEITANDO evento')
@@ -1933,7 +1453,7 @@ router.post('/webhook', async (req, res, next) => {
     // MP manda data.id no body e também na query string da URL
     const gatewayId = (req.query['data.id'] || event.data?.id)?.toString()
 
-    if (!(await verifyMpSignature(req, event))) {
+    if (!verifyMpSignature(req, event)) {
       console.warn('[webhook] assinatura inválida — evento descartado')
       return res.status(401).json({ error: 'Assinatura inválida' })
     }
@@ -1949,67 +1469,35 @@ router.post('/webhook', async (req, res, next) => {
       paymentForEvent = p
     }
 
-    // Registra evento bruto com payment_id para idempotência via UNIQUE constraint.
-    // Esperamos UNIQUE violation (23505) em retentativas do MP — silencia só
-    // esse caso. Qualquer outro erro de gravação é logado pra investigação.
-    const evIns = await supabase.from('payment_events').insert({
-      payment_id:         paymentForEvent?.id || null,
-      event_name:         eventType,
-      event_payload_json: event,
-      processing_status:  'pending',
+    const gatewayEventId = event.id == null
+      ? `${eventType}:${gatewayId || 'unknown'}`
+      : String(event.id)
+    const claimed = await processWebhookOnce({
+      event: { gatewayEventId, gatewayId, eventType, payload: event, payment: paymentForEvent },
+      claimEvent: async (candidate) => {
+        const ins = await supabase.from('payment_events').insert({
+          payment_id: candidate.payment?.id || null,
+          gateway_transaction_id: candidate.gatewayId,
+          gateway_event_id: candidate.gatewayEventId,
+          event_name: candidate.eventType,
+          event_payload_json: candidate.payload,
+          processing_status: 'pending',
+        }).select('id').maybeSingle()
+        if (ins.error?.code === '23505') return false
+        if (ins.error) throw ins.error
+        return !!ins.data
+      },
+      processEvent: async (candidate) => {
+        // Sem linha local, mantém o evento pending. O insert do payment ou o
+        // polling o reconciliará; não há confirmação falsa nem evento perdido.
+        if (!candidate.payment) return
+        await reconcileOfficialPayment(candidate.payment, candidate.gatewayId)
+        await supabase.from('payment_events').update({ processing_status: 'processed', processed_at: new Date().toISOString() })
+          .eq('gateway_event_id', candidate.gatewayEventId)
+      },
     })
-    if (evIns.error && evIns.error.code !== '23505') {
-      console.error('[webhook] falha ao gravar payment_events code=%s msg=%s',
-        evIns.error.code, evIns.error.message)
-    }
 
-    if ((eventType === 'payment' || eventType === 'payment.updated') && paymentForEvent) {
-      // ── O status vem do Mercado Pago, NÃO do corpo do evento ──────────────
-      // A notificação do MP carrega apenas o id do recurso ({"data":{"id":...}}) —
-      // não existe `data.status`. Ler o status do payload deixava `mpStatus`
-      // indefinido e NENHUM pagamento era confirmado por webhook: só era
-      // confirmado quem ficasse com a tela de "processando" aberta, porque lá o
-      // app consulta /status de 4 em 4 segundos. Quem pagava o PIX no app do
-      // banco e fechava o Turiva pagava e ficava sem reserva até expirar.
-      // Só consulta o MP para cobrança que realmente vive lá. Pagamento de
-      // teste (gateway 'test'/'manual', ou id "TEST-") não existe no MP: a
-      // consulta falharia, cairia no 503 e o MP reenviaria o evento em laço.
-      const noMercadoPago = paymentForEvent.gateway_name === 'mercado_pago'
-        && paymentForEvent.gateway_transaction_id
-        && !String(paymentForEvent.gateway_transaction_id).startsWith('TEST-')
-      if (!noMercadoPago) {
-        console.warn('[webhook] evento para pagamento fora do MP (gateway=%s) — ignorado',
-          paymentForEvent.gateway_name)
-        return res.status(200).json({ ok: true, ignorado: true })
-      }
-
-      let mpStatus = null
-      try {
-        const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
-        // Com split, o pagamento vive na conta do operador — consulta com o
-        // token dela, como já faz o polling.
-        const opMp = await getOperatorMp(paymentForEvent.bookings?.operator_id)
-        mpStatus = await getMpPaymentStatus(paymentForEvent.gateway_transaction_id, opMp?.token)
-      } catch (err) {
-        console.error('[webhook] consulta ao MP falhou payment=%s: %s',
-          paymentForEvent.id, err.message)
-      }
-
-      if (!mpStatus) {
-        // Sem status confiável, não decide nada. Responder com erro faz o MP
-        // reenviar o evento — melhor uma retentativa do que marcar a reserva
-        // errada (paga sem dinheiro, ou falha sobre pagamento aprovado).
-        console.warn('[webhook] status indeterminado payment=%s — pedindo retentativa', paymentForEvent.id)
-        return res.status(503).json({ error: 'Status indeterminado, reenvie' })
-      }
-
-      if (mpStatus === 'approved' && paymentForEvent.status !== 'approved') {
-        await onPaymentApproved(paymentForEvent)
-      } else if (['rejected', 'cancelled'].includes(mpStatus)) {
-        await supabase.from('payments').update({ status: 'failed' }).eq('id', paymentForEvent.id)
-        await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', paymentForEvent.booking_id)
-      }
-    }
+    if (!claimed) return res.status(200).json({ ok: true, duplicate: true })
 
     res.status(200).json({ ok: true })
   } catch (err) { next(err) }
@@ -2041,7 +1529,7 @@ router.post('/:id/simulate', authenticate, async (req, res, next) => {
       return res.json({ ok: true, already: true })
     }
 
-    await onPaymentApproved(payment)
+    await approveAndRunEffects(payment)
     res.json({ ok: true, booking_code: payment.bookings?.booking_code })
   } catch (err) { next(err) }
 })
@@ -2070,7 +1558,7 @@ router.post('/manual-confirm', authenticate, async (req, res, next) => {
       payment = p
     }
 
-    await onPaymentApproved({ ...payment, bookings: null })
+    await approveAndRunEffects({ ...payment, bookings: null })
     if (notes) await supabase.from('bookings').update({ notes }).eq('id', booking_id)
 
     res.json({ ok: true })
@@ -2081,7 +1569,7 @@ router.post('/manual-confirm', authenticate, async (req, res, next) => {
 // Registra 1 par de lançamentos (commission_platform/payout_operator) em
 // financial_ledger + 1 linha em commissions POR PERNA aceita, cada uma com
 // leg_id/operator_id (migration 042). Sem isso, /operator/financial não
-// consegue separar receita entre operadores diferentes no mesmo pedido —
+// consegue separar receita entre cooperativas diferentes no mesmo pedido —
 // risco já registrado no design (seção 10). NÃO mexe nos lançamentos de nível
 // pedido (booking_gross/gateway_fee/booking_net, leg_id NULL).
 async function recordLegAccounting(booking, payment) {
@@ -2110,7 +1598,7 @@ async function recordLegAccounting(booking, payment) {
 
     ledgerRows.push(
       { booking_id: booking.id, payment_id: payment.id, leg_id: leg.id, entry_type: 'commission_platform', description: `Comissão plataforma — perna ${leg.id} (${booking.booking_code})`, amount: commission, direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
-      { booking_id: booking.id, payment_id: payment.id, leg_id: leg.id, entry_type: 'payout_operator',     description: `Repasse operador — perna ${leg.id} (${booking.booking_code})`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
+      { booking_id: booking.id, payment_id: payment.id, leg_id: leg.id, entry_type: 'payout_operator',     description: `Repasse cooperativa — perna ${leg.id} (${booking.booking_code})`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
     )
     commissionRows.push({
       booking_id:         booking.id,
@@ -2141,84 +1629,17 @@ async function recordLegAccounting(booking, payment) {
   }
 }
 
-// Comissão da plataforma + repasse ao operador NO NÍVEL DO PEDIDO — usado
-// quando o motor de pernas está DESLIGADO (fluxo atual). Sem isso, o ledger
-// nunca recebe commission_platform/payout_operator e o Dashboard do admin mostra
-// "Comissão plataforma" e "Repasses" zerados. Retorna as linhas para entrarem no
-// MESMO insert protegido por ledger_created (idempotente por pagamento). Vazio
-// quando o motor de pernas está ligado (aí quem lança é recordLegAccounting, por
-// perna, evitando contagem dobrada).
-async function orderCommissionRows(booking, payment, effectiveDate, cfg) {
-  if (!booking?.id) return []
-  if (await isBookingLegsEngineEnabled()) return []
-  const total = Number(booking.total_amount || 0)
-  if (!(total > 0)) return []
-
-  // MESMO resolvedor do repasse (services/payouts.js). Antes cada lado tinha o
-  // seu, e eles se ignoravam: o razão nunca olhava o modal, o repasse nunca
-  // olhava o acordo com o operador. Duas verdades sobre o mesmo dinheiro.
-  const { pctDaPlataforma, modalDaReserva } = await import('../services/payouts.js')
-  const slug = await modalDaReserva(booking).catch(() => null)
-  let modal = null
-  if (slug) {
-    const { data } = await supabase
-      .from('service_modals').select('platform_commission_pct').eq('slug', slug).maybeSingle()
-    modal = data || null
-  }
-  const pct = await pctDaPlataforma(booking, modal, Number(cfg?.payment_split_admin_pct) || 0)
-  const commission = Math.round(total * (pct / 100) * 100) / 100
-  const payout     = Math.round((total - commission) * 100) / 100
-  return [
-    { booking_id: booking.id, payment_id: payment.id, entry_type: 'commission_platform', description: `Comissão plataforma — ${booking.booking_code}`, amount: commission, direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
-    { booking_id: booking.id, payment_id: payment.id, entry_type: 'payout_operator',     description: `Repasse operador — ${booking.booking_code}`,  amount: payout,     direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
-  ]
-}
-
 // ── Helpers ────────────────────────────────────────────
-// Exportada para a conciliação (services/paymentReconcile.js) reaproveitar
-// EXATAMENTE o mesmo caminho de aprovação do webhook e do polling — inclusive a
-// reserva atômica do ledger. Duplicar essa lógica seria criar uma segunda
-// verdade sobre quando uma reserva vira paga.
-export async function onPaymentApproved(payment) {
+async function runPaymentApprovalEffects(payment) {
   // Carrinho universal: pagamento de GRUPO segue por caminho próprio, que
   // aplica a aprovação a TODAS as reservas do grupo. O caminho de reserva
   // única abaixo permanece intacto.
   if (payment.order_group_id) return onGroupPaymentApproved(payment)
 
-  // Transição ATÔMICA pendente → aprovado. Só quem encontra a linha ainda não
-  // aprovada leva o UPDATE; qualquer chamada seguinte (webhook repetido,
-  // polling ao mesmo tempo, retentativa) recebe zero linhas e sabe que os
-  // efeitos de UMA vez só — e-mail, notificação — já foram disparados.
-  // O dinheiro já tinha guarda própria (ledger_created, repasses); faltava a
-  // dos avisos, que chegavam duplicados ao cliente.
-  const { data: transicao } = await supabase
-    .from('payments')
-    .update({ status: 'approved', paid_at: new Date().toISOString() })
-    .eq('id', payment.id)
-    .neq('status', 'approved')
-    .select('id')
-    .maybeSingle()
-  const primeiraAprovacao = !!transicao
-  if (!primeiraAprovacao) {
-    console.log('[payments] pagamento %s já estava aprovado — efeitos de aviso não repetidos', payment.id)
-  }
+  // Carrega a reserva ANTES de atualizar para saber se a cooperativa já aceitou.
+  const booking = payment.bookings || (await supabase.from('bookings').select('*').eq('id', payment.booking_id).single()).data
 
-  // Carrega a reserva COMPLETA antes de atualizar (precisa saber se a
-  // operador já aceitou).
-  //
-  // Antes isto era `payment.bookings || (busca)`, confiando no join de quem
-  // chamou — e o polling de /status seleciona só três colunas da reserva
-  // (booking_code, status_commercial, operator_id). Como um objeto parcial é
-  // "verdadeiro" em JavaScript, a busca de reserva NUNCA acontecia e o resto da
-  // função trabalhava sem `user_id`, `service_type`, `service_id` e as demais
-  // que ela usa: orçamento de translado não virava "pago", a notificação ao
-  // cliente ficava sem destinatário e a comissão do afiliado saía de uma
-  // reserva pela metade. E o polling é justamente o caminho por onde as
-  // aprovações passam hoje.
-  const { data: booking } = await supabase
-    .from('bookings').select('*').eq('id', payment.booking_id).maybeSingle()
-
-  // Fluxo novo (solicitar→aceitar→pagar): o operador já está atribuída, então
+  // Fluxo novo (solicitar→aceitar→pagar): a cooperativa já está atribuída, então
   // a reserva permanece 'assigned' e segue direto para o atendimento. Fluxo
   // antigo (paga primeiro): vai para a fila de despacho para alguém aceitar.
   const bookingUpdate = { status_commercial: 'paid', payment_status: 'approved' }
@@ -2238,27 +1659,15 @@ export async function onPaymentApproved(payment) {
     }
   }
 
-  // ── Lança no ledger UMA vez, com reserva atômica ──────────────────────────
-  // Antes isto era ler `ledger_created` e depois inserir. Ler e escrever em duas
-  // idas ao banco NÃO impede a corrida que o próprio comentário descrevia:
-  // webhook e polling podiam ler `false` ao mesmo tempo, os dois inserirem e a
-  // receita aparecer DOBRADA no financeiro. Era raro só porque o webhook nunca
-  // aprovava nada (ele lia um status que o Mercado Pago não manda); com o
-  // webhook consertado, a corrida passou a ser alcançável.
-  //
-  // Agora a marca é feita por UPDATE condicional: no Postgres, só uma das
-  // chamadas concorrentes encontra `ledger_created = false` e leva a linha. Se
-  // a inserção falhar depois, a marca é DEVOLVIDA — senão o pagamento ficaria
-  // marcado como lançado sem nenhum lançamento existir.
+  // Cria lançamentos no ledger apenas uma vez — ledger_created evita duplicação
+  // quando webhook e polling aprovam o mesmo pagamento quase simultaneamente.
   const { data: freshPayment } = await supabase
     .from('payments')
-    .update({ ledger_created: true })
-    .eq('id', payment.id)
-    .eq('ledger_created', false)
     .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount')
-    .maybeSingle()
+    .eq('id', payment.id)
+    .single()
 
-  if (freshPayment) {
+  if (!freshPayment?.ledger_created) {
     const amount     = freshPayment?.amount_gross ?? payment.amount_gross
     // Usa a taxa real registrada no payment; fallback 3.5% para linhas antigas sem gateway_fee_pct
     const feePct     = freshPayment?.gateway_fee_pct ?? 0.035
@@ -2267,54 +1676,19 @@ export async function onPaymentApproved(payment) {
       : Math.round(amount * feePct * 100) / 100
     // Data efetiva do recebimento — o gráfico de faturamento agrupa por ela
     const effectiveDate = new Date().toISOString().slice(0, 10)
-    const cfg = await getPaymentSettings()
-    const commissionRows = await orderCommissionRows(booking, payment, effectiveDate, cfg)
 
     const { error: ledgerErr } = await supabase.from('financial_ledger').insert([
       { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${booking?.booking_code}`,  amount,                direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
       { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${booking?.booking_code}`,    amount: gatewayFee,    direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
       { booking_id: payment.booking_id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${booking?.booking_code}`, amount: amount - gatewayFee, direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
-      ...commissionRows,
     ])
 
     if (ledgerErr) {
-      // Devolve a marca: sem isso o pagamento ficaria "lançado" sem lançamento
-      // nenhum, e a receita sumiria do financeiro para sempre.
+      // Não marca ledger_created: a próxima aprovação/consulta tenta de novo
       console.error('[ledger] falha ao lançar receita:', ledgerErr.message)
-      await supabase.from('payments').update({ ledger_created: false }).eq('id', payment.id)
+    } else {
+      await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
     }
-  }
-
-  // REPASSES a pagar (migration 080). Fica FORA do gate `ledger_created`: os
-  // dois são idempotentes por conta própria, e o repasse precisa existir mesmo
-  // que o razão já tivesse sido lançado numa tentativa anterior.
-  // Best-effort — o cliente já pagou e a reserva tem de ser confirmada de
-  // qualquer forma; o que se perde é a linha do repasse, que dá para lançar
-  // depois pelo admin.
-  try {
-    const { gerarRepasses } = await import('../services/payouts.js')
-
-    // `payment.amount` NÃO EXISTE. A coluna é `amount_gross` (migration 001).
-    // `Number(undefined) || 0` dava 0, `repartirReserva` recusa total zero, e
-    // `gerarRepasses` saía com "nada a repassar" — em silêncio, porque o retorno
-    // é best-effort e ninguém lia. Resultado: NENHUM repasse foi criado desde
-    // sempre. `booking_payouts` vazia, "Meus recebimentos" do operador zerado e
-    // a tela de repasses do admin vazia em todas as abas.
-    //
-    // O razão nunca sofreu disso porque usa `booking.total_amount`. Por isso o
-    // painel mostrava "Repasses efetuados R$ 0,17" e a tabela de repasses não
-    // tinha uma linha sequer: dois caminhos, um certo e um quebrado.
-    //
-    // Fallback para o total da reserva: se o pagamento vier sem valor por
-    // qualquer motivo, é melhor repassar pelo valor da reserva do que não
-    // registrar a dívida. Zero continua sendo recusado lá dentro.
-    const valorPago = Number(payment.amount_gross ?? booking?.total_amount) || 0
-    if (!(valorPago > 0)) {
-      console.error('[payouts] reserva %s sem valor para repartir (payment=%s)', booking?.id, payment?.id)
-    }
-    await gerarRepasses(booking, valorPago)
-  } catch (e) {
-    console.error('[payouts] não foi possível gerar os repasses:', e?.message)
   }
 
   // Contabilidade por perna (Etapa 2, Onda A) — só roda quando o motor está
@@ -2324,19 +1698,12 @@ export async function onPaymentApproved(payment) {
   await recordLegAccounting(booking, payment).catch((err) =>
     console.error('[ledger] contabilidade por perna falhou booking=%s err=%s', payment.booking_id, err.message))
 
-  // Comissão de afiliado — só quando a reserva foi INDICADA e está paga.
-  // Idempotente (índice único booking+affiliate, migration 055); best-effort.
-  await recordAffiliateCommission(booking).catch((err) =>
-    console.error('[afiliado] comissão falhou booking=%s err=%s', payment.booking_id, err.message))
-
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
-  if (primeiraAprovacao) {
-    sendConfirmationEmail(booking).catch((err) =>
-      console.error('[email] confirmação de reserva falhou:', err.message))
+  sendConfirmationEmail(booking).catch((err) =>
+    console.error('[email] confirmação de reserva falhou:', err.message))
 
-    // Central no app: confirma para o turista e avisa quem precisa.
-    if (booking) notifyBookingPaid(booking)
-  }
+  // Central no app: confirma para o turista e avisa quem precisa.
+  if (booking) notifyBookingPaid(booking)
 }
 
 // Notificações de "pagamento confirmado" de UMA reserva (app + WhatsApp).
@@ -2353,8 +1720,8 @@ function notifyBookingPaid(booking) {
     templateKey: 'payment_confirmed',
     title:       'Pagamento confirmado ✅',
     body:        booking.operator_id
-      ? `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). O operador já vai cuidar de tudo! 🎉`
-      : `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar um operador aceitar.`,
+      ? `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). A cooperativa já vai cuidar de tudo! 🎉`
+      : `Recebemos o pagamento do seu ${tipo} (${booking.booking_code}). Agora é só aguardar uma cooperativa aceitar.`,
   })
 
   // WhatsApp pro cliente: pagamento confirmado (segurança de que deu certo).
@@ -2362,7 +1729,7 @@ function notifyBookingPaid(booking) {
     console.error('[whatsapp] aviso cliente pagamento falhou:', err.message))
 
   if (booking.operator_id) {
-    // Fluxo novo: o operador que aceitou é avisada de que o pagamento entrou.
+    // Fluxo novo: a cooperativa que aceitou é avisada de que o pagamento entrou.
     notifyUser({
       userId:      booking.operator_id,
       bookingId:   booking.id,
@@ -2374,12 +1741,11 @@ function notifyBookingPaid(booking) {
     notifyOperatorPaymentReceived(supabase, booking).catch((err) =>
       console.error('[whatsapp] aviso coop pagamento falhou:', err.message))
   } else {
-    // Fluxo antigo: a reserva paga fica disponível para os operadores.
+    // Fluxo antigo: a reserva paga fica disponível para as cooperativas.
     notifyOperatorsNewBooking(supabase, booking).catch((err) =>
-      console.error('[whatsapp] notificação de operadores falhou:', err.message))
+      console.error('[whatsapp] notificação de cooperativas falhou:', err.message))
     notifyOperatorsAndAdmin({
       bookingId:   booking.id,
-      fleetBookingId: booking.id,
       templateKey: 'new_booking',
       title:       'Nova solicitação disponível',
       body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)}. Abra para aceitar.`,
@@ -2392,17 +1758,9 @@ function notifyBookingPaid(booking) {
 // status nem lançamentos. Espelha o caminho de reserva única, rateando a taxa
 // de gateway por reserva pelo total de cada uma.
 async function onGroupPaymentApproved(payment) {
-  await supabase.from('payments')
-    .update({ status: 'approved', paid_at: new Date().toISOString() })
-    .eq('id', payment.id)
-
   const { data: bookings } = await supabase
     .from('bookings').select('*').eq('order_group_id', payment.order_group_id)
-  // Só processa o que foi efetivamente cobrado: reservas que estavam prontas
-  // para pagar (awaiting_payment) ou já pagas (idempotência do webhook+polling).
-  // Itens ainda em aceite (awaiting_acceptance) NÃO entram — não foram cobrados,
-  // então não podem virar 'paid' aqui.
-  const list = (bookings || []).filter((b) => ['awaiting_payment', 'paid'].includes(b.status_commercial))
+  const list = (bookings || []).filter((b) => b.status_commercial !== 'cancelled')
   if (list.length === 0) return
 
   // 1) Marca cada reserva do grupo como paga (idempotente).
@@ -2420,18 +1778,11 @@ async function onGroupPaymentApproved(payment) {
 
   // 2) Receita no ledger — uma vez por pagamento (gate ledger_created),
   //    rateando a taxa de gateway entre as reservas pelo total de cada uma.
-  // Mesma reserva atômica do caminho de reserva única: UPDATE condicional em
-  // vez de ler-depois-escrever. Aqui o estrago seria maior — o grupo lança a
-  // receita de VÁRIAS reservas de uma vez, então a duplicação sairia
-  // multiplicada.
   const { data: fresh } = await supabase.from('payments')
-    .update({ ledger_created: true })
-    .eq('id', payment.id)
-    .eq('ledger_created', false)
     .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount')
-    .maybeSingle()
+    .eq('id', payment.id).single()
 
-  if (fresh) {
+  if (!fresh?.ledger_created) {
     const combined = Number(fresh?.amount_gross ?? payment.amount_gross) || 0
     const feePct   = fresh?.gateway_fee_pct ?? 0.035
     const totalFee = fresh?.gateway_fee_amount > 0
@@ -2439,7 +1790,6 @@ async function onGroupPaymentApproved(payment) {
       : Math.round(combined * feePct * 100) / 100
     const effectiveDate = new Date().toISOString().slice(0, 10)
     const sumTotals = list.reduce((s, b) => s + Number(b.total_amount || 0), 0) || combined
-    const cfg = await getPaymentSettings()
 
     const rows = []
     let feeAllocated = 0
@@ -2451,19 +1801,17 @@ async function onGroupPaymentApproved(payment) {
         ? Math.round((totalFee - feeAllocated) * 100) / 100
         : Math.round(totalFee * (sumTotals ? amt / sumTotals : 0) * 100) / 100
       feeAllocated = Math.round((feeAllocated + fee) * 100) / 100
-      const commissionRows = await orderCommissionRows(b, payment, effectiveDate, cfg)
       rows.push(
         { booking_id: b.id, payment_id: payment.id, entry_type: 'booking_gross', description: `Receita bruta — ${b.booking_code}`,  amount: amt,                              direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
         { booking_id: b.id, payment_id: payment.id, entry_type: 'gateway_fee',   description: `Taxa gateway — ${b.booking_code}`,    amount: fee,                              direction: 'outflow', financial_status: 'pending', effective_date: effectiveDate },
         { booking_id: b.id, payment_id: payment.id, entry_type: 'booking_net',   description: `Receita líquida — ${b.booking_code}`, amount: Math.round((amt - fee) * 100) / 100, direction: 'inflow',  financial_status: 'pending', effective_date: effectiveDate },
-        ...commissionRows,
       )
     }
     const { error: ledgerErr } = await supabase.from('financial_ledger').insert(rows)
     if (ledgerErr) {
-      // Devolve a marca para a próxima aprovação tentar de novo.
       console.error('[ledger] grupo: falha ao lançar receita:', ledgerErr.message)
-      await supabase.from('payments').update({ ledger_created: false }).eq('id', payment.id)
+    } else {
+      await supabase.from('payments').update({ ledger_created: true }).eq('id', payment.id)
     }
   }
 
@@ -2471,64 +1819,10 @@ async function onGroupPaymentApproved(payment) {
   for (const b of list) {
     await recordLegAccounting(b, payment).catch((err) =>
       console.error('[ledger] contabilidade por perna (grupo) falhou booking=%s err=%s', b.id, err.message))
-    await recordAffiliateCommission(b).catch((err) =>
-      console.error('[afiliado] comissão (grupo) falhou booking=%s err=%s', b.id, err.message))
     sendConfirmationEmail(b).catch((err) =>
       console.error('[email] confirmação (grupo) falhou:', err.message))
     notifyBookingPaid(b)
   }
-}
-
-// ── Comissão do programa de afiliados ───────────────────
-// Gerada quando a reserva indicada é paga. % vem de system_settings
-// (affiliate_commission_percent, padrão 5). Repasse manual via PIX em até
-// 7 dias corridos (payout_due_date) — o admin marca como pago na tela
-// Afiliados. Idempotente: índice único (booking_id, affiliate_id) faz o
-// INSERT duplicado (webhook + polling) falhar com 23505, engolido em silêncio.
-async function recordAffiliateCommission(booking) {
-  if (!booking?.affiliate_id) return
-  // Trava anti-autoindicação (defesa em profundidade — a criação já ignora)
-  if (booking.affiliate_id === booking.user_id) return
-
-  const { data: st } = await supabase
-    .from('system_settings').select('setting_value')
-    .eq('setting_key', 'affiliate_commission_percent').maybeSingle()
-  const pct = Number(st?.setting_value ?? 5)
-  if (!(pct > 0)) return
-
-  const total  = Number(booking.total_amount || 0)
-  const amount = Math.round(total * pct) / 100 // total × pct% com 2 casas
-  if (!(amount > 0)) return
-
-  const { error } = await supabase.from('commissions').insert({
-    booking_id:         booking.id,
-    affiliate_id:       booking.affiliate_id,
-    commission_model:   'percentage',
-    commission_percent: pct,
-    commission_amount:  amount,
-    platform_amount:    Math.round((total - amount) * 100) / 100,
-    operator_amount:    0,
-    payout_status:      'pending',
-    payout_due_date:    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-  })
-  if (error) {
-    if (error.code === '23505') return // já lançada (webhook+polling) — ok
-    throw error
-  }
-
-  const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-  notifyUser({
-    userId:      booking.affiliate_id,
-    bookingId:   booking.id,
-    templateKey: 'affiliate_commission',
-    title:       'Você ganhou uma comissão! 🤑',
-    body:        `Uma reserva indicada por você foi paga (${booking.booking_code}). Sua comissão de ${fmtBRL(amount)} será repassada via PIX em até 7 dias.`,
-  })
-
-  // WhatsApp automático pro afiliado — mesmo evento (pagamento aprovado).
-  const { notifyAffiliateCommission } = await import('../services/whatsapp.js')
-  notifyAffiliateCommission(supabase, { affiliateId: booking.affiliate_id, booking, amount })
-    .catch((err) => console.error('[whatsapp] aviso de comissão falhou:', err.message))
 }
 
 function fmtDateBR(iso) {
