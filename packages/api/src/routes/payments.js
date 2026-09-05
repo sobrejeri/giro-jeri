@@ -1163,7 +1163,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
         // ── Cartão: sem fallback fake — erro propaga ──────
         const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
-        const userInfo = await supabase.from('users').select('email, full_name').eq('id', req.user.id).single()
+        const userInfo = await supabase.from('users').select('email, full_name, phone, created_at').eq('id', req.user.id).single()
 
         cardResult = await comChamadaMarcada(tentativaReservadaId, () => createCardPayment({
           amount:          chargedTotal,
@@ -1176,6 +1176,21 @@ router.post('/intent', authenticate, async (req, res, next) => {
           // Nome REAL do pagador. O Mercado Pago usa esses dados no antifraude;
           // nome inventado derruba a aprovação em vez de ajudar.
           payerName:       userInfo.data?.full_name,
+          // O antifraude do Mercado Pago pontua o CONTEXTO da compra, não só o
+          // cartão. Telefone e há quanto tempo a pessoa é cliente pesam contra
+          // a leitura de "conta nova, comprador desconhecido" — que é o padrão
+          // de cc_rejected_high_risk. Campo ausente é omitido, nunca inventado.
+          payerPhone:            userInfo.data?.phone,
+          payerRegistrationDate: userInfo.data?.created_at,
+          // O QUE está sendo comprado. Sem isto a cobrança chega sem nada que
+          // a explique, e compra sem contexto é lida como risco.
+          item: {
+            id:          String(service_id || booking.id),
+            title:       service_name || `Reserva ${bookingCode}`,
+            description: service_name || `Reserva ${bookingCode}`,
+            quantity:    1,
+            unit_price:  chargedTotal,
+          },
           payerDoc:        payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
           externalRef:     booking.id,
           // Uma chave por TENTATIVA, não por reserva: reenvio da mesma

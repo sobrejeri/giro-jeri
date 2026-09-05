@@ -143,6 +143,16 @@ function semEmailDoComprador() {
   return err
 }
 
+// Telefone do pagador no formato do Mercado Pago (DDD e número separados).
+// Devolve null quando não dá para afirmar que é um telefone brasileiro válido —
+// mandar lixo é pior que não mandar: o antifraude lê como dado inconsistente.
+function telefoneDoPagador(phone) {
+  let d = String(phone || '').replace(/\D/g, '')
+  if (d.length > 11 && d.startsWith('55')) d = d.slice(2)   // tira o código do país
+  if (d.length < 10 || d.length > 11) return null           // DDD + 8 ou 9 dígitos
+  return { area_code: d.slice(0, 2), number: d.slice(2) }
+}
+
 // Nome do pagador como o Mercado Pago espera, sem inventar ninguém: só manda o
 // que existe de verdade.
 function nomeDoPagador(payerName) {
@@ -237,6 +247,11 @@ export async function createCardPayment({
   payerEmail,
   payerName,
   payerDoc,
+  payerPhone,
+  payerRegistrationDate,
+  item,
+  // Injetável para o teste exercitar o CORPO enviado ao Mercado Pago sem rede.
+  paymentClient,
   externalRef,
   idempotencyKey,
   deviceId,
@@ -246,7 +261,7 @@ export async function createCardPayment({
 }) {
   // Com split, opera na conta do operador; sem split, na conta da plataforma.
   // Sem fallback fake para cartão — erro propaga para o caller.
-  const client = paymentClientFor(sellerAccessToken)
+  const client = paymentClient || paymentClientFor(sellerAccessToken)
   if (!client) throw new Error('Mercado Pago não configurado (access token ausente)')
   // Sem chave de idempotência não se cobra. Inventar uma aqui destrói a única
   // proteção que existe contra cobrança dupla: chave nova = compra nova para o
@@ -267,6 +282,37 @@ export async function createCardPayment({
       ...nomeDoPagador(payerName),
       identification: { type: 'CPF', number: payerDoc },
     },
+  }
+
+  // ── additional_info: o que o antifraude realmente lê ────────────────────
+  // O Mercado Pago documenta este bloco como um dos que mais pesam na
+  // aprovação de cartão. Sem ele a cobrança chega "nua": um valor, um cartão e
+  // nada que explique O QUE está sendo comprado nem QUEM é o comprador — e
+  // compra sem contexto, de vendedor novo, é lida como risco. É uma das causas
+  // documentadas de cc_rejected_high_risk.
+  //
+  // Tudo aqui é dado REAL do pedido e do cadastro. Campo que não existe é
+  // OMITIDO: mandar telefone ou nome inventado piora, não melhora.
+  const telefone = telefoneDoPagador(payerPhone)
+  const pagadorInfo = {
+    ...nomeDoPagador(payerName),
+    ...(telefone ? { phone: telefone } : {}),
+    // Há quanto tempo é cliente. Conta nova comprando alto é o padrão de
+    // fraude; conta antiga é o contrário — e o MP só sabe se contarmos.
+    ...(payerRegistrationDate ? { registration_date: payerRegistrationDate } : {}),
+  }
+  if (item || Object.keys(pagadorInfo).length) {
+    body.additional_info = {
+      ...(item ? { items: [{
+        id:          String(item.id),
+        title:       String(item.title || '').slice(0, 256),
+        description: String(item.description || item.title || '').slice(0, 256),
+        category_id: 'travels',
+        quantity:    Number(item.quantity) || 1,
+        unit_price:  valorParaMP(item.unit_price ?? amount, 'unit_price'),
+      }] } : {}),
+      ...(Object.keys(pagadorInfo).length ? { payer: pagadorInfo } : {}),
+    }
   }
 
   // issuer_id é opcional — não enviar quando undefined para evitar rejeição MP

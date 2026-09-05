@@ -116,3 +116,63 @@ test('o checkout envia o e-mail do Brick junto com a cobrança', async () => {
   const envios = executavel.match(/payer_email:\s*formData\?\.payer\?\.email/g) || []
   assert.equal(envios.length, 2, 'cartão e PIX')
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// additional_info — o bloco que o antifraude do Mercado Pago realmente lê
+// ═══════════════════════════════════════════════════════════════════════════
+// Sem ele a cobrança chega "nua": um valor, um cartão, e nada que explique o
+// que está sendo comprado nem quem é o comprador. Compra sem contexto, de
+// vendedor novo, é lida como risco — é causa documentada de
+// cc_rejected_high_risk.
+function clienteEspiao() {
+  const enviados = []
+  return { enviados, create: async (input) => { enviados.push(input); return { id: 1, status: 'approved' } } }
+}
+
+const cartaoBase = {
+  amount: 10, description: 'Litoral Leste', paymentMethodId: 'master', cardToken: 'tok',
+  payerEmail: 'cliente@exemplo.com', payerDoc: '12345678901',
+  externalRef: 'bk-1', idempotencyKey: 'tentativa-1',
+}
+
+test('a cobrança leva o item comprado e o contexto do comprador', async () => {
+  const espiao = clienteEspiao()
+  await createCardPayment({
+    ...cartaoBase, paymentClient: espiao,
+    payerName: 'Maria Silva Souza', payerPhone: '+55 (85) 99876-5432',
+    payerRegistrationDate: '2024-03-10T12:00:00.000Z',
+    item: { id: 'tour-9', title: 'Litoral Leste Tradicional', quantity: 1, unit_price: 10 },
+  })
+  const { additional_info: info, payer } = espiao.enviados[0].body
+
+  assert.equal(info.items[0].id, 'tour-9')
+  assert.equal(info.items[0].title, 'Litoral Leste Tradicional')
+  assert.equal(info.items[0].unit_price, 10)
+  assert.equal(info.items[0].category_id, 'travels')
+
+  assert.equal(info.payer.first_name, 'Maria')
+  assert.equal(info.payer.last_name, 'Silva Souza')
+  assert.deepEqual(info.payer.phone, { area_code: '85', number: '998765432' },
+    'DDD e número separados, sem o +55')
+  assert.equal(info.payer.registration_date, '2024-03-10T12:00:00.000Z')
+
+  // O pagador principal continua com identidade real e completa.
+  assert.equal(payer.email, 'cliente@exemplo.com')
+  assert.equal(payer.identification.number, '12345678901')
+})
+
+test('telefone inválido é omitido, não enviado como lixo', async () => {
+  for (const ruim of ['123', '', null, 'não é telefone', '5585']) {
+    const espiao = clienteEspiao()
+    await createCardPayment({ ...cartaoBase, paymentClient: espiao, payerPhone: ruim, payerName: 'Ana' })
+    assert.equal(espiao.enviados[0].body.additional_info.payer.phone, undefined,
+      `telefone "${ruim}" inventado piora o antifraude em vez de ajudar`)
+  }
+})
+
+test('sem contexto nenhum, a cobrança sai igual — additional_info não é obrigatório', async () => {
+  const espiao = clienteEspiao()
+  await createCardPayment({ ...cartaoBase, paymentClient: espiao })
+  assert.equal(espiao.enviados[0].body.additional_info, undefined)
+  assert.equal(espiao.enviados[0].body.transaction_amount, 10)
+})
