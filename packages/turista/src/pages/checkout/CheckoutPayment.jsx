@@ -40,6 +40,9 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
   const brickRef = useRef(null)
   const [phase,       setPhase]       = useState('loading') // loading | ready | error
   const [rejectedMsg, setRejectedMsg] = useState('')
+  // true = falhou do nosso lado (rede, servidor); false = o gateway recusou.
+  const [falhaInterna, setFalhaInterna] = useState(false)
+  const enviandoRef = useRef(false)   // uma cobrança por vez
 
   useEffect(() => {
     let cancelled = false
@@ -76,6 +79,13 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
               if (!cancelled) setPhase((p) => (p === 'loading' ? 'error' : p))
             },
             onSubmit: async ({ selectedPaymentMethod, formData }) => {
+              // Trava de reentrada: o Brick já bloqueia o botão enquanto a
+              // promessa não resolve, mas uma segunda chamada (Enter no
+              // teclado, toque duplo que escapa) criaria uma SEGUNDA cobrança
+              // no Mercado Pago. Cobrança dupla é o erro caro deste fluxo.
+              if (enviandoRef.current) return Promise.reject(new Error('Pagamento em processamento…'))
+              enviandoRef.current = true
+              try {
               setRejectedMsg('')
               try {
                 // PIX (transferência bancária) → cria o pagamento e abre o QR.
@@ -97,14 +107,26 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
                 })
                 if (result?.status === 'rejected') {
                   const msg = result.message_key ? t(result.message_key) : t('payment.rejected.generic')
+                  setFalhaInterna(false)
                   setRejectedMsg(msg)
                   return Promise.reject(new Error(msg))
                 }
                 // approved / in_process → o componente pai navega de tela.
                 return Promise.resolve()
               } catch (err) {
-                setRejectedMsg(err?.message || t('payment.rejected.generic'))
+                // Recusa do cartão e falha nossa são coisas diferentes. Antes
+                // as duas apareciam sob "Pagamento recusado" — inclusive um
+                // erro de banco, que dizia ao cliente que o cartão foi negado
+                // quando o Mercado Pago podia ter aprovado a cobrança.
+                setFalhaInterna(true)
+                setRejectedMsg(
+                  err?.message ||
+                  'Não foi possível concluir a confirmação do pagamento. Estamos verificando o status da transação.',
+                )
                 return Promise.reject(err)
+              }
+              } finally {
+                enviandoRef.current = false
               }
             },
           },
@@ -155,11 +177,21 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
   return (
     <div className="pb-1">
       {rejectedMsg && (
-        <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-3 mb-3">
-          <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
+        <div className={`flex items-start gap-2 rounded-xl px-3 py-3 mb-3 border ${
+          falhaInterna ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'
+        }`}>
+          <AlertCircle size={15} className={`shrink-0 mt-0.5 ${falhaInterna ? 'text-amber-500' : 'text-red-400'}`} />
           <div>
-            <p className="text-[13px] font-semibold text-red-700">{t('payment.card.declined')}</p>
-            <p className="text-[12px] text-red-600 mt-0.5">{rejectedMsg}</p>
+            <p className={`text-[13px] font-semibold ${falhaInterna ? 'text-amber-800' : 'text-red-700'}`}>
+              {falhaInterna ? 'Não conseguimos confirmar agora' : t('payment.card.declined')}
+            </p>
+            <p className={`text-[12px] mt-0.5 ${falhaInterna ? 'text-amber-700' : 'text-red-600'}`}>{rejectedMsg}</p>
+            {falhaInterna && (
+              <p className="text-[11px] text-amber-700/80 mt-1.5">
+                Se o valor foi debitado, a reserva aparece em Minhas Reservas em alguns instantes —
+                não pague de novo sem conferir lá.
+              </p>
+            )}
           </div>
         </div>
       )}

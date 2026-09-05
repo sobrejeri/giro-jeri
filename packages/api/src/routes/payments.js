@@ -641,10 +641,23 @@ const nomeDaColunaNoErro = (msg = '') =>
 async function inserirPagamento(row) {
   let tentativa = { ...row }
   const camposPerdidos = []
+  // Uma transação do gateway = UMA linha. `upsert` com onConflict roda
+  // INSERT ... ON CONFLICT DO UPDATE num comando só: se a mesma transação
+  // chegar duas vezes (retentativa do cliente, cobrança que o MP repetiu,
+  // webhook e polling ao mesmo tempo), a segunda ATUALIZA em vez de estourar
+  // a unicidade. SELECT-e-depois-INSERT não serviria: entre os dois há corrida.
+  //
+  // Sem id de gateway (manual, PIX sem retorno) segue INSERT: a coluna é nula
+  // e nulo não conflita com nulo no Postgres — todo upsert viraria uma linha
+  // nova de qualquer forma.
+  const temIdDoGateway = !!row.gateway_transaction_id
+  const gravar = (linha) => (temIdDoGateway
+    ? supabase.from('payments').upsert(linha, { onConflict: 'gateway_transaction_id' }).select().single()
+    : supabase.from('payments').insert(linha).select().single())
 
   // No máximo uma volta por campo removível — nunca um laço aberto.
   for (let i = 0; i <= Object.keys(row).length; i++) {
-    const { data, error } = await supabase.from('payments').insert(tentativa).select().single()
+    const { data, error } = await gravar(tentativa)
     if (!error) return { payment: data, error: null, camposPerdidos }
     if (!COLUNA_AUSENTE.has(error.code)) return { payment: null, error, camposPerdidos }
 
@@ -1152,29 +1165,22 @@ router.post('/intent', authenticate, async (req, res, next) => {
     }
 
     const { payment, error: pErr, camposPerdidos } = await inserirPagamento(paymentInsertRow)
-    if (pErr?.code === '23505' && gatewayTransactionId) {
-      // Esta cobrança já está gravada: o gateway devolveu uma transação que já
-      // existe no banco. Devolve o que existe em vez de vazar o erro do
-      // Postgres — o cliente via "duplicate key value violates unique
-      // constraint" na tela de pagamento.
-      const { data: jaExiste } = await supabase
-        .from('payments')
-        .select('id, status')
-        .eq('gateway_transaction_id', gatewayTransactionId)
-        .maybeSingle()
-      if (jaExiste) {
-        console.warn('[payments] transação %s já registrada (pagamento %s, status %s)',
-          gatewayTransactionId, jaExiste.id, jaExiste.status)
-        return res.status(409).json({
-          error: jaExiste.status === 'approved'
-            ? 'Este pagamento já foi aprovado. Confira em Minhas Reservas antes de tentar de novo.'
-            : 'Esta tentativa de pagamento já foi registrada. Aguarde alguns segundos e tente novamente.',
-          payment_id: jaExiste.id,
-          status:     jaExiste.status,
-        })
+    if (pErr) {
+      // A cobrança pode já existir no gateway. Nunca deixe o erro de gravação
+      // virar "pagamento recusado": quem decide isso é o Mercado Pago.
+      console.error('[payments] falha ao gravar pagamento booking=%s tx=%s code=%s msg=%s',
+        booking.id, gatewayTransactionId || '(sem id)', pErr.code, pErr.message)
+      if (gatewayTransactionId) {
+        const e = new Error(
+          'Não foi possível concluir a confirmação do pagamento. Estamos verificando o status da transação — ' +
+          'confira em Minhas Reservas antes de tentar de novo.',
+        )
+        e.status = 502
+        e.gatewayTransactionId = gatewayTransactionId
+        throw e
       }
+      throw pErr
     }
-    if (pErr) throw pErr
     if (camposPerdidos.length) {
       console.error(
         '[payments] reserva %s gravada SEM as colunas %s (migration pendente). ' +
@@ -2144,7 +2150,23 @@ export async function onPaymentApproved(payment) {
   // única abaixo permanece intacto.
   if (payment.order_group_id) return onGroupPaymentApproved(payment)
 
-  await supabase.from('payments').update({ status: 'approved', paid_at: new Date().toISOString() }).eq('id', payment.id)
+  // Transição ATÔMICA pendente → aprovado. Só quem encontra a linha ainda não
+  // aprovada leva o UPDATE; qualquer chamada seguinte (webhook repetido,
+  // polling ao mesmo tempo, retentativa) recebe zero linhas e sabe que os
+  // efeitos de UMA vez só — e-mail, notificação — já foram disparados.
+  // O dinheiro já tinha guarda própria (ledger_created, repasses); faltava a
+  // dos avisos, que chegavam duplicados ao cliente.
+  const { data: transicao } = await supabase
+    .from('payments')
+    .update({ status: 'approved', paid_at: new Date().toISOString() })
+    .eq('id', payment.id)
+    .neq('status', 'approved')
+    .select('id')
+    .maybeSingle()
+  const primeiraAprovacao = !!transicao
+  if (!primeiraAprovacao) {
+    console.log('[payments] pagamento %s já estava aprovado — efeitos de aviso não repetidos', payment.id)
+  }
 
   // Carrega a reserva COMPLETA antes de atualizar (precisa saber se a
   // operador já aceitou).
@@ -2273,11 +2295,13 @@ export async function onPaymentApproved(payment) {
     console.error('[afiliado] comissão falhou booking=%s err=%s', payment.booking_id, err.message))
 
   // E-mail de confirmação — nunca pode quebrar o fluxo de pagamento
-  sendConfirmationEmail(booking).catch((err) =>
-    console.error('[email] confirmação de reserva falhou:', err.message))
+  if (primeiraAprovacao) {
+    sendConfirmationEmail(booking).catch((err) =>
+      console.error('[email] confirmação de reserva falhou:', err.message))
 
-  // Central no app: confirma para o turista e avisa quem precisa.
-  if (booking) notifyBookingPaid(booking)
+    // Central no app: confirma para o turista e avisa quem precisa.
+    if (booking) notifyBookingPaid(booking)
+  }
 }
 
 // Notificações de "pagamento confirmado" de UMA reserva (app + WhatsApp).
