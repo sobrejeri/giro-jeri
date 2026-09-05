@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ShieldCheck, AlertCircle } from 'lucide-react'
 import { api } from '../../lib/api'
-import { paymentMethodsDoBrick } from '../../lib/formasPagamento'
 
 // ─── helpers ────────────────────────────────────────────────
 function fmt(v) {
@@ -12,7 +11,7 @@ function fmt(v) {
 
 // ─── getMercadoPago ──────────────────────────────────────────
 // Instancia o SDK somente quando o script já carregou. Com `publicKey` (chave
-// do operador atribuído), tokeniza o cartão NA conta dela para o split;
+// da cooperativa atribuída), tokeniza o cartão NA conta dela para o split;
 // sem ela, usa a chave da plataforma (VITE_MP_PUBLIC_KEY, sem split).
 function getMercadoPago(publicKey) {
   if (typeof window.MercadoPago === 'undefined') return null
@@ -31,18 +30,24 @@ function getUserEmail() {
   catch { return undefined }
 }
 
+function getDeviceId() {
+  return window.MP_DEVICE_SESSION_ID ||
+    document.querySelector('input[name="deviceId"]')?.value ||
+    document.querySelector('[data-checkout="deviceId"]')?.value || undefined
+}
+
 // ─── PaymentBrick ────────────────────────────────────────────
 // Brick unificado do Mercado Pago: cartão (crédito/débito) E PIX na mesma tela
 // embutida. Tokeniza com segurança (PCI) e devolve os dados no onSubmit; a API
-// cria o pagamento (com split quando o operador está conectada).
-function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
+// cria o pagamento (com split quando a cooperativa está conectada).
+function PaymentBrick({ amount, publicKey, onCard, onPix }) {
   const { t }    = useTranslation()
   const brickRef = useRef(null)
+  const submittingRef = useRef(false)
+  const attemptRef = useRef(null)
   const [phase,       setPhase]       = useState('loading') // loading | ready | error
   const [rejectedMsg, setRejectedMsg] = useState('')
-  // true = falhou do nosso lado (rede, servidor); false = o gateway recusou.
-  const [falhaInterna, setFalhaInterna] = useState(false)
-  const enviandoRef = useRef(false)   // uma cobrança por vez
+  const [processing,  setProcessing]  = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -66,11 +71,13 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
   },
 },
           customization: {
-            visual: { style: { theme: 'default' } },
-            // Quais formas aparecem vem das Configurações do admin. Método
-            // desligado é OMITIDO do objeto — é assim que o Brick esconde uma
-            // forma de pagamento; lista vazia não desliga.
-            paymentMethods: paymentMethodsDoBrick(settings),
+            visual:         { style: { theme: 'default' } },
+            paymentMethods: {
+              creditCard:     'all',
+              debitCard:      'all',
+              bankTransfer:   ['pix'],   // habilita PIX no mesmo Brick
+              maxInstallments: 12,
+            },
           },
           callbacks: {
             onReady: () => { if (!cancelled) setPhase('ready') },
@@ -79,13 +86,9 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
               if (!cancelled) setPhase((p) => (p === 'loading' ? 'error' : p))
             },
             onSubmit: async ({ selectedPaymentMethod, formData }) => {
-              // Trava de reentrada: o Brick já bloqueia o botão enquanto a
-              // promessa não resolve, mas uma segunda chamada (Enter no
-              // teclado, toque duplo que escapa) criaria uma SEGUNDA cobrança
-              // no Mercado Pago. Cobrança dupla é o erro caro deste fluxo.
-              if (enviandoRef.current) return Promise.reject(new Error('Pagamento em processamento…'))
-              enviandoRef.current = true
-              try {
+              if (submittingRef.current) return Promise.reject(new Error(t('payment.card.processing')))
+              submittingRef.current = true
+              setProcessing(true)
               setRejectedMsg('')
               try {
                 // PIX (transferência bancária) → cria o pagamento e abre o QR.
@@ -97,6 +100,8 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
                 // Cartão (crédito/débito) → método inferido do payment_method_id.
                 const pmId   = formData?.payment_method_id || ''
                 const method = /^deb/i.test(pmId) ? 'debit_card' : 'credit_card'
+                const attemptId = attemptRef.current || crypto.randomUUID()
+                attemptRef.current = attemptId
                 const result = await onCard({
                   payment_method:    method,
                   card_token:        formData?.token,
@@ -104,33 +109,24 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
                   issuer_id:         formData?.issuer_id ? String(formData.issuer_id) : undefined,
                   installments:      Number(formData?.installments) || 1,
                   payer_doc:         formData?.payer?.identification?.number,
-                  // Device ID do antifraude do MP (security.js no index.html).
-                  // Vai vazio se o script não tiver carregado — a cobrança
-                  // segue, só sem o sinal que ajuda a aprovar.
-                  device_id:         typeof window !== 'undefined' ? window.MP_DEVICE_SESSION_ID : undefined,
+                  payment_attempt_id: attemptId,
+                  device_id:          getDeviceId(),
                 })
                 if (result?.status === 'rejected') {
+                  attemptRef.current = null
                   const msg = result.message_key ? t(result.message_key) : t('payment.rejected.generic')
-                  setFalhaInterna(false)
                   setRejectedMsg(msg)
                   return Promise.reject(new Error(msg))
                 }
+                if (result?.status === 'approved') attemptRef.current = null
                 // approved / in_process → o componente pai navega de tela.
                 return Promise.resolve()
               } catch (err) {
-                // Recusa do cartão e falha nossa são coisas diferentes. Antes
-                // as duas apareciam sob "Pagamento recusado" — inclusive um
-                // erro de banco, que dizia ao cliente que o cartão foi negado
-                // quando o Mercado Pago podia ter aprovado a cobrança.
-                setFalhaInterna(true)
-                setRejectedMsg(
-                  err?.message ||
-                  'Não foi possível concluir a confirmação do pagamento. Estamos verificando o status da transação.',
-                )
+                setRejectedMsg(err?.message || t('payment.rejected.generic'))
                 return Promise.reject(err)
-              }
               } finally {
-                enviandoRef.current = false
+                submittingRef.current = false
+                setProcessing(false)
               }
             },
           },
@@ -146,34 +142,12 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
       cancelled = true
       try { brickRef.current?.unmount?.() } catch { /* ignore */ }
     }
-  // `settings` entra nas dependências: se o dono mudar as formas de pagamento
-  // no admin, o Brick precisa ser remontado — ele lê a configuração só ao criar.
-  }, [amount, publicKey, settings]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [amount, publicKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (phase === 'error') {
     return (
-      // Beco sem saída antes: só dizia "atualize a página", e num app instalado
-      // não existe botão de atualizar à vista. Quem chegava aqui ficava com a
-      // reserva aceita e sem conseguir pagar.
-      <div className="px-4 py-4 bg-red-50 rounded-2xl border border-red-100">
-        <p className="text-[13px] text-red-700 font-semibold">Não foi possível carregar o pagamento.</p>
-        <p className="text-[12px] text-red-600/80 mt-1 leading-snug">
-          Costuma ser conexão instável. Sua reserva está guardada — pode tentar de novo.
-        </p>
-        <div className="flex flex-wrap items-center gap-2 mt-3">
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-brand text-white font-bold rounded-full px-4 py-2 text-[13px] active:scale-95 transition-transform"
-          >
-            Tentar de novo
-          </button>
-          <a
-            href="https://wa.me/5588981222990"
-            className="text-[12.5px] font-semibold text-gray-600 underline"
-          >
-            Falar no WhatsApp
-          </a>
-        </div>
+      <div className="px-4 py-4 text-[13px] text-red-600 bg-red-50 rounded-2xl border border-red-100">
+        Não foi possível carregar o pagamento. Atualize a página e tente novamente.
       </div>
     )
   }
@@ -181,25 +155,23 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
   return (
     <div className="pb-1">
       {rejectedMsg && (
-        <div className={`flex items-start gap-2 rounded-xl px-3 py-3 mb-3 border ${
-          falhaInterna ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100'
-        }`}>
-          <AlertCircle size={15} className={`shrink-0 mt-0.5 ${falhaInterna ? 'text-amber-500' : 'text-red-400'}`} />
+        <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-3 mb-3">
+          <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
           <div>
-            <p className={`text-[13px] font-semibold ${falhaInterna ? 'text-amber-800' : 'text-red-700'}`}>
-              {falhaInterna ? 'Não conseguimos confirmar agora' : t('payment.card.declined')}
-            </p>
-            <p className={`text-[12px] mt-0.5 ${falhaInterna ? 'text-amber-700' : 'text-red-600'}`}>{rejectedMsg}</p>
-            {falhaInterna && (
-              <p className="text-[11px] text-amber-700/80 mt-1.5">
-                Se o valor foi debitado, a reserva aparece em Minhas Reservas em alguns instantes —
-                não pague de novo sem conferir lá.
-              </p>
-            )}
+            <p className="text-[13px] font-semibold text-red-700">{t('payment.card.declined')}</p>
+            <p className="text-[12px] text-red-600 mt-0.5">{rejectedMsg}</p>
           </div>
         </div>
       )}
-      <div id="paymentBrick_container" />
+      <div className={processing ? 'pointer-events-none opacity-60' : ''} aria-busy={processing}>
+        <div id="paymentBrick_container" />
+      </div>
+      {processing && (
+        <div className="flex items-center justify-center py-3 gap-2 text-brand font-semibold">
+          <div className="w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+          <span className="text-[13px]">Processando pagamento...</span>
+        </div>
+      )}
       {phase === 'loading' && (
         <div className="flex items-center justify-center py-6 gap-2 text-gray-400">
           <div className="w-5 h-5 border-2 border-gray-300 border-t-brand rounded-full animate-spin" />
@@ -215,52 +187,20 @@ export default function CheckoutPayment() {
   const navigate   = useNavigate()
   const { state }  = useLocation()
   const { t }      = useTranslation()
-  // Formas de pagamento configuradas pelo dono no admin.
-  //
-  // COM PRAZO. Isto é preferência de exibição — NÃO pode segurar a tela de
-  // pagamento. Sem o prazo, a primeira versão deixava o cliente preso em
-  // "Preparando pagamento seguro…" enquanto a API acordava (cold start do
-  // Render leva dezenas de segundos), e o formulário nunca aparecia.
-  //
-  // Passados 2 segundos, segue com o padrão (todas as formas ligadas) e IGNORA
-  // a resposta atrasada — aplicá-la depois remontaria o Brick, e o Mercado Pago
-  // duplica o formulário quando remontado no mesmo container.
-  const [settings, setSettings] = useState(undefined)
-  useEffect(() => {
-    let decidido = false
-    const decidir = (v) => { if (!decidido) { decidido = true; setSettings(v) } }
-    const prazo = setTimeout(() => decidir({}), 2000)
-    api.getPublicSettings()
-      .then((s) => decidir(s || {}))
-      .catch(() => decidir({}))
-      .finally(() => clearTimeout(prazo))
-    return () => { decidido = true; clearTimeout(prazo) }
-  }, [])
-  // Chave pública do operador atribuído (split). Buscada para reservas já
+  // Chave pública da cooperativa atribuída (split). Buscada para reservas já
   // existentes (pagamento pós-aceite). keyChecked evita montar o Brick antes.
   const [sellerKey,  setSellerKey]  = useState(null)
   const [keyChecked, setKeyChecked] = useState(() => !state?.existing_booking_id)
 
-  // COM PRAZO, pelo mesmo motivo das formas de pagamento logo acima — e a
-  // ausência dele aqui era pior: esta chamada TRAVA o formulário. Sem resposta
-  // (cold start do Render leva dezenas de segundos, e a API pode estar fora),
-  // o cliente ficava preso em "Preparando pagamento seguro…" achando que o
-  // botão não funcionou. A chave do operador é otimização de split; não pode
-  // impedir alguém de pagar.
   useEffect(() => {
     const bid = state?.existing_booking_id
     if (!bid) { setKeyChecked(true); return }
-    let decidido = false
-    const seguir = () => { if (!decidido) { decidido = true; setKeyChecked(true) } }
-    const prazo = setTimeout(() => {
-      console.warn('[checkout] chave do operador demorou — seguindo com a da plataforma')
-      seguir()
-    }, 3000)
+    let active = true
     api.getCheckoutKey(bid)
-      .then((r) => { if (!decidido) setSellerKey(r?.public_key || null) })
+      .then((r) => { if (active) setSellerKey(r?.public_key || null) })
       .catch(() => {})
-      .finally(() => { clearTimeout(prazo); seguir() })
-    return () => { decidido = true; clearTimeout(prazo) }
+      .finally(() => { if (active) setKeyChecked(true) })
+    return () => { active = false }
   }, [state?.existing_booking_id])
 
   if (!state) { navigate(-1); return null }
@@ -328,10 +268,6 @@ export default function CheckoutPayment() {
       total_price, service_name, cover_image_url,
       existing_booking_id: existing_booking_id || undefined,
       order_group_id: order_group_id || undefined,
-      // Com QUAL chave pública o cartão foi tokenizado. O servidor usa isso
-      // para não dividir uma cobrança cujo token pertence a outra conta — o
-      // Mercado Pago recusaria o token, com uma mensagem que não explica nada.
-      mp_public_key: sellerKey || import.meta.env.VITE_MP_PUBLIC_KEY || undefined,
       ...cardFields,
     })
 
@@ -348,26 +284,6 @@ export default function CheckoutPayment() {
           card_last_four: result.card_last_four,
           card_brand:     result.card_brand,
           payment_method: cardFields.payment_method,
-        },
-      })
-      return result
-    }
-
-    // Débito com autenticação do emissor (3DS): o pagamento existe e está
-    // pendente do banco do cliente. Vai para a tela de processamento, que já
-    // consulta o status a cada poucos segundos — é ela quem descobre o
-    // desfecho, porque o iframe do banco é de outro domínio e não nos avisa.
-    if (result.status === 'challenge') {
-      navigate('/checkout/processando', {
-        state: {
-          ...state,
-          payment_id:      result.payment_id,
-          booking_id:      result.booking_id,
-          booking_code:    result.booking_code,
-          amount:          result.amount,
-          payment_method:  cardFields.payment_method,
-          challenge_url:   result.challenge_url,
-          challenge_creq:  result.challenge_creq,
         },
       })
       return result
@@ -392,7 +308,7 @@ export default function CheckoutPayment() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#F8F8F8]">
       <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="flex items-center gap-3">
           <button
@@ -426,17 +342,12 @@ export default function CheckoutPayment() {
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
           <p className="text-[14px] font-bold text-gray-900 px-4 pt-4 pb-1">{t('payment.choose')}</p>
           <div className="px-3 pb-3 pt-1">
-            {/* Espera TAMBÉM as formas de pagamento chegarem. Sem isso o Brick
-                montaria uma vez sem a configuração e outra com ela — e o
-                Mercado Pago não gosta de ser montado duas vezes no mesmo
-                container: o formulário aparece duplicado. */}
-            {keyChecked && settings !== undefined ? (
+            {keyChecked ? (
               <PaymentBrick
                 amount={total_price}
                 publicKey={sellerKey}
                 onCard={handleCardPayment}
                 onPix={handlePix}
-                settings={settings}
               />
             ) : (
               <div className="flex items-center justify-center py-8 gap-2 text-gray-400">
