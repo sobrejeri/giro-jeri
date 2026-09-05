@@ -136,6 +136,22 @@ async function insertBookingVehicles(bookingId, vehicles) {
   if (error) throw error
 }
 
+// Taxas do Mercado Pago por método (Brasil). São o que a plataforma ASSUME
+// para lançar o custo no financeiro — a cobrança real é a do extrato, e a
+// negociada de cada conta pode ser menor.
+//
+// O PIX estava sendo lançado a 3,5%: o insert gravava taxa ZERO para tudo que
+// não fosse cartão, e o razão caía num fallback de 3,5% pensado para linhas
+// antigas. Numa cobrança real de R$ 5,75 o Mercado Pago tirou R$ 0,06 (1,04%) e
+// a plataforma lançou R$ 0,20 — mais de três vezes o custo verdadeiro, para
+// baixo no lucro e em toda conferência de caixa.
+const TAXA_MP = {
+  pix:         0.0099,   // 0,99%
+  debit_card:  0.0150,   // 1,50%
+  credit_card: 0.0498,   // 4,98% à vista
+}
+const taxaDoMetodo = (metodo) => TAXA_MP[metodo] ?? 0.035
+
 async function getPaymentSettings() {
   const { data = [] } = await supabase
     .from('system_settings')
@@ -1085,7 +1101,9 @@ router.post('/intent', authenticate, async (req, res, next) => {
       payment_method,
       payment_type:           'full',
       amount_gross:           chargedTotal,
-      gateway_fee_amount:     isCard ? Math.round(chargedTotal * (cardGatewayFeePct || 0.035) * 100) / 100 : 0,
+      // Antes: taxa ZERO para tudo que não fosse cartão. PIX tem custo (~0,99%)
+      // e lançá-lo como zero fazia o razão cair no fallback de 3,5% depois.
+      gateway_fee_amount:     Math.round(chargedTotal * (cardGatewayFeePct || taxaDoMetodo(payment_method)) * 100) / 100,
       currency:               'BRL',
       status:                 initialPaymentStatus,
       expires_at:             expiresAt,
@@ -1100,6 +1118,9 @@ router.post('/intent', authenticate, async (req, res, next) => {
         card_holder_name:       cardHolderName,
         gateway_fee_pct:        cardGatewayFeePct,
       } : {}),
+      // Fora do bloco de cartão: o PIX também tem taxa, e gravá-la aqui é o que
+      // impede o razão de chutar 3,5% mais tarde.
+      ...(isCard ? {} : { gateway_fee_pct: taxaDoMetodo(payment_method) }),
       // Houve split? Registrar é o que impede `gerarRepasses` de lançar a
       // comissão de novo — o gateway já depositou a parte do operador nesta
       // cobrança, e o repasse manual seria pagamento em dobro (migration 087).
