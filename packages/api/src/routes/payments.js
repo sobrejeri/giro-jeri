@@ -1213,7 +1213,18 @@ router.post('/intent', authenticate, async (req, res, next) => {
           sellerAccessToken: split?.sellerAccessToken,
           applicationFee:    split?.applicationFee,
           // Débito no Brasil exige autenticação do emissor. Ver mercadoPago.js.
-          threeDSecure:      payment_method === 'debit_card',
+          // 3-D Secure em CRÉDITO também, não só em débito.
+          //
+          // No débito é obrigatório: sem ele o Mercado Pago recusa. No crédito
+          // não é exigido — mas é o mecanismo que o MP documenta para reverter
+          // justamente o cc_rejected_high_risk: quando o EMISSOR autentica o
+          // portador, a responsabilidade pela fraude passa para ele, e o risco
+          // deixa de ser motivo para recusar.
+          //
+          // 'optional' (ver mercadoPago.js) é o que torna isso barato: o desafio
+          // só aparece quando o emissor pede. Quem já seria aprovado não vê
+          // tela nenhuma; quem seria recusado por risco ganha uma chance.
+          threeDSecure:      true,
         }))
 
         gatewayTransactionId = cardResult.mp_id

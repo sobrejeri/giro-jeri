@@ -324,8 +324,12 @@ export async function createCardPayment({
   //
   // 'optional' e não 'mandatory' de propósito: o desafio só aparece quando o
   // emissor pede. Obrigar todo mundo a passar pela tela do banco derruba
-  // conversão sem necessidade — inclusive no crédito, onde o 3DS nem é exigido
-  // (por isso este parâmetro só é ligado para débito).
+  // conversão sem necessidade.
+  //
+  // Ligado também no CRÉDITO: ali o 3DS não é exigido, mas é o mecanismo que o
+  // Mercado Pago documenta para reverter recusa por risco (cc_rejected_high_risk).
+  // Autenticado pelo emissor, a responsabilidade pela fraude passa para ele — e
+  // o risco deixa de ser motivo para recusar.
   if (threeDSecure) body.three_d_secure_mode = 'optional'
 
   // Split: comissão da plataforma quando o pagamento cai na conta do operador

@@ -176,3 +176,20 @@ test('sem contexto nenhum, a cobrança sai igual — additional_info não é obr
   assert.equal(espiao.enviados[0].body.additional_info, undefined)
   assert.equal(espiao.enviados[0].body.transaction_amount, 10)
 })
+
+// 3DS é o mecanismo que o Mercado Pago documenta para reverter recusa por
+// risco: autenticado pelo emissor, a responsabilidade pela fraude passa para
+// ele. 'optional' mantém isso barato — o desafio só aparece se o emissor pedir.
+test('3DS vai como optional, nunca obrigando quem já seria aprovado', async () => {
+  const espiao = clienteEspiao()
+  await createCardPayment({ ...cartaoBase, paymentClient: espiao, threeDSecure: true })
+  assert.equal(espiao.enviados[0].body.three_d_secure_mode, 'optional')
+})
+
+test('a rota pede 3DS no crédito também, não só no débito', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /threeDSecure:\s*true/)
+  assert.doesNotMatch(executavel, /threeDSecure:\s*payment_method === 'debit_card'/,
+    'limitar ao débito desperdiça a única saída documentada para cc_rejected_high_risk')
+})
