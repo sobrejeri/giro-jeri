@@ -4,10 +4,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
+import ReviewSheet from '../components/ReviewSheet'
 import {
   ChevronLeft, MapPin, Calendar, Clock, Users, Car, Shield,
   MessageCircle, CheckCircle, AlertTriangle, Phone, Copy,
-  XCircle, Loader2, Zap, Sun, Waves, Anchor,
+  XCircle, Loader2, Zap, Sun, Waves, Anchor, Star,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -145,6 +146,29 @@ export default function BookingDetail() {
   })
 
   const booking = data
+
+  // ── Avaliação ───────────────────────────────────────────────────────────
+  // A nota do cliente é o que forma a reputação do operador na plataforma, e
+  // até agora só dava para avaliar pela LISTA de reservas. Quem terminava o
+  // passeio e abria o detalhe via "Finalizada" e mais nada — nenhum caminho
+  // para avaliar, justamente no momento em que a experiência está fresca.
+  const [avaliando, setAvaliando] = useState(false)
+  const { data: minhasAvaliacoes } = useQuery({
+    queryKey: ['my-coop-reviews'],   // MESMA chave da lista de reservas
+    queryFn:  () => api.getMyCoopReviews(),
+    staleTime: 60_000,
+  })
+  const jaAvaliou = (Array.isArray(minhasAvaliacoes) ? minhasAvaliacoes : [])
+    .some((r) => r.booking_id === id)
+
+  // Mesma regra da lista: serviço pago e já realizado (concluído pelo operador,
+  // ou com a data no passado — nem todo operador marca "concluir").
+  const podeAvaliar = (() => {
+    if (!booking || booking.status_commercial !== 'paid') return false
+    if (booking.status_operational === 'completed') return true
+    if (!booking.service_date) return false
+    return booking.service_date <= new Date().toISOString().slice(0, 10)
+  })()
 
   async function handleConfirmCancel() {
     setCancelLoading(true)
@@ -423,6 +447,34 @@ export default function BookingDetail() {
           </div>
         )}
 
+        {/* ── Avaliação do serviço ────────────────────────────────────────────
+            Aparece só depois de o serviço ter acontecido. É o momento certo:
+            o cliente acabou de voltar do passeio e está com a experiência
+            fresca — antes disso não haveria o que avaliar. */}
+        {podeAvaliar && (
+          jaAvaliou ? (
+            <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100 flex items-center gap-3">
+              <CheckCircle size={18} className="text-emerald-500 shrink-0" />
+              <p className="text-[13px] font-semibold text-emerald-800">
+                {t('bookingDetailPg.review.done')}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
+              <p className="text-[14px] font-bold text-gray-900">{t('bookingDetailPg.review.title')}</p>
+              <p className="text-[12px] text-gray-600 mt-1 leading-snug">
+                {t('bookingDetailPg.review.subtitle')}
+              </p>
+              <button
+                onClick={() => setAvaliando(true)}
+                className="mt-3 w-full bg-brand text-white font-bold rounded-xl py-3 text-[14px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              >
+                <Star size={16} className="fill-white" /> {t('bookingDetailPg.review.cta')}
+              </button>
+            </div>
+          )
+        )}
+
         {/* ── Motorista designado (despacho do operador) ──────────────────────
             O operador despacha e o cliente não via NADA: a tela ficava idêntica
             a antes, e parecia que o sistema não tinha atualizado. É a
@@ -646,6 +698,19 @@ export default function BookingDetail() {
       </main>
 
       {/* Cancel Dialog */}
+      {avaliando && booking && (
+        <ReviewSheet
+          booking={booking}
+          onClose={() => setAvaliando(false)}
+          onDone={() => {
+            setAvaliando(false)
+            // Uma chave só, compartilhada com a lista: o "Avaliado" aparece
+            // aqui E lá sem cada tela ter o próprio cache do mesmo dado.
+            queryClient.invalidateQueries({ queryKey: ['my-coop-reviews'] })
+          }}
+        />
+      )}
+
       {showCancel && (
         <CancelDialog
           bookingCode={booking.booking_code}

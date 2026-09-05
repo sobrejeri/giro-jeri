@@ -1080,6 +1080,12 @@
     },
     "dispatchCard": {
       "title": "Conductor asignado"
+    },
+    "review": {
+      "title": "¿Qué tal tu paseo?",
+      "subtitle": "Tu nota forma la reputación del operador en la plataforma y ayuda a otros viajeros a elegir.",
+      "cta": "Evaluar el servicio",
+      "done": "Ya evaluaste este servicio. ¡Gracias!"
     }
   },
   "checkoutPg": {

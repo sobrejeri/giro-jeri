@@ -1080,6 +1080,12 @@
     },
     "dispatchCard": {
       "title": "Motorista designado"
+    },
+    "review": {
+      "title": "Como foi seu passeio?",
+      "subtitle": "Sua nota forma a reputação do operador na plataforma e ajuda outros viajantes a escolher.",
+      "cta": "Avaliar o serviço",
+      "done": "Você já avaliou este serviço. Obrigado!"
     }
   },
   "checkoutPg": {

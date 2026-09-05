@@ -1080,6 +1080,12 @@
     },
     "dispatchCard": {
       "title": "Driver assigned"
+    },
+    "review": {
+      "title": "How was your tour?",
+      "subtitle": "Your rating builds the operator's reputation on the platform and helps other travellers choose.",
+      "cta": "Rate this service",
+      "done": "You have already rated this service. Thank you!"
     }
   },
   "checkoutPg": {
