@@ -168,6 +168,7 @@ export async function createCardPayment({
   externalRef,
   sellerAccessToken,
   applicationFee,
+  threeDSecure = false,
 }) {
   // Com split, opera na conta do operador; sem split, na conta da plataforma.
   // Sem fallback fake para cartão — erro propaga para o caller.
@@ -190,6 +191,16 @@ export async function createCardPayment({
 
   // issuer_id é opcional — não enviar quando undefined para evitar rejeição MP
   if (issuerId) body.issuer_id = String(issuerId)
+
+  // 3-D Secure. No Brasil o Mercado Pago EXIGE autenticação do emissor para
+  // cartão de DÉBITO: sem isto o pagamento é recusado, e era por isso que a
+  // opção de débito não funcionava.
+  //
+  // 'optional' e não 'mandatory' de propósito: o desafio só aparece quando o
+  // emissor pede. Obrigar todo mundo a passar pela tela do banco derruba
+  // conversão sem necessidade — inclusive no crédito, onde o 3DS nem é exigido
+  // (por isso este parâmetro só é ligado para débito).
+  if (threeDSecure) body.three_d_secure_mode = 'optional'
 
   // Split: comissão da plataforma quando o pagamento cai na conta do operador
   if (sellerAccessToken && applicationFee > 0) {
@@ -217,6 +228,16 @@ export async function createCardPayment({
     card_last_four:         response.card?.last_four_digits ?? null,
     card_brand:             response.payment_method_id ?? null,
     card_holder_name:       response.card?.cardholder?.name ?? null,
+    // Desafio do emissor: quando existe, o pagamento NÃO está resolvido — o
+    // cliente precisa autenticar no banco dele e só depois o status muda.
+    // Devolver null quando não há é o caso comum (crédito, e débito que o
+    // emissor liberou sem desafio).
+    three_ds:               response.three_ds_info?.external_resource_url
+      ? {
+          url:  response.three_ds_info.external_resource_url,
+          creq: response.three_ds_info.creq || null,
+        }
+      : null,
     raw:                    response,
   }
 }

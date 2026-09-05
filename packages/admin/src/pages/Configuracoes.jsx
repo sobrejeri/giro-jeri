@@ -472,7 +472,11 @@ function TabPagamentos({ settings, qc }) {
             {[
               ['payment_method_pix',    'PIX',                'Aprovação na hora, sem taxa de cartão.'],
               ['payment_method_credit', 'Cartão de crédito',  'Permite parcelar.'],
-              ['payment_method_debit',  'Cartão de débito',   'À vista, aprovação na hora.'],
+              // "aprovação na hora" era meia verdade: no débito o emissor pode
+              // exigir autenticação (3-D Secure), e aí o cliente confirma no
+              // banco antes de aprovar. Dizer isso aqui evita a suspeita de
+              // que o pagamento travou.
+              ['payment_method_debit',  'Cartão de débito',   'À vista. O banco pode pedir confirmação do cliente.'],
             ].map(([chave, titulo, ajuda]) => {
               const ativo = form[chave] !== 'false'
               // Impede desligar a última: checkout sem forma de pagamento é

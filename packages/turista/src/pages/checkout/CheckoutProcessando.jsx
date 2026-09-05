@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Copy, Check, Clock, QrCode, RefreshCw, ArrowRight, Landmark, FlaskConical, Zap } from 'lucide-react'
 import QRCode from 'qrcode'
 import { api } from '../../lib/api'
+import Desafio3DS from '../../components/Desafio3DS'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
 
@@ -211,6 +212,88 @@ function ManualPayment({ state }) {
   )
 }
 
+// ── Débito com autenticação do emissor (3-D Secure) ──────
+// Tela própria, não a do PIX: aqui não há QR nem código para copiar, e sim a
+// página do banco do cliente. Só o que é verdade nesta situação aparece.
+//
+// O desfecho vem da consulta de status, não do iframe: o banco responde ao
+// Mercado Pago, e o iframe é de outro domínio — não temos como ler nada dele.
+function PagamentoComDesafio({ state }) {
+  const navigate = useNavigate()
+  const { t } = useTranslation()
+  const [status, setStatus] = useState('pending')
+  const pollRef = useRef(null)
+
+  const consultar = useCallback(async () => {
+    if (!state.payment_id) return
+    try {
+      const r = await api.getPaymentStatus(state.payment_id)
+      if (r?.status === 'approved') {
+        setStatus('approved')
+        clearInterval(pollRef.current)
+        setTimeout(() => navigate('/checkout/sucesso', { state: { ...state, booking_id: state.booking_id } }), 800)
+      } else if (['failed', 'rejected', 'cancelled', 'expired'].includes(r?.status)) {
+        setStatus(r.status)
+        clearInterval(pollRef.current)
+      }
+    } catch { /* rede instável no polling não muda a tela */ }
+  }, [state, navigate])
+
+  useEffect(() => {
+    pollRef.current = setInterval(consultar, 4000)
+    return () => clearInterval(pollRef.current)
+  }, [consultar])
+
+  if (status === 'approved') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-center">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+            <Check size={36} className="text-green-500" strokeWidth={2.5} />
+          </div>
+          <p className="text-[20px] font-bold text-gray-900">{t('payment.gateway.approved')}</p>
+          <p className="text-[14px] text-gray-500 mt-1">{t('payment.gateway.approvedSub')}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status !== 'pending') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6">
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4">
+          <Clock size={32} className="text-red-400" />
+        </div>
+        <p className="text-[20px] font-bold text-gray-900 mb-1">{t('payment.gateway.failed')}</p>
+        <p className="text-[13px] text-gray-500 mb-6 text-center max-w-xs">
+          A autenticação não foi concluída. Sua reserva está guardada — dá para
+          tentar de novo, com este cartão ou outro.
+        </p>
+        <button
+          onClick={() => navigate(-2)}
+          className="bg-brand text-white font-bold rounded-2xl px-8 py-3.5 text-[14px] active:scale-[0.98] transition-transform"
+        >
+          {t('payment.gateway.retryBtn')}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen">
+      <header className="bg-white px-4 pt-12 pb-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <h1 className="text-lg font-bold text-gray-900">{t('payment.gateway.title')}</h1>
+      </header>
+      <main className="px-4 py-4 space-y-3">
+        <Desafio3DS url={state.challenge_url} creq={state.challenge_creq} />
+        <p className="text-[12px] text-gray-400 text-center leading-relaxed">
+          Não feche esta tela. Assim que o banco confirmar, seguimos sozinhos.
+        </p>
+      </main>
+    </div>
+  )
+}
+
 // ── Gateway payment (QR code polling) ────────────────────
 export default function CheckoutProcessando() {
   const navigate  = useNavigate()
@@ -225,6 +308,9 @@ export default function CheckoutProcessando() {
 
   // Manual mode: delegate to static PIX display
   if (state.manual_mode) return <ManualPayment state={state} />
+
+  // Débito parado no banco do cliente: tela própria, sem QR nem contagem.
+  if (state.challenge_url) return <PagamentoComDesafio state={state} />
 
   const { pix_code, qr_base64, expires_at, payment_id, booking_code, total_price, amount, test_mode } = state
   const value = amount || total_price

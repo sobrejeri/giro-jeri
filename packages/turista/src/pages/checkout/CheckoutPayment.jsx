@@ -313,6 +313,26 @@ export default function CheckoutPayment() {
       return result
     }
 
+    // Débito com autenticação do emissor (3DS): o pagamento existe e está
+    // pendente do banco do cliente. Vai para a tela de processamento, que já
+    // consulta o status a cada poucos segundos — é ela quem descobre o
+    // desfecho, porque o iframe do banco é de outro domínio e não nos avisa.
+    if (result.status === 'challenge') {
+      navigate('/checkout/processando', {
+        state: {
+          ...state,
+          payment_id:      result.payment_id,
+          booking_id:      result.booking_id,
+          booking_code:    result.booking_code,
+          amount:          result.amount,
+          payment_method:  cardFields.payment_method,
+          challenge_url:   result.challenge_url,
+          challenge_creq:  result.challenge_creq,
+        },
+      })
+      return result
+    }
+
     if (result.status === 'in_process') {
       navigate('/checkout/processando', {
         state: {

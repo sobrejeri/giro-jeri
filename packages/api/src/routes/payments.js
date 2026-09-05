@@ -850,6 +850,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
     let cardBrand          = null
     let cardHolderName     = null
     let cardGatewayFeePct  = null
+    let cardThreeDs        = null // desafio 3DS do emissor (débito)
     // Fora do bloco de propósito: o `split` é calculado lá dentro, mas a linha
     // de `payments` é montada aqui fora — e é nela que o split precisa ficar
     // registrado, senão o repasse manual paga de novo o que o gateway pagou.
@@ -916,6 +917,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
           externalRef:     booking.id,
           sellerAccessToken: split?.sellerAccessToken,
           applicationFee:    split?.applicationFee,
+          // Débito no Brasil exige autenticação do emissor. Ver mercadoPago.js.
+          threeDSecure:      payment_method === 'debit_card',
         })
 
         gatewayTransactionId = cardResult.mp_id
@@ -926,6 +929,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         cardLastFour         = cardResult.card_last_four
         cardBrand            = cardResult.card_brand
         cardHolderName       = cardResult.card_holder_name
+        cardThreeDs          = cardResult.three_ds
 
         // Taxa real por método: cartão à vista 4.98%, débito 1.50%
         if (payment_method === 'debit_card') {
@@ -1073,6 +1077,24 @@ router.post('/intent', authenticate, async (req, res, next) => {
         status:       'rejected',
         error_code:   cardStatusDetail,
         message_key:  mapRejectionKey(cardStatusDetail),
+      })
+    }
+
+    // Desafio 3DS pendente: o pagamento existe e está 'pending', mas só sai do
+    // lugar depois que o cliente autenticar no banco dele. Precisa de um status
+    // PRÓPRIO — sem ele o app via 'pending', não casava com 'approved' nem com
+    // 'in_process', e caía no galho de recusa: o cliente levava "pagamento
+    // recusado" num pagamento que nem tinha sido tentado ainda.
+    if (isCard && cardThreeDs?.url) {
+      return res.json({
+        booking_id:      booking.id,
+        booking_code:    bookingCode,
+        payment_id:      payment.id,
+        amount:          chargedTotal,
+        status:          'challenge',
+        challenge_url:   cardThreeDs.url,
+        challenge_creq:  cardThreeDs.creq,
+        payment_method,
       })
     }
 
