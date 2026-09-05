@@ -1405,6 +1405,52 @@ router.get('/meus-recebimentos', async (req, res, next) => {
       people_count: r.bookings?.people_count || null,
     }));
 
+    // ── O que o GATEWAY já pagou direto (split) ─────────────────────────────
+    // Quando a cobrança é dividida no ato, o operador recebe na conta dele e
+    // `gerarRepasses` NÃO cria a linha de comissão — de propósito, senão o
+    // admin pagaria de novo o que o Mercado Pago já pagou (migration 087).
+    //
+    // Só que esta tela lia apenas aquela linha. O efeito era o pior possível
+    // para quem confia nela: o operador RECEBEU e o painel dizia zero. Dinheiro
+    // que entrou na conta e não aparece em lugar nenhum é o tipo de erro que
+    // faz o parceiro desconfiar da plataforma inteira.
+    //
+    // O que ele ganhou é o cobrado MENOS a parte que ficou com a plataforma
+    // (`split_application_fee`) — é assim que o `application_fee` funciona.
+    try {
+      const { data: pagos } = await supabase
+        .from('payments')
+        .select('id, amount_gross, split_application_fee, paid_at, created_at, bookings ( booking_code, service_type, service_id, service_date, service_time )')
+        .eq('split_operator_id', req.user.id)
+        .eq('status', 'approved');
+
+      for (const p of pagos || []) {
+        const bruto = Number(p.amount_gross) || 0;
+        const daPlataforma = Number(p.split_application_fee) || 0;
+        const valor = Math.round((bruto - daPlataforma) * 100) / 100;
+        if (!(valor > 0)) continue;
+        const item = {
+          id:           `mp-${p.id}`,
+          kind:         'gateway',
+          amount:       valor,
+          status:       'paid',          // caiu na conta dele, não é promessa
+          paid_at:      p.paid_at || p.created_at,
+          booking_code: p.bookings?.booking_code || null,
+          service_type: p.bookings?.service_type || null,
+          service_id:   p.bookings?.service_id   || null,
+          service_name: null,
+          service_date: p.bookings?.service_date || null,
+          service_time: p.bookings?.service_time || null,
+          people_count: null,
+        };
+        if (dentro({ bookings: p.bookings })) itens.push(item);
+      }
+    } catch (e) {
+      // 42703 = colunas de split ausentes (migration 087 pendente): não houve
+      // split, e a lista dos repasses manuais acima já responde sozinha.
+      if (e?.code !== '42703') console.error('[recebimentos] split do gateway:', e?.message);
+    }
+
     // Nome do serviço, para a lista não ficar só com códigos. Duas consultas no
     // total (uma por tipo), não uma por linha. Falhar aqui não tira a lista do
     // ar — o valor a receber é o que importa; o nome é orientação.

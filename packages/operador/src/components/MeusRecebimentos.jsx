@@ -37,6 +37,9 @@ const PERIODOS = [
 const KIND_LABEL = {
   commission: 'Por aceitar',
   execution:  'Por executar',
+  // Split: o Mercado Pago depositou na conta do operador no ato da cobrança.
+  // Nunca fica "a receber" — já caiu.
+  gateway:    'Direto na sua conta',
 }
 
 function Resumo({ icon: Icon, label, value, cor, fundo }) {
@@ -135,8 +138,9 @@ export default function MeusRecebimentos() {
           </p>
         ) : itens.length === 0 ? (
           <p className="text-[13px] text-gray-400 bg-gray-50 rounded-xl px-4 py-4">
-            Nenhum recebimento neste período. Os valores aparecem aqui depois que
-            a reserva é paga.
+            Nenhum recebimento neste período. Aparecem aqui tanto o que cai
+            direto na sua conta pelo Mercado Pago quanto o que a plataforma
+            ainda vai repassar.
           </p>
         ) : (
           <div className="divide-y divide-gray-50 border border-gray-100 rounded-xl overflow-hidden">
@@ -169,7 +173,8 @@ export default function MeusRecebimentos() {
                         ? 'bg-green-50 text-green-600'
                         : 'bg-amber-50 text-amber-600'
                     }`}>
-                      {i.status === 'paid' ? 'Recebido' : 'A receber'}
+                      {i.kind === 'gateway' ? 'Caiu na conta'
+                        : i.status === 'paid' ? 'Recebido' : 'A receber'}
                     </span>
                   </div>
                 </div>
