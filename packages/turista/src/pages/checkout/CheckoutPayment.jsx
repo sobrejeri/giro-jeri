@@ -44,6 +44,7 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
   const { t }    = useTranslation()
   const brickRef = useRef(null)
   const submittingRef = useRef(false)
+  const attemptRef = useRef(null)
   const [phase,       setPhase]       = useState('loading') // loading | ready | error
   const [rejectedMsg, setRejectedMsg] = useState('')
   const [processing,  setProcessing]  = useState(false)
@@ -99,6 +100,8 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
                 // Cartão (crédito/débito) → método inferido do payment_method_id.
                 const pmId   = formData?.payment_method_id || ''
                 const method = /^deb/i.test(pmId) ? 'debit_card' : 'credit_card'
+                const attemptId = attemptRef.current || crypto.randomUUID()
+                attemptRef.current = attemptId
                 const result = await onCard({
                   payment_method:    method,
                   card_token:        formData?.token,
@@ -106,14 +109,16 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
                   issuer_id:         formData?.issuer_id ? String(formData.issuer_id) : undefined,
                   installments:      Number(formData?.installments) || 1,
                   payer_doc:         formData?.payer?.identification?.number,
-                  payment_attempt_id: crypto.randomUUID(),
+                  payment_attempt_id: attemptId,
                   device_id:          getDeviceId(),
                 })
                 if (result?.status === 'rejected') {
+                  attemptRef.current = null
                   const msg = result.message_key ? t(result.message_key) : t('payment.rejected.generic')
                   setRejectedMsg(msg)
                   return Promise.reject(new Error(msg))
                 }
+                if (result?.status === 'approved') attemptRef.current = null
                 // approved / in_process → o componente pai navega de tela.
                 return Promise.resolve()
               } catch (err) {

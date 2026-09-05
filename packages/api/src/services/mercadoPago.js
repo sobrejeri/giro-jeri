@@ -201,6 +201,23 @@ export function rejectionUserMessage(statusDetail) {
   return 'Pagamento não aprovado. Revise os dados ou tente outro meio de pagamento.'
 }
 
+export function normalizeCardPaymentResponse(response, fallbackInstallments = 1) {
+  const diagnostic = sanitizedPaymentResult(response)
+  const financingFee = (response?.fees || [])
+    .filter((f) => f.fee_id === 'FINANCING_FEE' || (f.type && /juros|interest|financing/i.test(f.type)))
+    .reduce((acc, f) => acc + (Number(f.value) || 0), 0)
+  return {
+    mp_id: String(response.id), status: response.status, status_detail: response.status_detail || null,
+    installments: response.installments || fallbackInstallments,
+    installment_amount: response.transaction_details?.installment_amount ?? null,
+    installment_fee_amount: financingFee > 0 ? financingFee : null,
+    card_last_four: response.card?.last_four_digits ?? null,
+    card_brand: response.payment_method_id ?? null,
+    card_holder_name: response.card?.cardholder?.name ?? null,
+    collector_id: diagnostic.collector_id, diagnostic,
+  }
+}
+
 // ── Pagamento com cartão de crédito ou débito ─────────
 export async function createCardPayment({
   amount,
@@ -219,10 +236,12 @@ export async function createCardPayment({
   payerFirstName,
   payerLastName,
   item,
+  bookingId,
+  paymentClient,
 }) {
   // Com split, opera na conta da cooperativa; sem split, na conta da plataforma.
   // Sem fallback fake para cartão — erro propaga para o caller.
-  const client = paymentClientFor(sellerAccessToken)
+  const client = paymentClient || paymentClientFor(sellerAccessToken)
   if (!client) throw new Error('Mercado Pago não configurado (access token ausente)')
   if (!payerEmail) throw new Error('E-mail do comprador ausente; pagamento não criado.')
   if (!idempotencyKey) throw new Error('payment_attempt_id ausente; pagamento não criado.')
@@ -235,6 +254,7 @@ export async function createCardPayment({
     token:              cardToken,
     statement_descriptor: 'TURIVA',
     external_reference: externalRef,
+    metadata: { booking_id: bookingId || externalRef, payment_attempt_id: idempotencyKey },
     payer: {
       email:          payerEmail,
       ...(payerFirstName ? { first_name: payerFirstName } : {}),
@@ -259,26 +279,18 @@ export async function createCardPayment({
     body,
     requestOptions: { idempotencyKey, ...(deviceId ? { meliSessionId: deviceId } : {}) },
   })
-  const diagnostic = logPaymentResult({ bookingId: externalRef, response, deviceIdPresent: !!deviceId })
+  const diagnostic = logPaymentResult({ bookingId: bookingId || externalRef, response, deviceIdPresent: !!deviceId })
 
-  // Extrai juro de parcelamento da lista de fees retornada pelo MP
-  const financingFee = (response.fees || [])
-    .filter((f) => f.fee_id === 'FINANCING_FEE' || (f.type && /juros|interest|financing/i.test(f.type)))
-    .reduce((acc, f) => acc + (Number(f.value) || 0), 0)
+  return { ...normalizeCardPaymentResponse(response, installments), diagnostic }
+}
 
-  return {
-    mp_id:                  String(response.id),
-    status:                 response.status,
-    status_detail:          response.status_detail || null,
-    installments:           response.installments || installments,
-    installment_amount:     response.transaction_details?.installment_amount ?? null,
-    installment_fee_amount: financingFee > 0 ? financingFee : null,
-    card_last_four:         response.card?.last_four_digits ?? null,
-    card_brand:             response.payment_method_id ?? null,
-    card_holder_name:       response.card?.cardholder?.name ?? null,
-    collector_id:           diagnostic.collector_id,
-    diagnostic,
-  }
+export async function findMpPaymentByExternalReference(externalRef, sellerAccessToken) {
+  const client = paymentClientFor(sellerAccessToken)
+  if (!client) return null
+  const found = await client.search({ options: { external_reference: String(externalRef), limit: 1 } })
+  const id = found?.results?.[0]?.id
+  if (!id) return null
+  return client.get({ id })
 }
 
 export async function getMpPaymentStatus(mpId, sellerAccessToken) {
@@ -287,6 +299,11 @@ export async function getMpPaymentStatus(mpId, sellerAccessToken) {
   if (!client) return null
   const r = await client.get({ id: mpId })
   return sanitizedPaymentResult(r)
+}
+
+export async function getMpPayment(mpId, sellerAccessToken) {
+  const client = paymentClientFor(sellerAccessToken)
+  return client ? client.get({ id: mpId }) : null
 }
 
 // ── OAuth: autorização e troca de código ──────────────
