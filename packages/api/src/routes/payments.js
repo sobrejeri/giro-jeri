@@ -9,6 +9,7 @@ import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
 import { sweepExpiredLegBookings } from '../services/legFlow.js'
+import { approvePaymentOnce, executePaymentAttempt, PaymentAttemptInProgressError, processWebhookOnce } from '../services/paymentFlow.js'
 
 const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -43,13 +44,15 @@ const intentSchema = z.object({
     (v) => (typeof v === 'string' ? v.replace(/\D/g, '') : v),
     z.string().regex(/^\d{11,14}$/).optional(),
   ),
+  payment_attempt_id: z.string().uuid().optional(),
+  device_id: z.string().min(8).max(256).optional(),
 }).refine(
   (d) => d.order_group_id || d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
   { message: 'Dados incompletos para criar reserva' },
 ).refine(
   (d) => !['credit_card', 'debit_card'].includes(d.payment_method) ||
-          (d.card_token && d.payment_method_id && d.payer_doc),
-  { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc)' },
+          (d.card_token && d.payment_method_id && d.payer_doc && d.payment_attempt_id),
+  { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc, payment_attempt_id)' },
 )
 
 // Solicitação de reserva (sem pagamento): subconjunto do intent, sem cartão.
@@ -188,10 +191,16 @@ async function getOperatorMp(operatorId) {
   if (!operatorId) return null
   const { data: op } = await supabase
     .from('users')
-    .select('mp_access_token, mp_refresh_token, mp_token_expires_at, mp_public_key, platform_split_pct')
+    .select('mp_user_id, mp_access_token, mp_refresh_token, mp_token_expires_at, mp_public_key, platform_split_pct')
     .eq('id', operatorId)
     .single()
   if (!op?.mp_access_token) return null
+
+  const tokenEnv = op.mp_access_token.startsWith('TEST-') ? 'sandbox' : 'production'
+  const keyEnv = op.mp_public_key?.startsWith('TEST-') ? 'sandbox' : 'production'
+  if (op.mp_public_key && tokenEnv !== keyEnv) {
+    throw new Error('Configuração Mercado Pago inconsistente: Public Key e Access Token pertencem a ambientes diferentes.')
+  }
 
   let token     = op.mp_access_token
   let publicKey = op.mp_public_key
@@ -212,7 +221,7 @@ async function getOperatorMp(operatorId) {
       console.error('[split] refresh de token MP falhou:', e.message)
     }
   }
-  return { token, publicKey, platformPct: op.platform_split_pct }
+  return { token, publicKey, platformPct: op.platform_split_pct, collectorId: op.mp_user_id, environment: tokenEnv }
 }
 
 // Contexto de split de um pagamento: token da cooperativa + comissão da
@@ -222,7 +231,71 @@ async function getSplitContext(booking, chargedTotal, cfg) {
   if (!opMp) return null
   const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
   const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
-  return { sellerAccessToken: opMp.token, applicationFee }
+  return { sellerAccessToken: opMp.token, applicationFee, collectorId: opMp.collectorId, environment: opMp.environment }
+}
+
+async function claimCardAttempt(attemptId, bookingId) {
+  const inserted = await supabase.from('payment_attempts').insert({ id: attemptId, booking_id: bookingId })
+    .select('*').maybeSingle()
+  if (!inserted.error && inserted.data) return { claimed: true, attempt: inserted.data }
+  if (inserted.error?.code !== '23505') throw inserted.error
+  const existing = await supabase.from('payment_attempts').select('*').eq('id', attemptId).single()
+  if (existing.error) throw existing.error
+  if (existing.data.booking_id !== bookingId) throw new Error('payment_attempt_id pertence a outra reserva')
+  return { claimed: false, attempt: existing.data }
+}
+
+async function saveCardAttemptGatewayResult(attemptId, response) {
+  const safe = response?.diagnostic || response
+  const gatewayId = response?.mp_id || response?.payment_id || response?.id
+  const { error } = await supabase.from('payment_attempts').update({
+    gateway_transaction_id: gatewayId ? String(gatewayId) : null,
+    attempt_status: response?.status || safe?.status || 'processing',
+    gateway_result_json: safe,
+    updated_at: new Date().toISOString(),
+  }).eq('id', attemptId)
+  if (error) throw error
+}
+
+async function claimPaymentApproval(paymentId) {
+  const { data, error } = await supabase.rpc('claim_payment_approval', { p_payment_id: paymentId })
+  if (error) throw error
+  return data === true
+}
+
+async function approveAndRunEffects(payment) {
+  return approvePaymentOnce({ payment, claimApproval: claimPaymentApproval, runEffects: runPaymentApprovalEffects })
+}
+
+async function reconcileOfficialPayment(payment, gatewayId) {
+  const opMp = await getOperatorMp(payment.bookings?.operator_id)
+  const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
+  const official = await getMpPaymentStatus(gatewayId, opMp?.token)
+  if (!official) return null
+  await supabase.from('payments').update({
+    status_detail: official.status_detail || null,
+    collector_id: official.collector_id || null,
+    raw_response_json: official,
+  }).eq('id', payment.id)
+  if (official.status === 'approved') {
+    await approveAndRunEffects(payment)
+  } else if (['rejected', 'cancelled'].includes(official.status)) {
+    await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+    await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', payment.booking_id)
+  }
+  return official
+}
+
+async function reconcilePendingWebhookEvents(payment) {
+  if (!payment.gateway_transaction_id) return
+  await supabase.from('payment_events').update({ payment_id: payment.id })
+    .eq('gateway_transaction_id', payment.gateway_transaction_id).is('payment_id', null)
+  const { data: events = [] } = await supabase.from('payment_events').select('gateway_event_id')
+    .eq('gateway_transaction_id', payment.gateway_transaction_id).eq('processing_status', 'pending')
+  if (!events.length) return
+  await reconcileOfficialPayment(payment, payment.gateway_transaction_id)
+  await supabase.from('payment_events').update({ processing_status: 'processed', processed_at: new Date().toISOString() })
+    .eq('gateway_transaction_id', payment.gateway_transaction_id).eq('processing_status', 'pending')
 }
 
 // =============================================================================
@@ -420,6 +493,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       service_name, cover_image_url,
       coupon_code, existing_booking_id, order_group_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc,
+      payment_attempt_id, device_id,
     } = parsed.data
 
     const isGroup = !!order_group_id
@@ -586,6 +660,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
     let cardBrand          = null
     let cardHolderName     = null
     let cardGatewayFeePct  = null
+    let cardAttemptId      = null
 
     if (gateway === 'test') {
       const { createPaymentIntent: testIntent } = await import('../payments/test.js')
@@ -630,22 +705,43 @@ router.post('/intent', authenticate, async (req, res, next) => {
         }
 
         // ── Cartão: sem fallback fake — erro propaga ──────
-        const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
-        const userInfo = await supabase.from('users').select('email').eq('id', req.user.id).single()
+        const { createCardPayment, findMpPaymentByExternalReference, getMpPayment, normalizeCardPaymentResponse } = await import('../services/mercadoPago.js')
+        const userInfo = await supabase.from('users').select('email, full_name').eq('id', req.user.id).single()
+        const attemptId = payment_attempt_id
+        cardAttemptId = attemptId
+        const nameParts = String(userInfo.data?.full_name || '').trim().split(/\s+/).filter(Boolean)
 
-        cardResult = await createCardPayment({
-          amount:          chargedTotal,
-          description:     service_name || `Reserva ${bookingCode}`,
-          installments:    cardInstallments,
-          paymentMethodId: payment_method_id,
-          cardToken:       card_token,
-          issuerId:        issuer_id,
-          payerEmail:      userInfo.data?.email,
-          payerDoc:        payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
-          externalRef:     booking.id,
-          sellerAccessToken: split?.sellerAccessToken,
-          applicationFee:    split?.applicationFee,
+        if (!device_id) console.warn('[MP INTEGRATION WARNING] booking_id=%s device_id_present=false', booking.id)
+
+        const attemptExecution = await executePaymentAttempt({
+          attemptId,
+          claim: (id) => claimCardAttempt(id, booking.id),
+          createPayment: () => createCardPayment({
+            amount: chargedTotal, description: service_name || `Reserva ${bookingCode}`,
+            installments: cardInstallments, paymentMethodId: payment_method_id,
+            cardToken: card_token, issuerId: issuer_id, payerEmail: userInfo.data?.email,
+            payerDoc: payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
+            externalRef: attemptId, bookingId: booking.id, idempotencyKey: attemptId,
+            deviceId: device_id, payerFirstName: nameParts[0],
+            payerLastName: nameParts.slice(1).join(' ') || undefined,
+            item: { id: String(service_id || booking.id), title: service_name || `Reserva ${bookingCode}`,
+              quantity: 1, unit_price: chargedTotal },
+            sellerAccessToken: split?.sellerAccessToken, applicationFee: split?.applicationFee,
+          }),
+          findOfficialPayment: async (attempt) => {
+            const official = attempt.gateway_transaction_id
+              ? await getMpPayment(attempt.gateway_transaction_id, split?.sellerAccessToken)
+              : await findMpPaymentByExternalReference(attemptId, split?.sellerAccessToken)
+            return official ? normalizeCardPaymentResponse(official, cardInstallments) : null
+          },
+          saveGatewayResult: saveCardAttemptGatewayResult,
         })
+        cardResult = attemptExecution.payment
+
+        const collectorRole = split?.collectorId && String(split.collectorId) === String(cardResult.collector_id)
+          ? 'operator' : split?.sellerAccessToken ? 'unexpected' : 'turiva'
+        console.info('[MP COLLECTOR] booking_id=%s collector_role=%s environment=%s',
+          booking.id, collectorRole, split?.environment || cfg.payment_gateway_env || 'unknown')
 
         gatewayTransactionId = cardResult.mp_id
         cardPaymentStatus    = cardResult.status
@@ -740,6 +836,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
       ...(isGroup ? { order_group_id } : {}),
       gateway_name:           effectiveGateway,
       gateway_transaction_id: gatewayTransactionId,
+      ...(isCard ? { payment_attempt_id: cardAttemptId, status_detail: cardStatusDetail,
+        collector_id: cardResult?.collector_id } : {}),
       payment_method,
       payment_type:           'full',
       amount_gross:           chargedTotal,
@@ -747,8 +845,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
       currency:               'BRL',
       status:                 initialPaymentStatus,
       expires_at:             expiresAt,
-      // raw response para cartão (inclui dados completos do MP)
-      ...(isCard && cardResult ? { raw_response_json: cardResult.raw } : {}),
+      // Snapshot estritamente diagnóstico; nunca persiste token/cartão/CPF.
+      ...(isCard && cardResult ? { raw_response_json: cardResult.diagnostic } : {}),
       // colunas de cartão (nullable em PIX/manual)
       ...(isCard ? {
         installments:           cardInstallments,
@@ -762,16 +860,20 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     const { data: payment, error: pErr } = await supabase
       .from('payments')
-      .insert(paymentInsertRow)
+      .upsert(paymentInsertRow, { onConflict: 'gateway_transaction_id' })
       .select()
       .single()
 
     if (pErr) throw pErr
 
+    if (gatewayTransactionId) {
+      await reconcilePendingWebhookEvents({ ...payment, bookings: booking })
+    }
+
     // ── Pós-inserção: ação imediata para cartão ────────
     if (isCard && cardPaymentStatus === 'approved') {
       // approved: dispara onPaymentApproved dentro do mesmo request
-      await onPaymentApproved(payment)
+      await approveAndRunEffects(payment)
     } else if (isCard && cardPaymentStatus === 'rejected') {
       // rejected: booking permanece awaiting_payment (não altera status_commercial)
       // O status 'failed' já foi gravado em payments acima
@@ -784,14 +886,18 @@ router.post('/intent', authenticate, async (req, res, next) => {
     // ── Resposta final ─────────────────────────────────
     // Cartão rejected → HTTP 200 com status: 'rejected' (nunca 402)
     if (isCard && cardPaymentStatus === 'rejected') {
-      const { mapRejectionKey } = await import('../services/mercadoPago.js')
+      const { mapRejectionKey, rejectionUserMessage } = await import('../services/mercadoPago.js')
       return res.json({
+        success:      false,
+        gateway:      'mercado_pago',
         booking_id:   booking.id,
         booking_code: bookingCode,
         payment_id:   payment.id,
         amount:       chargedTotal,
         status:       'rejected',
+        status_detail: cardStatusDetail,
         error_code:   cardStatusDetail,
+        user_message: rejectionUserMessage(cardStatusDetail),
         message_key:  mapRejectionKey(cardStatusDetail),
       })
     }
@@ -822,7 +928,21 @@ router.post('/intent', authenticate, async (req, res, next) => {
       bank_account:     manual ? (cfg.payment_admin_bank_account || null) : null,
       bank_account_type:manual ? (cfg.payment_admin_bank_account_type || null) : null,
     })
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (err instanceof PaymentAttemptInProgressError) {
+      return res.status(409).json({ success: false, gateway: 'mercado_pago', status: 'processing',
+        status_detail: 'payment_attempt_in_progress', user_message: err.message, error: err.message })
+    }
+    console.error('[payment intent] application_error code=%s', err?.code || err?.cause?.code || 'unknown')
+    return res.status(500).json({
+      success: false,
+      gateway: 'mercado_pago',
+      status: 'application_error',
+      status_detail: null,
+      user_message: 'Não conseguimos confirmar o pagamento agora. Tente novamente em instantes.',
+      error: 'Não conseguimos confirmar o pagamento agora. Tente novamente em instantes.',
+    })
+  }
 })
 
 // ── POST /api/payments/request ─────────────────────────
@@ -1224,7 +1344,7 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
 
     // Gateway de teste: aprova na primeira consulta de status
     if (payment.status === 'pending' && payment.gateway_name === 'test') {
-      await onPaymentApproved(payment)
+      await approveAndRunEffects(payment)
       return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
     }
 
@@ -1250,10 +1370,14 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
         const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
         // Pagamento com split vive na conta da cooperativa → consulta com o token dela.
         const opMp = await getOperatorMp(payment.bookings?.operator_id)
-        const mpStatus = await getMpPaymentStatus(payment.gateway_transaction_id, opMp?.token)
-        if (mpStatus === 'approved') {
-          await onPaymentApproved(payment)
+        const mpResult = await getMpPaymentStatus(payment.gateway_transaction_id, opMp?.token)
+        if (mpResult?.status === 'approved') {
+          await approveAndRunEffects(payment)
           return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
+        }
+        if (mpResult?.status === 'rejected') {
+          await supabase.from('payments').update({ status: 'failed', status_detail: mpResult.status_detail }).eq('id', payment.id)
+          return res.json({ status: 'rejected', status_detail: mpResult.status_detail, booking_id: payment.booking_id })
         }
       } catch { /* ignora erros de rede no polling */ }
     }
@@ -1345,29 +1469,35 @@ router.post('/webhook', async (req, res, next) => {
       paymentForEvent = p
     }
 
-    // Registra evento bruto com payment_id para idempotência via UNIQUE constraint.
-    // Esperamos UNIQUE violation (23505) em retentativas do MP — silencia só
-    // esse caso. Qualquer outro erro de gravação é logado pra investigação.
-    const evIns = await supabase.from('payment_events').insert({
-      payment_id:         paymentForEvent?.id || null,
-      event_name:         eventType,
-      event_payload_json: event,
-      processing_status:  'pending',
+    const gatewayEventId = event.id == null
+      ? `${eventType}:${gatewayId || 'unknown'}`
+      : String(event.id)
+    const claimed = await processWebhookOnce({
+      event: { gatewayEventId, gatewayId, eventType, payload: event, payment: paymentForEvent },
+      claimEvent: async (candidate) => {
+        const ins = await supabase.from('payment_events').insert({
+          payment_id: candidate.payment?.id || null,
+          gateway_transaction_id: candidate.gatewayId,
+          gateway_event_id: candidate.gatewayEventId,
+          event_name: candidate.eventType,
+          event_payload_json: candidate.payload,
+          processing_status: 'pending',
+        }).select('id').maybeSingle()
+        if (ins.error?.code === '23505') return false
+        if (ins.error) throw ins.error
+        return !!ins.data
+      },
+      processEvent: async (candidate) => {
+        // Sem linha local, mantém o evento pending. O insert do payment ou o
+        // polling o reconciliará; não há confirmação falsa nem evento perdido.
+        if (!candidate.payment) return
+        await reconcileOfficialPayment(candidate.payment, candidate.gatewayId)
+        await supabase.from('payment_events').update({ processing_status: 'processed', processed_at: new Date().toISOString() })
+          .eq('gateway_event_id', candidate.gatewayEventId)
+      },
     })
-    if (evIns.error && evIns.error.code !== '23505') {
-      console.error('[webhook] falha ao gravar payment_events code=%s msg=%s',
-        evIns.error.code, evIns.error.message)
-    }
 
-    if ((eventType === 'payment' || eventType === 'payment.updated') && paymentForEvent) {
-      const mpStatus = event.data?.status || event.status
-      if (mpStatus === 'approved' && paymentForEvent.status !== 'approved') {
-        await onPaymentApproved(paymentForEvent)
-      } else if (['rejected', 'cancelled'].includes(mpStatus)) {
-        await supabase.from('payments').update({ status: 'failed' }).eq('id', paymentForEvent.id)
-        await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', paymentForEvent.booking_id)
-      }
-    }
+    if (!claimed) return res.status(200).json({ ok: true, duplicate: true })
 
     res.status(200).json({ ok: true })
   } catch (err) { next(err) }
@@ -1399,7 +1529,7 @@ router.post('/:id/simulate', authenticate, async (req, res, next) => {
       return res.json({ ok: true, already: true })
     }
 
-    await onPaymentApproved(payment)
+    await approveAndRunEffects(payment)
     res.json({ ok: true, booking_code: payment.bookings?.booking_code })
   } catch (err) { next(err) }
 })
@@ -1428,7 +1558,7 @@ router.post('/manual-confirm', authenticate, async (req, res, next) => {
       payment = p
     }
 
-    await onPaymentApproved({ ...payment, bookings: null })
+    await approveAndRunEffects({ ...payment, bookings: null })
     if (notes) await supabase.from('bookings').update({ notes }).eq('id', booking_id)
 
     res.json({ ok: true })
@@ -1500,13 +1630,11 @@ async function recordLegAccounting(booking, payment) {
 }
 
 // ── Helpers ────────────────────────────────────────────
-async function onPaymentApproved(payment) {
+async function runPaymentApprovalEffects(payment) {
   // Carrinho universal: pagamento de GRUPO segue por caminho próprio, que
   // aplica a aprovação a TODAS as reservas do grupo. O caminho de reserva
   // única abaixo permanece intacto.
   if (payment.order_group_id) return onGroupPaymentApproved(payment)
-
-  await supabase.from('payments').update({ status: 'approved', paid_at: new Date().toISOString() }).eq('id', payment.id)
 
   // Carrega a reserva ANTES de atualizar para saber se a cooperativa já aceitou.
   const booking = payment.bookings || (await supabase.from('bookings').select('*').eq('id', payment.booking_id).single()).data
@@ -1630,10 +1758,6 @@ function notifyBookingPaid(booking) {
 // status nem lançamentos. Espelha o caminho de reserva única, rateando a taxa
 // de gateway por reserva pelo total de cada uma.
 async function onGroupPaymentApproved(payment) {
-  await supabase.from('payments')
-    .update({ status: 'approved', paid_at: new Date().toISOString() })
-    .eq('id', payment.id)
-
   const { data: bookings } = await supabase
     .from('bookings').select('*').eq('order_group_id', payment.order_group_id)
   const list = (bookings || []).filter((b) => b.status_commercial !== 'cancelled')
