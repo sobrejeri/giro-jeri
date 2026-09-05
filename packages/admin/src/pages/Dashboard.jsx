@@ -32,12 +32,32 @@ const OP_STATUS = {
   awaiting_dispatch: { label: 'Aguardando operador', dot: 'bg-amber-400',  text: 'text-amber-300',  chip: 'bg-amber-900/40' },
   confirmed:         { label: 'Confirmada',             dot: 'bg-blue-400',   text: 'text-blue-300',   chip: 'bg-blue-900/40' },
   assigned:          { label: 'Atribuída',              dot: 'bg-indigo-400', text: 'text-indigo-300', chip: 'bg-indigo-900/40' },
+  // DERIVADO, não existe no enum do banco: o despacho não muda
+  // `status_operational`, ele cria a OS (operational_assignments). O painel do
+  // operador já decidia assim; o admin não, e por isso uma reserva despachada
+  // continuava aparecendo como "Atribuída".
+  dispatched:        { label: 'Despachada',             dot: 'bg-teal-400',   text: 'text-teal-300',   chip: 'bg-teal-900/40' },
   en_route:          { label: 'A caminho',              dot: 'bg-cyan-400',   text: 'text-cyan-300',   chip: 'bg-cyan-900/40' },
   in_progress:       { label: 'Em andamento',           dot: 'bg-purple-400', text: 'text-purple-300', chip: 'bg-purple-900/40' },
   completed:         { label: 'Concluída',              dot: 'bg-green-400',  text: 'text-green-300',  chip: 'bg-green-900/40' },
   occurrence:        { label: 'Ocorrência',             dot: 'bg-red-400',    text: 'text-red-300',    chip: 'bg-red-900/40' },
 }
-const OP_ORDER = ['new','awaiting_dispatch','confirmed','assigned','en_route','in_progress','completed','occurrence']
+const OP_ORDER = ['new','awaiting_dispatch','confirmed','assigned','dispatched','en_route','in_progress','completed','occurrence']
+
+// Andamento REAL de uma reserva, para o painel.
+//
+// O despacho é o único passo que não vira `status_operational`: ele grava a OS
+// (motorista, veículo) e o status fica onde estava. Quem só lê a coluna vê uma
+// reserva despachada como "Atribuída" — foi exatamente o que aconteceu.
+//
+// A ordem importa: os estados que vêm DEPOIS do despacho mandam. Uma corrida em
+// andamento não pode voltar a "Despachada" só porque a OS existe.
+const temOS = (b) => (b.operational_assignments || []).length > 0
+export function andamentoDe(b) {
+  const s = b?.status_operational || 'new'
+  if (['en_route', 'in_progress', 'completed', 'occurrence', 'cancelled'].includes(s)) return s
+  return temOS(b) ? 'dispatched' : s
+}
 
 const PAYMENT_METHODS = [
   { id: 'cash',     label: 'Dinheiro' },
@@ -379,11 +399,11 @@ function AcompanhamentoOperacional() {
   if (tourId) base = base.filter((b) => b.service_id === tourId)
 
   const counts = OP_ORDER.reduce((acc, s) => {
-    acc[s] = base.filter((b) => (b.status_operational || 'new') === s).length
+    acc[s] = base.filter((b) => andamentoDe(b) === s).length
     return acc
   }, {})
 
-  let list = status ? base.filter((b) => (b.status_operational || 'new') === status) : base
+  let list = status ? base.filter((b) => andamentoDe(b) === status) : base
   list = [...list].sort((a, b) =>
     `${a.service_date || ''}${a.service_time || ''}`.localeCompare(`${b.service_date || ''}${b.service_time || ''}`))
 
@@ -518,7 +538,7 @@ function AcompanhamentoOperacional() {
           ) : (
             <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
               {list.map((b) => {
-                const st = OP_STATUS[b.status_operational || 'new'] || OP_STATUS.new
+                const st = OP_STATUS[andamentoDe(b)] || OP_STATUS.new
                 return (
                   <div key={b.id} className="flex items-center gap-3 bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-2.5">
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${b.service_type === 'transfer' ? 'bg-teal-900/40 text-teal-300' : 'bg-orange-900/40 text-brand'}`}>
