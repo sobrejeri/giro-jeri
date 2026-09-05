@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -193,6 +194,11 @@ const FORM_VAZIO = {
 }
 
 export default function Despacho() {
+  // Reserva indicada pelo botão "Despacho" da tela de Solicitações.
+  const { state: navState } = useLocation()
+  const abrirId = navState?.bookingId || null
+  const jaAbriu = useRef(false)
+
   const [date, setDate]       = useState('all')
   const [modal, setModal]     = useState(null)
   const [form, setForm]       = useState(FORM_VAZIO)
@@ -207,6 +213,19 @@ export default function Despacho() {
     queryFn:  () => api.getOperational(date !== 'all' ? { date } : {}),
     refetchInterval: 15_000,
   })
+
+  // Abre o formulário DAQUELA reserva assim que a lista chega. Uma vez só: sem
+  // a trava, fechar o modal o reabriria no próximo refetch (a cada 15s) e o
+  // operador não conseguiria sair dele.
+  useEffect(() => {
+    if (!abrirId || jaAbriu.current || !data) return
+    const todas = Object.values(data.columns || {}).flat()
+    const alvo  = todas.find((b) => b.id === abrirId)
+    if (!alvo) return
+    jaAbriu.current = true
+    handleDispatch(alvo)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirId, data])
 
   const { data: profile } = useQuery({
     queryKey: ['operator-profile'],

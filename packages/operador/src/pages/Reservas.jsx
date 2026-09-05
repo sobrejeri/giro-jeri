@@ -1027,7 +1027,10 @@ export default function Reservas() {
                 onRequestInfo={handleRequestInfo}
                 onStart={handleStart}
                 onComplete={handleComplete}
-                onDispatch={() => navigate('/despacho')}
+                // Leva a reserva junto: o botão diz "Despacho" DESTA corrida,
+                // e largar o operador numa lista para procurar de novo parece
+                // que o clique não fez nada.
+                onDispatch={(b) => navigate('/despacho', { state: { bookingId: b?.id } })}
                 busy={confirming === it.booking.id}
               />
             ))}
@@ -1053,7 +1056,7 @@ export default function Reservas() {
           onRequestInfo={handleRequestInfo}
           onStart={handleStart}
           onComplete={handleComplete}
-          onDispatch={() => { setMyGroupGid(null); navigate('/despacho') }}
+          onDispatch={(b) => { setMyGroupGid(null); navigate('/despacho', { state: { bookingId: b?.id } }) }}
           busyId={confirming}
         />
       )}
