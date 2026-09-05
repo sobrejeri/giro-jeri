@@ -350,7 +350,10 @@ async function modaisDasReservas(bookings) {
 // Falhando qualquer uma, devolve null e o valor cai inteiro na plataforma, que
 // repassa na mão. Fail-closed: errar para "fica com a plataforma" se corrige
 // com um repasse; errar para o outro lado é irreversível.
-async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg) {
+// `metodo` decide a taxa que a plataforma absorve. O padrão é o cartão à vista
+// — a maior — porque quem não informa o método (a tela que só pergunta a chave
+// pública) deve receber a resposta mais conservadora.
+async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg, metodo = 'credit_card') {
   if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return null
 
   const lista = (bookings || []).filter(Boolean)
@@ -390,38 +393,52 @@ async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg) {
   }
   const pct = somaValor > 0 ? somaPeso / somaValor : geral
 
-  const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
-  // Comissão que zera o operador não é split, e maior que o cobrado o MP
-  // recusaria — nos dois casos, manual.
-  if (!(applicationFee >= 0) || applicationFee >= chargedTotal) {
-    console.warn('[split] comissão de %s%% inviável para R$ %s — mantendo manual', pct, chargedTotal)
-    return null
-  }
-
-  // A parte do operador precisa cobrir a taxa que o próprio Mercado Pago cobra
-  // da cobrança. Se sobrar menos que isso, ele recusa o pagamento inteiro — e a
-  // mensagem que devolve fala do VALOR, não da comissão, então ninguém liga uma
-  // coisa à outra. Com 97% de comissão numa reserva de R$ 5,00 sobram R$ 0,15
-  // para o operador, e a taxa de cartão do MP é maior que isso.
+  // ── A PLATAFORMA ABSORVE A TAXA DO GATEWAY ────────────────────────────────
   //
-  // 5% é o teto entre os métodos (cartão à vista ~4,98%; PIX ~0,99%). Usar o
-  // maior para os dois erra para o lado seguro: na dúvida cobra sem split, o
-  // dinheiro fica com a plataforma e o repasse é lançado. O contrário é a venda
-  // ser recusada na cara do cliente.
-  const sobraDoOperador = Math.round((chargedTotal - applicationFee) * 100) / 100
-  const taxaEstimadaMP  = Math.round(chargedTotal * 0.05 * 100) / 100
-  if (sobraDoOperador <= taxaEstimadaMP) {
+  // No split, a cobrança nasce na conta do OPERADOR, e o Mercado Pago desconta
+  // a taxa dele de quem recebeu — ou seja, do operador. Cobrando a comissão
+  // cheia da plataforma, a conta não fecha:
+  //
+  //     R$ 5,00 recebidos − R$ 4,85 (97%) − R$ 0,25 (taxa) = −R$ 0,10
+  //
+  // O MP recusa a venda inteira, e a mensagem fala do VALOR, não da comissão.
+  //
+  // A saída não é baixar a comissão: é a plataforma deixar a taxa NA CONTA do
+  // operador, tirando menos para si. Em vez de `comissão = 97%`, tira
+  // `97% − taxa`. O operador recebe a fatia dele LIMPA, do valor cheio, e quem
+  // paga o gateway é a plataforma — que é o que o dono quer, e o que já
+  // acontece hoje no modelo manual.
+  //
+  //     comissão da plataforma = total × (pctPlataforma − taxa%)
+  //     operador recebe        = total × pctOperador, líquido
+  //
+  // Com R$ 5,00 a 97% e cartão a 4,98%: a plataforma tira R$ 4,60 em vez de
+  // R$ 4,85, o MP tira R$ 0,25, e o operador fica com R$ 0,15 — exatamente os
+  // 3%. A plataforma abriu mão de R$ 0,25, que é a taxa. Mesma conta do modelo
+  // manual, onde ela também paga o gateway.
+  // A conta é feita PELO ALVO, não por percentual: primeiro o que o operador
+  // tem de receber limpo, depois a taxa, e a comissão é o que sobra. Derivar da
+  // subtração de dois percentuais arredondados deixava o operador um centavo
+  // abaixo do combinado em alguns valores — pouco, mas sistemático, e é a conta
+  // que ele confere.
+  const taxaMP        = Math.round(chargedTotal * taxaDoMetodo(metodo) * 100) / 100
+  const liquidoOp     = Math.round(chargedTotal * ((100 - pct) / 100) * 100) / 100
+  const brutoOp       = Math.round((liquidoOp + taxaMP) * 100) / 100
+  const applicationFee = Math.round((chargedTotal - brutoOp) * 100) / 100
+
+  // Comissão negativa (a taxa come a comissão inteira) ou maior que o cobrado:
+  // nos dois casos o split não representa o combinado — manual.
+  if (!(applicationFee > 0) || applicationFee >= chargedTotal) {
     console.warn(
-      '[split] sobra de R$ %s para o operador não cobre a taxa do gateway (~R$ %s) em R$ %s — ' +
-      'cobrando sem split para o Mercado Pago não recusar a venda',
-      sobraDoOperador, taxaEstimadaMP, chargedTotal,
+      '[split] comissão de %s%% menos a taxa (R$ %s) não fecha em R$ %s — mantendo manual',
+      pct, taxaMP, chargedTotal,
     )
     return null
   }
   return { sellerAccessToken: opMp.token, applicationFee, operatorId, publicKey: opMp.publicKey }
 }
 
-async function getSplitContext(booking, chargedTotal, cfg) {
+async function getSplitContext(booking, chargedTotal, cfg, metodo = 'credit_card') {
   // Sem a 079 ligada, o comportamento antigo: split para todo operador
   // conectado, pelo percentual dele.
   if (!plataformaRecebeTudo(cfg)) {
@@ -431,7 +448,7 @@ async function getSplitContext(booking, chargedTotal, cfg) {
     const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
     return { sellerAccessToken: opMp.token, applicationFee, operatorId: booking?.operator_id, publicKey: opMp.publicKey }
   }
-  return contextoSplitOperadorUnico([booking], chargedTotal, cfg)
+  return contextoSplitOperadorUnico([booking], chargedTotal, cfg, metodo)
 }
 
 // =============================================================================
@@ -925,7 +942,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         ? await getSplitContextForGroup(groupBookings, chargedTotal, cfg)
         : (await isBookingLegsEngineEnabled())
           ? await getSplitContextForBooking(booking, chargedTotal, cfg)
-          : await getSplitContext(booking, chargedTotal, cfg)
+          : await getSplitContext(booking, chargedTotal, cfg, payment_method)
       // `mode:'multi'` é o split de N recebedores (motor de pernas), que tem
       // repasse próprio — aqui só interessa o de operador único.
       if (split?.operatorId && split.mode !== 'multi') splitAplicado = split
