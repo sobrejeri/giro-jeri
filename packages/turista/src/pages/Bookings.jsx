@@ -150,7 +150,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
   const serviceName = booking.service_name || (isTour ? 'Passeio' : 'Transfer')
 
   return (
-    <div onClick={() => onDetail?.(booking.id)} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer">
+    <div onClick={() => onDetail?.(booking.id)} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer flex flex-col h-full">
       {/* ── Hero ── */}
       <div className="relative h-[120px]">
         {booking.cover_image_url ? (
@@ -189,7 +189,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
       </div>
 
       {/* ── Body ── */}
-      <div className="px-4 pt-3 pb-4 space-y-3">
+      <div className="px-4 pt-3 pb-4 flex-1 flex flex-col gap-3">
         {/* Selo de pedido (carrinho): deixa claro que faz parte de um grupo */}
         {groupSize >= 2 && (
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-brand bg-brand/5 rounded-lg px-2.5 py-1.5">
@@ -224,7 +224,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
         )}
 
         {/* Total + actions */}
-        <div className="flex items-center justify-between pt-0.5">
+        <div className="mt-auto flex items-center justify-between gap-3 pt-0.5">
           <div>
             <p className="text-[10px] text-gray-400 leading-none">
               {['waiting_payment', 'waiting_acceptance'].includes(status) ? 'Total' : 'Total pago'}
@@ -232,7 +232,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
             <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">{fmt(booking.total_amount)}</p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
             {status === 'waiting_payment' && (
               <button
                 onClick={(e) => { e.stopPropagation(); onPay?.(booking) }}
@@ -549,7 +549,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
   const hasPrice = quote.quoted_price != null
 
   return (
-    <div onClick={() => onDetail?.(quote)} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer">
+    <div onClick={() => onDetail?.(quote)} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer flex flex-col h-full">
       {/* ── Hero ── */}
       <div className="relative h-[120px]">
         <div className={`w-full h-full bg-gradient-to-br ${from} ${to} flex items-center justify-center`}>
@@ -578,7 +578,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
       </div>
 
       {/* ── Body ── */}
-      <div className="px-4 pt-3 pb-4 space-y-3">
+      <div className="px-4 pt-3 pb-4 flex-1 flex flex-col gap-3">
         {/* Data / Horário / Pessoas */}
         <div className="flex items-center gap-4">
           {[
@@ -622,7 +622,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
         )}
 
         {/* Total + ações (mesmo layout das reservas) */}
-        <div className="flex items-center justify-between pt-0.5">
+        <div className="mt-auto flex items-center justify-between gap-3 pt-0.5">
           <div>
             <p className="text-[10px] text-gray-400 leading-none">
               {quote.status === 'accepted' ? 'Total a pagar' : 'Valor da corrida'}
