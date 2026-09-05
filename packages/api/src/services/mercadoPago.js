@@ -12,37 +12,54 @@ const mp = accessToken
 const OAUTH_CLIENT_ID     = process.env.MP_CLIENT_ID || process.env.MP_MARKETPLACE_CLIENT_ID || ''
 const OAUTH_CLIENT_SECRET = process.env.MP_CLIENT_SECRET || process.env.MP_MARKETPLACE_CLIENT_SECRET || ''
 
+export function calculateMarketplaceSplit(amount, platformSharePct) {
+  const cents = Math.round(Number(amount) * 100)
+  const pct = Number(platformSharePct)
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) throw new Error('Percentual de split inválido')
+  const platformCents = Math.round(cents * pct / 100)
+  return { platformAmount: platformCents / 100, operatorAmount: (cents - platformCents) / 100 }
+}
+
+export function sanitizedPaymentResult(response) {
+  return {
+    payment_id: response?.id == null ? null : String(response.id),
+    status: response?.status || null,
+    status_detail: response?.status_detail || null,
+    payment_method_id: response?.payment_method_id || null,
+    payment_type_id: response?.payment_type_id || null,
+    collector_id: response?.collector_id == null ? null : String(response.collector_id),
+    transaction_amount: response?.transaction_amount == null ? null : Number(response.transaction_amount),
+    installments: response?.installments == null ? null : Number(response.installments),
+    external_reference: response?.external_reference == null ? null : String(response.external_reference),
+  }
+}
+
+export function logPaymentResult({ bookingId, response, deviceIdPresent }) {
+  const safe = sanitizedPaymentResult(response)
+  console.info('[MP PAYMENT RESULT] booking_id=%s payment_id=%s status=%s status_detail=%s payment_method_id=%s payment_type_id=%s collector_id=%s amount=%s installments=%s external_reference=%s device_id_present=%s',
+    bookingId, safe.payment_id, safe.status, safe.status_detail, safe.payment_method_id,
+    safe.payment_type_id, safe.collector_id, safe.transaction_amount, safe.installments,
+    safe.external_reference, deviceIdPresent)
+  return safe
+}
+
 export function isMarketplaceConfigured() {
   return !!(OAUTH_CLIENT_ID && OAUTH_CLIENT_SECRET)
 }
 
+export function getMercadoPagoEnvironment(token = accessToken) {
+  if (!token) return 'unconfigured'
+  return token.startsWith('TEST-') ? 'sandbox' : 'production'
+}
+
 // Cria um cliente de pagamento. Com sellerAccessToken, opera NA conta da
-// operador (split); sem ele, usa o token da plataforma.
+// cooperativa (split); sem ele, usa o token da plataforma.
 function paymentClientFor(sellerAccessToken) {
   if (sellerAccessToken) {
     const cfg = new MercadoPagoConfig({ accessToken: sellerAccessToken, options: { timeout: 10000 } })
     return new Payment(cfg)
   }
   return mp ? new Payment(mp) : null
-}
-
-// Valor em reais no formato que o Mercado Pago aceita.
-//
-// O gateway recusa com "Invalid value for transaction_amount" qualquer coisa
-// que não seja um número positivo com no máximo 2 casas. E é fácil chegar aqui
-// com lixo de ponto flutuante: acréscimo de temporada é percentual, e
-// `5 * 1.15` dá 5.749999999999999 em JavaScript. Na tela isso aparece como
-// "R$ 5,75" — o cliente vê um valor válido e o pagamento é recusado com uma
-// mensagem que não diz nada.
-//
-// Trava na FRONTEIRA de propósito: é o último ponto por onde todo pagamento
-// passa. Corrigir só na origem deixaria o próximo caminho novo desprotegido.
-function valorParaMP(v, campo = 'transaction_amount') {
-  const n = Math.round(Number(v) * 100) / 100
-  if (!Number.isFinite(n) || n <= 0) {
-    throw new Error(`Valor inválido para ${campo}: ${v}`)
-  }
-  return n
 }
 
 // Formata uma data no padrão que o Mercado Pago espera em date_of_expiration:
@@ -60,7 +77,7 @@ function mpDate(d) {
 
 export async function createPixPayment({ amount, description, payerEmail, payerName, payerDoc, externalRef, sellerAccessToken, applicationFee }) {
   const client = paymentClientFor(sellerAccessToken)
-  // Sem token nenhum (nem da plataforma, nem do operador) = configuração
+  // Sem token nenhum (nem da plataforma, nem da cooperativa) = configuração
   // ausente. Erro claro em vez de um PIX falso que só "expira".
   if (!client) throw new Error('Mercado Pago não configurado: falta o Access Token (MP_ACCESS_TOKEN) no servidor.')
 
@@ -68,8 +85,10 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
   const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
   const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
 
+  if (!payerEmail) throw new Error('E-mail do comprador ausente; pagamento não criado.')
+  const parts = String(payerName || '').trim().split(/\s+/).filter(Boolean)
   const body = {
-    transaction_amount: valorParaMP(amount),
+    transaction_amount: amount,
     description,
     payment_method_id:  'pix',
     external_reference: String(externalRef),
@@ -77,18 +96,16 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
     date_of_expiration: mpDate(new Date(Date.now() + 30 * 60 * 1000)),
     ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     payer: {
-      email:      payerEmail || 'comprador@girojeri.com',
-      first_name: (payerName || 'Comprador').split(' ')[0],
-      last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'Turiva',
+      email: payerEmail,
+      ...(parts[0] ? { first_name: parts[0] } : {}),
+      ...(parts.length > 1 ? { last_name: parts.slice(1).join(' ') } : {}),
       // Identificação do pagador (o Payment Brick envia o CPF/CNPJ no PIX)
       ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
     },
   }
-  // Split: comissão da plataforma quando o pagamento cai na conta do operador
+  // Split: comissão da plataforma quando o pagamento cai na conta da cooperativa
   if (sellerAccessToken && applicationFee > 0) {
-    // A comissão também passa pela trava: `application_fee` com casas demais é
-    // recusado pelo mesmo motivo, e ela nasce de um percentual.
-    body.application_fee = valorParaMP(applicationFee, 'application_fee')
+    body.application_fee = Math.round(applicationFee * 100) / 100
   }
 
   const response = await client.create({ body })
@@ -132,17 +149,19 @@ export async function createPixPaymentSplit({ amount, description, payerEmail, p
   const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
   const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
 
+  if (!payerEmail) throw new Error('E-mail do comprador ausente; pagamento não criado.')
+  const parts = String(payerName || '').trim().split(/\s+/).filter(Boolean)
   const body = {
-    transaction_amount: valorParaMP(amount),
+    transaction_amount: amount,
     description,
     payment_method_id:  'pix',
     external_reference: String(externalRef),
     date_of_expiration: mpDate(new Date(Date.now() + 30 * 60 * 1000)),
     ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     payer: {
-      email:      payerEmail || 'comprador@girojeri.com',
-      first_name: (payerName || 'Comprador').split(' ')[0],
-      last_name:  (payerName || '').split(' ').slice(1).join(' ') || 'Turiva',
+      email: payerEmail,
+      ...(parts[0] ? { first_name: parts[0] } : {}),
+      ...(parts.length > 1 ? { last_name: parts.slice(1).join(' ') } : {}),
       ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
     },
     disbursements,
@@ -176,6 +195,29 @@ export function mapRejectionKey(statusDetail) {
   return REJECTION_MAP[statusDetail] || 'payment.rejected.generic'
 }
 
+export function rejectionUserMessage(statusDetail) {
+  if (statusDetail === 'cc_rejected_high_risk') return 'Pagamento não aprovado por segurança. Tente outro meio de pagamento.'
+  if (statusDetail === 'cc_rejected_insufficient_amount') return 'Pagamento não aprovado. Verifique limite ou saldo disponível.'
+  return 'Pagamento não aprovado. Revise os dados ou tente outro meio de pagamento.'
+}
+
+export function normalizeCardPaymentResponse(response, fallbackInstallments = 1) {
+  const diagnostic = sanitizedPaymentResult(response)
+  const financingFee = (response?.fees || [])
+    .filter((f) => f.fee_id === 'FINANCING_FEE' || (f.type && /juros|interest|financing/i.test(f.type)))
+    .reduce((acc, f) => acc + (Number(f.value) || 0), 0)
+  return {
+    mp_id: String(response.id), status: response.status, status_detail: response.status_detail || null,
+    installments: response.installments || fallbackInstallments,
+    installment_amount: response.transaction_details?.installment_amount ?? null,
+    installment_fee_amount: financingFee > 0 ? financingFee : null,
+    card_last_four: response.card?.last_four_digits ?? null,
+    card_brand: response.payment_method_id ?? null,
+    card_holder_name: response.card?.cardholder?.name ?? null,
+    collector_id: diagnostic.collector_id, diagnostic,
+  }
+}
+
 // ── Pagamento com cartão de crédito ou débito ─────────
 export async function createCardPayment({
   amount,
@@ -187,171 +229,81 @@ export async function createCardPayment({
   payerEmail,
   payerDoc,
   externalRef,
-  idempotencyKey,
-  deviceId,
   sellerAccessToken,
   applicationFee,
-  threeDSecure = false,
+  idempotencyKey,
+  deviceId,
+  payerFirstName,
+  payerLastName,
+  item,
+  bookingId,
+  paymentClient,
 }) {
-  // Com split, opera na conta do operador; sem split, na conta da plataforma.
+  // Com split, opera na conta da cooperativa; sem split, na conta da plataforma.
   // Sem fallback fake para cartão — erro propaga para o caller.
-  const client = paymentClientFor(sellerAccessToken)
+  const client = paymentClient || paymentClientFor(sellerAccessToken)
   if (!client) throw new Error('Mercado Pago não configurado (access token ausente)')
+  if (!payerEmail) throw new Error('E-mail do comprador ausente; pagamento não criado.')
+  if (!idempotencyKey) throw new Error('payment_attempt_id ausente; pagamento não criado.')
 
   const body = {
-    transaction_amount: valorParaMP(amount),
+    transaction_amount: amount,
     description,
     installments:       Number(installments) || 1,
     payment_method_id:  paymentMethodId,
     token:              cardToken,
     statement_descriptor: 'TURIVA',
     external_reference: externalRef,
+    metadata: { booking_id: bookingId || externalRef, payment_attempt_id: idempotencyKey },
     payer: {
-      email:          payerEmail || 'comprador@girojeri.com',
+      email:          payerEmail,
+      ...(payerFirstName ? { first_name: payerFirstName } : {}),
+      ...(payerLastName ? { last_name: payerLastName } : {}),
       identification: { type: 'CPF', number: payerDoc },
     },
+    ...(item ? { additional_info: { items: [item], payer: {
+      ...(payerFirstName ? { first_name: payerFirstName } : {}),
+      ...(payerLastName ? { last_name: payerLastName } : {}),
+    } } } : {}),
   }
 
   // issuer_id é opcional — não enviar quando undefined para evitar rejeição MP
   if (issuerId) body.issuer_id = String(issuerId)
 
-  // 3-D Secure. No Brasil o Mercado Pago EXIGE autenticação do emissor para
-  // cartão de DÉBITO: sem isto o pagamento é recusado, e era por isso que a
-  // opção de débito não funcionava.
-  //
-  // 'optional' e não 'mandatory' de propósito: o desafio só aparece quando o
-  // emissor pede. Obrigar todo mundo a passar pela tela do banco derruba
-  // conversão sem necessidade — inclusive no crédito, onde o 3DS nem é exigido
-  // (por isso este parâmetro só é ligado para débito).
-  if (threeDSecure) body.three_d_secure_mode = 'optional'
-
-  // Split: comissão da plataforma quando o pagamento cai na conta do operador
+  // Split: comissão da plataforma quando o pagamento cai na conta da cooperativa
   if (sellerAccessToken && applicationFee > 0) {
-    // A comissão também passa pela trava: `application_fee` com casas demais é
-    // recusado pelo mesmo motivo, e ela nasce de um percentual.
-    body.application_fee = valorParaMP(applicationFee, 'application_fee')
+    body.application_fee = Math.round(applicationFee * 100) / 100
   }
 
   const response = await client.create({
     body,
-    // X-Idempotency-Key protege contra COBRAR DUAS VEZES quando a mesma
-    // tentativa é reenviada (timeout de rede, cliente tocando de novo).
-    //
-    // Ela NÃO pode ser a reserva: a chave é por TENTATIVA. Com booking.id, o
-    // cliente cujo cartão foi recusado tentava de novo e o Mercado Pago
-    // devolvia a MESMA cobrança recusada, sem nem tocar no cartão novo — e a
-    // gravação estourava a unicidade de gateway_transaction_id, jogando o erro
-    // do banco na cara do cliente. Quem chama manda uma chave por tentativa
-    // (o token do cartão serve: é de uso único).
-    requestOptions: {
-      idempotencyKey: idempotencyKey || externalRef,
-      // X-Meli-Session-Id: identifica o APARELHO para o antifraude. O Mercado
-      // Pago documenta este sinal como um dos que mais pesam na aprovação —
-      // sem ele, compra legítima de aparelho desconhecido vira risco e volta
-      // como cc_rejected_high_risk. O SDK envia o header a partir daqui.
-      ...(deviceId ? { meliSessionId: String(deviceId) } : {}),
-    },
+    requestOptions: { idempotencyKey, ...(deviceId ? { meliSessionId: deviceId } : {}) },
   })
+  const diagnostic = logPaymentResult({ bookingId: bookingId || externalRef, response, deviceIdPresent: !!deviceId })
 
-  // Extrai juro de parcelamento da lista de fees retornada pelo MP
-  const financingFee = (response.fees || [])
-    .filter((f) => f.fee_id === 'FINANCING_FEE' || (f.type && /juros|interest|financing/i.test(f.type)))
-    .reduce((acc, f) => acc + (Number(f.value) || 0), 0)
+  return { ...normalizeCardPaymentResponse(response, installments), diagnostic }
+}
 
-  return {
-    mp_id:                  String(response.id),
-    status:                 response.status,
-    status_detail:          response.status_detail || null,
-    installments:           response.installments || installments,
-    installment_amount:     response.transaction_details?.installment_amount ?? null,
-    installment_fee_amount: financingFee > 0 ? financingFee : null,
-    card_last_four:         response.card?.last_four_digits ?? null,
-    card_brand:             response.payment_method_id ?? null,
-    card_holder_name:       response.card?.cardholder?.name ?? null,
-    // Desafio do emissor: quando existe, o pagamento NÃO está resolvido — o
-    // cliente precisa autenticar no banco dele e só depois o status muda.
-    // Devolver null quando não há é o caso comum (crédito, e débito que o
-    // emissor liberou sem desafio).
-    three_ds:               response.three_ds_info?.external_resource_url
-      ? {
-          url:  response.three_ds_info.external_resource_url,
-          creq: response.three_ds_info.creq || null,
-        }
-      : null,
-    raw:                    response,
-  }
+export async function findMpPaymentByExternalReference(externalRef, sellerAccessToken) {
+  const client = paymentClientFor(sellerAccessToken)
+  if (!client) return null
+  const found = await client.search({ options: { external_reference: String(externalRef), limit: 1 } })
+  const id = found?.results?.[0]?.id
+  if (!id) return null
+  return client.get({ id })
 }
 
 export async function getMpPaymentStatus(mpId, sellerAccessToken) {
-  // Uma cobrança só existe para a conta que a criou. Consultar com o token
-  // ERRADO devolve "não encontrado", e quem chama não distingue isso de "ainda
-  // pendente" — o pagamento fica pendente para sempre.
-  //
-  // Foi exatamente o que aconteceu: PIX aprovado no Mercado Pago, reserva
-  // parada em `awaiting_payment`. A conciliação usava o token do operador
-  // sempre que a reserva tinha um operador conectado, mesmo quando a cobrança
-  // tinha sido feita na conta da PLATAFORMA (sem split).
-  //
-  // Então tenta o token informado e, se ele não achar, tenta o da plataforma.
-  // Duas contas, duas tentativas — e é barato: só acontece quando a primeira
-  // falha. Nunca devolve palpite: sem resposta de nenhuma das duas, devolve
-  // null e quem chamou deixa o pagamento como está.
-  const tentativas = sellerAccessToken ? [sellerAccessToken, null] : [null]
-
-  let ultimoErro = null
-  for (const token of tentativas) {
-    const client = paymentClientFor(token)
-    if (!client) continue
-    try {
-      const r = await client.get({ id: mpId })
-      if (r?.status) return r.status
-    } catch (err) {
-      ultimoErro = err
-    }
-  }
-  if (ultimoErro) throw ultimoErro
-  return null
+  // Pagamento com split vive na conta da cooperativa → consultar com o token dela.
+  const client = paymentClientFor(sellerAccessToken)
+  if (!client) return null
+  const r = await client.get({ id: mpId })
+  return sanitizedPaymentResult(r)
 }
 
-// Auditoria: a cobrança COMPLETA no Mercado Pago, não só o status.
-// `getMpPaymentStatus` devolve uma string — suficiente para decidir o fluxo,
-// inútil para descobrir POR QUE uma cobrança foi recusada. Aqui vem o
-// status_detail, o meio de pagamento, as parcelas e a comissão aplicada.
-// Nada sensível: o MP nunca devolve número completo nem CVV.
-export async function getMpPaymentAudit(mpId, sellerAccessToken) {
-  const tentativas = sellerAccessToken ? [sellerAccessToken, null] : [null]
-  let ultimoErro = null
-  for (const token of tentativas) {
-    const client = paymentClientFor(token)
-    if (!client) continue
-    try {
-      const r = await client.get({ id: mpId })
-      if (!r?.status) continue
-      return {
-        conta_consultada:    token ? 'operador' : 'plataforma',
-        payment_id:          String(r.id),
-        status:              r.status,
-        status_detail:       r.status_detail,
-        payment_method_id:   r.payment_method_id,
-        payment_type_id:     r.payment_type_id,
-        installments:        r.installments,
-        transaction_amount:  r.transaction_amount,
-        application_fee:     r.application_fee ?? null,
-        external_reference:  r.external_reference,
-        date_created:        r.date_created,
-        date_approved:       r.date_approved,
-        // E-mail do pagador só como domínio — o suficiente para comparar com a
-        // conta recebedora sem despejar dado pessoal no relatório.
-        payer_email_dominio: r.payer?.email ? String(r.payer.email).split('@')[1] : null,
-        collector_id:        r.collector_id ?? null,
-        payer_id:            r.payer?.id ?? null,
-        card_last_four:      r.card?.last_four_digits ?? null,
-        live_mode:           r.live_mode ?? null,
-      }
-    } catch (err) { ultimoErro = err }
-  }
-  if (ultimoErro) throw ultimoErro
-  return null
+export async function getMpPayment(mpId, sellerAccessToken) {
+  const client = paymentClientFor(sellerAccessToken)
+  return client ? client.get({ id: mpId }) : null
 }
 
 // ── OAuth: autorização e troca de código ──────────────
