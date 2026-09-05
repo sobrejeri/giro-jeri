@@ -1048,6 +1048,18 @@ router.post('/intent', authenticate, async (req, res, next) => {
         cardHolderName       = cardResult.card_holder_name
         cardThreeDs          = cardResult.three_ds
 
+        // Motivo da recusa no log do servidor. Sem isto, uma recusa só deixava
+        // rastro na tela do cliente e a causa real ficava invisível para quem
+        // opera. Nada sensível: id da cobrança, status e motivo do MP.
+        // `cc_rejected_high_risk` costuma ser antifraude — e a causa mais comum
+        // em teste é pagador e recebedor serem a MESMA pessoa (o dono da conta
+        // pagando com o próprio cartão).
+        console[cardPaymentStatus === 'rejected' ? 'warn' : 'log'](
+          '[payments] cartão booking=%s mp_id=%s status=%s detail=%s split=%s',
+          booking.id, gatewayTransactionId, cardPaymentStatus,
+          cardStatusDetail || '-', split ? 'sim' : 'não',
+        )
+
         // Taxa real por método: cartão à vista 4.98%, débito 1.50%
         if (payment_method === 'debit_card') {
           cardGatewayFeePct = 0.0150
