@@ -581,6 +581,20 @@ function TabPagamentos({ settings, qc }) {
                 <p className="text-xs text-amber-500/80">
                   Estas chaves são armazenadas no banco e nunca expostas ao cliente final.
                 </p>
+                {/* No Mercado Pago o servidor NÃO usa a API Key daqui: ele lê o
+                    Access Token da variável de ambiente. Sem dizer isso, quem
+                    cola a chave neste campo e vê o PIX continuar falhando não
+                    tem como descobrir por quê — o campo parece o lugar certo. */}
+                {form.payment_gateway === 'mercado_pago' && (
+                  <p className="text-xs text-gray-500">
+                    No Mercado Pago o servidor usa o Access Token da variável
+                    <code className="mx-1 text-gray-400">MERCADO_PAGO_ACCESS_TOKEN</code>
+                    (no Render) — o campo API Key acima <b>não</b> é lido. Token que
+                    começa com <code className="mx-1 text-gray-400">TEST-</code> cobra
+                    em sandbox; para cobrar de verdade ele precisa começar com
+                    <code className="mx-1 text-gray-400">APP_USR-</code>.
+                  </p>
+                )}
                 {/* O texto acima dizia só metade: o servidor lê primeiro a
                     variável de ambiente do Render, e este campo é a reserva.
                     Sem essa explicação, preencher aqui e ver o webhook falhar
