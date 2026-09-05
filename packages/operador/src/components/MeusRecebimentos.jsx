@@ -121,6 +121,12 @@ export default function MeusRecebimentos() {
           <Resumo icon={Wallet}       label="Total no período" value={fmt(data?.total)}     cor="text-gray-900"   fundo="bg-gray-800"  />
         </div>
 
+        {data?.aviso && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-4">
+            <p className="text-[13px] text-amber-800">{data.aviso}</p>
+          </div>
+        )}
+
         {isLoading ? (
           <p className="text-[13px] text-gray-400 py-4">Carregando…</p>
         ) : isError ? (

@@ -1366,9 +1366,16 @@ router.get('/meus-recebimentos', async (req, res, next) => {
 
     const { data, error } = await q;
     if (error) {
-      // 42P01 = tabela ausente (migration 080 pendente). Tela vazia é melhor
-      // que erro: o operador não tem o que fazer a respeito.
-      if (error.code === '42P01') return res.json({ itens: [], a_receber: 0, recebido: 0, total: 0 });
+      // 42P01 = tabela ausente (migration 080 pendente). Devolver lista vazia
+      // e MAIS NADA seria mentir: o operador leria "não ganhei nada" quando a
+      // verdade é "a plataforma ainda não sabe registrar isso". O aviso vai
+      // junto, para a tela dizer o que está acontecendo.
+      if (error.code === '42P01') {
+        return res.json({
+          itens: [], a_receber: 0, recebido: 0, total: 0,
+          aviso: 'Os repasses ainda não estão registrados nesta plataforma. Fale com o administrador — falta aplicar a migration 080 no banco.',
+        });
+      }
       throw error;
     }
 
