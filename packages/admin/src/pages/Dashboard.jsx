@@ -404,8 +404,15 @@ function AcompanhamentoOperacional() {
   }, {})
 
   let list = status ? base.filter((b) => andamentoDe(b) === status) : base
-  list = [...list].sort((a, b) =>
-    `${a.service_date || ''}${a.service_time || ''}`.localeCompare(`${b.service_date || ''}${b.service_time || ''}`))
+  // Da solicitação mais NOVA para a mais antiga, de cima para baixo.
+  //
+  // Ordena por `created_at` — quando o pedido entrou —, não pela data do
+  // serviço: um passeio marcado para daqui a um mês pode ter sido solicitado
+  // agora, e é ele que o admin precisa ver primeiro. Sem `created_at` (dado
+  // antigo), cai na data do serviço, também da mais recente para a mais velha,
+  // para a linha não sumir no fim da lista.
+  const quando = (b) => b.created_at || `${b.service_date || ''}T${b.service_time || '00:00'}`
+  list = [...list].sort((a, b) => String(quando(b)).localeCompare(String(quando(a))))
 
   const serviceLabel = (b) => {
     if (b.service_type === 'transfer') {

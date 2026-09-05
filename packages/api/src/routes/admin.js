@@ -897,6 +897,11 @@ router.get('/operational', requireOperator, async (req, res, next) => {
       .select(`
         id, booking_code, service_type, service_id, booking_mode, user_id, operator_id,
         order_group_id,
+        -- Quando a solicitação ENTROU. É por aqui que o painel ordena: quem
+        -- acompanha a operação quer ver o pedido novo no topo, e a data do
+        -- SERVIÇO não diz isso (um passeio marcado para daqui a um mês pode ter
+        -- sido pedido hoje).
+        created_at,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
         pickup_place_name, destination_place_name, special_notes,
