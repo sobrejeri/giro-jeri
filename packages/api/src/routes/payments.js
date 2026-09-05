@@ -2,7 +2,7 @@ import { Router }    from 'express'
 import crypto        from 'node:crypto'
 import { z }         from 'zod'
 import { supabase }  from '../supabase.js'
-import { authenticate } from '../middleware/auth.js'
+import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
@@ -1484,6 +1484,47 @@ router.post('/intent', authenticate, async (req, res, next) => {
 // Valida um cupom ANTES da solicitação, para o app mostrar o desconto na
 // hora (Resumo e Carrinho). A aplicação autoritativa continua no servidor
 // na criação da reserva — isto aqui é só feedback.
+// ── GET /api/payments/diagnostico-cartao ───────────────
+// Por que o cartão é recusado e o PIX não.
+//
+// Existe porque a recusa por risco (cc_rejected_high_risk) é a mesma mensagem
+// para causas completamente diferentes: cartão do cliente, comportamento
+// suspeito, OU a conta recebedora simplesmente não habilitada para cartão. Sem
+// perguntar ao Mercado Pago, os três casos são indistinguíveis daqui — e a
+// diferença decide se há algo a corrigir no código ou no cadastro.
+//
+// Compara PLATAFORMA e OPERADOR lado a lado: se o PIX aparece ativo nos dois e
+// o crédito só na plataforma, a resposta está na conta do operador.
+router.get('/diagnostico-cartao', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { diagnosticoDaConta } = await import('../services/mercadoPago.js')
+    const { operator_id } = req.query
+
+    const saida = { plataforma: await diagnosticoDaConta(null) }
+
+    if (operator_id) {
+      const opMp = await getOperatorMp(operator_id)
+      if (!opMp?.token) {
+        saida.operador = { erro: 'Operador não conectado ao Mercado Pago (sem access token).' }
+      } else {
+        saida.operador = await diagnosticoDaConta(opMp.token)
+        saida.operador.public_key_gravada = !!opMp.publicKey
+        saida.operador.split_pct = opMp.platformPct
+      }
+    }
+
+    // A leitura pronta, para não depender de interpretar a lista bruta.
+    const op = saida.operador
+    if (op?.resumo) {
+      saida.conclusao = op.resumo.credito_ativo > 0
+        ? 'A conta do operador aceita cartão de crédito. A recusa vem de risco ou do cartão, não de habilitação.'
+        : 'A conta do operador NÃO tem cartão de crédito ativo. É isto que precisa ser resolvido no cadastro do Mercado Pago dela — nenhuma mudança de código aprova a cobrança.'
+    }
+
+    res.json(saida)
+  } catch (err) { next(err) }
+})
+
 router.post('/validate-coupon', authenticate, async (req, res, next) => {
   try {
     const { coupon_code, service_type, region_id, subtotal } = req.body || {}

@@ -524,6 +524,74 @@ export async function getMpPaymentAudit(mpId, sellerAccessToken) {
   return null
 }
 
+// ── Diagnóstico: o que ESTA conta pode aceitar ───────────────────────────────
+//
+// PIX aprovando e cartão sempre recusando não é coincidência estatística: são
+// habilitações diferentes na conta do Mercado Pago. PIX costuma valer assim que
+// a conta existe; receber cartão exige verificação de identidade e liberação —
+// e enquanto ela não sai, a cobrança volta como recusa genérica de risco, sem
+// dizer que o problema é de cadastro.
+//
+// Em vez de inferir isso de fora, pergunta: quem é a conta e o que ela aceita.
+async function mpGet(caminho, token) {
+  const r = await fetch(`https://api.mercadopago.com${caminho}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const corpo = await r.json().catch(() => null)
+  if (!r.ok) {
+    const err = new Error(corpo?.message || `Mercado Pago respondeu ${r.status}`)
+    err.status = r.status
+    throw err
+  }
+  return corpo
+}
+
+export async function diagnosticoDaConta(sellerAccessToken) {
+  const token = sellerAccessToken || accessToken
+  if (!token) return { erro: 'Sem access token para consultar.' }
+
+  // Token de sandbox e de produção têm prefixos diferentes. Vale conferir: um
+  // token TEST- em produção explica sozinho um monte de comportamento estranho.
+  const resultado = { ambiente: token.startsWith('TEST-') ? 'sandbox' : 'production' }
+
+  try {
+    const eu = await mpGet('/users/me', token)
+    resultado.conta = {
+      id:        eu?.id == null ? null : String(eu.id),
+      apelido:   eu?.nickname || null,
+      site:      eu?.site_id || null,
+      tipo:      eu?.user_type || null,
+      // `tags` costuma trazer marcas como 'normal', 'test_user', restrições de
+      // conta. É onde aparece se a conta está limitada.
+      tags:      Array.isArray(eu?.tags) ? eu.tags : [],
+      status:    eu?.status || null,
+    }
+  } catch (err) {
+    resultado.conta = { erro: err.message, http: err.status || null }
+  }
+
+  try {
+    const metodos = await mpGet('/v1/payment_methods', token)
+    const porTipo = {}
+    for (const m of Array.isArray(metodos) ? metodos : []) {
+      const tipo = m?.payment_type_id || 'desconhecido'
+      ;(porTipo[tipo] ||= []).push({ id: m.id, nome: m.name, status: m.status })
+    }
+    resultado.metodos = porTipo
+    // A resposta do que interessa, sem precisar ler a lista inteira.
+    const ativos = (lista) => (lista || []).filter((m) => m.status === 'active').length
+    resultado.resumo = {
+      credito_ativo: ativos(porTipo.credit_card),
+      debito_ativo:  ativos(porTipo.debit_card),
+      pix_ativo:     ativos(porTipo.bank_transfer),
+    }
+  } catch (err) {
+    resultado.metodos = { erro: err.message, http: err.status || null }
+  }
+
+  return resultado
+}
+
 // ── OAuth: autorização e troca de código ──────────────
 export function buildOAuthAuthorizeUrl({ redirectUri, state }) {
   const params = new URLSearchParams({

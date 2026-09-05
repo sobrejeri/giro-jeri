@@ -251,3 +251,56 @@ test('PIX segue aceitando pagador sem documento', async () => {
   assert.match(src, /identificacaoDoPagador\(payerDoc, \{ obrigatorio: true \}\)/,
     'só o cartão exige — é o gateway que exige')
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Diagnóstico: separar "conta não habilitada" de "recusa por risco"
+// ═══════════════════════════════════════════════════════════════════════════
+// cc_rejected_high_risk é a MESMA mensagem para causas diferentes: cartão do
+// cliente, comportamento suspeito, ou a conta recebedora sem cartão liberado.
+// Daqui os três são indistinguíveis — só perguntando ao Mercado Pago se separa.
+test('o diagnóstico diz quantos métodos de cada tipo a conta aceita', async () => {
+  const respostas = {
+    '/users/me': { id: 41422708, nickname: 'COPPER', site_id: 'MLB', tags: ['normal'], status: 'active' },
+    '/v1/payment_methods': [
+      { id: 'master', name: 'Mastercard', payment_type_id: 'credit_card', status: 'active' },
+      { id: 'visa',   name: 'Visa',       payment_type_id: 'credit_card', status: 'inactive' },
+      { id: 'pix',    name: 'PIX',        payment_type_id: 'bank_transfer', status: 'active' },
+    ],
+  }
+  const fetchOriginal = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    const caminho = String(url).replace('https://api.mercadopago.com', '')
+    return { ok: true, json: async () => respostas[caminho] }
+  }
+  try {
+    const { diagnosticoDaConta } = await import('../src/services/mercadoPago.js')
+    const d = await diagnosticoDaConta('APP_USR-token-do-operador')
+    assert.equal(d.conta.id, '41422708')
+    assert.equal(d.ambiente, 'production')
+    assert.equal(d.resumo.credito_ativo, 1, 'só o Mastercard está ativo')
+    assert.equal(d.resumo.pix_ativo, 1)
+    assert.equal(d.resumo.debito_ativo, 0, 'débito ausente é débito não habilitado')
+  } finally {
+    globalThis.fetch = fetchOriginal
+  }
+})
+
+test('conta que o Mercado Pago recusa consultar não derruba o diagnóstico', async () => {
+  const fetchOriginal = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ message: 'invalid token' }) })
+  try {
+    const { diagnosticoDaConta } = await import('../src/services/mercadoPago.js')
+    const d = await diagnosticoDaConta('APP_USR-token-vencido')
+    assert.equal(d.conta.http, 401)
+    assert.match(d.conta.erro, /invalid token/)
+    assert.equal(d.metodos.http, 401, 'reporta as duas falhas em vez de lançar')
+  } finally {
+    globalThis.fetch = fetchOriginal
+  }
+})
+
+test('o diagnóstico é restrito ao admin', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  assert.match(src, /router\.get\('\/diagnostico-cartao', authenticate, requireAdmin/,
+    'expõe dados da conta do operador — não pode ficar aberto')
+})
