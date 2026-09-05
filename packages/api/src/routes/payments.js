@@ -1015,6 +1015,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
           payerEmail:      userInfo.data?.email,
           payerDoc:        payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
           externalRef:     booking.id,
+          // Uma chave por TENTATIVA, não por reserva: o token do cartão é de
+          // uso único, então reenvio da mesma tentativa não cobra duas vezes e
+          // uma tentativa nova (cartão corrigido) é de fato uma cobrança nova.
+          idempotencyKey:  `${booking.id}:${card_token}`,
           sellerAccessToken: split?.sellerAccessToken,
           applicationFee:    split?.applicationFee,
           // Débito no Brasil exige autenticação do emissor. Ver mercadoPago.js.
@@ -1148,6 +1152,28 @@ router.post('/intent', authenticate, async (req, res, next) => {
     }
 
     const { payment, error: pErr, camposPerdidos } = await inserirPagamento(paymentInsertRow)
+    if (pErr?.code === '23505' && gatewayTransactionId) {
+      // Esta cobrança já está gravada: o gateway devolveu uma transação que já
+      // existe no banco. Devolve o que existe em vez de vazar o erro do
+      // Postgres — o cliente via "duplicate key value violates unique
+      // constraint" na tela de pagamento.
+      const { data: jaExiste } = await supabase
+        .from('payments')
+        .select('id, status')
+        .eq('gateway_transaction_id', gatewayTransactionId)
+        .maybeSingle()
+      if (jaExiste) {
+        console.warn('[payments] transação %s já registrada (pagamento %s, status %s)',
+          gatewayTransactionId, jaExiste.id, jaExiste.status)
+        return res.status(409).json({
+          error: jaExiste.status === 'approved'
+            ? 'Este pagamento já foi aprovado. Confira em Minhas Reservas antes de tentar de novo.'
+            : 'Esta tentativa de pagamento já foi registrada. Aguarde alguns segundos e tente novamente.',
+          payment_id: jaExiste.id,
+          status:     jaExiste.status,
+        })
+      }
+    }
     if (pErr) throw pErr
     if (camposPerdidos.length) {
       console.error(

@@ -187,6 +187,7 @@ export async function createCardPayment({
   payerEmail,
   payerDoc,
   externalRef,
+  idempotencyKey,
   sellerAccessToken,
   applicationFee,
   threeDSecure = false,
@@ -232,8 +233,16 @@ export async function createCardPayment({
 
   const response = await client.create({
     body,
-    // X-Idempotency-Key: booking.id garante que retentativas não geram duplicatas
-    requestOptions: { idempotencyKey: externalRef },
+    // X-Idempotency-Key protege contra COBRAR DUAS VEZES quando a mesma
+    // tentativa é reenviada (timeout de rede, cliente tocando de novo).
+    //
+    // Ela NÃO pode ser a reserva: a chave é por TENTATIVA. Com booking.id, o
+    // cliente cujo cartão foi recusado tentava de novo e o Mercado Pago
+    // devolvia a MESMA cobrança recusada, sem nem tocar no cartão novo — e a
+    // gravação estourava a unicidade de gateway_transaction_id, jogando o erro
+    // do banco na cara do cliente. Quem chama manda uma chave por tentativa
+    // (o token do cartão serve: é de uso único).
+    requestOptions: { idempotencyKey: idempotencyKey || externalRef },
   })
 
   // Extrai juro de parcelamento da lista de fees retornada pelo MP
