@@ -70,14 +70,21 @@ function refreshOnce() {
 async function request(path, options = {}, isRetry = false) {
   if (!isRetry && tokenExpiringSoon()) await refreshOnce()
   const token = getToken()
-  const res = await fetch(`${BASE}${path}`, {
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     ...options,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  })
+    })
+  } catch {
+    const error = new Error('Não foi possível conectar. Verifique sua internet e tente novamente.')
+    error.kind = 'network'
+    throw error
+  }
 
   if (res.status === 401) {
     if (!isRetry) {
@@ -91,36 +98,12 @@ async function request(path, options = {}, isRetry = false) {
   }
 
   if (res.status === 204) return null
-
-  // Resposta que não é JSON é FALHA DE SERVIDOR, não dado.
-  //
-  // Antes isto virava `{}` silenciosamente. Quando o Render está acordando ou
-  // reiniciando, ele devolve uma página HTML de erro com status 200 — e o `{}`
-  // seguia como se fosse a lista de passeios. Na home, `toursData?.tours ||
-  // toursData || []` deixava o `{}` passar (objeto vazio é "verdadeiro"), o
-  // `.filter` estourava e, sem barreira de erro, a TELA INTEIRA ficava branca.
-  // Lançar aqui faz o React Query tratar como erro e a tela mostrar o estado
-  // de erro, que é o que ela já sabe fazer.
-  let data
-  try {
-    data = await res.json()
-  } catch {
-    if (!res.ok) {
-      const err = new Error(`Erro ${res.status}`)
-      err.status = res.status
-      throw err
-    }
-    const err = new Error('O servidor respondeu num formato inesperado. Tente de novo em instantes.')
-    err.status = res.status
-    err.naoEhJson = true
-    throw err
-  }
-
+  const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const err = new Error(data.error || `Erro ${res.status}`)
-    err.status  = res.status
-    err.payload = data // ex.: verification_required traz signup_token/channels
-    throw err
+    const error = new Error(data.user_message || data.error || 'Não conseguimos confirmar o pagamento agora. Tente novamente em instantes.')
+    error.kind = data.status === 'rejected' ? 'gateway_rejected' : 'application'
+    error.details = data
+    throw error
   }
   return data
 }
@@ -129,30 +112,18 @@ export const api = {
   // Auth
   login:          (body) => request('/api/auth/login',           { method: 'POST', body }),
   register:       (body) => request('/api/auth/register',        { method: 'POST', body }),
-  otpRequest:     (body) => request('/api/auth/otp/request',      { method: 'POST', body }),
-  otpVerify:      (body) => request('/api/auth/otp/verify',       { method: 'POST', body }),
   forgotPassword: (body) => request('/api/auth/forgot-password', { method: 'POST', body }),
-  resetPassword:  (body) => request('/api/auth/reset-password',  { method: 'POST', body }),
   me:            ()     => request('/api/auth/me'),
   updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),
   uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),
-  whatsappStatus: ()    => request('/api/auth/me/whatsapp-status'),
-  verifyWhatsapp: ()    => request('/api/auth/me/verify-whatsapp', { method: 'POST', body: {} }),
-  checkWhatsapp:  (phone) => request('/api/auth/check-whatsapp', { method: 'POST', body: { phone } }),
   uploadCover:   (photoData) => request('/api/auth/me/cover', { method: 'POST',  body: { photo_data: photoData } }),
   logout:        ()     => request('/api/auth/logout', { method: 'POST' }),
 
   // Configurações públicas (banner da home etc.)
   getPublicSettings: () => request('/api/settings/public'),
 
-  // Operadores parceiras (vitrine na home) — público
+  // Cooperativas parceiras (vitrine na home) — público
   getPartners: () => request('/api/operator/partners'),
-
-  // Avaliações REAIS por operador (reputação) — públicas + criação autenticada
-  getCoopReviews:        (params = {}) => request(`/api/reviews?${new URLSearchParams(params)}`),
-  getCoopReviewsSummary: ()            => request('/api/reviews/summary'),
-  getMyCoopReviews:      ()            => request('/api/reviews/mine'),
-  createCoopReview:      (body)        => request('/api/reviews', { method: 'POST', body }),
 
   // Feed de eventos / promoções da vila
   getFeed: () => request('/api/feed'),
@@ -176,11 +147,6 @@ export const api = {
   deletePost:     (id)         => request(`/api/feed/${id}`,  { method: 'DELETE' }),
 
   // Regiões
-  // Ofertas divulgadas por WhatsApp
-  getOffer:    (code)  => request(`/api/broadcast/offer/${encodeURIComponent(code)}`),
-  acceptOffer: (code)  => request('/api/broadcast/accept', { method: 'POST', body: { code } }),
-  getOptOut:   (token) => request(`/api/broadcast/opt-out/${token}`),
-  optOut:      (token) => request('/api/broadcast/opt-out', { method: 'POST', body: { token } }),
   getRegions: () => request('/api/regions'),
 
   // Veículos
@@ -189,16 +155,12 @@ export const api = {
   // Passeios
   getTours:        (params = {}) => request(`/api/tours?${new URLSearchParams(params)}`),
   getTour:         (id)          => request(`/api/tours/${id}`),
-  getTourVehicles: (id, regionId) => request(`/api/tours/${id}/vehicles${regionId ? `?region_id=${regionId}` : ''}`),
+  getTourVehicles: (id)          => request(`/api/tours/${id}/vehicles`),
   calculateTour:   (id, body)    => request(`/api/tours/${id}/calculate`, { method: 'POST', body }),
 
   // Transfers
   getTransfers:       (params = {}) => request(`/api/transfers?${new URLSearchParams(params)}`),
   getTransferRoutes:  (params = {}) => request(`/api/transfers/routes?${new URLSearchParams(params)}`),
-  // Veículos que atendem UMA rota (matriz veículo × rota). Sem isso o app
-  // listava todos os de transfer — dava para pedir buggy num trecho aéreo.
-  getRouteVehicles:   (routeId, params = {}) =>
-    request(`/api/transfers/routes/${routeId}/vehicles?${new URLSearchParams(params)}`),
   calculateTransfer:  (body)        => request('/api/transfers/calculate', { method: 'POST', body }),
   transferSurcharge:  (body)        => request('/api/transfers/surcharge', { method: 'POST', body }),
   // Alta temporada (público): regras ativas p/ sinalizar datas no calendário
@@ -215,11 +177,6 @@ export const api = {
   requestBooking:         (body) => request('/api/payments/request',     { method: 'POST', body }),
   cartRequest:            (items, extra = {}) => request('/api/payments/cart-request', { method: 'POST', body: { items, ...extra } }),
   getPartner:             (slug) => request(`/api/partner/${encodeURIComponent(slug)}`),
-  resolveAffiliate:       (code) => request(`/api/affiliate/resolve/${encodeURIComponent(code)}`),
-  affiliateActivate:      ()     => request('/api/affiliate/activate', { method: 'POST' }),
-  affiliateMe:            ()     => request('/api/affiliate/me'),
-  validateCoupon:         (body) => request('/api/payments/validate-coupon', { method: 'POST', body }),
-  affiliateSavePix:       (body) => request('/api/affiliate/pix', { method: 'PUT', body }),
   createPaymentIntent:    (body) => request('/api/payments/intent',       { method: 'POST', body }),
   getCheckoutKey:         (id)   => request(`/api/payments/booking/${id}/checkout-key`),
   // Checkout parcial (R3): cancela as pernas ainda pendentes e libera o
