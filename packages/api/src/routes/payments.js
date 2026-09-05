@@ -9,6 +9,13 @@ import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateAdvance, applyCoupon } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
 import { sweepExpiredLegBookings } from '../services/legFlow.js'
+import {
+  reivindicarAprovacao as claimAprovacao,
+  reservarTentativa as claimTentativa,
+  registrarEventoWebhook,
+  statusInicialDoPagamento,
+  MARCA_FALHA_MP,
+} from '../services/paymentFlow.js'
 
 const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -38,6 +45,9 @@ const intentSchema = z.object({
   // Device ID do antifraude do MP (security.js no front). Opcional: sem ele a
   // cobrança segue, só perde o sinal que ajuda a aprovar.
   device_id:          z.string().max(200).optional(),
+  // Chave da TENTATIVA, gerada pelo checkout. Obrigatória para cartão (refine
+  // abaixo) — o servidor nunca inventa uma: chave nova = cobrança nova no MP.
+  payment_attempt_id: z.string().uuid().optional(),
   installments:       z.number({ coerce: true }).int().min(1).max(12).default(1),
   payment_method_id:  z.string().min(1).optional(),
   issuer_id:          z.string().optional(),
@@ -56,8 +66,8 @@ const intentSchema = z.object({
   { message: 'Dados incompletos para criar reserva' },
 ).refine(
   (d) => !['credit_card', 'debit_card'].includes(d.payment_method) ||
-          (d.card_token && d.payment_method_id && d.payer_doc),
-  { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc)' },
+          (d.card_token && d.payment_method_id && d.payer_doc && d.payment_attempt_id),
+  { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc, payment_attempt_id)' },
 )
 
 // Solicitação de reserva (sem pagamento): subconjunto do intent, sem cartão.
@@ -641,14 +651,69 @@ const COLUNA_AUSENTE = new Set(['PGRST204', '42703'])
 const nomeDaColunaNoErro = (msg = '') =>
   (msg.match(/'([^']+)' column/) || msg.match(/column "([^"]+)"/) || [])[1] || null
 
-// Identificador da tentativa de pagamento, derivado do token do cartão sem
-// carregá-lo: mesmo token → mesmo id; token novo → id novo. Serve para compor
-// a chave de idempotência sem colocar credencial em cabeçalho nem em log.
-function idDaTentativa(cardToken) {
-  return crypto.createHash('sha256').update(String(cardToken || '')).digest('hex').slice(0, 16)
+// ── Tentativa de pagamento e claim de aprovação ──────────────────────────────
+// A regra mora em services/paymentFlow.js, testada com um banco dublê que
+// simula violação de UNIQUE e a corrida entre webhook e polling. Aqui só entra
+// o cliente real do Supabase e o relógio.
+const reservarTentativa   = (args)      => claimTentativa(supabase, { ...args, agoraMs: Date.now() })
+const reivindicarAprovacao = (paymentId) => claimAprovacao(supabase, paymentId, new Date().toISOString())
+
+// Marca a tentativa quando a chamada ao Mercado Pago LANÇA (rede, 5xx, timeout
+// do SDK). Sem esta marca, o próximo envio veria a tentativa como "em voo" e
+// esperaria 90 segundos por um processo que já morreu — com o cliente parado na
+// tela. Com ela, o retry retoma na hora, e retomar é seguro porque vai com a
+// MESMA chave de idempotência: se o MP criou, devolve a primeira cobrança.
+async function comChamadaMarcada(tentativaReservadaId, chamar) {
+  try {
+    return await chamar()
+  } catch (err) {
+    if (tentativaReservadaId) {
+      try {
+        // Não use .catch() direto no builder do Supabase.
+        await supabase.from('payments')
+          .update({ status_detail: MARCA_FALHA_MP })
+          .eq('id', tentativaReservadaId)
+          .is('gateway_transaction_id', null)
+      } catch (e) {
+        console.error('[pagamento] não deu para marcar a falha da chamada: %s', e?.message)
+      }
+    }
+    throw err
+  }
 }
 
-async function inserirPagamento(row) {
+// A tentativa já virou cobrança no Mercado Pago. Em vez de cobrar de novo,
+// pergunta o estado oficial, atualiza o que temos e responde ao app.
+async function reconciliarTentativa(payment) {
+  const { getMpPaymentStatus, mapRejectionKey } = await import('../services/mercadoPago.js')
+  const opMp = await getOperatorMp(payment.bookings?.operator_id)
+  let oficial = null
+  try {
+    oficial = await getMpPaymentStatus(payment.gateway_transaction_id, opMp?.token)
+  } catch (e) {
+    console.error('[pagamento] consulta ao MP na reconciliação falhou: %s', e?.message)
+  }
+
+  if (oficial === 'approved' || oficial?.status === 'approved') {
+    await onPaymentApproved(payment)
+    return { success: true, reconciliado: true, status: 'approved', payment_id: payment.id,
+      booking_id: payment.booking_id, gateway_transaction_id: payment.gateway_transaction_id }
+  }
+  const st = typeof oficial === 'string' ? oficial : oficial?.status
+  if (st === 'rejected' || st === 'cancelled') {
+    await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+    const detalhe = typeof oficial === 'object' ? oficial?.status_detail : payment.status_detail
+    // Mesma forma da resposta de recusa do /intent — o app já sabe lê-la.
+    return { status: 'rejected', payment_id: payment.id, booking_id: payment.booking_id,
+      booking_code: payment.bookings?.booking_code, amount: payment.amount_gross,
+      error_code: detalhe || null, message_key: mapRejectionKey(detalhe) }
+  }
+  // Ainda indefinido: o app segue pelo /status, sem uma segunda cobrança.
+  return { success: true, reconciliado: true, status: st || 'pending', payment_id: payment.id,
+    booking_id: payment.booking_id, gateway_transaction_id: payment.gateway_transaction_id }
+}
+
+async function inserirPagamento(row, tentativaReservadaId = null) {
   let tentativa = { ...row }
   const camposPerdidos = []
   // Uma transação do gateway = UMA linha. `upsert` com onConflict roda
@@ -661,9 +726,16 @@ async function inserirPagamento(row) {
   // e nulo não conflita com nulo no Postgres — todo upsert viraria uma linha
   // nova de qualquer forma.
   const temIdDoGateway = !!row.gateway_transaction_id
-  const gravar = (linha) => (temIdDoGateway
-    ? supabase.from('payments').upsert(linha, { onConflict: 'gateway_transaction_id' }).select().single()
-    : supabase.from('payments').insert(linha).select().single())
+  // A tentativa já reservou a linha: o resultado do Mercado Pago é gravado
+  // NELA. Um insert/upsert novo competiria pela UNIQUE de payment_attempt_id.
+  const gravar = (linha) => {
+    if (tentativaReservadaId) {
+      return supabase.from('payments').update(linha).eq('id', tentativaReservadaId).select().single()
+    }
+    return temIdDoGateway
+      ? supabase.from('payments').upsert(linha, { onConflict: 'gateway_transaction_id' }).select().single()
+      : supabase.from('payments').insert(linha).select().single()
+  }
 
   // No máximo uma volta por campo removível — nunca um laço aberto.
   for (let i = 0; i <= Object.keys(row).length; i++) {
@@ -768,6 +840,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       service_name, cover_image_url,
       coupon_code, existing_booking_id, order_group_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc, device_id,
+      payment_attempt_id,
       mp_public_key,
     } = parsed.data
 
@@ -929,6 +1002,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     // Campos extras preenchidos apenas em pagamentos com cartão
     let cardResult         = null // resultado completo de createCardPayment
+    // Id da linha que a tentativa reservou. Quando existe, o resultado do MP é
+    // gravado NELA — um insert novo competiria pela mesma UNIQUE e transformaria
+    // uma cobrança bem-sucedida em erro.
+    let tentativaReservadaId = null
     let cardPaymentStatus  = null // status final a reportar na response
     let cardStatusDetail   = null
     let cardInstallments   = Number(installments) || 1
@@ -1024,11 +1101,42 @@ router.post('/intent', authenticate, async (req, res, next) => {
           }
         }
 
+        // ── Reserva da TENTATIVA, antes de falar com o Mercado Pago ──────
+        // A linha em `payments` nasce aqui, sem gateway_transaction_id, e o
+        // UNIQUE parcial de payment_attempt_id decide quem ficou com ela. Um
+        // SELECT antes do create não bastaria: duas requisições simultâneas
+        // leriam "não existe" antes de qualquer uma escrever.
+        const reserva = await reservarTentativa({
+          attemptId:     payment_attempt_id,
+          bookingId:     booking.id,
+          orderGroupId:  isGroup ? order_group_id : null,
+          amount:        chargedTotal,
+          paymentMethod: payment_method,
+          gateway,
+        })
+
+        if (reserva.modo === 'existente') {
+          // Esta tentativa JÁ virou cobrança. Não se cobra de novo: consulta o
+          // estado oficial e devolve o que o Mercado Pago diz.
+          return res.json(await reconciliarTentativa(reserva.payment))
+        }
+        if (reserva.modo === 'em_voo') {
+          // Outra requisição está falando com o MP agora, com esta mesma chave.
+          // 202 em vez de uma segunda chamada: o app volta pelo /status.
+          return res.status(202).json({
+            success: true, status: 'processing',
+            payment_id: reserva.paymentId, booking_id: booking.id,
+            booking_code: bookingCode, amount: chargedTotal,
+            user_message: 'Estamos confirmando seu pagamento. Aguarde alguns instantes.',
+          })
+        }
+        if (reserva.modo !== 'indisponivel') tentativaReservadaId = reserva.paymentId
+
         // ── Cartão: sem fallback fake — erro propaga ──────
         const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
         const userInfo = await supabase.from('users').select('email').eq('id', req.user.id).single()
 
-        cardResult = await createCardPayment({
+        cardResult = await comChamadaMarcada(tentativaReservadaId, () => createCardPayment({
           amount:          chargedTotal,
           description:     service_name || `Reserva ${bookingCode}`,
           installments:    cardInstallments,
@@ -1049,13 +1157,17 @@ router.post('/intent', authenticate, async (req, res, next) => {
           // pagamento não deve estar em nenhum dos dois. O hash é estável para
           // a mesma tentativa e diferente para outra, que é tudo que a
           // idempotência precisa.
-          idempotencyKey:  `turiva:${booking.id}:${idDaTentativa(card_token)}`,
+          // A chave é a TENTATIVA que o checkout gerou — não algo derivado do
+          // token. Um token novo (o Brick gera um a cada envio) daria uma chave
+          // nova, e chave nova é cobrança nova para o Mercado Pago: era assim
+          // que o retry de um timeout virava a segunda cobrança.
+          idempotencyKey:  payment_attempt_id,
           deviceId:        device_id || undefined,
           sellerAccessToken: split?.sellerAccessToken,
           applicationFee:    split?.applicationFee,
           // Débito no Brasil exige autenticação do emissor. Ver mercadoPago.js.
           threeDSecure:      payment_method === 'debit_card',
-        })
+        }))
 
         gatewayTransactionId = cardResult.mp_id
         cardPaymentStatus    = cardResult.status
@@ -1155,18 +1267,21 @@ router.post('/intent', authenticate, async (req, res, next) => {
     // Status inicial difere: PIX/manual ficam 'pending'; cartão já tem status
     // definitivo (approved/rejected/in_process) neste mesmo request.
     const isCard = ['credit_card', 'debit_card'].includes(payment_method)
-    let initialPaymentStatus = 'pending'
-    if (isCard && cardPaymentStatus) {
-      if (cardPaymentStatus === 'approved')   initialPaymentStatus = 'approved'
-      else if (cardPaymentStatus === 'rejected') initialPaymentStatus = 'failed'
-      else                                       initialPaymentStatus = cardPaymentStatus // in_process / pending
-    }
+    // Nunca 'approved': quem promove a linha é reivindicarAprovacao(), e ele só
+    // executa os efeitos se ENCONTRAR a linha ainda não aprovada. Ver
+    // statusInicialDoPagamento() em services/paymentFlow.js.
+    const initialPaymentStatus = isCard ? statusInicialDoPagamento(cardPaymentStatus) : 'pending'
 
     const paymentInsertRow = {
       booking_id:             booking.id,          // âncora do grupo (NOT NULL)
       ...(isGroup ? { order_group_id } : {}),
       gateway_name:           effectiveGateway,
       gateway_transaction_id: gatewayTransactionId,
+      ...(isCard ? {
+        payment_attempt_id: payment_attempt_id,
+        ...(cardStatusDetail ? { status_detail: cardStatusDetail } : {}),
+        ...(cardResult?.collector_id ? { collector_id: String(cardResult.collector_id) } : {}),
+      } : {}),
       payment_method,
       payment_type:           'full',
       amount_gross:           chargedTotal,
@@ -1199,7 +1314,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       } : {}),
     }
 
-    const { payment, error: pErr, camposPerdidos } = await inserirPagamento(paymentInsertRow)
+    const { payment, error: pErr, camposPerdidos } = await inserirPagamento(paymentInsertRow, tentativaReservadaId)
     if (pErr) {
       // A cobrança pode já existir no gateway. Nunca deixe o erro de gravação
       // virar "pagamento recusado": quem decide isso é o Mercado Pago.
@@ -1949,18 +2064,47 @@ router.post('/webhook', async (req, res, next) => {
       paymentForEvent = p
     }
 
-    // Registra evento bruto com payment_id para idempotência via UNIQUE constraint.
-    // Esperamos UNIQUE violation (23505) em retentativas do MP — silencia só
-    // esse caso. Qualquer outro erro de gravação é logado pra investigação.
-    const evIns = await supabase.from('payment_events').insert({
-      payment_id:         paymentForEvent?.id || null,
-      event_name:         eventType,
-      event_payload_json: event,
-      processing_status:  'pending',
+    // ── Idempotência de verdade ──────────────────────────────────────────
+    // A UNIQUE original de payment_events era (payment_id, event_name,
+    // received_at). Com received_at no meio ela NUNCA colide: cada reentrega
+    // chega num instante diferente e entra como evento novo. Ou seja, o evento
+    // repetido do Mercado Pago seguia adiante e reexecutava os efeitos.
+    //
+    // Agora a identidade é o id do evento no gateway, com UNIQUE parcial
+    // (migration 088). E o evento é gravado SEMPRE, inclusive antes de existir
+    // pagamento local — ver abaixo.
+    const gatewayEventId = event.id == null
+      ? `${eventType}:${gatewayId || 'unknown'}`
+      : String(event.id)
+
+    const decisao = await registrarEventoWebhook(supabase, {
+      gatewayEventId,
+      eventName: eventType,
+      payload:   event,
+      paymentId: paymentForEvent?.id || null,
     })
-    if (evIns.error && evIns.error.code !== '23505') {
-      console.error('[webhook] falha ao gravar payment_events code=%s msg=%s',
-        evIns.error.code, evIns.error.message)
+    if (!decisao.processar) {
+      return res.status(200).json({ ok: true, duplicate: true })
+    }
+
+    // ── O aviso chegou antes do nosso INSERT ─────────────────────────────
+    // A janela existe: o MP dispara a notificação no mesmo instante em que cria
+    // a cobrança. Antes, sem pagamento local, respondíamos 200 — para o MP,
+    // entregue e resolvido; para nós, perdido. Agora o evento já está gravado
+    // (payment_id nulo) e tentamos ligá-lo pelo id da transação.
+    if (!paymentForEvent && gatewayId) {
+      const { data: p2 } = await supabase
+        .from('payments').select('*, bookings(*)')
+        .eq('gateway_transaction_id', gatewayId).maybeSingle()
+      if (p2) {
+        paymentForEvent = p2
+        await supabase.from('payment_events').update({ payment_id: p2.id })
+          .eq('gateway_event_id', gatewayEventId).is('payment_id', null)
+      }
+    }
+    if (!paymentForEvent) {
+      console.warn('[webhook] pagamento local ainda não existe para mp=%s — evento guardado como pendente', gatewayId)
+      return res.status(200).json({ ok: true, pending: true })
     }
 
     if ((eventType === 'payment' || eventType === 'payment.updated') && paymentForEvent) {
@@ -2003,12 +2147,22 @@ router.post('/webhook', async (req, res, next) => {
         return res.status(503).json({ error: 'Status indeterminado, reenvie' })
       }
 
-      if (mpStatus === 'approved' && paymentForEvent.status !== 'approved') {
+      // Sem o `&& status !== 'approved'`: esse if em JavaScript não protege
+      // nada — webhook e polling leem 'pending' os dois antes de qualquer um
+      // escrever. Quem decide é o claim atômico dentro de onPaymentApproved.
+      if (mpStatus === 'approved') {
         await onPaymentApproved(paymentForEvent)
       } else if (['rejected', 'cancelled'].includes(mpStatus)) {
         await supabase.from('payments').update({ status: 'failed' }).eq('id', paymentForEvent.id)
         await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', paymentForEvent.booking_id)
       }
+
+      // Só agora o evento está concluído. Marcar antes faria uma queda no meio
+      // parecer sucesso, e a reentrega do MP — que é a segunda chance — seria
+      // descartada como duplicata.
+      await supabase.from('payment_events')
+        .update({ processing_status: 'processed', processed_at: new Date().toISOString() })
+        .eq('gateway_event_id', gatewayEventId)
     }
 
     res.status(200).json({ ok: true })
@@ -2191,14 +2345,7 @@ export async function onPaymentApproved(payment) {
   // efeitos de UMA vez só — e-mail, notificação — já foram disparados.
   // O dinheiro já tinha guarda própria (ledger_created, repasses); faltava a
   // dos avisos, que chegavam duplicados ao cliente.
-  const { data: transicao } = await supabase
-    .from('payments')
-    .update({ status: 'approved', paid_at: new Date().toISOString() })
-    .eq('id', payment.id)
-    .neq('status', 'approved')
-    .select('id')
-    .maybeSingle()
-  const primeiraAprovacao = !!transicao
+  const primeiraAprovacao = await reivindicarAprovacao(payment.id)
   if (!primeiraAprovacao) {
     console.log('[payments] pagamento %s já estava aprovado — efeitos de aviso não repetidos', payment.id)
   }
@@ -2392,9 +2539,14 @@ function notifyBookingPaid(booking) {
 // status nem lançamentos. Espelha o caminho de reserva única, rateando a taxa
 // de gateway por reserva pelo total de cada uma.
 async function onGroupPaymentApproved(payment) {
-  await supabase.from('payments')
-    .update({ status: 'approved', paid_at: new Date().toISOString() })
-    .eq('id', payment.id)
+  // Mesma trava do caminho de reserva única: só quem ENCONTRA a linha ainda não
+  // aprovada dispara os avisos. Antes o UPDATE era incondicional, e webhook +
+  // polling ao mesmo tempo mandavam e-mail e notificação em dobro para CADA
+  // reserva do carrinho. O dinheiro já tinha guarda própria (ledger_created).
+  const primeiraAprovacao = await reivindicarAprovacao(payment.id)
+  if (!primeiraAprovacao) {
+    console.log('[payments] grupo %s já estava aprovado — avisos não repetidos', payment.id)
+  }
 
   const { data: bookings } = await supabase
     .from('bookings').select('*').eq('order_group_id', payment.order_group_id)
@@ -2473,9 +2625,11 @@ async function onGroupPaymentApproved(payment) {
       console.error('[ledger] contabilidade por perna (grupo) falhou booking=%s err=%s', b.id, err.message))
     await recordAffiliateCommission(b).catch((err) =>
       console.error('[afiliado] comissão (grupo) falhou booking=%s err=%s', b.id, err.message))
-    sendConfirmationEmail(b).catch((err) =>
-      console.error('[email] confirmação (grupo) falhou:', err.message))
-    notifyBookingPaid(b)
+    if (primeiraAprovacao) {
+      sendConfirmationEmail(b).catch((err) =>
+        console.error('[email] confirmação (grupo) falhou:', err.message))
+      notifyBookingPaid(b)
+    }
   }
 }
 

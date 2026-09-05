@@ -197,6 +197,10 @@ export async function createCardPayment({
   // Sem fallback fake para cartão — erro propaga para o caller.
   const client = paymentClientFor(sellerAccessToken)
   if (!client) throw new Error('Mercado Pago não configurado (access token ausente)')
+  // Sem chave de idempotência não se cobra. Inventar uma aqui destrói a única
+  // proteção que existe contra cobrança dupla: chave nova = compra nova para o
+  // Mercado Pago, e o retry de um timeout vira uma segunda cobrança real.
+  if (!idempotencyKey) throw new Error('payment_attempt_id ausente; pagamento não criado.')
 
   const body = {
     transaction_amount: valorParaMP(amount),
@@ -244,7 +248,7 @@ export async function createCardPayment({
     // do banco na cara do cliente. Quem chama manda uma chave por tentativa
     // (o token do cartão serve: é de uso único).
     requestOptions: {
-      idempotencyKey: idempotencyKey || externalRef,
+      idempotencyKey,
       // X-Meli-Session-Id: identifica o APARELHO para o antifraude. O Mercado
       // Pago documenta este sinal como um dos que mais pesam na aprovação —
       // sem ele, compra legítima de aparelho desconhecido vira risco e volta

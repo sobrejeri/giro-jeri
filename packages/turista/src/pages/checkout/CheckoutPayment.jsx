@@ -43,6 +43,17 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
   // true = falhou do nosso lado (rede, servidor); false = o gateway recusou.
   const [falhaInterna, setFalhaInterna] = useState(false)
   const enviandoRef = useRef(false)   // uma cobrança por vez
+  // ── Identidade da TENTATIVA de pagar ───────────────────────────────────────
+  // Esta chave é metade da proteção contra cobrança dupla: ela vira o
+  // X-Idempotency-Key do Mercado Pago. Gerar uma nova a cada envio faz o retry
+  // de um timeout parecer uma compra nova — e o MP cobra de novo, de verdade.
+  //
+  // Por isso ela nasce UMA vez e sobrevive a erro ambíguo (rede caiu, timeout,
+  // erro nosso): nesses casos não sabemos se a cobrança existe, e repetir com a
+  // MESMA chave devolve a primeira, nunca uma segunda. Só é descartada depois
+  // de um estado DEFINITIVO — recusado ou aprovado —, quando um novo envio é
+  // de fato uma cobrança nova.
+  const tentativaRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -97,6 +108,7 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
                 // Cartão (crédito/débito) → método inferido do payment_method_id.
                 const pmId   = formData?.payment_method_id || ''
                 const method = /^deb/i.test(pmId) ? 'debit_card' : 'credit_card'
+                if (!tentativaRef.current) tentativaRef.current = crypto.randomUUID()
                 const result = await onCard({
                   payment_method:    method,
                   card_token:        formData?.token,
@@ -104,17 +116,25 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
                   issuer_id:         formData?.issuer_id ? String(formData.issuer_id) : undefined,
                   installments:      Number(formData?.installments) || 1,
                   payer_doc:         formData?.payer?.identification?.number,
+                  payment_attempt_id: tentativaRef.current,
                   // Device ID do antifraude do MP (security.js no index.html).
                   // Vai vazio se o script não tiver carregado — a cobrança
                   // segue, só sem o sinal que ajuda a aprovar.
                   device_id:         typeof window !== 'undefined' ? window.MP_DEVICE_SESSION_ID : undefined,
                 })
                 if (result?.status === 'rejected') {
+                  // DEFINITIVO: o cartão foi recusado. O próximo envio é uma
+                  // cobrança nova de verdade (outro cartão, outra bandeira),
+                  // então precisa de uma chave nova — com a chave antiga o MP
+                  // devolveria a mesma recusa sem sequer olhar o cartão novo.
+                  tentativaRef.current = null
                   const msg = result.message_key ? t(result.message_key) : t('payment.rejected.generic')
                   setFalhaInterna(false)
                   setRejectedMsg(msg)
                   return Promise.reject(new Error(msg))
                 }
+                // Também DEFINITIVO: encerra a tentativa.
+                if (result?.status === 'approved') tentativaRef.current = null
                 // approved / in_process → o componente pai navega de tela.
                 return Promise.resolve()
               } catch (err) {
@@ -373,7 +393,14 @@ export default function CheckoutPayment() {
       return result
     }
 
-    if (result.status === 'in_process') {
+    // 'processing' = outra requisição está falando com o Mercado Pago agora com
+    // esta MESMA tentativa (o servidor devolve 202 em vez de cobrar de novo).
+    // 'pending' com `reconciliado` = a tentativa já virou cobrança e o desfecho
+    // ainda não saiu. Nos dois casos existe cobrança em curso: a tela de
+    // processamento é quem consulta o status até o desfecho. Sem este galho o
+    // cliente ficava parado no checkout, sem erro e sem confirmação.
+    if (result.status === 'in_process' || result.status === 'processing' ||
+        (result.reconciliado && result.status === 'pending')) {
       navigate('/checkout/processando', {
         state: {
           ...state,
