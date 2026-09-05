@@ -81,7 +81,7 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
       email: payerEmail,
       ...nomeDoPagador(payerName),
       // Identificação do pagador (o Payment Brick envia o CPF/CNPJ no PIX)
-      ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
+      ...identificacaoDoPagador(payerDoc),
     },
   }
   // Split: comissão da plataforma quando o pagamento cai na conta do operador
@@ -139,6 +139,62 @@ export function sanitizedPaymentResult(response) {
 // repetir a tentativa para sempre.
 function semEmailDoComprador() {
   const err = new Error('Sua conta está sem e-mail cadastrado, e o Mercado Pago exige o e-mail do pagador. Adicione um e-mail no seu perfil e tente de novo.')
+  err.status = 422
+  return err
+}
+
+// ── Documento do pagador ─────────────────────────────────────────────────────
+// CPF e CNPJ têm dígitos verificadores. Conferir aqui é o que transforma
+// "Invalid user identification number" — a mensagem crua do gateway, que não
+// diz ao cliente o que fazer — num erro que aponta o campo errado ANTES de
+// tentar cobrar.
+function documentoValido(digitos) {
+  const d = String(digitos || '').replace(/\D/g, '')
+  if (/^(\d)\1+$/.test(d)) return false          // 111.111.111-11 e afins passam na conta
+
+  if (d.length === 11) {
+    const dv = (ate) => {
+      let soma = 0
+      for (let i = 0; i < ate; i++) soma += Number(d[i]) * (ate + 1 - i)
+      const r = (soma * 10) % 11
+      return r === 10 ? 0 : r
+    }
+    return dv(9) === Number(d[9]) && dv(10) === Number(d[10])
+  }
+
+  if (d.length === 14) {
+    const dv = (ate) => {
+      const pesos = ate === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]
+      let soma = 0
+      for (let i = 0; i < ate; i++) soma += Number(d[i]) * pesos[i]
+      const r = soma % 11
+      return r < 2 ? 0 : 11 - r
+    }
+    return dv(12) === Number(d[12]) && dv(13) === Number(d[13])
+  }
+
+  return false   // 12 ou 13 dígitos não são nem CPF nem CNPJ
+}
+
+// O bloco `identification` como o Mercado Pago espera. Devolve {} quando não há
+// documento: mandar `{ type: 'CPF', number: undefined }` é o que produzia
+// "Invalid user identification number" — o campo ia vazio, não ausente.
+function identificacaoDoPagador(payerDoc, { obrigatorio = false } = {}) {
+  const d = String(payerDoc || '').replace(/\D/g, '')
+  if (!d) {
+    if (obrigatorio) throw documentoInvalido('O CPF do titular é obrigatório para pagar com cartão.')
+    return {}
+  }
+  if (!documentoValido(d)) {
+    throw documentoInvalido(d.length === 14
+      ? 'O CNPJ informado não é válido. Confira os números e tente de novo.'
+      : 'O CPF informado não é válido. Confira os números e tente de novo.')
+  }
+  return { identification: { type: d.length === 14 ? 'CNPJ' : 'CPF', number: d } }
+}
+
+function documentoInvalido(mensagem) {
+  const err = new Error(mensagem)
   err.status = 422
   return err
 }
@@ -203,7 +259,7 @@ export async function createPixPaymentSplit({ amount, description, payerEmail, p
     payer: {
       email: payerEmail,
       ...nomeDoPagador(payerName),
-      ...(payerDoc ? { identification: { type: String(payerDoc).length === 14 ? 'CNPJ' : 'CPF', number: payerDoc } } : {}),
+      ...identificacaoDoPagador(payerDoc),
     },
     disbursements,
   }
@@ -280,7 +336,11 @@ export async function createCardPayment({
     payer: {
       email:          payerEmail,
       ...nomeDoPagador(payerName),
-      identification: { type: 'CPF', number: payerDoc },
+      // Era o único caminho que mandava `identification` SEMPRE e SEMPRE como
+      // CPF: sem documento ia `number: undefined`, e um CNPJ de 14 dígitos ia
+      // rotulado como CPF. Os dois casos o Mercado Pago recusa com
+      // "Invalid user identification number".
+      ...identificacaoDoPagador(payerDoc, { obrigatorio: true }),
     },
   }
 

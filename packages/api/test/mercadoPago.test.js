@@ -129,9 +129,14 @@ function clienteEspiao() {
   return { enviados, create: async (input) => { enviados.push(input); return { id: 1, status: 'approved' } } }
 }
 
+// CPF com dígitos verificadores corretos. O fixture antigo ('12345678901') era
+// inválido — e passava porque nada conferia, que era exatamente o bug.
+const CPF_VALIDO  = '52998224725'
+const CNPJ_VALIDO = '11222333000181'
+
 const cartaoBase = {
   amount: 10, description: 'Litoral Leste', paymentMethodId: 'master', cardToken: 'tok',
-  payerEmail: 'cliente@exemplo.com', payerDoc: '12345678901',
+  payerEmail: 'cliente@exemplo.com', payerDoc: CPF_VALIDO,
   externalRef: 'bk-1', idempotencyKey: 'tentativa-1',
 }
 
@@ -158,7 +163,7 @@ test('a cobrança leva o item comprado e o contexto do comprador', async () => {
 
   // O pagador principal continua com identidade real e completa.
   assert.equal(payer.email, 'cliente@exemplo.com')
-  assert.equal(payer.identification.number, '12345678901')
+  assert.equal(payer.identification.number, CPF_VALIDO)
 })
 
 test('telefone inválido é omitido, não enviado como lixo', async () => {
@@ -192,4 +197,57 @@ test('a rota pede 3DS no crédito também, não só no débito', async () => {
   assert.match(executavel, /threeDSecure:\s*true/)
   assert.doesNotMatch(executavel, /threeDSecure:\s*payment_method === 'debit_card'/,
     'limitar ao débito desperdiça a única saída documentada para cc_rejected_high_risk')
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Documento do pagador — "Invalid user identification number"
+// ═══════════════════════════════════════════════════════════════════════════
+// O caminho do cartão era o único que mandava `identification` SEMPRE e SEMPRE
+// como CPF. Sem documento ia `number: undefined`; um CNPJ de 14 dígitos ia
+// rotulado como CPF. Os dois o Mercado Pago recusa com essa mensagem crua, que
+// não diz ao cliente o que corrigir.
+test('CNPJ vai rotulado como CNPJ, não como CPF', async () => {
+  const espiao = clienteEspiao()
+  await createCardPayment({ ...cartaoBase, paymentClient: espiao, payerDoc: CNPJ_VALIDO })
+  assert.deepEqual(espiao.enviados[0].body.payer.identification,
+    { type: 'CNPJ', number: CNPJ_VALIDO })
+})
+
+test('CPF vai rotulado como CPF, só com dígitos', async () => {
+  const espiao = clienteEspiao()
+  await createCardPayment({ ...cartaoBase, paymentClient: espiao, payerDoc: '529.982.247-25' })
+  assert.deepEqual(espiao.enviados[0].body.payer.identification,
+    { type: 'CPF', number: CPF_VALIDO })
+})
+
+test('documento inválido vira erro que diz o que corrigir, sem cobrar', async () => {
+  for (const ruim of ['12345678901', '11111111111', '123456789012', '00000000000000']) {
+    const espiao = clienteEspiao()
+    await assert.rejects(
+      createCardPayment({ ...cartaoBase, paymentClient: espiao, payerDoc: ruim }),
+      (err) => {
+        assert.equal(err.status, 422)
+        assert.match(err.message, /CPF|CNPJ/)
+        return true
+      })
+    assert.equal(espiao.enviados.length, 0, `"${ruim}" não pode chegar a virar cobrança`)
+  }
+})
+
+test('cartão sem documento nenhum é recusado antes do gateway', async () => {
+  const espiao = clienteEspiao()
+  await assert.rejects(
+    createCardPayment({ ...cartaoBase, paymentClient: espiao, payerDoc: undefined }),
+    (err) => { assert.equal(err.status, 422); return true })
+  assert.equal(espiao.enviados.length, 0)
+})
+
+// No PIX o documento é opcional — e continua sendo. O que mudou é que, quando
+// vem, precisa ser válido.
+test('PIX segue aceitando pagador sem documento', async () => {
+  const src = await readFile(new URL('../src/services/mercadoPago.js', import.meta.url), 'utf8')
+  const usos = src.match(/\.\.\.identificacaoDoPagador\(payerDoc\)/g) || []
+  assert.equal(usos.length, 2, 'os dois caminhos de PIX, sem obrigatoriedade')
+  assert.match(src, /identificacaoDoPagador\(payerDoc, \{ obrigatorio: true \}\)/,
+    'só o cartão exige — é o gateway que exige')
 })

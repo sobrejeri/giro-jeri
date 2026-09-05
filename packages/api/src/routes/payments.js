@@ -76,9 +76,13 @@ export const intentSchema = z.object({
     z.string().optional(),
   ),
   // CPF/CNPJ do pagador. Aceita com ou sem máscara e salva apenas números.
+  // 11 dígitos (CPF) ou 14 (CNPJ). O intervalo antigo aceitava 12 e 13, que não
+  // são nem um nem outro — e seguiam para o gateway virar
+  // "Invalid user identification number". Os dígitos verificadores são
+  // conferidos em mercadoPago.js, antes de qualquer cobrança.
   payer_doc: z.preprocess(
     (v) => (typeof v === 'string' ? v.replace(/\D/g, '') : v),
-    z.string().regex(/^\d{11,14}$/).optional(),
+    z.string().regex(/^(\d{11}|\d{14})$/, 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos)').optional(),
   ),
 }).refine(
   (d) => d.order_group_id || d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
