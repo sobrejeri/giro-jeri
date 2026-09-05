@@ -30,6 +30,12 @@ function getUserEmail() {
   catch { return undefined }
 }
 
+function getDeviceId() {
+  return window.MP_DEVICE_SESSION_ID ||
+    document.querySelector('input[name="deviceId"]')?.value ||
+    document.querySelector('[data-checkout="deviceId"]')?.value || undefined
+}
+
 // ─── PaymentBrick ────────────────────────────────────────────
 // Brick unificado do Mercado Pago: cartão (crédito/débito) E PIX na mesma tela
 // embutida. Tokeniza com segurança (PCI) e devolve os dados no onSubmit; a API
@@ -37,8 +43,10 @@ function getUserEmail() {
 function PaymentBrick({ amount, publicKey, onCard, onPix }) {
   const { t }    = useTranslation()
   const brickRef = useRef(null)
+  const submittingRef = useRef(false)
   const [phase,       setPhase]       = useState('loading') // loading | ready | error
   const [rejectedMsg, setRejectedMsg] = useState('')
+  const [processing,  setProcessing]  = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -77,6 +85,9 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
               if (!cancelled) setPhase((p) => (p === 'loading' ? 'error' : p))
             },
             onSubmit: async ({ selectedPaymentMethod, formData }) => {
+              if (submittingRef.current) return Promise.reject(new Error(t('payment.card.processing')))
+              submittingRef.current = true
+              setProcessing(true)
               setRejectedMsg('')
               try {
                 // PIX (transferência bancária) → cria o pagamento e abre o QR.
@@ -95,6 +106,8 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
                   issuer_id:         formData?.issuer_id ? String(formData.issuer_id) : undefined,
                   installments:      Number(formData?.installments) || 1,
                   payer_doc:         formData?.payer?.identification?.number,
+                  payment_attempt_id: crypto.randomUUID(),
+                  device_id:          getDeviceId(),
                 })
                 if (result?.status === 'rejected') {
                   const msg = result.message_key ? t(result.message_key) : t('payment.rejected.generic')
@@ -106,6 +119,9 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
               } catch (err) {
                 setRejectedMsg(err?.message || t('payment.rejected.generic'))
                 return Promise.reject(err)
+              } finally {
+                submittingRef.current = false
+                setProcessing(false)
               }
             },
           },
@@ -142,7 +158,15 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
           </div>
         </div>
       )}
-      <div id="paymentBrick_container" />
+      <div className={processing ? 'pointer-events-none opacity-60' : ''} aria-busy={processing}>
+        <div id="paymentBrick_container" />
+      </div>
+      {processing && (
+        <div className="flex items-center justify-center py-3 gap-2 text-brand font-semibold">
+          <div className="w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+          <span className="text-[13px]">Processando pagamento...</span>
+        </div>
+      )}
       {phase === 'loading' && (
         <div className="flex items-center justify-center py-6 gap-2 text-gray-400">
           <div className="w-5 h-5 border-2 border-gray-300 border-t-brand rounded-full animate-spin" />

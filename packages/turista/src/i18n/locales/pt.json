@@ -309,11 +309,11 @@
       "inReviewSub": "Sua reserva foi criada e o pagamento está em análise."
     },
     "rejected": {
-      "insufficient_amount": "Saldo ou limite insuficiente. Tente outro cartão.",
+      "insufficient_amount": "Pagamento não aprovado. Verifique limite ou saldo disponível.",
       "bad_cvv": "CVV incorreto. Verifique o código de segurança.",
       "bad_date": "Data de validade inválida.",
       "bad_number": "Número do cartão inválido.",
-      "high_risk": "Pagamento recusado por segurança. Tente outro cartão.",
+      "high_risk": "Pagamento não aprovado por segurança. Tente outro meio de pagamento.",
       "call_authorize": "Autorize a compra com seu banco antes de tentar novamente.",
       "card_disabled": "Cartão desabilitado. Entre em contato com seu banco.",
       "duplicated": "Pagamento duplicado detectado.",

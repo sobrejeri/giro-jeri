@@ -70,14 +70,21 @@ function refreshOnce() {
 async function request(path, options = {}, isRetry = false) {
   if (!isRetry && tokenExpiringSoon()) await refreshOnce()
   const token = getToken()
-  const res = await fetch(`${BASE}${path}`, {
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     ...options,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  })
+    })
+  } catch {
+    const error = new Error('Não foi possível conectar. Verifique sua internet e tente novamente.')
+    error.kind = 'network'
+    throw error
+  }
 
   if (res.status === 401) {
     if (!isRetry) {
@@ -92,7 +99,12 @@ async function request(path, options = {}, isRetry = false) {
 
   if (res.status === 204) return null
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
+  if (!res.ok) {
+    const error = new Error(data.user_message || data.error || 'Não conseguimos confirmar o pagamento agora. Tente novamente em instantes.')
+    error.kind = data.status === 'rejected' ? 'gateway_rejected' : 'application'
+    error.details = data
+    throw error
+  }
   return data
 }
 
