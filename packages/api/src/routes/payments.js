@@ -17,7 +17,7 @@ import {
   MARCA_FALHA_MP,
 } from '../services/paymentFlow.js'
 
-const intentSchema = z.object({
+export const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
   service_id:          z.string().uuid().optional(),
   service_date_iso:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (YYYY-MM-DD)').optional(),
@@ -44,7 +44,18 @@ const intentSchema = z.object({
   card_token:         z.string().min(1).optional(),
   // Device ID do antifraude do MP (security.js no front). Opcional: sem ele a
   // cobrança segue, só perde o sinal que ajuda a aprovar.
-  device_id:          z.string().max(200).optional(),
+  // Device ID do antifraude do MP (security.js no front). É um token opaco e
+  // LONGO — passa dos 200 caracteres. O limite antigo derrubava o pagamento
+  // inteiro com "String must contain at most 200 character(s)", por causa de um
+  // campo que é só um sinal auxiliar.
+  //
+  // Agora ele nunca reprova a requisição: valor ausente, vazio ou fora do
+  // tamanho plausível é DESCARTADO, e a cobrança segue sem o sinal (com aviso
+  // no log). Um campo opcional não pode ser motivo para ninguém deixar de pagar.
+  device_id: z.preprocess(
+    (v) => (typeof v === 'string' && v.length > 0 && v.length <= 4000 ? v : undefined),
+    z.string().optional(),
+  ),
   // Chave da TENTATIVA, gerada pelo checkout. Obrigatória para cartão (refine
   // abaixo) — o servidor nunca inventa uma: chave nova = cobrança nova no MP.
   payment_attempt_id: z.string().uuid().optional(),
@@ -58,7 +69,12 @@ const intentSchema = z.object({
   // navegador); serve para o servidor saber em QUAL conta o token foi criado.
   // Sem isso não há como detectar a incompatibilidade que quebra o split — ver
   // a checagem em `contextoSplitOperadorUnico`.
-  mp_public_key:      z.string().max(200).optional(),
+  // Só decide se o split pode ser aplicado; sem ela o código já cai no caminho
+  // seguro (cobra sem split). Descartar é melhor que reprovar a cobrança.
+  mp_public_key: z.preprocess(
+    (v) => (typeof v === 'string' && v.length > 0 && v.length <= 500 ? v : undefined),
+    z.string().optional(),
+  ),
   // CPF/CNPJ do pagador. Aceita com ou sem máscara e salva apenas números.
   payer_doc: z.preprocess(
     (v) => (typeof v === 'string' ? v.replace(/\D/g, '') : v),
@@ -650,6 +666,16 @@ function fortalezaNowParts() {
 //
 // Só tira coluna por causa de "coluna inexistente". Qualquer outro erro sobe
 // como sempre — mascarar um CHECK ou um FK aqui seria pior que o problema.
+// Erro de validação que diz ONDE, não só o quê. "String must contain at most
+// 200 character(s)" sozinho, na tela do cliente e no log, não permite descobrir
+// qual campo reprovou — foi exatamente o que escondeu o limite do device_id.
+function mensagemDeValidacao(erro) {
+  const primeiro = erro?.errors?.[0]
+  if (!primeiro) return 'Dados inválidos'
+  const campo = (primeiro.path || []).join('.')
+  return campo ? `${campo}: ${primeiro.message}` : primeiro.message
+}
+
 const COLUNA_AUSENTE = new Set(['PGRST204', '42703'])
 const nomeDaColunaNoErro = (msg = '') =>
   (msg.match(/'([^']+)' column/) || msg.match(/column "([^"]+)"/) || [])[1] || null
@@ -831,7 +857,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
   try {
     const parsed = intentSchema.safeParse(nullToUndefined(req.body))
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
+      return res.status(400).json({ error: mensagemDeValidacao(parsed.error) })
     }
 
     const {
@@ -1454,7 +1480,7 @@ router.post('/request', authenticate, async (req, res, next) => {
   try {
     const parsed = requestSchema.safeParse(nullToUndefined(req.body))
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
+      return res.status(400).json({ error: mensagemDeValidacao(parsed.error) })
     }
 
     const {
@@ -1600,7 +1626,7 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       : req.body
     const parsed = cartRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Dados inválidos' })
+      return res.status(400).json({ error: mensagemDeValidacao(parsed.error) })
     }
     const { items, partner_slug, affiliate_code } = parsed.data
 
