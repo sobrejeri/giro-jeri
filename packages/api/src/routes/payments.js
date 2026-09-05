@@ -552,6 +552,58 @@ function fortalezaNowParts() {
   return { todayIso: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) }
 }
 
+// ── Gravação do pagamento, à prova de coluna faltando ──────────────────────
+//
+// O cartão é cobrado no Mercado Pago ANTES desta linha existir — não há como
+// inverter a ordem, porque só a resposta do gateway traz o id da transação, a
+// bandeira e as parcelas. Isso torna esta inserção o ponto mais perigoso do
+// fluxo: se ela falhar, o dinheiro saiu e a plataforma não tem registro nenhum.
+//
+// Foi o que aconteceu. A migration 024 não tinha sido rodada, o PostgREST
+// recusou o INSERT com PGRST204 ("Could not find the 'card_brand' column"), o
+// request estourou — e a cobrança ficou órfã: cliente cobrado, reserva sem
+// pagamento, nada no painel.
+//
+// Agora, quando o banco não tem uma coluna, tiramos EXATAMENTE a coluna que
+// ele reclamou (o erro traz o nome) e tentamos de novo. Perder a bandeira do
+// cartão é um arranhão; perder o rastro do dinheiro, não. As colunas removidas
+// voltam no log, para completar a linha à mão depois de rodar a migration.
+//
+// Só tira coluna por causa de "coluna inexistente". Qualquer outro erro sobe
+// como sempre — mascarar um CHECK ou um FK aqui seria pior que o problema.
+const COLUNA_AUSENTE = new Set(['PGRST204', '42703'])
+const nomeDaColunaNoErro = (msg = '') =>
+  (msg.match(/'([^']+)' column/) || msg.match(/column "([^"]+)"/) || [])[1] || null
+
+async function inserirPagamento(row) {
+  let tentativa = { ...row }
+  const camposPerdidos = []
+
+  // No máximo uma volta por campo removível — nunca um laço aberto.
+  for (let i = 0; i <= Object.keys(row).length; i++) {
+    const { data, error } = await supabase.from('payments').insert(tentativa).select().single()
+    if (!error) return { payment: data, error: null, camposPerdidos }
+    if (!COLUNA_AUSENTE.has(error.code)) return { payment: null, error, camposPerdidos }
+
+    const coluna = nomeDaColunaNoErro(error.message)
+    // Sem saber QUAL coluna, ou se ela é obrigatória para o registro fazer
+    // sentido, é melhor falhar alto do que gravar uma linha capenga.
+    if (!coluna || !(coluna in tentativa) || CAMPOS_ESSENCIAIS.has(coluna)) {
+      return { payment: null, error, camposPerdidos }
+    }
+    delete tentativa[coluna]
+    camposPerdidos.push(coluna)
+  }
+  return { payment: null, error: { message: 'não foi possível gravar o pagamento' }, camposPerdidos }
+}
+
+// Sem estes campos a linha não serve para conciliar dinheiro: é melhor o erro
+// aparecer do que existir um pagamento que ninguém consegue cruzar com o extrato.
+const CAMPOS_ESSENCIAIS = new Set([
+  'booking_id', 'amount_gross', 'status', 'payment_method',
+  'gateway_name', 'gateway_transaction_id',
+])
+
 async function checkBookingCutoff({ service_type, service_id, service_date_iso }) {
   if (!service_id || !service_date_iso) return null
   const { todayIso, minutes: nowMin } = fortalezaNowParts()
@@ -986,13 +1038,15 @@ router.post('/intent', authenticate, async (req, res, next) => {
       } : {}),
     }
 
-    const { data: payment, error: pErr } = await supabase
-      .from('payments')
-      .insert(paymentInsertRow)
-      .select()
-      .single()
-
+    const { payment, error: pErr, camposPerdidos } = await inserirPagamento(paymentInsertRow)
     if (pErr) throw pErr
+    if (camposPerdidos.length) {
+      console.error(
+        '[payments] reserva %s gravada SEM as colunas %s (migration pendente). ' +
+        'Cobrança no gateway: %s. Rode as migrations e complete a linha à mão.',
+        booking.id, camposPerdidos.join(', '), gatewayTransactionId || '(sem id)',
+      )
+    }
 
     // ── Pós-inserção: ação imediata para cartão ────────
     if (isCard && cardPaymentStatus === 'approved') {
