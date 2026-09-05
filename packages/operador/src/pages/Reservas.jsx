@@ -650,6 +650,14 @@ export default function Reservas() {
 
   const pending = data?.pending || []
   const mine    = data?.mine    || []
+
+  // Reserva que já foi para o Despacho sai desta tela. O trabalho dela continua
+  // lá — veículo, motorista, iniciar e concluir — e vê-la nos dois lugares, com
+  // ações diferentes em cada um, era a confusão que esta lista causava.
+  // A concluída volta a aparecer aqui, como histórico: o Despacho só mostra o
+  // que ainda está em aberto.
+  const NO_DESPACHO = ['awaiting_dispatch', 'confirmed', 'assigned', 'en_route', 'in_progress']
+  const mineAtivas = mine.filter((b) => !NO_DESPACHO.includes(b.status_operational))
   // A view /quotes/pending traz TODAS as cotações não-pagas (pending, quoted,
   // accepted...). Aqui mantemos só as que o operador ainda precisa cotar —
   // senão as já respondidas/aceitas reaparecem com o botão (duplicando e dando
@@ -751,7 +759,7 @@ export default function Reservas() {
   const mineItems = (() => {
     const groups = new Map()
     const singles = []
-    for (const b of mine) {
+    for (const b of mineAtivas) {
       if (b.order_group_id) {
         if (!groups.has(b.order_group_id)) groups.set(b.order_group_id, [])
         groups.get(b.order_group_id).push(b)
@@ -768,7 +776,7 @@ export default function Reservas() {
 
   // Serviços do pedido aberto — derivados do `mine` vivo, para a folha
   // refletir a mudança de status na hora (aceitar/iniciar/concluir).
-  const openGroupBookings = myGroupGid ? mine.filter((b) => b.order_group_id === myGroupGid) : []
+  const openGroupBookings = myGroupGid ? mineAtivas.filter((b) => b.order_group_id === myGroupGid) : []
 
   // Item 8: abre o WhatsApp para PEDIR informações ao cliente (não confirma nem
   // muda status). O despacho/confirmação de dados acontece na tela de Despacho.
@@ -802,6 +810,25 @@ export default function Reservas() {
     } finally {
       setConfirming(null)
     }
+  }
+
+  // Despacho: marca a reserva como enviada ao despacho e abre a tela. É essa
+  // marcação que a faz sumir daqui — sem ela, o botão só trocava de tela e a
+  // corrida continuava nas duas listas.
+  async function handleDispatch(booking) {
+    try {
+      if ((booking?.status_operational || 'new') === 'new') {
+        await api.confirmBooking(booking.id)
+        queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      }
+    } catch (err) {
+      // Falha aqui não pode impedir de abrir o Despacho: a reserva aparece lá
+      // de qualquer forma por estar paga, e o operador segue o trabalho.
+      setToast({ message: err.message || 'Não foi possível marcar como despachada', type: 'error' })
+    }
+    // Leva a reserva junto: o botão diz "Despacho" DESTA corrida, e largar o
+    // operador numa lista para procurar de novo parece que o clique não fez nada.
+    navigate('/despacho', { state: { bookingId: booking?.id } })
   }
 
   async function handleStart(booking) {
@@ -890,7 +917,7 @@ export default function Reservas() {
           // qualquer solicitação nova, de qualquer serviço, conta como disponível.
           { key: 'pending',  label: 'Disponíveis',     short: 'Disponíveis', count: pending.length + pendingQuotes.length },
           { key: 'cotacoes', label: 'Cotações',        short: 'Cotações',    count: pendingQuotes.length },
-          { key: 'mine',     label: 'Minhas corridas', short: 'Minhas',      count: mine.length + quotedQuotes.length },
+          { key: 'mine',     label: 'Minhas corridas', short: 'Minhas',      count: mineAtivas.length + quotedQuotes.length },
         ].map((t) => (
           <button
             key={t.key}
@@ -993,7 +1020,7 @@ export default function Reservas() {
           <div className="text-center py-16 text-gray-400">
             <Car size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium">Nenhuma corrida ativa</p>
-            <p className="text-xs mt-1">As corridas que você aceitar aparecerão aqui</p>
+            <p className="text-xs mt-1">As corridas que você aceitar aparecem aqui até irem para o Despacho</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -1027,10 +1054,7 @@ export default function Reservas() {
                 onRequestInfo={handleRequestInfo}
                 onStart={handleStart}
                 onComplete={handleComplete}
-                // Leva a reserva junto: o botão diz "Despacho" DESTA corrida,
-                // e largar o operador numa lista para procurar de novo parece
-                // que o clique não fez nada.
-                onDispatch={(b) => navigate('/despacho', { state: { bookingId: b?.id } })}
+                onDispatch={handleDispatch}
                 busy={confirming === it.booking.id}
               />
             ))}
@@ -1056,7 +1080,7 @@ export default function Reservas() {
           onRequestInfo={handleRequestInfo}
           onStart={handleStart}
           onComplete={handleComplete}
-          onDispatch={(b) => { setMyGroupGid(null); navigate('/despacho', { state: { bookingId: b?.id } }) }}
+          onDispatch={(b) => { setMyGroupGid(null); handleDispatch(b) }}
           busyId={confirming}
         />
       )}
