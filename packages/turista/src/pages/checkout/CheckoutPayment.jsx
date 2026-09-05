@@ -104,6 +104,10 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
                   issuer_id:         formData?.issuer_id ? String(formData.issuer_id) : undefined,
                   installments:      Number(formData?.installments) || 1,
                   payer_doc:         formData?.payer?.identification?.number,
+                  // Device ID do antifraude do MP (security.js no index.html).
+                  // Vai vazio se o script não tiver carregado — a cobrança
+                  // segue, só sem o sinal que ajuda a aprovar.
+                  device_id:         typeof window !== 'undefined' ? window.MP_DEVICE_SESSION_ID : undefined,
                 })
                 if (result?.status === 'rejected') {
                   const msg = result.message_key ? t(result.message_key) : t('payment.rejected.generic')

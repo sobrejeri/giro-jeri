@@ -35,6 +35,9 @@ const intentSchema = z.object({
   coupon_code:      z.string().max(50).optional(),
   // Campos de cartão (obrigatórios condicionalmente via .refine abaixo)
   card_token:         z.string().min(1).optional(),
+  // Device ID do antifraude do MP (security.js no front). Opcional: sem ele a
+  // cobrança segue, só perde o sinal que ajuda a aprovar.
+  device_id:          z.string().max(200).optional(),
   installments:       z.number({ coerce: true }).int().min(1).max(12).default(1),
   payment_method_id:  z.string().min(1).optional(),
   issuer_id:          z.string().optional(),
@@ -764,7 +767,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       total_price, payment_method = 'pix',
       service_name, cover_image_url,
       coupon_code, existing_booking_id, order_group_id,
-      card_token, installments = 1, payment_method_id, issuer_id, payer_doc,
+      card_token, installments = 1, payment_method_id, issuer_id, payer_doc, device_id,
       mp_public_key,
     } = parsed.data
 
@@ -1047,6 +1050,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
           // a mesma tentativa e diferente para outra, que é tudo que a
           // idempotência precisa.
           idempotencyKey:  `turiva:${booking.id}:${idDaTentativa(card_token)}`,
+          deviceId:        device_id || undefined,
           sellerAccessToken: split?.sellerAccessToken,
           applicationFee:    split?.applicationFee,
           // Débito no Brasil exige autenticação do emissor. Ver mercadoPago.js.
@@ -1074,6 +1078,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
           booking.id, gatewayTransactionId, cardPaymentStatus,
           cardStatusDetail || '-', split ? 'sim' : 'não',
         )
+        if (!device_id) {
+          console.warn('[payments] cobrança booking=%s SEM device id — o antifraude do MP ' +
+            'recusa mais sem esse sinal (security.js não carregou no navegador?)', booking.id)
+        }
 
         // Taxa real por método: cartão à vista 4.98%, débito 1.50%
         if (payment_method === 'debit_card') {

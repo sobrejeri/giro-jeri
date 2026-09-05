@@ -188,6 +188,7 @@ export async function createCardPayment({
   payerDoc,
   externalRef,
   idempotencyKey,
+  deviceId,
   sellerAccessToken,
   applicationFee,
   threeDSecure = false,
@@ -242,7 +243,14 @@ export async function createCardPayment({
     // gravação estourava a unicidade de gateway_transaction_id, jogando o erro
     // do banco na cara do cliente. Quem chama manda uma chave por tentativa
     // (o token do cartão serve: é de uso único).
-    requestOptions: { idempotencyKey: idempotencyKey || externalRef },
+    requestOptions: {
+      idempotencyKey: idempotencyKey || externalRef,
+      // X-Meli-Session-Id: identifica o APARELHO para o antifraude. O Mercado
+      // Pago documenta este sinal como um dos que mais pesam na aprovação —
+      // sem ele, compra legítima de aparelho desconhecido vira risco e volta
+      // como cc_rejected_high_risk. O SDK envia o header a partir daqui.
+      ...(deviceId ? { meliSessionId: String(deviceId) } : {}),
+    },
   })
 
   // Extrai juro de parcelamento da lista de fees retornada pelo MP

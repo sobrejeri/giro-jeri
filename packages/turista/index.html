@@ -32,6 +32,12 @@
     <meta name="twitter:description" content="Viagens, passeios e mobilidade para viver momentos inesquecíveis." />
     <!-- Mercado Pago SDK -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
+    <!-- Device ID: identifica o aparelho para o antifraude do Mercado Pago.
+         Sem ele, uma compra legítima de aparelho "desconhecido" é lida como
+         risco e recusada com cc_rejected_high_risk. O script cria a global
+         MP_DEVICE_SESSION_ID, que enviamos no cabeçalho X-Meli-Session-Id ao
+         criar a cobrança. Não coleta dado de cartão. -->
+    <script src="https://www.mercadopago.com/v2/security.js" view="checkout"></script>
 
     <!-- Splash screen (estilo WhatsApp) — pinta antes do React, sem flash -->
     <style>
