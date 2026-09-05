@@ -53,6 +53,11 @@ const PAYMENT_KEYS = new Set([
   // configuração crua — dois lugares editando a mesma coisa.
   'payment_method_pix', 'payment_method_credit', 'payment_method_debit',
   'payment_max_installments',
+  // Split de 2 recebedores (migration 087). A chave existia no banco e NÃO
+  // aparecia em lugar nenhum do painel: não dava para ver se estava ligada nem
+  // para ligar — só por SQL. Numa decisão que muda para onde o dinheiro vai,
+  // isso é o pior estado possível.
+  'payment_split_single_operator',
 ])
 
 // ── Payment tab constants ─────────────────────────────────
@@ -104,6 +109,7 @@ const PAYMENT_DEFAULTS = {
   payment_method_pix:             'true',
   payment_method_credit:          'true',
   payment_method_debit:           'true',
+  payment_split_single_operator:  'false',
   payment_max_installments:       '12',
 }
 
@@ -610,9 +616,39 @@ function TabPagamentos({ settings, qc }) {
                 </p>
               </>
             )}
+            {/* ── Split: para onde o dinheiro vai ───────────────────────── */}
+            <div className="border-t border-gray-800 pt-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.payment_split_single_operator === 'true'}
+                  onChange={(e) => set('payment_split_single_operator', e.target.checked ? 'true' : 'false')}
+                  className="mt-1 w-4 h-4 accent-brand shrink-0"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-gray-200">
+                    Dividir a cobrança no ato (split)
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    <b className="text-gray-400">Ligado:</b> o operador recebe a parte dele
+                    direto do Mercado Pago, na conta dele, no momento do pagamento. A plataforma
+                    fica só com a comissão. Não há repasse a fazer.<br />
+                    <b className="text-gray-400">Desligado:</b> a plataforma recebe 100% e você
+                    paga cada operador depois, dando baixa na tela de Repasses.
+                  </p>
+                  <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
+                    Só vale para reserva de UM operador que tenha conta do Mercado Pago
+                    conectada e cujo modal não tenha executor fixo. Combo continua sempre
+                    manual. Não ligue antes de uma cobrança real ter funcionado do início ao fim.
+                  </p>
+                </div>
+              </label>
+            </div>
+
             <SaveRow
               onSave={() => saveSection(
-                ['payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key', 'payment_gateway_webhook_secret'],
+                ['payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key',
+                 'payment_gateway_webhook_secret', 'payment_split_single_operator'],
                 'gateway',
               )}
               pending={saveMut.isPending}
