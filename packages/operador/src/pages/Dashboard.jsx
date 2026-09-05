@@ -28,6 +28,8 @@ const STATUS = {
   awaiting_dispatch: { label: 'Ag. Despacho', pct: 28,  dot: 'bg-amber-500',  chip: 'bg-amber-50 text-amber-600',   bar: '#f59e0b' },
   confirmed:         { label: 'Confirmado',   pct: 42,  dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-600',     bar: '#14b8a6' },
   assigned:          { label: 'Atribuído',    pct: 58,  dot: 'bg-indigo-500', chip: 'bg-indigo-50 text-indigo-600', bar: '#6366f1' },
+  // Derivado da OS, não existe no enum do banco — ver `andamentoDe` abaixo.
+  dispatched:        { label: 'Despachado',   pct: 65,  dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-600',     bar: '#3b82f6' },
   en_route:          { label: 'A Caminho',    pct: 72,  dot: 'bg-orange-500', chip: 'bg-orange-50 text-orange-600', bar: '#f97316' },
   in_progress:       { label: 'Em Andamento', pct: 88,  dot: 'bg-brand',      chip: 'bg-orange-50 text-orange-700', bar: '#ff6a00' },
   completed:         { label: 'Concluído',    pct: 100, dot: 'bg-green-500',  chip: 'bg-green-50 text-green-600',   bar: '#22c55e' },
@@ -35,12 +37,23 @@ const STATUS = {
   cancelled:         { label: 'Cancelado',    pct: 0,   dot: 'bg-gray-400',   chip: 'bg-gray-100 text-gray-500',    bar: '#9ca3af' },
 }
 
-const PENDING_SET    = ['new', 'awaiting_dispatch', 'confirmed']
-const DISPATCHED_SET = ['assigned', 'en_route', 'in_progress']
-
 // "Despachado" = OS preenchida (veículo/motorista atribuído) — não o status
 // 'assigned' (que também vem do aceite). Alinha o painel com a tela de Despacho.
 const hasOS = (b) => !!(b.operational_assignments?.[0]?.real_vehicle_text || b.operational_assignments?.[0]?.driver_name)
+
+// Selo da linha. Os cartões do topo e as abas já contavam pela OS, mas o selo
+// de cada reserva lia `status_operational` cru — e o despacho NÃO mexe nessa
+// coluna. Resultado: o cartão dizia "Despachadas 1" e a linha logo abaixo dizia
+// "Atribuído", na mesma tela. Uma regra só resolve.
+//
+// Estados posteriores mandam: uma corrida em andamento ou concluída não volta a
+// "Despachado" só porque a OS existe.
+const POSTERIORES = ['en_route', 'in_progress', 'completed', 'occurrence', 'cancelled']
+function andamentoDe(b) {
+  const s = b?.status_operational || 'new'
+  if (POSTERIORES.includes(s)) return s
+  return hasOS(b) ? 'dispatched' : s
+}
 
 const AVATAR_COLORS = [
   'bg-blue-100 text-blue-600', 'bg-purple-100 text-purple-600',
@@ -102,7 +115,7 @@ function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
 
 // ── Linha da tabela ────────────────────────────────────
 function BookingRow({ b, onAssign, operador }) {
-  const st       = STATUS[b.status_operational] || STATUS.new
+  const st       = STATUS[andamentoDe(b)] || STATUS.new
   const name     = b.users?.full_name || '—'
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?'
   const dateStr  = b.service_date
@@ -212,7 +225,7 @@ function BookingRow({ b, onAssign, operador }) {
 
 // ── Card mobile (mesma info da linha da tabela) ────────
 function BookingCardMobile({ b, onAssign, operador }) {
-  const st       = STATUS[b.status_operational] || STATUS.new
+  const st       = STATUS[andamentoDe(b)] || STATUS.new
   const name     = b.users?.full_name || '—'
   const dateStr  = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), 'dd MMM', { locale: ptBR }) : '—'
@@ -539,7 +552,11 @@ export default function Dashboard() {
               </span>
             </h2>
             <p className="text-[13px] text-gray-400 mt-0.5">
-              Acompanhe e despache os serviços · {fmt(revenue)} em receita
+              {/* Era "em receita", e é o valor CHEIO pago pelo cliente — não o
+                  que o operador recebe, que sai depois da comissão. Prometer
+                  receita maior que a real na tela dele é o pior tipo de erro
+                  de rótulo. O valor a receber fica no Financeiro. */}
+              Acompanhe e despache os serviços · {fmt(revenue)} em serviços
             </p>
           </div>
           {isFetching && !isLoading && (
