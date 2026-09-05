@@ -2105,7 +2105,26 @@ export async function onPaymentApproved(payment) {
   // depois pelo admin.
   try {
     const { gerarRepasses } = await import('../services/payouts.js')
-    await gerarRepasses(booking, Number(payment.amount) || 0)
+
+    // `payment.amount` NÃO EXISTE. A coluna é `amount_gross` (migration 001).
+    // `Number(undefined) || 0` dava 0, `repartirReserva` recusa total zero, e
+    // `gerarRepasses` saía com "nada a repassar" — em silêncio, porque o retorno
+    // é best-effort e ninguém lia. Resultado: NENHUM repasse foi criado desde
+    // sempre. `booking_payouts` vazia, "Meus recebimentos" do operador zerado e
+    // a tela de repasses do admin vazia em todas as abas.
+    //
+    // O razão nunca sofreu disso porque usa `booking.total_amount`. Por isso o
+    // painel mostrava "Repasses efetuados R$ 0,17" e a tabela de repasses não
+    // tinha uma linha sequer: dois caminhos, um certo e um quebrado.
+    //
+    // Fallback para o total da reserva: se o pagamento vier sem valor por
+    // qualquer motivo, é melhor repassar pelo valor da reserva do que não
+    // registrar a dívida. Zero continua sendo recusado lá dentro.
+    const valorPago = Number(payment.amount_gross ?? booking?.total_amount) || 0
+    if (!(valorPago > 0)) {
+      console.error('[payouts] reserva %s sem valor para repartir (payment=%s)', booking?.id, payment?.id)
+    }
+    await gerarRepasses(booking, valorPago)
   } catch (e) {
     console.error('[payouts] não foi possível gerar os repasses:', e?.message)
   }

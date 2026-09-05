@@ -177,6 +177,18 @@ function RepassesOperadores() {
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-payouts'] }),
     onError:    (e) => alert(e?.message || 'Erro ao atualizar o repasse.'),
   })
+  // Repasses que faltaram em reservas já pagas. Roda sob demanda porque é
+  // conserto de passado, não rotina: o caminho normal cria o repasse sozinho na
+  // aprovação do pagamento.
+  const backfillMut = useMutation({
+    mutationFn: () => api.backfillPayouts({ dias: 90 }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['admin-payouts'] })
+      alert(`${r.criados} repasse(s) criados a partir de ${r.verificados} pagamento(s) conferidos.`)
+    },
+    onError: (e) => alert(e?.message || 'Não foi possível gerar os repasses.'),
+  })
+
   const pagarTudoMut = useMutation({
     // Quem tem cadastro é baixado pelo id; o motorista avulso (082), pelo nome.
     mutationFn: (t) => api.payAllPayouts(
@@ -211,12 +223,22 @@ function RepassesOperadores() {
               }`}>{label}</button>
           ))}
         </div>
-        {status === 'pending' && totalGeral > 0 && (
-          <p className="text-sm text-gray-400">
-            Total a pagar: <span className="font-bold text-brand">{fmtBRL(totalGeral)}</span>
-            {isFetching && <span className="ml-2 text-xs text-gray-600">atualizando…</span>}
-          </p>
-        )}
+        <div className="flex items-center gap-3 flex-wrap">
+          {status === 'pending' && totalGeral > 0 && (
+            <p className="text-sm text-gray-400">
+              Total a pagar: <span className="font-bold text-brand">{fmtBRL(totalGeral)}</span>
+              {isFetching && <span className="ml-2 text-xs text-gray-600">atualizando…</span>}
+            </p>
+          )}
+          <button
+            onClick={() => confirm('Conferir os pagamentos dos últimos 90 dias e criar os repasses que faltarem?\n\nNão paga ninguém e não duplica o que já existe.')
+              && backfillMut.mutate()}
+            disabled={backfillMut.isPending}
+            className="text-xs font-semibold text-gray-400 hover:text-gray-200 border border-gray-700 rounded-lg px-3 py-1.5 disabled:opacity-50"
+          >
+            {backfillMut.isPending ? 'Conferindo…' : 'Gerar repasses faltantes'}
+          </button>
+        </div>
       </div>
 
       {/* Período — pela data do serviço */}

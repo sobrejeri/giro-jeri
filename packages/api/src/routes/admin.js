@@ -622,6 +622,56 @@ router.post('/payments/reconcile', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/admin/payouts/backfill ───────────────────
+// Cria os repasses que FALTARAM nas reservas já pagas.
+//
+// Existe por causa de um defeito real: `onPaymentApproved` chamava
+// `gerarRepasses` com `payment.amount`, e essa coluna não existe — a coluna é
+// `amount_gross`. O valor virava zero, `repartirReserva` recusava total zero e
+// a geração saía em silêncio. Nenhum repasse foi criado desde sempre. Corrigir
+// o código não conserta o passado: as reservas já aprovadas não passam de novo
+// por ali.
+//
+// Seguro de rodar quantas vezes quiser: `gerarRepasses` é idempotente
+// (UNIQUE booking_id+kind com upsert que ignora conflito). Não cria cobrança,
+// não mexe em pagamento, não paga ninguém — só registra o que a plataforma deve.
+router.post('/payouts/backfill', requireAdmin, async (req, res, next) => {
+  try {
+    const dias = Math.min(Number(req.body?.dias) || 90, 365);
+    const desde = dayjs().subtract(dias, 'day').toISOString();
+
+    const { data: pagos, error } = await supabase
+      .from('payments')
+      .select('id, amount_gross, booking_id, created_at')
+      .eq('status', 'approved')
+      .gte('created_at', desde)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (error) throw error;
+
+    const { gerarRepasses } = await import('../services/payouts.js');
+    const resultado = { verificados: 0, criados: 0, ignorados: 0, detalhes: [] };
+
+    for (const p of pagos || []) {
+      resultado.verificados++;
+      const { data: booking } = await supabase
+        .from('bookings')
+        .select('id, booking_code, operator_id, service_type, service_id, total_amount')
+        .eq('id', p.booking_id)
+        .maybeSingle();
+      if (!booking) { resultado.ignorados++; continue; }
+
+      const valor = Number(p.amount_gross ?? booking.total_amount) || 0;
+      const r = await gerarRepasses(booking, valor);
+      if (r?.criados) resultado.criados += r.criados;
+      else resultado.ignorados++;
+      resultado.detalhes.push({ booking_code: booking.booking_code, valor, resultado: r });
+    }
+
+    res.json(resultado);
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/admin/financial ───────────────────────────
 router.get('/financial', requireAdmin, async (req, res, next) => {
   try {
