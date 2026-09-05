@@ -585,6 +585,43 @@ router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next
   }
 });
 
+// ── POST /api/admin/payments/reconcile ─────────────────
+// Confere no Mercado Pago os pagamentos que a plataforma ainda tem como
+// pendentes, e aplica o desfecho real.
+//
+// A conciliação já existia, mas só rodava quando o CLIENTE abria a lista de
+// reservas dele. Se ele pagou e não voltou ao app, ninguém tinha como destravar
+// — e foi o que aconteceu: PIX aprovado no Mercado Pago, reserva parada em
+// `awaiting_payment`, e nenhuma tela no admin para resolver.
+//
+// Só leitura no Mercado Pago: consulta status e, quando ele responde
+// 'approved', roda o MESMO caminho de aprovação do webhook (financeiro,
+// repasses, notificações). Nada aqui cria cobrança nem estorna.
+router.post('/payments/reconcile', requireAdmin, async (req, res, next) => {
+  try {
+    const { reconciliarLote } = await import('../services/paymentReconcile.js');
+    const { onPaymentApproved, getOperatorMp } = await import('./payments.js');
+
+    const resultado = await reconciliarLote(
+      { limite: req.body?.limite },
+      {
+        aoAprovar:     onPaymentApproved,
+        resolverToken: async (operatorId) => (await getOperatorMp(operatorId))?.token || null,
+      },
+    );
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'payments',
+      entity_id:       null,
+      action_type:     'reconcile_payments',
+      new_values_json: resultado,
+    }).select().maybeSingle();
+
+    res.json(resultado);
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/admin/financial ───────────────────────────
 router.get('/financial', requireAdmin, async (req, res, next) => {
   try {

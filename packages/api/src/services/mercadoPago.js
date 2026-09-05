@@ -243,11 +243,34 @@ export async function createCardPayment({
 }
 
 export async function getMpPaymentStatus(mpId, sellerAccessToken) {
-  // Pagamento com split vive na conta do operador → consultar com o token dela.
-  const client = paymentClientFor(sellerAccessToken)
-  if (!client) return null
-  const r = await client.get({ id: mpId })
-  return r.status
+  // Uma cobrança só existe para a conta que a criou. Consultar com o token
+  // ERRADO devolve "não encontrado", e quem chama não distingue isso de "ainda
+  // pendente" — o pagamento fica pendente para sempre.
+  //
+  // Foi exatamente o que aconteceu: PIX aprovado no Mercado Pago, reserva
+  // parada em `awaiting_payment`. A conciliação usava o token do operador
+  // sempre que a reserva tinha um operador conectado, mesmo quando a cobrança
+  // tinha sido feita na conta da PLATAFORMA (sem split).
+  //
+  // Então tenta o token informado e, se ele não achar, tenta o da plataforma.
+  // Duas contas, duas tentativas — e é barato: só acontece quando a primeira
+  // falha. Nunca devolve palpite: sem resposta de nenhuma das duas, devolve
+  // null e quem chamou deixa o pagamento como está.
+  const tentativas = sellerAccessToken ? [sellerAccessToken, null] : [null]
+
+  let ultimoErro = null
+  for (const token of tentativas) {
+    const client = paymentClientFor(token)
+    if (!client) continue
+    try {
+      const r = await client.get({ id: mpId })
+      if (r?.status) return r.status
+    } catch (err) {
+      ultimoErro = err
+    }
+  }
+  if (ultimoErro) throw ultimoErro
+  return null
 }
 
 // ── OAuth: autorização e troca de código ──────────────
