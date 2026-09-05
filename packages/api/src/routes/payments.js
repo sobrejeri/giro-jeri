@@ -6,7 +6,7 @@ import { authenticate } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
-import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance, applyCoupon } from '../services/priceEngine.js'
+import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateAdvance, applyCoupon } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
 import { sweepExpiredLegBookings } from '../services/legFlow.js'
 
@@ -1094,10 +1094,12 @@ router.post('/request', authenticate, async (req, res, next) => {
       vehicles = [], origin_text, destination_text, partner_slug,
     } = parsed.data
 
-    // Antecedência mínima para transfers (rota definida) — mesma regra do
-    // translado personalizado. Bloqueia agendamento "ao vivo"/imediato.
-    if (service_type === 'transfer' && service_date_iso) {
-      await validateTransferAdvance(service_date_iso, service_time || '00:00', { serviceId: service_id })
+    // Antecedência mínima. Vale para PASSEIO e para TRANSLADO: a regra do
+    // passeio (tours.min_advance_hours) existia no cadastro desde a 049 e não
+    // era conferida em lugar nenhum — o admin preenchia e não acontecia nada.
+    // Passeio sem regra própria segue sem mínimo, freado só pelo cutoff.
+    if (service_date_iso) {
+      await validateAdvance(service_type, service_date_iso, service_time || '00:00', { serviceId: service_id })
     }
 
     // R6: respeita o horário limite de solicitação do serviço.
@@ -1260,8 +1262,8 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     for (let i = 0; i < items.length; i++) {
       const it = items[i]
       try {
-        if (it.service_type === 'transfer' && it.service_date_iso) {
-          await validateTransferAdvance(it.service_date_iso, it.service_time || '00:00', { serviceId: it.service_id })
+        if (it.service_date_iso) {
+          await validateAdvance(it.service_type, it.service_date_iso, it.service_time || '00:00', { serviceId: it.service_id })
         }
         const cutoffErr = await checkBookingCutoff({
           service_type: it.service_type, service_id: it.service_id, service_date_iso: it.service_date_iso,

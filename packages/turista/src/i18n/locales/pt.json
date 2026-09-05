@@ -1178,7 +1178,8 @@
       "noPriceConfigured": "Sem preço configurado",
       "selectTime": "Selecione o horário",
       "requestBooking": "Solicitar reserva",
-      "note": "Você só paga depois que um operador aceitar. Acompanhe o andamento em Minhas Reservas."
+      "note": "Você só paga depois que um operador aceitar. Acompanhe o andamento em Minhas Reservas.",
+      "adjustTime": "Ajuste a data ou o horário"
     },
     "error": {
       "requestFailed": "Erro ao enviar solicitação. Tente novamente."
@@ -1214,7 +1215,12 @@
       "backHome": "Voltar ao início"
     },
     "peopleCount": "{{count}} pessoas",
-    "capacityInsufficient": "Capacidade insuficiente para {{count}} pessoas"
+    "capacityInsufficient": "Capacidade insuficiente para {{count}} pessoas",
+    "advance": {
+      "title": "Antecedência mínima",
+      "description": "Este serviço precisa de pelo menos {{hours}}h de antecedência. Escolha a partir de {{datetime}}.",
+      "at": "às"
+    }
   },
   "reviewsPg": {
     "title": "Avaliações verificadas",

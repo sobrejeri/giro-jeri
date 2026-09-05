@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
@@ -6,6 +6,7 @@ import { api } from '../../lib/api'
 import { lerOferta } from '../../lib/oferta'
 import { useCart } from '../../contexts/CartContext'
 import { checkoutStateFor } from '../../lib/cartCheckout'
+import { horasDeAntecedencia, primeiroReservavel } from '../../lib/antecedencia'
 import { getPartner as getPartnerAttribution } from '../../lib/partner'
 import { getAffiliate as getAffiliateAttribution } from '../../lib/affiliate'
 import {
@@ -162,10 +163,26 @@ function CheckoutSummaryInner() {
   })()
   const nowMins       = new Date().getHours() * 60 + new Date().getMinutes()
   const isAfterCutoff = cutoffMins !== null && nowMins >= cutoffMins
-  const minDate       = isAfterCutoff ? addDays(startOfDay(new Date()), 1) : startOfDay(new Date())
   const cutoffLabel   = ls?.booking_cutoff_time
     ? `${ls.booking_cutoff_time.slice(0, 2)}h${ls.booking_cutoff_time.slice(3, 5)}`
     : null
+
+  // ── Antecedência mínima ──────────────────────────────────
+  // Esta tela é a ÚLTIMA antes de solicitar, e é aqui que a data e o horário
+  // podem ser trocados. Mesmo assim ela só olhava o cutoff, que restringe a
+  // DATA — o horário passava sem conferência nenhuma, e dava para pedir para
+  // hoje às 21:30 às 20h. A regra mora em lib/antecedencia.js, a mesma que as
+  // telas de translado consultam.
+  const horasAntecedencia = horasDeAntecedencia(ls?.service_type, ls?.min_advance_hours)
+  const minReservavel = useMemo(
+    () => primeiroReservavel(horasAntecedencia),
+    // Recalcula quando as horas mudam; o relógio andando não precisa re-render.
+    [horasAntecedencia],
+  )
+  // A data mínima é a mais restritiva entre o cutoff e a antecedência.
+  const minDatePorCutoff = isAfterCutoff ? addDays(startOfDay(new Date()), 1) : startOfDay(new Date())
+  const minDatePorHoras  = startOfDay(minReservavel)
+  const minDate = isBefore(minDatePorCutoff, minDatePorHoras) ? minDatePorHoras : minDatePorCutoff
 
   /* ── All hooks unconditionally ──────────────────────────── */
   const [editing,       setEditing]  = useState(ls?.open_editing === true)
@@ -338,7 +355,21 @@ function CheckoutSummaryInner() {
 
   const capacityOk  = !hasVehicles || (cartHasItems && cartCapacity >= people)
   const canSave     = capacityOk
-  const canProceed  = hasPricing && !!time
+
+  // Data + horário escolhidos como relógio de parede, para comparar com o
+  // mínimo. Só o horário não basta: "amanhã 06:00" é válido e "hoje 06:00"
+  // pode não ser.
+  const escolhido = (() => {
+    if (!time) return null
+    const [h, m] = time.split(':').map(Number)
+    const d = new Date(date)
+    d.setHours(h || 0, m || 0, 0, 0)
+    return d
+  })()
+  const antecedenciaOk = horasAntecedencia <= 0 || !escolhido || !isBefore(escolhido, minReservavel)
+  const minReservavelLabel = `${format(minReservavel, 'dd/MM')} ${t('checkoutPg.advance.at')} ${format(minReservavel, 'HH:mm')}`
+
+  const canProceed  = hasPricing && !!time && antecedenciaOk
 
   const dateLabel = isToday(date) ? t('checkoutPg.date.today')
     : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? t('checkoutPg.date.tomorrow')
@@ -480,6 +511,19 @@ function CheckoutSummaryInner() {
               <p className="text-[13px] font-bold text-amber-800">{t('checkoutPg.cutoff.title')}</p>
               <p className="text-[12px] text-amber-700 mt-0.5 leading-relaxed">
                 {t('checkoutPg.cutoff.description', { time: cutoffLabel })}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Antecedência mínima: diz o que fazer, não só que está errado. */}
+        {!antecedenciaOk && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
+            <Clock size={15} className="text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[13px] font-bold text-amber-800">{t('checkoutPg.advance.title')}</p>
+              <p className="text-[12px] text-amber-700 mt-0.5 leading-relaxed">
+                {t('checkoutPg.advance.description', { hours: horasAntecedencia, datetime: minReservavelLabel })}
               </p>
             </div>
           </div>
@@ -907,7 +951,11 @@ function CheckoutSummaryInner() {
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {requesting ? t('checkoutPg.common.sending') : !hasPricing ? t('checkoutPg.footer.noPriceConfigured') : !time ? t('checkoutPg.footer.selectTime') : t('checkoutPg.footer.requestBooking')}
+                {requesting ? t('checkoutPg.common.sending')
+                  : !hasPricing ? t('checkoutPg.footer.noPriceConfigured')
+                  : !time ? t('checkoutPg.footer.selectTime')
+                  : !antecedenciaOk ? t('checkoutPg.footer.adjustTime')
+                  : t('checkoutPg.footer.requestBooking')}
               </button>
             </>
           )}

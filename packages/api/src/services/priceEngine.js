@@ -396,22 +396,60 @@ export async function calculateTabbedTransfer({
 // =============================================================================
 
 export async function validateTransferAdvance(serviceDate, serviceTime, opts = {}) {
-  // Antecedência por serviço (admin define no catálogo). service_id de transfer
-  // é um transfer_route → a regra mora no transfer pai. NULL = usa o padrão
-  // global (setting transfer_min_advance_hours, default 4h).
+  return validateAdvance('transfer', serviceDate, serviceTime, opts);
+}
+
+/**
+ * Antecedência mínima de PASSEIO e de TRANSLADO, num lugar só.
+ *
+ * Passeio nunca teve validação nenhuma aqui: `tours.min_advance_hours` existe
+ * desde a migration 049 e não era lido em canto nenhum — o admin preenchia e
+ * não acontecia nada. O único freio do passeio era o `booking_cutoff_time`, que
+ * restringe a DATA e ignora o horário. Dava para pedir um passeio para hoje às
+ * 21:30 faltando duas horas.
+ *
+ * A regra, decidida com o dono:
+ *   • o serviço pode definir a sua (`min_advance_hours`, no catálogo);
+ *   • sem isso, TRANSLADO usa o padrão global `transfer_min_advance_hours`, e
+ *     PASSEIO não tem mínimo — nele o freio segue sendo o cutoff.
+ *
+ * Zero horas = sem exigência, e é uma escolha válida do admin. Por isso o teste
+ * é `!= null` no valor cadastrado, não a verdade do número.
+ *
+ * @param {'tour'|'transfer'} tipo
+ */
+export async function validateAdvance(tipo, serviceDate, serviceTime, opts = {}) {
   let minHours = null;
+
   if (opts.serviceId) {
-    const { data } = await supabase
-      .from('transfer_routes')
-      .select('transfers ( min_advance_hours )')
-      .eq('id', opts.serviceId)
-      .maybeSingle();
-    const perService = data?.transfers?.min_advance_hours;
-    if (perService != null) minHours = Number(perService);
+    if (tipo === 'transfer') {
+      // service_id de translado é um transfer_route → a regra mora no pai.
+      const { data } = await supabase
+        .from('transfer_routes')
+        .select('transfers ( min_advance_hours )')
+        .eq('id', opts.serviceId)
+        .maybeSingle();
+      const perService = data?.transfers?.min_advance_hours;
+      if (perService != null) minHours = Number(perService);
+    } else {
+      const { data, error } = await supabase
+        .from('tours')
+        .select('min_advance_hours')
+        .eq('id', opts.serviceId)
+        .maybeSingle();
+      // 42703 = coluna ausente (049 pendente). Sem a coluna não há regra a
+      // aplicar, e derrubar a reserva por isso seria pior que não validar.
+      if (error?.code !== '42703' && data?.min_advance_hours != null) {
+        minHours = Number(data.min_advance_hours);
+      }
+    }
   }
+
   if (minHours == null) {
-    minHours = parseInt(await getSetting('transfer_min_advance_hours', '4'));
+    if (tipo !== 'transfer') return;   // passeio sem regra própria: nada a exigir
+    minHours = parseInt(await getSetting('transfer_min_advance_hours', '3'));
   }
+  if (!Number.isFinite(minHours) || minHours <= 0) return;
 
   // service_time é horário LOCAL de Jericoacoara/Fortaleza (UTC-3 o ano todo).
   // Ancorar o offset -03:00 evita interpretar como UTC (dava 3h de erro e
@@ -424,10 +462,10 @@ export async function validateTransferAdvance(serviceDate, serviceTime, opts = {
       timeZone: 'America/Fortaleza', day: '2-digit', month: '2-digit',
       hour: '2-digit', minute: '2-digit', hour12: false,
     }).format(minAllowed.toDate());
-    throw {
-      status: 400,
-      message: `Transfers precisam ser agendados com pelo menos ${minHours} horas de antecedência. Horário mínimo: ${minLocal}.`,
-    };
+    const frase = tipo === 'transfer'
+      ? `Transfers precisam ser agendados com pelo menos ${minHours} horas de antecedência.`
+      : `Este passeio precisa ser agendado com pelo menos ${minHours} horas de antecedência.`;
+    throw { status: 400, message: `${frase} Horário mínimo: ${minLocal}.` };
   }
 }
 

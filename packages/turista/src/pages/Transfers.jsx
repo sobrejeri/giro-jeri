@@ -609,21 +609,11 @@ export default function Transfers() {
   // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
   // anteriores a "agora + N horas". Padrão 4h; a rota selecionada pode definir
   // a sua própria antecedência (transfers.min_advance_hours, via admin).
-  const DEFAULT_MIN_ADVANCE_HOURS = 4
-  const bookableAfter = (hours) => {
-    const p = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Fortaleza',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    }).formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a }, {})
-    const d = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), 0)
-    d.setHours(d.getHours() + hours)
-    return d
-  }
-
-  // Rota definida: usa a antecedência da rota (senão o padrão).
-  const MIN_ADVANCE_HOURS = matched?.transfers?.min_advance_hours ?? DEFAULT_MIN_ADVANCE_HOURS
-  const minBookable = useMemo(() => bookableAfter(MIN_ADVANCE_HOURS), [MIN_ADVANCE_HOURS])
+  // Regra em lib/antecedencia.js — a mesma do PC e do resumo do checkout. Aqui
+  // estavam 4h cravadas contra as 3h do servidor.
+  const DEFAULT_MIN_ADVANCE_HOURS = HORAS_PADRAO_TRANSFER
+  const MIN_ADVANCE_HOURS = horasDeAntecedencia('transfer', matched?.transfers?.min_advance_hours)
+  const minBookable = useMemo(() => primeiroReservavel(MIN_ADVANCE_HOURS), [MIN_ADVANCE_HOURS])
   const minDate = useMemo(() => startOfDay(minBookable), [minBookable])
   // Horário mínimo: só restringe quando a data escolhida é o 1º dia disponível.
   const minTime = isSameDay(date, minDate) ? format(minBookable, 'HH:mm') : '00:00'
@@ -639,7 +629,7 @@ export default function Transfers() {
   }, [date, minTime])
 
   // TRANSFER PERSONALIZADO (customDate/customTime): sem rota, usa o padrão.
-  const customMinBookable = useMemo(() => bookableAfter(DEFAULT_MIN_ADVANCE_HOURS), [])
+  const customMinBookable = useMemo(() => primeiroReservavel(DEFAULT_MIN_ADVANCE_HOURS), [])
   const customMinDate = useMemo(() => startOfDay(customMinBookable), [customMinBookable])
   const customMinTime = isSameDay(customDate, customMinDate) ? format(customMinBookable, 'HH:mm') : '00:00'
   useEffect(() => {

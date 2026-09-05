@@ -1178,7 +1178,8 @@
       "noPriceConfigured": "No price configured",
       "selectTime": "Select a time",
       "requestBooking": "Request booking",
-      "note": "You only pay after a operator accepts. Track the progress in My Bookings."
+      "note": "You only pay after a operator accepts. Track the progress in My Bookings.",
+      "adjustTime": "Adjust the date or time"
     },
     "error": {
       "requestFailed": "Error sending request. Please try again."
@@ -1214,7 +1215,12 @@
       "backHome": "Back to home"
     },
     "peopleCount": "{{count}} people",
-    "capacityInsufficient": "Insufficient capacity for {{count}} people"
+    "capacityInsufficient": "Insufficient capacity for {{count}} people",
+    "advance": {
+      "title": "Minimum notice",
+      "description": "This service needs at least {{hours}}h notice. Choose from {{datetime}} onwards.",
+      "at": "at"
+    }
   },
   "reviewsPg": {
     "title": "Verified reviews",

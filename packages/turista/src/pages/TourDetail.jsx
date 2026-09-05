@@ -205,6 +205,7 @@ export default function TourDetail() {
           service_id:            tour.id,
           vehicles:              [],
           booking_cutoff_time:   tour.booking_cutoff_time || null,
+          min_advance_hours:     tour.min_advance_hours ?? null,
           open_editing:          true,
         },
       })
@@ -230,6 +231,7 @@ export default function TourDetail() {
           service_id:            tour.id,
           vehicles:              cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(vehicle.base_price) || 0 })),
           booking_cutoff_time:   tour.booking_cutoff_time || null,
+          min_advance_hours:     tour.min_advance_hours ?? null,
           open_editing:          true,
         },
       })

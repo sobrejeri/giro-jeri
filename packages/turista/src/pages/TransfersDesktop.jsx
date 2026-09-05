@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { PlaceInput, suggestVehicles, VehicleRow, shortPlace } from './Transfers'
 import { isHighSeasonIso } from '../lib/season'
+import { horasDeAntecedencia, primeiroReservavel, HORAS_PADRAO_TRANSFER } from '../lib/antecedencia'
 import { useCart } from '../contexts/CartContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
 import { format, startOfDay, addDays, isToday, isSameDay } from 'date-fns'
@@ -287,20 +288,12 @@ export default function TransfersDesktop() {
   // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
   // anteriores a "agora + N horas". Padrão 4h; a rota pode definir a sua
   // (transfers.min_advance_hours, via admin) — mesma regra do mobile.
-  const DEFAULT_MIN_ADVANCE_HOURS = 4
-  const bookableAfter = (hours) => {
-    const p = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Fortaleza',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    }).formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a }, {})
-    const d = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), 0)
-    d.setHours(d.getHours() + hours)
-    return d
-  }
-
-  const MIN_ADVANCE_HOURS = matched?.transfers?.min_advance_hours ?? DEFAULT_MIN_ADVANCE_HOURS
-  const minBookable = useMemo(() => bookableAfter(MIN_ADVANCE_HOURS), [MIN_ADVANCE_HOURS])
+  // Regra em lib/antecedencia.js — a mesma do celular e do resumo do checkout.
+  // Aqui estavam 4h cravadas, enquanto o servidor usa 3h: a tela recusava
+  // horários que a API aceitaria, e o cliente não tinha como saber por quê.
+  const DEFAULT_MIN_ADVANCE_HOURS = HORAS_PADRAO_TRANSFER
+  const MIN_ADVANCE_HOURS = horasDeAntecedencia('transfer', matched?.transfers?.min_advance_hours)
+  const minBookable = useMemo(() => primeiroReservavel(MIN_ADVANCE_HOURS), [MIN_ADVANCE_HOURS])
   const minDateIso  = format(minBookable, 'yyyy-MM-dd')
   // Horário mínimo: só restringe quando a data escolhida é o 1º dia disponível.
   const minTime = date === minDateIso ? format(minBookable, 'HH:mm') : '00:00'
@@ -315,7 +308,7 @@ export default function TransfersDesktop() {
   const advanceOk = date > minDateIso || (date === minDateIso && (time || '') >= minTime)
 
   // Translado personalizado: sem rota, usa a antecedência padrão.
-  const customMinBookable = useMemo(() => bookableAfter(DEFAULT_MIN_ADVANCE_HOURS), [])
+  const customMinBookable = useMemo(() => primeiroReservavel(DEFAULT_MIN_ADVANCE_HOURS), [])
   const customMinDateIso  = format(customMinBookable, 'yyyy-MM-dd')
   const customMinTime = customDate === customMinDateIso ? format(customMinBookable, 'HH:mm') : '00:00'
   useEffect(() => {
