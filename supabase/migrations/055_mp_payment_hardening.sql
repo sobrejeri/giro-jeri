@@ -28,6 +28,17 @@ ALTER TABLE payment_events ADD COLUMN IF NOT EXISTS gateway_transaction_id VARCH
 CREATE UNIQUE INDEX IF NOT EXISTS payment_events_gateway_event_id_key
   ON payment_events(gateway_event_id) WHERE gateway_event_id IS NOT NULL;
 
+-- O webhook pode chegar ANTES do INSERT local. Nesse caso o evento fica gravado
+-- com payment_id nulo e é reconciliado depois pelo gateway_transaction_id —
+-- este índice é o que torna essa varredura barata a cada pagamento criado.
+CREATE INDEX IF NOT EXISTS payment_events_gateway_transaction_id_idx
+  ON payment_events(gateway_transaction_id) WHERE gateway_transaction_id IS NOT NULL;
+
+COMMENT ON COLUMN payment_events.payment_id IS
+  'Nulo enquanto o evento do gateway chega antes do pagamento local existir; preenchido na reconciliação.';
+COMMENT ON COLUMN payment_attempts.attempt_status IS
+  'processing = alguém está falando com o gateway; call_failed = a chamada lançou e a tentativa pode ser retomada com a MESMA chave de idempotência; demais valores = status devolvido pelo gateway.';
+
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS approval_claimed_at TIMESTAMPTZ;
 
 CREATE OR REPLACE FUNCTION claim_payment_approval(p_payment_id UUID)
