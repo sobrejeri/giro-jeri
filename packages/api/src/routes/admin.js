@@ -2622,4 +2622,141 @@ function sumByStatus(rows, direction, status) {
     .reduce((s, r) => s + Number(r.amount), 0);
 }
 
+// ── GET /api/admin/payments/audit ─────────────────────
+// Auditoria de uma tentativa de pagamento: junta o que o banco tem com o que o
+// Mercado Pago diz, e responde as perguntas que se faz depois de uma recusa —
+// quantas linhas existem para a transação, qual foi o status_detail real, se o
+// webhook chegou, se houve efeito duplicado.
+//
+// Existe porque, sem ela, auditar exigia abrir o Supabase, o painel do MP e o
+// log do Render em três abas e cruzar à mão. Só leitura: não cobra, não
+// reprocessa, não altera nada.
+//
+// Uso: /api/admin/payments/audit?booking_code=GJ0CJF00
+//      /api/admin/payments/audit?payment_id=<uuid interno>
+//      /api/admin/payments/audit?mp_id=<id da cobrança no MP>
+router.get('/payments/audit', requireAdmin, async (req, res, next) => {
+  try {
+    const { booking_code, payment_id, mp_id } = req.query;
+
+    let q = supabase
+      .from('payments')
+      .select('id, booking_id, gateway_name, gateway_transaction_id, payment_method, status, ' +
+              'amount_gross, installments, card_brand, card_last_four, gateway_fee_pct, ' +
+              'split_operator_id, split_application_fee, ledger_created, paid_at, created_at, ' +
+              'bookings(booking_code, operator_id, status_commercial, status_operational, total_amount)')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (payment_id)   q = q.eq('id', payment_id);
+    else if (mp_id)   q = q.eq('gateway_transaction_id', String(mp_id));
+
+    let { data: linhas, error } = await q;
+    if (error) throw error;
+
+    if (booking_code) {
+      linhas = (linhas || []).filter((p) => p.bookings?.booking_code === booking_code);
+      if (!linhas.length) {
+        const { data: bk } = await supabase
+          .from('bookings').select('id').eq('booking_code', booking_code).maybeSingle();
+        if (bk) {
+          const r = await supabase
+            .from('payments')
+            .select('id, booking_id, gateway_name, gateway_transaction_id, payment_method, status, ' +
+                    'amount_gross, installments, card_brand, card_last_four, gateway_fee_pct, ' +
+                    'split_operator_id, split_application_fee, ledger_created, paid_at, created_at, ' +
+                    'bookings(booking_code, operator_id, status_commercial, status_operational, total_amount)')
+            .eq('booking_id', bk.id)
+            .order('created_at', { ascending: false });
+          linhas = r.data || [];
+        }
+      }
+    }
+
+    if (!linhas?.length) return res.status(404).json({ error: 'Nenhum pagamento encontrado para o filtro informado' });
+
+    const alvo = linhas[0];
+
+    // Quantas linhas existem para ESTA transação — a pergunta que o erro de
+    // unicidade levantou. O esperado é exatamente 1.
+    let registrosDaTransacao = null;
+    if (alvo.gateway_transaction_id) {
+      const { count } = await supabase
+        .from('payments')
+        .select('id', { count: 'exact', head: true })
+        .eq('gateway_transaction_id', alvo.gateway_transaction_id);
+      registrosDaTransacao = count;
+    }
+
+    // Webhooks recebidos para este pagamento.
+    const { data: eventos } = await supabase
+      .from('payment_events')
+      .select('id, event_name, processing_status, created_at')
+      .eq('payment_id', alvo.id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    // A verdade sobre a cobrança vem do Mercado Pago, não da nossa linha.
+    let mp = null, mpErro = null;
+    if (alvo.gateway_name === 'mercado_pago' && alvo.gateway_transaction_id
+        && !String(alvo.gateway_transaction_id).startsWith('TEST-')) {
+      try {
+        const { getMpPaymentAudit } = await import('../services/mercadoPago.js');
+        const { getOperatorMp } = await import('./payments.js');
+        const opMp = await getOperatorMp(alvo.bookings?.operator_id);
+        mp = await getMpPaymentAudit(alvo.gateway_transaction_id, opMp?.token);
+      } catch (e) { mpErro = e.message; }
+    }
+
+    // Tentativas anteriores da mesma reserva: antifraude do MP reage a
+    // repetição de valor/pagador, e é isso que se quer enxergar aqui.
+    const { data: irmas } = await supabase
+      .from('payments')
+      .select('id, gateway_transaction_id, status, amount_gross, created_at')
+      .eq('booking_id', alvo.booking_id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    res.json({
+      pagamento: {
+        payment_id_interno:     alvo.id,
+        booking_id:             alvo.booking_id,
+        booking_code:           alvo.bookings?.booking_code || null,
+        gateway:                alvo.gateway_name,
+        gateway_transaction_id: alvo.gateway_transaction_id,
+        payment_method:         alvo.payment_method,
+        status_no_banco:        alvo.status,
+        amount_gross:           alvo.amount_gross,
+        installments:           alvo.installments,
+        cartao:                 alvo.card_brand ? `${alvo.card_brand} ****${alvo.card_last_four || '????'}` : null,
+        ledger_created:         alvo.ledger_created,
+        paid_at:                alvo.paid_at,
+        created_at:             alvo.created_at,
+      },
+      banco: {
+        registros_para_esta_transacao: registrosDaTransacao,
+        duplicidade: registrosDaTransacao == null ? 'sem id de gateway'
+          : registrosDaTransacao === 1 ? 'não — exatamente 1 registro'
+          : `SIM — ${registrosDaTransacao} registros`,
+        tentativas_desta_reserva: (irmas || []).length,
+      },
+      mercado_pago: mp || { erro: mpErro || 'não consultado (pagamento fora do MP)' },
+      split: {
+        aplicado:        alvo.split_operator_id ? 'sim' : 'não',
+        operador_id:     alvo.split_operator_id || null,
+        application_fee: alvo.split_application_fee ?? null,
+        // Confere o que foi de fato cobrado como comissão contra o valor bruto.
+        pct_efetivo: (alvo.split_application_fee != null && Number(alvo.amount_gross) > 0)
+          ? Math.round((Number(alvo.split_application_fee) / Number(alvo.amount_gross)) * 10000) / 100
+          : null,
+      },
+      webhook: {
+        eventos_recebidos: (eventos || []).length,
+        eventos: eventos || [],
+      },
+      tentativas: irmas || [],
+    });
+  } catch (err) { next(err); }
+});
+
 export default router;

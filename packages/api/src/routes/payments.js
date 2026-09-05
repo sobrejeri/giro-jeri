@@ -638,6 +638,13 @@ const COLUNA_AUSENTE = new Set(['PGRST204', '42703'])
 const nomeDaColunaNoErro = (msg = '') =>
   (msg.match(/'([^']+)' column/) || msg.match(/column "([^"]+)"/) || [])[1] || null
 
+// Identificador da tentativa de pagamento, derivado do token do cartão sem
+// carregá-lo: mesmo token → mesmo id; token novo → id novo. Serve para compor
+// a chave de idempotência sem colocar credencial em cabeçalho nem em log.
+function idDaTentativa(cardToken) {
+  return crypto.createHash('sha256').update(String(cardToken || '')).digest('hex').slice(0, 16)
+}
+
 async function inserirPagamento(row) {
   let tentativa = { ...row }
   const camposPerdidos = []
@@ -1028,10 +1035,18 @@ router.post('/intent', authenticate, async (req, res, next) => {
           payerEmail:      userInfo.data?.email,
           payerDoc:        payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
           externalRef:     booking.id,
-          // Uma chave por TENTATIVA, não por reserva: o token do cartão é de
-          // uso único, então reenvio da mesma tentativa não cobra duas vezes e
-          // uma tentativa nova (cartão corrigido) é de fato uma cobrança nova.
-          idempotencyKey:  `${booking.id}:${card_token}`,
+          // Uma chave por TENTATIVA, não por reserva: reenvio da mesma
+          // tentativa (timeout, toque duplo) não cobra duas vezes, e uma
+          // tentativa nova — cartão corrigido — é de fato uma cobrança nova.
+          // Com a chave fixa por reserva, o MP repetia a cobrança recusada
+          // anterior sem tocar no cartão novo.
+          //
+          // O identificador da tentativa é um HASH do token, nunca o token: a
+          // chave viaja em cabeçalho e aparece em log, e credencial de
+          // pagamento não deve estar em nenhum dos dois. O hash é estável para
+          // a mesma tentativa e diferente para outra, que é tudo que a
+          // idempotência precisa.
+          idempotencyKey:  `turiva:${booking.id}:${idDaTentativa(card_token)}`,
           sellerAccessToken: split?.sellerAccessToken,
           applicationFee:    split?.applicationFee,
           // Débito no Brasil exige autenticação do emissor. Ver mercadoPago.js.

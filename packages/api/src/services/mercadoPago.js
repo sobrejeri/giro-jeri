@@ -305,6 +305,47 @@ export async function getMpPaymentStatus(mpId, sellerAccessToken) {
   return null
 }
 
+// Auditoria: a cobrança COMPLETA no Mercado Pago, não só o status.
+// `getMpPaymentStatus` devolve uma string — suficiente para decidir o fluxo,
+// inútil para descobrir POR QUE uma cobrança foi recusada. Aqui vem o
+// status_detail, o meio de pagamento, as parcelas e a comissão aplicada.
+// Nada sensível: o MP nunca devolve número completo nem CVV.
+export async function getMpPaymentAudit(mpId, sellerAccessToken) {
+  const tentativas = sellerAccessToken ? [sellerAccessToken, null] : [null]
+  let ultimoErro = null
+  for (const token of tentativas) {
+    const client = paymentClientFor(token)
+    if (!client) continue
+    try {
+      const r = await client.get({ id: mpId })
+      if (!r?.status) continue
+      return {
+        conta_consultada:    token ? 'operador' : 'plataforma',
+        payment_id:          String(r.id),
+        status:              r.status,
+        status_detail:       r.status_detail,
+        payment_method_id:   r.payment_method_id,
+        payment_type_id:     r.payment_type_id,
+        installments:        r.installments,
+        transaction_amount:  r.transaction_amount,
+        application_fee:     r.application_fee ?? null,
+        external_reference:  r.external_reference,
+        date_created:        r.date_created,
+        date_approved:       r.date_approved,
+        // E-mail do pagador só como domínio — o suficiente para comparar com a
+        // conta recebedora sem despejar dado pessoal no relatório.
+        payer_email_dominio: r.payer?.email ? String(r.payer.email).split('@')[1] : null,
+        collector_id:        r.collector_id ?? null,
+        payer_id:            r.payer?.id ?? null,
+        card_last_four:      r.card?.last_four_digits ?? null,
+        live_mode:           r.live_mode ?? null,
+      }
+    } catch (err) { ultimoErro = err }
+  }
+  if (ultimoErro) throw ultimoErro
+  return null
+}
+
 // ── OAuth: autorização e troca de código ──────────────
 export function buildOAuthAuthorizeUrl({ redirectUri, state }) {
   const params = new URLSearchParams({
