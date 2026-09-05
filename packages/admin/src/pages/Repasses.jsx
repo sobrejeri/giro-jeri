@@ -149,6 +149,58 @@ const PERIODOS = [
   { id: 'prox30',  label: 'Próximos 30', range: () => [hojeIso(), maisDias(30)] },
 ]
 
+// ── Por que a tela está vazia ────────────────────────────────────────────────
+// Fatos do servidor, em linguagem de gente. Só aparece quando não há nada a
+// mostrar: com repasse na tela, ninguém precisa de diagnóstico.
+function Diagnostico() {
+  const [aberto, setAberto] = useState(false)
+  const { data, isLoading } = useQuery({
+    queryKey: ['diagnostico-repasses'],
+    queryFn:  () => api.diagnosticoRepasses(),
+    enabled:  aberto,
+  })
+
+  if (!aberto) {
+    return (
+      <div className="text-center pb-2">
+        <button onClick={() => setAberto(true)}
+          className="text-xs font-semibold text-brand hover:underline">
+          Por que está vazio?
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-2 border-t border-gray-800 pt-4">
+      {isLoading ? (
+        <p className="text-xs text-gray-500 text-center py-3">Conferindo…</p>
+      ) : !data ? (
+        <p className="text-xs text-gray-500 text-center py-3">Não foi possível conferir agora.</p>
+      ) : (
+        <>
+          {data.conclusao && (
+            <p className="text-sm text-gray-200 bg-gray-800/60 rounded-xl px-4 py-3 mb-3">
+              {data.conclusao}
+            </p>
+          )}
+          <ul className="space-y-1.5">
+            {data.checagens?.map((c, i) => (
+              <li key={i} className="text-xs flex items-start gap-2">
+                <span className={c.ok ? 'text-emerald-500' : 'text-amber-500'}>{c.ok ? '✓' : '!'}</span>
+                <span className="text-gray-400">
+                  {c.item}: <span className="text-gray-200">{c.valor}</span>
+                  {c.dica && <span className="block text-gray-500 mt-0.5">{c.dica}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  )
+}
+
 function RepassesOperadores() {
   const [status, setStatus] = useState('pending')
   const [aberto, setAberto] = useState(null)   // operador expandida
@@ -266,6 +318,9 @@ function RepassesOperadores() {
               ? (de || ate ? 'Nenhum repasse pendente neste período.' : 'Nenhum repasse pendente.')
               : 'Nada aqui.'}
           </p>
+          {/* Tela vazia sem explicação vira adivinhação — e custou uma sessão
+              inteira. Aqui ela mesma responde por que está vazia. */}
+          <Diagnostico />
         </CardBody></Card>
       ) : totais.map((t) => {
         // Mesma chave que a API usou para somar o grupo — sem isso os itens

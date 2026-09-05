@@ -672,6 +672,118 @@ router.post('/payouts/backfill', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── GET /api/admin/diagnostico/repasses ────────────────
+// Por que a tela de repasses está vazia?
+//
+// Existe porque a pergunta atravessou uma sessão inteira sem resposta: a tela
+// mostrava zero e nem o dono nem eu conseguíamos dizer se era falta de
+// migration, split ligado, valor errado ou nada pago. Cada hipótese exigia uma
+// consulta SQL manual, e adivinhar custou várias rodadas.
+//
+// Só leitura. Devolve fatos, não opinião.
+router.get('/diagnostico/repasses', requireAdmin, async (_req, res, next) => {
+  try {
+    const out = { checagens: [], conclusao: null };
+    const add = (item, valor, ok, dica = null) => out.checagens.push({ item, valor, ok, dica });
+
+    // 1) A tabela dos repasses existe?
+    let tabelaOk = true;
+    let totalPayouts = 0;
+    try {
+      const { count, error } = await supabase
+        .from('booking_payouts').select('id', { count: 'exact', head: true });
+      if (error) throw error;
+      totalPayouts = count || 0;
+    } catch (e) {
+      if (e?.code === '42P01') { tabelaOk = false; }
+      else throw e;
+    }
+    add('Tabela booking_payouts', tabelaOk ? 'existe' : 'NÃO EXISTE', tabelaOk,
+        tabelaOk ? null : 'Rode a migration 080_repasses_por_reserva.sql no Supabase.');
+    if (tabelaOk) {
+      add('Repasses registrados', String(totalPayouts), totalPayouts > 0,
+          totalPayouts > 0 ? null : 'Nenhum repasse foi criado ainda.');
+    }
+
+    // 2) Há pagamento aprovado? Sem isso não há repasse a criar.
+    const { data: aprovados } = await supabase
+      .from('payments')
+      .select('id, amount_gross, booking_id, split_operator_id, payment_method, created_at')
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    const nAprovados = (aprovados || []).length;
+    add('Pagamentos aprovados', String(nAprovados), nAprovados > 0,
+        nAprovados > 0 ? null : 'Nenhuma cobrança aprovada — não há o que repassar.');
+
+    // 3) Alguma cobrança foi DIVIDIDA no ato?
+    const comSplit = (aprovados || []).filter((p) => p.split_operator_id);
+    add('Cobranças divididas pelo gateway (split)', String(comSplit.length), true,
+        comSplit.length > 0
+          ? 'O operador recebeu direto; estas aparecem como "pago pelo gateway".'
+          : 'Nenhuma foi dividida — o valor caiu inteiro na plataforma e o repasse é manual.');
+
+    // 4) As reservas desses pagamentos têm operador? Sem operador não há a quem
+    //    repassar, e o repasse simplesmente não nasce.
+    const bookingIds = [...new Set((aprovados || []).map((p) => p.booking_id).filter(Boolean))];
+    let semOperador = 0, comOperador = 0;
+    if (bookingIds.length) {
+      const { data: bs } = await supabase
+        .from('bookings').select('id, operator_id, total_amount').in('id', bookingIds);
+      for (const b of bs || []) (b.operator_id ? comOperador++ : semOperador++);
+    }
+    add('Reservas pagas COM operador', String(comOperador), comOperador > 0,
+        comOperador > 0 ? null : 'Sem operador atribuído não existe repasse a criar.');
+    if (semOperador > 0) {
+      add('Reservas pagas SEM operador', String(semOperador), false,
+          'Estas nunca gerarão repasse — ninguém foi atribuído.');
+    }
+
+    // 5) O valor chega? Foi o defeito real: a coluna lida não existia.
+    const semValor = (aprovados || []).filter((p) => !(Number(p.amount_gross) > 0)).length;
+    add('Pagamentos com valor gravado', String(nAprovados - semValor), semValor === 0,
+        semValor === 0 ? null : `${semValor} pagamento(s) sem amount_gross — não dá para repartir.`);
+
+    // 6) Configuração do split
+    const { data: cfgRows } = await supabase
+      .from('system_settings').select('setting_key, setting_value')
+      .in('setting_key', ['payment_split_single_operator', 'payment_gateway', 'payment_split_admin_pct']);
+    const cfg = Object.fromEntries((cfgRows || []).map((r) => [r.setting_key, r.setting_value]));
+    add('Split no ato (chave)', cfg.payment_split_single_operator || '(não existe)',
+        cfg.payment_split_single_operator === 'true',
+        cfg.payment_split_single_operator === 'true'
+          ? 'Ligado: o operador recebe direto e não há repasse manual a fazer.'
+          : 'Desligado: a plataforma recebe tudo e repassa depois.');
+    add('Gateway ativo', cfg.payment_gateway || '(não existe)', cfg.payment_gateway === 'mercado_pago');
+
+    // 7) Operadores prontos para receber por split
+    const { data: ops } = await supabase
+      .from('users').select('full_name, mp_access_token, mp_public_key')
+      .eq('user_type', 'operator').eq('is_active', true);
+    const prontos = (ops || []).filter((u) => u.mp_access_token && u.mp_public_key).length;
+    add('Operadores prontos para split (token + chave pública)',
+        `${prontos} de ${(ops || []).length}`, prontos > 0,
+        prontos > 0 ? null : 'Sem conta conectada, o split não aplica — cai no repasse manual.');
+
+    // ── Conclusão em uma frase ────────────────────────────────────────────
+    if (!tabelaOk) {
+      out.conclusao = 'A tabela dos repasses não existe. Rode a migration 080 e depois use "Gerar repasses faltantes".';
+    } else if (nAprovados === 0) {
+      out.conclusao = 'Ainda não há cobrança aprovada. Nada a repassar.';
+    } else if (comOperador === 0) {
+      out.conclusao = 'As reservas pagas não têm operador atribuído — não há a quem repassar.';
+    } else if (totalPayouts === 0 && comSplit.length === 0) {
+      out.conclusao = 'Há reserva paga com operador e nenhum repasse foi criado. Use o botão "Gerar repasses faltantes".';
+    } else if (totalPayouts === 0 && comSplit.length > 0) {
+      out.conclusao = 'O operador recebeu direto pelo gateway (split). Não há repasse manual a fazer — os valores aparecem nas abas "Pagos" e "Todos".';
+    } else {
+      out.conclusao = `${totalPayouts} repasse(s) registrados. Se a tela está vazia, confira a aba (A pagar / Pagos / Todos) e o período.`;
+    }
+
+    res.json(out);
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/admin/financial ───────────────────────────
 router.get('/financial', requireAdmin, async (req, res, next) => {
   try {

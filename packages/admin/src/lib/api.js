@@ -127,6 +127,8 @@ export const api = {
   payAllPayouts:       (body)                          => request('/api/admin/payouts/pay-all', { method: 'POST', body }),
   // Cria os repasses que faltaram em reservas já pagas. Idempotente.
   backfillPayouts:     (body = {})                     => request('/api/admin/payouts/backfill', { method: 'POST', body }),
+  // Por que a tela de repasses está vazia. Só leitura.
+  diagnosticoRepasses: ()                              => request('/api/admin/diagnostico/repasses'),
   getOperatorVehicles: (operatorId)                    => request(`/api/admin/operators/${operatorId}/vehicles`),
   setOperatorVehicle:  (operatorId, vehicleId, body)   => request(`/api/admin/operators/${operatorId}/vehicles/${vehicleId}`, { method: 'PUT', body }),
   // Modais operados pelo operador (076): o corte grosso do roteamento.
