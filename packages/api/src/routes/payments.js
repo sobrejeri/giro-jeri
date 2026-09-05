@@ -178,7 +178,11 @@ async function computeChargedTotal({ data, userId }) {
         }
       }
       if (r && typeof r.totalAmount === 'number') {
-        chargedTotal     = r.totalAmount
+        // Arredonda: o motor devolve o total de contas com percentual (alta
+        // temporada, feriado), e `5 * 1.15` dá 5.749999999999999 em JavaScript.
+        // Os outros caminhos deste mesmo bloco já arredondavam; este não, e era
+        // por aqui que o passeio chegava ao gateway com casas demais.
+        chargedTotal     = Math.round(Number(r.totalAmount) * 100) / 100
         couponId         = r.couponId || null
         discountAmount   = Number(r.discountAmount) || 0
         seasonAdditional = Number(r.seasonAdditional) || 0
@@ -375,6 +379,27 @@ async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg) {
   // recusaria — nos dois casos, manual.
   if (!(applicationFee >= 0) || applicationFee >= chargedTotal) {
     console.warn('[split] comissão de %s%% inviável para R$ %s — mantendo manual', pct, chargedTotal)
+    return null
+  }
+
+  // A parte do operador precisa cobrir a taxa que o próprio Mercado Pago cobra
+  // da cobrança. Se sobrar menos que isso, ele recusa o pagamento inteiro — e a
+  // mensagem que devolve fala do VALOR, não da comissão, então ninguém liga uma
+  // coisa à outra. Com 97% de comissão numa reserva de R$ 5,00 sobram R$ 0,15
+  // para o operador, e a taxa de cartão do MP é maior que isso.
+  //
+  // 5% é o teto entre os métodos (cartão à vista ~4,98%; PIX ~0,99%). Usar o
+  // maior para os dois erra para o lado seguro: na dúvida cobra sem split, o
+  // dinheiro fica com a plataforma e o repasse é lançado. O contrário é a venda
+  // ser recusada na cara do cliente.
+  const sobraDoOperador = Math.round((chargedTotal - applicationFee) * 100) / 100
+  const taxaEstimadaMP  = Math.round(chargedTotal * 0.05 * 100) / 100
+  if (sobraDoOperador <= taxaEstimadaMP) {
+    console.warn(
+      '[split] sobra de R$ %s para o operador não cobre a taxa do gateway (~R$ %s) em R$ %s — ' +
+      'cobrando sem split para o Mercado Pago não recusar a venda',
+      sobraDoOperador, taxaEstimadaMP, chargedTotal,
+    )
     return null
   }
   return { sellerAccessToken: opMp.token, applicationFee, operatorId, publicKey: opMp.publicKey }

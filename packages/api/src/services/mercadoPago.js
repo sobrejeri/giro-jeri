@@ -26,6 +26,25 @@ function paymentClientFor(sellerAccessToken) {
   return mp ? new Payment(mp) : null
 }
 
+// Valor em reais no formato que o Mercado Pago aceita.
+//
+// O gateway recusa com "Invalid value for transaction_amount" qualquer coisa
+// que não seja um número positivo com no máximo 2 casas. E é fácil chegar aqui
+// com lixo de ponto flutuante: acréscimo de temporada é percentual, e
+// `5 * 1.15` dá 5.749999999999999 em JavaScript. Na tela isso aparece como
+// "R$ 5,75" — o cliente vê um valor válido e o pagamento é recusado com uma
+// mensagem que não diz nada.
+//
+// Trava na FRONTEIRA de propósito: é o último ponto por onde todo pagamento
+// passa. Corrigir só na origem deixaria o próximo caminho novo desprotegido.
+function valorParaMP(v, campo = 'transaction_amount') {
+  const n = Math.round(Number(v) * 100) / 100
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`Valor inválido para ${campo}: ${v}`)
+  }
+  return n
+}
+
 // Formata uma data no padrão que o Mercado Pago espera em date_of_expiration:
 // ISO 8601 com offset (ex.: 2026-06-24T21:45:00.000+00:00). O MP pode recusar o
 // formato UTC com "Z".
@@ -50,7 +69,7 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
   const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
 
   const body = {
-    transaction_amount: amount,
+    transaction_amount: valorParaMP(amount),
     description,
     payment_method_id:  'pix',
     external_reference: String(externalRef),
@@ -67,7 +86,9 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
   }
   // Split: comissão da plataforma quando o pagamento cai na conta do operador
   if (sellerAccessToken && applicationFee > 0) {
-    body.application_fee = Math.round(applicationFee * 100) / 100
+    // A comissão também passa pela trava: `application_fee` com casas demais é
+    // recusado pelo mesmo motivo, e ela nasce de um percentual.
+    body.application_fee = valorParaMP(applicationFee, 'application_fee')
   }
 
   const response = await client.create({ body })
@@ -112,7 +133,7 @@ export async function createPixPaymentSplit({ amount, description, payerEmail, p
   const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
 
   const body = {
-    transaction_amount: amount,
+    transaction_amount: valorParaMP(amount),
     description,
     payment_method_id:  'pix',
     external_reference: String(externalRef),
@@ -176,7 +197,7 @@ export async function createCardPayment({
   if (!client) throw new Error('Mercado Pago não configurado (access token ausente)')
 
   const body = {
-    transaction_amount: amount,
+    transaction_amount: valorParaMP(amount),
     description,
     installments:       Number(installments) || 1,
     payment_method_id:  paymentMethodId,
@@ -204,7 +225,9 @@ export async function createCardPayment({
 
   // Split: comissão da plataforma quando o pagamento cai na conta do operador
   if (sellerAccessToken && applicationFee > 0) {
-    body.application_fee = Math.round(applicationFee * 100) / 100
+    // A comissão também passa pela trava: `application_fee` com casas demais é
+    // recusado pelo mesmo motivo, e ela nasce de um percentual.
+    body.application_fee = valorParaMP(applicationFee, 'application_fee')
   }
 
   const response = await client.create({
