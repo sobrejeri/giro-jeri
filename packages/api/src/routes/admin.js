@@ -894,14 +894,16 @@ router.get('/operational', requireOperator, async (req, res, next) => {
 
     let query = supabase
       .from('bookings')
+      // ATENÇÃO: nada de comentário `--` aqui dentro. Isto NÃO é SQL — é a lista
+      // de colunas que vai no `select` do PostgREST, e ele lê `--` como nome de
+      // coluna. Foi assim que este endpoint quebrou inteiro e os painéis do
+      // operador e do admin ficaram zerados, sem nenhum erro visível na tela.
+      //
+      // `created_at` está aqui porque o painel ordena pela entrada da
+      // solicitação — a data do serviço não diz quando o pedido chegou.
       .select(`
         id, booking_code, service_type, service_id, booking_mode, user_id, operator_id,
-        order_group_id,
-        -- Quando a solicitação ENTROU. É por aqui que o painel ordena: quem
-        -- acompanha a operação quer ver o pedido novo no topo, e a data do
-        -- SERVIÇO não diz isso (um passeio marcado para daqui a um mês pode ter
-        -- sido pedido hoje).
-        created_at,
+        order_group_id, created_at,
         service_date, service_time, people_count, total_amount,
         status_commercial, status_operational,
         pickup_place_name, destination_place_name, special_notes,
