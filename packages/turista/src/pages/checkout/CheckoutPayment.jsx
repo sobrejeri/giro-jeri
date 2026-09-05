@@ -292,6 +292,10 @@ export default function CheckoutPayment() {
       total_price, service_name, cover_image_url,
       existing_booking_id: existing_booking_id || undefined,
       order_group_id: order_group_id || undefined,
+      // Com QUAL chave pública o cartão foi tokenizado. O servidor usa isso
+      // para não dividir uma cobrança cujo token pertence a outra conta — o
+      // Mercado Pago recusaria o token, com uma mensagem que não explica nada.
+      mp_public_key: sellerKey || import.meta.env.VITE_MP_PUBLIC_KEY || undefined,
       ...cardFields,
     })
 

@@ -38,6 +38,11 @@ const intentSchema = z.object({
   installments:       z.number({ coerce: true }).int().min(1).max(12).default(1),
   payment_method_id:  z.string().min(1).optional(),
   issuer_id:          z.string().optional(),
+  // Chave PÚBLICA com que o app tokenizou o cartão. Não é segredo (ela vive no
+  // navegador); serve para o servidor saber em QUAL conta o token foi criado.
+  // Sem isso não há como detectar a incompatibilidade que quebra o split — ver
+  // a checagem em `contextoSplitOperadorUnico`.
+  mp_public_key:      z.string().max(200).optional(),
   // CPF/CNPJ do pagador. Aceita com ou sem máscara e salva apenas números.
   payer_doc: z.preprocess(
     (v) => (typeof v === 'string' ? v.replace(/\D/g, '') : v),
@@ -372,7 +377,7 @@ async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg) {
     console.warn('[split] comissão de %s%% inviável para R$ %s — mantendo manual', pct, chargedTotal)
     return null
   }
-  return { sellerAccessToken: opMp.token, applicationFee, operatorId }
+  return { sellerAccessToken: opMp.token, applicationFee, operatorId, publicKey: opMp.publicKey }
 }
 
 async function getSplitContext(booking, chargedTotal, cfg) {
@@ -383,7 +388,7 @@ async function getSplitContext(booking, chargedTotal, cfg) {
     if (!opMp) return null
     const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
     const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
-    return { sellerAccessToken: opMp.token, applicationFee, operatorId: booking?.operator_id }
+    return { sellerAccessToken: opMp.token, applicationFee, operatorId: booking?.operator_id, publicKey: opMp.publicKey }
   }
   return contextoSplitOperadorUnico([booking], chargedTotal, cfg)
 }
@@ -682,6 +687,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       service_name, cover_image_url,
       coupon_code, existing_booking_id, order_group_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc,
+      mp_public_key,
     } = parsed.data
 
     const isGroup = !!order_group_id
@@ -872,7 +878,9 @@ router.post('/intent', authenticate, async (req, res, next) => {
       // Motor de pernas (Onda A) ligado: quando o pedido tem 2+ operadores
       // com pernas aceitas, monta split nativo N-recebedores; com 1 (ou sem
       // pernas), cai no MESMO caminho de sempre (mode:'single').
-      const split = isGroup
+      // `let`, não `const`: a checagem da chave do cartão logo abaixo pode
+      // anular o split, e anular é o caminho seguro.
+      let split = isGroup
         ? await getSplitContextForGroup(groupBookings, chargedTotal, cfg)
         : (await isBookingLegsEngineEnabled())
           ? await getSplitContextForBooking(booking, chargedTotal, cfg)
@@ -899,6 +907,40 @@ router.post('/intent', authenticate, async (req, res, next) => {
           return res.status(422).json({
             error: 'Este pedido tem operadores diferentes por perna. Pagamento com cartão para pedidos multi-operador ainda não é suportado — pague via PIX.',
           })
+        }
+
+        // ── Token do cartão x conta que vai cobrar ────────
+        // O cartão é tokenizado com a chave PÚBLICA de uma aplicação e cobrado
+        // com o access token de outra. Se as duas não forem a mesma, o Mercado
+        // Pago recusa o token — com uma mensagem que não explica nada.
+        //
+        // O app só busca a chave do operador quando a reserva JÁ EXISTE. Numa
+        // reserva criada e paga no mesmo passo — o link direto do operador
+        // (/c/<slug>), que nasce atribuída — ele tokeniza com a chave da
+        // PLATAFORMA e o split cobraria na conta do operador. Cartão recusado,
+        // sem explicação, e só em produção.
+        //
+        // Então: cartão só é dividido quando a chave que tokenizou é a mesma do
+        // operador que vai receber. Não batendo, cai no modelo manual — o
+        // dinheiro fica com a plataforma e o repasse é lançado. Fail-closed: a
+        // venda acontece, e o acerto se resolve depois.
+        // A regra é de IGUALDADE COMPROVADA, não de diferença detectada: só
+        // divide quando dá para afirmar que as duas chaves são a mesma. Se
+        // faltar qualquer um dos lados — o app não informou, ou o operador está
+        // conectado sem `mp_public_key` gravada — não há como verificar, e não
+        // verificar é motivo suficiente para não dividir.
+        if (split) {
+          const mesmaConta = !!split.publicKey && !!mp_public_key && split.publicKey === mp_public_key
+          if (!mesmaConta) {
+            console.warn(
+              '[split] não dá para afirmar que o cartão foi tokenizado na conta do operador ' +
+              '(operador=%s app=%s) — cobrando sem split, reserva %s',
+              split.publicKey ? 'com chave' : 'SEM chave',
+              mp_public_key ? 'informou' : 'NÃO informou',
+              booking.id,
+            )
+            split = null
+          }
         }
 
         // ── Cartão: sem fallback fake — erro propaga ──────
