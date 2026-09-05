@@ -126,6 +126,45 @@ export function repartirReserva(total, operador, modal, pctPlataformaGeral = 0) 
   return { comissao, plataforma, execucao, executorFixo, divideComExecutor: true };
 }
 
+/**
+ * Percentual que fica com a PLATAFORMA nesta reserva, num lugar só.
+ *
+ * Existia em DOIS lugares que se ignoravam:
+ *   · o razão (financial_ledger) usava `users.platform_split_pct` do operador,
+ *     senão a configuração global — e nunca olhava o modal;
+ *   · o repasse (booking_payouts) usava `service_modals.platform_commission_pct`,
+ *     senão a configuração global — e nunca olhava o operador.
+ *
+ * Com 97% no cadastro do operador e outro valor no global, o razão dizia que ele
+ * tinha R$ 0,17 a receber e a tela de repasses mandava pagar outro valor. Duas
+ * verdades sobre o mesmo dinheiro, e nenhuma das duas telas dava pista disso.
+ *
+ * Ordem, do mais específico para o mais geral:
+ *   1. acordo com AQUELE operador  (users.platform_split_pct)
+ *   2. regra da CATEGORIA          (service_modals.platform_commission_pct)
+ *   3. padrão da casa              (system_settings.payment_split_admin_pct)
+ *
+ * O operador vem primeiro porque é um acordo com um parceiro específico; o
+ * modal é o padrão de uma categoria de serviço. Esta ordem também preserva
+ * exatamente o que o razão já fazia — o número que hoje está no ar não muda.
+ */
+export async function pctDaPlataforma(booking, modal, geral) {
+  if (booking?.operator_id) {
+    try {
+      const { data: op } = await supabase
+        .from('users').select('platform_split_pct').eq('id', booking.operator_id).maybeSingle();
+      if (op?.platform_split_pct != null) return Number(op.platform_split_pct);
+    } catch (err) {
+      // Sem a leitura do operador, seguir para a regra mais geral é melhor que
+      // falhar: o repasse existir com o percentual padrão é recuperável; não
+      // existir some com o registro da dívida.
+      console.error('[payouts] pct do operador indisponível:', err?.message);
+    }
+  }
+  if (modal?.platform_commission_pct != null) return Number(modal.platform_commission_pct);
+  return Number(geral) || 0;
+}
+
 // Carrega o modal do serviço e o percentual geral — os dois insumos da conta.
 async function contextoDoRateio(booking) {
   const slug = await modalDaReserva(booking);
@@ -140,7 +179,12 @@ async function contextoDoRateio(booking) {
   const { data: cfg } = await supabase
     .from('system_settings').select('setting_value')
     .eq('setting_key', 'payment_split_admin_pct').maybeSingle();
-  return { modal, geral: Number(cfg?.setting_value) || 0 };
+  const geral = Number(cfg?.setting_value) || 0;
+  // Resolve AQUI e injeta no modal: `repartirReserva` é função pura e não pode
+  // consultar banco. Assim a conta do repasse passa a usar o mesmo percentual
+  // que o razão.
+  const pct = await pctDaPlataforma(booking, modal, geral);
+  return { modal: { ...(modal || {}), platform_commission_pct: pct }, geral };
 }
 
 /**

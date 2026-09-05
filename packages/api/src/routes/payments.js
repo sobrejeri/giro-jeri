@@ -1982,12 +1982,18 @@ async function orderCommissionRows(booking, payment, effectiveDate, cfg) {
   const total = Number(booking.total_amount || 0)
   if (!(total > 0)) return []
 
-  let pct = Number(cfg?.payment_split_admin_pct) || 0
-  if (booking.operator_id) {
-    const { data: op } = await supabase
-      .from('users').select('platform_split_pct').eq('id', booking.operator_id).maybeSingle()
-    if (op?.platform_split_pct != null) pct = Number(op.platform_split_pct)
+  // MESMO resolvedor do repasse (services/payouts.js). Antes cada lado tinha o
+  // seu, e eles se ignoravam: o razão nunca olhava o modal, o repasse nunca
+  // olhava o acordo com o operador. Duas verdades sobre o mesmo dinheiro.
+  const { pctDaPlataforma, modalDaReserva } = await import('../services/payouts.js')
+  const slug = await modalDaReserva(booking).catch(() => null)
+  let modal = null
+  if (slug) {
+    const { data } = await supabase
+      .from('service_modals').select('platform_commission_pct').eq('slug', slug).maybeSingle()
+    modal = data || null
   }
+  const pct = await pctDaPlataforma(booking, modal, Number(cfg?.payment_split_admin_pct) || 0)
   const commission = Math.round(total * (pct / 100) * 100) / 100
   const payout     = Math.round((total - commission) * 100) / 100
   return [
