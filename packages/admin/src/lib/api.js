@@ -102,6 +102,12 @@ export const api = {
   updateMe:     (body)       => request('/api/auth/me', { method: 'PATCH', body }),
   uploadPhoto:  (photo_data) => request('/api/auth/me/photo', { method: 'POST', body: { photo_data } }),
 
+  // Por que o cartão é recusado e o PIX não. Pergunta ao Mercado Pago o que a
+  // conta do operador realmente aceita — habilitação e recusa por risco chegam
+  // aqui com a MESMA mensagem, e só o gateway sabe distinguir.
+  diagnosticarCartao: (operatorId) =>
+    request(`/api/payments/diagnostico-cartao${operatorId ? `?operator_id=${operatorId}` : ''}`),
+
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),

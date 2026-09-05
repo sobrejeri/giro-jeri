@@ -257,6 +257,19 @@ function SplitPorOperador({ globalAdminPct, qc }) {
 
   const operators = data?.data || []
 
+  // ── Diagnóstico do cartão ────────────────────────────────────────────────
+  // cc_rejected_high_risk é a MESMA mensagem para causas diferentes: cartão do
+  // cliente, comportamento suspeito, ou a conta do operador simplesmente sem
+  // cartão liberado. PIX é habilitado quase sempre de imediato; cartão exige
+  // verificação. Sem perguntar ao Mercado Pago, os casos são indistinguíveis —
+  // e a diferença decide se há algo a corrigir no código ou no cadastro.
+  const [diagnostico, setDiagnostico] = useState(null)   // { operatorId, dados } | { operatorId, erro }
+  const diagMut = useMutation({
+    mutationFn: (operatorId) => api.diagnosticarCartao(operatorId),
+    onSuccess: (dados, operatorId) => setDiagnostico({ operatorId, dados }),
+    onError:   (err, operatorId) => setDiagnostico({ operatorId, erro: err?.message || 'Falhou' }),
+  })
+
   // Isenção de Mercado Pago: usada no "operador da casa", quando a própria
   // plataforma opera e paga os motoristas por fora (aba Repasses).
   const exemptMut = useMutation({
@@ -289,7 +302,72 @@ function SplitPorOperador({ globalAdminPct, qc }) {
     updateMut.mutate({ id: op.id, pct: pct === '' ? null : Number(pct) })
   }
 
-  function clearOverride(op) {
+  // Lê o diagnóstico para quem não vai abrir o JSON: o que a conta aceita, e a
+// conclusão em uma frase. O número de métodos ativos por tipo é a resposta —
+// crédito em zero significa habilitação pendente, não código errado.
+function DiagnosticoCartao({ resultado }) {
+  const { dados, erro } = resultado
+  if (erro) {
+    return (
+      <p className="mt-2 text-[11px] text-red-400 bg-red-950/40 border border-red-900/50 rounded px-2 py-1.5">
+        Não foi possível consultar: {erro}
+      </p>
+    )
+  }
+
+  const op  = dados?.operador
+  const pl  = dados?.plataforma
+  const res = op?.resumo
+  const creditoOk = (res?.credito_ativo ?? 0) > 0
+
+  const Linha = ({ rotulo, valor, ok }) => (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-gray-500">{rotulo}</span>
+      <span className={ok === undefined ? 'text-gray-300' : ok ? 'text-green-400' : 'text-red-400'}>
+        {valor}
+      </span>
+    </div>
+  )
+
+  return (
+    <div className="mt-2 text-[11px] rounded-lg bg-gray-950 border border-gray-800 p-2.5 space-y-2">
+      {op?.conta?.erro ? (
+        <p className="text-red-400">
+          Conta do operador: {op.conta.erro}
+          {op.conta.http ? ` (HTTP ${op.conta.http})` : ''}
+        </p>
+      ) : (
+        <div className="space-y-1">
+          <Linha rotulo="Conta do operador" valor={`${op?.conta?.apelido || '—'} · ${op?.conta?.id || '—'}`} />
+          <Linha rotulo="Ambiente" valor={op?.ambiente || '—'} ok={op?.ambiente === 'production'} />
+          {res && (
+            <>
+              <Linha rotulo="Crédito ativo" valor={res.credito_ativo} ok={creditoOk} />
+              <Linha rotulo="Débito ativo"  valor={res.debito_ativo}  ok={res.debito_ativo > 0} />
+              <Linha rotulo="PIX ativo"     valor={res.pix_ativo}     ok={res.pix_ativo > 0} />
+            </>
+          )}
+        </div>
+      )}
+
+      {pl?.resumo && (
+        <div className="pt-2 border-t border-gray-800 space-y-1">
+          <p className="text-gray-600">Plataforma, para comparar</p>
+          <Linha rotulo="Crédito ativo" valor={pl.resumo.credito_ativo} ok={pl.resumo.credito_ativo > 0} />
+          <Linha rotulo="PIX ativo"     valor={pl.resumo.pix_ativo}     ok={pl.resumo.pix_ativo > 0} />
+        </div>
+      )}
+
+      {dados?.conclusao && (
+        <p className={`pt-2 border-t border-gray-800 ${creditoOk ? 'text-gray-400' : 'text-amber-400'}`}>
+          {dados.conclusao}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function clearOverride(op) {
     updateMut.mutate({ id: op.id, pct: null })
   }
 
@@ -350,7 +428,20 @@ function SplitPorOperador({ globalAdminPct, qc }) {
                       >
                         {op.mp_payout_exempt ? 'exigir MP' : 'isentar'}
                       </button>
+                      {op.mp_user_id && (
+                        <button
+                          onClick={() => { setDiagnostico(null); diagMut.mutate(op.id) }}
+                          disabled={diagMut.isPending}
+                          className="text-[10px] text-gray-500 hover:text-gray-300 underline disabled:opacity-50"
+                        >
+                          {diagMut.isPending && diagMut.variables === op.id ? 'consultando…' : 'testar cartão'}
+                        </button>
+                      )}
                     </div>
+
+                    {diagnostico?.operatorId === op.id && (
+                      <DiagnosticoCartao resultado={diagnostico} />
+                    )}
                   </div>
 
                   {/* Percentuais */}
