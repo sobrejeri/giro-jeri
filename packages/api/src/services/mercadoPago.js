@@ -31,6 +31,15 @@ export function sanitizedPaymentResult(response) {
     transaction_amount: response?.transaction_amount == null ? null : Number(response.transaction_amount),
     installments: response?.installments == null ? null : Number(response.installments),
     external_reference: response?.external_reference == null ? null : String(response.external_reference),
+    // Conciliação: quando o MP aprovou, quanto ele cobrou de taxa e quanto
+    // sobrou líquido. Nenhum destes carrega dado de cartão ou do portador — são
+    // os números que o financeiro precisa e que antes se perdiam no snapshot.
+    date_approved: response?.date_approved || null,
+    fee_amount: Array.isArray(response?.fee_details)
+      ? Math.round(response.fee_details.reduce((s, f) => s + (Number(f?.amount) || 0), 0) * 100) / 100
+      : null,
+    net_received_amount: response?.transaction_details?.net_received_amount == null
+      ? null : Number(response.transaction_details.net_received_amount),
   }
 }
 
@@ -75,6 +84,16 @@ function mpDate(d) {
          `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000${sign}${oh}:${om}`
 }
 
+// O Mercado Pago exige o e-mail REAL do pagador (identidade fictícia derruba a
+// aprovação e o antifraude). Quando a conta não tem e-mail, o problema é do
+// cadastro, não do servidor: 422 dizendo o que fazer, em vez de um 500 genérico
+// que faz o cliente repetir a tentativa para sempre.
+function semEmailDoComprador() {
+  const err = new Error('Sua conta está sem e-mail cadastrado, e o Mercado Pago exige o e-mail do pagador. Adicione um e-mail no seu perfil e tente de novo.')
+  err.status = 422
+  return err
+}
+
 export async function createPixPayment({ amount, description, payerEmail, payerName, payerDoc, externalRef, sellerAccessToken, applicationFee }) {
   const client = paymentClientFor(sellerAccessToken)
   // Sem token nenhum (nem da plataforma, nem da cooperativa) = configuração
@@ -85,7 +104,7 @@ export async function createPixPayment({ amount, description, payerEmail, payerN
   const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
   const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
 
-  if (!payerEmail) throw new Error('E-mail do comprador ausente; pagamento não criado.')
+  if (!payerEmail) throw semEmailDoComprador()
   const parts = String(payerName || '').trim().split(/\s+/).filter(Boolean)
   const body = {
     transaction_amount: amount,
@@ -149,7 +168,7 @@ export async function createPixPaymentSplit({ amount, description, payerEmail, p
   const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
   const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
 
-  if (!payerEmail) throw new Error('E-mail do comprador ausente; pagamento não criado.')
+  if (!payerEmail) throw semEmailDoComprador()
   const parts = String(payerName || '').trim().split(/\s+/).filter(Boolean)
   const body = {
     transaction_amount: amount,
@@ -243,7 +262,7 @@ export async function createCardPayment({
   // Sem fallback fake para cartão — erro propaga para o caller.
   const client = paymentClient || paymentClientFor(sellerAccessToken)
   if (!client) throw new Error('Mercado Pago não configurado (access token ausente)')
-  if (!payerEmail) throw new Error('E-mail do comprador ausente; pagamento não criado.')
+  if (!payerEmail) throw semEmailDoComprador()
   if (!idempotencyKey) throw new Error('payment_attempt_id ausente; pagamento não criado.')
 
   const body = {
@@ -284,26 +303,42 @@ export async function createCardPayment({
   return { ...normalizeCardPaymentResponse(response, installments), diagnostic }
 }
 
-export async function findMpPaymentByExternalReference(externalRef, sellerAccessToken) {
-  const client = paymentClientFor(sellerAccessToken)
+// Consulta que NÃO pode derrubar quem chamou. É usada para descobrir se uma
+// cobrança existe; "não consegui perguntar" e "não existe" são coisas
+// diferentes para quem lê, mas ambas significam "ainda não sei" — e lançar aqui
+// vira HTTP 500 no webhook, que faz o Mercado Pago reentregar em loop.
+async function consultaSegura(rotulo, fn) {
+  try {
+    return await fn()
+  } catch (err) {
+    console.error('[mp] %s falhou: %s', rotulo, err?.message)
+    return null
+  }
+}
+
+export async function findMpPaymentByExternalReference(externalRef, sellerAccessToken, paymentClient) {
+  const client = paymentClient || paymentClientFor(sellerAccessToken)
   if (!client) return null
-  const found = await client.search({ options: { external_reference: String(externalRef), limit: 1 } })
-  const id = found?.results?.[0]?.id
-  if (!id) return null
-  return client.get({ id })
+  return consultaSegura(`busca por external_reference=${externalRef}`, async () => {
+    const found = await client.search({ options: { external_reference: String(externalRef), limit: 1 } })
+    const id = found?.results?.[0]?.id
+    if (!id) return null
+    return client.get({ id })
+  })
 }
 
 export async function getMpPaymentStatus(mpId, sellerAccessToken) {
   // Pagamento com split vive na conta da cooperativa → consultar com o token dela.
   const client = paymentClientFor(sellerAccessToken)
   if (!client) return null
-  const r = await client.get({ id: mpId })
-  return sanitizedPaymentResult(r)
+  return consultaSegura(`consulta do pagamento ${mpId}`, async () =>
+    sanitizedPaymentResult(await client.get({ id: mpId })))
 }
 
-export async function getMpPayment(mpId, sellerAccessToken) {
-  const client = paymentClientFor(sellerAccessToken)
-  return client ? client.get({ id: mpId }) : null
+export async function getMpPayment(mpId, sellerAccessToken, paymentClient) {
+  const client = paymentClient || paymentClientFor(sellerAccessToken)
+  if (!client) return null
+  return consultaSegura(`consulta do pagamento ${mpId}`, () => client.get({ id: mpId }))
 }
 
 // ── OAuth: autorização e troca de código ──────────────

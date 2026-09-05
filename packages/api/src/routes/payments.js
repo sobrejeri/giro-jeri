@@ -9,7 +9,10 @@ import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateTransferAdvance } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
 import { sweepExpiredLegBookings } from '../services/legFlow.js'
-import { approvePaymentOnce, executePaymentAttempt, PaymentAttemptInProgressError, processWebhookOnce } from '../services/paymentFlow.js'
+import {
+  approvePaymentOnce, executePaymentAttempt, PaymentAttemptInProgressError, processWebhookOnce,
+  TENTATIVA_EM_VOO_MS, TENTATIVA_CHAMADA_FALHOU,
+} from '../services/paymentFlow.js'
 
 const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -241,8 +244,50 @@ async function claimCardAttempt(attemptId, bookingId) {
   if (inserted.error?.code !== '23505') throw inserted.error
   const existing = await supabase.from('payment_attempts').select('*').eq('id', attemptId).single()
   if (existing.error) throw existing.error
-  if (existing.data.booking_id !== bookingId) throw new Error('payment_attempt_id pertence a outra reserva')
+  if (existing.data.booking_id !== bookingId) {
+    const err = new Error('payment_attempt_id pertence a outra reserva')
+    err.status = 409
+    throw err
+  }
+
+  // A tentativa é de alguém, mas esse alguém ainda está vivo? Duas situações em
+  // que não está: a chamada ao Mercado Pago LANÇOU (marcada como call_failed) ou
+  // o processo morreu sem registrar nada (reivindicada há mais que o tempo de
+  // voo). Sem esta retomada, o cliente recebe 409 para SEMPRE nessa chave.
+  //
+  // A retomada é o próprio UPDATE condicional — não um SELECT seguido de
+  // decisão. Só uma requisição encontra a linha nas condições abaixo; as
+  // demais recebem zero linhas e continuam esperando.
+  if (!existing.data.gateway_transaction_id) {
+    const limite = new Date(Date.now() - TENTATIVA_EM_VOO_MS).toISOString()
+    const agora  = new Date().toISOString()
+    const retomada = await supabase.from('payment_attempts')
+      .update({ attempt_status: 'processing', processing_started_at: agora, updated_at: agora })
+      .eq('id', attemptId)
+      .is('gateway_transaction_id', null)
+      // O timestamp vai entre aspas: sem elas o PostgREST quebra o valor nos
+      // pontos de `.000Z` e trata cada pedaço como operador.
+      .or(`attempt_status.eq.${TENTATIVA_CHAMADA_FALHOU},processing_started_at.lt."${limite}"`)
+      .select('*').maybeSingle()
+    if (retomada.data) {
+      console.warn('[pagamento] tentativa %s retomada (status anterior=%s) — mesma chave de idempotência',
+        attemptId, existing.data.attempt_status)
+      return { claimed: true, attempt: retomada.data }
+    }
+  }
+
   return { claimed: false, attempt: existing.data }
+}
+
+// Chamada ao MP lançou: a tentativa deixa de estar "em voo" para que o próximo
+// envio possa retomá-la na hora, em vez de esperar o tempo de voo inteiro.
+async function releaseCardAttempt(attemptId, err) {
+  const { error } = await supabase.from('payment_attempts')
+    .update({ attempt_status: TENTATIVA_CHAMADA_FALHOU, updated_at: new Date().toISOString() })
+    .eq('id', attemptId)
+    .is('gateway_transaction_id', null)
+  if (error) console.error('[pagamento] não deu para soltar a tentativa %s: %s', attemptId, error.message)
+  else console.warn('[pagamento] tentativa %s solta após falha na chamada ao MP: %s', attemptId, err?.message)
 }
 
 async function saveCardAttemptGatewayResult(attemptId, response) {
@@ -259,8 +304,29 @@ async function saveCardAttemptGatewayResult(attemptId, response) {
 
 async function claimPaymentApproval(paymentId) {
   const { data, error } = await supabase.rpc('claim_payment_approval', { p_payment_id: paymentId })
-  if (error) throw error
-  return data === true
+  if (!error) return data === true
+
+  // Função ausente = código no ar antes da migration 055. Sem esta saída, TODA
+  // aprovação lançaria — inclusive a de um cartão já cobrado de verdade, que
+  // ficaria sem reserva paga, sem ledger e sem e-mail. O compare-and-set
+  // equivalente em SQL puro dá a mesma garantia: só uma requisição encontra a
+  // linha ainda não aprovada.
+  if (error.code === 'PGRST202' || error.code === '42883') {
+    console.warn('[pagamento] claim_payment_approval ausente (migration 055 pendente) — usando UPDATE condicional')
+    const { data: linhas, error: updErr } = await supabase.from('payments')
+      .update({ status: 'approved', paid_at: new Date().toISOString() })
+      .eq('id', paymentId).neq('status', 'approved').select('id')
+    if (updErr) {
+      console.error('[pagamento] claim de aprovação falhou payment=%s err=%s', paymentId, updErr.message)
+      return false
+    }
+    return (linhas || []).length > 0
+  }
+
+  // Falhar aqui não pode virar "aprova mesmo assim": efeito duplicado é pior
+  // que aprovação atrasada, que o polling refaz.
+  console.error('[pagamento] claim de aprovação falhou payment=%s err=%s', paymentId, error.message)
+  return false
 }
 
 async function approveAndRunEffects(payment) {
@@ -271,10 +337,15 @@ async function reconcileOfficialPayment(payment, gatewayId) {
   const opMp = await getOperatorMp(payment.bookings?.operator_id)
   const { getMpPaymentStatus } = await import('../services/mercadoPago.js')
   const official = await getMpPaymentStatus(gatewayId, opMp?.token)
+  // Consulta indisponível: não há o que aplicar. Quem chamou precisa saber para
+  // NÃO marcar o evento como processado — senão a reentrega do Mercado Pago,
+  // que é a segunda chance, seria descartada.
   if (!official) return null
+  // Só grava o que o oficial realmente trouxe. Escrever null aqui APAGARIA o
+  // status_detail, o collector_id e o snapshot que o /intent já registrou.
   await supabase.from('payments').update({
-    status_detail: official.status_detail || null,
-    collector_id: official.collector_id || null,
+    ...(official.status_detail ? { status_detail: official.status_detail } : {}),
+    ...(official.collector_id  ? { collector_id:  official.collector_id  } : {}),
     raw_response_json: official,
   }).eq('id', payment.id)
   if (official.status === 'approved') {
@@ -293,7 +364,10 @@ async function reconcilePendingWebhookEvents(payment) {
   const { data: events = [] } = await supabase.from('payment_events').select('gateway_event_id')
     .eq('gateway_transaction_id', payment.gateway_transaction_id).eq('processing_status', 'pending')
   if (!events.length) return
-  await reconcileOfficialPayment(payment, payment.gateway_transaction_id)
+  const official = await reconcileOfficialPayment(payment, payment.gateway_transaction_id)
+  // Sem o pagamento oficial nada foi aplicado. Marcar 'processed' aqui faria o
+  // evento adiantado ser dado como resolvido sem nunca ter sido.
+  if (!official) return
   await supabase.from('payment_events').update({ processing_status: 'processed', processed_at: new Date().toISOString() })
     .eq('gateway_transaction_id', payment.gateway_transaction_id).eq('processing_status', 'pending')
 }
@@ -735,6 +809,9 @@ router.post('/intent', authenticate, async (req, res, next) => {
             return official ? normalizeCardPaymentResponse(official, cardInstallments) : null
           },
           saveGatewayResult: saveCardAttemptGatewayResult,
+          // Sem soltar a tentativa, uma falha de rede na ida ao MP prenderia o
+          // cliente em 409 para sempre nessa chave. Ver executePaymentAttempt().
+          releaseAttempt: releaseCardAttempt,
         })
         cardResult = attemptExecution.payment
 
@@ -933,7 +1010,26 @@ router.post('/intent', authenticate, async (req, res, next) => {
       return res.status(409).json({ success: false, gateway: 'mercado_pago', status: 'processing',
         status_detail: 'payment_attempt_in_progress', user_message: err.message, error: err.message })
     }
-    console.error('[payment intent] application_error code=%s', err?.code || err?.cause?.code || 'unknown')
+    // Sem mensagem nem stack, uma falha aqui é indiagnosticável: o log só dizia
+    // 'application_error code=unknown'.
+    console.error('[payment intent] falhou code=%s msg=%s\n%s',
+      err?.code || err?.cause?.code || 'unknown', err?.message, err?.stack)
+
+    // Erro de CADASTRO/REGRA (e-mail do pagador ausente, tentativa de outra
+    // reserva) não é falha do servidor. Um 500 genérico esconde do cliente o
+    // que ele precisa corrigir e faz a tentativa se repetir sem fim.
+    const status = Number(err?.status) || 500
+    if (status >= 400 && status < 500) {
+      return res.status(status).json({
+        success: false,
+        gateway: 'mercado_pago',
+        status: 'error',
+        status_detail: null,
+        user_message: err.message,
+        error: err.message,
+      })
+    }
+
     return res.status(500).json({
       success: false,
       gateway: 'mercado_pago',
@@ -1483,15 +1579,36 @@ router.post('/webhook', async (req, res, next) => {
           event_payload_json: candidate.payload,
           processing_status: 'pending',
         }).select('id').maybeSingle()
-        if (ins.error?.code === '23505') return false
-        if (ins.error) throw ins.error
-        return !!ins.data
+        if (!ins.error) return !!ins.data
+        if (ins.error.code !== '23505') throw ins.error
+
+        // Já existe — mas repetido não é sempre "ignore". Se o processamento
+        // anterior caiu no meio (queda, MP fora do ar), o evento ficou pendente,
+        // e a reentrega do Mercado Pago é justamente a segunda chance. Descartar
+        // aqui perderia a aprovação até alguém abrir a tela e o polling rodar.
+        const { data: anterior } = await supabase.from('payment_events')
+          .select('processing_status').eq('gateway_event_id', candidate.gatewayEventId).maybeSingle()
+        if (anterior?.processing_status === 'processed') return false
+        // Reentrega de evento que nunca concluiu: liga ao pagamento se ele já
+        // existir agora (na primeira vez podia ainda não existir) e reprocessa.
+        if (candidate.payment) {
+          await supabase.from('payment_events').update({ payment_id: candidate.payment.id })
+            .eq('gateway_event_id', candidate.gatewayEventId).is('payment_id', null)
+        }
+        console.warn('[webhook] evento %s reentregue sem ter concluído — reprocessando', candidate.gatewayEventId)
+        return true
       },
       processEvent: async (candidate) => {
         // Sem linha local, mantém o evento pending. O insert do payment ou o
         // polling o reconciliará; não há confirmação falsa nem evento perdido.
         if (!candidate.payment) return
-        await reconcileOfficialPayment(candidate.payment, candidate.gatewayId)
+        const official = await reconcileOfficialPayment(candidate.payment, candidate.gatewayId)
+        // Consulta ao MP indisponível: o evento segue pendente para a reentrega
+        // ou o polling resolverem. Marcar 'processed' descartaria a aprovação.
+        if (!official) {
+          console.warn('[webhook] consulta oficial indisponível para mp=%s — evento segue pendente', candidate.gatewayId)
+          return
+        }
         await supabase.from('payment_events').update({ processing_status: 'processed', processed_at: new Date().toISOString() })
           .eq('gateway_event_id', candidate.gatewayEventId)
       },
