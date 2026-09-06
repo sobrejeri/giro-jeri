@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
+import { resolveStatusReserva, rotuloDoTotal } from '../lib/statusReserva'
 import ReviewSheet from '../components/ReviewSheet'
 import { PageSpinner } from '../components/ui/Spinner'
 import {
@@ -16,25 +17,10 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 /* ── Status helpers ─────────────────────────────────────────── */
-function resolveStatus(b) {
-  const c = b.status_commercial
-  const o = b.status_operational
-  if (c === 'cancelled' || o === 'cancelled') return 'cancelled'
-  if (c === 'expired'   || o === 'expired')   return 'expired'
-  if (o === 'completed')                       return 'completed'
-  if (o === 'in_progress')                     return 'in_progress'
-  // Fluxo solicitar → aceitar → pagar:
-  if (c === 'awaiting_acceptance')             return 'waiting_acceptance' // aguardando operador aceitar
-  if (c === 'awaiting_payment')                return 'waiting_payment'    // aceita → pague agora
-  // Pago: se o operador já está cuidando (aceita/confirmada/despachada),
-  // está confirmado; senão (fluxo antigo, sem coop ainda) aguarda uma aceitar.
-  // 'awaiting_dispatch' é o estado após a coop clicar "Confirmar" — continua
-  // confirmado para o cliente (não é "aguardando aceite").
-  const HANDLED_OPS = ['assigned', 'awaiting_dispatch', 'confirmed', 'en_route', 'dispatched']
-  if (c === 'paid')                            return HANDLED_OPS.includes(o) ? 'confirmed' : 'waiting_acceptance'
-  if (HANDLED_OPS.includes(o))                 return 'confirmed'
-  return 'waiting_payment'
-}
+// A regra vive em lib/statusReserva.js e é COMPARTILHADA com o detalhe da
+// reserva. Havia duas cópias, elas divergiram, e uma reserva com pagamento
+// recusado aparecia "Confirmado · Total pago" aqui e "Aguardando pagamento" lá.
+const resolveStatus = resolveStatusReserva
 
 function getStatusCfg(t) {
   return {
@@ -228,7 +214,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
         <div className="mt-auto flex items-center justify-between gap-3 pt-0.5">
           <div>
             <p className="text-[10px] text-gray-400 leading-none">
-              {['waiting_payment', 'waiting_acceptance'].includes(status) ? 'Total' : 'Total pago'}
+              {rotuloDoTotal(status)}
             </p>
             <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">{fmt(booking.total_amount)}</p>
           </div>

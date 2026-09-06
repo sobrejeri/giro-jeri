@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
+import { resolveStatusReserva } from '../lib/statusReserva'
 import { PageSpinner } from '../components/ui/Spinner'
 import ReviewSheet from '../components/ReviewSheet'
 import {
@@ -25,24 +26,9 @@ function WhatsAppIcon() {
   )
 }
 
-// Map API dual-status fields to a single timeline status
-function resolveStatus(booking) {
-  if (!booking) return 'waiting_acceptance'
-  const c = booking.status_commercial
-  const o = booking.status_operational
-  if (c === 'cancelled' || o === 'cancelled') return 'cancelled'
-  if (o === 'completed') return 'completed'
-  if (o === 'in_progress') return 'in_progress'
-  // Fluxo solicitar → aceitar → pagar:
-  if (c === 'awaiting_acceptance') return 'waiting_acceptance' // aguardando operador
-  if (c === 'awaiting_payment' || c === 'payment_failed') return 'waiting_payment' // aceita → pague
-  // Pago = dinheiro recebido, já passou da aceitação. Independente do
-  // sub-estado operacional (assigned/awaiting_dispatch/new), pro cliente é
-  // "confirmada". completed/in_progress já foram tratados acima.
-  if (c === 'paid') return 'confirmed'
-  if (o === 'assigned') return 'confirmed'
-  return 'waiting_acceptance'
-}
+// A regra vive em lib/statusReserva.js e é COMPARTILHADA com a lista de
+// reservas. Duas cópias da mesma regra foi o que deixou as telas discordando.
+const resolveStatus = resolveStatusReserva
 
 const TOUR_GRADIENTS = [
   'from-orange-100 to-amber-50',
