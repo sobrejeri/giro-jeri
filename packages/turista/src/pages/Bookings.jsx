@@ -214,7 +214,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
         <div className="mt-auto flex items-center justify-between gap-3 pt-0.5">
           <div>
             <p className="text-[10px] text-gray-400 leading-none">
-              {rotuloDoTotal(status)}
+              {rotuloDoTotal(status, booking)}
             </p>
             <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">{fmt(booking.total_amount)}</p>
           </div>

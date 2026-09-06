@@ -50,8 +50,16 @@ export function resolveStatusReserva(b) {
 }
 
 // O rótulo do valor só pode dizer "pago" quando de fato foi pago.
-export function rotuloDoTotal(status) {
-  return status === 'confirmed' || status === 'in_progress' || status === 'completed'
-    ? 'Total pago'
-    : 'Total'
+//
+// Decidir isso pelo status DERIVADO não bastava: `in_progress` e `completed`
+// vêm do estado OPERACIONAL e passam na frente de qualquer verificação de
+// dinheiro. Uma reserva com pagamento recusado que o operador já tivesse
+// iniciado aparecia como "Total pago" — a mesma mentira que a correção
+// anterior tirou do "Confirmado", sobrevivendo nestes dois estados.
+//
+// Quem responde "entrou dinheiro?" é o comercial, e só ele. Sem a reserva em
+// mãos, o rótulo neutro: melhor não afirmar do que afirmar errado.
+export function rotuloDoTotal(status, booking) {
+  if (!booking) return 'Total'
+  return booking.status_commercial === 'paid' ? 'Total pago' : 'Total'
 }
