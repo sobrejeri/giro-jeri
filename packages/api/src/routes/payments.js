@@ -1120,6 +1120,32 @@ router.post('/intent', authenticate, async (req, res, next) => {
         // faltar qualquer um dos lados — o app não informou, ou o operador está
         // conectado sem `mp_public_key` gravada — não há como verificar, e não
         // verificar é motivo suficiente para não dividir.
+        // ── O token do cartão pertence à conta que vai cobrar? ────────────
+        // Um token de cartão é criado com a chave PÚBLICA de uma conta e só
+        // vale para o access token DAQUELA conta. Cruzar as duas faz o Mercado
+        // Pago recusar — com uma mensagem genérica que não diz que o problema
+        // é esse.
+        //
+        // O caso ao contrário do `mesmaConta` abaixo: aqui NÃO haverá split (o
+        // valor cai na plataforma), mas o app tokenizou na conta do operador.
+        // Acontece quando o split é desligado no admin e a tela do checkout já
+        // estava aberta: ela pegou a chave do operador antes da mudança e
+        // continua usando. Sem esta checagem, a cobrança sai fadada a falhar e
+        // o cliente leva "recusado por segurança" por um problema de cache.
+        if (!split && mp_public_key && booking?.operator_id) {
+          const { data: opChave } = await supabase
+            .from('users').select('mp_public_key').eq('id', booking.operator_id).maybeSingle()
+          if (opChave?.mp_public_key && opChave.mp_public_key === mp_public_key) {
+            console.warn('[split] token do cartão é da conta do operador, mas a cobrança sai na plataforma — reserva %s', booking.id)
+            const e = new Error(
+              'A tela de pagamento está desatualizada. Recarregue a página e tente de novo — ' +
+              'nenhuma cobrança foi feita.',
+            )
+            e.status = 409
+            throw e
+          }
+        }
+
         if (split) {
           const mesmaConta = !!split.publicKey && !!mp_public_key && split.publicKey === mp_public_key
           if (!mesmaConta) {

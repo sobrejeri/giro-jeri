@@ -304,3 +304,21 @@ test('o diagnóstico é restrito ao admin', async () => {
   assert.match(src, /router\.get\('\/diagnostico-cartao', authenticate, requireAdmin/,
     'expõe dados da conta do operador — não pode ficar aberto')
 })
+
+// Um token de cartão é criado com a chave PÚBLICA de uma conta e só vale para o
+// access token DAQUELA conta. Cruzar as duas faz o Mercado Pago recusar com uma
+// mensagem genérica — que é indistinguível de recusa por risco.
+//
+// Acontece de verdade: desligar o split no admin com a tela do checkout já
+// aberta. Ela pegou a chave do operador antes da mudança e continua usando,
+// enquanto o servidor passa a cobrar na plataforma.
+test('token tokenizado na conta do operador não vai para cobrança da plataforma', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /if \(!split && mp_public_key && booking\?\.operator_id\)/,
+    'sem esta checagem a cobrança sai fadada a falhar')
+  assert.match(executavel, /A tela de pagamento está desatualizada/,
+    'e o cliente precisa saber que é para recarregar, não que o cartão foi negado')
+  // O caminho oposto (split ligado, chave divergente) já existia e continua.
+  assert.match(executavel, /const mesmaConta = /)
+})
