@@ -2302,12 +2302,12 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
             await onPaymentApproved(payment)
             return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
           }
-          if (['rejected', 'cancelled'].includes(achado.status)) {
-            await supabase.from('payments')
-              .update({ status: 'failed', status_detail: achado.status_detail || null })
-              .eq('id', payment.id)
-            return res.json({ status: 'rejected', status_detail: achado.status_detail || null, booking_id: payment.booking_id })
-          }
+          // Achado por REFERÊNCIA, não por id: a busca traz todas as cobranças
+          // da reserva, inclusive recusas de tentativas antigas. Serve para
+          // descobrir aprovação, não para condenar. Recusa tem caminho próprio
+          // (webhook), que vem com o id exato da cobrança que falhou.
+          console.log('[status] cobrança %s achada por referência não está aprovada (%s)',
+            achado.id, achado.status)
         }
       } catch (err) {
         console.error('[status] resolução por external_reference falhou: %s', err.message)
@@ -2565,7 +2565,13 @@ router.post('/webhook', async (req, res, next) => {
         await onPaymentApproved(paymentForEvent)
       } else if (['rejected', 'cancelled'].includes(mpStatus)) {
         await supabase.from('payments').update({ status: 'failed' }).eq('id', paymentForEvent.id)
-        await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', paymentForEvent.booking_id)
+        // Só rebaixa quem ainda estava esperando pagar. Uma recusa que chega
+        // depois de outra tentativa ter passado não pode desfazer a reserva —
+        // aconteceu em produção, com o dinheiro já debitado no cartão.
+        await supabase.from('bookings')
+          .update({ status_commercial: 'payment_failed', payment_status: 'failed' })
+          .eq('id', paymentForEvent.booking_id)
+          .in('status_commercial', ['awaiting_payment', 'payment_failed'])
       }
 
       // Só agora o evento está concluído. Marcar antes faria uma queda no meio

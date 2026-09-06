@@ -99,6 +99,19 @@ async function conciliarUm(pagamento, { aoAprovar, resolverToken, consultarStatu
       mpStatus = achado.status || null;
       console.log('[conciliação] cobrança %s ligada à reserva %s pelo external_reference',
         achado.id, pagamento.booking_id);
+
+      // A busca por external_reference acha TODAS as cobranças daquela reserva —
+      // inclusive recusas de tentativas antigas. Ela serve para DESCOBRIR uma
+      // aprovação que não chegou até nós; não serve para condenar.
+      //
+      // Sem esta saída, uma linha pendente abandonada era ligada a uma recusa
+      // velha e derrubava a reserva. Recusa tem caminho próprio: o webhook, que
+      // vem com o id exato da cobrança que falhou.
+      if (mpStatus !== 'approved') {
+        console.log('[conciliação] cobrança %s achada por referência não está aprovada (%s) — nada a decidir',
+          achado.id, mpStatus);
+        return null;
+      }
     }
   } catch (err) {
     console.error('[conciliação] consulta ao MP falhou payment=%s: %s', pagamento.id, err.message);
@@ -109,10 +122,21 @@ async function conciliarUm(pagamento, { aoAprovar, resolverToken, consultarStatu
     console.log('[conciliação] pagamento aprovado fora do webhook payment=%s', pagamento.id);
     await aoAprovar(pagamento);
   } else if (['rejected', 'cancelled'].includes(mpStatus)) {
+    // A LINHA vira 'failed' — ela foi recusada mesmo. Mas a RESERVA não pode
+    // ser rebaixada por causa disso: um pedido pode ter várias tentativas, e
+    // uma recusa antiga não desfaz o pagamento que passou depois.
+    //
+    // Aconteceu em produção: reserva paga (dinheiro debitado no cartão do
+    // cliente) voltou para "aguardando pagamento" e passou a oferecer pagar de
+    // novo. Marcar a reserva como falha é sempre o passo mais perigoso do
+    // fluxo, e o único que precisa de permissão explícita do estado atual.
     await supabase.from('payments').update({ status: 'failed' }).eq('id', pagamento.id);
     await supabase.from('bookings')
       .update({ status_commercial: 'payment_failed', payment_status: 'failed' })
-      .eq('id', pagamento.booking_id);
+      .eq('id', pagamento.booking_id)
+      // Só rebaixa quem ainda estava esperando pagar. 'paid', 'cancelled' e
+      // qualquer estado adiante ficam intocados.
+      .in('status_commercial', ['awaiting_payment', 'payment_failed']);
   }
   // 'in_process', 'pending' e afins: segue pendente, sem mexer.
   return mpStatus;

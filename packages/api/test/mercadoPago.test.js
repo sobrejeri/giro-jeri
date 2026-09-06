@@ -670,3 +670,44 @@ test('checkout novo só depois de conferir se já pagaram no gateway', async () 
   assert.ok(posBusca > 0 && posCriar > 0, 'os dois trechos precisam existir')
   assert.ok(posBusca < posCriar, 'conferir depois de criar a preferência não evita nada')
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Uma reserva PAGA nunca pode ser rebaixada
+// ═══════════════════════════════════════════════════════════════════════════
+// Aconteceu em produção: a GJOH2F2T estava 'paid' (dinheiro debitado no cartão
+// do cliente) e voltou para 'payment_failed', passando a oferecer "Pagar agora"
+// de novo. A causa foi a conciliação: uma linha pendente abandonada foi ligada
+// a uma RECUSA de tentativa antiga, e o rebaixamento da reserva não perguntava
+// em que estado ela estava.
+//
+// Marcar a reserva como falha é o passo mais perigoso do fluxo — é o único que
+// pode desfazer dinheiro que já entrou.
+test('rebaixar reserva para falha exige que ela ainda esteja esperando pagar', async () => {
+  const rota = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const conc = await readFile(new URL('../src/services/paymentReconcile.js', import.meta.url), 'utf8')
+
+  for (const [nome, fonte] of [['webhook', rota], ['conciliação', conc]]) {
+    for (const m of fonte.matchAll(/status_commercial: 'payment_failed'/g)) {
+      const vizinhanca = fonte.slice(m.index, m.index + 420)
+      assert.match(vizinhanca, /\.in\('status_commercial', \['awaiting_payment', 'payment_failed'\]\)/,
+        `${nome}: rebaixa a reserva sem conferir o estado atual — pode desfazer um pagamento`)
+    }
+  }
+})
+
+// A busca por external_reference traz TODAS as cobranças da reserva, inclusive
+// recusas de tentativas antigas. Ela existe para descobrir uma aprovação que
+// não chegou até nós — usá-la para condenar é o que derrubou a reserva paga.
+// Recusa tem caminho próprio: o webhook, com o id exato da cobrança que falhou.
+test('busca por referência só decide aprovação, nunca recusa', async () => {
+  const conc = await readFile(new URL('../src/services/paymentReconcile.js', import.meta.url), 'utf8')
+  const executavel = conc.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /if \(mpStatus !== 'approved'\) \{[\s\S]{0,240}?return null;/,
+    'achado por referência e não aprovado: não decide nada')
+
+  const rota = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const trecho = rota.slice(rota.indexOf('buscarPagamentoPorReferencia(payment.booking_id'))
+    .slice(0, 1400)
+  assert.doesNotMatch(trecho, /status: 'failed'/,
+    'a rota de status não pode marcar falha a partir de uma busca por referência')
+})
