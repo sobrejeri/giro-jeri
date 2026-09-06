@@ -2673,7 +2673,36 @@ router.get('/payments/audit', requireAdmin, async (req, res, next) => {
       }
     }
 
-    if (!linhas?.length) return res.status(404).json({ error: 'Nenhum pagamento encontrado para o filtro informado' });
+    // Recusa no Checkout Pro pode não ter linha local: a cobrança nasce lá e o
+    // webhook só liga as pontas quando ela avança. Sem este caminho, auditar
+    // uma recusa exigia abrir o painel do Mercado Pago — justamente o que este
+    // endpoint existe para evitar. Com o número da operação em mãos, pergunta
+    // direto ao gateway.
+    if (!linhas?.length) {
+      if (mp_id) {
+        try {
+          const { getMpPaymentAudit } = await import('../services/mercadoPago.js');
+          const soNoGateway = await getMpPaymentAudit(String(mp_id), null);
+          if (soNoGateway) {
+            return res.json({
+              pagamento: null,
+              banco: {
+                registros_para_esta_transacao: 0,
+                duplicidade: 'não — esta cobrança não tem linha local',
+                observacao: 'A cobrança existe no Mercado Pago e NÃO foi gravada aqui. ' +
+                  'Normal numa recusa do Checkout Pro: a reserva segue aguardando pagamento.',
+              },
+              mercado_pago: soNoGateway,
+              webhook: { eventos_recebidos: 0, eventos: [] },
+              tentativas: [],
+            });
+          }
+        } catch (e) {
+          return res.status(502).json({ error: `Cobrança não encontrada aqui nem no Mercado Pago: ${e.message}` });
+        }
+      }
+      return res.status(404).json({ error: 'Nenhum pagamento encontrado para o filtro informado' });
+    }
 
     const alvo = linhas[0];
 
