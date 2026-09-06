@@ -764,6 +764,14 @@ async function reconciliarTentativa(payment) {
     booking_id: payment.booking_id, gateway_transaction_id: payment.gateway_transaction_id }
 }
 
+// Estados comerciais em que a reserva AINDA PODE SER PAGA.
+//
+// `payment_failed` anda junto com `awaiting_payment`: nos dois o dinheiro não
+// entrou. Tratá-lo como estado final criou um beco sem saída — cartão recusado
+// e a API respondendo 409 "esta reserva não está aguardando pagamento", sem
+// nenhum caminho de volta. Recusa é convite a tentar de novo, não fim de linha.
+const PODE_PAGAR = ['awaiting_payment', 'payment_failed']
+
 async function inserirPagamento(row, tentativaReservadaId = null) {
   let tentativa = { ...row }
   const camposPerdidos = []
@@ -932,7 +940,9 @@ router.post('/intent', authenticate, async (req, res, next) => {
         return res.status(404).json({ error: 'Grupo não encontrado nesta conta.' })
       }
       // Só cobra as reservas aguardando pagamento; ignora canceladas/pagas.
-      const payable = all.filter((b) => b.status_commercial === 'awaiting_payment')
+      // Inclui a que teve pagamento recusado — senão o combo inteiro trava
+      // depois de uma recusa num único item.
+      const payable = all.filter((b) => PODE_PAGAR.includes(b.status_commercial))
       if (payable.length === 0) {
         return res.status(409).json({
           error: 'Nenhuma reserva do grupo está pronta para pagamento. Aguarde o aceite dos operadores.',
@@ -974,13 +984,14 @@ router.post('/intent', authenticate, async (req, res, next) => {
           error: 'Reserva não encontrada nesta conta. Entre com a mesma conta que fez a reserva.',
         })
       }
-      if (existing.status_commercial !== 'awaiting_payment') {
+      if (!PODE_PAGAR.includes(existing.status_commercial)) {
         const s = existing.status_commercial
         const msg =
           s === 'awaiting_acceptance' ? 'Esta reserva ainda não foi aceita por um operador. Aguarde o aceite para pagar.' :
           s === 'paid'                ? 'Esta reserva já foi paga.' :
           s === 'cancelled'           ? 'Esta reserva foi cancelada.' :
-                                        `Esta reserva não está aguardando pagamento (status: ${s}).`
+          s === 'expired'             ? 'O prazo de pagamento desta reserva venceu. Faça uma nova solicitação.' :
+                                        'Esta reserva não pode ser paga agora. Fale com a gente pelo WhatsApp.'
         return res.status(409).json({ error: msg })
       }
 
@@ -2260,7 +2271,7 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
         await supabase.from('bookings')
           .update({ status_commercial: 'expired', payment_status: 'expired' })
           .eq('order_group_id', payment.order_group_id)
-          .eq('status_commercial', 'awaiting_payment')
+          .in('status_commercial', PODE_PAGAR)
       } else {
         await supabase.from('bookings').update({ status_commercial: 'expired', payment_status: 'expired' }).eq('id', payment.booking_id)
       }
@@ -3000,7 +3011,10 @@ async function onGroupPaymentApproved(payment) {
   // para pagar (awaiting_payment) ou já pagas (idempotência do webhook+polling).
   // Itens ainda em aceite (awaiting_acceptance) NÃO entram — não foram cobrados,
   // então não podem virar 'paid' aqui.
-  const list = (bookings || []).filter((b) => ['awaiting_payment', 'paid'].includes(b.status_commercial))
+  // `payment_failed` PRECISA entrar: é o estado de quem teve uma tentativa
+  // recusada e pagou na seguinte. Fora daqui, o dinheiro entrava e a reserva
+  // ficava sem virar 'paid' — pago e não confirmado, o pior dos dois mundos.
+  const list = (bookings || []).filter((b) => [...PODE_PAGAR, 'paid'].includes(b.status_commercial))
   if (list.length === 0) return
 
   // 1) Marca cada reserva do grupo como paga (idempotente).
