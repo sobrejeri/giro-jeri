@@ -591,6 +591,13 @@ export async function criarPreferenciaCheckoutPro({
     external_reference: String(externalRef),
     ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     statement_descriptor: 'TURIVA',
+    // NÃO enviar `purpose`. É por omissão que o Checkout Pro aceita quem NÃO
+    // tem conta no Mercado Pago: o comprador digita o cartão como convidado, sem
+    // criar cadastro nem fazer login. Com `purpose: 'wallet_purchase'` só usuário
+    // logado consegue pagar — e a maior parte dos turistas ficaria de fora.
+    //
+    // Quem tem conta ganha a opção de entrar, e aí o antifraude avalia uma
+    // pessoa com histórico. Quem não tem paga do mesmo jeito.
     payment_methods: {
       // PIX e boleto ficam de fora: o PIX tem fluxo próprio no app, que já
       // funciona, e boleto não é oferecido. Aqui é o caminho do CARTÃO.

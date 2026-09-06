@@ -493,3 +493,20 @@ test('toda configuração de pagamento editável é realmente salva', async () =
   assert.deepEqual(esquecidas, [],
     `editável mas nunca gravado: ${esquecidas.join(', ')}`)
 })
+
+// Turista sem conta no Mercado Pago é a maioria. `purpose: 'wallet_purchase'`
+// restringe o Checkout Pro a usuário LOGADO — mandá-lo deixaria essa gente sem
+// conseguir pagar. A permissão vem da OMISSÃO do campo, então é fácil alguém
+// acrescentá-lo sem perceber o efeito.
+test('quem não tem conta no Mercado Pago também paga', async () => {
+  const espiao = fetchEspiao(PREF_OK)
+  try {
+    const { criarPreferenciaCheckoutPro } = await import('../src/services/mercadoPago.js')
+    await criarPreferenciaCheckoutPro({
+      amount: 10, description: 'x', externalRef: 'bk-1', bookingId: 'bk-1',
+      payerEmail: 'cliente@exemplo.com',
+    })
+    assert.equal(espiao.chamadas[0].body.purpose, undefined,
+      "com purpose='wallet_purchase' só quem tem conta consegue pagar")
+  } finally { espiao.restaurar() }
+})
