@@ -459,15 +459,39 @@ export async function createCardPayment({
 // reserva ficaria pendente para sempre e o cliente encalharia na tela de
 // "confirmando". Esta busca é a saída independente: a tela de status pergunta
 // direto ao gateway, sem depender de ninguém avisar.
-export async function buscarPagamentoPorReferencia(externalRef, sellerAccessToken, paymentClient) {
+export async function buscarPagamentoPorReferencia(externalRef, sellerAccessToken, paymentClient, opcoes = {}) {
   const client = paymentClient || paymentClientFor(sellerAccessToken)
   if (!client) return null
   try {
     const r = await client.search({
       options: { external_reference: String(externalRef), sort: 'date_created', criteria: 'desc', limit: 10 },
     })
-    const achados = r?.results || []
+    let achados = r?.results || []
     if (!achados.length) return null
+
+    // `desdeISO` é o corte que separa "esta tentativa" de "as anteriores".
+    //
+    // Uma reserva pode ter várias tentativas ao longo de dias, e a busca traz
+    // TODAS. Sem o corte, uma recusa de ontem era atribuída à linha de hoje —
+    // foi exatamente isso que derrubou uma reserva já paga. Com ele, só entram
+    // cobranças criadas a partir do nascimento da linha que estamos resolvendo.
+    // Pediram o corte e não deu para calculá-lo? Então NÃO dá para dizer a que
+    // tentativa a cobrança pertence. Só a aprovação passa — ela é segura em
+    // qualquer tentativa da mesma reserva; a recusa não.
+    if ('desdeISO' in opcoes && !Number.isFinite(new Date(opcoes.desdeISO || '').getTime())) {
+      console.warn('[mp] busca por referência sem data de corte — só aprovação será considerada')
+      return achados.find((p) => p.status === 'approved') || null
+    }
+
+    if (opcoes.desdeISO) {
+      const corte = new Date(opcoes.desdeISO).getTime() - 60_000   // 1 min de folga p/ relógios
+      achados = achados.filter((p) => {
+        const t = new Date(p.date_created || 0).getTime()
+        return Number.isFinite(t) && t >= corte
+      })
+      if (!achados.length) return null
+    }
+
     // Aprovado tem prioridade sobre tentativa recusada anterior: o cliente pode
     // ter errado o cartão e acertado na segunda, e a reserva vale pela que deu
     // certo. Sem isso, uma recusa antiga esconderia o pagamento que passou.

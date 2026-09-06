@@ -548,7 +548,7 @@ test('o status resolve o Checkout Pro sem depender do webhook', async () => {
   const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
   assert.match(executavel, /payment\.gateway_name === 'mercado_pago' && !payment\.gateway_transaction_id/,
     'a linha sem id de cobrança precisa de um caminho próprio')
-  assert.match(executavel, /buscarPagamentoPorReferencia\(payment\.booking_id/)
+  assert.match(executavel, /buscarPagamentoPorReferencia\(\s*payment\.booking_id/)
 })
 
 test('a tela de retorno não gira para sempre', async () => {
@@ -600,7 +600,7 @@ test('a conciliação alcança o Checkout Pro, que nasce sem id de cobrança', a
   // fora justamente do mecanismo que existe para salvar webhook perdido.
   assert.doesNotMatch(executavel, /ehDoMercadoPago = \(p\) =>[\s\S]{0,120}&& p\.gateway_transaction_id\s*\n/,
     'exigir o id exclui o Checkout Pro da conciliação')
-  assert.match(executavel, /buscarPagamentoPorReferencia\(pagamento\.booking_id/)
+  assert.match(executavel, /buscarPagamentoPorReferencia\(\s*pagamento\.booking_id/)
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -665,7 +665,7 @@ test('a tela de detalhe se atualiza enquanto espera o pagamento', async () => {
 test('checkout novo só depois de conferir se já pagaram no gateway', async () => {
   const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
   const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
-  const posBusca  = executavel.indexOf('buscarPagamentoPorReferencia(booking.id')
+  const posBusca  = executavel.search(/buscarPagamentoPorReferencia\(\s*booking\.id/)
   const posCriar  = executavel.indexOf('criarPreferenciaCheckoutPro({')
   assert.ok(posBusca > 0 && posCriar > 0, 'os dois trechos precisam existir')
   assert.ok(posBusca < posCriar, 'conferir depois de criar a preferência não evita nada')
@@ -699,17 +699,60 @@ test('rebaixar reserva para falha exige que ela ainda esteja esperando pagar', a
 // recusas de tentativas antigas. Ela existe para descobrir uma aprovação que
 // não chegou até nós — usá-la para condenar é o que derrubou a reserva paga.
 // Recusa tem caminho próprio: o webhook, com o id exato da cobrança que falhou.
-test('busca por referência só decide aprovação, nunca recusa', async () => {
-  const conc = await readFile(new URL('../src/services/paymentReconcile.js', import.meta.url), 'utf8')
-  const executavel = conc.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
-  assert.match(executavel, /if \(mpStatus !== 'approved'\) \{[\s\S]{0,240}?return null;/,
-    'achado por referência e não aprovado: não decide nada')
-
+// A busca por referência traz TODAS as cobranças da reserva, de todas as
+// tentativas. O que separa uma da outra é a DATA: só cobrança nascida depois da
+// linha pode ser atribuída a ela. Sem esse corte, uma recusa de ontem derrubava
+// a reserva paga de hoje — foi o incidente.
+test('a busca por referência é limitada à tentativa que está sendo resolvida', async () => {
   const rota = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
-  const trecho = rota.slice(rota.indexOf('buscarPagamentoPorReferencia(payment.booking_id'))
-    .slice(0, 1400)
-  assert.doesNotMatch(trecho, /status: 'failed'/,
-    'a rota de status não pode marcar falha a partir de uma busca por referência')
+  const conc = await readFile(new URL('../src/services/paymentReconcile.js', import.meta.url), 'utf8')
+
+  for (const [nome, fonte] of [['rota', rota], ['conciliação', conc]]) {
+    for (const m of fonte.matchAll(/buscarPagamentoPorReferencia\(/g)) {
+      const chamada = fonte.slice(m.index, m.index + 260)
+      assert.match(chamada, /desdeISO:/, `${nome}: busca sem corte por data pode pegar outra tentativa`)
+    }
+  }
+
+  // E a data precisa REALMENTE chegar: sem created_at no SELECT, o corte some.
+  assert.match(rota, /gateway_transaction_id, created_at, expires_at/)
+  const selects = conc.match(/created_at, amount_gross/g) || []
+  assert.equal(selects.length, 2, 'os dois SELECTs da conciliação precisam trazer created_at')
+})
+
+test('sem data de corte, só aprovação é considerada', async () => {
+  const { buscarPagamentoPorReferencia } = await import('../src/services/mercadoPago.js')
+  const resultados = [
+    { id: 1, status: 'rejected', date_created: '2026-09-06T14:00:00Z' },
+    { id: 2, status: 'approved', date_created: '2026-09-05T10:00:00Z' },
+  ]
+  const client = { search: async () => ({ results: resultados }) }
+
+  // Corte pedido mas impossível de calcular: recusa NÃO passa, aprovação sim.
+  const semData = await buscarPagamentoPorReferencia('bk-1', undefined, client, { desdeISO: undefined })
+  assert.equal(semData?.id, 2, 'a recusa não pode ser atribuída sem saber a que tentativa pertence')
+
+  const soRecusa = { search: async () => ({ results: [resultados[0]] }) }
+  assert.equal(
+    await buscarPagamentoPorReferencia('bk-1', undefined, soRecusa, { desdeISO: null }), null,
+    'sem aprovação e sem corte, não devolve nada')
+})
+
+test('o corte por data descarta cobranças de tentativas anteriores', async () => {
+  const { buscarPagamentoPorReferencia } = await import('../src/services/mercadoPago.js')
+  const client = { search: async () => ({ results: [
+    { id: 1, status: 'rejected', date_created: '2026-09-05T00:29:00Z' },   // ontem
+    { id: 2, status: 'rejected', date_created: '2026-09-06T15:22:00Z' },   // esta tentativa
+  ] }) }
+  const achado = await buscarPagamentoPorReferencia('bk-1', undefined, client,
+    { desdeISO: '2026-09-06T15:20:00Z' })
+  assert.equal(achado?.id, 2, 'a recusa de ontem não pertence à linha de hoje')
+
+  const soAntigas = { search: async () => ({ results: [
+    { id: 1, status: 'rejected', date_created: '2026-09-05T00:29:00Z' },
+  ] }) }
+  assert.equal(await buscarPagamentoPorReferencia('bk-1', undefined, soAntigas,
+    { desdeISO: '2026-09-06T15:20:00Z' }), null, 'nada desta tentativa: nada a decidir')
 })
 
 // O Mercado Pago acrescenta o desfecho ao link de retorno. Sem ler isso, quem

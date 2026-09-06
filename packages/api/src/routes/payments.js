@@ -1171,7 +1171,12 @@ router.post('/intent', authenticate, async (req, res, next) => {
           const pendentes = (jaExiste || []).filter((p) => p.status === 'pending')
           if (pendentes.length) {
             const { buscarPagamentoPorReferencia } = await import('../services/mercadoPago.js')
-            const achado = await buscarPagamentoPorReferencia(booking.id, split?.sellerAccessToken)
+            // Aqui interessa SÓ aprovação: a pergunta é "já pagaram esta
+            // reserva?", para não abrir um segundo checkout. Uma recusa não
+            // impede nada e não deve ser atribuída a linha nenhuma — por isso
+            // `desdeISO: null`, que faz a busca devolver apenas o aprovado.
+            const achado = await buscarPagamentoPorReferencia(
+              booking.id, split?.sellerAccessToken, undefined, { desdeISO: null })
             if (achado?.status === 'approved') {
               console.warn('[checkout-pro] reserva %s já paga no gateway (%s) — conciliando em vez de abrir checkout',
                 booking.id, achado.id)
@@ -2234,7 +2239,7 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
   try {
     const { data: payment } = await supabase
       .from('payments')
-      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, expires_at, amount_gross, gateway_fee_pct, gateway_fee_amount, bookings(booking_code, status_commercial, operator_id)')
+      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, created_at, expires_at, amount_gross, gateway_fee_pct, gateway_fee_amount, bookings(booking_code, status_commercial, operator_id)')
       .eq('id', req.params.id)
       .single()
 
@@ -2275,7 +2280,11 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
       try {
         const { buscarPagamentoPorReferencia } = await import('../services/mercadoPago.js')
         const opMp = await getOperatorMp(payment.bookings?.operator_id)
-        const achado = await buscarPagamentoPorReferencia(payment.booking_id, opMp?.token)
+        // O corte por data é o que separa ESTA tentativa das anteriores. Sem
+        // ele, uma recusa de ontem é atribuída à linha de hoje — foi assim que
+        // uma reserva já paga foi rebaixada.
+        const achado = await buscarPagamentoPorReferencia(
+          payment.booking_id, opMp?.token, undefined, { desdeISO: payment.created_at })
         if (achado?.id) {
           const { data: ligadas, error: erroLiga } = await supabase.from('payments')
             .update({ gateway_transaction_id: String(achado.id) })
@@ -2302,10 +2311,30 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
             await onPaymentApproved(payment)
             return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
           }
-          // Achado por REFERÊNCIA, não por id: a busca traz todas as cobranças
-          // da reserva, inclusive recusas de tentativas antigas. Serve para
-          // descobrir aprovação, não para condenar. Recusa tem caminho próprio
-          // (webhook), que vem com o id exato da cobrança que falhou.
+          // Recusa: agora pode ser aplicada, porque a busca foi limitada a
+          // cobranças criadas DEPOIS desta linha — não há como atribuir a ela
+          // uma recusa de outra tentativa. Sem isto o cliente recusado ficava
+          // preso em "confirmando seu pagamento" até a tela desistir, porque o
+          // link "Voltar para <vendedor>" do Mercado Pago não traz o desfecho.
+          //
+          // A RESERVA só é rebaixada se ainda estiver esperando pagar; um
+          // pagamento que passou depois não pode ser desfeito por isso.
+          if (['rejected', 'cancelled'].includes(achado.status)) {
+            await supabase.from('payments')
+              .update({ status: 'failed', status_detail: achado.status_detail || null })
+              .eq('id', payment.id)
+            await supabase.from('bookings')
+              .update({ status_commercial: 'payment_failed', payment_status: 'failed' })
+              .eq('id', payment.booking_id)
+              .in('status_commercial', ['awaiting_payment', 'payment_failed'])
+            const { mapRejectionKey } = await import('../services/mercadoPago.js')
+            return res.json({
+              status: 'rejected', status_detail: achado.status_detail || null,
+              message_key: mapRejectionKey(achado.status_detail),
+              booking_id: payment.booking_id,
+            })
+          }
+
           console.log('[status] cobrança %s achada por referência não está aprovada (%s)',
             achado.id, achado.status)
         }

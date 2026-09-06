@@ -75,7 +75,10 @@ async function conciliarUm(pagamento, { aoAprovar, resolverToken, consultarStatu
       // as próximas consultas seguirem o caminho normal. `.is(null)` evita que
       // o webhook chegando ao mesmo tempo ligue a mesma linha duas vezes.
       const { buscarPagamentoPorReferencia } = await import('./mercadoPago.js');
-      const achado = await buscarPagamentoPorReferencia(pagamento.booking_id, token);
+      // Mesmo corte por data da rota de status: só cobranças nascidas depois
+      // desta linha podem ser atribuídas a ela.
+      const achado = await buscarPagamentoPorReferencia(
+        pagamento.booking_id, token, undefined, { desdeISO: pagamento.created_at });
       if (!achado?.id) return null;
 
       const { data: ligadas, error: erroLiga } = await supabase.from('payments')
@@ -100,15 +103,12 @@ async function conciliarUm(pagamento, { aoAprovar, resolverToken, consultarStatu
       console.log('[conciliação] cobrança %s ligada à reserva %s pelo external_reference',
         achado.id, pagamento.booking_id);
 
-      // A busca por external_reference acha TODAS as cobranças daquela reserva —
-      // inclusive recusas de tentativas antigas. Ela serve para DESCOBRIR uma
-      // aprovação que não chegou até nós; não serve para condenar.
-      //
-      // Sem esta saída, uma linha pendente abandonada era ligada a uma recusa
-      // velha e derrubava a reserva. Recusa tem caminho próprio: o webhook, que
-      // vem com o id exato da cobrança que falhou.
-      if (mpStatus !== 'approved') {
-        console.log('[conciliação] cobrança %s achada por referência não está aprovada (%s) — nada a decidir',
+      // Com o corte por data acima, o achado pertence a ESTA tentativa: dá para
+      // aplicar recusa também, não só aprovação. O que continua valendo é a
+      // trava do rebaixamento — a RESERVA só cai se ainda estiver esperando
+      // pagar, então um pagamento posterior nunca é desfeito por uma recusa.
+      if (!['approved', 'rejected', 'cancelled'].includes(mpStatus)) {
+        console.log('[conciliação] cobrança %s ainda sem desfecho (%s) — nada a decidir',
           achado.id, mpStatus);
         return null;
       }
@@ -179,7 +179,7 @@ export async function reconciliarPagamentosDoCliente(userId, ganchos) {
 
     const { data: pendentes, error } = await supabase
       .from('payments')
-      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, amount_gross, bookings!inner(user_id, operator_id, booking_code)')
+      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, created_at, amount_gross, bookings!inner(user_id, operator_id, booking_code)')
       .eq('status', 'pending')
       .eq('gateway_name', 'mercado_pago')
       .eq('bookings.user_id', userId)
@@ -210,7 +210,7 @@ export async function reconciliarLote({ limite = 25 } = {}, ganchos) {
 
   const { data: pendentes, error } = await supabase
     .from('payments')
-    .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, amount_gross, bookings(user_id, operator_id, booking_code)')
+    .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, created_at, amount_gross, bookings(user_id, operator_id, booking_code)')
     .eq('status', 'pending')
     .eq('gateway_name', 'mercado_pago')
     .gte('created_at', desde)
