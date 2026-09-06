@@ -442,3 +442,28 @@ test('checkout_pro só vale com a configuração ligada no servidor', async () =
   assert.match(executavel, /String\(cfg\.payment_card_flow \|\| 'bricks'\) !== 'checkout_pro'/,
     'o app pede, mas quem decide é o servidor')
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Configurações que a tela edita mas nunca grava
+// ═══════════════════════════════════════════════════════════════════════════
+// O Salvar de cada card manda uma LISTA EXPLÍCITA de chaves. Uma chave nova,
+// editada na tela e esquecida na lista, é marcada, salva com sucesso aparente,
+// e nunca chega ao banco — foi o que aconteceu com payment_card_flow: a caixa
+// ficava marcada e o checkout continuava no fluxo antigo.
+test('toda configuração de pagamento editável é realmente salva', async () => {
+  const jsx = await readFile(
+    new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
+
+  // O que a tela permite editar…
+  const editadas = new Set(
+    [...jsx.matchAll(/\bset\(\s*'(payment_[a-z0-9_]+)'/g)].map((m) => m[1]))
+  // …e o que cada Salvar manda para o servidor.
+  const salvas = new Set(
+    [...jsx.matchAll(/saveSection\(\s*(?:\/\/[^\n]*\n\s*)*\[([\s\S]*?)\]/g)]
+      .flatMap((m) => [...m[1].matchAll(/'(payment_[a-z0-9_]+)'/g)].map((k) => k[1])))
+
+  assert.ok(editadas.size > 5, 'o teste precisa estar realmente lendo a tela')
+  const esquecidas = [...editadas].filter((k) => !salvas.has(k))
+  assert.deepEqual(esquecidas, [],
+    `editável mas nunca gravado: ${esquecidas.join(', ')}`)
+})

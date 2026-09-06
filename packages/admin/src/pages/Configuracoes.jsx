@@ -777,8 +777,12 @@ function TabPagamentos({ settings, qc }) {
 
             <SaveRow
               onSave={() => saveSection(
+                // Toda chave editada NESTE card precisa estar aqui: o Salvar
+                // manda uma lista explícita, e o que ficar de fora é marcado na
+                // tela e nunca gravado — o pior tipo de silêncio.
                 ['payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key',
-                 'payment_gateway_webhook_secret', 'payment_split_single_operator'],
+                 'payment_gateway_webhook_secret', 'payment_split_single_operator',
+                 'payment_card_flow'],
                 'gateway',
               )}
               pending={saveMut.isPending}
