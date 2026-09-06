@@ -2178,6 +2178,45 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
       return res.json({ status: 'expired', booking_id: payment.booking_id })
     }
 
+    // ── Checkout Pro: a linha ainda não sabe o id da cobrança ────────────
+    // Ela nasce SEM gateway_transaction_id — o pagamento é criado na página do
+    // Mercado Pago. Sem esta resolução, a consulta abaixo nunca roda (ela exige
+    // o id) e o cliente fica preso em "confirmando seu pagamento" para sempre,
+    // dependendo só do webhook chegar.
+    //
+    // Aqui perguntamos ao gateway pelo external_reference, que é o id da
+    // reserva, e ligamos as duas pontas. `.is(null)` garante que o webhook
+    // chegando ao mesmo tempo não ligue a mesma linha duas vezes.
+    if (payment.status === 'pending' && payment.gateway_name === 'mercado_pago' && !payment.gateway_transaction_id) {
+      try {
+        const { buscarPagamentoPorReferencia } = await import('../services/mercadoPago.js')
+        const opMp = await getOperatorMp(payment.bookings?.operator_id)
+        const achado = await buscarPagamentoPorReferencia(payment.booking_id, opMp?.token)
+        if (achado?.id) {
+          const { error: erroLiga } = await supabase.from('payments')
+            .update({ gateway_transaction_id: String(achado.id) })
+            .eq('id', payment.id).is('gateway_transaction_id', null)
+          if (!erroLiga) {
+            payment.gateway_transaction_id = String(achado.id)
+            console.log('[status] pagamento %s ligado à reserva %s pelo external_reference',
+              achado.id, payment.booking_id)
+          }
+          if (achado.status === 'approved') {
+            await onPaymentApproved(payment)
+            return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
+          }
+          if (['rejected', 'cancelled'].includes(achado.status)) {
+            await supabase.from('payments')
+              .update({ status: 'failed', status_detail: achado.status_detail || null })
+              .eq('id', payment.id)
+            return res.json({ status: 'rejected', status_detail: achado.status_detail || null, booking_id: payment.booking_id })
+          }
+        }
+      } catch (err) {
+        console.error('[status] resolução por external_reference falhou: %s', err.message)
+      }
+    }
+
     // Se MP ativo e pendente, consulta gateway em tempo real
     if (payment.status === 'pending' && payment.gateway_name === 'mercado_pago' && payment.gateway_transaction_id && !payment.gateway_transaction_id.startsWith('TEST-')) {
       try {

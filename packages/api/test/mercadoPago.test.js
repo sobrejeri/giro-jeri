@@ -510,3 +510,50 @@ test('quem não tem conta no Mercado Pago também paga', async () => {
       "com purpose='wallet_purchase' só quem tem conta consegue pagar")
   } finally { espiao.restaurar() }
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Checkout Pro: a tela de status precisa resolver SOZINHA
+// ═══════════════════════════════════════════════════════════════════════════
+// A linha nasce sem gateway_transaction_id (o pagamento é criado na página do
+// Mercado Pago). A consulta normal do polling EXIGE esse id — sem a resolução
+// por external_reference, ela nunca roda e o cliente fica preso em
+// "confirmando seu pagamento" dependendo só do webhook chegar.
+test('a busca por referência prefere o pagamento aprovado', async () => {
+  const client = {
+    search: async () => ({ results: [
+      { id: 1, status: 'rejected', date_created: '2026-01-02' },
+      { id: 2, status: 'approved', date_created: '2026-01-01' },
+    ] }),
+  }
+  const { buscarPagamentoPorReferencia } = await import('../src/services/mercadoPago.js')
+  // Injeta pelo cliente da plataforma: sem token não há cliente.
+  const original = process.env.MP_ACCESS_TOKEN
+  process.env.MP_ACCESS_TOKEN = original
+  const achado = await buscarPagamentoPorReferencia('bk-1', undefined, client)
+  assert.equal(achado?.id, 2,
+    'uma recusa anterior não pode esconder a tentativa que passou')
+})
+
+test('busca sem resultado devolve null em vez de lançar', async () => {
+  const { buscarPagamentoPorReferencia } = await import('../src/services/mercadoPago.js')
+  assert.equal(await buscarPagamentoPorReferencia('bk-1', undefined,
+    { search: async () => ({ results: [] }) }), null)
+  assert.equal(await buscarPagamentoPorReferencia('bk-1', undefined,
+    { search: async () => { throw new Error('timeout') } }), null,
+    'falha de rede no polling não pode derrubar a tela')
+})
+
+test('o status resolve o Checkout Pro sem depender do webhook', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /payment\.gateway_name === 'mercado_pago' && !payment\.gateway_transaction_id/,
+    'a linha sem id de cobrança precisa de um caminho próprio')
+  assert.match(executavel, /buscarPagamentoPorReferencia\(payment\.booking_id/)
+})
+
+test('a tela de retorno não gira para sempre', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutProcessando.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /tentativas >= 30/, 'precisa desistir e oferecer uma saída')
+  assert.match(jsx, /Ainda confirmando/)
+})

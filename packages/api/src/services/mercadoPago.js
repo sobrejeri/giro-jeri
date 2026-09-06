@@ -452,6 +452,32 @@ export async function createCardPayment({
   }
 }
 
+// Acha a cobrança pelo external_reference (o id da reserva).
+//
+// No Checkout Pro o pagamento nasce na página do Mercado Pago, e o id dele só
+// chega até nós pelo webhook. Se o webhook atrasa, falha ou é rejeitado, a
+// reserva ficaria pendente para sempre e o cliente encalharia na tela de
+// "confirmando". Esta busca é a saída independente: a tela de status pergunta
+// direto ao gateway, sem depender de ninguém avisar.
+export async function buscarPagamentoPorReferencia(externalRef, sellerAccessToken, paymentClient) {
+  const client = paymentClient || paymentClientFor(sellerAccessToken)
+  if (!client) return null
+  try {
+    const r = await client.search({
+      options: { external_reference: String(externalRef), sort: 'date_created', criteria: 'desc', limit: 10 },
+    })
+    const achados = r?.results || []
+    if (!achados.length) return null
+    // Aprovado tem prioridade sobre tentativa recusada anterior: o cliente pode
+    // ter errado o cartão e acertado na segunda, e a reserva vale pela que deu
+    // certo. Sem isso, uma recusa antiga esconderia o pagamento que passou.
+    return achados.find((p) => p.status === 'approved') || achados[0]
+  } catch (err) {
+    console.error('[mp] busca por external_reference=%s falhou: %s', externalRef, err?.message)
+    return null
+  }
+}
+
 // A cobrança COMPLETA, não só o status. O webhook do Checkout Pro precisa do
 // `external_reference` para descobrir a qual reserva o pagamento pertence — o
 // id dele nasce na página do Mercado Pago e chega aqui sem contexto nenhum.

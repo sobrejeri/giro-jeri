@@ -309,10 +309,11 @@ function VoltandoDoMercadoPago({ paymentId }) {
 
   useEffect(() => {
     let vivo = true
+    let tentativas = 0
     const consultar = async () => {
       try {
         const r = await api.getPaymentStatus(paymentId)
-        if (!vivo) return
+        if (!vivo) return false
         if (r?.status === 'approved') {
           setStatus('approved')
           setTimeout(() => navigate('/checkout/sucesso', { state: { booking_id: r.booking_id, booking_code: r.booking_code } }), 800)
@@ -320,12 +321,32 @@ function VoltandoDoMercadoPago({ paymentId }) {
         }
         if (r?.status === 'rejected' || r?.status === 'expired') { setStatus(r.status); return true }
       } catch { /* rede instável: a próxima volta tenta de novo */ }
+      // Girar para sempre é pior que dizer "não sei ainda": depois de ~2min o
+      // desfecho não vem mais por aqui, e o cliente precisa de uma saída em vez
+      // de uma tela que nunca termina. A reserva ainda é confirmada pelo
+      // webhook — o que acaba é a espera, não o pagamento.
+      if (++tentativas >= 30) { setStatus('demorando'); return true }
       return false
     }
     consultar()
     const t = setInterval(async () => { if (await consultar()) clearInterval(t) }, 4000)
     return () => { vivo = false; clearInterval(t) }
   }, [paymentId, navigate])
+
+  if (status === 'demorando') {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="text-center max-w-sm">
+          <p className="text-[17px] font-bold text-gray-900 mb-2">Ainda confirmando</p>
+          <p className="text-[13px] text-gray-600 leading-relaxed mb-5">
+            O Mercado Pago ainda não devolveu o resultado. Se o valor foi debitado, a reserva
+            aparece em Minhas Reservas em alguns minutos — não pague de novo sem conferir lá.
+          </p>
+          <Link to="/reservas" className="text-[14px] font-semibold text-brand">Ver minhas reservas</Link>
+        </div>
+      </div>
+    )
+  }
 
   const recusado = status === 'rejected' || status === 'expired'
   return (
