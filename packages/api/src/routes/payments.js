@@ -1149,6 +1149,53 @@ router.post('/intent', authenticate, async (req, res, next) => {
             throw e
           }
 
+          // ── Antes de criar QUALQUER coisa: esta reserva já foi paga? ────
+          // No Bricks a proteção contra cobrança dupla era a reserva da
+          // tentativa (UNIQUE de payment_attempt_id). Aqui não existe cobrança
+          // nossa para reservar — o pagamento nasce lá — então a proteção tem
+          // de ser esta: nunca abrir um checkout novo para uma reserva que já
+          // tem pagamento aprovado, nem para uma que tem um checkout aberto
+          // agora. Sem isto, cada toque no botão é uma cobrança de verdade a
+          // mais, e o cliente paga duas vezes.
+          const { data: jaExiste } = await supabase.from('payments')
+            .select('id, status, raw_response_json, created_at')
+            .eq('booking_id', booking.id)
+            .in('status', ['approved', 'pending'])
+            .order('created_at', { ascending: false })
+            .limit(5)
+
+          const aprovado = (jaExiste || []).find((p) => p.status === 'approved')
+          if (aprovado) {
+            console.warn('[checkout-pro] reserva %s já tem pagamento aprovado — nenhum checkout novo', booking.id)
+            return res.json({
+              success: true, status: 'approved', ja_pago: true,
+              payment_id: aprovado.id, booking_id: booking.id, booking_code: bookingCode,
+              amount: chargedTotal,
+              user_message: 'Esta reserva já está paga. Confira em Minhas Reservas.',
+            })
+          }
+
+          // Checkout aberto há pouco: devolve o MESMO link, não um novo. Duas
+          // preferências para a mesma reserva são dois caminhos de pagamento
+          // abertos ao mesmo tempo — e o cliente pode concluir os dois.
+          const REUSO_MS = 20 * 60 * 1000
+          const emAberto = (jaExiste || []).find((p) =>
+            p.status === 'pending'
+            && p.raw_response_json?.checkout_pro
+            && p.raw_response_json?.redirect_url
+            && (Date.now() - new Date(p.created_at).getTime()) < REUSO_MS)
+          if (emAberto) {
+            console.log('[checkout-pro] reaproveitando preferência de %s para a reserva %s',
+              emAberto.id, booking.id)
+            return res.json({
+              success: true, status: 'redirect',
+              redirect_url: emAberto.raw_response_json.redirect_url,
+              preference_id: emAberto.raw_response_json.preference_id || null,
+              payment_id: emAberto.id, booking_id: booking.id,
+              booking_code: bookingCode, amount: chargedTotal,
+            })
+          }
+
           const { criarPreferenciaCheckoutPro } = await import('../services/mercadoPago.js')
           const usuario = await supabase.from('users')
             .select('email, full_name, phone').eq('id', req.user.id).single()
@@ -1204,8 +1251,14 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
           // Guarda a preferência na linha: é o rastro que liga a nossa linha ao
           // checkout que o cliente abriu, antes de existir id de pagamento.
+          // O LINK vai junto: é ele que permite devolver o mesmo checkout em vez
+          // de abrir um segundo. Sem guardá-lo, o reuso acima nunca acontece.
           await supabase.from('payments')
-            .update({ raw_response_json: { checkout_pro: true, preference_id: pref.preference_id } })
+            .update({ raw_response_json: {
+              checkout_pro: true,
+              preference_id: pref.preference_id,
+              redirect_url:  pref.redirect_url,
+            } })
             .eq('id', linha.id)
 
           console.log('[checkout-pro] preferência %s criada para reserva %s split=%s',

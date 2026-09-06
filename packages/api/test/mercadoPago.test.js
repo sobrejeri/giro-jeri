@@ -602,3 +602,34 @@ test('a conciliação alcança o Checkout Pro, que nasce sem id de cobrança', a
     'exigir o id exclui o Checkout Pro da conciliação')
   assert.match(executavel, /buscarPagamentoPorReferencia\(pagamento\.booking_id/)
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Checkout Pro: nunca abrir um segundo caminho de pagamento
+// ═══════════════════════════════════════════════════════════════════════════
+// No Bricks a proteção contra cobrança dupla é a reserva da tentativa (UNIQUE
+// de payment_attempt_id). Aqui não existe cobrança nossa para reservar — o
+// pagamento nasce na página do Mercado Pago —, então cada toque no botão criava
+// uma preferência nova e um caminho de pagamento a mais, todos concluíveis.
+// Aconteceu em produção: três linhas para a mesma reserva, duas com cobrança.
+test('reserva já paga não abre outro checkout', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /const aprovado = \(jaExiste \|\| \[\]\)\.find\(\(p\) => p\.status === 'approved'\)/)
+  assert.match(executavel, /ja_pago: true/, 'e o app precisa saber para levar ao sucesso, não ao erro')
+})
+
+test('checkout aberto há pouco devolve o MESMO link', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /const emAberto = /)
+  assert.match(executavel, /redirect_url: emAberto\.raw_response_json\.redirect_url/,
+    'duas preferências para a mesma reserva são dois caminhos concluíveis')
+  // O reuso só funciona se o link tiver sido guardado.
+  assert.match(executavel, /redirect_url:\s+pref\.redirect_url/)
+})
+
+test('o app leva à tela de sucesso quando a reserva já estava paga', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /if \(result\?\.status === 'approved'\)[\s\S]{0,200}checkout\/sucesso/)
+})

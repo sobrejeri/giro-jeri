@@ -463,6 +463,14 @@ export default function CheckoutPayment() {
         payment_method: 'credit_card',
         checkout_pro: true,
       })
+      // A reserva já estava paga (o servidor recusou abrir outro checkout).
+      // Levar para a tela de sucesso é melhor que dizer "não deu": deu, antes.
+      if (result?.status === 'approved') {
+        navigate('/checkout/sucesso', {
+          state: { ...state, booking_id: result.booking_id, booking_code: result.booking_code },
+        })
+        return
+      }
       if (!result?.redirect_url) throw new Error('O Mercado Pago não devolveu o link de pagamento.')
       // Sai do app. Quem volta é o back_url, já com o id do pagamento.
       window.location.href = result.redirect_url
