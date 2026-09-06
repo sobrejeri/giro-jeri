@@ -633,3 +633,40 @@ test('o app leva à tela de sucesso quando a reserva já estava paga', async () 
     new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
   assert.match(jsx, /if \(result\?\.status === 'approved'\)[\s\S]{0,200}checkout\/sucesso/)
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Duas telas da mesma reserva não podem discordar
+// ═══════════════════════════════════════════════════════════════════════════
+// Aconteceu em produção: a LISTA mostrava "Confirmado · Total pago" e o DETALHE
+// da MESMA reserva mostrava "Aguardando pagamento" com um botão "Pagar agora".
+// A conciliação — que é o que descobre o pagamento quando o webhook não chega —
+// rodava só na lista.
+test('o detalhe da reserva concilia igual à lista', async () => {
+  const src = await readFile(new URL('../src/routes/bookings.js', import.meta.url), 'utf8')
+  const chamadas = src.match(/await reconciliarPagamentosDoCliente\(req\.user\.id/g) || []
+  assert.equal(chamadas.length, 2, 'lista E detalhe — quem abre um ou outro vê o mesmo estado')
+})
+
+// Esperando o pagamento é EXATAMENTE quando a tela precisa se atualizar, e era
+// o único estado fora do refetch: ela congelava e seguia oferecendo pagar de
+// novo uma reserva já paga.
+test('a tela de detalhe se atualiza enquanto espera o pagamento', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/BookingDetail.jsx', import.meta.url), 'utf8')
+  const linha = jsx.match(/return \[[^\]]*\]\.includes\(s\) \? 8000 : false/)
+  assert.ok(linha, 'o refetchInterval precisa existir')
+  assert.match(linha[0], /'waiting_payment'/)
+  assert.match(jsx, /refetchOnWindowFocus: true/,
+    'voltar do Mercado Pago é uma troca de aba — precisa reler, não mostrar cache')
+})
+
+// A janela mais cara: pago no gateway, 'pending' aqui. Sem conciliar ANTES de
+// abrir o checkout, ofereceríamos pagar de novo uma reserva com dinheiro dentro.
+test('checkout novo só depois de conferir se já pagaram no gateway', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  const posBusca  = executavel.indexOf('buscarPagamentoPorReferencia(booking.id')
+  const posCriar  = executavel.indexOf('criarPreferenciaCheckoutPro({')
+  assert.ok(posBusca > 0 && posCriar > 0, 'os dois trechos precisam existir')
+  assert.ok(posBusca < posCriar, 'conferir depois de criar a preferência não evita nada')
+})

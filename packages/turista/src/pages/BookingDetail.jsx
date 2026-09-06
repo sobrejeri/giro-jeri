@@ -139,10 +139,17 @@ export default function BookingDetail() {
     queryKey:        ['booking', id],
     queryFn:         () => api.getBooking(id),
     enabled:         !!id,
+    // `waiting_payment` FALTAVA aqui — e é justamente o estado em que a tela
+    // mais precisa se atualizar: o cliente acabou de pagar e está esperando a
+    // confirmação. Sem ele, a tela congelava no estado em que carregou e
+    // continuava oferecendo "Pagar agora" numa reserva já paga.
     refetchInterval: (q) => {
       const s = resolveStatus(q.state.data)
-      return ['waiting_acceptance', 'confirmed', 'in_progress'].includes(s) ? 8000 : false
+      return ['waiting_acceptance', 'waiting_payment', 'confirmed', 'in_progress'].includes(s) ? 8000 : false
     },
+    // Ao voltar para a aba (é exatamente o que acontece na volta do Mercado
+    // Pago), relê em vez de mostrar o que estava em cache.
+    refetchOnWindowFocus: true,
   })
 
   const booking = data

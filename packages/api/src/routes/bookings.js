@@ -325,6 +325,19 @@ router.get('/:id', authenticate, async (req, res, next) => {
     // cancelada quando o cliente abre o detalhe. Best-effort e inerte com flag off.
     await sweepExpiredLegBookings().catch(() => {});
 
+    // A conciliação rodava só na LISTA. Quem abria o DETALHE direto — que é o
+    // caminho de quem acabou de pagar e quer conferir aquela reserva — via
+    // "Aguardando pagamento" e um botão "Pagar agora" numa reserva já paga.
+    // Duas telas do mesmo pedido discordando, e a mais perigosa oferecendo
+    // pagar de novo.
+    //
+    // Mesmas contenções da lista: só leitura no Mercado Pago, só pagamento
+    // 'pending', best-effort. O detalhe abre mesmo com o gateway fora do ar.
+    await reconciliarPagamentosDoCliente(req.user.id, {
+      aoAprovar:     onPaymentApproved,
+      resolverToken: async (operatorId) => (await getOperatorMp(operatorId))?.token || null,
+    }).catch(() => {});
+
     const { data, error } = await supabase
       .from('bookings')
       .select(`

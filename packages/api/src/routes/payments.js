@@ -1158,11 +1158,42 @@ router.post('/intent', authenticate, async (req, res, next) => {
           // agora. Sem isto, cada toque no botão é uma cobrança de verdade a
           // mais, e o cliente paga duas vezes.
           const { data: jaExiste } = await supabase.from('payments')
-            .select('id, status, raw_response_json, created_at')
+            .select('id, status, raw_response_json, created_at, gateway_transaction_id')
             .eq('booking_id', booking.id)
             .in('status', ['approved', 'pending'])
             .order('created_at', { ascending: false })
             .limit(5)
+
+          // Antes de decidir: alguma pendente já foi paga LÁ e nós ainda não
+          // sabemos? Esta é a janela perigosa — o cliente pagou, o webhook não
+          // chegou, nossa linha segue 'pending', e sem esta checagem abriríamos
+          // um checkout novo para uma reserva que já tem dinheiro dentro.
+          const pendentes = (jaExiste || []).filter((p) => p.status === 'pending')
+          if (pendentes.length) {
+            const { buscarPagamentoPorReferencia } = await import('../services/mercadoPago.js')
+            const achado = await buscarPagamentoPorReferencia(booking.id, split?.sellerAccessToken)
+            if (achado?.status === 'approved') {
+              console.warn('[checkout-pro] reserva %s já paga no gateway (%s) — conciliando em vez de abrir checkout',
+                booking.id, achado.id)
+              // A linha certa é a que ainda não tem cobrança ligada; `.is(null)`
+              // impede que webhook e esta chamada liguem a mesma duas vezes.
+              const alvo = pendentes.find((p) => !p.gateway_transaction_id) || pendentes[0]
+              const { data: ligadas } = await supabase.from('payments')
+                .update({ gateway_transaction_id: String(achado.id) })
+                .eq('id', alvo.id).is('gateway_transaction_id', null).select('id')
+              if ((ligadas || []).length) {
+                const { data: completo } = await supabase.from('payments')
+                  .select('*, bookings(*)').eq('id', alvo.id).maybeSingle()
+                if (completo) await onPaymentApproved(completo)
+              }
+              return res.json({
+                success: true, status: 'approved', ja_pago: true,
+                payment_id: alvo.id, booking_id: booking.id, booking_code: bookingCode,
+                amount: chargedTotal,
+                user_message: 'Esta reserva já está paga. Confira em Minhas Reservas.',
+              })
+            }
+          }
 
           const aprovado = (jaExiste || []).find((p) => p.status === 'approved')
           if (aprovado) {
