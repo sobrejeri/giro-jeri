@@ -104,8 +104,15 @@ test('a rota grava o snapshot seguro, não a resposta crua', async () => {
 test('a rota aceita o e-mail que o Brick coletou quando a conta não tem', async () => {
   const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
   const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
-  const usos = executavel.match(/payerEmail:\s*\w+\.data\?\.email \|\| payer_email/g) || []
-  assert.equal(usos.length, 3, 'cartão, PIX e PIX com split precisam do mesmo fallback real')
+  // Conta-agnóstico de propósito: caminhos novos (Checkout Pro) não podem
+  // quebrar o teste, mas TODO caminho que manda e-mail precisa do mesmo
+  // fallback. Um que use só o e-mail da conta bloquearia quem se cadastrou
+  // por telefone.
+  const todos    = executavel.match(/payerEmail:\s*[^,\n]+/g) || []
+  const comQueda = executavel.match(/payerEmail:\s*\w+\.data\?\.email \|\| payer_email/g) || []
+  assert.ok(todos.length >= 3, 'cartão, PIX e PIX com split, no mínimo')
+  assert.equal(comQueda.length, todos.length,
+    `${todos.length - comQueda.length} caminho(s) mandam e-mail sem o fallback do Brick`)
   assert.match(executavel, /payer_email:\s*z\.string\(\)\.email\(\)/,
     'e o servidor precisa validar que é um e-mail de verdade')
 })
@@ -246,8 +253,10 @@ test('cartão sem documento nenhum é recusado antes do gateway', async () => {
 // vem, precisa ser válido.
 test('PIX segue aceitando pagador sem documento', async () => {
   const src = await readFile(new URL('../src/services/mercadoPago.js', import.meta.url), 'utf8')
-  const usos = src.match(/\.\.\.identificacaoDoPagador\(payerDoc\)/g) || []
-  assert.equal(usos.length, 2, 'os dois caminhos de PIX, sem obrigatoriedade')
+  // PIX (dois caminhos) e a preferência do Checkout Pro: nenhum deles exige
+  // documento, porque o gateway não exige neles.
+  const opcionais = src.match(/\.\.\.identificacaoDoPagador\(payerDoc\)/g) || []
+  assert.ok(opcionais.length >= 2, 'os caminhos de PIX seguem sem obrigatoriedade')
   assert.match(src, /identificacaoDoPagador\(payerDoc, \{ obrigatorio: true \}\)/,
     'só o cartão exige — é o gateway que exige')
 })
@@ -321,4 +330,115 @@ test('token tokenizado na conta do operador não vai para cobrança da plataform
     'e o cliente precisa saber que é para recarregar, não que o cartão foi negado')
   // O caminho oposto (split ligado, chave divergente) já existia e continua.
   assert.match(executavel, /const mesmaConta = /)
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Checkout Pro — a cobrança acontece na página do Mercado Pago
+// ═══════════════════════════════════════════════════════════════════════════
+// Existe porque o Checkout API (Bricks) vinha recusando por risco: o MP avalia
+// uma transação num site que ele não controla. No Checkout Pro ele avalia o
+// próprio checkout, com o comprador possivelmente logado.
+function fetchEspiao(resposta, ok = true) {
+  const chamadas = []
+  const original = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    chamadas.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null, init })
+    return { ok, status: ok ? 200 : 400, json: async () => resposta }
+  }
+  return { chamadas, restaurar: () => { globalThis.fetch = original } }
+}
+
+const PREF_OK = { id: 'pref-123', init_point: 'https://mp.com/pagar/abc', sandbox_init_point: 'https://sandbox.mp.com/pagar/abc' }
+
+test('a preferência leva item, comprador real e o link de retorno', async () => {
+  const espiao = fetchEspiao(PREF_OK)
+  try {
+    const { criarPreferenciaCheckoutPro } = await import('../src/services/mercadoPago.js')
+    const r = await criarPreferenciaCheckoutPro({
+      amount: 10, description: 'Litoral Leste', externalRef: 'bk-1', bookingId: 'bk-1',
+      payerEmail: 'cliente@exemplo.com', payerName: 'Maria Silva', payerDoc: CPF_VALIDO,
+      payerPhone: '85998765432', maxInstallments: 6,
+      backUrl: 'https://turivabrasil.com/checkout/processando?p=pay-9',
+      sellerAccessToken: 'APP_USR-operador', applicationFee: 9.2,
+      item: { id: 'tour-9', title: 'Litoral Leste Tradicional' },
+    })
+    const { body, url, init } = espiao.chamadas[0]
+    assert.match(url, /checkout\/preferences$/)
+    assert.equal(init.headers.Authorization, 'Bearer APP_USR-operador', 'cobra na conta do operador')
+
+    assert.equal(body.items[0].unit_price, 10)
+    assert.equal(body.items[0].category_id, 'travels')
+    assert.equal(body.payer.email, 'cliente@exemplo.com')
+    assert.deepEqual(body.payer.identification, { type: 'CPF', number: CPF_VALIDO })
+    assert.equal(body.external_reference, 'bk-1', 'é por ele que o webhook acha a reserva')
+    assert.equal(body.back_urls.success, 'https://turivabrasil.com/checkout/processando?p=pay-9')
+    assert.equal(body.payment_methods.installments, 6)
+
+    // No Checkout Pro a comissão da plataforma chama marketplace_fee.
+    assert.equal(body.marketplace_fee, 9.2)
+    assert.equal(body.application_fee, undefined)
+
+    // PIX tem fluxo próprio no app; aqui é o caminho do cartão.
+    const excluidos = body.payment_methods.excluded_payment_types.map((e) => e.id)
+    assert.ok(excluidos.includes('bank_transfer') && excluidos.includes('ticket'))
+
+    assert.equal(r.preference_id, 'pref-123')
+    assert.equal(r.redirect_url, 'https://mp.com/pagar/abc', 'token de produção → init_point')
+  } finally { espiao.restaurar() }
+})
+
+test('credencial de teste manda para o checkout de sandbox', async () => {
+  const espiao = fetchEspiao(PREF_OK)
+  try {
+    const { criarPreferenciaCheckoutPro } = await import('../src/services/mercadoPago.js')
+    const r = await criarPreferenciaCheckoutPro({
+      amount: 10, description: 'x', externalRef: 'bk-1', bookingId: 'bk-1',
+      payerEmail: 'cliente@exemplo.com', sellerAccessToken: 'TEST-sandbox',
+    })
+    assert.equal(r.redirect_url, 'https://sandbox.mp.com/pagar/abc',
+      'mandar para produção com token de teste levaria a um checkout que não corresponde à cobrança')
+  } finally { espiao.restaurar() }
+})
+
+test('sem split, nenhuma comissão vai na preferência', async () => {
+  const espiao = fetchEspiao(PREF_OK)
+  try {
+    const { criarPreferenciaCheckoutPro } = await import('../src/services/mercadoPago.js')
+    await criarPreferenciaCheckoutPro({
+      amount: 10, description: 'x', externalRef: 'bk-1', bookingId: 'bk-1',
+      payerEmail: 'cliente@exemplo.com', applicationFee: 9.2,   // sem sellerAccessToken
+    })
+    assert.equal(espiao.chamadas[0].body.marketplace_fee, undefined,
+      'sem conta de operador não há para quem dividir')
+  } finally { espiao.restaurar() }
+})
+
+test('preferência recusada vira erro que o cliente entende, não 500 mudo', async () => {
+  const espiao = fetchEspiao({ message: 'invalid back_urls' }, false)
+  try {
+    const { criarPreferenciaCheckoutPro } = await import('../src/services/mercadoPago.js')
+    await assert.rejects(
+      criarPreferenciaCheckoutPro({ amount: 10, description: 'x', externalRef: 'bk-1',
+        bookingId: 'bk-1', payerEmail: 'cliente@exemplo.com' }),
+      (err) => { assert.equal(err.status, 422); assert.match(err.message, /back_urls/); return true })
+  } finally { espiao.restaurar() }
+})
+
+// Sem esta resolução TODO pagamento por Checkout Pro ficaria pendente: o id da
+// cobrança nasce na página do Mercado Pago, e a primeira vez que ficamos
+// sabendo dele é no webhook — sem nenhum vínculo com a nossa linha.
+test('o webhook liga a cobrança à reserva pelo external_reference', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /getMpPaymentCompleto/)
+  assert.match(executavel, /const reservaId = oficial\?\.external_reference/)
+  assert.match(executavel, /\.is\('gateway_transaction_id', null\)/,
+    'ligar só a linha ainda sem cobrança evita duas entregas ligarem a mesma')
+})
+
+test('checkout_pro só vale com a configuração ligada no servidor', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /String\(cfg\.payment_card_flow \|\| 'bricks'\) !== 'checkout_pro'/,
+    'o app pede, mas quem decide é o servidor')
 })

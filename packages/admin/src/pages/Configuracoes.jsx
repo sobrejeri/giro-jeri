@@ -53,6 +53,7 @@ const PAYMENT_KEYS = new Set([
   // configuração crua — dois lugares editando a mesma coisa.
   'payment_method_pix', 'payment_method_credit', 'payment_method_debit',
   'payment_max_installments',
+  'payment_card_flow',
   // Split de 2 recebedores (migration 087). A chave existia no banco e NÃO
   // aparecia em lugar nenhum do painel: não dava para ver se estava ligada nem
   // para ligar — só por SQL. Numa decisão que muda para onde o dinheiro vai,
@@ -111,6 +112,9 @@ const PAYMENT_DEFAULTS = {
   payment_method_debit:           'true',
   payment_split_single_operator:  'false',
   payment_max_installments:       '12',
+  // Onde o cartão é digitado. 'bricks' = no nosso site; 'checkout_pro' = na
+  // página do Mercado Pago. O PIX não é afetado por esta chave.
+  payment_card_flow:              'bricks',
 }
 
 function settingsToMap(list) {
@@ -712,6 +716,36 @@ function TabPagamentos({ settings, qc }) {
                 </p>
               </>
             )}
+            {/* ── Onde o cartão é digitado ──────────────────────────────── */}
+            <div className="border-t border-gray-800 pt-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.payment_card_flow === 'checkout_pro'}
+                  onChange={(e) => set('payment_card_flow', e.target.checked ? 'checkout_pro' : 'bricks')}
+                  className="mt-1 w-4 h-4 accent-brand shrink-0"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-gray-200">
+                    Cartão na página do Mercado Pago (Checkout Pro)
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    <b className="text-gray-400">Desligado:</b> o cliente digita o cartão dentro do
+                    nosso site. Nós tokenizamos e criamos a cobrança.<br />
+                    <b className="text-gray-400">Ligado:</b> o cliente vai para a página do Mercado
+                    Pago e volta depois de pagar. Se ele tiver conta lá, entra logado, com cartões
+                    salvos e histórico — e o antifraude passa a avaliar uma pessoa conhecida, não um
+                    cartão anônimo. É o caminho indicado quando há recusa por risco
+                    (<code className="text-gray-400">cc_rejected_high_risk</code>).
+                  </p>
+                  <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
+                    O PIX não muda: continua sendo pago dentro do app, como hoje. O split e a
+                    comissão da plataforma continuam valendo igual.
+                  </p>
+                </div>
+              </label>
+            </div>
+
             {/* ── Split: para onde o dinheiro vai ───────────────────────── */}
             <div className="border-t border-gray-800 pt-4">
               <label className="flex items-start gap-3 cursor-pointer">

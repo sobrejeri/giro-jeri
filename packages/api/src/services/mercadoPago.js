@@ -452,6 +452,20 @@ export async function createCardPayment({
   }
 }
 
+// A cobrança COMPLETA, não só o status. O webhook do Checkout Pro precisa do
+// `external_reference` para descobrir a qual reserva o pagamento pertence — o
+// id dele nasce na página do Mercado Pago e chega aqui sem contexto nenhum.
+export async function getMpPaymentCompleto(mpId, sellerAccessToken) {
+  const client = paymentClientFor(sellerAccessToken)
+  if (!client) return null
+  try {
+    return await client.get({ id: mpId })
+  } catch (err) {
+    console.error('[mp] consulta completa do pagamento %s falhou: %s', mpId, err?.message)
+    return null
+  }
+}
+
 export async function getMpPaymentStatus(mpId, sellerAccessToken) {
   // Uma cobrança só existe para a conta que a criou. Consultar com o token
   // ERRADO devolve "não encontrado", e quem chama não distingue isso de "ainda
@@ -522,6 +536,93 @@ export async function getMpPaymentAudit(mpId, sellerAccessToken) {
   }
   if (ultimoErro) throw ultimoErro
   return null
+}
+
+// ── Checkout Pro: a cobrança acontece na página do Mercado Pago ──────────────
+//
+// No Checkout API (Bricks) o cartão é digitado no NOSSO site e nós criamos a
+// cobrança. O Mercado Pago avalia o risco de uma transação num site que ele não
+// controla, de um vendedor sem histórico de cartão — e recusa por risco
+// (cc_rejected_high_risk) mesmo com tudo que ele documenta sendo enviado.
+//
+// No Checkout Pro o comprador vai para a página DELES. Muda quem está avaliando
+// o quê: o MP faz o próprio fingerprint do aparelho, e se o comprador tiver
+// conta (a maioria tem) ele entra logado, com histórico e cartões salvos. O
+// antifraude passa a avaliar uma PESSOA conhecida, não um cartão anônimo.
+//
+// Mesma conta, mesmo contrato, mesmo split. O que muda é onde o cartão é
+// digitado — e o PIX continua no fluxo próprio, que já funciona.
+export async function criarPreferenciaCheckoutPro({
+  amount, description, externalRef, bookingId,
+  payerEmail, payerName, payerDoc, payerPhone,
+  maxInstallments, backUrl, sellerAccessToken, applicationFee, item,
+}) {
+  const token = sellerAccessToken || accessToken
+  if (!token) throw new Error('Mercado Pago não configurado: falta o Access Token.')
+  if (!payerEmail) throw semEmailDoComprador()
+
+  const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
+  const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
+  const telefone = telefoneDoPagador(payerPhone)
+
+  const body = {
+    items: [{
+      id:          String(item?.id || bookingId),
+      title:       String(item?.title || description || 'Reserva').slice(0, 256),
+      description: String(item?.description || item?.title || description || 'Reserva').slice(0, 256),
+      category_id: 'travels',
+      quantity:    1,
+      currency_id: 'BRL',
+      unit_price:  valorParaMP(amount),
+    }],
+    payer: {
+      email: payerEmail,
+      ...nomeDoPagador(payerName),
+      ...identificacaoDoPagador(payerDoc),
+      ...(telefone ? { phone: { area_code: telefone.area_code, number: telefone.number } } : {}),
+    },
+    // Quem paga volta para a tela de processamento, que consulta o status. Não
+    // confiamos no retorno para confirmar nada: quem confirma é o webhook e o
+    // polling, como no fluxo atual. O back_url só traz o cliente de volta.
+    ...(backUrl ? {
+      back_urls: { success: backUrl, pending: backUrl, failure: backUrl },
+      auto_return: 'approved',
+    } : {}),
+    external_reference: String(externalRef),
+    ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+    statement_descriptor: 'TURIVA',
+    payment_methods: {
+      // PIX e boleto ficam de fora: o PIX tem fluxo próprio no app, que já
+      // funciona, e boleto não é oferecido. Aqui é o caminho do CARTÃO.
+      excluded_payment_types: [{ id: 'ticket' }, { id: 'bank_transfer' }, { id: 'atm' }],
+      installments: Number(maxInstallments) || 12,
+    },
+    // Comissão da plataforma quando a cobrança cai na conta do operador. No
+    // Checkout Pro o campo chama `marketplace_fee`, não `application_fee`.
+    ...(sellerAccessToken && applicationFee > 0
+      ? { marketplace_fee: valorParaMP(applicationFee, 'marketplace_fee') } : {}),
+  }
+
+  const r = await fetch('https://api.mercadopago.com/checkout/preferences', {
+    method:  'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  })
+  const resposta = await r.json().catch(() => null)
+  if (!r.ok) {
+    const err = new Error(resposta?.message || `Mercado Pago recusou a preferência (${r.status})`)
+    err.status = r.status >= 400 && r.status < 500 ? 422 : 502
+    throw err
+  }
+
+  // sandbox_init_point só existe com credencial de teste; em produção é o
+  // init_point. Preferir o que combina com o token evita mandar o cliente para
+  // um checkout que não corresponde à cobrança.
+  const sandbox = String(token).startsWith('TEST-')
+  return {
+    preference_id: String(resposta.id),
+    redirect_url:  (sandbox ? resposta.sandbox_init_point : resposta.init_point) || resposta.init_point,
+  }
 }
 
 // ── Diagnóstico: o que ESTA conta pode aceitar ───────────────────────────────

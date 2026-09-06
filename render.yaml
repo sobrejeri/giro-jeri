@@ -11,12 +11,16 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # Domínio do app do turista. É a base do link de RETORNO do Checkout Pro:
+      # o cliente paga na página do Mercado Pago e volta para
+      # <TURISTA_URL>/checkout/processando?p=<id>. Apontando para o lugar
+      # errado, ele paga e cai numa página que não existe.
       - key: TURISTA_URL
-        value: https://sobrejeri.github.io/giro-jeri
+        value: https://turivabrasil.com
       - key: COOP_URL
-        value: https://sobrejeri.github.io/giro-jeri/cooperativa
+        value: https://turivabrasil.com/operador
       - key: ADMIN_URL
-        value: https://sobrejeri.github.io/giro-jeri/admin
+        value: https://turivabrasil.com/admin
       # Geoapify Places (OpenStreetMap) — diretório automático em "Descubra a Vila".
       # Gere a chave grátis em https://myprojects.geoapify.com e cole aqui no Render.
       - key: GEOAPIFY_API_KEY

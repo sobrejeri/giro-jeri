@@ -295,6 +295,68 @@ function PagamentoComDesafio({ state }) {
 }
 
 // ── Gateway payment (QR code polling) ────────────────────
+// ── Volta do Checkout Pro ────────────────────────────────────────────────────
+// O cliente volta do Mercado Pago por um LINK, não pelo navigate() do app —
+// então não existe `location.state`. O que existe é `?p=<id do pagamento>`, que
+// nós mesmos colocamos no back_url. Esta tela consulta esse id até o desfecho.
+//
+// O retorno do navegador NÃO confirma nada: o cliente pode fechar a aba antes,
+// ou voltar com o pagamento ainda em análise. Quem confirma é o webhook e este
+// polling — o mesmo caminho do PIX, que já funciona.
+function VoltandoDoMercadoPago({ paymentId }) {
+  const navigate = useNavigate()
+  const [status, setStatus] = useState('pending')
+
+  useEffect(() => {
+    let vivo = true
+    const consultar = async () => {
+      try {
+        const r = await api.getPaymentStatus(paymentId)
+        if (!vivo) return
+        if (r?.status === 'approved') {
+          setStatus('approved')
+          setTimeout(() => navigate('/checkout/sucesso', { state: { booking_id: r.booking_id, booking_code: r.booking_code } }), 800)
+          return true
+        }
+        if (r?.status === 'rejected' || r?.status === 'expired') { setStatus(r.status); return true }
+      } catch { /* rede instável: a próxima volta tenta de novo */ }
+      return false
+    }
+    consultar()
+    const t = setInterval(async () => { if (await consultar()) clearInterval(t) }, 4000)
+    return () => { vivo = false; clearInterval(t) }
+  }, [paymentId, navigate])
+
+  const recusado = status === 'rejected' || status === 'expired'
+  return (
+    <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="text-center max-w-sm">
+        {recusado ? (
+          <>
+            <p className="text-[17px] font-bold text-gray-900 mb-2">Pagamento não concluído</p>
+            <p className="text-[13px] text-gray-600 leading-relaxed mb-5">
+              {status === 'expired'
+                ? 'O prazo para pagar expirou. Você pode tentar de novo pela sua reserva.'
+                : 'O pagamento não foi aprovado. Nenhum valor foi cobrado.'}
+            </p>
+            <Link to="/reservas" className="text-[14px] font-semibold text-brand">Ver minhas reservas</Link>
+          </>
+        ) : (
+          <>
+            <div className="w-8 h-8 border-2 border-gray-200 border-t-brand rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-[15px] font-semibold text-gray-900 mb-1">
+              {status === 'approved' ? 'Pagamento confirmado' : 'Confirmando seu pagamento…'}
+            </p>
+            <p className="text-[13px] text-gray-500 leading-relaxed">
+              Pode levar alguns instantes. Não feche esta tela.
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function CheckoutProcessando() {
   const navigate  = useNavigate()
   const { state } = useLocation()
@@ -303,6 +365,11 @@ export default function CheckoutProcessando() {
   const [status, setStatus]     = useState('pending')
   const [generatedQr, setGeneratedQr] = useState(null)
   const pollRef = useRef(null)
+
+  // Precisa vir ANTES do `if (!state)`: quem volta do Mercado Pago chega sem
+  // state nenhum, e seria mandado para a home no meio de um pagamento.
+  const pagamentoDaUrl = new URLSearchParams(window.location.search).get('p')
+  if (!state && pagamentoDaUrl) return <VoltandoDoMercadoPago paymentId={pagamentoDaUrl} />
 
   if (!state) { navigate('/'); return null }
 

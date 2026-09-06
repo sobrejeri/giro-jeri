@@ -25,6 +25,10 @@ const PUBLIC_KEYS = [
   'payment_method_credit',
   'payment_method_debit',
   'payment_max_installments',
+  // 'bricks' (cartão digitado no site) ou 'checkout_pro' (cliente vai para a
+  // página do Mercado Pago). O app precisa saber para decidir se mostra o
+  // formulário de cartão ou um botão que redireciona.
+  'payment_card_flow',
 ];
 
 // ── GET /api/settings/public ───────────────────────────

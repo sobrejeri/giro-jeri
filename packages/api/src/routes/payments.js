@@ -62,6 +62,11 @@ export const intentSchema = z.object({
   // E-mail do pagador coletado pelo Brick. Usado quando a conta não tem e-mail
   // (cadastro só por telefone é permitido) — nunca para inventar um.
   payer_email:        z.string().email().max(255).optional(),
+  // Checkout Pro: a cobrança acontece na página do Mercado Pago, então o app
+  // não tem token de cartão para enviar — ele pede um link. Quem decide se o
+  // fluxo está ligado é o SERVIDOR (payment_card_flow); este campo só diz o que
+  // o app está pedindo, e um pedido sem a configuração ligada é recusado.
+  checkout_pro:       z.boolean().optional(),
   installments:       z.number({ coerce: true }).int().min(1).max(12).default(1),
   payment_method_id:  z.string().min(1).optional(),
   issuer_id:          z.string().optional(),
@@ -88,7 +93,7 @@ export const intentSchema = z.object({
   (d) => d.order_group_id || d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
   { message: 'Dados incompletos para criar reserva' },
 ).refine(
-  (d) => !['credit_card', 'debit_card'].includes(d.payment_method) ||
+  (d) => !['credit_card', 'debit_card'].includes(d.payment_method) || d.checkout_pro === true ||
           (d.card_token && d.payment_method_id && d.payer_doc && d.payment_attempt_id),
   { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc, payment_attempt_id)' },
 )
@@ -873,7 +878,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       service_name, cover_image_url,
       coupon_code, existing_booking_id, order_group_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc, device_id,
-      payment_attempt_id, payer_email,
+      payment_attempt_id, payer_email, checkout_pro,
       mp_public_key,
     } = parsed.data
 
@@ -1120,6 +1125,91 @@ router.post('/intent', authenticate, async (req, res, next) => {
         // faltar qualquer um dos lados — o app não informou, ou o operador está
         // conectado sem `mp_public_key` gravada — não há como verificar, e não
         // verificar é motivo suficiente para não dividir.
+        // ── Checkout Pro: devolve um LINK, não uma cobrança ───────────────
+        // A cobrança acontece na página do Mercado Pago. Aqui só criamos a
+        // preferência e a linha em `payments` que vai receber o resultado — o
+        // pagamento em si nasce lá, e chega até nós pelo webhook.
+        if (checkout_pro) {
+          if (String(cfg.payment_card_flow || 'bricks') !== 'checkout_pro') {
+            const e = new Error('O checkout de cartão do Mercado Pago não está ativo.')
+            e.status = 409
+            throw e
+          }
+
+          const { criarPreferenciaCheckoutPro } = await import('../services/mercadoPago.js')
+          const usuario = await supabase.from('users')
+            .select('email, full_name, phone').eq('id', req.user.id).single()
+
+          // A linha nasce ANTES da preferência, e SEM gateway_transaction_id: o
+          // id do pagamento só existe depois que o cliente paga lá. Precisa vir
+          // primeiro porque o link de retorno carrega o id DELA — é assim que a
+          // tela de processamento sabe o que consultar quando o cliente volta.
+          // O webhook liga as duas pontas pelo external_reference (id da reserva).
+          const { payment: linha, error: erroLinha } = await inserirPagamento({
+            booking_id:         booking.id,
+            ...(isGroup ? { order_group_id } : {}),
+            gateway_name:       gateway,
+            payment_method,
+            payment_type:       'full',
+            amount_gross:       chargedTotal,
+            gateway_fee_amount: Math.round(chargedTotal * taxaDoMetodo(payment_method) * 100) / 100,
+            gateway_fee_pct:    taxaDoMetodo(payment_method),
+            currency:           'BRL',
+            status:             'pending',
+            ...(payment_attempt_id ? { payment_attempt_id } : {}),
+            ...(splitAplicado ? {
+              split_operator_id:     splitAplicado.operatorId,
+              split_application_fee: splitAplicado.applicationFee,
+            } : {}),
+          })
+          if (erroLinha) throw erroLinha
+
+          // Sem esta base o cliente paga e não volta para lugar nenhum: o
+          // Mercado Pago fica sem back_url e ele encalha na tela deles. O
+          // webhook ainda confirma a reserva, mas o cliente não sabe disso.
+          const base = String(process.env.TURISTA_URL || '').replace(/\/+$/, '')
+          if (!base) console.error('[checkout-pro] TURISTA_URL não configurada — cliente ficará sem link de volta')
+          const pref = await criarPreferenciaCheckoutPro({
+            amount:          chargedTotal,
+            description:     service_name || `Reserva ${bookingCode}`,
+            externalRef:     booking.id,
+            bookingId:       booking.id,
+            payerEmail:      usuario.data?.email || payer_email,
+            payerName:       usuario.data?.full_name,
+            payerDoc:        payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
+            payerPhone:      usuario.data?.phone,
+            maxInstallments: Number(cfg.payment_max_installments) || 12,
+            backUrl:         base ? `${base}/checkout/processando?p=${linha.id}` : undefined,
+            sellerAccessToken: split?.sellerAccessToken,
+            applicationFee:    split?.applicationFee,
+            item: {
+              id: String(service_id || booking.id),
+              title: service_name || `Reserva ${bookingCode}`,
+              description: service_name || `Reserva ${bookingCode}`,
+            },
+          })
+
+          // Guarda a preferência na linha: é o rastro que liga a nossa linha ao
+          // checkout que o cliente abriu, antes de existir id de pagamento.
+          await supabase.from('payments')
+            .update({ raw_response_json: { checkout_pro: true, preference_id: pref.preference_id } })
+            .eq('id', linha.id)
+
+          console.log('[checkout-pro] preferência %s criada para reserva %s split=%s',
+            pref.preference_id, booking.id, split ? 'sim' : 'não')
+
+          return res.json({
+            success:      true,
+            status:       'redirect',
+            redirect_url: pref.redirect_url,
+            preference_id: pref.preference_id,
+            payment_id:   linha.id,
+            booking_id:   booking.id,
+            booking_code: bookingCode,
+            amount:       chargedTotal,
+          })
+        }
+
         // ── O token do cartão pertence à conta que vai cobrar? ────────────
         // Um token de cartão é criado com a chave PÚBLICA de uma conta e só
         // vale para o access token DAQUELA conta. Cruzar as duas faz o Mercado
@@ -2225,11 +2315,50 @@ router.post('/webhook', async (req, res, next) => {
       const { data: p2 } = await supabase
         .from('payments').select('*, bookings(*)')
         .eq('gateway_transaction_id', gatewayId).maybeSingle()
-      if (p2) {
-        paymentForEvent = p2
-        await supabase.from('payment_events').update({ payment_id: p2.id })
-          .eq('gateway_event_id', gatewayEventId).is('payment_id', null)
+      if (p2) paymentForEvent = p2
+    }
+
+    // ── Checkout Pro: o id do pagamento nasce LÁ ──────────────────────────
+    // No Bricks nós criamos a cobrança e guardamos o id na hora. No Checkout
+    // Pro só criamos a preferência — o pagamento nasce na página do Mercado
+    // Pago, e a primeira vez que ficamos sabendo o id dele é agora. Sem esta
+    // resolução, TODO pagamento por Checkout Pro ficaria pendente para sempre.
+    //
+    // O elo é o `external_reference` da cobrança oficial, que é o id da reserva.
+    if (!paymentForEvent && gatewayId) {
+      let oficial = null
+      try {
+        const { getMpPaymentCompleto } = await import('../services/mercadoPago.js')
+        oficial = await getMpPaymentCompleto(gatewayId)
+      } catch (err) {
+        console.error('[webhook] consulta para resolver external_reference falhou: %s', err.message)
       }
+      const reservaId = oficial?.external_reference
+      if (reservaId) {
+        // A linha mais recente daquela reserva que ainda não tem cobrança
+        // ligada. `.is(null)` no UPDATE garante que duas entregas simultâneas
+        // não liguem a mesma linha duas vezes.
+        const { data: candidata } = await supabase
+          .from('payments').select('*, bookings(*)')
+          .eq('booking_id', reservaId)
+          .is('gateway_transaction_id', null)
+          .order('created_at', { ascending: false })
+          .limit(1).maybeSingle()
+        if (candidata) {
+          const { error: erroLiga } = await supabase.from('payments')
+            .update({ gateway_transaction_id: gatewayId })
+            .eq('id', candidata.id).is('gateway_transaction_id', null)
+          if (!erroLiga) {
+            paymentForEvent = { ...candidata, gateway_transaction_id: gatewayId }
+            console.log('[webhook] pagamento %s ligado à reserva %s pelo external_reference', gatewayId, reservaId)
+          }
+        }
+      }
+    }
+
+    if (paymentForEvent) {
+      await supabase.from('payment_events').update({ payment_id: paymentForEvent.id })
+        .eq('gateway_event_id', gatewayEventId).is('payment_id', null)
     }
     if (!paymentForEvent) {
       console.warn('[webhook] pagamento local ainda não existe para mp=%s — evento guardado como pendente', gatewayId)

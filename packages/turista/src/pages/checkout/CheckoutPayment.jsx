@@ -264,6 +264,19 @@ export default function CheckoutPayment() {
   // existentes (pagamento pós-aceite). keyChecked evita montar o Brick antes.
   const [sellerKey,  setSellerKey]  = useState(null)
   const [keyChecked, setKeyChecked] = useState(() => !state?.existing_booking_id)
+  // Checkout Pro: o cliente sai do app para pagar com cartão na página do
+  // Mercado Pago. Enquanto o link não vem, o botão trava — sair duas vezes
+  // criaria duas preferências para a mesma reserva.
+  const [redirecionando, setRedirecionando] = useState(false)
+  const [erroCartao,     setErroCartao]     = useState('')
+
+  // Com o Checkout Pro ligado, o cartão sai do Brick: ele fica só com o PIX,
+  // que continua funcionando no app. Ter as duas formas de pagar com cartão na
+  // mesma tela confundiria — e o Brick tokenizaria um cartão que ninguém usaria.
+  const cartaoNoMercadoPago = settings?.payment_card_flow === 'checkout_pro'
+  const settingsDoBrick = cartaoNoMercadoPago
+    ? { ...settings, payment_method_credit: 'false', payment_method_debit: 'false' }
+    : settings
 
   // COM PRAZO, pelo mesmo motivo das formas de pagamento logo acima — e a
   // ausência dele aqui era pior: esta chamada TRAVA o formulário. Sem resposta
@@ -423,6 +436,34 @@ export default function CheckoutPayment() {
     return result
   }
 
+  // ── Checkout Pro: o cartão é digitado na página do Mercado Pago ──────────
+  // Não há token para enviar: pedimos um link e mandamos o cliente para lá. A
+  // confirmação continua vindo do webhook e da tela de processamento, como no
+  // PIX — o retorno do navegador não confirma nada sozinho.
+  async function pagarComCartaoNoMercadoPago() {
+    if (redirecionando) return
+    setRedirecionando(true)
+    setErroCartao('')
+    try {
+      const result = await api.createPaymentIntent({
+        ...(existing_booking_id ? { existing_booking_id } : {}),
+        ...(order_group_id ? { order_group_id } : {}),
+        service_type, service_id, booking_mode,
+        service_date_iso, service_time, people_count, region_id,
+        vehicles, origin_text, destination_text,
+        total_price, service_name, cover_image_url,
+        payment_method: 'credit_card',
+        checkout_pro: true,
+      })
+      if (!result?.redirect_url) throw new Error('O Mercado Pago não devolveu o link de pagamento.')
+      // Sai do app. Quem volta é o back_url, já com o id do pagamento.
+      window.location.href = result.redirect_url
+    } catch (err) {
+      setRedirecionando(false)
+      setErroCartao(err?.message || 'Não foi possível abrir o pagamento com cartão.')
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
@@ -463,13 +504,34 @@ export default function CheckoutPayment() {
                 Mercado Pago não gosta de ser montado duas vezes no mesmo
                 container: o formulário aparece duplicado. */}
             {keyChecked && settings !== undefined ? (
-              <PaymentBrick
-                amount={total_price}
-                publicKey={sellerKey}
-                onCard={handleCardPayment}
-                onPix={handlePix}
-                settings={settings}
-              />
+              <>
+                {cartaoNoMercadoPago && (
+                  <div className="mb-3">
+                    {erroCartao && (
+                      <div className="mb-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
+                        <p className="text-[12px] text-red-700 leading-relaxed">{erroCartao}</p>
+                      </div>
+                    )}
+                    <button
+                      onClick={pagarComCartaoNoMercadoPago}
+                      disabled={redirecionando}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand text-white font-semibold text-[14px] py-3.5 active:scale-[0.99] transition-transform disabled:opacity-60"
+                    >
+                      {redirecionando ? 'Abrindo pagamento…' : 'Pagar com cartão'}
+                    </button>
+                    <p className="text-[11px] text-gray-500 text-center mt-2 leading-relaxed">
+                      Você vai concluir no ambiente do Mercado Pago e volta para cá em seguida.
+                    </p>
+                  </div>
+                )}
+                <PaymentBrick
+                  amount={total_price}
+                  publicKey={sellerKey}
+                  onCard={handleCardPayment}
+                  onPix={handlePix}
+                  settings={settingsDoBrick}
+                />
+              </>
             ) : (
               <div className="flex items-center justify-center py-8 gap-2 text-gray-400">
                 <div className="w-5 h-5 border-2 border-gray-300 border-t-brand rounded-full animate-spin" />
