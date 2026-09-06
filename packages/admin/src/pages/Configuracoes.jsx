@@ -321,9 +321,9 @@ function DiagnosticoCartao({ resultado }) {
   const creditoOk = (res?.credito_ativo ?? 0) > 0
 
   const Linha = ({ rotulo, valor, ok }) => (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-gray-500">{rotulo}</span>
-      <span className={ok === undefined ? 'text-gray-300' : ok ? 'text-green-400' : 'text-red-400'}>
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-gray-500 whitespace-nowrap">{rotulo}</span>
+      <span className={`text-right ${ok === undefined ? 'text-gray-300' : ok ? 'text-green-400' : 'text-red-400'}`}>
         {valor}
       </span>
     </div>
@@ -399,8 +399,12 @@ function clearOverride(op) {
               return (
                 <div
                   key={op.id}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-900 border border-gray-800"
+                  className="px-3 py-2.5 rounded-lg bg-gray-900 border border-gray-800"
                 >
+                  {/* Cabeçalho: nome à esquerda, percentuais à direita. O
+                      diagnóstico NÃO entra aqui — espremido nesta coluna, no
+                      celular ele quebrava uma palavra por linha. */}
+                  <div className="flex items-center gap-3">
                   {/* Nome */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200 truncate">{op.full_name}</p>
@@ -438,10 +442,6 @@ function clearOverride(op) {
                         </button>
                       )}
                     </div>
-
-                    {diagnostico?.operatorId === op.id && (
-                      <DiagnosticoCartao resultado={diagnostico} />
-                    )}
                   </div>
 
                   {/* Percentuais */}
@@ -503,6 +503,11 @@ function clearOverride(op) {
                         </button>
                       )}
                     </div>
+                  )}
+                  </div>
+
+                  {diagnostico?.operatorId === op.id && (
+                    <DiagnosticoCartao resultado={diagnostico} />
                   )}
                 </div>
               )
