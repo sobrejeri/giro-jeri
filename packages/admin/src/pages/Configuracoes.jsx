@@ -112,9 +112,10 @@ const PAYMENT_DEFAULTS = {
   payment_method_debit:           'true',
   payment_split_single_operator:  'false',
   payment_max_installments:       '12',
-  // Onde o cartão é digitado. 'bricks' = no nosso site; 'checkout_pro' = na
-  // página do Mercado Pago. O PIX não é afetado por esta chave.
-  payment_card_flow:              'bricks',
+  // Onde o cartão é digitado. 'checkout_pro' (padrão) = na página do Mercado
+  // Pago; 'bricks' = dentro do nosso site. O padrão é o Checkout Pro porque o
+  // caminho dentro do site vinha sendo recusado por risco. O PIX não é afetado.
+  payment_card_flow:              'checkout_pro',
 }
 
 function settingsToMap(list) {
@@ -751,7 +752,7 @@ function TabPagamentos({ settings, qc }) {
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={form.payment_card_flow === 'checkout_pro'}
+                  checked={form.payment_card_flow !== 'bricks'}
                   onChange={(e) => set('payment_card_flow', e.target.checked ? 'checkout_pro' : 'bricks')}
                   className="mt-1 w-4 h-4 accent-brand shrink-0"
                 />
@@ -769,7 +770,9 @@ function TabPagamentos({ settings, qc }) {
                     (<code className="text-gray-400">cc_rejected_high_risk</code>).
                   </p>
                   <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
-                    O PIX não muda: continua sendo pago dentro do app, como hoje. O split e a
+                    Vem <b>ligado por padrão</b>: o caminho de digitar o cartão dentro do site
+                    vinha sendo recusado por risco. Desmarque só se quiser voltar a testá-lo.
+                    O PIX não muda — continua sendo pago dentro do app, como hoje. O split e a
                     comissão da plataforma continuam valendo igual.
                   </p>
                 </div>

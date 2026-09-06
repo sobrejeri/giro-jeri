@@ -273,7 +273,15 @@ export default function CheckoutPayment() {
   // Com o Checkout Pro ligado, o cartão sai do Brick: ele fica só com o PIX,
   // que continua funcionando no app. Ter as duas formas de pagar com cartão na
   // mesma tela confundiria — e o Brick tokenizaria um cartão que ninguém usaria.
-  const cartaoNoMercadoPago = settings?.payment_card_flow === 'checkout_pro'
+  // LIGADO POR PADRÃO — a mesma regra do servidor (cartaoNoCheckoutPro em
+  // routes/payments.js). Chave ausente significa Checkout Pro; só um 'bricks'
+  // explícito volta ao formulário de cartão dentro do site. As duas pontas
+  // PRECISAM concordar: discordando, o cliente vê um formulário que o servidor
+  // recusa, ou um botão que não leva a lugar nenhum.
+  //
+  // Vale também quando as configurações não chegam (o fallback de 2s devolve
+  // {}): sem saber, o certo é o caminho que funciona.
+  const cartaoNoMercadoPago = settings?.payment_card_flow !== 'bricks'
   const settingsDoBrick = cartaoNoMercadoPago
     ? { ...settings, payment_method_credit: 'false', payment_method_debit: 'false' }
     : settings

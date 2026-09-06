@@ -12,6 +12,10 @@ import { readFile } from 'node:fs/promises'
 // a criação falharia na checagem de configuração, antes de chegar nas validações
 // que estes testes exercitam. É um token de sandbox e nada aqui chama a rede.
 process.env.MP_ACCESS_TOKEN ||= 'TEST-token-de-teste'
+// A rota importa o cliente do Supabase na carga e aborta sem estas. Nada aqui
+// toca o banco — os testes leem funções puras e o texto dos arquivos.
+process.env.SUPABASE_URL ||= 'https://exemplo.supabase.co'
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'chave-de-teste'
 const { createCardPayment, createPixPayment, sanitizedPaymentResult } =
   await import('../src/services/mercadoPago.js')
 
@@ -436,11 +440,33 @@ test('o webhook liga a cobrança à reserva pelo external_reference', async () =
     'ligar só a linha ainda sem cobrança evita duas entregas ligarem a mesma')
 })
 
-test('checkout_pro só vale com a configuração ligada no servidor', async () => {
+// O Checkout Pro vem LIGADO por padrão: o caminho de digitar o cartão dentro do
+// site vinha sendo recusado por risco de forma sistemática. Chave ausente
+// significa Checkout Pro; só um 'bricks' explícito volta ao caminho antigo.
+test('sem configuração no banco, o cartão vai para o Checkout Pro', async () => {
+  const { cartaoNoCheckoutPro } = await import('../src/routes/payments.js')
+  assert.equal(cartaoNoCheckoutPro({}), true, 'ausente = ligado')
+  assert.equal(cartaoNoCheckoutPro({ payment_card_flow: '' }), true, 'vazio = ligado')
+  assert.equal(cartaoNoCheckoutPro(undefined), true)
+  assert.equal(cartaoNoCheckoutPro({ payment_card_flow: 'checkout_pro' }), true)
+  assert.equal(cartaoNoCheckoutPro({ payment_card_flow: 'bricks' }), false,
+    'só o valor explícito desliga')
+})
+
+// Se as duas pontas discordarem, o cliente vê um formulário de cartão que o
+// servidor recusa, ou um botão de redirecionamento que não leva a lugar nenhum.
+test('app e servidor usam a MESMA regra de padrão', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /const cartaoNoMercadoPago = settings\?\.payment_card_flow !== 'bricks'/,
+    'o app precisa tratar ausente como ligado, igual ao servidor')
+})
+
+test('o pedido do app não decide sozinho: quem manda é o servidor', async () => {
   const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
   const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
-  assert.match(executavel, /String\(cfg\.payment_card_flow \|\| 'bricks'\) !== 'checkout_pro'/,
-    'o app pede, mas quem decide é o servidor')
+  assert.match(executavel, /if \(!cartaoNoCheckoutPro\(cfg\)\)/,
+    'checkout_pro pedido com a chave em bricks tem de ser recusado')
 })
 
 // ═══════════════════════════════════════════════════════════════════════════

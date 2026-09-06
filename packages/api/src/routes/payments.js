@@ -325,6 +325,19 @@ export async function getOperatorMp(operatorId) {
 // sem split. Errar para o lado de "o dinheiro fica com a plataforma" é
 // recuperável com um repasse; errar para o outro manda dinheiro para a conta de
 // terceiro e não tem volta.
+// ── Onde o cartão é digitado ─────────────────────────────────────────────────
+// LIGADO POR PADRÃO. A chave ausente significa Checkout Pro, não Bricks: o
+// caminho de digitar o cartão no nosso site vinha sendo recusado por risco
+// (cc_rejected_high_risk) de forma sistemática, então o padrão seguro é o que
+// funciona. Só um 'bricks' EXPLÍCITO no banco volta ao caminho antigo.
+//
+// A mesma regra vale no app (CheckoutPayment.jsx). Se os dois discordarem, o
+// cliente vê um formulário de cartão que o servidor recusa, ou um botão de
+// redirecionamento que não leva a lugar nenhum.
+export function cartaoNoCheckoutPro(cfg) {
+  return String(cfg?.payment_card_flow || 'checkout_pro') !== 'bricks'
+}
+
 export function plataformaRecebeTudo(cfg) {
   const v = cfg?.payment_platform_receives_all
   if (v === undefined || v === null || v === '') return true
@@ -1130,7 +1143,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         // preferência e a linha em `payments` que vai receber o resultado — o
         // pagamento em si nasce lá, e chega até nós pelo webhook.
         if (checkout_pro) {
-          if (String(cfg.payment_card_flow || 'bricks') !== 'checkout_pro') {
+          if (!cartaoNoCheckoutPro(cfg)) {
             const e = new Error('O checkout de cartão do Mercado Pago não está ativo.')
             e.status = 409
             throw e
