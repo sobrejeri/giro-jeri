@@ -31,10 +31,19 @@ const JANELA_DIAS = Number(process.env.RECONCILE_JANELA_DIAS) || 7;
 // não pode transformar a abertura da tela de reservas numa espera longa.
 const TETO_POR_RODADA = Number(process.env.RECONCILE_TETO) || 5;
 
+// Cobrança de teste não existe no Mercado Pago: consultá-la só gera erro.
+const ehDeTeste = (p) => String(p.gateway_transaction_id || '').startsWith('TEST-');
+
+// Vale conciliar? Duas formas de identificar a cobrança lá:
+//
+//   · com gateway_transaction_id — o caminho de sempre (PIX, Bricks);
+//   · SEM ele — o Checkout Pro. A linha nasce sem id porque o pagamento é
+//     criado na página do Mercado Pago; achamos pelo external_reference (o id
+//     da reserva). Sem esta segunda forma, um cliente que pagou pelo Checkout
+//     Pro e cujo webhook não chegou ficaria com a reserva parada até expirar —
+//     e é justamente o caso que a conciliação existe para pegar.
 const ehDoMercadoPago = (p) =>
-  p.gateway_name === 'mercado_pago'
-  && p.gateway_transaction_id
-  && !String(p.gateway_transaction_id).startsWith('TEST-');
+  p.gateway_name === 'mercado_pago' && !ehDeTeste(p);
 
 /**
  * Consulta o MP e aplica o desfecho de UM pagamento.
@@ -58,7 +67,39 @@ async function conciliarUm(pagamento, { aoAprovar, resolverToken, consultarStatu
     // Com split, a cobrança vive na conta do operador: consulta com o token
     // dela. Sem operador (ou sem token), cai no token da plataforma.
     const token = await resolverToken(pagamento.bookings?.operator_id);
-    mpStatus = await consulta(pagamento.gateway_transaction_id, token);
+
+    if (pagamento.gateway_transaction_id) {
+      mpStatus = await consulta(pagamento.gateway_transaction_id, token);
+    } else {
+      // Checkout Pro: procura pelo id da reserva e LIGA a cobrança à linha, para
+      // as próximas consultas seguirem o caminho normal. `.is(null)` evita que
+      // o webhook chegando ao mesmo tempo ligue a mesma linha duas vezes.
+      const { buscarPagamentoPorReferencia } = await import('./mercadoPago.js');
+      const achado = await buscarPagamentoPorReferencia(pagamento.booking_id, token);
+      if (!achado?.id) return null;
+
+      const { data: ligadas, error: erroLiga } = await supabase.from('payments')
+        .update({ gateway_transaction_id: String(achado.id) })
+        .eq('id', pagamento.id).is('gateway_transaction_id', null)
+        .select('id');
+
+      // A ligação FALHANDO é informação, não detalhe: ou a UNIQUE de
+      // gateway_transaction_id barrou (esta cobrança já pertence a outra linha),
+      // ou o webhook ligou primeiro. Nos dois casos, seguir e aplicar o
+      // 'approved' aqui aprovaria a MESMA cobrança duas vezes — duas entradas no
+      // razão, duas comissões, dois e-mails. Melhor não decidir nada: a próxima
+      // rodada relê a linha já ligada e segue o caminho normal.
+      if (erroLiga || !(ligadas || []).length) {
+        console.warn('[conciliação] cobrança %s não pôde ser ligada à linha %s (%s) — deixando para a próxima rodada',
+          achado.id, pagamento.id, erroLiga?.code || 'já ligada');
+        return null;
+      }
+
+      pagamento.gateway_transaction_id = String(achado.id);
+      mpStatus = achado.status || null;
+      console.log('[conciliação] cobrança %s ligada à reserva %s pelo external_reference',
+        achado.id, pagamento.booking_id);
+    }
   } catch (err) {
     console.error('[conciliação] consulta ao MP falhou payment=%s: %s', pagamento.id, err.message);
     return null;   // sem resposta confiável, não decide nada

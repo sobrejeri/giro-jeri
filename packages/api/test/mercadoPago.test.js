@@ -557,3 +557,48 @@ test('a tela de retorno não gira para sempre', async () => {
   assert.match(jsx, /tentativas >= 30/, 'precisa desistir e oferecer uma saída')
   assert.match(jsx, /Ainda confirmando/)
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Ligar a cobrança à linha: quem não conseguiu, não decide
+// ═══════════════════════════════════════════════════════════════════════════
+// Três caminhos podem descobrir a cobrança do Checkout Pro ao mesmo tempo:
+// webhook, tela de status e conciliação. Todos ligam com `.is(null)`, então só
+// UM vence. Quem perde não pode seguir e aplicar o desfecho: o claim atômico da
+// aprovação protege por LINHA, e aqui seriam duas linhas diferentes apontando
+// para a MESMA cobrança — dois lançamentos no razão, duas comissões, dois
+// e-mails.
+test('os três caminhos só decidem depois de conseguir ligar a cobrança', async () => {
+  const rota = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const conc = await readFile(new URL('../src/services/paymentReconcile.js', import.meta.url), 'utf8')
+
+  // Toda ligação confere se ALGUMA linha foi realmente afetada, não só se houve
+  // erro: um UPDATE que não achou linha volta sem erro e com zero linhas.
+  const conferem = [
+    ...rota.matchAll(/erroLiga \|\| !\(ligadas \|\| \[\]\)\.length/g),
+    ...conc.matchAll(/erroLiga \|\| !\(ligadas \|\| \[\]\)\.length/g),
+  ]
+  assert.ok(conferem.length >= 2, 'status e conciliação precisam desistir quando não ligam')
+  assert.match(rota, /if \(!erroLiga && \(ligadas \|\| \[\]\)\.length\)/,
+    'o webhook só adota a linha que ele mesmo ligou')
+
+  // E ninguém liga sem a trava de concorrência. Olha a vizinhança de cada
+  // ligação, não uma expressão fechada: o encadeamento muda de forma conforme
+  // o caminho, mas o `.is(null)` tem de estar em todos.
+  for (const fonte of [rota, conc]) {
+    for (const m of fonte.matchAll(/update\(\{ gateway_transaction_id/g)) {
+      const vizinhanca = fonte.slice(m.index, m.index + 320)
+      assert.match(vizinhanca, /\.is\('gateway_transaction_id', null\)/,
+        'ligar sem .is(null) deixa duas entregas simultâneas sobrescreverem a mesma linha')
+    }
+  }
+})
+
+test('a conciliação alcança o Checkout Pro, que nasce sem id de cobrança', async () => {
+  const conc = await readFile(new URL('../src/services/paymentReconcile.js', import.meta.url), 'utf8')
+  const executavel = conc.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  // A regra antiga exigia gateway_transaction_id e deixava o Checkout Pro de
+  // fora justamente do mecanismo que existe para salvar webhook perdido.
+  assert.doesNotMatch(executavel, /ehDoMercadoPago = \(p\) =>[\s\S]{0,120}&& p\.gateway_transaction_id\s*\n/,
+    'exigir o id exclui o Checkout Pro da conciliação')
+  assert.match(executavel, /buscarPagamentoPorReferencia\(pagamento\.booking_id/)
+})

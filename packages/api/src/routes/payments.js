@@ -2193,14 +2193,27 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
         const opMp = await getOperatorMp(payment.bookings?.operator_id)
         const achado = await buscarPagamentoPorReferencia(payment.booking_id, opMp?.token)
         if (achado?.id) {
-          const { error: erroLiga } = await supabase.from('payments')
+          const { data: ligadas, error: erroLiga } = await supabase.from('payments')
             .update({ gateway_transaction_id: String(achado.id) })
             .eq('id', payment.id).is('gateway_transaction_id', null)
-          if (!erroLiga) {
-            payment.gateway_transaction_id = String(achado.id)
-            console.log('[status] pagamento %s ligado à reserva %s pelo external_reference',
-              achado.id, payment.booking_id)
+            .select('id')
+
+          // Não conseguiu ligar = esta cobrança já é de outra linha (a UNIQUE
+          // barrou) ou o webhook ligou primeiro. Aplicar o desfecho aqui
+          // aprovaria a MESMA cobrança duas vezes — dois lançamentos no razão,
+          // duas comissões, dois e-mails. Devolve 'pending' e deixa a linha
+          // certa resolver.
+          if (erroLiga || !(ligadas || []).length) {
+            console.warn('[status] cobrança %s não pôde ser ligada à linha %s (%s)',
+              achado.id, payment.id, erroLiga?.code || 'já ligada')
+            return res.json({ status: 'pending', booking_id: payment.booking_id,
+              booking_code: payment.bookings?.booking_code })
           }
+
+          payment.gateway_transaction_id = String(achado.id)
+          console.log('[status] pagamento %s ligado à reserva %s pelo external_reference',
+            achado.id, payment.booking_id)
+
           if (achado.status === 'approved') {
             await onPaymentApproved(payment)
             return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
@@ -2397,10 +2410,14 @@ router.post('/webhook', async (req, res, next) => {
           .order('created_at', { ascending: false })
           .limit(1).maybeSingle()
         if (candidata) {
-          const { error: erroLiga } = await supabase.from('payments')
+          const { data: ligadas, error: erroLiga } = await supabase.from('payments')
             .update({ gateway_transaction_id: gatewayId })
             .eq('id', candidata.id).is('gateway_transaction_id', null)
-          if (!erroLiga) {
+            .select('id')
+          // Só segue com a linha que ELE conseguiu ligar. Falhando (UNIQUE, ou
+          // outro caminho ligou primeiro), paymentForEvent fica nulo e o evento
+          // é guardado como pendente — melhor que aprovar em duplicidade.
+          if (!erroLiga && (ligadas || []).length) {
             paymentForEvent = { ...candidata, gateway_transaction_id: gatewayId }
             console.log('[webhook] pagamento %s ligado à reserva %s pelo external_reference', gatewayId, reservaId)
           }
