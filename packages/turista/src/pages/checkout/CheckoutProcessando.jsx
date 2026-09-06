@@ -303,9 +303,19 @@ function PagamentoComDesafio({ state }) {
 // O retorno do navegador NÃO confirma nada: o cliente pode fechar a aba antes,
 // ou voltar com o pagamento ainda em análise. Quem confirma é o webhook e este
 // polling — o mesmo caminho do PIX, que já funciona.
-function VoltandoDoMercadoPago({ paymentId }) {
+function VoltandoDoMercadoPago({ paymentId, statusDaUrl }) {
   const navigate = useNavigate()
-  const [status, setStatus] = useState('pending')
+  // O Mercado Pago acrescenta o desfecho ao link de retorno
+  // (?status=rejected&collection_status=...). Isso serve para FALAR com o
+  // cliente na hora — quem foi recusado não pode ficar dois minutos olhando
+  // "confirmando seu pagamento" para só então saber que não passou.
+  //
+  // Mas NÃO decide nada: é um parâmetro de URL, que qualquer um edita. Quem
+  // confirma continua sendo o servidor, e o polling segue rodando por baixo —
+  // inclusive porque o MP pode dizer 'rejected' de uma tentativa e o cliente
+  // ter pago em outra.
+  const recusaNaUrl = ['rejected', 'failure', 'cancelled', 'null'].includes(String(statusDaUrl || ''))
+  const [status, setStatus] = useState(recusaNaUrl ? 'rejected' : 'pending')
 
   useEffect(() => {
     let vivo = true
@@ -320,6 +330,9 @@ function VoltandoDoMercadoPago({ paymentId }) {
           return true
         }
         if (r?.status === 'rejected' || r?.status === 'expired') { setStatus(r.status); return true }
+        // O servidor ainda diz 'pending' e a URL dizia recusado: mantém a
+        // mensagem de recusa, mas segue consultando. Se o cliente tiver pago em
+        // outra tentativa, a aprovação chega e corrige a tela sozinha.
       } catch { /* rede instável: a próxima volta tenta de novo */ }
       // Girar para sempre é pior que dizer "não sei ainda": depois de ~2min o
       // desfecho não vem mais por aqui, e o cliente precisa de uma saída em vez
@@ -358,7 +371,7 @@ function VoltandoDoMercadoPago({ paymentId }) {
             <p className="text-[13px] text-gray-600 leading-relaxed mb-5">
               {status === 'expired'
                 ? 'O prazo para pagar expirou. Você pode tentar de novo pela sua reserva.'
-                : 'O pagamento não foi aprovado. Nenhum valor foi cobrado.'}
+                : 'O pagamento não foi aprovado e nenhum valor foi cobrado. Você pode tentar com outro cartão, ou pagar por PIX — que costuma passar quando o cartão é recusado por segurança.'}
             </p>
             <Link to="/reservas" className="text-[14px] font-semibold text-brand">Ver minhas reservas</Link>
           </>
@@ -389,8 +402,16 @@ export default function CheckoutProcessando() {
 
   // Precisa vir ANTES do `if (!state)`: quem volta do Mercado Pago chega sem
   // state nenhum, e seria mandado para a home no meio de um pagamento.
-  const pagamentoDaUrl = new URLSearchParams(window.location.search).get('p')
-  if (!state && pagamentoDaUrl) return <VoltandoDoMercadoPago paymentId={pagamentoDaUrl} />
+  const paramsDaUrl = new URLSearchParams(window.location.search)
+  const pagamentoDaUrl = paramsDaUrl.get('p')
+  if (!state && pagamentoDaUrl) {
+    return (
+      <VoltandoDoMercadoPago
+        paymentId={pagamentoDaUrl}
+        statusDaUrl={paramsDaUrl.get('status') || paramsDaUrl.get('collection_status')}
+      />
+    )
+  }
 
   if (!state) { navigate('/'); return null }
 

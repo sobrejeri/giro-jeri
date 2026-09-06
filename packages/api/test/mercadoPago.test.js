@@ -711,3 +711,28 @@ test('busca por referência só decide aprovação, nunca recusa', async () => {
   assert.doesNotMatch(trecho, /status: 'failed'/,
     'a rota de status não pode marcar falha a partir de uma busca por referência')
 })
+
+// O Mercado Pago acrescenta o desfecho ao link de retorno. Sem ler isso, quem
+// foi RECUSADO ficava dois minutos olhando "confirmando seu pagamento" para só
+// então descobrir que não passou.
+//
+// Mas é parâmetro de URL — qualquer um edita. Serve para FALAR, nunca para
+// decidir: o polling continua e o servidor é quem confirma.
+test('a volta do Mercado Pago mostra a recusa na hora, sem confiar na URL', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutProcessando.jsx', import.meta.url), 'utf8')
+
+  assert.match(jsx, /paramsDaUrl\.get\('status'\) \|\| paramsDaUrl\.get\('collection_status'\)/)
+  assert.match(jsx, /const recusaNaUrl = \[/, 'o desfecho da URL precisa virar mensagem imediata')
+
+  // A trava que importa: a URL não pode virar estado no servidor. Nada de
+  // chamar a API com o status vindo do link.
+  assert.doesNotMatch(jsx, /statusDaUrl[\s\S]{0,120}?api\./,
+    'o parâmetro da URL não pode alimentar nenhuma chamada de API')
+
+  // E o polling continua rodando mesmo com recusa na URL — o cliente pode ter
+  // pago numa segunda tentativa.
+  const inicio = jsx.indexOf('function VoltandoDoMercadoPago')
+  const bloco = jsx.slice(inicio, inicio + 4000)
+  assert.match(bloco, /setInterval/, 'a consulta ao servidor não pode parar por causa da URL')
+})
