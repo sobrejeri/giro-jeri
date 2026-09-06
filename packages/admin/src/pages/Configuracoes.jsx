@@ -533,14 +533,39 @@ function TabPagamentos({ settings, qc }) {
     if (settings.length) setForm({ ...PAYMENT_DEFAULTS, ...settingsToMap(settings) })
   }, [settings])
 
+  // Erro por seção, para a mensagem aparecer ao lado do botão que falhou.
+  const [erroSecao, setErroSecao] = useState(null)   // { secao, mensagem }
+
   const saveMut = useMutation({
-    mutationFn: (pairs) =>
-      Promise.all(pairs.map(([key, value]) => api.updateSetting(key, { setting_value: value }))),
-    onSuccess: (_, pairs) => {
+    mutationFn: async ({ pairs }) => {
+      // `Promise.all` para de dar detalhe na primeira falha. Com allSettled
+      // sabemos EXATAMENTE quais chaves não gravaram — que é o que a pessoa
+      // precisa saber para não continuar achando que salvou.
+      const r = await Promise.allSettled(
+        pairs.map(([key, value]) => api.updateSetting(key, { setting_value: value })))
+      const falhas = pairs
+        .map(([key], i) => (r[i].status === 'rejected' ? { key, erro: r[i].reason } : null))
+        .filter(Boolean)
+      if (falhas.length) {
+        const e = new Error(
+          `Não foi possível salvar: ${falhas.map((f) => f.key).join(', ')}. ` +
+          (falhas[0].erro?.message || ''))
+        e.falhas = falhas
+        throw e
+      }
+      return r
+    },
+    onSuccess: (_, { secao }) => {
       qc.invalidateQueries({ queryKey: ['settings'] })
-      const section = pairs[0]?.[0]?.split('_')[1]
-      setSavedSection(section)
+      setErroSecao(null)
+      setSavedSection(secao)
       setTimeout(() => setSavedSection(null), 2500)
+    },
+    onError: (err, { secao }) => {
+      // Antes o erro era engolido e o "Salvo!" já tinha sido mostrado de forma
+      // otimista — a tela afirmava o contrário do que tinha acontecido.
+      setSavedSection(null)
+      setErroSecao({ secao, mensagem: err?.message || 'Falha ao salvar.' })
     },
   })
 
@@ -548,9 +573,13 @@ function TabPagamentos({ settings, qc }) {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
+  // "Salvo!" só depois que o servidor confirmou. Marcar antes fazia uma falha
+  // silenciosa parecer sucesso, e uma configuração de pagamento que não gravou
+  // é exatamente o tipo de coisa que não pode mentir.
   function saveSection(keys, section) {
-    saveMut.mutate(keys.map((k) => [k, form[k]]))
-    setSavedSection(section)
+    setErroSecao(null)
+    setSavedSection(null)
+    saveMut.mutate({ pairs: keys.map((k) => [k, form[k]]), secao: section })
   }
 
   const adminPct   = Number(form.payment_split_admin_pct) || 0
@@ -640,6 +669,7 @@ function TabPagamentos({ settings, qc }) {
             )}
             pending={saveMut.isPending}
             saved={savedSection === 'method'}
+            erro={erroSecao?.secao === 'method' ? erroSecao.mensagem : null}
           />
         </CardBody>
       </Card>
@@ -787,6 +817,7 @@ function TabPagamentos({ settings, qc }) {
               )}
               pending={saveMut.isPending}
               saved={savedSection === 'gateway'}
+              erro={erroSecao?.secao === 'gateway' ? erroSecao.mensagem : null}
             />
           </div>
         </CardBody>
@@ -835,6 +866,7 @@ function TabPagamentos({ settings, qc }) {
               onSave={() => saveSection(['payment_split_admin_pct'], 'split')}
               pending={saveMut.isPending}
               saved={savedSection === 'split'}
+              erro={erroSecao?.secao === 'split' ? erroSecao.mensagem : null}
             />
           </div>
         </CardBody>
@@ -928,6 +960,7 @@ function TabPagamentos({ settings, qc }) {
               ], 'conta')}
               pending={saveMut.isPending}
               saved={savedSection === 'conta'}
+              erro={erroSecao?.secao === 'conta' ? erroSecao.mensagem : null}
             />
           </div>
         </CardBody>
@@ -936,17 +969,24 @@ function TabPagamentos({ settings, qc }) {
   )
 }
 
-function SaveRow({ onSave, pending, saved }) {
+function SaveRow({ onSave, pending, saved, erro }) {
   return (
-    <div className="flex items-center gap-3 pt-1">
-      <Button type="button" onClick={onSave} disabled={pending}>
-        {pending ? 'Salvando…' : 'Salvar'}
-      </Button>
-      {saved && (
-        <span className="flex items-center gap-1.5 text-sm text-green-400">
-          <CheckCircle size={14} />
-          Salvo!
-        </span>
+    <div className="pt-1">
+      <div className="flex items-center gap-3">
+        <Button type="button" onClick={onSave} disabled={pending}>
+          {pending ? 'Salvando…' : 'Salvar'}
+        </Button>
+        {saved && (
+          <span className="flex items-center gap-1.5 text-sm text-green-400">
+            <CheckCircle size={14} />
+            Salvo!
+          </span>
+        )}
+      </div>
+      {erro && (
+        <p className="mt-2 text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded px-2 py-1.5 leading-relaxed">
+          {erro}
+        </p>
       )}
     </div>
   )
