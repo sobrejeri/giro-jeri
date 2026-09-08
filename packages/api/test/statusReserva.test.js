@@ -152,3 +152,56 @@ test('reserva com pagamento recusado pode ser paga de novo', async () => {
     'waiting_payment',
     'se o app deixar de oferecer o pagamento aqui, o servidor aceita algo que ninguém pede')
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Handler passado direto no onClick recebe o EVENTO como primeiro argumento
+// ═══════════════════════════════════════════════════════════════════════════
+// `onClick={handlePay}` entregava o evento do clique como `totalOverride`, e o
+// total da reserva virava um objeto de evento. O checkout abria com um valor
+// inválido e o pagamento morria ali — o botão "Pagar agora" simplesmente não
+// funcionava, e nada na tela dizia por quê.
+//
+// É uma classe de erro, não um caso: qualquer handler com parâmetro opcional
+// passado direto no onClick tem o mesmo destino.
+test('nenhum handler com parâmetro é passado direto para onClick', async () => {
+  const { readdir } = await import('node:fs/promises')
+  const raiz = new URL('../../turista/src/pages/', import.meta.url)
+
+  async function arquivos(dir) {
+    const saida = []
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const filho = new URL(e.name + (e.isDirectory() ? '/' : ''), dir)
+      if (e.isDirectory()) saida.push(...await arquivos(filho))
+      else if (e.name.endsWith('.jsx')) saida.push(filho)
+    }
+    return saida
+  }
+
+  const problemas = []
+  for (const arq of await arquivos(raiz)) {
+    const bruto = await readFile(arq, 'utf8')
+    // Só o código EXECUTÁVEL. Um comentário citando `onClick={handlePay}` para
+    // explicar o bug não é o bug — e sem isto o teste acusava a própria
+    // documentação da correção.
+    const src = bruto.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+    for (const m of src.matchAll(/onClick=\{(handle[A-Za-z0-9_]*)\}/g)) {
+      const nome = m[1]
+      // A declaração do handler, em qualquer das formas usadas no projeto.
+      const decl = src.match(
+        new RegExp(`(?:function\\s+${nome}\\s*\\(([^)]*)\\)|const\\s+${nome}\\s*=\\s*(?:async\\s*)?\\(([^)]*)\\)\\s*=>)`))
+      // Não achar a declaração NÃO é "tudo certo": é o teste deixando de
+      // testar. Antes isto era um `continue` mudo, e a varredura passava
+      // enquanto o bug estava lá.
+      assert.ok(decl, `não localizei a declaração de ${nome} — o teste precisa ser ajustado`)
+      const params = (decl[1] ?? decl[2] ?? '').trim()
+      // Um parâmetro chamado `e`/`ev`/`event` é o próprio evento: intencional.
+      if (params && !/^(e|ev|event)\b/.test(params)) {
+        problemas.push(`${arq.pathname.split('/pages/')[1]} · onClick={${nome}} mas ${nome}(${params})`)
+      }
+    }
+  }
+
+  assert.deepEqual(problemas, [],
+    'o evento do clique vira o primeiro argumento — use onClick={() => ' +
+    'handler()} quando o handler tiver parâmetro próprio')
+})

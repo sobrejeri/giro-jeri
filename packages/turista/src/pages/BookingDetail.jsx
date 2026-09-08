@@ -189,6 +189,16 @@ export default function BookingDetail() {
   // totalOverride: usado no checkout parcial (paga só o total das pernas aceitas).
   function handlePay(totalOverride) {
     if (!booking) return
+    // `onClick={handlePay}` entrega o EVENTO do clique como primeiro argumento.
+    // Sem esta guarda ele virava `totalOverride`, e o total da reserva era
+    // substituído por um objeto de evento: o checkout abria com um valor
+    // inválido e o pagamento morria ali. O botão simplesmente "não funcionava".
+    //
+    // A guarda fica aqui, e não só no onClick, porque protege qualquer
+    // chamador futuro que cometa o mesmo engano.
+    const total = typeof totalOverride === 'number' && Number.isFinite(totalOverride)
+      ? totalOverride
+      : null
     let dStr = '—'
     if (booking.service_date) {
       try { dStr = format(new Date(booking.service_date + 'T00:00:00'), "d MMM", { locale: ptBR }) } catch {}
@@ -203,7 +213,7 @@ export default function BookingDetail() {
         service_date_iso:    booking.service_date,
         service_time:        booking.service_time,
         people_count:        booking.people_count,
-        total_price:         totalOverride != null ? totalOverride : booking.total_amount,
+        total_price:         total != null ? total : booking.total_amount,
         origin_text:         booking.origin_text || booking.pickup_place_name || null,
         destination_text:    booking.destination_text || booking.destination_place_name || null,
         existing_booking_id: booking.id,
@@ -407,7 +417,7 @@ export default function BookingDetail() {
               </div>
             </div>
             <button
-              onClick={handlePay}
+              onClick={() => handlePay()}
               className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98] transition-transform"
             >
               {t('bookingDetailPg.payCta.button', { amount: fmt(booking.total_amount) })}
