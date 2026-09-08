@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ShieldCheck, AlertCircle } from 'lucide-react'
 import { api } from '../../lib/api'
-import { paymentMethodsDoBrick } from '../../lib/formasPagamento'
+import { paymentMethodsDoBrick, formasAtivas } from '../../lib/formasPagamento'
+import { useAuth } from '../../contexts/AuthContext'
 
 // ─── helpers ────────────────────────────────────────────────
 function fmt(v) {
@@ -26,7 +27,8 @@ function fmt(v) {
 // TODOS enquanto qualquer um abre. São coisas diferentes: sem a segunda, o
 // cliente clicaria no segundo adquirente enquanto o primeiro já está
 // redirecionando, e sairiam duas cobranças da mesma reserva.
-function BotaoAdquirente({ estilo, rotulo, carregando, desabilitado, onClick }) {
+function BotaoAdquirente({ estilo, rotulo, rotuloCarregando = 'Abrindo pagamento…',
+  carregando, desabilitado, onClick }) {
   const [semLogo, setSemLogo] = useState(false)
   return (
     <button
@@ -50,8 +52,99 @@ function BotaoAdquirente({ estilo, rotulo, carregando, desabilitado, onClick }) 
           className="h-5 w-auto shrink-0"
         />
       )}
-      <span>{carregando ? 'Abrindo pagamento…' : rotulo}</span>
+      <span>{carregando ? rotuloCarregando : rotulo}</span>
     </button>
+  )
+}
+
+// Cor institucional do Pix (Banco Central). Literal, como o azul do Mercado
+// Pago: é marca de terceiro, e mudar a paleta da Turiva não pode repintá-la.
+const ESTILO_PIX = {
+  cor: '#32BCAD', corAtiva: '#2BA697', texto: '#FFFFFF', logo: 'pix.svg',
+}
+
+// ─── BlocoPix ───────────────────────────────────────────────
+// Escolher e pagar, nesta ordem. O botão de pagar SÓ existe depois da escolha:
+// um botão de pagamento aceso sem nada selecionado convida ao clique e não diz
+// o que vai acontecer — e era o que o Brick fazia, com um "Pagar" azul genérico
+// visível desde a abertura da tela.
+function BlocoPix({ selecionado, onSelecionar, precisaEmail, email, onEmail,
+  erro, enviando, onPagar }) {
+  // O e-mail existe porque a conta pode ter sido criada só com telefone, e o
+  // Mercado Pago exige e-mail do pagador para emitir o PIX. Quem coletava isso
+  // era o Brick; tirando o Brick, a coleta tinha de vir junto — senão essa
+  // pessoa perderia o único meio de pagamento que ela tem.
+  const emailOk = !precisaEmail || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '')
+
+  return (
+    <div>
+      <button
+        onClick={onSelecionar}
+        aria-pressed={selecionado}
+        className={`w-full flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
+          selecionado ? 'border-[#32BCAD] bg-[#32BCAD]/5' : 'border-gray-200 bg-white'
+        }`}
+      >
+        <span
+          className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+            selecionado ? 'border-[#32BCAD]' : 'border-gray-300'
+          }`}
+        >
+          {selecionado && <span className="w-2 h-2 rounded-full bg-[#32BCAD]" />}
+        </span>
+        <span className="w-8 h-8 rounded-full bg-[#32BCAD] flex items-center justify-center shrink-0">
+          <img src={import.meta.env.BASE_URL + 'logos/pix.svg'} alt="" aria-hidden="true"
+            className="w-4 h-4" />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[14px] font-semibold text-gray-900">Pix</span>
+          <span className="block text-[11px] text-gray-500">Aprovação na hora, sem cadastro</span>
+        </span>
+      </button>
+
+      {selecionado && (
+        <div className="mt-3 space-y-3">
+          {precisaEmail && (
+            <div>
+              <label className="block text-[12px] font-semibold text-gray-700 mb-1">
+                Seu e-mail
+              </label>
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => onEmail(e.target.value)}
+                placeholder="voce@exemplo.com"
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[14px] outline-none focus:border-[#32BCAD]"
+              />
+              <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                Sua conta não tem e-mail cadastrado, e ele é obrigatório para emitir o Pix.
+              </p>
+            </div>
+          )}
+
+          {erro && (
+            <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
+              <p className="text-[12px] text-red-700 leading-relaxed">{erro}</p>
+            </div>
+          )}
+
+          <BotaoAdquirente
+            estilo={ESTILO_PIX}
+            rotulo="Pagar com Pix"
+            rotuloCarregando="Gerando o Pix…"
+            carregando={enviando}
+            desabilitado={enviando || !emailOk}
+            onClick={onPagar}
+          />
+          <p className="text-[11px] text-gray-500 text-center leading-relaxed">
+            Você recebe o QR Code na próxima tela. A reserva confirma assim que o
+            pagamento cair.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -284,6 +377,9 @@ export default function CheckoutPayment() {
   const navigate   = useNavigate()
   const { state }  = useLocation()
   const { t }      = useTranslation()
+  // O e-mail da conta decide se o PIX precisa pedir um: cadastro só por
+  // telefone é permitido, e o Mercado Pago exige e-mail do pagador.
+  const { user }   = useAuth() || {}
   // Formas de pagamento configuradas pelo dono no admin.
   //
   // COM PRAZO. Isto é preferência de exibição — NÃO pode segurar a tela de
@@ -316,6 +412,10 @@ export default function CheckoutPayment() {
   // cartão na tela, um booleano acenderia "Abrindo pagamento…" nos dois e o
   // cliente não saberia qual ele apertou.
   const [redirecionando, setRedirecionando] = useState(null)
+  const [pixSelecionado, setPixSelecionado] = useState(false)
+  const [emailPix,       setEmailPix]       = useState('')
+  const [erroPix,        setErroPix]        = useState('')
+  const [enviandoPix,    setEnviandoPix]    = useState(false)
   const [erroCartao,     setErroCartao]     = useState('')
 
   // Com o Checkout Pro ligado, o cartão sai do Brick: ele fica só com o PIX,
@@ -397,6 +497,38 @@ export default function CheckoutPayment() {
       logo: 'pagarme.svg',
       primario: false,
     },
+  }
+
+  // ── PIX: bloco próprio ou Brick ────────────────────────────────────────
+  // O Brick só continua fazendo sentido no modo 'bricks', em que ele desenha o
+  // FORMULÁRIO DE CARTÃO. Com o cartão nos botões hospedados, sobrava dele uma
+  // lista de uma opção só e um "Pagar" genérico — pior que o nosso bloco, e
+  // impossível de pintar com a marca do Pix (quem desenha é o SDK deles).
+  //
+  // No modo 'bricks' nada muda: o Brick segue inteiro, cartão e PIX.
+  const pixAtivo  = formasAtivas(settings).pix
+  const pixProprio = acquirersDisponiveis.length > 0 && pixAtivo
+
+  // A conta pode ter sido criada só com telefone, e o Mercado Pago exige
+  // e-mail do pagador para emitir o PIX. Quem coletava isso era o Brick — sem
+  // ele, quem não tem e-mail no cadastro ficaria sem nenhum meio de pagamento.
+  const precisaEmailNoPix = !user?.email
+
+  async function pagarComPix() {
+    if (enviandoPix) return
+    setEnviandoPix(true)
+    setErroPix('')
+    try {
+      // O MESMO handlePix de sempre. O servidor prefere o e-mail da conta e só
+      // usa este quando ela não tem — igual ao que o Brick mandava.
+      await handlePix(precisaEmailNoPix ? { payer: { email: emailPix.trim() } } : undefined)
+    } catch (err) {
+      // O Brick engolia o erro na sua própria caixinha. Aqui ele precisa
+      // aparecer: PIX que falha em silêncio é um cliente parado numa tela que
+      // não responde.
+      setEnviandoPix(false)
+      setErroPix(err?.message || 'Não foi possível gerar o Pix. Tente de novo.')
+    }
   }
 
   // Havendo QUALQUER botão de cartão hospedado, o Brick fica só com o PIX. Dois
@@ -692,13 +824,46 @@ export default function CheckoutPayment() {
                     )}
                   </div>
                 )}
-                <PaymentBrick
-                  amount={total_price}
-                  publicKey={sellerKey}
-                  onCard={handleCardPayment}
-                  onPix={handlePix}
-                  settings={settingsDoBrick}
-                />
+                {/* ── PIX ────────────────────────────────────────────────
+                    Bloco PRÓPRIO, com a mesma forma dos botões de cartão.
+                    Antes esta parte era o Brick do Mercado Pago, e com o
+                    cartão indo para os botões acima sobrava dele só uma lista
+                    de UMA opção mais um "Pagar" genérico, azul, sempre visível
+                    — inclusive antes de o cliente escolher qualquer coisa.
+
+                    Aqui a escolha vem primeiro e o botão de pagar aparece
+                    depois dela. O caminho do pagamento em si NÃO mudou: é o
+                    mesmo handlePix, o mesmo /intent, a mesma tela de
+                    processando. Só o gatilho é nosso. */}
+                {pixProprio && acquirersDisponiveis.length > 0 && (
+                  <div className="flex items-center gap-3 my-3">
+                    <span className="flex-1 h-px bg-gray-100" />
+                    <span className="text-[11px] text-gray-400">ou</span>
+                    <span className="flex-1 h-px bg-gray-100" />
+                  </div>
+                )}
+                {pixProprio ? (
+                  <BlocoPix
+                    selecionado={pixSelecionado}
+                    onSelecionar={() => setPixSelecionado((v) => !v)}
+                    precisaEmail={precisaEmailNoPix}
+                    email={emailPix}
+                    onEmail={setEmailPix}
+                    erro={erroPix}
+                    enviando={enviandoPix}
+                    onPagar={pagarComPix}
+                  />
+                ) : acquirersDisponiveis.length === 0 ? (
+                  /* Modo 'bricks': o Brick ainda desenha o FORMULÁRIO DE
+                     CARTÃO, então continua inteiro, cartão e PIX. */
+                  <PaymentBrick
+                    amount={total_price}
+                    publicKey={sellerKey}
+                    onCard={handleCardPayment}
+                    onPix={handlePix}
+                    settings={settingsDoBrick}
+                  />
+                ) : null /* cartão hospedado e PIX desligado: só os botões acima */}
               </>
             ) : (
               <div className="flex items-center justify-center py-8 gap-2 text-gray-400">

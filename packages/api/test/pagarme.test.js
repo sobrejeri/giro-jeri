@@ -476,3 +476,90 @@ test('o símbolo do Mercado Pago está no repositório e é branco', async () =>
     'a cor precisa estar gravada no arquivo — o logo só aparece sobre o azul')
   assert.doesNotMatch(svg, /currentColor/)
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PIX com bloco próprio
+// ═══════════════════════════════════════════════════════════════════════════
+// Com o cartão nos botões hospedados, o Brick do Mercado Pago sobrava como uma
+// lista de UMA opção mais um "Pagar" azul genérico, visível desde a abertura da
+// tela — antes de o cliente escolher qualquer coisa. E não dá para pintá-lo com
+// a marca do Pix: quem desenha aquilo é o SDK deles.
+test('o Pix tem bloco próprio quando o cartão está nos botões hospedados', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+
+  assert.match(jsx, /const pixProprio = acquirersDisponiveis\.length > 0 && pixAtivo/)
+  // #32BCAD é a cor institucional do Pix (Banco Central).
+  assert.match(jsx, /cor: '#32BCAD'/)
+  assert.match(jsx, /logo: 'pix\.svg'/)
+  // Mesma peça de botão dos adquirentes de cartão: um segundo componente
+  // divergiria da aparência assim que um dos dois fosse ajustado.
+  assert.match(jsx, /estilo=\{ESTILO_PIX\}[\s\S]{0,200}rotulo="Pagar com Pix"/)
+})
+
+// O pedido era explícito: o botão de pagar só depois da escolha. Um botão de
+// pagamento aceso sem nada selecionado convida ao clique e não diz o que vai
+// acontecer.
+test('o botão de pagar com Pix só existe depois do Pix selecionado', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  const i = jsx.indexOf('function BlocoPix')
+  assert.ok(i > 0, 'o bloco do Pix mudou de nome — ajuste este teste')
+  const bloco = jsx.slice(i, i + 4000)
+  assert.match(bloco, /\{selecionado && \(/,
+    'o botão de pagar precisa estar dentro da condição de selecionado')
+  // E a condição tem de vir ANTES do botão, não depois.
+  assert.ok(bloco.indexOf('{selecionado && (') < bloco.indexOf('rotulo="Pagar com Pix"'))
+})
+
+// O modo 'bricks' ainda usa o Brick para desenhar o FORMULÁRIO DE CARTÃO.
+// Removê-lo junto deixaria esse modo sem nenhuma forma de pagar.
+test('o Brick continua inteiro no modo bricks', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /acquirersDisponiveis\.length === 0 \? \([\s\S]{0,400}<PaymentBrick/,
+    'sem adquirente hospedado, o Brick precisa continuar sendo renderizado')
+})
+
+// O caminho do pagamento NÃO muda: mesmo handlePix, mesmo /intent, mesma tela
+// de processando. Só o gatilho passou a ser nosso. Um segundo caminho de PIX
+// seria a coisa mais fácil de quebrar aqui — o PIX é o que funciona hoje.
+test('o Pix próprio usa o mesmo handlePix, não um caminho novo', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /async function pagarComPix\(\)[\s\S]{0,900}await handlePix\(/)
+  // Só existe UMA chamada de criação de PIX no arquivo.
+  const intents = jsx.match(/payment_method: 'pix'/g) || []
+  assert.equal(intents.length, 1, 'dois caminhos de PIX divergem — e o PIX é o que funciona')
+})
+
+// Cadastro só por telefone é permitido, e o Mercado Pago exige e-mail do
+// pagador para emitir o PIX. Quem coletava isso era o Brick: tirando o Brick
+// sem repor a coleta, essa pessoa ficaria sem NENHUM meio de pagamento.
+test('sem e-mail na conta, o Pix pede um antes de deixar pagar', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /const precisaEmailNoPix = !user\?\.email/)
+  assert.match(jsx, /precisaEmailNoPix \? \{ payer: \{ email: emailPix\.trim\(\) \} \} : undefined/)
+  // E o botão fica travado enquanto o e-mail não for válido.
+  assert.match(jsx, /const emailOk = !precisaEmail \|\|/)
+  assert.match(jsx, /desabilitado=\{enviando \|\| !emailOk\}/)
+})
+
+// O Brick engolia o erro na própria caixinha. Sem repor isso, um PIX que falha
+// deixa o cliente parado numa tela que não responde.
+test('falha ao gerar o Pix aparece na tela', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /catch \(err\) \{[\s\S]{0,300}setErroPix\(/)
+  assert.match(jsx, /\{erro && \(/, 'o erro precisa ser renderizado no bloco')
+})
+
+test('o símbolo do Pix está no repositório e é branco', async () => {
+  const svg = await readFile(
+    new URL('../../turista/public/logos/pix.svg', import.meta.url), 'utf8')
+  assert.match(svg, /<svg[^>]*viewBox/)
+  assert.match(svg, /<path/)
+  assert.match(svg, /fill="#FFFFFF"/, 'o logo só aparece sobre o verde do Pix')
+  assert.doesNotMatch(svg, /currentColor/)
+})
