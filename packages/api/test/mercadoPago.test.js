@@ -328,7 +328,7 @@ test('o diagnóstico é restrito ao admin', async () => {
 test('token tokenizado na conta do operador não vai para cobrança da plataforma', async () => {
   const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
   const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
-  assert.match(executavel, /if \(!split && mp_public_key && booking\?\.operator_id\)/,
+  assert.match(executavel, /if \(!split && mp_public_key && booking\?\.operator_id/,
     'sem esta checagem a cobrança sai fadada a falhar')
   assert.match(executavel, /A tela de pagamento está desatualizada/,
     'e o cliente precisa saber que é para recarregar, não que o cartão foi negado')
@@ -784,4 +784,78 @@ test('a volta do Mercado Pago mostra a recusa na hora, sem confiar na URL', asyn
   const inicio = jsx.indexOf('function VoltandoDoMercadoPago')
   const bloco = jsx.slice(inicio, inicio + 4000)
   assert.match(bloco, /setInterval/, 'a consulta ao servidor não pode parar por causa da URL')
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Split multi-recebedor: a PLATAFORMA como principal da cobrança
+// ═══════════════════════════════════════════════════════════════════════════
+// A diferença que importa: com `application_fee` a cobrança nasce na conta do
+// OPERADOR e o antifraude avalia a conta dele — nova, sem histórico, recusada
+// por risco. Com `disbursements` ela nasce na conta da PLATAFORMA, que
+// distribui a fatia do operador. Os valores não mudam; muda quem é avaliado.
+test('a cobrança com disbursements sai na conta da plataforma', async () => {
+  const espiao = clienteEspiao()
+  const { createCardPaymentSplit, buildDisbursements } = await import('../src/services/mercadoPago.js')
+  await createCardPaymentSplit({
+    ...cartaoBase, paymentClient: espiao,
+    payerName: 'Maria Silva', payerPhone: '85998765432',
+    item: { id: 'tour-9', title: 'Litoral Leste' },
+    disbursements: buildDisbursements([
+      { amount: 10, collectorId: '41422708', applicationFee: 9.2, externalReference: 'bk-1' },
+    ]),
+  })
+  const { body, requestOptions } = espiao.enviados[0]
+
+  assert.equal(body.disbursements.length, 1)
+  assert.equal(body.disbursements[0].collector_id, 41422708, 'o operador é o RECEBEDOR, não o cobrador')
+  assert.equal(body.disbursements[0].amount, 10)
+  assert.equal(body.disbursements[0].application_fee, 9.2, 'a comissão da plataforma não muda de valor')
+  assert.equal(body.application_fee, undefined,
+    'application_fee no topo é o OUTRO modelo — misturar os dois é pedir recusa')
+
+  // O resto do que faz uma cobrança ser aprovada continua indo.
+  assert.equal(requestOptions.idempotencyKey, 'tentativa-1')
+  assert.equal(body.additional_info.items[0].category_id, 'travels')
+  assert.equal(body.payer.identification.number, CPF_VALIDO)
+})
+
+test('disbursements sem recebedor não vira cobrança', async () => {
+  const espiao = clienteEspiao()
+  const { createCardPaymentSplit } = await import('../src/services/mercadoPago.js')
+  await assert.rejects(
+    createCardPaymentSplit({ ...cartaoBase, paymentClient: espiao, disbursements: [] }),
+    /ao menos 1 disbursement/)
+  assert.equal(espiao.enviados.length, 0)
+})
+
+// Um card token pertence à conta cuja chave pública o gerou. Com disbursements
+// quem cobra é a plataforma, então o token TEM de ser dela — devolver a chave
+// do operador aqui geraria token de uma conta e cobrança de outra.
+test('no modo disbursements o app tokeniza com a chave da plataforma', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+
+  assert.match(executavel, /ctx\?\.sellerAccessToken && modoDeSplit\(cfg\) !== 'disbursements'/,
+    'checkout-key não pode devolver a chave do operador neste modo')
+  // E as duas guardas de "token de outra conta" precisam saber do modo, senão
+  // acusam um descasamento que é intencional.
+  assert.match(executavel, /split && modoDeSplit\(cfg\) !== 'disbursements'/)
+  assert.match(executavel, /!split && mp_public_key && booking\?\.operator_id && modoDeSplit\(cfg\) !== 'disbursements'/)
+})
+
+test('sem mp_user_id do operador, cai no modelo anterior em vez de falhar', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /modoDeSplit\(cfg\) === 'disbursements' && !!split\.collectorId/,
+    'sem o collector_id não há como distribuir — melhor o modelo antigo que um erro')
+  assert.match(src, /caindo em application_fee/, 'e o log precisa dizer por quê')
+})
+
+test('o modo padrão continua sendo application_fee', async () => {
+  const { modoDeSplit } = await import('../src/routes/payments.js')
+  assert.equal(modoDeSplit({}), 'application_fee')
+  assert.equal(modoDeSplit({ payment_split_mode: '' }), 'application_fee')
+  assert.equal(modoDeSplit({ payment_split_mode: 'disbursements' }), 'disbursements')
+  assert.equal(modoDeSplit({ payment_split_mode: 'qualquer_coisa' }), 'application_fee',
+    'valor desconhecido não pode ligar um modelo de cobrança')
 })

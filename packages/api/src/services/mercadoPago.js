@@ -240,6 +240,86 @@ export function buildDisbursements(recipients) {
   }))
 }
 
+// ── Cartão com split N-recebedores (plataforma como principal) ──────────────
+//
+// A diferença que importa em relação a `createCardPayment` + `application_fee`:
+// AQUI o pagamento nasce na conta da PLATAFORMA, com o token dela, e ela
+// distribui para os recebedores. Lá, o pagamento nasce na conta do OPERADOR.
+//
+// Isso muda quem o antifraude avalia. No modelo `application_fee` o Mercado
+// Pago julga a conta do operador — nova, sem histórico de vendas — e vinha
+// recusando por risco (cc_rejected_high_risk) mesmo com Device ID, 3DS,
+// additional_info e identidade real do pagador. Aqui quem responde pela venda é
+// a conta da plataforma, com o histórico dela.
+//
+// O CARD TOKEN precisa ter sido criado com a chave pública da PLATAFORMA: um
+// token pertence à conta cuja chave o gerou, e cobrar com outro access token é
+// recusa na certa.
+//
+// NÃO VALIDADO com cartão. O `disbursements` está documentado para o "Split de
+// pagamentos" e exige a aplicação marketplace com o recurso habilitado no
+// painel do MP. Se o recurso não estiver liberado, ou não valer para cartão, o
+// próprio Mercado Pago recusa a criação — e é isso que o teste vai revelar.
+export async function createCardPaymentSplit({
+  amount, description, installments = 1, paymentMethodId, cardToken, issuerId,
+  payerEmail, payerName, payerDoc, payerPhone, payerRegistrationDate,
+  externalRef, idempotencyKey, deviceId, item, disbursements,
+  threeDSecure = false, paymentClient,
+}) {
+  // Token da PLATAFORMA sempre: é ela quem cobra e distribui.
+  const client = paymentClient || (mp ? new Payment(mp) : null)
+  if (!client) throw new Error('Mercado Pago não configurado: falta o Access Token da plataforma (MP_ACCESS_TOKEN) para o split multi-recebedor.')
+  if (!idempotencyKey) throw new Error('payment_attempt_id ausente; pagamento não criado.')
+  if (!payerEmail) throw semEmailDoComprador()
+  if (!disbursements?.length) throw new Error('Split multi-recebedor exige ao menos 1 disbursement.')
+
+  const apiBase = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || ''
+  const notificationUrl = apiBase ? `${apiBase}/api/payments/webhook` : undefined
+  const telefone = telefoneDoPagador(payerPhone)
+
+  const body = {
+    transaction_amount: valorParaMP(amount),
+    description,
+    installments:       Number(installments) || 1,
+    payment_method_id:  paymentMethodId,
+    token:              cardToken,
+    statement_descriptor: 'TURIVA',
+    external_reference: String(externalRef),
+    ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+    payer: {
+      email: payerEmail,
+      ...nomeDoPagador(payerName),
+      ...identificacaoDoPagador(payerDoc, { obrigatorio: true }),
+    },
+    // Mesmo bloco de contexto do caminho normal: é o que o antifraude lê.
+    additional_info: {
+      ...(item ? { items: [{
+        id: String(item.id), title: String(item.title || '').slice(0, 256),
+        description: String(item.description || item.title || '').slice(0, 256),
+        category_id: 'travels', quantity: 1,
+        unit_price: valorParaMP(item.unit_price ?? amount, 'unit_price'),
+      }] } : {}),
+      payer: {
+        ...nomeDoPagador(payerName),
+        ...(telefone ? { phone: telefone } : {}),
+        ...(payerRegistrationDate ? { registration_date: payerRegistrationDate } : {}),
+      },
+    },
+    disbursements,
+  }
+  if (issuerId) body.issuer_id = String(issuerId)
+  if (threeDSecure) body.three_d_secure_mode = 'optional'
+
+  const response = await client.create({
+    body,
+    requestOptions: { idempotencyKey, ...(deviceId ? { meliSessionId: String(deviceId) } : {}) },
+  })
+  console.log('[MP CARTÃO SPLIT] booking=%s mp_id=%s status=%s detail=%s recebedores=%s device_id=%s',
+    externalRef, response.id, response.status, response.status_detail || '-',
+    disbursements.length, !!deviceId)
+  return respostaDoCartao(response, installments)
+}
+
 export async function createPixPaymentSplit({ amount, description, payerEmail, payerName, payerDoc, externalRef, disbursements }) {
   if (!mp) throw new Error('Mercado Pago não configurado: falta o Access Token da plataforma (MP_ACCESS_TOKEN) para o split multi-recebedor.')
   if (!disbursements?.length) throw new Error('Split multi-recebedor exige ao menos 1 disbursement.')
@@ -421,6 +501,14 @@ export async function createCardPayment({
   })
 
   // Extrai juro de parcelamento da lista de fees retornada pelo MP
+  return respostaDoCartao(response, installments)
+}
+
+// A forma do resultado de um cartão, usada pelos DOIS caminhos de cobrança
+// (application_fee e disbursements). Duas cópias divergiriam, e o que a rota lê
+// daqui alimenta a linha de `payments` — divergência aqui vira dado errado no
+// banco.
+function respostaDoCartao(response, installments) {
   const financingFee = (response.fees || [])
     .filter((f) => f.fee_id === 'FINANCING_FEE' || (f.type && /juros|interest|financing/i.test(f.type)))
     .reduce((acc, f) => acc + (Number(f.value) || 0), 0)

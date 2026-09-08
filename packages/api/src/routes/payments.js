@@ -489,7 +489,15 @@ async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg, metodo = 
     )
     return null
   }
-  return { sellerAccessToken: opMp.token, applicationFee, operatorId, publicKey: opMp.publicKey }
+  // `collectorId` é o mp_user_id do operador — o que identifica a conta dele
+  // como RECEBEDORA quando a cobrança nasce na plataforma (disbursements).
+  const { data: opUser } = await supabase.from('users')
+    .select('mp_user_id').eq('id', operatorId).maybeSingle()
+
+  return {
+    sellerAccessToken: opMp.token, applicationFee, operatorId,
+    publicKey: opMp.publicKey, collectorId: opUser?.mp_user_id || null,
+  }
 }
 
 async function getSplitContext(booking, chargedTotal, cfg, metodo = 'credit_card') {
@@ -771,6 +779,29 @@ async function reconciliarTentativa(payment) {
 // e a API respondendo 409 "esta reserva não está aguardando pagamento", sem
 // nenhum caminho de volta. Recusa é convite a tentar de novo, não fim de linha.
 const PODE_PAGAR = ['awaiting_payment', 'payment_failed']
+
+// ── Quem é o PRINCIPAL da cobrança ───────────────────────────────────────────
+//
+//   'application_fee' (padrão) — a cobrança nasce na conta do OPERADOR, com o
+//     token dele, e a plataforma retém a comissão. Quem o antifraude avalia é
+//     a conta DELE.
+//
+//   'disbursements' — a cobrança nasce na conta da PLATAFORMA, com o token
+//     dela, que distribui a fatia do operador. Quem responde pela venda é a
+//     conta da plataforma, com o histórico dela.
+//
+// A diferença não é de contabilidade, é de RISCO: conta de operador recém
+// conectada, sem histórico de vendas, vinha sendo recusada por
+// cc_rejected_high_risk mesmo com tudo que o Mercado Pago documenta sendo
+// enviado. Inverter quem é o principal ataca a raiz.
+//
+// Exige "Split de pagamentos" habilitado na aplicação marketplace do MP. Sem
+// isso o próprio gateway recusa a criação — e é assim que se descobre.
+export function modoDeSplit(cfg) {
+  return String(cfg?.payment_split_mode || 'application_fee') === 'disbursements'
+    ? 'disbursements'
+    : 'application_fee'
+}
 
 async function inserirPagamento(row, tentativaReservadaId = null) {
   let tentativa = { ...row }
@@ -1335,7 +1366,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         // estava aberta: ela pegou a chave do operador antes da mudança e
         // continua usando. Sem esta checagem, a cobrança sai fadada a falhar e
         // o cliente leva "recusado por segurança" por um problema de cache.
-        if (!split && mp_public_key && booking?.operator_id) {
+        if (!split && mp_public_key && booking?.operator_id && modoDeSplit(cfg) !== 'disbursements') {
           const { data: opChave } = await supabase
             .from('users').select('mp_public_key').eq('id', booking.operator_id).maybeSingle()
           if (opChave?.mp_public_key && opChave.mp_public_key === mp_public_key) {
@@ -1349,7 +1380,11 @@ router.post('/intent', authenticate, async (req, res, next) => {
           }
         }
 
-        if (split) {
+        // No modo `disbursements` esta verificação não se aplica: o token é da
+        // PLATAFORMA de propósito, e comparar com a chave do operador acusaria
+        // um descasamento que não existe — derrubando o split logo no modo que
+        // veio para consertar o problema.
+        if (split && modoDeSplit(cfg) !== 'disbursements') {
           const mesmaConta = !!split.publicKey && !!mp_public_key && split.publicKey === mp_public_key
           if (!mesmaConta) {
             console.warn(
@@ -1395,10 +1430,38 @@ router.post('/intent', authenticate, async (req, res, next) => {
         if (reserva.modo !== 'indisponivel') tentativaReservadaId = reserva.paymentId
 
         // ── Cartão: sem fallback fake — erro propaga ──────
-        const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
+        const { createCardPayment, createCardPaymentSplit, buildDisbursements, mapRejectionKey } =
+          await import('../services/mercadoPago.js')
         const userInfo = await supabase.from('users').select('email, full_name, phone, created_at').eq('id', req.user.id).single()
 
-        cardResult = await comChamadaMarcada(tentativaReservadaId, () => createCardPayment({
+        // ── Quem é o PRINCIPAL desta cobrança ────────────────────────────
+        // Com 'disbursements' o pagamento nasce na conta da PLATAFORMA e ela
+        // distribui a fatia do operador — o antifraude passa a avaliar a conta
+        // dela. Ver modoDeSplit(). Exige o mp_user_id do operador (o
+        // collector_id) e o "Split de pagamentos" liberado na aplicação.
+        const porDisbursements =
+          !!split && modoDeSplit(cfg) === 'disbursements' && !!split.collectorId
+        if (split && modoDeSplit(cfg) === 'disbursements' && !split.collectorId) {
+          console.warn('[split] modo disbursements pedido mas o operador %s não tem mp_user_id — caindo em application_fee',
+            split.operatorId)
+        }
+
+        const criarCobranca = (dados) => (porDisbursements
+          ? createCardPaymentSplit({
+              ...dados,
+              // A fatia do operador é o que sobra depois da comissão. Mesma
+              // aritmética do application_fee: o número não muda, muda quem
+              // cobra e quem é avaliado pelo risco.
+              disbursements: buildDisbursements([{
+                amount:            chargedTotal,
+                collectorId:       split.collectorId,
+                applicationFee:    split.applicationFee,
+                externalReference: booking.id,
+              }]),
+            })
+          : createCardPayment({ ...dados, sellerAccessToken: split?.sellerAccessToken, applicationFee: split?.applicationFee }))
+
+        cardResult = await comChamadaMarcada(tentativaReservadaId, () => criarCobranca({
           amount:          chargedTotal,
           description:     service_name || `Reserva ${bookingCode}`,
           installments:    cardInstallments,
@@ -1443,8 +1506,11 @@ router.post('/intent', authenticate, async (req, res, next) => {
           // que o retry de um timeout virava a segunda cobrança.
           idempotencyKey:  payment_attempt_id,
           deviceId:        device_id || undefined,
-          sellerAccessToken: split?.sellerAccessToken,
-          applicationFee:    split?.applicationFee,
+          // O split NÃO entra aqui: quem decide entre application_fee (cobra na
+          // conta do operador) e disbursements (cobra na da plataforma) é
+          // `criarCobranca`, logo acima. Repetir os campos aqui faria os dois
+          // caminhos parecerem iguais quando o ponto é justamente serem
+          // diferentes.
           // Débito no Brasil exige autenticação do emissor. Ver mercadoPago.js.
           // 3-D Secure em CRÉDITO também, não só em débito.
           //
@@ -2234,7 +2300,11 @@ router.get('/booking/:id/checkout-key', authenticate, async (req, res, next) => 
       const ctx = completa
         ? await getSplitContext(completa, Number(completa.total_amount) || 0, cfg)
         : null
-      if (ctx?.sellerAccessToken) {
+      // No modo `disbursements` a cobrança nasce na conta da PLATAFORMA, então
+      // o cartão tem de ser tokenizado com a chave pública DELA. Devolver a do
+      // operador aqui geraria um token de uma conta e uma cobrança de outra —
+      // recusa garantida, com mensagem que não explica nada.
+      if (ctx?.sellerAccessToken && modoDeSplit(cfg) !== 'disbursements') {
         const { data: op } = await supabase
           .from('users').select('mp_public_key').eq('id', booking.operator_id).maybeSingle()
         publicKey = op?.mp_public_key || null
