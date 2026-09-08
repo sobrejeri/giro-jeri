@@ -418,3 +418,47 @@ test('as chaves novas do cartão são realmente gravadas pelo admin', async () =
     assert.ok(salvas.has(k), `${k} é editável mas não está na lista do Salvar`)
   }
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A aparência do botão de cada adquirente
+// ═══════════════════════════════════════════════════════════════════════════
+// Um botão que leva o cliente para FORA do site precisa parecer com o lugar
+// para onde ele vai. Botão na cor da Turiva levando a outro domínio é o que
+// ensina o cliente a desconfiar no meio do pagamento.
+test('o botão do Mercado Pago usa a cor oficial deles', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  // #009EE3 é o azul institucional do Mercado Pago.
+  assert.match(jsx, /cor: '#009EE3'/, 'a cor da marca não pode virar a cor do tema')
+  assert.match(jsx, /backgroundColor: estilo\.cor/,
+    'a cor precisa chegar ao botão, não só ficar declarada')
+})
+
+// O app é publicado num SUBCAMINHO do GitHub Pages. Um '/logos/...' absoluto
+// aponta para a raiz do domínio e o logo some em produção — funcionando em dev
+// e quebrando publicado, que é o pior jeito de quebrar.
+test('o logo é carregado pela base do site, não por caminho absoluto', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /import\.meta\.env\.BASE_URL \+ 'logos\/' \+ estilo\.logo/)
+  assert.doesNotMatch(jsx, /src="\/logos\//, 'caminho absoluto quebra no GitHub Pages')
+
+  // E o arquivo ausente não pode derrubar nada: é marca de terceiro, baixada
+  // do brand kit, e pode simplesmente não estar lá. Como <img> é só um 404;
+  // como `import`, seria o build inteiro do Vite falhando.
+  assert.match(jsx, /onError=\{\(\) => setSemLogo\(true\)\}/)
+  assert.doesNotMatch(jsx, /import .* from '.*logos\//,
+    'importar o logo faria o build quebrar quando o arquivo não existe')
+})
+
+// Sem isto, o cliente clica no segundo adquirente enquanto o primeiro já está
+// redirecionando — e saem duas cobranças da mesma reserva.
+test('um adquirente abrindo desabilita o outro botão', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /desabilitado=\{!!redirecionando\}/,
+    'todos os botões param enquanto qualquer um abre')
+  assert.match(jsx, /carregando=\{redirecionando === g\}/,
+    'mas só o clicado mostra "Abrindo pagamento…"')
+  assert.match(jsx, /disabled=\{desabilitado\}/)
+})

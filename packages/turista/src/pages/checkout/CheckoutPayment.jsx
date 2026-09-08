@@ -10,6 +10,51 @@ function fmt(v) {
   return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 }
 
+// ─── BotaoAdquirente ────────────────────────────────────────
+// Botão de pagamento com a identidade do ADQUIRENTE — cor e logo dele.
+//
+// O logo vem de `public/logos/`, e NÃO é importado: um import de arquivo
+// ausente quebra o build inteiro do Vite, e este é justamente um arquivo que
+// pode não estar lá (é marca de terceiro, baixada do brand kit deles). Como
+// `<img>`, o arquivo faltando é só um 404 — o `onError` esconde a imagem e o
+// botão continua inteiro, com a cor e o texto. Colocar o SVG oficial no
+// caminho certo faz o logo aparecer sem tocar em código.
+//
+// BASE_URL é obrigatório: o app é publicado num subcaminho do GitHub Pages, e
+// um '/logos/...' absoluto apontaria para a raiz do domínio.
+// `carregando` é só deste botão (qual está abrindo); `desabilitado` vale para
+// TODOS enquanto qualquer um abre. São coisas diferentes: sem a segunda, o
+// cliente clicaria no segundo adquirente enquanto o primeiro já está
+// redirecionando, e sairiam duas cobranças da mesma reserva.
+function BotaoAdquirente({ estilo, rotulo, carregando, desabilitado, onClick }) {
+  const [semLogo, setSemLogo] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      disabled={desabilitado}
+      style={{
+        backgroundColor: estilo.cor,
+        color: estilo.texto,
+        ...(estilo.borda ? { borderWidth: 1, borderColor: '#E5E7EB' } : {}),
+      }}
+      className="w-full flex items-center justify-center gap-2.5 rounded-xl font-semibold text-[14px] py-3.5 active:scale-[0.99] transition-transform disabled:opacity-60"
+    >
+      {!semLogo && estilo.logo && (
+        <img
+          src={import.meta.env.BASE_URL + 'logos/' + estilo.logo}
+          onError={() => setSemLogo(true)}
+          alt=""
+          /* alt vazio e aria-hidden: o nome do adquirente já está no texto do
+             botão. Repeti-lo faria o leitor de tela anunciar duas vezes. */
+          aria-hidden="true"
+          className="h-5 w-auto shrink-0"
+        />
+      )}
+      <span>{carregando ? 'Abrindo pagamento…' : rotulo}</span>
+    </button>
+  )
+}
+
 // ─── getMercadoPago ──────────────────────────────────────────
 // Instancia o SDK somente quando o script já carregou. Com `publicKey` (chave
 // do operador atribuído), tokeniza o cartão NA conta dela para o split;
@@ -315,20 +360,42 @@ export default function CheckoutPayment() {
     return lista.filter((g) => g !== 'mercado_pago' || cartaoNoMercadoPago)
   })()
 
-  // Rótulo e explicação de cada botão. O texto é o produto aqui: a diferença
-  // entre os dois não é técnica para o cliente, é "preciso de conta ou não".
+  // Rótulo, aparência e explicação de cada botão. O texto é o produto aqui: a
+  // diferença entre os dois não é técnica para o cliente, é "preciso de conta
+  // ou não".
+  //
+  // A COR é do adquirente, não do app. Um botão que leva o cliente para FORA do
+  // site precisa parecer com o lugar para onde ele vai — quem toca "Pagar com
+  // Mercado Pago" e cai numa tela azul do Mercado Pago entende que está no
+  // lugar certo. Botão na cor da Turiva levando a outro domínio é justamente o
+  // que ensina o cliente a desconfiar.
   const BOTOES_CARTAO = {
     mercado_pago: {
       rotulo: cartaoSoComConta ? 'Pagar com Mercado Pago' : 'Pagar com cartão',
       ajuda: cartaoSoComConta
         ? 'Cartão de crédito ou débito, com login na sua conta do Mercado Pago.'
         : 'Você vai concluir no ambiente do Mercado Pago e volta para cá em seguida.',
+      // #009EE3 é o azul institucional do Mercado Pago. Fica como valor literal
+      // (e não como cor do tema) de propósito: é marca de terceiro, e mudar a
+      // paleta da Turiva não pode repintar o botão deles.
+      cor: '#009EE3',
+      corAtiva: '#0089C7',
+      texto: '#FFFFFF',
+      logo: 'mercadopago.svg',
       primario: true,
     },
     pagarme: {
       rotulo: 'Pagar com cartão',
       ajuda: 'Crédito ou débito, sem precisar de conta em lugar nenhum. Aceita cartão internacional.',
-      primario: !acquirersDisponiveis.includes('mercado_pago'),
+      // Neutro de propósito: fica visualmente em segundo plano quando os dois
+      // aparecem, que é a hierarquia certa — e continua legível quando é o
+      // único botão da tela.
+      cor: '#FFFFFF',
+      corAtiva: '#F3F4F6',
+      texto: '#1F2937',
+      borda: true,
+      logo: 'pagarme.svg',
+      primario: false,
     },
   }
 
@@ -597,20 +664,16 @@ export default function CheckoutPayment() {
                       if (!b) return null
                       return (
                         <div key={g}>
-                          <button
+                          <BotaoAdquirente
+                            estilo={b}
+                            rotulo={b.rotulo}
+                            carregando={redirecionando === g}
+                            desabilitado={!!redirecionando}
                             /* Seta, e não a função direta: onClick passa o
                                EVENTO como primeiro argumento, e um handler que
                                espera outra coisa recebe o clique no lugar. */
                             onClick={() => pagarComCartaoHospedado(g)}
-                            disabled={!!redirecionando}
-                            className={`w-full flex items-center justify-center gap-2 rounded-xl font-semibold text-[14px] py-3.5 active:scale-[0.99] transition-transform disabled:opacity-60 ${
-                              b.primario
-                                ? 'bg-brand text-white'
-                                : 'bg-white text-gray-800 border border-gray-200'
-                            }`}
-                          >
-                            {redirecionando === g ? 'Abrindo pagamento…' : b.rotulo}
-                          </button>
+                          />
                           <p className="text-[11px] text-gray-500 text-center mt-2 leading-relaxed">
                             {b.ajuda}
                           </p>
