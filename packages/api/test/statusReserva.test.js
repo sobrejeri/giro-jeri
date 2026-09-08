@@ -23,7 +23,7 @@ test('nada é confirmado sem o comercial dizer que foi pago', () => {
       const s = resolveStatusReserva({ status_commercial: c, status_operational: o })
       assert.notEqual(s, 'confirmed',
         `${c} + ${o} virou "confirmado" — o operador aceitar não significa que o dinheiro entrou`)
-      assert.equal(rotuloDoTotal(s), 'Total',
+      assert.equal(rotuloDoTotal(s, { status_commercial: c }), 'Total',
         `${c} + ${o} mostraria "Total pago" numa reserva não paga`)
     }
   }
@@ -31,16 +31,17 @@ test('nada é confirmado sem o comercial dizer que foi pago', () => {
 
 // Foi este o caso exato do incidente: recusado no gateway, operador já aceito.
 test('pagamento recusado com operador aceito continua pedindo pagamento', () => {
-  const s = resolveStatusReserva({ status_commercial: 'payment_failed', status_operational: 'assigned' })
-  assert.equal(s, 'waiting_payment')
-  assert.equal(rotuloDoTotal(s), 'Total')
+  const reserva = { status_commercial: 'payment_failed', status_operational: 'assigned' }
+  assert.equal(resolveStatusReserva(reserva), 'waiting_payment')
+  assert.equal(rotuloDoTotal(resolveStatusReserva(reserva), reserva), 'Total')
 })
 
 test('reserva paga e com operador cuidando é confirmada', () => {
   for (const o of ['assigned', 'awaiting_dispatch', 'confirmed', 'en_route', 'dispatched']) {
-    const s = resolveStatusReserva({ status_commercial: 'paid', status_operational: o })
+    const reserva = { status_commercial: 'paid', status_operational: o }
+    const s = resolveStatusReserva(reserva)
     assert.equal(s, 'confirmed', `paid + ${o} deveria ser confirmada`)
-    assert.equal(rotuloDoTotal(s), 'Total pago')
+    assert.equal(rotuloDoTotal(s, reserva), 'Total pago')
   }
 })
 
@@ -119,11 +120,13 @@ test('aprovação não promove reserva cancelada ou reembolsada', async () => {
     // A guarda pode estar DEPOIS (filtro no próprio UPDATE, caminho de reserva
     // única) ou ANTES (a lista do grupo já vem filtrada em `list`). Olha os
     // dois lados da escrita.
-    const antes  = src.slice(Math.max(0, m.index - 900), m.index)
+    const antes  = src.slice(Math.max(0, m.index - 1800), m.index)
     const depois = src.slice(m.index, m.index + 900)
+    // Duas formas: filtro no próprio UPDATE (reserva única) ou lista já
+    // filtrada antes do laço (grupo). O que não pode é promover sem nenhuma.
     const protegido =
       /not\('status_commercial', 'in'/.test(depois) ||
-      /\['awaiting_payment', 'paid'\]\.includes/.test(antes)
+      /\[\.\.\.PODE_PAGAR, 'paid'\]\.includes/.test(antes)
     assert.ok(protegido,
       `promoção a paid sem excluir cancelled/refunded (perto de "${depois.slice(0, 60).replace(/\n/g, ' ')}")`)
   }
@@ -137,7 +140,9 @@ test('aprovação não promove reserva cancelada ou reembolsada', async () => {
 // cliente mais tenta de novo.
 test('reserva com pagamento recusado pode ser paga de novo', async () => {
   const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
-  assert.match(src, /\['awaiting_payment', 'payment_failed'\]\.includes\(existing\.status_commercial\)/,
+  assert.match(src, /const PODE_PAGAR = \['awaiting_payment', 'payment_failed'\]/,
+    'payment_failed precisa estar entre os estados que ainda podem ser pagos')
+  assert.match(src, /PODE_PAGAR\.includes\(existing\.status_commercial\)/,
     'o servidor precisa aceitar o retry que a própria tela oferece')
 
   // E as duas pontas precisam concordar sobre o que "aguardando pagamento" é.

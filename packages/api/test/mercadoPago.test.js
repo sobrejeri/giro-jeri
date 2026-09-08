@@ -691,9 +691,11 @@ test('rebaixar reserva para falha exige que ela ainda esteja esperando pagar', a
       const vizinhanca = fonte.slice(m.index, m.index + 760)
       // Duas formas aceitáveis: a lista dos estados que podem cair, ou um
       // `.eq` ainda mais restrito (o caminho da expiração usa este).
+      // Três formas aceitáveis, todas equivalentes em efeito: a constante
+      // PODE_PAGAR, a lista literal, ou um `.eq` ainda mais restrito.
       assert.match(
         vizinhanca,
-        /\.in\('status_commercial', \['awaiting_payment', 'payment_failed'\]\)|\.eq\('status_commercial', 'awaiting_payment'\)/,
+        /\.in\('status_commercial', PODE_PAGAR\)|\.in\('status_commercial', \['awaiting_payment', 'payment_failed'\]\)|\.eq\('status_commercial', 'awaiting_payment'\)/,
         `${nome}: rebaixa a reserva sem conferir o estado atual — pode desfazer um pagamento`)
     }
   }
