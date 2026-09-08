@@ -55,6 +55,9 @@ const PAYMENT_KEYS = new Set([
   'payment_method_pix', 'payment_method_credit', 'payment_method_debit',
   'payment_max_installments',
   'payment_card_flow', 'payment_mp_wallet_only',
+  // Lista de adquirentes de cartão + a chave PRÓPRIA do Pagar.me (a genérica é
+  // do gateway padrão, que é outro).
+  'payment_card_acquirers', 'payment_pagarme_api_key',
   // Split de 2 recebedores (migration 087). A chave existia no banco e NÃO
   // aparecia em lugar nenhum do painel: não dava para ver se estava ligada nem
   // para ligar — só por SQL. Numa decisão que muda para onde o dinheiro vai,
@@ -74,6 +77,26 @@ const GATEWAYS = [
   { value: 'asaas',        label: 'Asaas' },
   { value: 'pagarme',      label: 'Pagar.me' },
 ]
+
+// Adquirentes de CARTÃO oferecidos ao cliente. É uma lista, e não uma escolha
+// única, porque cada um cobre um público que o outro não cobre — ver a nota em
+// acquirersDeCartao() na API, que é quem decide de verdade.
+const ACQUIRERS_CARTAO = [
+  { value: 'mercado_pago', label: 'Mercado Pago',
+    nota: 'Cartão na página do Mercado Pago. Com "exigir conta" ligado, atende só quem tem conta lá — que é justamente quem aprova.' },
+  { value: 'pagarme', label: 'Pagar.me',
+    nota: 'Cartão na página do Pagar.me, sem exigir conta em lugar nenhum. É o caminho de quem não tem conta no Mercado Pago — inclusive turista estrangeiro. Sem split: a plataforma recebe e o repasse sai pela tela de Repasses.' },
+]
+
+// A lista vive como texto ('mercado_pago,pagarme') porque system_settings é
+// chave/valor de texto. Marcar e desmarcar mexe nesse texto preservando a ORDEM
+// de ACQUIRERS_CARTAO — é a ordem em que os botões aparecem no checkout, e não
+// pode depender de em qual caixa o admin clicou primeiro.
+function listaDeCartao(atual, valor, marcado) {
+  const tem = new Set(String(atual || '').split(',').map((s) => s.trim()).filter(Boolean))
+  if (marcado) tem.add(valor); else tem.delete(valor)
+  return ACQUIRERS_CARTAO.map((a) => a.value).filter((v) => tem.has(v)).join(',')
+}
 
 const ENVS = [
   { value: 'sandbox',    label: 'Sandbox (testes)' },
@@ -126,6 +149,11 @@ const PAYMENT_DEFAULTS = {
   // Se a tela mostrasse desligado e o servidor tratasse como ligado, o operador
   // estaria lendo uma configuração que não é a que decide a cobrança.
   payment_mp_wallet_only:         'true',
+  // Vazio de propósito: a API entende vazio como "usa o adquirente legado", que
+  // é o comportamento de hoje. Preencher aqui mudaria a cobrança de instalação
+  // nenhuma ter aberto esta tela.
+  payment_card_acquirers:         '',
+  payment_pagarme_api_key:        '',
 }
 
 function settingsToMap(list) {
@@ -607,6 +635,19 @@ function TabPagamentos({ settings, qc }) {
     saveMut.mutate({ pairs: keys.map((k) => [k, form[k]]), secao: section })
   }
 
+  // MESMA regra da API (acquirersDeCartao): lista vazia cai no adquirente
+  // legado — `payment_gateway_card`, ou o padrão. Sem esse espelho, uma
+  // instalação que nunca abriu esta tela apareceria com tudo desmarcado
+  // enquanto o cartão continuava cobrando normalmente. Caixa desmarcada que
+  // não corresponde ao que acontece é o tipo de mentira que já custou caro aqui.
+  function cartaoMarcado(valor) {
+    const lista = String(form.payment_card_acquirers || '')
+      .split(',').map((s) => s.trim()).filter(Boolean)
+    if (lista.length) return lista.includes(valor)
+    const legado = String(form.payment_gateway_card || '').trim() || form.payment_gateway
+    return legado === valor
+  }
+
   const adminPct   = Number(form.payment_split_admin_pct) || 0
   const operatorPct = Math.max(0, 100 - adminPct)
 
@@ -882,18 +923,69 @@ function TabPagamentos({ settings, qc }) {
                 <option value="">Usar o padrão</option>
                 {GATEWAYS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
               </Select>
-              <Select
-                label="Cartão (crédito e débito)"
-                value={form.payment_gateway_card}
-                onChange={(e) => set('payment_gateway_card', e.target.value)}
-                className="max-w-xs"
-              >
-                <option value="">Usar o padrão</option>
-                {GATEWAYS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
-              </Select>
+
+              {/* ── Cartão: MAIS DE UM adquirente ao mesmo tempo ───────────
+                  Deixou de ser uma escolha única porque os dois cobrem
+                  públicos diferentes: o Mercado Pago aprova quem tem conta lá
+                  e recusa o resto por risco; o Pagar.me atende quem não tem
+                  conta nenhuma. Marcar os dois mostra as duas opções no
+                  checkout e o cliente escolhe. */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-300">Cartão (crédito e débito)</p>
+                {ACQUIRERS_CARTAO.map((a) => (
+                  <label key={a.value} className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={cartaoMarcado(a.value)}
+                      onChange={(e) => set('payment_card_acquirers',
+                        listaDeCartao(form.payment_card_acquirers, a.value, e.target.checked))}
+                      className="mt-1 w-4 h-4 accent-brand shrink-0"
+                    />
+                    <div>
+                      <p className="text-sm text-gray-200">{a.label}</p>
+                      <p className="text-xs text-gray-500 leading-relaxed">{a.nota}</p>
+                    </div>
+                  </label>
+                ))}
+                {!cartaoMarcado('mercado_pago') && !cartaoMarcado('pagarme') && (
+                  <p className="text-xs text-amber-500/80 leading-relaxed">
+                    Nenhum adquirente marcado: o checkout não vai oferecer cartão nenhum,
+                    só PIX.
+                  </p>
+                )}
+                {cartaoMarcado('pagarme') && !form.payment_pagarme_api_key && (
+                  <p className="text-xs text-amber-500/80 leading-relaxed">
+                    Pagar.me marcado mas <b>sem API Key</b> abaixo. Enquanto ela faltar, o
+                    botão dele <b>não aparece</b> no checkout — melhor sumir do que dar erro
+                    depois do clique.
+                  </p>
+                )}
+              </div>
+
+              {/* A chave do Pagar.me tem campo PRÓPRIO: a de cima é a do gateway
+                  padrão (hoje o Mercado Pago). Usar aquela para chamar o
+                  Pagar.me mandaria o token do MP no Authorization deles. */}
+              <MaskedInput
+                label="Pagar.me — API Key (Secret Key)"
+                value={form.payment_pagarme_api_key}
+                onChange={(e) => set('payment_pagarme_api_key', e.target.value)}
+                placeholder="sk_..."
+              />
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Dashboard do Pagar.me → Configurações → Chaves. Use a <b>Secret Key</b>
+                {' '}(<code className="text-gray-400">sk_</code>), não a pública. A variável
+                {' '}<code className="text-gray-400">PAGARME_API_KEY</code> no servidor tem
+                prioridade sobre este campo.
+              </p>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Webhook a cadastrar no painel do Pagar.me:
+                {' '}<code className="text-gray-400">/api/payments/webhook/pagarme</code>
+                {' '}— eventos <code className="text-gray-400">order.paid</code> e
+                {' '}<code className="text-gray-400">order.payment_failed</code>.
+              </p>
               <p className="text-xs text-amber-500/80 leading-relaxed">
-                Asaas e Pagar.me ainda <b>não têm integração</b>. Escolher um deles faz o pagamento
-                falhar com aviso — nunca passar silenciosamente como manual.
+                Asaas ainda <b>não tem integração</b>. Escolhê-lo faz o pagamento falhar com
+                aviso — nunca passar silenciosamente como manual.
               </p>
             </div>
 
@@ -905,7 +997,8 @@ function TabPagamentos({ settings, qc }) {
                 ['payment_gateway', 'payment_gateway_card', 'payment_gateway_pix',
                  'payment_gateway_env', 'payment_gateway_api_key',
                  'payment_gateway_webhook_secret', 'payment_split_single_operator',
-                 'payment_card_flow', 'payment_mp_wallet_only'],
+                 'payment_card_flow', 'payment_mp_wallet_only',
+                 'payment_card_acquirers', 'payment_pagarme_api_key'],
                 'gateway',
               )}
               pending={saveMut.isPending}

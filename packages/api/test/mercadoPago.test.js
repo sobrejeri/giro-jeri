@@ -767,7 +767,15 @@ test('a busca por referência é limitada à tentativa que está sendo resolvida
   }
 
   // E a data precisa REALMENTE chegar: sem created_at no SELECT, o corte some.
-  assert.match(rota, /gateway_transaction_id, created_at, expires_at/)
+  // A verificação é por COLUNA, não pela sequência exata: prender à ordem fazia
+  // o teste quebrar só por acrescentarem uma coluna no meio da lista.
+  const iStatus = rota.indexOf("router.get('/:id/status'")
+  assert.ok(iStatus > 0)
+  const selectDoStatus = rota.slice(iStatus, iStatus + 1200)
+  for (const coluna of ['gateway_transaction_id', 'created_at', 'expires_at']) {
+    assert.match(selectDoStatus, new RegExp(`\\b${coluna}\\b`),
+      `${coluna} precisa vir no SELECT do polling`)
+  }
   const selects = conc.match(/created_at, amount_gross/g) || []
   assert.equal(selects.length, 2, 'os dois SELECTs da conciliação precisam trazer created_at')
 })
@@ -827,7 +835,10 @@ test('a volta do Mercado Pago mostra a recusa na hora, sem confiar na URL', asyn
 
   // E o polling continua rodando mesmo com recusa na URL — o cliente pode ter
   // pago numa segunda tentativa.
-  const inicio = jsx.indexOf('function VoltandoDoMercadoPago')
+  const inicio = jsx.indexOf('function VoltandoDoCheckout')
+  // Sem esta guarda, um rename faz o indexOf devolver -1, o slice pegar o FIM
+  // do arquivo e a asserção abaixo testar outra coisa qualquer.
+  assert.ok(inicio >= 0, 'a tela de volta do checkout mudou de nome — ajuste este teste')
   const bloco = jsx.slice(inicio, inicio + 4000)
   assert.match(bloco, /setInterval/, 'a consulta ao servidor não pode parar por causa da URL')
 })

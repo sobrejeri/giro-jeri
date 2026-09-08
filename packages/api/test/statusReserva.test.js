@@ -290,7 +290,10 @@ test('a tela do admin oferece os dois seletores e avisa o que não existe', asyn
     new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
   assert.match(jsx, /payment_gateway_pix/)
   assert.match(jsx, /payment_gateway_card/)
-  assert.match(jsx, /não têm integração/, 'escolher Asaas/Pagar.me hoje quebra — precisa avisar')
+  // O Pagar.me SAIU deste aviso: ele passou a ter adapter de cartão, consulta
+  // no polling e webhook próprio. Sobrou o Asaas, que continua sem nada.
+  assert.match(jsx, /Asaas ainda <b>não tem integração<\/b>/,
+    'escolher Asaas hoje quebra — precisa avisar')
   // E as duas chaves novas precisam entrar no Salvar, senão marcam sem gravar.
   // A lista do card do gateway, não a primeira saveSection do arquivo.
   const iGateway = jsx.indexOf("'payment_gateway', 'payment_gateway_card'")

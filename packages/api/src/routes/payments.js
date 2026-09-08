@@ -67,6 +67,11 @@ export const intentSchema = z.object({
   // fluxo está ligado é o SERVIDOR (payment_card_flow); este campo só diz o que
   // o app está pedindo, e um pedido sem a configuração ligada é recusado.
   checkout_pro:       z.boolean().optional(),
+  // Qual adquirente de cartão o cliente escolheu na tela. Com Mercado Pago e
+  // Pagar.me oferecidos lado a lado, é ele quem decide — mas o servidor só
+  // aceita um valor que esteja na lista OFERECIDA (ver gatewayDoMetodo).
+  // Valor estranho não derruba a cobrança: cai no adquirente padrão.
+  card_acquirer:      z.enum(['mercado_pago', 'pagarme', 'asaas']).optional(),
   installments:       z.number({ coerce: true }).int().min(1).max(12).default(1),
   payment_method_id:  z.string().min(1).optional(),
   issuer_id:          z.string().optional(),
@@ -93,7 +98,13 @@ export const intentSchema = z.object({
   (d) => d.order_group_id || d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
   { message: 'Dados incompletos para criar reserva' },
 ).refine(
-  (d) => !['credit_card', 'debit_card'].includes(d.payment_method) || d.checkout_pro === true ||
+  // Cartão exige token — EXCETO nos caminhos hospedados, em que o cartão é
+  // digitado na página do adquirente e o app nunca vê o número. Checkout Pro
+  // (Mercado Pago) e Pagar.me são os dois; exigir token deles recusaria a
+  // cobrança antes de sair, com uma mensagem sobre campos que não existem
+  // naquele fluxo.
+  (d) => !['credit_card', 'debit_card'].includes(d.payment_method) ||
+          d.checkout_pro === true || d.card_acquirer === 'pagarme' ||
           (d.card_token && d.payment_method_id && d.payer_doc && d.payment_attempt_id),
   { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc, payment_attempt_id)' },
 )
@@ -791,13 +802,145 @@ const PODE_PAGAR = ['awaiting_payment', 'payment_failed']
 // `payment_gateway` continua sendo o padrão. As chaves por método só existem
 // para quem precisa separar, e um valor vazio cai no padrão — instalação que
 // nunca abriu essa tela segue exatamente como estava.
-export function gatewayDoMetodo(cfg, metodo) {
+export function gatewayDoMetodo(cfg, metodo, escolhaDoCliente) {
   const padrao = cfg?.payment_gateway || 'manual'
   const especifico = ['credit_card', 'debit_card'].includes(metodo)
     ? cfg?.payment_gateway_card
     : cfg?.payment_gateway_pix
-  const escolhido = String(especifico || '').trim()
-  return escolhido || padrao
+  const base = String(especifico || '').trim() || padrao
+
+  // ── Quando o CLIENTE escolhe o adquirente ──────────────────────────────
+  // Com mais de um adquirente de cartão oferecido na tela, quem escolhe é o
+  // comprador — "Mercado Pago" e "cartão" viraram dois botões diferentes.
+  //
+  // Mas a escolha dele é um PEDIDO, não uma ordem: só vale se aquele
+  // adquirente estiver de fato na lista oferecida. Sem essa validação, um
+  // cliente (ou um app desatualizado) mandaria qualquer string e cobraria por
+  // um caminho que o admin desligou — a mesma regra que já vale para
+  // `checkout_pro`, onde quem manda é o servidor.
+  if (!['credit_card', 'debit_card'].includes(metodo)) return base
+  const pedido = String(escolhaDoCliente || '').trim()
+  if (!pedido) return base
+  return acquirersDeCartao(cfg).includes(pedido) ? pedido : base
+}
+
+// Adquirentes de cartão OFERECIDOS ao cliente, na ordem em que aparecem.
+//
+// `payment_card_acquirers` é uma lista ('mercado_pago,pagarme') porque o
+// cartão deixou de ter um dono único: o Mercado Pago aprova quem tem conta lá
+// e recusa o resto por risco; o Pagar.me atende quem não tem conta nenhuma —
+// inclusive o turista estrangeiro, que não tem conta no MP nem faz PIX. Manter
+// os dois cobre públicos que um só não cobre.
+//
+// VAZIA cai no comportamento antigo (um adquirente só, o de
+// `payment_gateway_card`/`payment_gateway`): instalação que nunca abriu essa
+// tela segue idêntica, e é isso que torna a mudança segura de publicar.
+export const ACQUIRERS_CARTAO = ['mercado_pago', 'pagarme', 'asaas']
+
+export function acquirersDeCartao(cfg) {
+  const lista = String(cfg?.payment_card_acquirers || '')
+    .split(',').map((s) => s.trim()).filter(Boolean)
+    // Filtra o desconhecido em vez de confiar: um valor com erro de digitação
+    // gravado no banco viraria um botão que não cobra por lugar nenhum.
+    .filter((g) => ACQUIRERS_CARTAO.includes(g))
+  const unicos = [...new Set(lista)]
+  if (unicos.length) return unicos
+  const legado = String(cfg?.payment_gateway_card || '').trim() || cfg?.payment_gateway || 'manual'
+  return ACQUIRERS_CARTAO.includes(legado) ? [legado] : []
+}
+
+// A chave do Pagar.me tem campo PRÓPRIO.
+//
+// `payment_gateway_api_key` é a chave do gateway PADRÃO — que hoje é o Mercado
+// Pago. Ler dali para chamar o Pagar.me mandaria o access token do MP no
+// Authorization deles: falha de autenticação, com mensagem que não diz nada
+// sobre a causa. Só serve de reserva quando o Pagar.me É o gateway padrão, aí
+// aquele campo é mesmo a chave dele.
+export function chaveDoPagarme(cfg) {
+  return String(
+    cfg?.payment_pagarme_api_key
+    || process.env.PAGARME_API_KEY
+    || (String(cfg?.payment_gateway || '') === 'pagarme' ? cfg?.payment_gateway_api_key : '')
+    || ''
+  ).trim()
+}
+
+// ── Desfecho de uma cobrança no Pagar.me ─────────────────────────────────────
+//
+// UM lugar só, usado pelo polling de /status e pelo webhook — pelo mesmo motivo
+// que resolveStatusReserva existe no app: duas cópias da mesma regra divergem, e
+// aqui divergir significa confirmar uma reserva que não foi paga, ou deixar
+// paga como pendente.
+//
+// O ESTADO VEM DA API, nunca do corpo do evento. É a regra que já vale para o
+// Mercado Pago, e ela resolve de uma vez o problema de webhook forjado: o pior
+// que um POST falso consegue é nos fazer consultar o pedido de verdade.
+//
+// Devolve null quando NÃO FOI POSSÍVEL PERGUNTAR (sem chave, rede fora, pedido
+// inexistente). Quem chama trata isso como "ainda não sei" — nunca como recusa.
+async function desfechoPagarme(payment) {
+  const cfg = await getPaymentSettings().catch(() => ({}))
+  const apiKey = chaveDoPagarme(cfg)
+  if (!apiKey) {
+    console.error('[pagarme] sem API Key para consultar o pagamento %s', payment.id)
+    return null
+  }
+  const { consultarPedido, buscarPedidoPorCodigo, estadoDoPedido } =
+    await import('../payments/pagarmeCheckout.js')
+
+  // O id do pedido fica no rastro que o /intent gravou. Faltando ele (linha
+  // antiga, ou a gravação falhou depois de criar o pedido), a busca por `code`
+  // — o id da reserva — é a rede de segurança: sem ela, um pagamento aprovado
+  // ficaria pendente para sempre por causa de uma coluna não gravada.
+  const pedidoId = payment.raw_response_json?.pedido_id
+  const pedido = pedidoId
+    ? await consultarPedido(apiKey, pedidoId)
+    : await buscarPedidoPorCodigo(apiKey, payment.booking_id)
+  if (!pedido) return null
+
+  return { pedido, estado: estadoDoPedido(pedido) }
+}
+
+// Consulta e APLICA o desfecho. Devolve o estado aplicado, ou null se não deu
+// para saber.
+async function aplicarDesfechoPagarme(payment) {
+  const r = await desfechoPagarme(payment)
+  if (!r) return null
+  const { pedido, estado } = r
+
+  // Liga a cobrança à nossa linha, uma vez só. `.is(null)` é o que impede o
+  // webhook e o polling — que rodam ao mesmo tempo — de ligarem a mesma linha
+  // duas vezes e aplicarem o desfecho em dobro: dois lançamentos no razão,
+  // duas comissões, dois e-mails.
+  if (!payment.gateway_transaction_id && pedido?.id) {
+    const { data: ligadas, error: erroLiga } = await supabase.from('payments')
+      .update({ gateway_transaction_id: String(pedido.id) })
+      .eq('id', payment.id).is('gateway_transaction_id', null)
+      .select('id')
+    if (erroLiga || !(ligadas || []).length) {
+      console.warn('[pagarme] pedido %s não pôde ser ligado à linha %s (%s)',
+        pedido.id, payment.id, erroLiga?.code || 'já ligada')
+      return 'pending'
+    }
+    payment.gateway_transaction_id = String(pedido.id)
+  }
+
+  if (estado === 'approved') {
+    await onPaymentApproved(payment)
+    return 'approved'
+  }
+  if (estado === 'failed') {
+    await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+    // Só rebaixa quem ainda estava esperando pagar. Uma recusa que chega depois
+    // de outra tentativa ter passado não pode desfazer a reserva — isso já
+    // aconteceu em produção, com o dinheiro debitado no cartão.
+    await supabase.from('bookings')
+      .update({ status_commercial: 'payment_failed', payment_status: 'failed' })
+      .eq('id', payment.booking_id)
+      .in('status_commercial', PODE_PAGAR)
+    return 'failed'
+  }
+  return 'pending'
 }
 
 // ── Quem é o PRINCIPAL da cobrança ───────────────────────────────────────────
@@ -951,7 +1094,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       service_name, cover_image_url,
       coupon_code, existing_booking_id, order_group_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc, device_id,
-      payment_attempt_id, payer_email, checkout_pro,
+      payment_attempt_id, payer_email, checkout_pro, card_acquirer,
       mp_public_key,
     } = parsed.data
 
@@ -985,8 +1128,13 @@ router.post('/intent', authenticate, async (req, res, next) => {
     // Uma chave só (`payment_gateway`) obrigava os dois métodos ao mesmo
     // adquirente. Agora cada um tem o seu, e `payment_gateway` segue como o
     // padrão de quem não foi configurado — nada muda para quem não mexer.
-    const gateway = gatewayDoMetodo(cfg, payment_method)
-    console.log('[intent] método=%s gateway=%s env=%s', payment_method, gateway, cfg.payment_gateway_env)
+    //
+    // E com MAIS DE UM adquirente de cartão oferecido, quem escolhe é o
+    // cliente na tela — validado contra a lista, nunca aceito de olhos
+    // fechados.
+    const gateway = gatewayDoMetodo(cfg, payment_method, card_acquirer)
+    console.log('[intent] método=%s gateway=%s (pedido=%s) env=%s',
+      payment_method, gateway, card_acquirer || '—', cfg.payment_gateway_env)
 
     let booking, bookingCode, groupBookings = null
 
@@ -1647,6 +1795,18 @@ router.post('/intent', authenticate, async (req, res, next) => {
     // pega isso, porque a sintaxe está correta.
     if (gateway === 'pagarme' && ['credit_card', 'debit_card'].includes(payment_method)) {
       const { criarCheckoutCartao } = await import('../payments/pagarmeCheckout.js')
+
+      // A chave ANTES de qualquer escrita. Sem ela a chamada falharia depois de
+      // a linha em `payments` já existir — sobrando uma cobrança pendente que
+      // nunca vai ter desfecho, e um cliente vendo erro sem entender por quê.
+      const chavePagarme = chaveDoPagarme(cfg)
+      if (!chavePagarme) {
+        console.error('[pagarme] escolhido para a reserva %s mas não há API Key configurada', booking.id)
+        const e = new Error('O pagamento com cartão está temporariamente indisponível. Use PIX, ou tente pelo Mercado Pago.')
+        e.status = 503
+        throw e
+      }
+
       const usuario = await supabase.from('users')
         .select('email, full_name, phone').eq('id', req.user.id).single()
 
@@ -1672,7 +1832,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       if (erroLinha) throw erroLinha
 
       const checkout = await criarCheckoutCartao({
-        apiKey:          cfg.payment_gateway_api_key || process.env.PAGARME_API_KEY || '',
+        apiKey:          chavePagarme,
         amount:          chargedTotal,
         description:     service_name || `Reserva ${bookingCode}`,
         bookingId:       booking.id,
@@ -1705,6 +1865,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
     // 'manual', a reserva ficaria aguardando confirmação humana, e ninguém
     // saberia que o gateway configurado nunca foi chamado. O cliente acharia
     // que pagou.
+    // O Pagar.me CONTINUA na lista de propósito. O adapter dele cobre cartão, e
+    // o cartão já retornou lá em cima — chegar aqui com 'pagarme' significa
+    // PIX apontado para ele, que não existe. Deixar passar viraria pagamento
+    // manual: reserva esperando confirmação humana, cliente achando que pagou.
     if (['asaas', 'pagarme'].includes(gateway)) {
       console.error('[intent] gateway %s escolhido para %s mas o adapter não existe — reserva %s',
         gateway, payment_method, booking.id)
@@ -1714,7 +1878,6 @@ router.post('/intent', authenticate, async (req, res, next) => {
       e.status = 503
       throw e
     }
-    // asaas / pagarme: adapters a implementar quando credentials disponíveis
 
     // Gateway efetivo: se o MP (ou outro) não devolveu transação, o pagamento
     // é apresentado como manual — então grava 'manual' para o botão de
@@ -1934,6 +2097,11 @@ router.get('/diagnostico-cartao', authenticate, requireAdmin, async (req, res, n
       // desligado é o risco conhecido. Sem saber qual modo valia, os dois casos
       // viram "cc_rejected_high_risk" e a conclusão sai errada.
       cartao_so_com_conta_mp:   String(cfgAtual?.payment_mp_wallet_only ?? 'true') !== 'false',
+      // Quais botões de cartão o checkout mostra, lido da MESMA função que
+      // roteia a cobrança — e não da lista crua do banco, que pode incluir um
+      // adquirente sem credencial.
+      adquirentes_de_cartao:    acquirersDeCartao(cfgAtual),
+      pagarme_com_chave:        !!chaveDoPagarme(cfgAtual),
     }
 
     // A leitura pronta, para não depender de interpretar a lista bruta.
@@ -2448,7 +2616,9 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
   try {
     const { data: payment } = await supabase
       .from('payments')
-      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, created_at, expires_at, amount_gross, gateway_fee_pct, gateway_fee_amount, bookings(booking_code, status_commercial, operator_id)')
+      // `raw_response_json` entra aqui porque é onde mora o id do pedido do
+      // Pagar.me — sem ele o polling não teria o que consultar.
+      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, raw_response_json, created_at, expires_at, amount_gross, gateway_fee_pct, gateway_fee_amount, bookings(booking_code, status_commercial, operator_id)')
       .eq('id', req.params.id)
       .single()
 
@@ -2564,6 +2734,29 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
         }
       } catch (err) {
         console.error('[status] resolução por external_reference falhou: %s', err.message)
+      }
+    }
+
+    // ── Pagar.me: mesma situação do Checkout Pro ─────────────────────────
+    // A linha também nasce sem id de cobrança (o cartão é digitado na página
+    // deles). Sem esta consulta, a tela de processamento giraria para sempre e
+    // a confirmação dependeria só do webhook chegar — que é exatamente a
+    // aposta que já falhou uma vez aqui.
+    if (payment.status === 'pending' && payment.gateway_name === 'pagarme') {
+      try {
+        const estado = await aplicarDesfechoPagarme(payment)
+        if (estado === 'approved') {
+          return res.json({ status: 'approved', booking_id: payment.booking_id,
+            booking_code: payment.bookings?.booking_code })
+        }
+        if (estado === 'failed') {
+          return res.json({ status: 'rejected', booking_id: payment.booking_id,
+            booking_code: payment.bookings?.booking_code })
+        }
+      } catch (err) {
+        // Não decide nada no escuro: erro aqui vira 'pending' e a próxima
+        // consulta tenta de novo.
+        console.error('[status] consulta ao Pagar.me falhou: %s', err.message)
       }
     }
 
@@ -2836,6 +3029,96 @@ router.post('/webhook', async (req, res, next) => {
     }
 
     res.status(200).json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+// ── POST /api/payments/webhook/pagarme ────────────────
+//
+// ROTA SEPARADA de propósito. O /webhook acima verifica a assinatura do
+// Mercado Pago (HMAC com o secret deles) e responde 401 a tudo que não bate —
+// um evento do Pagar.me entregue lá seria descartado como forjado, e o
+// pagamento ficaria pendente sem nada indicando o motivo.
+//
+// NÃO CONFIA NO CORPO. Do evento sai apenas um identificador; o estado vem de
+// uma consulta à API do Pagar.me com a nossa chave, como já é feito com o
+// Mercado Pago. Consequência boa: um POST forjado não aprova nada — o máximo
+// que consegue é nos fazer consultar um pedido de verdade.
+//
+// O body chega como Buffer: o express.raw do index.js está montado no prefixo
+// /api/payments/webhook, que cobre esta rota também.
+router.post('/webhook/pagarme', async (req, res, next) => {
+  try {
+    let event = req.body
+    if (Buffer.isBuffer(event)) {
+      try { event = JSON.parse(event.toString('utf8')) }
+      catch { return res.status(400).json({ error: 'JSON inválido' }) }
+    }
+
+    const tipo = event?.type || 'unknown'
+    const dados = event?.data || {}
+    // O evento pode ser do PEDIDO (order.*) ou da COBRANÇA (charge.*). No
+    // segundo caso o pedido vem aninhado. Pegar os dois evita depender de qual
+    // deles o Pagar.me manda primeiro.
+    const pedidoId = dados.id && String(dados.id).startsWith('or_')
+      ? String(dados.id)
+      : (dados.order?.id ? String(dados.order.id) : null)
+    // `code` é o id da RESERVA — foi assim que o pedido foi criado.
+    const codigo = dados.code || dados.order?.code || null
+
+    console.log('[pagarme-webhook] tipo=%s pedido=%s code=%s', tipo, pedidoId || '—', codigo || '—')
+
+    // ── Acha a nossa linha ────────────────────────────────────────────────
+    // Duas portas: o id do pedido (gravado no rastro ou já ligado) e o código
+    // da reserva. A segunda existe porque o primeiro evento costuma chegar
+    // antes de qualquer id nosso estar ligado.
+    let linha = null
+    if (pedidoId) {
+      const { data } = await supabase.from('payments')
+        .select('*').eq('gateway_transaction_id', pedidoId).maybeSingle()
+      linha = data || null
+    }
+    if (!linha && (codigo || pedidoId)) {
+      const { data } = await supabase.from('payments')
+        .select('*')
+        .eq('gateway_name', 'pagarme')
+        .eq(codigo ? 'booking_id' : 'gateway_transaction_id', codigo || pedidoId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      linha = (data || [])[0] || null
+    }
+
+    if (!linha) {
+      // 200, não erro: o Pagar.me reentrega em laço quem responde 5xx, e um
+      // evento de pedido que não é nosso nunca vai virar linha nenhuma.
+      console.warn('[pagarme-webhook] nenhum pagamento local para pedido=%s code=%s', pedidoId, codigo)
+      return res.status(200).json({ ok: true, pending: true })
+    }
+
+    // ── Idempotência ──────────────────────────────────────────────────────
+    // Mesma trava do Mercado Pago: a identidade é o id do evento no gateway,
+    // com UNIQUE parcial (migration 088). Reentrega não reexecuta os efeitos.
+    const gatewayEventId = `pagarme:${event?.id || `${tipo}:${pedidoId || codigo}`}`
+    const decisao = await registrarEventoWebhook(supabase, {
+      gatewayEventId, eventName: tipo, payload: event, paymentId: linha.id,
+    })
+    if (!decisao.processar) return res.status(200).json({ ok: true, duplicate: true })
+
+    const estado = await aplicarDesfechoPagarme(linha)
+    if (estado === null) {
+      // Não conseguimos perguntar. 503 faz o Pagar.me reenviar — melhor uma
+      // retentativa do que gravar um desfecho adivinhado.
+      console.warn('[pagarme-webhook] estado indeterminado para %s — pedindo retentativa', linha.id)
+      return res.status(503).json({ error: 'Status indeterminado, reenvie' })
+    }
+
+    // Só agora o evento está concluído. Marcar antes faria uma queda no meio
+    // parecer sucesso, e a reentrega — que é a segunda chance — seria
+    // descartada como duplicata.
+    await supabase.from('payment_events')
+      .update({ processing_status: 'processed', processed_at: new Date().toISOString() })
+      .eq('gateway_event_id', gatewayEventId)
+
+    res.status(200).json({ ok: true, estado })
   } catch (err) { next(err) }
 })
 

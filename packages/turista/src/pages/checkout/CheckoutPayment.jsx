@@ -267,7 +267,10 @@ export default function CheckoutPayment() {
   // Checkout Pro: o cliente sai do app para pagar com cartão na página do
   // Mercado Pago. Enquanto o link não vem, o botão trava — sair duas vezes
   // criaria duas preferências para a mesma reserva.
-  const [redirecionando, setRedirecionando] = useState(false)
+  // Guarda QUAL adquirente está abrindo, não um booleano: com dois botões de
+  // cartão na tela, um booleano acenderia "Abrindo pagamento…" nos dois e o
+  // cliente não saberia qual ele apertou.
+  const [redirecionando, setRedirecionando] = useState(null)
   const [erroCartao,     setErroCartao]     = useState('')
 
   // Com o Checkout Pro ligado, o cartão sai do Brick: ele fica só com o PIX,
@@ -294,7 +297,46 @@ export default function CheckoutPayment() {
   const cartaoSoComConta = cartaoNoMercadoPago
     && String(settings?.payment_mp_wallet_only ?? 'true') !== 'false'
 
-  const settingsDoBrick = cartaoNoMercadoPago
+  // ── Quais botões de cartão aparecem ────────────────────────────────────
+  // A lista vem PRONTA do servidor (/settings/public): ele já removeu o
+  // adquirente sem credencial, porque um botão que responde 503 depois do
+  // clique é pior que botão nenhum.
+  //
+  // Chave ausente = API antiga ou configurações que não chegaram. Aí vale o
+  // comportamento de hoje: o Mercado Pago, se o Checkout Pro estiver ligado.
+  // Nunca listar o Pagar.me por suposição — seria oferecer um caminho que
+  // pode não existir.
+  const acquirersDisponiveis = (() => {
+    const bruto = settings?.payment_card_acquirers
+    if (bruto === undefined || bruto === null) return cartaoNoMercadoPago ? ['mercado_pago'] : []
+    const lista = String(bruto).split(',').map((s) => s.trim()).filter(Boolean)
+    // O Mercado Pago ainda depende do Checkout Pro estar ligado: no modo
+    // 'bricks' o cartão é digitado aqui dentro, pelo Brick, e não há botão.
+    return lista.filter((g) => g !== 'mercado_pago' || cartaoNoMercadoPago)
+  })()
+
+  // Rótulo e explicação de cada botão. O texto é o produto aqui: a diferença
+  // entre os dois não é técnica para o cliente, é "preciso de conta ou não".
+  const BOTOES_CARTAO = {
+    mercado_pago: {
+      rotulo: cartaoSoComConta ? 'Pagar com Mercado Pago' : 'Pagar com cartão',
+      ajuda: cartaoSoComConta
+        ? 'Cartão de crédito ou débito, com login na sua conta do Mercado Pago.'
+        : 'Você vai concluir no ambiente do Mercado Pago e volta para cá em seguida.',
+      primario: true,
+    },
+    pagarme: {
+      rotulo: 'Pagar com cartão',
+      ajuda: 'Crédito ou débito, sem precisar de conta em lugar nenhum. Aceita cartão internacional.',
+      primario: !acquirersDisponiveis.includes('mercado_pago'),
+    },
+  }
+
+  // Havendo QUALQUER botão de cartão hospedado, o Brick fica só com o PIX. Dois
+  // caminhos de cartão na mesma tela — um botão que redireciona e um formulário
+  // logo abaixo — confundem, e o formulário ainda tokenizaria um cartão que
+  // ninguém vai usar.
+  const settingsDoBrick = acquirersDisponiveis.length > 0
     ? { ...settings, payment_method_credit: 'false', payment_method_debit: 'false' }
     : settings
 
@@ -460,9 +502,13 @@ export default function CheckoutPayment() {
   // Não há token para enviar: pedimos um link e mandamos o cliente para lá. A
   // confirmação continua vindo do webhook e da tela de processamento, como no
   // PIX — o retorno do navegador não confirma nada sozinho.
-  async function pagarComCartaoNoMercadoPago() {
+  // Um handler para os DOIS caminhos hospedados (Mercado Pago e Pagar.me): o
+  // que muda entre eles é para onde o servidor manda, não o que a tela faz.
+  // Duas cópias divergiriam — e aqui divergir significa uma delas parar de
+  // tratar "já estava pago" ou de mostrar o erro.
+  async function pagarComCartaoHospedado(acquirer) {
     if (redirecionando) return
-    setRedirecionando(true)
+    setRedirecionando(acquirer)
     setErroCartao('')
     try {
       const result = await api.createPaymentIntent({
@@ -473,7 +519,13 @@ export default function CheckoutPayment() {
         vehicles, origin_text, destination_text,
         total_price, service_name, cover_image_url,
         payment_method: 'credit_card',
-        checkout_pro: true,
+        // Quem decide de verdade é o servidor: ele só aceita um adquirente que
+        // esteja na lista oferecida. Isto é o PEDIDO do cliente.
+        card_acquirer: acquirer,
+        // `checkout_pro` só faz sentido no Mercado Pago — é o nome do produto
+        // deles. Mandá-lo junto do Pagar.me faria o servidor entrar no ramo
+        // errado.
+        ...(acquirer === 'mercado_pago' ? { checkout_pro: true } : {}),
       })
       // A reserva já estava paga (o servidor recusou abrir outro checkout).
       // Levar para a tela de sucesso é melhor que dizer "não deu": deu, antes.
@@ -483,11 +535,11 @@ export default function CheckoutPayment() {
         })
         return
       }
-      if (!result?.redirect_url) throw new Error('O Mercado Pago não devolveu o link de pagamento.')
-      // Sai do app. Quem volta é o back_url, já com o id do pagamento.
+      if (!result?.redirect_url) throw new Error('O gateway não devolveu o link de pagamento.')
+      // Sai do app. Quem volta é o link de retorno, já com o id do pagamento.
       window.location.href = result.redirect_url
     } catch (err) {
-      setRedirecionando(false)
+      setRedirecionando(null)
       setErroCartao(err?.message || 'Não foi possível abrir o pagamento com cartão.')
     }
   }
@@ -533,27 +585,48 @@ export default function CheckoutPayment() {
                 container: o formulário aparece duplicado. */}
             {keyChecked && settings !== undefined ? (
               <>
-                {cartaoNoMercadoPago && (
-                  <div className="mb-3">
+                {acquirersDisponiveis.length > 0 && (
+                  <div className="mb-3 space-y-3">
                     {erroCartao && (
-                      <div className="mb-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
+                      <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
                         <p className="text-[12px] text-red-700 leading-relaxed">{erroCartao}</p>
                       </div>
                     )}
-                    <button
-                      onClick={pagarComCartaoNoMercadoPago}
-                      disabled={redirecionando}
-                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand text-white font-semibold text-[14px] py-3.5 active:scale-[0.99] transition-transform disabled:opacity-60"
-                    >
-                      {redirecionando
-                        ? 'Abrindo pagamento…'
-                        : (cartaoSoComConta ? 'Pagar com Mercado Pago' : 'Pagar com cartão')}
-                    </button>
-                    <p className="text-[11px] text-gray-500 text-center mt-2 leading-relaxed">
-                      {cartaoSoComConta
-                        ? 'Cartão de crédito ou débito, com login na sua conta do Mercado Pago. Não tem conta? Pague com PIX abaixo — não precisa de cadastro.'
-                        : 'Você vai concluir no ambiente do Mercado Pago e volta para cá em seguida.'}
-                    </p>
+                    {acquirersDisponiveis.map((g) => {
+                      const b = BOTOES_CARTAO[g]
+                      if (!b) return null
+                      return (
+                        <div key={g}>
+                          <button
+                            /* Seta, e não a função direta: onClick passa o
+                               EVENTO como primeiro argumento, e um handler que
+                               espera outra coisa recebe o clique no lugar. */
+                            onClick={() => pagarComCartaoHospedado(g)}
+                            disabled={!!redirecionando}
+                            className={`w-full flex items-center justify-center gap-2 rounded-xl font-semibold text-[14px] py-3.5 active:scale-[0.99] transition-transform disabled:opacity-60 ${
+                              b.primario
+                                ? 'bg-brand text-white'
+                                : 'bg-white text-gray-800 border border-gray-200'
+                            }`}
+                          >
+                            {redirecionando === g ? 'Abrindo pagamento…' : b.rotulo}
+                          </button>
+                          <p className="text-[11px] text-gray-500 text-center mt-2 leading-relaxed">
+                            {b.ajuda}
+                          </p>
+                        </div>
+                      )
+                    })}
+                    {/* O PIX é a saída de quem não se encaixa em nenhum cartão.
+                        Só vale dizer isso quando o cartão TEM restrição de
+                        conta e não existe alternativa sem conta na tela —
+                        senão o aviso manda embora quem podia pagar no cartão. */}
+                    {cartaoSoComConta && !acquirersDisponiveis.includes('pagarme') && (
+                      <p className="text-[11px] text-gray-500 text-center leading-relaxed">
+                        Não tem conta no Mercado Pago? Pague com PIX abaixo — não precisa
+                        de cadastro.
+                      </p>
+                    )}
                   </div>
                 )}
                 <PaymentBrick

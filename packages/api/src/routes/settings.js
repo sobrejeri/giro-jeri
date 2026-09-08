@@ -35,16 +35,40 @@ const PUBLIC_KEYS = [
   'payment_mp_wallet_only',
 ];
 
+// Chaves que decidem QUAIS botões de cartão o checkout mostra. Não vão na lista
+// acima porque não são copiadas do banco: são calculadas — ver abaixo.
+const CHAVES_CARTAO = ['payment_card_acquirers', 'payment_gateway_card', 'payment_gateway',
+  'payment_pagarme_api_key'];
+
 // ── GET /api/settings/public ───────────────────────────
 router.get('/public', async (_req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('system_settings')
       .select('setting_key, setting_value')
-      .in('setting_key', PUBLIC_KEYS);
+      .in('setting_key', [...PUBLIC_KEYS, ...CHAVES_CARTAO]);
     if (error) throw error;
 
-    const map = Object.fromEntries((data || []).map((s) => [s.setting_key, s.setting_value]));
+    const todas = Object.fromEntries((data || []).map((s) => [s.setting_key, s.setting_value]));
+    const map = Object.fromEntries(PUBLIC_KEYS.map((k) => [k, todas[k]])
+      .filter(([, v]) => v !== undefined));
+
+    // ── Quais botões de cartão o checkout pode mostrar ───────────────────
+    // CALCULADO, e só com o que está REALMENTE PRONTO. A lista bruta diria
+    // "Pagar.me" mesmo sem chave cadastrada, e o cliente clicaria num botão que
+    // responde 503 — pior que não ter o botão. Aqui só sai o adquirente que
+    // consegue cobrar agora.
+    //
+    // O SEGREDO NÃO SAI: vai um booleano derivado da existência da chave, nunca
+    // a chave. Esta rota é pública e sem autenticação.
+    const { acquirersDeCartao, chaveDoPagarme } = await import('./payments.js');
+    const prontos = acquirersDeCartao(todas).filter((g) => {
+      if (g === 'pagarme') return !!chaveDoPagarme(todas);
+      if (g === 'asaas')   return false;   // sem integração
+      return true;                          // mercado_pago: as credenciais já são exigidas no /intent
+    });
+    map.payment_card_acquirers = prontos.join(',');
+
     res.json(map);
   } catch (err) { next(err); }
 });

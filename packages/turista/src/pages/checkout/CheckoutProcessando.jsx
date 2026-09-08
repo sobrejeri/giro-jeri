@@ -303,7 +303,7 @@ function PagamentoComDesafio({ state }) {
 // O retorno do navegador NÃO confirma nada: o cliente pode fechar a aba antes,
 // ou voltar com o pagamento ainda em análise. Quem confirma é o webhook e este
 // polling — o mesmo caminho do PIX, que já funciona.
-function VoltandoDoMercadoPago({ paymentId, statusDaUrl }) {
+function VoltandoDoCheckout({ paymentId, statusDaUrl }) {
   const navigate = useNavigate()
   // O Mercado Pago acrescenta o desfecho ao link de retorno
   // (?status=rejected&collection_status=...). Isso serve para FALAR com o
@@ -352,7 +352,7 @@ function VoltandoDoMercadoPago({ paymentId, statusDaUrl }) {
         <div className="text-center max-w-sm">
           <p className="text-[17px] font-bold text-gray-900 mb-2">Ainda confirmando</p>
           <p className="text-[13px] text-gray-600 leading-relaxed mb-5">
-            O Mercado Pago ainda não devolveu o resultado. Se o valor foi debitado, a reserva
+            O pagamento ainda não foi confirmado. Se o valor foi debitado, a reserva
             aparece em Minhas Reservas em alguns minutos — não pague de novo sem conferir lá.
           </p>
           <Link to="/reservas" className="text-[14px] font-semibold text-brand">Ver minhas reservas</Link>
@@ -406,7 +406,7 @@ export default function CheckoutProcessando() {
   const pagamentoDaUrl = paramsDaUrl.get('p')
   if (!state && pagamentoDaUrl) {
     return (
-      <VoltandoDoMercadoPago
+      <VoltandoDoCheckout
         paymentId={pagamentoDaUrl}
         statusDaUrl={paramsDaUrl.get('status') || paramsDaUrl.get('collection_status')}
       />
