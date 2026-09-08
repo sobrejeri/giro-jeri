@@ -33,6 +33,10 @@ const PUBLIC_KEYS = [
   // dizer isso ANTES do clique, e para apontar o PIX a quem não tem conta —
   // descobrir a restrição já dentro da página deles é o pior lugar possível.
   'payment_mp_wallet_only',
+  // Terceira opção de cartão: o formulário do Mercado Pago DENTRO do site, ao
+  // lado dos botões que redirecionam. É o caminho de quem não tem conta no
+  // Mercado Pago e por isso não consegue usar o Checkout Pro.
+  'payment_card_form_inline',
 ];
 
 // Chaves que decidem QUAIS botões de cartão o checkout mostra. Não vão na lista

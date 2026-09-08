@@ -563,3 +563,51 @@ test('o símbolo do Pix está no repositório e é branco', async () => {
   assert.match(svg, /fill="#FFFFFF"/, 'o logo só aparece sobre o verde do Pix')
   assert.doesNotMatch(svg, /currentColor/)
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Terceiro botão: cartão digitado AQUI DENTRO
+// ═══════════════════════════════════════════════════════════════════════════
+// Com o Checkout Pro restrito a quem tem conta no Mercado Pago, sem esta opção
+// quem não tem conta fica sem NENHUM caminho de cartão — só o Pix. Ela soma ao
+// Checkout Pro, não substitui: são públicos diferentes.
+test('o formulário de cartão no site é uma terceira opção, não um substituto', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+
+  // Só no fluxo NOVO: no modo 'bricks' puro o formulário já é a tela inteira, e
+  // oferecê-lo como opção o desenharia duas vezes.
+  assert.match(jsx, /const ofereceFormulario = acquirersDisponiveis\.length > 0 && formularioNoSite/)
+  // Sem crédito nem débito ligados, o Brick montaria vazio.
+  assert.match(jsx, /formasCartao\.credito \|\| formasCartao\.debito/)
+  // O botão ABRE o formulário; não redireciona.
+  assert.match(jsx, /onClick=\{\(\) => setFormularioAberto\(\(v\) => !v\)\}/)
+  assert.match(jsx, /\{formularioAberto && \([\s\S]{0,400}<PaymentBrick/)
+})
+
+// Dois botões com o mesmo rótulo e destinos diferentes é o pior resultado
+// possível: um sai do site, o outro abre um formulário aqui.
+test('o botão que redireciona nomeia o adquirente; "cartão" fica com o do site', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /rotulo: 'Pagar com Mercado Pago'/,
+    'o botão hospedado precisa dizer para onde leva, sempre')
+  assert.doesNotMatch(jsx, /rotulo: cartaoSoComConta \?/,
+    'rótulo condicional colidia com o do formulário no site')
+  assert.match(jsx, /estilo=\{ESTILO_CARTAO_SITE\}[\s\S]{0,120}rotulo="Pagar com cartão"/)
+})
+
+// O Pix tem bloco próprio logo abaixo. Oferecê-lo TAMBÉM dentro do formulário
+// de cartão é convite a erro — e deixa duas rotas de PIX na mesma tela.
+test('o formulário de cartão não repete o Pix', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /const settingsSoCartao = \{ \.\.\.settings, payment_method_pix: 'false' \}/)
+  assert.match(jsx, /settings=\{settingsSoCartao\}/)
+})
+
+test('o ícone do cartão está no repositório e é escuro (botão branco)', async () => {
+  const svg = await readFile(
+    new URL('../../turista/public/logos/cartao.svg', import.meta.url), 'utf8')
+  assert.match(svg, /<svg[^>]*viewBox/)
+  assert.match(svg, /#1F2937/, 'sobre botão branco, um ícone branco seria invisível')
+})

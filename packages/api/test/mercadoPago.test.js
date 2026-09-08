@@ -537,13 +537,16 @@ test('a restrição a quem tem conta é o que liga e desliga o campo purpose', a
   } finally { espiao.restaurar() }
 })
 
-// Servidor, app e painel leem a MESMA chave e precisam do MESMO padrão. Se
-// discordarem, o cliente vê "Pagar com cartão" e a página do Mercado Pago exige
-// login — ou o painel mostra desmarcado enquanto a cobrança sai restrita.
-test('servidor, app e painel concordam no padrão de exigir conta', async () => {
+// Servidor e painel leem a MESMA chave e precisam do MESMO padrão: se
+// discordarem, o painel mostra desmarcado enquanto a cobrança sai restrita.
+//
+// O APP saiu desta verificação de propósito. Ele deixou de ramificar em
+// `payment_mp_wallet_only` quando o botão passou a nomear o adquirente sempre
+// ("Pagar com Mercado Pago") e o formulário no site virou opção separada — não
+// há mais nada na tela que dependa de saber se há restrição de conta, então
+// exigir a leitura ali seria pedir código morto.
+test('servidor e painel concordam no padrão de exigir conta', async () => {
   const rota  = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
-  const app   = await readFile(
-    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
   const admin = await readFile(
     new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
 
@@ -551,10 +554,27 @@ test('servidor, app e painel concordam no padrão de exigir conta', async () => 
   // 'false' explícito desliga". Qualquer outra leitura muda o padrão.
   assert.match(rota, /payment_mp_wallet_only \?\? 'true'\) !== 'false'/,
     'o servidor precisa tratar a chave ausente como restrição LIGADA')
-  assert.match(app, /payment_mp_wallet_only \?\? 'true'\) !== 'false'/,
-    'o app precisa usar a mesma regra do servidor')
   assert.match(admin, /payment_mp_wallet_only:\s*'true'/,
     'o painel precisa mostrar marcado o que o servidor considera ligado')
+})
+
+// A mesma armadilha, na chave nova: o app decide sozinho se mostra o terceiro
+// botão, e o painel precisa mostrar marcado exatamente o que o app vai fazer.
+test('app e painel concordam no padrão do formulário no site', async () => {
+  const app   = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  const admin = await readFile(
+    new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
+  const rota  = await readFile(new URL('../src/routes/settings.js', import.meta.url), 'utf8')
+
+  assert.match(app, /payment_card_form_inline \?\? 'true'\) !== 'false'/,
+    'ausente = ligado, só um "false" explícito desliga')
+  assert.match(admin, /payment_card_form_inline:\s*'true'/,
+    'o painel precisa mostrar marcado o que o app considera ligado')
+  // E a chave precisa CHEGAR ao app: sem ela em /settings/public, o app cai no
+  // padrão e o botão fica preso ligado, ignorando o admin.
+  assert.match(rota, /'payment_card_form_inline'/,
+    'sem estar nas chaves públicas, desmarcar no painel não muda nada na tela')
 })
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -58,6 +58,7 @@ const PAYMENT_KEYS = new Set([
   // Lista de adquirentes de cartão + a chave PRÓPRIA do Pagar.me (a genérica é
   // do gateway padrão, que é outro).
   'payment_card_acquirers', 'payment_pagarme_api_key',
+  'payment_card_form_inline',
   // Split de 2 recebedores (migration 087). A chave existia no banco e NÃO
   // aparecia em lugar nenhum do painel: não dava para ver se estava ligada nem
   // para ligar — só por SQL. Numa decisão que muda para onde o dinheiro vai,
@@ -154,6 +155,10 @@ const PAYMENT_DEFAULTS = {
   // nenhuma ter aberto esta tela.
   payment_card_acquirers:         '',
   payment_pagarme_api_key:        '',
+  // Formulário de cartão dentro do site, como TERCEIRA opção ao lado dos
+  // botões. Ligado por padrão: com o Checkout Pro exigindo conta no Mercado
+  // Pago, sem ele quem não tem conta fica sem nenhum caminho de cartão.
+  payment_card_form_inline:       'true',
 }
 
 function settingsToMap(list) {
@@ -873,6 +878,38 @@ function TabPagamentos({ settings, qc }) {
                   </div>
                 </label>
               )}
+
+              {/* Terceira opção de cartão, ao lado dos botões que
+                  redirecionam. Só existe no fluxo novo — no modo antigo
+                  ('bricks' puro) o formulário já é a tela inteira. */}
+              {form.payment_card_flow !== 'bricks' && (
+                <label className="flex items-start gap-3 cursor-pointer mt-4 pl-7">
+                  <input
+                    type="checkbox"
+                    checked={form.payment_card_form_inline !== 'false'}
+                    onChange={(e) => set('payment_card_form_inline', e.target.checked ? 'true' : 'false')}
+                    className="mt-1 w-4 h-4 accent-brand shrink-0"
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-200">
+                      Também oferecer o formulário de cartão dentro do site
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      Acrescenta um terceiro botão, <b className="text-gray-400">Pagar com cartão</b>,
+                      que abre o formulário do Mercado Pago aqui mesmo em vez de redirecionar.
+                      Não substitui o Checkout Pro — soma a ele.
+                    </p>
+                    <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
+                      Vem <b>ligado</b> porque, com a exigência de conta acima ativa, sem ele quem
+                      não tem conta no Mercado Pago fica sem <b>nenhum</b> caminho de cartão.
+                      Saiba do que se trata: é justamente este formulário que vinha sendo recusado
+                      por risco (<code className="text-gray-400">cc_rejected_high_risk</code>) —
+                      a aprovação aqui é pior que a do Checkout Pro. Ele existe como última
+                      tentativa para quem não tem alternativa, não como caminho principal.
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
 
             {/* ── Split: para onde o dinheiro vai ───────────────────────── */}
@@ -998,7 +1035,8 @@ function TabPagamentos({ settings, qc }) {
                  'payment_gateway_env', 'payment_gateway_api_key',
                  'payment_gateway_webhook_secret', 'payment_split_single_operator',
                  'payment_card_flow', 'payment_mp_wallet_only',
-                 'payment_card_acquirers', 'payment_pagarme_api_key'],
+                 'payment_card_acquirers', 'payment_pagarme_api_key',
+                 'payment_card_form_inline'],
                 'gateway',
               )}
               pending={saveMut.isPending}

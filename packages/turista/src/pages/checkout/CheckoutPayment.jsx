@@ -63,6 +63,14 @@ const ESTILO_PIX = {
   cor: '#32BCAD', corAtiva: '#2BA697', texto: '#FFFFFF', logo: 'pix.svg',
 }
 
+// Cartão digitado AQUI DENTRO. Neutro de propósito: não é marca de ninguém —
+// o formulário é do Mercado Pago, mas quem digita não sai do site, e pintá-lo
+// de azul prometeria um redirecionamento que não acontece.
+const ESTILO_CARTAO_SITE = {
+  cor: '#FFFFFF', corAtiva: '#F3F4F6', texto: '#1F2937', borda: true,
+  logo: 'cartao.svg',
+}
+
 // ─── BlocoPix ───────────────────────────────────────────────
 // Escolher e pagar, nesta ordem. O botão de pagar SÓ existe depois da escolha:
 // um botão de pagamento aceso sem nada selecionado convida ao clique e não diz
@@ -413,6 +421,9 @@ export default function CheckoutPayment() {
   // cliente não saberia qual ele apertou.
   const [redirecionando, setRedirecionando] = useState(null)
   const [pixSelecionado, setPixSelecionado] = useState(false)
+  // O formulário de cartão no site começa FECHADO, como o Pix: a tela abre com
+  // as opções, e o cliente escolhe antes de ver campo nenhum.
+  const [formularioAberto, setFormularioAberto] = useState(false)
   const [emailPix,       setEmailPix]       = useState('')
   const [erroPix,        setErroPix]        = useState('')
   const [enviandoPix,    setEnviandoPix]    = useState(false)
@@ -431,16 +442,18 @@ export default function CheckoutPayment() {
   // {}): sem saber, o certo é o caminho que funciona.
   const cartaoNoMercadoPago = settings?.payment_card_flow !== 'bricks'
 
-  // O cartão no Checkout Pro está restrito a quem TEM conta no Mercado Pago
-  // (`purpose: 'wallet_purchase'` no servidor). MESMA REGRA DE PADRÃO do
-  // servidor — ligado quando a chave falta, só um 'false' explícito desliga —
-  // porque discordar aqui é prometer ao cliente um caminho que não existe.
+  // ── Formulário de cartão AQUI DENTRO (Bricks) ──────────────────────────
+  // Terceira opção, ao lado dos botões que redirecionam. Existe porque o
+  // Checkout Pro está restrito a quem tem conta no Mercado Pago
+  // (`payment_mp_wallet_only`): sem esta, quem não tem conta fica sem NENHUM
+  // caminho de cartão — só o Pix.
   //
-  // Dizer isso ANTES do clique é o ponto: quem não tem conta descobriria a
-  // restrição já dentro da página do Mercado Pago, sem entender por quê e sem
-  // caminho de volta. Aqui ele lê a exigência e o PIX está logo abaixo.
-  const cartaoSoComConta = cartaoNoMercadoPago
-    && String(settings?.payment_mp_wallet_only ?? 'true') !== 'false'
+  // Não substitui o Checkout Pro, soma a ele. São públicos diferentes: quem
+  // tem conta no MP aprova muito melhor lá; quem não tem só tem esta.
+  //
+  // MESMA REGRA DE PADRÃO das outras chaves de pagamento: ausente = ligado, só
+  // um 'false' explícito desliga.
+  const formularioNoSite = String(settings?.payment_card_form_inline ?? 'true') !== 'false'
 
   // ── Quais botões de cartão aparecem ────────────────────────────────────
   // A lista vem PRONTA do servidor (/settings/public): ele já removeu o
@@ -474,7 +487,12 @@ export default function CheckoutPayment() {
   // que ensina o cliente a desconfiar.
   const BOTOES_CARTAO = {
     mercado_pago: {
-      rotulo: cartaoSoComConta ? 'Pagar com Mercado Pago' : 'Pagar com cartão',
+      // Nomeia o adquirente SEMPRE, e não só quando há restrição de conta: o
+      // botão leva para fora do site, e dizer para onde é a única informação
+      // que sobrou depois que os textos de apoio saíram. "Pagar com cartão"
+      // ficou reservado para o formulário aqui dentro — dois botões com o
+      // mesmo rótulo e destinos diferentes seria o pior resultado possível.
+      rotulo: 'Pagar com Mercado Pago',
       // #009EE3 é o azul institucional do Mercado Pago. Fica como valor literal
       // (e não como cor do tema) de propósito: é marca de terceiro, e mudar a
       // paleta da Turiva não pode repintar o botão deles.
@@ -507,6 +525,20 @@ export default function CheckoutPayment() {
   // No modo 'bricks' nada muda: o Brick segue inteiro, cartão e PIX.
   const pixAtivo  = formasAtivas(settings).pix
   const pixProprio = acquirersDisponiveis.length > 0 && pixAtivo
+
+  // O formulário no site só entra no fluxo NOVO (o dos botões). No modo antigo
+  // ('bricks' puro) ele já é a tela inteira, e oferecê-lo como opção seria
+  // desenhar o mesmo formulário duas vezes.
+  //
+  // Exige também que o cartão esteja ligado nas formas de pagamento: sem
+  // crédito nem débito, o Brick montaria vazio.
+  const formasCartao = formasAtivas(settings)
+  const ofereceFormulario = acquirersDisponiveis.length > 0 && formularioNoSite
+    && (formasCartao.credito || formasCartao.debito)
+
+  // O Brick do formulário fica só com o CARTÃO: o Pix tem bloco próprio logo
+  // abaixo, e oferecê-lo duas vezes na mesma tela é convite a erro.
+  const settingsSoCartao = { ...settings, payment_method_pix: 'false' }
 
   // A conta pode ter sido criada só com telefone, e o Mercado Pago exige
   // e-mail do pagador para emitir o PIX. Quem coletava isso era o Brick — sem
@@ -807,6 +839,33 @@ export default function CheckoutPayment() {
                         />
                       )
                     })}
+
+                    {/* ── Cartão AQUI DENTRO (Bricks) ────────────────────
+                        Não redireciona: abre o formulário do Mercado Pago
+                        embaixo do botão, como o Pix faz. É o caminho de quem
+                        não tem conta no Mercado Pago e por isso não consegue
+                        usar o Checkout Pro. */}
+                    {ofereceFormulario && (
+                      <div>
+                        <BotaoAdquirente
+                          estilo={ESTILO_CARTAO_SITE}
+                          rotulo="Pagar com cartão"
+                          desabilitado={!!redirecionando}
+                          onClick={() => setFormularioAberto((v) => !v)}
+                        />
+                        {formularioAberto && (
+                          <div className="mt-2">
+                            <PaymentBrick
+                              amount={total_price}
+                              publicKey={sellerKey}
+                              onCard={handleCardPayment}
+                              onPix={handlePix}
+                              settings={settingsSoCartao}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 {/* ── PIX ────────────────────────────────────────────────
