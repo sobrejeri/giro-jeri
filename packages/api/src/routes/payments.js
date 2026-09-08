@@ -1808,6 +1808,24 @@ router.get('/diagnostico-cartao', authenticate, requireAdmin, async (req, res, n
       }
     }
 
+    // ── O que está VALENDO agora ──────────────────────────────────────
+    // Três vezes num único dia uma configuração foi alterada no admin e a
+    // cobrança saiu pelo caminho antigo — sem nada na tela dizendo qual modo
+    // estava ativo. O teste era feito, o resultado interpretado, e só o
+    // collector_id no banco revelava depois que o modo nem tinha entrado.
+    //
+    // Aqui o servidor responde o que ELE está usando, lido da mesma função que
+    // decide na hora de cobrar. Não é o que o admin mostra marcado: é o que
+    // vale.
+    const cfgAtual = await getPaymentSettings().catch(() => ({}))
+    saida.configuracao = {
+      onde_o_cartao_e_digitado: cartaoNoCheckoutPro(cfgAtual) ? 'checkout_pro (página do Mercado Pago)' : 'bricks (dentro do site)',
+      quem_cobra:               modoDeSplit(cfgAtual) === 'disbursements'
+        ? 'plataforma (disbursements) — o operador entra como recebedor'
+        : 'operador (application_fee) — a plataforma retém a comissão',
+      split_no_ato_ligado:      String(cfgAtual?.payment_split_single_operator ?? 'false') === 'true',
+    }
+
     // A leitura pronta, para não depender de interpretar a lista bruta.
     const op = saida.operador
     if (op?.resumo) {

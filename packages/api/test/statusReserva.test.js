@@ -205,3 +205,26 @@ test('nenhum handler com parâmetro é passado direto para onClick', async () =>
     'o evento do clique vira o primeiro argumento — use onClick={() => ' +
     'handler()} quando o handler tiver parâmetro próprio')
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// O diagnóstico precisa dizer o que o SERVIDOR está usando
+// ═══════════════════════════════════════════════════════════════════════════
+// Três vezes num único dia uma configuração de pagamento foi alterada no admin
+// e a cobrança saiu pelo caminho antigo. O teste era feito, o resultado
+// interpretado, e só o `collector_id` no banco revelava — depois — que o modo
+// nem tinha entrado em ação. Cada ciclo desses custou uma cobrança real.
+test('o diagnóstico responde qual modo está valendo, lido de quem decide', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+
+  assert.match(executavel, /saida\.configuracao = \{/)
+  // O ponto: as MESMAS funções que decidem na hora de cobrar. Reimplementar a
+  // leitura aqui deixaria o diagnóstico mentir sem ninguém perceber.
+  assert.match(executavel, /onde_o_cartao_e_digitado: cartaoNoCheckoutPro\(cfgAtual\)/)
+  assert.match(executavel, /quem_cobra:\s+modoDeSplit\(cfgAtual\) === 'disbursements'/)
+
+  const jsx = await readFile(
+    new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /O servidor está usando agora/, 'e a tela precisa mostrar')
+  assert.match(jsx, /dados\?\.configuracao/)
+})

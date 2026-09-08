@@ -336,8 +336,22 @@ function DiagnosticoCartao({ resultado }) {
     </div>
   )
 
+  const cfg = dados?.configuracao
+
   return (
     <div className="mt-2 text-[11px] rounded-lg bg-gray-950 border border-gray-800 p-2.5 space-y-2">
+      {/* O que está VALENDO no servidor — não o que a tela mostra marcado.
+          Três vezes num dia uma configuração foi alterada e a cobrança saiu
+          pelo caminho antigo, sem nada aqui dizendo qual modo estava ativo. */}
+      {cfg && (
+        <div className="space-y-1 pb-2 border-b border-gray-800">
+          <p className="text-gray-600">O servidor está usando agora</p>
+          <Linha rotulo="Cartão digitado em" valor={cfg.onde_o_cartao_e_digitado} />
+          <Linha rotulo="Quem cobra"         valor={cfg.quem_cobra} />
+          <Linha rotulo="Split no ato"       valor={cfg.split_no_ato_ligado ? 'ligado' : 'desligado'}
+                 ok={cfg.split_no_ato_ligado} />
+        </div>
+      )}
       {op?.conta?.erro ? (
         <p className="text-red-400">
           Conta do operador: {op.conta.erro}
