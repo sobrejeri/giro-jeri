@@ -1625,6 +1625,75 @@ router.post('/intent', authenticate, async (req, res, next) => {
         }
       }
     }
+    // ── Cartão no Pagar.me ───────────────────────────────────────────────
+    // Mesmo desenho do Checkout Pro: criamos o pedido, devolvemos um LINK, e a
+    // cobrança nasce na página deles. A linha em `payments` nasce sem
+    // gateway_transaction_id — o id da cobrança só existe depois — e é ligada
+    // depois pelo `code` do pedido, que é o id da reserva.
+    //
+    // SEM SPLIT, de propósito. O split foi o que colocou a conta nova do
+    // operador como recebedora principal e disparou a avaliação de risco no
+    // Mercado Pago. Aqui a plataforma é a lojista e o repasse ao operador sai
+    // pela tela de Repasses — que já lança sozinha quando não houve split.
+    // A expressão vai inline: `isCard` só é declarado mais abaixo (com `const`,
+    // portanto em zona morta aqui) e o de cima vive dentro do bloco do Mercado
+    // Pago. Usá-lo aqui seria ReferenceError em produção — e `node --check` não
+    // pega isso, porque a sintaxe está correta.
+    if (gateway === 'pagarme' && ['credit_card', 'debit_card'].includes(payment_method)) {
+      const { criarCheckoutCartao } = await import('../payments/pagarmeCheckout.js')
+      const usuario = await supabase.from('users')
+        .select('email, full_name, phone').eq('id', req.user.id).single()
+
+      const base = String(process.env.TURISTA_URL || '').replace(/\/+$/, '')
+      if (!base) console.error('[pagarme] TURISTA_URL não configurada — cliente ficará sem link de volta')
+
+      // A linha ANTES do pedido, pelo mesmo motivo do Checkout Pro: o link de
+      // retorno carrega o id DELA, e é assim que a tela de processamento sabe
+      // o que consultar quando o cliente volta.
+      const { payment: linha, error: erroLinha } = await inserirPagamento({
+        booking_id:         booking.id,
+        ...(isGroup ? { order_group_id } : {}),
+        gateway_name:       'pagarme',
+        payment_method,
+        payment_type:       'full',
+        amount_gross:       chargedTotal,
+        gateway_fee_amount: Math.round(chargedTotal * taxaDoMetodo(payment_method) * 100) / 100,
+        gateway_fee_pct:    taxaDoMetodo(payment_method),
+        currency:           'BRL',
+        status:             'pending',
+        ...(payment_attempt_id ? { payment_attempt_id } : {}),
+      })
+      if (erroLinha) throw erroLinha
+
+      const checkout = await criarCheckoutCartao({
+        apiKey:          cfg.payment_gateway_api_key || process.env.PAGARME_API_KEY || '',
+        amount:          chargedTotal,
+        description:     service_name || `Reserva ${bookingCode}`,
+        bookingId:       booking.id,
+        retornoUrl:      base ? `${base}/checkout/processando?p=${linha.id}` : undefined,
+        clienteNome:     usuario.data?.full_name,
+        clienteEmail:    usuario.data?.email || payer_email,
+        clienteDoc:      payer_doc,
+        clienteTelefone: usuario.data?.phone,
+        maxParcelas:     Number(cfg.payment_max_installments) || 12,
+        item: { id: service_id || booking.id, title: service_name || `Reserva ${bookingCode}` },
+      })
+
+      await supabase.from('payments')
+        .update({ raw_response_json: { pagarme: true, pedido_id: checkout.pedido_id,
+          redirect_url: checkout.redirect_url } })
+        .eq('id', linha.id)
+
+      console.log('[pagarme] pedido %s criado para a reserva %s', checkout.pedido_id, booking.id)
+
+      return res.json({
+        success: true, status: 'redirect',
+        redirect_url: checkout.redirect_url,
+        payment_id: linha.id, booking_id: booking.id,
+        booking_code: bookingCode, amount: chargedTotal,
+      })
+    }
+
     // ── Adquirente escolhido mas sem adapter ─────────────────────────────
     // Silenciar aqui seria o pior desfecho: o pagamento seguiria como
     // 'manual', a reserva ficaria aguardando confirmação humana, e ninguém
