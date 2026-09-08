@@ -460,9 +460,12 @@ export default function CheckoutPayment() {
     return lista.filter((g) => g !== 'mercado_pago' || cartaoNoMercadoPago)
   })()
 
-  // Rótulo, aparência e explicação de cada botão. O texto é o produto aqui: a
-  // diferença entre os dois não é técnica para o cliente, é "preciso de conta
-  // ou não".
+  // Rótulo e aparência de cada botão.
+  //
+  // SEM texto de apoio embaixo, por decisão de produto: a tela fica com as
+  // opções juntas, lidas de uma vez. O rótulo passou a ser o único lugar onde
+  // o cliente aprende para onde vai — daí ele nomear o adquirente em vez de
+  // dizer só "cartão".
   //
   // A COR é do adquirente, não do app. Um botão que leva o cliente para FORA do
   // site precisa parecer com o lugar para onde ele vai — quem toca "Pagar com
@@ -472,9 +475,6 @@ export default function CheckoutPayment() {
   const BOTOES_CARTAO = {
     mercado_pago: {
       rotulo: cartaoSoComConta ? 'Pagar com Mercado Pago' : 'Pagar com cartão',
-      ajuda: cartaoSoComConta
-        ? 'Cartão de crédito ou débito, com login na sua conta do Mercado Pago.'
-        : 'Você vai concluir no ambiente do Mercado Pago e volta para cá em seguida.',
       // #009EE3 é o azul institucional do Mercado Pago. Fica como valor literal
       // (e não como cor do tema) de propósito: é marca de terceiro, e mudar a
       // paleta da Turiva não pode repintar o botão deles.
@@ -486,7 +486,6 @@ export default function CheckoutPayment() {
     },
     pagarme: {
       rotulo: 'Pagar com cartão',
-      ajuda: 'Crédito ou débito, sem precisar de conta em lugar nenhum. Aceita cartão internacional.',
       // Neutro de propósito: fica visualmente em segundo plano quando os dois
       // aparecem, que é a hierarquia certa — e continua legível quando é o
       // único botão da tela.
@@ -785,7 +784,7 @@ export default function CheckoutPayment() {
             {keyChecked && settings !== undefined ? (
               <>
                 {acquirersDisponiveis.length > 0 && (
-                  <div className="mb-3 space-y-3">
+                  <div className="mb-2 space-y-2">
                     {erroCartao && (
                       <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
                         <p className="text-[12px] text-red-700 leading-relaxed">{erroCartao}</p>
@@ -795,33 +794,19 @@ export default function CheckoutPayment() {
                       const b = BOTOES_CARTAO[g]
                       if (!b) return null
                       return (
-                        <div key={g}>
-                          <BotaoAdquirente
-                            estilo={b}
-                            rotulo={b.rotulo}
-                            carregando={redirecionando === g}
-                            desabilitado={!!redirecionando}
-                            /* Seta, e não a função direta: onClick passa o
-                               EVENTO como primeiro argumento, e um handler que
-                               espera outra coisa recebe o clique no lugar. */
-                            onClick={() => pagarComCartaoHospedado(g)}
-                          />
-                          <p className="text-[11px] text-gray-500 text-center mt-2 leading-relaxed">
-                            {b.ajuda}
-                          </p>
-                        </div>
+                        <BotaoAdquirente
+                          key={g}
+                          estilo={b}
+                          rotulo={b.rotulo}
+                          carregando={redirecionando === g}
+                          desabilitado={!!redirecionando}
+                          /* Seta, e não a função direta: onClick passa o
+                             EVENTO como primeiro argumento, e um handler que
+                             espera outra coisa recebe o clique no lugar. */
+                          onClick={() => pagarComCartaoHospedado(g)}
+                        />
                       )
                     })}
-                    {/* O PIX é a saída de quem não se encaixa em nenhum cartão.
-                        Só vale dizer isso quando o cartão TEM restrição de
-                        conta e não existe alternativa sem conta na tela —
-                        senão o aviso manda embora quem podia pagar no cartão. */}
-                    {cartaoSoComConta && !acquirersDisponiveis.includes('pagarme') && (
-                      <p className="text-[11px] text-gray-500 text-center leading-relaxed">
-                        Não tem conta no Mercado Pago? Pague com PIX abaixo — não precisa
-                        de cadastro.
-                      </p>
-                    )}
                   </div>
                 )}
                 {/* ── PIX ────────────────────────────────────────────────
@@ -835,13 +820,6 @@ export default function CheckoutPayment() {
                     depois dela. O caminho do pagamento em si NÃO mudou: é o
                     mesmo handlePix, o mesmo /intent, a mesma tela de
                     processando. Só o gatilho é nosso. */}
-                {pixProprio && acquirersDisponiveis.length > 0 && (
-                  <div className="flex items-center gap-3 my-3">
-                    <span className="flex-1 h-px bg-gray-100" />
-                    <span className="text-[11px] text-gray-400">ou</span>
-                    <span className="flex-1 h-px bg-gray-100" />
-                  </div>
-                )}
                 {pixProprio ? (
                   <BlocoPix
                     selecionado={pixSelecionado}
