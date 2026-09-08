@@ -1347,6 +1347,12 @@ router.post('/intent', authenticate, async (req, res, next) => {
             payerDoc:        payer_doc ? String(payer_doc).replace(/\D/g, '') : undefined,
             payerPhone:      usuario.data?.phone,
             maxInstallments: Number(cfg.payment_max_installments) || 12,
+            // Restringir a quem tem conta no Mercado Pago: o comprador logado
+            // aprova, o convidado é recusado por risco. LIGADO por padrão —
+            // oferecer cartão a quem vai ser recusado é pior que não oferecer.
+            // Configurável porque a troca não é de graça: ver a nota em
+            // criarPreferenciaCheckoutPro. Só um 'false' explícito desliga.
+            somenteComConta: String(cfg.payment_mp_wallet_only ?? 'true') !== 'false',
             backUrl:         base ? `${base}/checkout/processando?p=${linha.id}` : undefined,
             sellerAccessToken: split?.sellerAccessToken,
             applicationFee:    split?.applicationFee,
@@ -1923,6 +1929,11 @@ router.get('/diagnostico-cartao', authenticate, requireAdmin, async (req, res, n
         ? 'operador (split no ato) — a conta DELE é a avaliada pelo antifraude'
         : 'plataforma (sem split) — repasse ao operador pela tela de Repasses',
       split_no_ato_ligado:      String(cfgAtual?.payment_split_single_operator ?? 'false') === 'true',
+      // Divide o resultado de um teste em dois: recusa com o comprador LOGADO
+      // é problema de conta ou de cartão; recusa como CONVIDADO com isto
+      // desligado é o risco conhecido. Sem saber qual modo valia, os dois casos
+      // viram "cc_rejected_high_risk" e a conclusão sai errada.
+      cartao_so_com_conta_mp:   String(cfgAtual?.payment_mp_wallet_only ?? 'true') !== 'false',
     }
 
     // A leitura pronta, para não depender de interpretar a lista bruta.

@@ -622,6 +622,7 @@ export async function criarPreferenciaCheckoutPro({
   amount, description, externalRef, bookingId,
   payerEmail, payerName, payerDoc, payerPhone,
   maxInstallments, backUrl, sellerAccessToken, applicationFee, item,
+  somenteComConta = false,
 }) {
   const token = sellerAccessToken || accessToken
   if (!token) throw new Error('Mercado Pago não configurado: falta o Access Token.')
@@ -657,13 +658,20 @@ export async function criarPreferenciaCheckoutPro({
     external_reference: String(externalRef),
     ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     statement_descriptor: 'TURIVA',
-    // NÃO enviar `purpose`. É por omissão que o Checkout Pro aceita quem NÃO
-    // tem conta no Mercado Pago: o comprador digita o cartão como convidado, sem
-    // criar cadastro nem fazer login. Com `purpose: 'wallet_purchase'` só usuário
-    // logado consegue pagar — e a maior parte dos turistas ficaria de fora.
+    // `purpose: 'wallet_purchase'` restringe o checkout a quem TEM conta no
+    // Mercado Pago e está logado. Sem ele, qualquer um paga como convidado.
     //
-    // Quem tem conta ganha a opção de entrar, e aí o antifraude avalia uma
-    // pessoa com histórico. Quem não tem paga do mesmo jeito.
+    // A escolha não é óbvia, e por isso é configurável. O que sabemos por teste:
+    // com o comprador LOGADO a cobrança aprova; como CONVIDADO é recusada por
+    // risco (operações 176622831007 e 176632829177, mesma reserva, mesmo dia).
+    // O Mercado Pago compensa a falta de histórico da conta recebedora com o
+    // histórico do comprador — quando ele existe.
+    //
+    // Restringir troca "recusa na cara do cliente" por "esse cliente não usa
+    // cartão". É melhor, mas não é de graça: quem não tem conta fica só com o
+    // PIX. Só vale porque o PIX funciona e está na mesma tela — se não
+    // estivesse, isto seria fechar a porta.
+    ...(somenteComConta ? { purpose: 'wallet_purchase' } : {}),
     payment_methods: {
       // PIX e boleto ficam de fora: o PIX tem fluxo próprio no app, que já
       // funciona, e boleto não é oferecido. Aqui é o caminho do CARTÃO.

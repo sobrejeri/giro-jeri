@@ -494,21 +494,67 @@ test('toda configuração de pagamento editável é realmente salva', async () =
     `editável mas nunca gravado: ${esquecidas.join(', ')}`)
 })
 
-// Turista sem conta no Mercado Pago é a maioria. `purpose: 'wallet_purchase'`
-// restringe o Checkout Pro a usuário LOGADO — mandá-lo deixaria essa gente sem
-// conseguir pagar. A permissão vem da OMISSÃO do campo, então é fácil alguém
-// acrescentá-lo sem perceber o efeito.
-test('quem não tem conta no Mercado Pago também paga', async () => {
-  const espiao = fetchEspiao(PREF_OK)
+// ═══════════════════════════════════════════════════════════════════════════
+// Cartão só para quem tem conta no Mercado Pago
+// ═══════════════════════════════════════════════════════════════════════════
+// `purpose: 'wallet_purchase'` restringe o Checkout Pro a comprador LOGADO. A
+// diferença apareceu em produção: a mesma reserva, no mesmo dia, aprovou com o
+// comprador logado e foi recusada por risco como convidado.
+//
+// A permissão ao convidado vem da OMISSÃO do campo — quem lê o corpo não vê
+// nada que diga "convidado pode". Por isso os dois lados são fixados aqui:
+// desligado NÃO manda o campo, ligado manda. Trocar um pelo outro sem querer
+// ou fecha o cartão para quem não tem conta, ou reabre a recusa por risco.
+test('a restrição a quem tem conta é o que liga e desliga o campo purpose', async () => {
+  const { criarPreferenciaCheckoutPro } = await import('../src/services/mercadoPago.js')
+  const base = {
+    amount: 10, description: 'x', externalRef: 'bk-1', bookingId: 'bk-1',
+    payerEmail: 'cliente@exemplo.com',
+  }
+
+  let espiao = fetchEspiao(PREF_OK)
   try {
-    const { criarPreferenciaCheckoutPro } = await import('../src/services/mercadoPago.js')
-    await criarPreferenciaCheckoutPro({
-      amount: 10, description: 'x', externalRef: 'bk-1', bookingId: 'bk-1',
-      payerEmail: 'cliente@exemplo.com',
-    })
+    await criarPreferenciaCheckoutPro({ ...base, somenteComConta: false })
     assert.equal(espiao.chamadas[0].body.purpose, undefined,
-      "com purpose='wallet_purchase' só quem tem conta consegue pagar")
+      'sem a restrição, quem não tem conta precisa conseguir pagar como convidado')
   } finally { espiao.restaurar() }
+
+  espiao = fetchEspiao(PREF_OK)
+  try {
+    await criarPreferenciaCheckoutPro({ ...base, somenteComConta: true })
+    assert.equal(espiao.chamadas[0].body.purpose, 'wallet_purchase',
+      'com a restrição ligada o checkout tem de exigir login no Mercado Pago')
+  } finally { espiao.restaurar() }
+
+  // Sem dizer nada, o padrão do ADAPTADOR é permissivo — quem decide é quem
+  // chama (a rota lê a configuração). Um adaptador que restringisse por conta
+  // própria tornaria a chave do admin decorativa.
+  espiao = fetchEspiao(PREF_OK)
+  try {
+    await criarPreferenciaCheckoutPro(base)
+    assert.equal(espiao.chamadas[0].body.purpose, undefined,
+      'o adaptador não decide sozinho restringir')
+  } finally { espiao.restaurar() }
+})
+
+// Servidor, app e painel leem a MESMA chave e precisam do MESMO padrão. Se
+// discordarem, o cliente vê "Pagar com cartão" e a página do Mercado Pago exige
+// login — ou o painel mostra desmarcado enquanto a cobrança sai restrita.
+test('servidor, app e painel concordam no padrão de exigir conta', async () => {
+  const rota  = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const app   = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  const admin = await readFile(
+    new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
+
+  // A forma `?? 'true') !== 'false'` é o que diz "ausente = ligado, só um
+  // 'false' explícito desliga". Qualquer outra leitura muda o padrão.
+  assert.match(rota, /payment_mp_wallet_only \?\? 'true'\) !== 'false'/,
+    'o servidor precisa tratar a chave ausente como restrição LIGADA')
+  assert.match(app, /payment_mp_wallet_only \?\? 'true'\) !== 'false'/,
+    'o app precisa usar a mesma regra do servidor')
+  assert.match(admin, /payment_mp_wallet_only:\s*'true'/,
+    'o painel precisa mostrar marcado o que o servidor considera ligado')
 })
 
 // ═══════════════════════════════════════════════════════════════════════════

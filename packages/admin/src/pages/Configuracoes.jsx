@@ -54,7 +54,7 @@ const PAYMENT_KEYS = new Set([
   // configuração crua — dois lugares editando a mesma coisa.
   'payment_method_pix', 'payment_method_credit', 'payment_method_debit',
   'payment_max_installments',
-  'payment_card_flow',
+  'payment_card_flow', 'payment_mp_wallet_only',
   // Split de 2 recebedores (migration 087). A chave existia no banco e NÃO
   // aparecia em lugar nenhum do painel: não dava para ver se estava ligada nem
   // para ligar — só por SQL. Numa decisão que muda para onde o dinheiro vai,
@@ -121,6 +121,11 @@ const PAYMENT_DEFAULTS = {
   // Pago; 'bricks' = dentro do nosso site. O padrão é o Checkout Pro porque o
   // caminho dentro do site vinha sendo recusado por risco. O PIX não é afetado.
   payment_card_flow:              'checkout_pro',
+  // Cartão só para quem tem conta no Mercado Pago. MESMO PADRÃO do servidor
+  // (routes/payments.js) e do app: ligado, e só um 'false' explícito desliga.
+  // Se a tela mostrasse desligado e o servidor tratasse como ligado, o operador
+  // estaria lendo uma configuração que não é a que decide a cobrança.
+  payment_mp_wallet_only:         'true',
 }
 
 function settingsToMap(list) {
@@ -796,6 +801,37 @@ function TabPagamentos({ settings, qc }) {
                   </p>
                 </div>
               </label>
+
+              {/* Só faz sentido dentro do Checkout Pro: no formulário dentro do
+                  site não existe "estar logado no Mercado Pago". */}
+              {form.payment_card_flow !== 'bricks' && (
+                <label className="flex items-start gap-3 cursor-pointer mt-4 pl-7">
+                  <input
+                    type="checkbox"
+                    checked={form.payment_mp_wallet_only !== 'false'}
+                    onChange={(e) => set('payment_mp_wallet_only', e.target.checked ? 'true' : 'false')}
+                    className="mt-1 w-4 h-4 accent-brand shrink-0"
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-200">
+                      Exigir conta no Mercado Pago (sem pagamento como convidado)
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      <b className="text-gray-400">Ligado:</b> só quem tem conta no Mercado Pago e
+                      entra logado consegue pagar com cartão. <b className="text-gray-400">Desligado:</b>{' '}
+                      qualquer um paga como convidado, sem conta.
+                    </p>
+                    <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
+                      Vem <b>ligado</b> porque foi o que separou aprovação de recusa nos testes: a
+                      mesma reserva, no mesmo dia, aprovou com o comprador <b>logado</b> e foi
+                      recusada por risco como <b>convidado</b>. Ligado, quem não tem conta nem chega
+                      a ver a recusa — mas também não paga com cartão, e fica só com o PIX (que o
+                      checkout oferece na mesma tela, sem cadastro). É solução de ponte até o
+                      cartão ter um adquirente próprio.
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
 
             {/* ── Split: para onde o dinheiro vai ───────────────────────── */}
@@ -869,7 +905,7 @@ function TabPagamentos({ settings, qc }) {
                 ['payment_gateway', 'payment_gateway_card', 'payment_gateway_pix',
                  'payment_gateway_env', 'payment_gateway_api_key',
                  'payment_gateway_webhook_secret', 'payment_split_single_operator',
-                 'payment_card_flow'],
+                 'payment_card_flow', 'payment_mp_wallet_only'],
                 'gateway',
               )}
               pending={saveMut.isPending}

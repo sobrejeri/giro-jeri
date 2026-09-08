@@ -29,6 +29,10 @@ const PUBLIC_KEYS = [
   // página do Mercado Pago). O app precisa saber para decidir se mostra o
   // formulário de cartão ou um botão que redireciona.
   'payment_card_flow',
+  // Cartão restrito a quem tem conta no Mercado Pago. O app precisa saber para
+  // dizer isso ANTES do clique, e para apontar o PIX a quem não tem conta —
+  // descobrir a restrição já dentro da página deles é o pior lugar possível.
+  'payment_mp_wallet_only',
 ];
 
 // ── GET /api/settings/public ───────────────────────────

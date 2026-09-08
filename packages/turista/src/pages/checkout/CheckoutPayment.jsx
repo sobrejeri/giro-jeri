@@ -282,6 +282,18 @@ export default function CheckoutPayment() {
   // Vale também quando as configurações não chegam (o fallback de 2s devolve
   // {}): sem saber, o certo é o caminho que funciona.
   const cartaoNoMercadoPago = settings?.payment_card_flow !== 'bricks'
+
+  // O cartão no Checkout Pro está restrito a quem TEM conta no Mercado Pago
+  // (`purpose: 'wallet_purchase'` no servidor). MESMA REGRA DE PADRÃO do
+  // servidor — ligado quando a chave falta, só um 'false' explícito desliga —
+  // porque discordar aqui é prometer ao cliente um caminho que não existe.
+  //
+  // Dizer isso ANTES do clique é o ponto: quem não tem conta descobriria a
+  // restrição já dentro da página do Mercado Pago, sem entender por quê e sem
+  // caminho de volta. Aqui ele lê a exigência e o PIX está logo abaixo.
+  const cartaoSoComConta = cartaoNoMercadoPago
+    && String(settings?.payment_mp_wallet_only ?? 'true') !== 'false'
+
   const settingsDoBrick = cartaoNoMercadoPago
     ? { ...settings, payment_method_credit: 'false', payment_method_debit: 'false' }
     : settings
@@ -533,10 +545,14 @@ export default function CheckoutPayment() {
                       disabled={redirecionando}
                       className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand text-white font-semibold text-[14px] py-3.5 active:scale-[0.99] transition-transform disabled:opacity-60"
                     >
-                      {redirecionando ? 'Abrindo pagamento…' : 'Pagar com cartão'}
+                      {redirecionando
+                        ? 'Abrindo pagamento…'
+                        : (cartaoSoComConta ? 'Pagar com Mercado Pago' : 'Pagar com cartão')}
                     </button>
                     <p className="text-[11px] text-gray-500 text-center mt-2 leading-relaxed">
-                      Você vai concluir no ambiente do Mercado Pago e volta para cá em seguida.
+                      {cartaoSoComConta
+                        ? 'Cartão de crédito ou débito, com login na sua conta do Mercado Pago. Não tem conta? Pague com PIX abaixo — não precisa de cadastro.'
+                        : 'Você vai concluir no ambiente do Mercado Pago e volta para cá em seguida.'}
                     </p>
                   </div>
                 )}
