@@ -2265,15 +2265,30 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
     // Verifica se expirou
     if (payment.status === 'pending' && payment.expires_at && new Date(payment.expires_at) < new Date()) {
       await supabase.from('payments').update({ status: 'expired' }).eq('id', payment.id)
-      if (payment.order_group_id) {
+      // ATENÇÃO ao valor: o enum `status_commercial` é
+      //   draft · awaiting_acceptance · awaiting_payment · paid ·
+      //   payment_failed · cancelled · refunded
+      // 'expired' NÃO existe nele (001:32 + 035). Gravá-lo fazia o Postgres
+      // recusar o UPDATE com erro de enum — e o retorno nunca era lido, então
+      // o pagamento virava 'expired' e a RESERVA ficava em 'awaiting_payment'
+      // para sempre, calada. Uma trava que parecia existir e não existia.
+      //
+      // `payment_failed` é o estado certo: o prazo acabou, ninguém pagou, e o
+      // cliente pode tentar de novo. `payments.payment_status` tem 'expired' de
+      // verdade no enum dele, então ali o valor continua exato.
+      const expirouReserva = { status_commercial: 'payment_failed', payment_status: 'expired' }
+      const { error: erroExpiracao } = payment.order_group_id
         // Grupo: expira só as reservas ainda aguardando pagamento (não toca
         // canceladas/pagas). Evita grupo "meio-expirado".
-        await supabase.from('bookings')
-          .update({ status_commercial: 'expired', payment_status: 'expired' })
-          .eq('order_group_id', payment.order_group_id)
-          .in('status_commercial', PODE_PAGAR)
-      } else {
-        await supabase.from('bookings').update({ status_commercial: 'expired', payment_status: 'expired' }).eq('id', payment.booking_id)
+        ? await supabase.from('bookings').update(expirouReserva)
+            .eq('order_group_id', payment.order_group_id)
+            .in('status_commercial', PODE_PAGAR)
+        : await supabase.from('bookings').update(expirouReserva)
+            .eq('id', payment.booking_id)
+            .in('status_commercial', PODE_PAGAR)
+      if (erroExpiracao) {
+        console.error('[status] expiração da reserva %s falhou: %s',
+          payment.booking_id, erroExpiracao.message)
       }
       return res.json({ status: 'expired', booking_id: payment.booking_id })
     }
@@ -2827,7 +2842,21 @@ export async function onPaymentApproved(payment) {
   // antigo (paga primeiro): vai para a fila de despacho para alguém aceitar.
   const bookingUpdate = { status_commercial: 'paid', payment_status: 'approved' }
   if (!booking?.operator_id) bookingUpdate.status_operational = 'awaiting_dispatch'
-  await supabase.from('bookings').update(bookingUpdate).eq('id', payment.booking_id)
+  // Cancelada e reembolsada NÃO voltam a ser pagas. O caminho de GRUPO já
+  // filtrava assim; este, de reserva única, promovia qualquer estado —
+  // inclusive uma reserva que o cliente cancelou. Dinheiro que chega para uma
+  // reserva cancelada é um problema de gente, não de código: não silencia.
+  const { data: promovidas } = await supabase.from('bookings')
+    .update(bookingUpdate)
+    .eq('id', payment.booking_id)
+    .not('status_commercial', 'in', '("cancelled","refunded")')
+    .select('id')
+  if (!(promovidas || []).length) {
+    console.error(
+      '[pagamento] APROVAÇÃO EM RESERVA NÃO PROMOVÍVEL booking=%s status=%s payment=%s — ' +
+      'dinheiro recebido sem reserva ativa, precisa de conferência manual',
+      payment.booking_id, booking?.status_commercial, payment.id)
+  }
 
   // If this booking came from a custom transfer quote, mark the quote as paid.
   // Não use .catch() direto no builder do Supabase.

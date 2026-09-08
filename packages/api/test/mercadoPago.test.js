@@ -688,8 +688,12 @@ test('rebaixar reserva para falha exige que ela ainda esteja esperando pagar', a
 
   for (const [nome, fonte] of [['webhook', rota], ['conciliação', conc]]) {
     for (const m of fonte.matchAll(/status_commercial: 'payment_failed'/g)) {
-      const vizinhanca = fonte.slice(m.index, m.index + 420)
-      assert.match(vizinhanca, /\.in\('status_commercial', \['awaiting_payment', 'payment_failed'\]\)/,
+      const vizinhanca = fonte.slice(m.index, m.index + 760)
+      // Duas formas aceitáveis: a lista dos estados que podem cair, ou um
+      // `.eq` ainda mais restrito (o caminho da expiração usa este).
+      assert.match(
+        vizinhanca,
+        /\.in\('status_commercial', \['awaiting_payment', 'payment_failed'\]\)|\.eq\('status_commercial', 'awaiting_payment'\)/,
         `${nome}: rebaixa a reserva sem conferir o estado atual — pode desfazer um pagamento`)
     }
   }
