@@ -787,75 +787,34 @@ test('a volta do Mercado Pago mostra a recusa na hora, sem confiar na URL', asyn
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Split multi-recebedor: a PLATAFORMA como principal da cobrança
+// `disbursements` não existe em POST /v1/payments
 // ═══════════════════════════════════════════════════════════════════════════
-// A diferença que importa: com `application_fee` a cobrança nasce na conta do
-// OPERADOR e o antifraude avalia a conta dele — nova, sem histórico, recusada
-// por risco. Com `disbursements` ela nasce na conta da PLATAFORMA, que
-// distribui a fatia do operador. Os valores não mudam; muda quem é avaliado.
-test('a cobrança com disbursements sai na conta da plataforma', async () => {
-  const espiao = clienteEspiao()
-  const { createCardPaymentSplit, buildDisbursements } = await import('../src/services/mercadoPago.js')
-  await createCardPaymentSplit({
-    ...cartaoBase, paymentClient: espiao,
-    payerName: 'Maria Silva', payerPhone: '85998765432',
-    item: { id: 'tour-9', title: 'Litoral Leste' },
-    disbursements: buildDisbursements([
-      { amount: 10, collectorId: '41422708', applicationFee: 9.2, externalReference: 'bk-1' },
-    ]),
-  })
-  const { body, requestOptions } = espiao.enviados[0]
+// Tentamos inverter quem cobra — plataforma como principal, operador como
+// recebedor — para tirar a conta nova do operador da avaliação de risco. O
+// Mercado Pago respondeu, em produção:
+//
+//     "The name of the following parameters is wrong : [disbursements]"
+//
+// Não é falta de habilitação nem de permissão: o campo não é aceito nesse
+// endpoint. Este teste existe para que ninguém reintroduza a tentativa achando
+// que foi configuração.
+test('nenhum caminho de cartão manda disbursements ao Mercado Pago', async () => {
+  const mp   = await readFile(new URL('../src/services/mercadoPago.js', import.meta.url), 'utf8')
+  const rota = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
 
-  assert.equal(body.disbursements.length, 1)
-  assert.equal(body.disbursements[0].collector_id, 41422708, 'o operador é o RECEBEDOR, não o cobrador')
-  assert.equal(body.disbursements[0].amount, 10)
-  assert.equal(body.disbursements[0].application_fee, 9.2, 'a comissão da plataforma não muda de valor')
-  assert.equal(body.application_fee, undefined,
-    'application_fee no topo é o OUTRO modelo — misturar os dois é pedir recusa')
+  assert.doesNotMatch(mp, /export async function createCardPaymentSplit/,
+    'cartão com disbursements é recusado pelo gateway — não pode voltar')
+  assert.doesNotMatch(rota, /createCardPaymentSplit/)
 
-  // O resto do que faz uma cobrança ser aprovada continua indo.
-  assert.equal(requestOptions.idempotencyKey, 'tentativa-1')
-  assert.equal(body.additional_info.items[0].category_id, 'travels')
-  assert.equal(body.payer.identification.number, CPF_VALIDO)
+  // A única função que ainda monta disbursements é a de PIX do motor de pernas,
+  // que está atrás de flag desligada e agora carrega o aviso.
+  assert.match(mp, /⚠️ NÃO FUNCIONA\. Mesmo endpoint/,
+    'a versão PIX usa o MESMO parâmetro recusado e precisa avisar')
 })
 
-test('disbursements sem recebedor não vira cobrança', async () => {
-  const espiao = clienteEspiao()
-  const { createCardPaymentSplit } = await import('../src/services/mercadoPago.js')
-  await assert.rejects(
-    createCardPaymentSplit({ ...cartaoBase, paymentClient: espiao, disbursements: [] }),
-    /ao menos 1 disbursement/)
-  assert.equal(espiao.enviados.length, 0)
-})
-
-// Um card token pertence à conta cuja chave pública o gerou. Com disbursements
-// quem cobra é a plataforma, então o token TEM de ser dela — devolver a chave
-// do operador aqui geraria token de uma conta e cobrança de outra.
-test('no modo disbursements o app tokeniza com a chave da plataforma', async () => {
-  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
-  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
-
-  assert.match(executavel, /ctx\?\.sellerAccessToken && modoDeSplit\(cfg\) !== 'disbursements'/,
-    'checkout-key não pode devolver a chave do operador neste modo')
-  // E as duas guardas de "token de outra conta" precisam saber do modo, senão
-  // acusam um descasamento que é intencional.
-  assert.match(executavel, /split && modoDeSplit\(cfg\) !== 'disbursements'/)
-  assert.match(executavel, /!split && mp_public_key && booking\?\.operator_id && modoDeSplit\(cfg\) !== 'disbursements'/)
-})
-
-test('sem mp_user_id do operador, cai no modelo anterior em vez de falhar', async () => {
-  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
-  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
-  assert.match(executavel, /modoDeSplit\(cfg\) === 'disbursements' && !!split\.collectorId/,
-    'sem o collector_id não há como distribuir — melhor o modelo antigo que um erro')
-  assert.match(src, /caindo em application_fee/, 'e o log precisa dizer por quê')
-})
-
-test('o modo padrão continua sendo application_fee', async () => {
+test('só existe um modo de split para cartão', async () => {
   const { modoDeSplit } = await import('../src/routes/payments.js')
-  assert.equal(modoDeSplit({}), 'application_fee')
-  assert.equal(modoDeSplit({ payment_split_mode: '' }), 'application_fee')
-  assert.equal(modoDeSplit({ payment_split_mode: 'disbursements' }), 'disbursements')
-  assert.equal(modoDeSplit({ payment_split_mode: 'qualquer_coisa' }), 'application_fee',
-    'valor desconhecido não pode ligar um modelo de cobrança')
+  assert.equal(modoDeSplit(), 'application_fee')
+  assert.equal(modoDeSplit({ payment_split_mode: 'disbursements' }), 'application_fee',
+    'configuração não pode ressuscitar um modo que o gateway recusa')
 })

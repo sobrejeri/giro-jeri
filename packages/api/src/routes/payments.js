@@ -782,25 +782,26 @@ const PODE_PAGAR = ['awaiting_payment', 'payment_failed']
 
 // ── Quem é o PRINCIPAL da cobrança ───────────────────────────────────────────
 //
-//   'application_fee' (padrão) — a cobrança nasce na conta do OPERADOR, com o
-//     token dele, e a plataforma retém a comissão. Quem o antifraude avalia é
-//     a conta DELE.
+// Hoje só existe UM modo para cartão: 'application_fee'. A cobrança nasce na
+// conta do OPERADOR, com o token dele, e a plataforma retém a comissão — o que
+// significa que quem o antifraude avalia é a conta DELE.
 //
-//   'disbursements' — a cobrança nasce na conta da PLATAFORMA, com o token
-//     dela, que distribui a fatia do operador. Quem responde pela venda é a
-//     conta da plataforma, com o histórico dela.
+// TENTAMOS o outro caminho ('disbursements': cobrança na conta da plataforma,
+// que distribui a fatia do operador) justamente para tirar a conta nova do
+// operador da linha de frente do risco. O Mercado Pago respondeu, em produção,
+// sobre POST /v1/payments:
 //
-// A diferença não é de contabilidade, é de RISCO: conta de operador recém
-// conectada, sem histórico de vendas, vinha sendo recusada por
-// cc_rejected_high_risk mesmo com tudo que o Mercado Pago documenta sendo
-// enviado. Inverter quem é o principal ataca a raiz.
+//     "The name of the following parameters is wrong : [disbursements]"
 //
-// Exige "Split de pagamentos" habilitado na aplicação marketplace do MP. Sem
-// isso o próprio gateway recusa a criação — e é assim que se descobre.
-export function modoDeSplit(cfg) {
-  return String(cfg?.payment_split_mode || 'application_fee') === 'disbursements'
-    ? 'disbursements'
-    : 'application_fee'
+// O parâmetro NÃO existe nesse endpoint. Não é falta de habilitação, não é
+// permissão: o campo não é aceito. Deixar a opção disponível seria oferecer uma
+// configuração que quebra 100% dos pagamentos com cartão.
+//
+// O caminho que resta para tirar o operador do risco é NÃO dividir no ato:
+// desligar `payment_split_single_operator`, cobrar tudo na conta da plataforma
+// e repassar pela tela de Repasses. Sem parâmetro novo, sem API nova.
+export function modoDeSplit() {
+  return 'application_fee'
 }
 
 async function inserirPagamento(row, tentativaReservadaId = null) {
@@ -1366,7 +1367,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         // estava aberta: ela pegou a chave do operador antes da mudança e
         // continua usando. Sem esta checagem, a cobrança sai fadada a falhar e
         // o cliente leva "recusado por segurança" por um problema de cache.
-        if (!split && mp_public_key && booking?.operator_id && modoDeSplit(cfg) !== 'disbursements') {
+        if (!split && mp_public_key && booking?.operator_id) {
           const { data: opChave } = await supabase
             .from('users').select('mp_public_key').eq('id', booking.operator_id).maybeSingle()
           if (opChave?.mp_public_key && opChave.mp_public_key === mp_public_key) {
@@ -1384,7 +1385,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         // PLATAFORMA de propósito, e comparar com a chave do operador acusaria
         // um descasamento que não existe — derrubando o split logo no modo que
         // veio para consertar o problema.
-        if (split && modoDeSplit(cfg) !== 'disbursements') {
+        if (split) {
           const mesmaConta = !!split.publicKey && !!mp_public_key && split.publicKey === mp_public_key
           if (!mesmaConta) {
             console.warn(
@@ -1430,36 +1431,18 @@ router.post('/intent', authenticate, async (req, res, next) => {
         if (reserva.modo !== 'indisponivel') tentativaReservadaId = reserva.paymentId
 
         // ── Cartão: sem fallback fake — erro propaga ──────
-        const { createCardPayment, createCardPaymentSplit, buildDisbursements, mapRejectionKey } =
-          await import('../services/mercadoPago.js')
+        const { createCardPayment, mapRejectionKey } = await import('../services/mercadoPago.js')
         const userInfo = await supabase.from('users').select('email, full_name, phone, created_at').eq('id', req.user.id).single()
 
-        // ── Quem é o PRINCIPAL desta cobrança ────────────────────────────
-        // Com 'disbursements' o pagamento nasce na conta da PLATAFORMA e ela
-        // distribui a fatia do operador — o antifraude passa a avaliar a conta
-        // dela. Ver modoDeSplit(). Exige o mp_user_id do operador (o
-        // collector_id) e o "Split de pagamentos" liberado na aplicação.
-        const porDisbursements =
-          !!split && modoDeSplit(cfg) === 'disbursements' && !!split.collectorId
-        if (split && modoDeSplit(cfg) === 'disbursements' && !split.collectorId) {
-          console.warn('[split] modo disbursements pedido mas o operador %s não tem mp_user_id — caindo em application_fee',
-            split.operatorId)
-        }
-
-        const criarCobranca = (dados) => (porDisbursements
-          ? createCardPaymentSplit({
-              ...dados,
-              // A fatia do operador é o que sobra depois da comissão. Mesma
-              // aritmética do application_fee: o número não muda, muda quem
-              // cobra e quem é avaliado pelo risco.
-              disbursements: buildDisbursements([{
-                amount:            chargedTotal,
-                collectorId:       split.collectorId,
-                applicationFee:    split.applicationFee,
-                externalReference: booking.id,
-              }]),
-            })
-          : createCardPayment({ ...dados, sellerAccessToken: split?.sellerAccessToken, applicationFee: split?.applicationFee }))
+        // Um modo só para cartão — ver modoDeSplit(): o Mercado Pago recusa
+        // `disbursements` em POST /v1/payments ("The name of the following
+        // parameters is wrong"). Para tirar a conta do operador do risco, o
+        // caminho é desligar o split e repassar depois.
+        const criarCobranca = (dados) => createCardPayment({
+          ...dados,
+          sellerAccessToken: split?.sellerAccessToken,
+          applicationFee:    split?.applicationFee,
+        })
 
         cardResult = await comChamadaMarcada(tentativaReservadaId, () => criarCobranca({
           amount:          chargedTotal,
@@ -1820,9 +1803,13 @@ router.get('/diagnostico-cartao', authenticate, requireAdmin, async (req, res, n
     const cfgAtual = await getPaymentSettings().catch(() => ({}))
     saida.configuracao = {
       onde_o_cartao_e_digitado: cartaoNoCheckoutPro(cfgAtual) ? 'checkout_pro (página do Mercado Pago)' : 'bricks (dentro do site)',
-      quem_cobra:               modoDeSplit(cfgAtual) === 'disbursements'
-        ? 'plataforma (disbursements) — o operador entra como recebedor'
-        : 'operador (application_fee) — a plataforma retém a comissão',
+      // Com o split ligado quem cobra é o OPERADOR — e é a conta dele que o
+      // antifraude avalia. Desligado, a cobrança sai na plataforma e o repasse
+      // vai pela tela de Repasses. É a única alavanca que existe aqui: o
+      // Mercado Pago não aceita `disbursements` em cartão.
+      quem_cobra:               String(cfgAtual?.payment_split_single_operator ?? 'false') === 'true'
+        ? 'operador (split no ato) — a conta DELE é a avaliada pelo antifraude'
+        : 'plataforma (sem split) — repasse ao operador pela tela de Repasses',
       split_no_ato_ligado:      String(cfgAtual?.payment_split_single_operator ?? 'false') === 'true',
     }
 
@@ -2322,7 +2309,7 @@ router.get('/booking/:id/checkout-key', authenticate, async (req, res, next) => 
       // o cartão tem de ser tokenizado com a chave pública DELA. Devolver a do
       // operador aqui geraria um token de uma conta e uma cobrança de outra —
       // recusa garantida, com mensagem que não explica nada.
-      if (ctx?.sellerAccessToken && modoDeSplit(cfg) !== 'disbursements') {
+      if (ctx?.sellerAccessToken) {
         const { data: op } = await supabase
           .from('users').select('mp_public_key').eq('id', booking.operator_id).maybeSingle()
         publicKey = op?.mp_public_key || null

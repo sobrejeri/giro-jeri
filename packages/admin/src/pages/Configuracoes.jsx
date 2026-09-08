@@ -54,7 +54,6 @@ const PAYMENT_KEYS = new Set([
   'payment_method_pix', 'payment_method_credit', 'payment_method_debit',
   'payment_max_installments',
   'payment_card_flow',
-  'payment_split_mode',
   // Split de 2 recebedores (migration 087). A chave existia no banco e NÃO
   // aparecia em lugar nenhum do painel: não dava para ver se estava ligada nem
   // para ligar — só por SQL. Numa decisão que muda para onde o dinheiro vai,
@@ -117,7 +116,6 @@ const PAYMENT_DEFAULTS = {
   // Pago; 'bricks' = dentro do nosso site. O padrão é o Checkout Pro porque o
   // caminho dentro do site vinha sendo recusado por risco. O PIX não é afetado.
   payment_card_flow:              'checkout_pro',
-  payment_split_mode:             'application_fee',
 }
 
 function settingsToMap(list) {
@@ -795,40 +793,6 @@ function TabPagamentos({ settings, qc }) {
               </label>
             </div>
 
-            {/* ── Quem é o principal da cobrança ────────────────────────── */}
-            <div className="border-t border-gray-800 pt-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.payment_split_mode === 'disbursements'}
-                  onChange={(e) => set('payment_split_mode', e.target.checked ? 'disbursements' : 'application_fee')}
-                  className="mt-1 w-4 h-4 accent-brand shrink-0"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-gray-200">
-                    Cobrar na conta da plataforma e repassar ao operador (split multi-recebedor)
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                    <b className="text-gray-400">Desligado:</b> a cobrança nasce na conta do
-                    OPERADOR e a plataforma retém a comissão. Quem o antifraude avalia é a conta
-                    dele.<br />
-                    <b className="text-gray-400">Ligado:</b> a cobrança nasce na conta da
-                    PLATAFORMA, que distribui a fatia do operador. Quem responde pela venda é a sua
-                    conta, com o seu histórico.
-                  </p>
-                  <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
-                    É a resposta ao <code className="text-gray-400">cc_rejected_high_risk</code>:
-                    conta de operador recém-conectada, sem histórico de vendas, vinha sendo recusada
-                    mesmo com tudo certo no envio. Os valores do split não mudam — muda quem cobra.
-                    <br />
-                    <b>Exige "Split de pagamentos" habilitado</b> na sua aplicação marketplace do
-                    Mercado Pago, e o operador precisa ter o mp_user_id gravado (reconecte a conta
-                    dele se necessário). Sem isso, cai sozinho no modo anterior.
-                  </p>
-                </div>
-              </label>
-            </div>
-
             {/* ── Split: para onde o dinheiro vai ───────────────────────── */}
             <div className="border-t border-gray-800 pt-4">
               <label className="flex items-start gap-3 cursor-pointer">
@@ -865,7 +829,7 @@ function TabPagamentos({ settings, qc }) {
                 // tela e nunca gravado — o pior tipo de silêncio.
                 ['payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key',
                  'payment_gateway_webhook_secret', 'payment_split_single_operator',
-                 'payment_card_flow', 'payment_split_mode'],
+                 'payment_card_flow'],
                 'gateway',
               )}
               pending={saveMut.isPending}

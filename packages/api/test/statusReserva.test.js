@@ -221,7 +221,9 @@ test('o diagnóstico responde qual modo está valendo, lido de quem decide', asy
   // O ponto: as MESMAS funções que decidem na hora de cobrar. Reimplementar a
   // leitura aqui deixaria o diagnóstico mentir sem ninguém perceber.
   assert.match(executavel, /onde_o_cartao_e_digitado: cartaoNoCheckoutPro\(cfgAtual\)/)
-  assert.match(executavel, /quem_cobra:\s+modoDeSplit\(cfgAtual\) === 'disbursements'/)
+  // Quem cobra é decidido pelo split no ato — a única alavanca que existe,
+  // já que o Mercado Pago não aceita `disbursements` em cartão.
+  assert.match(executavel, /quem_cobra:\s+String\(cfgAtual\?\.payment_split_single_operator/)
 
   const jsx = await readFile(
     new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')

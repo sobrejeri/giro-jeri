@@ -29,10 +29,6 @@ const PUBLIC_KEYS = [
   // página do Mercado Pago). O app precisa saber para decidir se mostra o
   // formulário de cartão ou um botão que redireciona.
   'payment_card_flow',
-  // O app não usa esta chave para decidir nada — quem decide é o servidor. Vai
-  // no público só para a tela de pagamento poder explicar o modelo quando
-  // precisar. Manter aqui evita uma segunda rota só para isso.
-  'payment_split_mode',
 ];
 
 // ── GET /api/settings/public ───────────────────────────
