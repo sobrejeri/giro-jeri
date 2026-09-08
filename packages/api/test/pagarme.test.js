@@ -462,3 +462,17 @@ test('um adquirente abrindo desabilita o outro botão', async () => {
     'mas só o clicado mostra "Abrindo pagamento…"')
   assert.match(jsx, /disabled=\{desabilitado\}/)
 })
+
+// O logo é servido de public/, que o Vite copia cru para o dist. Some do
+// repositório e o botão volta a ser azul sem marca nenhuma — sem erro de build,
+// sem teste vermelho, só um 404 em produção que ninguém vê nos logs do app.
+test('o símbolo do Mercado Pago está no repositório e é branco', async () => {
+  const svg = await readFile(
+    new URL('../../turista/public/logos/mercadopago.svg', import.meta.url), 'utf8')
+  assert.match(svg, /<svg[^>]*viewBox/, 'precisa ser um SVG de verdade')
+  assert.match(svg, /<path/, 'sem path não desenha nada')
+  // <img> NÃO herda a cor do botão: um currentColor ficaria preto sobre o azul.
+  assert.match(svg, /fill="#FFFFFF"/,
+    'a cor precisa estar gravada no arquivo — o logo só aparece sobre o azul')
+  assert.doesNotMatch(svg, /currentColor/)
+})
