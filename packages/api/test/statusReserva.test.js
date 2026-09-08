@@ -11,6 +11,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+// A rota de pagamentos monta o cliente do Supabase na carga e aborta sem estas.
+// Nada aqui toca o banco — os testes leem funções puras e o texto dos arquivos.
+process.env.SUPABASE_URL ||= 'https://exemplo.supabase.co'
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'chave-de-teste'
+process.env.MP_ACCESS_TOKEN ||= 'TEST-token-de-teste'
+
 import { resolveStatusReserva, rotuloDoTotal } from '../../turista/src/lib/statusReserva.js'
 
 // A regra que não pode ser quebrada por nenhum caminho.
@@ -229,4 +235,65 @@ test('o diagnóstico responde qual modo está valendo, lido de quem decide', asy
     new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
   assert.match(jsx, /O servidor está usando agora/, 'e a tela precisa mostrar')
   assert.match(jsx, /dados\?\.configuracao/)
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Gateway por método: PIX e cartão em adquirentes diferentes
+// ═══════════════════════════════════════════════════════════════════════════
+// O PIX aprova no Mercado Pago. O cartão é recusado lá por risco, de forma
+// sistemática — inclusive com a cobrança nascendo na conta da plataforma, sem
+// split (collector_id 1068684688, cc_rejected_high_risk). Prender os dois à
+// mesma chave significaria mover o PIX que funciona junto com o cartão que não.
+test('cada método pode ter seu adquirente, com o padrão valendo por omissão', async () => {
+  const { gatewayDoMetodo } = await import('../src/routes/payments.js')
+
+  // Sem nada configurado: tudo cai no padrão. Uma instalação que nunca abriu
+  // essa tela não pode mudar de comportamento.
+  const soPadrao = { payment_gateway: 'mercado_pago' }
+  for (const m of ['pix', 'credit_card', 'debit_card']) {
+    assert.equal(gatewayDoMetodo(soPadrao, m), 'mercado_pago')
+  }
+
+  // O caso que motivou tudo: PIX fica, cartão sai.
+  const separado = { payment_gateway: 'mercado_pago', payment_gateway_card: 'pagarme' }
+  assert.equal(gatewayDoMetodo(separado, 'pix'), 'mercado_pago', 'o PIX que funciona não se move')
+  assert.equal(gatewayDoMetodo(separado, 'credit_card'), 'pagarme')
+  assert.equal(gatewayDoMetodo(separado, 'debit_card'), 'pagarme', 'débito acompanha o crédito')
+
+  // Vazio e espaço em branco são "não configurado", não um gateway chamado "".
+  for (const vazio of ['', '   ', null, undefined]) {
+    assert.equal(gatewayDoMetodo({ payment_gateway: 'mercado_pago', payment_gateway_card: vazio },
+      'credit_card'), 'mercado_pago')
+  }
+
+  // Sem padrão nenhum: manual, que é o comportamento seguro de sempre.
+  assert.equal(gatewayDoMetodo({}, 'credit_card'), 'manual')
+})
+
+// Escolher um adquirente sem adapter e deixar passar seria o pior desfecho: o
+// pagamento viraria 'manual', a reserva ficaria aguardando confirmação humana,
+// e o cliente acharia que pagou.
+test('adquirente sem integração falha alto, não vira pagamento manual', async () => {
+  const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  const executavel = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.match(executavel, /\['asaas', 'pagarme'\]\.includes\(gateway\)/)
+  assert.match(executavel, /e\.status = 503/)
+  // E precisa acontecer ANTES do trecho que trata gateway desconhecido como manual.
+  const posGuarda  = executavel.search(/\['asaas', 'pagarme'\]\.includes\(gateway\)/)
+  const posManual  = executavel.search(/const effectiveGateway/)
+  assert.ok(posGuarda > 0 && posGuarda < posManual,
+    'a guarda tem de vir antes de o gateway virar manual por omissão')
+})
+
+test('a tela do admin oferece os dois seletores e avisa o que não existe', async () => {
+  const jsx = await readFile(
+    new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /payment_gateway_pix/)
+  assert.match(jsx, /payment_gateway_card/)
+  assert.match(jsx, /não têm integração/, 'escolher Asaas/Pagar.me hoje quebra — precisa avisar')
+  // E as duas chaves novas precisam entrar no Salvar, senão marcam sem gravar.
+  // A lista do card do gateway, não a primeira saveSection do arquivo.
+  const iGateway = jsx.indexOf("'payment_gateway', 'payment_gateway_card'")
+  assert.ok(iGateway > 0, 'as chaves novas precisam estar na lista do Salvar do gateway')
+  assert.match(jsx.slice(iGateway, iGateway + 200), /'payment_gateway_pix'/)
 })

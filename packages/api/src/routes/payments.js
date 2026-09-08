@@ -780,6 +780,26 @@ async function reconciliarTentativa(payment) {
 // nenhum caminho de volta. Recusa é convite a tentar de novo, não fim de linha.
 const PODE_PAGAR = ['awaiting_payment', 'payment_failed']
 
+// ── Qual adquirente cobra CADA método ────────────────────────────────────────
+//
+// PIX e cartão podem viver em adquirentes diferentes. Não é preferência de
+// arquitetura: o PIX aprova no Mercado Pago e o cartão é recusado por risco lá,
+// de forma sistemática — inclusive com a cobrança nascendo na conta da
+// plataforma, sem split. Prender os dois à mesma chave significaria mover o PIX
+// que funciona junto com o cartão que não funciona.
+//
+// `payment_gateway` continua sendo o padrão. As chaves por método só existem
+// para quem precisa separar, e um valor vazio cai no padrão — instalação que
+// nunca abriu essa tela segue exatamente como estava.
+export function gatewayDoMetodo(cfg, metodo) {
+  const padrao = cfg?.payment_gateway || 'manual'
+  const especifico = ['credit_card', 'debit_card'].includes(metodo)
+    ? cfg?.payment_gateway_card
+    : cfg?.payment_gateway_pix
+  const escolhido = String(especifico || '').trim()
+  return escolhido || padrao
+}
+
 // ── Quem é o PRINCIPAL da cobrança ───────────────────────────────────────────
 //
 // Hoje só existe UM modo para cartão: 'application_fee'. A cobrança nasce na
@@ -956,8 +976,17 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
     // ── 1. Lê configurações do gateway ─────────────────
     const cfg     = await getPaymentSettings()
-    const gateway = cfg.payment_gateway || 'manual'
-    console.log('[intent] gateway=%s env=%s', gateway, cfg.payment_gateway_env)
+    // ── Gateway POR MÉTODO ───────────────────────────────────────────────
+    // O PIX funciona no Mercado Pago e vai ficar lá. O cartão precisa sair:
+    // nove hipóteses testadas, todas descartadas, e a recusa por risco
+    // (cc_rejected_high_risk) persiste até com a cobrança nascendo na conta da
+    // plataforma, sem split — comprovado pelo collector_id 1068684688.
+    //
+    // Uma chave só (`payment_gateway`) obrigava os dois métodos ao mesmo
+    // adquirente. Agora cada um tem o seu, e `payment_gateway` segue como o
+    // padrão de quem não foi configurado — nada muda para quem não mexer.
+    const gateway = gatewayDoMetodo(cfg, payment_method)
+    console.log('[intent] método=%s gateway=%s env=%s', payment_method, gateway, cfg.payment_gateway_env)
 
     let booking, bookingCode, groupBookings = null
 
@@ -1595,6 +1624,20 @@ router.post('/intent', authenticate, async (req, res, next) => {
           })
         }
       }
+    }
+    // ── Adquirente escolhido mas sem adapter ─────────────────────────────
+    // Silenciar aqui seria o pior desfecho: o pagamento seguiria como
+    // 'manual', a reserva ficaria aguardando confirmação humana, e ninguém
+    // saberia que o gateway configurado nunca foi chamado. O cliente acharia
+    // que pagou.
+    if (['asaas', 'pagarme'].includes(gateway)) {
+      console.error('[intent] gateway %s escolhido para %s mas o adapter não existe — reserva %s',
+        gateway, payment_method, booking.id)
+      const e = new Error(
+        `O meio de pagamento selecionado ainda não está disponível. ` +
+        `Use PIX, ou fale com o suporte.`)
+      e.status = 503
+      throw e
     }
     // asaas / pagarme: adapters a implementar quando credentials disponíveis
 

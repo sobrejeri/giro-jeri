@@ -43,7 +43,8 @@ const SETTING_LABELS = {
 }
 
 const PAYMENT_KEYS = new Set([
-  'payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key',
+  'payment_gateway', 'payment_gateway_card', 'payment_gateway_pix',
+  'payment_gateway_env', 'payment_gateway_api_key',
   'payment_gateway_webhook_secret', 'payment_split_admin_pct',
   'payment_admin_pix_key_type', 'payment_admin_pix_key',
   'payment_admin_bank_name', 'payment_admin_bank_agency',
@@ -94,6 +95,10 @@ const ACCOUNT_TYPES = [
 
 const PAYMENT_DEFAULTS = {
   payment_gateway:                'manual',
+  // Vazio = usa o gateway padrão acima. Existem para separar PIX e cartão em
+  // adquirentes diferentes, sem mover o que já funciona.
+  payment_gateway_card:           '',
+  payment_gateway_pix:            '',
   payment_gateway_env:            'sandbox',
   payment_gateway_api_key:        '',
   payment_gateway_webhook_secret: '',
@@ -822,12 +827,47 @@ function TabPagamentos({ settings, qc }) {
               </label>
             </div>
 
+            {/* ── Adquirente por método ─────────────────────────────────── */}
+            <div className="border-t border-gray-800 pt-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-200">Adquirente por meio de pagamento</p>
+                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                  Deixe em branco para usar o gateway padrão acima. Serve para separar: o PIX
+                  aprova no Mercado Pago e o cartão vem sendo recusado por risco lá, então dá para
+                  mover só o cartão sem tocar no que funciona.
+                </p>
+              </div>
+              <Select
+                label="PIX"
+                value={form.payment_gateway_pix}
+                onChange={(e) => set('payment_gateway_pix', e.target.value)}
+                className="max-w-xs"
+              >
+                <option value="">Usar o padrão</option>
+                {GATEWAYS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+              </Select>
+              <Select
+                label="Cartão (crédito e débito)"
+                value={form.payment_gateway_card}
+                onChange={(e) => set('payment_gateway_card', e.target.value)}
+                className="max-w-xs"
+              >
+                <option value="">Usar o padrão</option>
+                {GATEWAYS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+              </Select>
+              <p className="text-xs text-amber-500/80 leading-relaxed">
+                Asaas e Pagar.me ainda <b>não têm integração</b>. Escolher um deles faz o pagamento
+                falhar com aviso — nunca passar silenciosamente como manual.
+              </p>
+            </div>
+
             <SaveRow
               onSave={() => saveSection(
                 // Toda chave editada NESTE card precisa estar aqui: o Salvar
                 // manda uma lista explícita, e o que ficar de fora é marcado na
                 // tela e nunca gravado — o pior tipo de silêncio.
-                ['payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key',
+                ['payment_gateway', 'payment_gateway_card', 'payment_gateway_pix',
+                 'payment_gateway_env', 'payment_gateway_api_key',
                  'payment_gateway_webhook_secret', 'payment_split_single_operator',
                  'payment_card_flow'],
                 'gateway',
