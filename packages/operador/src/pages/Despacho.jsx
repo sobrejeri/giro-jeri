@@ -14,7 +14,7 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea, Select } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
-import { downloadOrderPDF } from '../lib/orderPDF'
+import { downloadOrderPDF, orderPDFBase64 } from '../lib/orderPDF'
 import SendOsButton from '../components/SendOsButton'
 import ConfirmarExecutor, { TIPOS_PIX } from '../components/ConfirmarExecutor'
 
