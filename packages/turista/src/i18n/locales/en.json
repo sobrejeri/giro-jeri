@@ -467,7 +467,8 @@
       "weekdayWed": "W",
       "weekdayThu": "T",
       "weekdayFri": "F",
-      "weekdaySat": "S"
+      "weekdaySat": "S",
+      "close": "Close"
     },
     "card": {
       "startingAt": "From",
@@ -477,7 +478,16 @@
       "badgeBestSeller": "Best seller",
       "favorite": "Add to favorites",
       "selected": "Selected",
-      "capacity": "{{count}} people"
+      "capacity": "{{count}} people",
+      "durationHours": "{{count}}h",
+      "tourTypeBoth": "Private or shared",
+      "tourTypePrivateGroups": "Private",
+      "recommendedBadge": "Recommended",
+      "newBadge": "New",
+      "fromLabel": "From",
+      "perPersonSuffix": "per person",
+      "viewOptions": "See options",
+      "favoriteAria": "Save to favorites"
     },
     "page": {
       "title": "Tours in {{region}}",

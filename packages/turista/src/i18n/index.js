@@ -15,6 +15,30 @@ function detectLang() {
   return 'pt'
 }
 
+// Rede de proteção: `fallbackLng` só cobre a chave que existe no pt. Quando ela
+// falta nos TRÊS idiomas, o i18next devolve a própria chave e o caminho cru
+// ("toursPg.card.fromLabel") vai parar na tela do cliente — foi o que aconteceu
+// nos cartões de passeio do PC. Aqui o último trecho da chave vira um rótulo
+// legível, então o pior caso passa a ser um texto sem tradução em vez de código.
+function textoPadrao(chave) {
+  const ultimo = String(chave || '').split('.').pop() || ''
+  const legivel = ultimo
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')   // camelCase → palavras
+    .replace(/[_-]+/g, ' ')
+    .trim()
+  if (!legivel) return ''
+  // Siglas ficam como estão (CEP, PIX, CPF); o resto vira minúscula, só a
+  // primeira palavra com inicial maiúscula.
+  return legivel
+    .split(' ')
+    .map((palavra, i) => {
+      if (palavra.length > 1 && palavra === palavra.toUpperCase()) return palavra
+      const p = palavra.toLowerCase()
+      return i === 0 ? p.charAt(0).toUpperCase() + p.slice(1) : p
+    })
+    .join(' ')
+}
+
 i18n
   .use(initReactI18next)
   .init({
@@ -26,6 +50,10 @@ i18n
     lng:            detectLang(),
     fallbackLng:    'pt',
     interpolation:  { escapeValue: false },
+    parseMissingKeyHandler: (chave) => {
+      if (import.meta.env.DEV) console.warn('[i18n] chave sem tradução:', chave)
+      return textoPadrao(chave)
+    },
   })
 
 export function setLang(lang) {

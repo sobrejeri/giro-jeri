@@ -467,7 +467,8 @@
       "weekdayWed": "Q",
       "weekdayThu": "Q",
       "weekdayFri": "S",
-      "weekdaySat": "S"
+      "weekdaySat": "S",
+      "close": "Fechar"
     },
     "card": {
       "startingAt": "A partir de",
@@ -477,7 +478,16 @@
       "badgeBestSeller": "Mais vendido",
       "favorite": "Favoritar",
       "selected": "Selecionado",
-      "capacity": "{{count}} pessoas"
+      "capacity": "{{count}} pessoas",
+      "durationHours": "{{count}}h",
+      "tourTypeBoth": "Privativo ou compartilhado",
+      "tourTypePrivateGroups": "Privativo",
+      "recommendedBadge": "Recomendado",
+      "newBadge": "Novo",
+      "fromLabel": "A partir de",
+      "perPersonSuffix": "por pessoa",
+      "viewOptions": "Ver opções",
+      "favoriteAria": "Salvar nos favoritos"
     },
     "page": {
       "title": "Passeios em {{region}}",
