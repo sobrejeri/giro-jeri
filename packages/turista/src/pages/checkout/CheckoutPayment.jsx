@@ -427,7 +427,10 @@ export default function CheckoutPayment() {
   const [emailPix,       setEmailPix]       = useState('')
   const [erroPix,        setErroPix]        = useState('')
   const [enviandoPix,    setEnviandoPix]    = useState(false)
-  const [erroCartao,     setErroCartao]     = useState('')
+  // Erro POR ADQUIRENTE, não um só para todos. Com um campo único, a falha do
+  // Pagar.me aparecia acima do botão do Mercado Pago também — que estava
+  // funcionando — e o cliente não tinha como saber qual dos dois recusou.
+  const [erroCartao,     setErroCartao]     = useState({})
 
   // Com o Checkout Pro ligado, o cartão sai do Brick: ele fica só com o PIX,
   // que continua funcionando no app. Ter as duas formas de pagar com cartão na
@@ -743,7 +746,7 @@ export default function CheckoutPayment() {
   async function pagarComCartaoHospedado(acquirer) {
     if (redirecionando) return
     setRedirecionando(acquirer)
-    setErroCartao('')
+    setErroCartao((e) => ({ ...e, [acquirer]: '' }))
     try {
       const result = await api.createPaymentIntent({
         ...(existing_booking_id ? { existing_booking_id } : {}),
@@ -774,7 +777,16 @@ export default function CheckoutPayment() {
       window.location.href = result.redirect_url
     } catch (err) {
       setRedirecionando(null)
-      setErroCartao(err?.message || 'Não foi possível abrir o pagamento com cartão.')
+      // A mensagem do gateway vem em inglês e fala da configuração DELES
+      // ("Checkout is disabled."). Para o turista isso não quer dizer nada e
+      // ainda parece defeito do site. Ele lê algo acionável; o texto original
+      // fica no console, que é onde ele serve para alguém.
+      console.error('[checkout] %s recusou:', acquirer, err?.message)
+      setErroCartao((e) => ({
+        ...e,
+        [acquirer]: 'Não foi possível abrir o pagamento com cartão por aqui. '
+          + 'Tente outra forma de pagamento abaixo.',
+      }))
     }
   }
 
@@ -821,17 +833,12 @@ export default function CheckoutPayment() {
               <>
                 {acquirersDisponiveis.length > 0 && (
                   <div className="mb-2 space-y-2">
-                    {erroCartao && (
-                      <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
-                        <p className="text-[12px] text-red-700 leading-relaxed">{erroCartao}</p>
-                      </div>
-                    )}
                     {acquirersDisponiveis.map((g) => {
                       const b = BOTOES_CARTAO[g]
                       if (!b) return null
                       return (
+                      <div key={`bloco-${g}`} className="space-y-2">
                         <BotaoAdquirente
-                          key={g}
                           estilo={b}
                           rotulo={b.rotulo}
                           carregando={redirecionando === g}
@@ -841,6 +848,14 @@ export default function CheckoutPayment() {
                              espera outra coisa recebe o clique no lugar. */
                           onClick={() => pagarComCartaoHospedado(g)}
                         />
+                        {/* O erro fica COLADO no botão que falhou: é o que diz
+                            ao cliente qual caminho não deu e qual ainda vale. */}
+                        {erroCartao[g] && (
+                          <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
+                            <p className="text-[12px] text-red-700 leading-relaxed">{erroCartao[g]}</p>
+                          </div>
+                        )}
+                      </div>
                       )
                     })}
 
