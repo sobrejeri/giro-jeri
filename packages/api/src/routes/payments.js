@@ -214,8 +214,15 @@ async function getPaymentSettings() {
 
 // Recalcula o valor autoritativo da reserva (alta temporada / feriado / cupom)
 // a partir do serviço, data e veículos. O cliente nunca define o valor cobrado.
-// Devolve { total, couponId, discountAmount } para a reserva gravar o cupom e
-// registrar o uso (coupon_redemptions). Falha → total do cliente, sem cupom.
+//
+// `autoritativo` diz se o motor de preço REALMENTE rodou. Antes, todo caminho
+// que não conseguia calcular caía em `Number(total_price)` — o valor que veio
+// do navegador — e isso era explorável: `region_id` é opcional no schema, mas
+// o recálculo exige ele. Bastava omitir `region_id` (ou mandar `vehicles: []`,
+// ou um `service_id` que não casa com nenhuma rota) para que nenhum cálculo
+// rodasse e a cobrança saísse pelo valor escolhido pelo cliente — o mínimo do
+// schema é R$ 1,00. Agora o valor não-calculado NUNCA vira cobrança: quem
+// chama recusa a requisição.
 async function computeChargedTotal({ data, userId }) {
   const {
     service_type, service_id, booking_mode, service_date_iso,
@@ -228,6 +235,7 @@ async function computeChargedTotal({ data, userId }) {
   // temporada OU feriado). Guardados nas reservas p/ o Dashboard somar as taxas.
   let subtotal          = Number(total_price)
   let seasonAdditional  = 0
+  let autoritativo      = false
   try {
     if (service_type === 'tour' && service_id && region_id && service_date_iso) {
       let r = null
@@ -255,6 +263,7 @@ async function computeChargedTotal({ data, userId }) {
         discountAmount   = Number(r.discountAmount) || 0
         seasonAdditional = Number(r.seasonAdditional) || 0
         subtotal         = Number(r.subtotalAmount) || chargedTotal
+        autoritativo     = true
       }
     } else if (service_type === 'transfer' && service_id && region_id && service_date_iso) {
       // Rota tabelada: recalcula a partir do preço da rota × veículos + acréscimo
@@ -276,17 +285,19 @@ async function computeChargedTotal({ data, userId }) {
           discountAmount = Number(c.discount) || 0
           chargedTotal   = Math.round((chargedTotal - discountAmount) * 100) / 100
         }
+        autoritativo = true
       }
     }
   } catch (e) {
-    console.error('[payments] recálculo de preço falhou, usando total do cliente:', e.message)
-    chargedTotal     = Number(total_price)
+    // Falha no motor de preço NÃO pode virar "cobra o que o cliente mandou".
+    // Sem preço confiável não há cobrança: autoritativo fica false e quem
+    // chama recusa. A mensagem interna fica só no log.
+    console.error('[payments] recálculo de preço falhou:', e.message)
+    autoritativo     = false
     couponId         = null
     discountAmount   = 0
-    subtotal         = Number(total_price)
-    seasonAdditional = 0
   }
-  return { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional }
+  return { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional, autoritativo }
 }
 
 // Credenciais Mercado Pago do operador (com refresh automático se o token
@@ -1113,9 +1124,20 @@ router.post('/intent', authenticate, async (req, res, next) => {
     //    Reserva nova → recalcula (alta temporada/feriado). Reserva já existente
     //    (pagamento pós-aceite) → usa o total já gravado no banco. Grupo → soma
     //    dos totais já gravados das reservas do grupo (definido abaixo). ───────
-    let chargedTotal = existing_booking_id
-      ? Number(total_price)
-      : isGroup ? 0 : (await computeChargedTotal({ data: parsed.data, userId: req.user.id })).total
+    // Reserva existente e grupo recebem o total do BANCO logo abaixo (linhas
+    // do `existing` / `payable`); aqui o valor inicial é descartado.
+    let chargedTotal = 0
+    if (!existing_booking_id && !isGroup) {
+      const calc = await computeChargedTotal({ data: parsed.data, userId: req.user.id })
+      if (!calc.autoritativo) {
+        console.error('[payments] preço não autoritativo — cobrança recusada',
+          { service_type, service_id, tem_region: !!region_id, veiculos: (parsed.data.vehicles || []).length })
+        return res.status(422).json({
+          error: 'Não foi possível calcular o valor desta reserva. Refaça a seleção e tente novamente.',
+        })
+      }
+      chargedTotal = calc.total
+    }
 
     // ── 1. Lê configurações do gateway ─────────────────
     const cfg     = await getPaymentSettings()
@@ -2177,8 +2199,18 @@ router.post('/request', authenticate, async (req, res, next) => {
     const aff = parsed.data.affiliate_code ? await resolveAffiliate(parsed.data.affiliate_code) : null
     const affiliateId = aff && aff.id !== req.user.id ? aff.id : null
 
-    const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional } =
+    const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional, autoritativo } =
       await computeChargedTotal({ data: parsed.data, userId: req.user.id })
+    // Sem preço calculado pelo servidor não há cobrança. Mensagem genérica:
+    // o motivo interno fica no log, não na resposta.
+    if (!autoritativo) {
+      console.error('[payments] preço não autoritativo — cobrança recusada',
+        { service_type: parsed.data.service_type, service_id: parsed.data.service_id,
+          tem_region: !!parsed.data.region_id, veiculos: (parsed.data.vehicles || []).length })
+      return res.status(422).json({
+        error: 'Não foi possível calcular o valor desta reserva. Refaça a seleção e tente novamente.',
+      })
+    }
 
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
     const baseBooking = {
@@ -2331,8 +2363,13 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
         })
         if (windowErr) throw { status: 400, message: windowErr }
         const itemData = (couponIsFixed && couponApplied) ? { ...it, coupon_code: undefined } : it
-        const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional } =
+        const { total: chargedTotal, couponId, discountAmount, subtotal, seasonAdditional, autoritativo } =
           await computeChargedTotal({ data: itemData, userId: req.user.id })
+        if (!autoritativo) {
+          console.error('[payments] preço não autoritativo no carrinho — item recusado',
+            { service_type: it.service_type, service_id: it.service_id, tem_region: !!it.region_id })
+          throw { status: 422, message: 'Não foi possível calcular o valor deste item. Refaça a seleção.' }
+        }
         if (couponId) couponApplied = true
         prepared.push({ it, chargedTotal, couponId, discountAmount, subtotal, seasonAdditional })
       } catch (err) {
@@ -2612,17 +2649,55 @@ router.get('/booking/:id/checkout-key', authenticate, async (req, res, next) => 
 
 // ── GET /api/payments/:id/status ───────────────────────
 // Polling: retorna status do pagamento
+// Quem pode consultar/mexer nesta cobrança: o turista dono da reserva (ou de
+// alguma reserva do grupo), o operador atribuído, ou admin.
+//
+// Esta rota NÃO é só leitura: ela aprova pagamento de teste e EXPIRA cobrança
+// e reserva. Sem dono verificado, qualquer usuário autenticado podia expirar a
+// cobrança pendente de outra pessoa — e ainda ler `raw_response_json`, que é a
+// resposta crua do gateway.
+async function podeVerPagamento(req, payment) {
+  const u = req.user
+  if (u.user_type === 'admin' || u.user_type === 'finance') return true
+  if (u.user_type === 'operator' && payment.bookings?.operator_id === u.id) return true
+
+  if (payment.order_group_id) {
+    // Basta ser dono de uma reserva do grupo — o pagamento é do grupo inteiro.
+    const { data: minha } = await supabase
+      .from('bookings').select('id')
+      .eq('order_group_id', payment.order_group_id)
+      .eq('user_id', u.id)
+      .limit(1).maybeSingle()
+    if (minha) return true
+  }
+  if (payment.booking_id) {
+    const { data: dona } = await supabase
+      .from('bookings').select('id')
+      .eq('id', payment.booking_id).eq('user_id', u.id)
+      .maybeSingle()
+    if (dona) return true
+  }
+  return false
+}
+
 router.get('/:id/status', authenticate, async (req, res, next) => {
   try {
     const { data: payment } = await supabase
       .from('payments')
       // `raw_response_json` entra aqui porque é onde mora o id do pedido do
       // Pagar.me — sem ele o polling não teria o que consultar.
-      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, raw_response_json, created_at, expires_at, amount_gross, gateway_fee_pct, gateway_fee_amount, bookings(booking_code, status_commercial, operator_id)')
+      .select('id, status, booking_id, order_group_id, gateway_name, gateway_transaction_id, raw_response_json, created_at, expires_at, amount_gross, gateway_fee_pct, gateway_fee_amount, bookings(booking_code, status_commercial, operator_id, user_id)')
       .eq('id', req.params.id)
       .single()
 
     if (!payment) return res.status(404).json({ error: 'Pagamento não encontrado' })
+
+    // 404 (e não 403) de propósito: quem não é dono não deve nem confirmar que
+    // este id existe.
+    if (!(await podeVerPagamento(req, payment))) {
+      console.warn('[status] acesso negado ao pagamento %s por usuário %s', payment.id, req.user.id)
+      return res.status(404).json({ error: 'Pagamento não encontrado' })
+    }
 
     // Gateway de teste: aprova na primeira consulta de status
     if (payment.status === 'pending' && payment.gateway_name === 'test') {

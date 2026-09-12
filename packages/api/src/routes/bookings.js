@@ -558,14 +558,25 @@ router.patch('/:id/status', authenticate, requireOperator, async (req, res, next
       updates.completed_at = new Date().toISOString();
     }
 
-    const { data, error } = await supabase
-      .from('bookings')
-      .update(updates)
-      .eq('id', req.params.id)
-      .select()
-      .single();
+    // `requireOperator` só garante que quem chamou É operador — não que a
+    // reserva seja DELE. Sem este recorte, qualquer operador autenticado
+    // mudava o status operacional de qualquer reserva da plataforma, inclusive
+    // concluir ou cancelar a corrida de um concorrente.
+    //
+    // O recorte vai no próprio UPDATE (e não num SELECT antes) para não abrir
+    // janela entre conferir e gravar: se a reserva não for dele, nenhuma linha
+    // é afetada e a resposta é 404 — igual à de reserva inexistente, para não
+    // confirmar a existência de reservas alheias.
+    let q = supabase.from('bookings').update(updates).eq('id', req.params.id);
+    if (req.user.user_type !== 'admin') q = q.eq('operator_id', req.user.id);
 
-    if (error || !data) return res.status(404).json({ error: 'Reserva não encontrada' });
+    const { data, error } = await q.select().single();
+
+    if (error || !data) {
+      console.warn('[bookings] status negado: reserva=%s usuário=%s tipo=%s',
+        req.params.id, req.user.id, req.user.user_type);
+      return res.status(404).json({ error: 'Reserva não encontrada' });
+    }
 
     // Log de auditoria manual para observações
     if (notes) {
