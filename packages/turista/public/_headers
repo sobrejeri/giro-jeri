@@ -1,0 +1,61 @@
+# ⚠️ ESTE ARQUIVO NÃO TEM EFEITO NA HOSPEDAGEM ATUAL.
+#
+# O frontend do Turiva é publicado no GitHub Pages (.github/workflows/
+# deploy-turista.yml, actions/deploy-pages). O GitHub Pages NÃO permite definir
+# cabeçalhos HTTP de resposta — não existe arquivo de configuração, regra ou
+# ajuste que faça isso. Este arquivo está aqui versionado e pronto para o dia em
+# que o site for servido por uma hospedagem que leia `_headers` (Cloudflare
+# Pages, Netlify) ou equivalente. Enquanto isso, ele é documentação executável,
+# não proteção ativa.
+#
+# O que É possível hoje, no Pages:
+#   • <meta name="referrer">                 → já aplicado no index.html
+#   • <meta http-equiv="Content-Security-Policy"> → possível, mas NÃO ligado
+#     ainda: em meta não existe Report-Only (não dá para fazer implantação
+#     gradual) e `frame-ancestors` é ignorado (não protege contra clickjacking).
+#     Ligar sem validar o checkout real é arriscar derrubar o pagamento.
+#
+# Os valores abaixo foram testados contra o BUILD de produção servidos como
+# cabeçalho HTTP real: home, /passeios e /transfers montaram com ZERO violações.
+# NÃO foi possível validar o checkout do Mercado Pago (o ambiente de teste
+# bloqueia sdk.mercadopago.com, e não se faz cobrança real numa auditoria).
+
+/*
+  # Impede que o navegador adivinhe o tipo do conteúdo.
+  X-Content-Type-Options: nosniff
+
+  # Não vaza caminho nem query do Turiva para terceiros.
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # Só o que o app usa. Geolocalização fica em `self`: é voluntária e serve
+  # para achar o ponto de embarque. `payment=()` porque o app não usa a
+  # Payment Request API — o cartão passa pelo SDK do adquirente.
+  Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=()
+
+  # HSTS SEM includeSubDomains e SEM preload de propósito: antes de estender a
+  # política a todos os subdomínios é preciso confirmar que TODOS servem HTTPS
+  # válido. preload é praticamente irreversível — só depois de um período
+  # estável com max-age alto.
+  Strict-Transport-Security: max-age=31536000
+
+  # Clickjacking. frame-ancestors é a forma moderna; X-Frame-Options fica para
+  # navegadores antigos. Os dois dizem a mesma coisa, de propósito.
+  X-Frame-Options: DENY
+
+  # CSP — origens tiradas do código, não de suposição:
+  #   sdk.mercadopago.com / www.mercadopago.com  SDK + antifraude (security.js)
+  #   maps.googleapis.com                        Google Maps
+  #   fonts.googleapis.com / fonts.gstatic.com   fontes
+  #   *.supabase.co                              banco/auth
+  #   giro-jeri-api.onrender.com                 API
+  #   nominatim / overpass                       geocodificação alternativa
+  #
+  # 'sha256-...' libera UM script inline: o controlador da splash no
+  # index.html. O hash é conferido pelo teste cspHash.test.js — se alguém
+  # editar o script e esquecer do hash, o teste quebra em vez de a splash
+  # travar em produção.
+  #
+  # 'unsafe-inline' em style-src é exceção assumida: o Tailwind e os estilos
+  # calculados em runtime injetam CSS inline. Não há 'unsafe-eval' nem
+  # 'unsafe-inline' em script-src.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-0/AjEzGg+ovRi0qwBQ8nnrCw4bk+utMc3ikHSX95itI=' https://sdk.mercadopago.com https://www.mercadopago.com https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co https://giro-jeri-api.onrender.com https://api.mercadopago.com https://sdk.mercadopago.com https://*.mercadopago.com https://maps.googleapis.com https://nominatim.openstreetmap.org https://overpass-api.de; frame-src https://www.mercadopago.com https://sdk.mercadopago.com; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'

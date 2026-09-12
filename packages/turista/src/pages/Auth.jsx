@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { MapPin, Eye, EyeOff, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import PhoneInput from '../components/PhoneInput'
+import { destinoSeguro } from '../lib/destinoSeguro'
 
 function TextField({ label, type = 'text', value, onChange, placeholder, required, autoFocus, hint }) {
   const [show, setShow] = useState(false)
@@ -47,7 +48,9 @@ export default function Auth({ defaultTab = 'login' }) {
   // que caiu no meio do uso). Só aceita caminho interno (começa com "/" e não
   // "//") pra evitar open-redirect.
   const rawNext   = location.state?.from || new URLSearchParams(location.search).get('next')
-  const from      = (rawNext && /^\/(?!\/)/.test(rawNext)) ? rawNext : '/'
+  // destinoSeguro normaliza a barra invertida antes de testar: a guarda antiga
+  // deixava passar "/\evil.com", que o navegador trata como protocolo-relativo.
+  const from      = destinoSeguro(rawNext)
 
   const [tab,     setTab]     = useState(location.state?.tab || defaultTab)
   const [loading, setLoading] = useState(false)

@@ -26,6 +26,7 @@ import Avaliacoes      from './pages/Avaliacoes'
 import PartnerLink     from './pages/PartnerLink'
 import AffiliateLink   from './pages/AffiliateLink'
 import Affiliate       from './pages/Affiliate'
+import { destinoSeguro } from './lib/destinoSeguro'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -49,8 +50,9 @@ function SpaRedirectHandler() {
     if (!saved) return
     sessionStorage.removeItem('spa_redirect')
     const base = import.meta.env.BASE_URL || '/'
-    const rel  = saved.startsWith(base) ? '/' + saved.slice(base.length) : saved
-    if (rel && rel !== '/' && !rel.startsWith('//')) navigate(rel, { replace: true })
+    const bruto = saved.startsWith(base) ? '/' + saved.slice(base.length) : saved
+    const rel   = destinoSeguro(bruto)
+    if (rel !== '/') navigate(rel, { replace: true })
   }, [navigate])
   return null
 }

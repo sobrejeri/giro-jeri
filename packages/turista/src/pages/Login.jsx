@@ -6,13 +6,14 @@ import { api } from '../lib/api'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { MapPin } from 'lucide-react'
+import { destinoSeguro } from '../lib/destinoSeguro'
 
 export default function Login() {
   const { t }     = useTranslation()
   const navigate  = useNavigate()
   const location  = useLocation()
   const { login } = useAuth()
-  const from      = location.state?.from || '/'
+  const from      = destinoSeguro(location.state?.from)
 
   const [form,    setForm]    = useState({ email: '', password: '' })
   const [error,   setError]   = useState('')

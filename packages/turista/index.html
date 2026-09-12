@@ -3,6 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <!-- Único cabeçalho de segurança que o GitHub Pages permite de fato: em
+         <meta> só valem `referrer` e Content-Security-Policy. O Pages não
+         deixa definir cabeçalho HTTP de resposta, então nosniff, HSTS,
+         Permissions-Policy e frame-ancestors NÃO são aplicáveis aqui — ficam
+         em public/_headers, prontos para uma hospedagem que os leia.
+         Sem isto, o caminho completo (inclusive ids de reserva na URL) ia no
+         Referer para Google Maps, Mercado Pago e qualquer host externo. -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="theme-color" content="#FF6A00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
