@@ -46,7 +46,17 @@ services:
       # URL da cooperativa para onde redirecionar após o OAuth do MP
       - key: MP_OAUTH_RETURN_URL
         sync: false
-      # Resend — e-mails transacionais (confirmação de reserva). Chave em resend.com.
+      # ── E-mails transacionais ──
+      # Dois provedores possíveis. Com as DUAS definidas, o Brevo ganha — é o
+      # que permite migrar ligando uma variável, sem janela sem e-mail. Para
+      # voltar ao Resend, basta apagar BREVO_API_KEY.
+      #
+      # Brevo (preferido): chave em brevo.com > SMTP & API > API Keys.
+      # O domínio do EMAIL_FROM precisa estar verificado lá, senão o Brevo
+      # aceita a chamada e o e-mail não chega.
+      - key: BREVO_API_KEY
+        sync: false
+      # Resend (herança): chave em resend.com.
       - key: RESEND_API_KEY
         sync: false
       # Remetente dos e-mails. Sem domínio verificado no Resend, use onboarding@resend.dev

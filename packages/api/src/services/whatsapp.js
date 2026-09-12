@@ -443,7 +443,9 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
 // ── RESET DE SENHA ─────────────────────────────────────
 // Item 3: envia o link de redefinição de senha por WhatsApp (botão + fallback
 // para link em texto). O token vem do endpoint /forgot-password.
-const linkPasswordReset = (token) => `${TURISTA_APP}/redefinir-senha?token=${encodeURIComponent(token)}`;
+// Exportado: o e-mail de redefinição usa EXATAMENTE este link. Uma segunda
+// cópia divergiria no dia em que a rota da página mudasse.
+export const linkPasswordReset = (token) => `${TURISTA_APP}/redefinir-senha?token=${encodeURIComponent(token)}`;
 
 export async function notifyPasswordReset(phone, token) {
   if (!isWhatsappEnabled() || !phone) return { skipped: true }

@@ -7,7 +7,8 @@ import { normalizeToE164 }                   from '../lib/phone.js';
 import { signSignupToken }                   from '../lib/signupToken.js';
 import { signResetToken, verifyResetToken }  from '../lib/resetToken.js';
 import { validateUsername, normalizeUsername } from '../lib/username.js';
-import { notifyPasswordReset }               from '../services/whatsapp.js';
+import { notifyPasswordReset, linkPasswordReset } from '../services/whatsapp.js';
+import { sendPasswordReset }                 from '../services/email.js';
 import { requestOtp, maskDestination }       from '../services/otp.js';
 import { buildChannels }                     from './otp.js';
 
@@ -547,8 +548,15 @@ router.post('/forgot-password', async (req, res, next) => {
         notifyPasswordReset(user.phone, token).catch((err) =>
           console.error('[reset] whatsapp falhou:', err.message));
       } else if (user.email) {
-        // Sem telefone → mantém o reset por e-mail do Supabase.
-        supabase.auth.resetPasswordForEmail(user.email, { redirectTo: redirect_url })
+        // Sem telefone → e-mail com o MESMO token e o MESMO link do WhatsApp.
+        //
+        // Antes aqui rodava `supabase.auth.resetPasswordForEmail`, um mecanismo
+        // completamente diferente: outro token, outro remetente, outra página.
+        // Eram duas formas de redefinir a mesma senha, e só a do WhatsApp
+        // passava pelas nossas regras — expiração de 30 min, escopo por
+        // propósito e o rate limit de /api/auth/reset-password. Agora os dois
+        // canais entregam o mesmo link e caem na mesma validação.
+        sendPasswordReset({ to: user.email, url: linkPasswordReset(token) })
           .catch((err) => console.error('[reset] email falhou:', err?.message));
       }
     }
