@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { pathToFileURL } from 'node:url';
 import express        from 'express';
 import cors           from 'cors';
 import helmet         from 'helmet';
@@ -208,9 +209,18 @@ app.use('/api/notifications', notificationsRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`🚀 Turiva API v2 rodando na porta ${PORT}`);
-  console.log(`   Ambiente: ${process.env.NODE_ENV || 'development'}`);
-});
+// Abre porta só quando ESTE arquivo é o executado (`npm run start` e
+// `npm run dev`, que é o que o Render roda). Importar o app — como os testes
+// fazem — não pode mais ligar um servidor: além de prender o processo aberto,
+// binda uma porta que ninguém pediu.
+const executadoDireto =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (executadoDireto) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Turiva API v2 rodando na porta ${PORT}`);
+    console.log(`   Ambiente: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
 
 export default app;
