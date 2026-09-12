@@ -11,6 +11,7 @@ import { horasDeAntecedencia, primeiroReservavel, HORAS_PADRAO_TRANSFER } from '
 import { highSeasonMonthSet } from '../lib/season'
 import DateSheet from '../components/DateSheet'
 import { api }         from '../lib/api'
+import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
 import {
@@ -324,7 +325,8 @@ function RouteSheet({ title, options, selected, onSelect, onClose }) {
 /* ── Vehicle suggestion ─────────────────────────────────────── */
 export function suggestVehicles(vehicles, people) {
   if (!vehicles.length) return null
-  const single = vehicles.filter(v => v.seat_capacity >= people)
+  const transporte = somenteTransporte(vehicles)
+  const single = transporte.filter(v => v.seat_capacity >= people)
                          .sort((a, b) => a.seat_capacity - b.seat_capacity)[0]
   if (single) return { vehicle: single, qty: 1 }
   const biggest = [...vehicles].sort((a, b) => b.seat_capacity - a.seat_capacity)[0]
@@ -675,7 +677,7 @@ export default function Transfers() {
     .filter(([, q]) => q > 0)
     .map(([id, qty]) => ({ vehicle: vehicles.find(v => v.id === id), qty }))
     .filter(x => x.vehicle)
-  const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
+  const cartCapacity = capacidadeDaCombinacao(cartItems)
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const cartHasItems = cartItems.length > 0
 

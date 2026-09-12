@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
+import { duracao } from '../lib/formato'
 import {
   Star, Clock, Users, Heart, Minus, Plus, Zap, Search, X,
 } from 'lucide-react'
@@ -29,7 +30,7 @@ function TourCard({ tour, badge, gradient, isFav, onToggleFav, onDetails }) {
   const private_ = tour.is_private_enabled
 
   const meta = [
-    tour.duration_hours ? t('toursPg.card.durationHours', { count: tour.duration_hours }) : null,
+    duracao(tour.duration_hours),   // 4.5 → "4h30", igual ao cartão do celular
     private_ && shared ? t('toursPg.card.tourTypeBoth')
       : private_ ? t('toursPg.card.tourTypePrivateGroups')
       : shared ? t('toursPg.mode.shared') : null,

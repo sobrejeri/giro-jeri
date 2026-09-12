@@ -11,6 +11,9 @@ const PUBLIC_KEYS = [
   'home_banner_title',
   'home_banner_subtitle',
   'whatsapp_support_number',
+  // Perfil do Instagram no rodapé. Vazio = o app esconde o ícone, em vez de
+  // mostrar um link para "#".
+  'instagram_url',
   'app_version',
   'default_currency',
   // Fotos de fundo dos quadros "Descubra" da home. Vazio = a home cai no

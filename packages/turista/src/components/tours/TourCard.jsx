@@ -1,6 +1,7 @@
 import { Heart, Clock, Users, Check, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { precoDeEntrada } from '../../lib/precoCartao'
+import { duracao as fmtDuracao } from '../../lib/formato'
 
 /* ── Degradê de reserva para passeio sem foto ────────────────────────────── */
 const GRADS = [
@@ -40,12 +41,7 @@ function dificuldade(nivel, t) {
 
 const fmtPreco = (v) => `R$ ${Number(v).toLocaleString('pt-BR')}`
 
-const fmtDuracao = (h) => {
-  const n = Number(h)
-  if (!n) return null
-  if (n < 1) return `${Math.round(n * 60)}min`
-  return Number.isInteger(n) ? `${n}h` : `${Math.floor(n)}h${String(Math.round((n % 1) * 60)).padStart(2, '0')}`
-}
+
 
 /* ── Preço ────────────────────────────────────────────────────────────────
    A regra vive em lib/precoCartao.js e é a MESMA das telas de PC — antes cada

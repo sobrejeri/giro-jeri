@@ -249,6 +249,11 @@ export default function HomeDesktop() {
   const bannerImg      = settings?.home_banner_image_url || null
   const bannerTitle    = settings?.home_banner_title     || null
   const bannerSubtitle = settings?.home_banner_subtitle  || null
+  // Só aceita URL http(s) — um valor mal digitado no admin não vira link solto.
+  const instagramUrl   = (() => {
+    const bruto = String(settings?.instagram_url || '').trim()
+    return /^https?:\/\/\S+$/i.test(bruto) ? bruto : null
+  })()
 
   // Operadores parceiros — vitrine de confiança, só no PC.
   const { data: partnersData } = useQuery({
@@ -258,11 +263,14 @@ export default function HomeDesktop() {
   })
   const partners = Array.isArray(partnersData) ? partnersData : []
 
-  // Nome do lugar dinâmico — segue SEMPRE a região atual do app (localização
-  // selecionada/detectada). O título do banner do admin fica só como reserva
-  // quando ainda não há região, para o hero e "Mais procurados em…" baterem
-  // com o lugar escolhido (ex.: Cruz → "Viva o melhor de CRUZ").
-  const placeName  = region?.name || bannerTitle || 'Jericoacoara'
+  // Nome do lugar — segue SEMPRE a região atual do app (localização
+  // selecionada/detectada), e NUNCA o título do banner do admin: aquilo é texto
+  // promocional livre, não um topônimo. Com o fallback antigo, um banner escrito
+  // como "Descubra Jericoacoara" entrava nos encaixes de frase e produzia
+  // "Viva o melhor de Descubra Jericoacoara", "Chegue em Descubra Jericoacoara"
+  // e "momentos únicos em Descubra Jericoacoara". O banner do admin continua
+  // aparecendo — como título próprio do hero, logo abaixo.
+  const placeName  = region?.name || 'Jericoacoara'
   const placeShort = /jericoacoara/i.test(placeName) ? 'Jeri' : placeName
 
   // Estado do box de busca
@@ -364,11 +372,16 @@ export default function HomeDesktop() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
         <div className="relative z-10 max-w-[1520px] mx-auto px-10 xl:px-16 pt-14 pb-44">
-          <p className="text-orange-300 text-[19px] italic font-semibold tracking-wide drop-shadow-md">
-            {t('homePg.heroPrefix')}
-          </p>
+          {/* Sem banner do admin: "Viva o melhor de" + NOME DO DESTINO. Com
+              banner: o texto dele é o título inteiro e o prefixo some — senão
+              vira "Viva o melhor de <frase promocional>". */}
+          {!bannerTitle && (
+            <p className="text-orange-300 text-[19px] italic font-semibold tracking-wide drop-shadow-md">
+              {t('homePg.heroPrefix')}
+            </p>
+          )}
           <h1 className="mt-1 text-white font-extrabold uppercase leading-[0.95] tracking-tight text-[54px] xl:text-[64px] drop-shadow-2xl break-words">
-            {placeName}
+            {bannerTitle || placeName}
           </h1>
           <p className="mt-4 text-white/90 text-[16px] leading-relaxed max-w-[440px] drop-shadow">
             {bannerSubtitle || t('homePg.heroDesc')}
@@ -766,11 +779,22 @@ export default function HomeDesktop() {
             <p className="text-[12px] text-gray-500 leading-relaxed">
               {t('homePg.footerDesc')}
             </p>
-            <div className="flex items-center gap-3 mt-4">
-              <a href="#" className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors" aria-label="Instagram">
-                <Instagram size={14} className="text-gray-600" />
-              </a>
-            </div>
+            {/* href="#" recarregava a home e parecia link quebrado. Só aparece
+                quando o perfil está configurado no admin (instagram_url) — sem
+                perfil, nada de ícone morto. */}
+            {instagramUrl && (
+              <div className="flex items-center gap-3 mt-4">
+                <a
+                  href={instagramUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                  aria-label={t('homePg.instagramAria')}
+                >
+                  <Instagram size={14} className="text-gray-600" />
+                </a>
+              </div>
+            )}
           </div>
 
           <div>

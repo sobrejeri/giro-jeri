@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import NotificationBell from '../components/NotificationBell'
 import HomeDesktop from './HomeDesktop'
+import { duracao as fmtDuracao } from '../lib/formato'
 
 // ── Home ─────────────────────────────────────────────────────────────────────
 // Layout definido pelo dono por mockup e reproduzido tela a tela. Conviveu com
@@ -46,12 +47,7 @@ function precoDe(tour) {
   return { valor: fmtPreco(p.valor), selo: p.porPessoa ? 'por pessoa' : 'privativo' }
 }
 
-const fmtDuracao = (h) => {
-  const n = Number(h)
-  if (!n) return null
-  if (n < 1) return `${Math.round(n * 60)}min`
-  return Number.isInteger(n) ? `${n}h` : `${Math.floor(n)}h${String(Math.round((n % 1) * 60)).padStart(2, '0')}`
-}
+
 
 // ── Ilustrações ─────────────────────────────────────────────────────────────
 // Desenhadas em SVG, não são imagens: o mockup tem coqueiro/duna nos cartões e

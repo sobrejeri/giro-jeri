@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
+import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
+import { duracao } from '../lib/formato'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
@@ -46,7 +48,9 @@ const priceOf = (v) => Number(v?.base_price || 0)
 
 function suggest(vehicles, people, filter = 'recommended') {
   if (!vehicles.length) return null
-  const ok = vehicles.filter(v => v.is_private_allowed !== false && v.is_tour_allowed !== false)
+  // somenteTransporte: guia/serviço adicional nunca vira sugestão de veículo.
+  const ok = somenteTransporte(vehicles)
+    .filter(v => v.is_private_allowed !== false && v.is_tour_allowed !== false)
   if (!ok.length) return null
   const fits = ok.filter(v => v.seat_capacity >= people)
 
@@ -104,6 +108,7 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
       {qty === 0 ? (
         <button
           onClick={onAdd}
+          aria-label={t('a11y.addVehicle')}
           className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform shrink-0"
         >
           <Plus size={14} className="text-white" />
@@ -112,6 +117,7 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onRemove}
+            aria-label={t('a11y.removeVehicle')}
             className="w-7 h-7 rounded-full border border-gray-200 flex items-center justify-center active:scale-95 transition-transform"
           >
             <Minus size={11} className="text-gray-600" />
@@ -119,6 +125,7 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
           <span className="text-[14px] font-bold text-gray-900 w-4 text-center">{qty}</span>
           <button
             onClick={onAdd}
+            aria-label={t('a11y.addVehicle')}
             className="w-7 h-7 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform"
           >
             <Plus size={11} className="text-white" />
@@ -140,8 +147,7 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
   const { t } = useTranslation()
   if (!tour) return null
 
-  const dur = Number(tour.duration_hours) || null
-  const durLabel = dur ? (dur < 1 ? `${Math.round(dur * 60)}min` : Number.isInteger(dur) ? `${dur}h` : `${Math.floor(dur)}h${String(Math.round((dur % 1) * 60)).padStart(2, '0')}`) : null
+  const durLabel = duracao(tour.duration_hours)
   const cap = Number(tour.max_people) || null
   const compartilhado = mode === 'shared' && tour.shared_price_per_person
   const preco = compartilhado ? Number(tour.shared_price_per_person) : Number(tour.from_price) || null
@@ -206,7 +212,7 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
             <div className="mt-1.5 inline-flex items-center gap-3 bg-gray-50 rounded-2xl px-2 py-1.5">
               <button
                 onClick={() => onPeople(Math.max(1, people - 1))}
-                aria-label="Menos uma pessoa"
+                aria-label={t('a11y.lessPerson')}
                 className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center active:scale-95"
               >
                 <Minus size={14} className="text-gray-600" />
@@ -214,7 +220,7 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
               <span className="text-[16px] font-bold text-gray-900 w-6 text-center tabular-nums">{people}</span>
               <button
                 onClick={() => onPeople(people + 1)}
-                aria-label="Mais uma pessoa"
+                aria-label={t('a11y.morePerson')}
                 className="w-9 h-9 rounded-full bg-brand flex items-center justify-center active:scale-95"
               >
                 <Plus size={14} className="text-white" />
@@ -668,8 +674,11 @@ export default function Tours() {
   /* ── Sugestão ─────────────────────────────────────────────── */
   const suggestion = useMemo(() => suggest(vehicles, people, filter), [vehicles, people, filter])
 
+  // O catálogo de veículos lista só transporte. Serviço adicional (guia,
+  // ingresso) não é "veículo": mostrá-lo aqui produzia "Até 1 pessoa" e
+  // cobrança "/veículo" para algo que não leva ninguém.
   const sortedVehicles = useMemo(() => {
-    const arr = vehicles.slice()
+    const arr = somenteTransporte(vehicles)
     if (filter === 'economico') return arr.sort((a, b) => priceOf(a) - priceOf(b))
     if (filter === 'conforto')  return arr.sort((a, b) => b.seat_capacity - a.seat_capacity)
     return arr
@@ -686,7 +695,7 @@ export default function Tours() {
     0,
   )
   const cartHasItems = cartItems.length > 0
-  const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
+  const cartCapacity = capacidadeDaCombinacao(cartItems)
 
   // Rascunho do carrinho. Guarda só o que o cliente realmente escolheu nesta
   // tela: o passeio e o número de pessoas (da folha). Data, horário, local de

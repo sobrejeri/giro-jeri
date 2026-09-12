@@ -3,11 +3,13 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card from '../components/ui/Card'
 import OriginPicker from '../components/OriginPicker'
+import { hora } from '../lib/formato'
 import {
   Clock, Users, ChevronLeft, CheckCircle, XCircle,
   Zap, Sun, Waves, Anchor, UserCheck,
@@ -29,7 +31,9 @@ const priceOf = (v) => Number(v?.base_price || 0)
 
 function suggest(vehicles, people, filter = 'recommended') {
   if (!vehicles.length) return null
-  const ok = vehicles.filter(v => v.is_private_allowed !== false && v.is_tour_allowed !== false)
+  // somenteTransporte: guia/serviço adicional nunca vira sugestão de veículo.
+  const ok = somenteTransporte(vehicles)
+    .filter(v => v.is_private_allowed !== false && v.is_tour_allowed !== false)
   if (!ok.length) return null
   const fits = ok.filter(v => v.seat_capacity >= people)
 
@@ -142,7 +146,9 @@ export default function TourDetail() {
   // Matriz = app 1:1: só os veículos com regra ATIVA para este passeio no
   // Motor de Preços. Sem fallback para o catálogo inteiro — se o admin não
   // ativou o veículo para o passeio, ele não aparece aqui.
-  const vehicles = useMemo(() => vehiclesData || [], [vehiclesData])
+  // Só transporte: guia/serviço adicional não é veículo e não pode aparecer
+  // no catálogo com "Até 1 pessoa" e cobrança "/veículo".
+  const vehicles = useMemo(() => somenteTransporte(vehiclesData || []), [vehiclesData])
 
   useEffect(() => {
     if (!tour) return
@@ -341,7 +347,7 @@ export default function TourDetail() {
               <div className="flex flex-wrap gap-2">
                 {tour.tour_schedules.map((s) => (
                   <span key={s.id} className="inline-flex items-center gap-1.5 bg-orange-50 text-brand text-sm font-medium px-3 py-1.5 rounded-full">
-                    <Clock size={13} /> {s.departure_time} — {s.schedule_name}
+                    <Clock size={13} /> {hora(s.departure_time)} — {s.schedule_name}
                   </span>
                 ))}
               </div>

@@ -676,7 +676,8 @@
     "footerCopyright": "© {{year}} Turiva · Tours, traslados y experiencias.",
     "footerMadeWithPrefix": "Hecho con",
     "footerMadeWithSuffix": "por quienes viven el destino.",
-    "tagline": "Tours y Traslados"
+    "tagline": "Tours y Traslados",
+    "instagramAria": "Turiva en Instagram"
   },
   "tourDetailPg": {
     "backToTours": "Tours",
@@ -1552,5 +1553,11 @@
       "uploading": "Enviando…",
       "uploadingPercent": "Enviando {{pct}}%"
     }
+  },
+  "a11y": {
+    "addVehicle": "Añadir un vehículo",
+    "removeVehicle": "Quitar un vehículo",
+    "lessPerson": "Una persona menos",
+    "morePerson": "Una persona más"
   }
 }

@@ -311,10 +311,13 @@ router.get('/routes/:id/vehicles', async (req, res, next) => {
     // para as listas comuns, e aqui a lista é justamente a aérea. Sem essa
     // ressalva, uma rota aérea nova (ainda sem matriz de preço) abriria vazia,
     // que é o cadastro incompleto travando a reserva.
-    const montarLivres = (comModal, comOptIn) => {
+    // comTransporte: is_transport (089) separa veículo de serviço adicional.
+    // Sem a coluna, cai para o comportamento antigo (tudo é transporte).
+    const montarLivres = (comModal, comOptIn, comTransporte = true) => {
       let q = supabase
         .from('vehicles')
-        .select('id, name, vehicle_type, seat_capacity, luggage_capacity, image_url, description, display_order')
+        .select('id, name, vehicle_type, seat_capacity, luggage_capacity, image_url, description, display_order'
+                + (comTransporte ? ', is_transport' : ''))
         .eq('is_active', true)
         .eq('is_transfer_allowed', true);
       if (req.query.region_id) q = q.eq('region_id', req.query.region_id);
@@ -329,8 +332,9 @@ router.get('/routes/:id/vehicles', async (req, res, next) => {
       // 073 (modal) ou 066 (requires_opt_in) pendente: cai para o comportamento
       // que a coluna existente permitir, em vez de devolver 500.
       console.warn('[transfers] coluna de frota ausente; seguindo sem o filtro:', e2.message);
-      ({ data: livres, error: e2 } = await montarLivres(false, true));
-      if (e2?.code === '42703') ({ data: livres, error: e2 } = await montarLivres(false, false));
+      ({ data: livres, error: e2 } = await montarLivres(true, !ehAerea, false));
+      if (e2?.code === '42703') ({ data: livres, error: e2 } = await montarLivres(false, true, false));
+      if (e2?.code === '42703') ({ data: livres, error: e2 } = await montarLivres(false, false, false));
     }
     if (e2) throw e2;
     res.json(livres || []);

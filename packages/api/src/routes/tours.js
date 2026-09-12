@@ -196,7 +196,14 @@ router.get('/:id/vehicles', async (req, res, next) => {
 
     const COLS = `id, name, vehicle_type, seat_capacity, luggage_capacity,
                   image_url, description, display_order`;
-    let { data, error } = await montarRegras(`${COLS}, modal`);
+    // Tenta com as duas colunas opcionais e vai soltando a que o banco ainda
+    // não tem. is_transport (089) diz se o cadastro é transporte ou serviço
+    // adicional; sem ela o app trata tudo como transporte, como fazia antes.
+    let { data, error } = await montarRegras(`${COLS}, modal, is_transport`);
+    if (error?.code === '42703') {
+      console.warn('[tours] coluna opcional de vehicles ausente; tentando sem is_transport:', error.message);
+      ({ data, error } = await montarRegras(`${COLS}, modal`));
+    }
     if (error?.code === '42703') {   // vehicles.modal ausente (073 pendente)
       console.warn('[tours] vehicles.modal ausente; seguindo sem o filtro de modal:', error.message);
       ({ data, error } = await montarRegras(COLS));

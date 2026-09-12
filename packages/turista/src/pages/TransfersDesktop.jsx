@@ -16,6 +16,7 @@ import { useCart } from '../contexts/CartContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
 import { format, startOfDay, addDays, isToday, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
 
 const GRADIENTS = [
   'from-orange-400 to-amber-300',
@@ -197,8 +198,11 @@ export default function TransfersDesktop() {
   // `!== false`, não `truthy`: quando a rota não tem matriz de preço, a API
   // devolve a frota do modal SEM a coluna `is_transfer_allowed` no select. Com
   // o teste de verdadeiro, `undefined` reprovava e a lista abria VAZIA.
-  const vehicles = (Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [])
-                    .filter(v => v.is_transfer_allowed !== false && v.is_active !== false)
+  // somenteTransporte: serviço adicional (guia, ingresso) não é veículo — não
+  // entra na lista, na sugestão nem na conta de assentos.
+  const vehicles = somenteTransporte(
+    Array.isArray(vehiclesData) ? vehiclesData : vehiclesData?.vehicles || [],
+  ).filter(v => v.is_transfer_allowed !== false && v.is_active !== false)
 
   // Alta temporada: regras (datas exatas) p/ colorir o calendário em laranja
   // e avisar quando a data escolhida cai dentro de uma delas.
@@ -347,7 +351,7 @@ export default function TransfersDesktop() {
     .filter(([, q]) => q > 0)
     .map(([id, qty]) => ({ vehicle: vehicles.find(v => v.id === id), qty }))
     .filter(x => x.vehicle)
-  const cartCapacity = cartItems.reduce((s, { vehicle, qty }) => s + vehicle.seat_capacity * qty, 0)
+  const cartCapacity = capacidadeDaCombinacao(cartItems)
   const cartTotal    = unitPrice ? cartItems.reduce((s, { qty }) => s + unitPrice * qty, 0) : 0
   const canBook      = !!matched && cartItems.length > 0 && cartCapacity >= people && !!time && advanceOk
 
