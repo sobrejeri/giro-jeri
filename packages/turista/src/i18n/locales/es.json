@@ -852,8 +852,8 @@
     "summaryTitle": "Resumen del traslado",
     "vehiclesTotal": "Total de vehículos",
     "summaryFootnote": "La fecha, el horario y posibles recargos de temporada se definen al continuar, en el carrito.",
-    "driverInfoRoute": "El chofer estará en el punto de embarque con un cartel identificado. Cancelación gratuita hasta 24h antes.",
-    "driverInfoDesktop": "El chofer estará en el punto de embarque con un cartel identificado. Cancelación gratuita hasta 24h antes. Tu reserva será enviada al operador después del pago.",
+    "driverInfoRoute": "El conductor estará en el punto de embarque con cartel identificado. Cancelación gratuita hasta 72h antes.",
+    "driverInfoDesktop": "El conductor estará en el punto de embarque con cartel identificado. Cancelación gratuita hasta 72h antes. Tu reserva se envía al operador tras el pago.",
     "selectVehicle": "Selecciona un vehículo",
     "selectVehicleOption": "Selecciona el vehículo",
     "selectRoute": "Selecciona la ruta",
@@ -884,7 +884,7 @@
         "desc": "Llega a tiempo"
       },
       "support": {
-        "title": "Atención 24h",
+        "title": "Soporte por WhatsApp",
         "desc": "Soporte siempre disponible"
       }
     },
@@ -1559,5 +1559,9 @@
     "removeVehicle": "Quitar un vehículo",
     "lessPerson": "Una persona menos",
     "morePerson": "Una persona más"
+  },
+  "policy": {
+    "tour": "Cancelación gratuita hasta 24h antes del paseo. Pasado ese plazo, puede aplicarse una tarifa.",
+    "transfer": "Cancelación gratuita hasta 72h antes del traslado. Pasado ese plazo, puede aplicarse una tarifa."
   }
 }

@@ -186,7 +186,10 @@ export default function Auth({ defaultTab = 'login' }) {
           <ul className="mt-8 space-y-3 text-white/90 text-[15px]">
             <li className="flex items-center gap-3"><CheckCircle2 size={18} className="text-white/80 shrink-0" /> Reserva rápida e segura</li>
             <li className="flex items-center gap-3"><CheckCircle2 size={18} className="text-white/80 shrink-0" /> Operadores e guias verificados</li>
-            <li className="flex items-center gap-3"><CheckCircle2 size={18} className="text-white/80 shrink-0" /> Suporte no WhatsApp 24h</li>
+            {/* "24h" não tem nenhuma configuração que o sustente no projeto —
+                nem horário de atendimento, nem SLA. Fica o que é verificável:
+                existe canal de WhatsApp (settings.whatsapp_support_number). */}
+            <li className="flex items-center gap-3"><CheckCircle2 size={18} className="text-white/80 shrink-0" /> Suporte pelo WhatsApp</li>
           </ul>
         </div>
       </div>

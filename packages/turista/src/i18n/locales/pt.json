@@ -852,8 +852,8 @@
     "summaryTitle": "Resumo do transfer",
     "vehiclesTotal": "Total dos veículos",
     "summaryFootnote": "Data, horário e eventuais acréscimos de temporada são definidos ao continuar, no carrinho.",
-    "driverInfoRoute": "Motorista aparecerá no local de embarque com placa identificada. Cancelamento gratuito até 24h antes.",
-    "driverInfoDesktop": "Motorista aparecerá no local de embarque com placa identificada. Cancelamento gratuito até 24h antes. Sua reserva será enviada ao operador após o pagamento.",
+    "driverInfoRoute": "Motorista aparecerá no local de embarque com placa identificada. Cancelamento gratuito até 72h antes.",
+    "driverInfoDesktop": "Motorista aparecerá no local de embarque com placa identificada. Cancelamento gratuito até 72h antes. Sua reserva será enviada ao operador após o pagamento.",
     "selectVehicle": "Selecione um veículo",
     "selectVehicleOption": "Selecione o veículo",
     "selectRoute": "Selecione a rota",
@@ -884,7 +884,7 @@
         "desc": "Chegue no horário"
       },
       "support": {
-        "title": "Atendimento 24h",
+        "title": "Suporte pelo WhatsApp",
         "desc": "Suporte sempre disponível"
       }
     },
@@ -1559,5 +1559,9 @@
     "removeVehicle": "Remover um veículo",
     "lessPerson": "Menos uma pessoa",
     "morePerson": "Mais uma pessoa"
+  },
+  "policy": {
+    "tour": "Cancelamento gratuito até 24h antes do passeio. Após esse prazo, pode haver cobrança de taxa.",
+    "transfer": "Cancelamento gratuito até 72h antes do transfer. Após esse prazo, pode haver cobrança de taxa."
   }
 }

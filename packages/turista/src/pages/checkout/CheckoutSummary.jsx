@@ -886,7 +886,7 @@ function CheckoutSummaryInner() {
             <div>
               <p className="text-[13px] font-bold text-blue-900 mb-0.5">{t('checkoutPg.policy.title')}</p>
               <p className="text-[11px] text-blue-700 leading-relaxed">
-                {t('checkoutPg.policy.description')}
+                {t(isTransfer ? 'policy.transfer' : 'policy.tour')}
               </p>
             </div>
           </div>

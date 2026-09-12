@@ -682,7 +682,10 @@ export default function BookingDetail() {
             <div>
               <p className="text-xs font-bold text-blue-900 mb-0.5">{t('bookingDetailPg.policy.title')}</p>
               <p className="text-xs text-blue-700 leading-relaxed">
-                {t('bookingDetailPg.policy.text')}
+                {/* Prazo por serviço: os Termos dão 24h para passeio e 72h
+                    para transfer. O texto único de 24h prometia ao cliente
+                    de transfer um prazo que o contrato não dá. */}
+                {t(booking.service_type === 'transfer' ? 'policy.transfer' : 'policy.tour')}
               </p>
             </div>
           </div>

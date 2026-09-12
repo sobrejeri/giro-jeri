@@ -852,8 +852,8 @@
     "summaryTitle": "Transfer summary",
     "vehiclesTotal": "Vehicles total",
     "summaryFootnote": "Date, time and any seasonal surcharges are set when you continue, in the cart.",
-    "driverInfoRoute": "The driver will be at the pickup location with an identified sign. Free cancellation up to 24h before.",
-    "driverInfoDesktop": "The driver will be at the pickup location with an identified sign. Free cancellation up to 24h before. Your booking will be sent to the operator after payment.",
+    "driverInfoRoute": "The driver will meet you at the pickup point with an identified sign. Free cancellation up to 72h before.",
+    "driverInfoDesktop": "The driver will meet you at the pickup point with an identified sign. Free cancellation up to 72h before. Your booking is sent to the operator after payment.",
     "selectVehicle": "Select a vehicle",
     "selectVehicleOption": "Select the vehicle",
     "selectRoute": "Select the route",
@@ -884,7 +884,7 @@
         "desc": "Arrive on time"
       },
       "support": {
-        "title": "24h support",
+        "title": "WhatsApp support",
         "desc": "Support always available"
       }
     },
@@ -1559,5 +1559,9 @@
     "removeVehicle": "Remove one vehicle",
     "lessPerson": "One fewer person",
     "morePerson": "One more person"
+  },
+  "policy": {
+    "tour": "Free cancellation up to 24h before the tour. After that, a fee may apply.",
+    "transfer": "Free cancellation up to 72h before the transfer. After that, a fee may apply."
   }
 }
