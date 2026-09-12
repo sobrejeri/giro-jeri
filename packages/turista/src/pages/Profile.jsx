@@ -300,7 +300,7 @@ export default function Profile() {
     <>
     <div className="lg:hidden min-h-full pb-24">
 
-      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-14 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
+      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-[57px] z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
         <div className="relative flex items-center justify-center min-h-[32px]">
           <button
             onClick={() => navigate(-1)}

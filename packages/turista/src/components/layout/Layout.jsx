@@ -49,7 +49,16 @@ export default function Layout() {
     <div className="min-h-screen">
       <TopNav />
 
-      <div className="relative w-full max-w-[430px] lg:max-w-none mx-auto min-h-screen lg:min-h-0 lg:bg-transparent overflow-x-hidden shadow-2xl lg:shadow-none">
+      {/* overflow-x-hidden segura a moldura de 430px no celular, mas no desktop
+          ele transformava esta div em caixa de rolagem (overflow-y vira `auto`
+          quando o outro eixo não é `visible`). Com isso, todo header `sticky
+          lg:top-14` das páginas passava a medir o offset contra ESTA div em vez
+          da viewport — e, como o TopNav é sticky em fluxo, os 56px eram contados
+          duas vezes e o header descia por cima do conteúdo, cortando o topo do
+          primeiro card. No desktop a moldura não existe, então não há o que
+          esconder: devolvemos overflow visível e o sticky volta a se ancorar na
+          viewport. */}
+      <div className="relative w-full max-w-[430px] lg:max-w-none mx-auto min-h-screen lg:min-h-0 lg:bg-transparent overflow-x-hidden lg:overflow-x-visible shadow-2xl lg:shadow-none">
         <OfflineBanner />
         <PartnerBadge />
         <div className="pb-[68px] lg:pb-0">

@@ -690,7 +690,7 @@ export default function Feed() {
 
   return (
     <div className="min-h-full pb-24 lg:pb-10">
-      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-14 z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-[57px] z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="max-w-2xl mx-auto">
           <div className="relative flex items-center justify-center min-h-[32px]">
             <button

@@ -305,7 +305,7 @@ export default function BookingDetail() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <header className="bg-white px-4 pt-4 md:pt-6 pb-4 sticky top-0 md:top-14 z-40 shadow-sm">
+      <header className="bg-white px-4 pt-4 md:pt-6 pb-4 sticky top-0 lg:top-[57px] z-40 shadow-sm">
         <div className="flex items-center gap-3 max-w-2xl lg:max-w-3xl mx-auto">
           <button
             onClick={() => navigate(-1)}
