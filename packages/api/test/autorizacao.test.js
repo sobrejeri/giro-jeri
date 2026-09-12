@@ -87,3 +87,54 @@ test('as rotas por id de pagamento que já tinham dono continuam tendo', () => {
       `${assinatura} perdeu a checagem de identidade`)
   }
 })
+
+// ── Recorte das reservas por perfil ──────────────────────────────────────────
+// Segunda passada da auditoria: GET /api/bookings recortava APENAS o turista.
+// Operador e agência recebiam todas as reservas da plataforma, paginadas,
+// incluindo as de concorrentes. E GET /api/bookings/:id só barrava o turista
+// de outro — operador abria qualquer reserva, com contato do cliente.
+//
+// A fila de aceite não depende disso: ela tem rota própria
+// (GET /api/operator/bookings), que filtra `operator_id IS NULL` e não seleciona
+// nenhum dado pessoal do cliente.
+
+const operador = fs.readFileSync(new URL('../src/routes/operator.js', import.meta.url), 'utf8')
+
+test('GET /bookings recorta operador e agência pelas reservas deles', () => {
+  const r = rota(reservas, "router.get('/', authenticate")
+  assert.ok(/user_type === 'operator' \|\| req\.user\.user_type === 'agency'/.test(r),
+    'operador e agência precisam de recorte próprio')
+  assert.ok(/query = query\.eq\('operator_id', req\.user\.id\)/.test(r),
+    'o recorte precisa filtrar por operator_id')
+})
+
+test('GET /bookings nega por padrão um perfil desconhecido', () => {
+  const r = rota(reservas, "router.get('/', authenticate")
+  const i = r.indexOf("user_type !== 'admin'")
+  assert.notEqual(i, -1, 'precisa existir o ramo final de negação')
+  assert.ok(/data: \[\], total: 0/.test(r.slice(i, i + 400)),
+    'perfil desconhecido tem de receber lista vazia, não a lista inteira')
+})
+
+test('GET /bookings/:id só abre para dono, operador atribuído ou admin', () => {
+  const r = rota(reservas, "router.get('/:id'")
+  assert.ok(/const dono =/.test(r), 'precisa calcular quem pode abrir')
+  assert.ok(/data\.operator_id === req\.user\.id/.test(r),
+    'operador só pode abrir a reserva atribuída a ele')
+  assert.ok(/data\.user_id === req\.user\.id/.test(r),
+    'turista só pode abrir a própria reserva')
+  assert.ok(/status\(404\)/.test(r.slice(r.indexOf('const dono ='))),
+    'negativa precisa ser 404 para não confirmar a existência')
+})
+
+test('a fila de aceite não entrega dado pessoal do cliente', () => {
+  const i = operador.indexOf("router.get('/bookings'")
+  assert.notEqual(i, -1)
+  const fila = operador.slice(i, i + 3000)
+  for (const campo of ['phone', 'email', 'full_name', 'cpf']) {
+    assert.ok(!new RegExp(`\\b${campo}\\b`).test(fila),
+      `a fila não pode expor ${campo} antes do aceite`)
+  }
+  assert.ok(/\.is\('operator_id', null\)/.test(fila),
+    'a fila precisa listar só o que ainda não tem operador')
+})

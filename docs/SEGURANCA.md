@@ -54,7 +54,26 @@ Rodava em três lugares: `Auth.jsx` (`?next=` e `state.from`), `Login.jsx` (**se
 
 **Correção:** `packages/turista/src/lib/destinoSeguro.js`, que normaliza barra invertida e remove caracteres de controle antes de testar. É o mesmo defeito do aviso `GHSA-wrjc-x8rr-h8h6` do react-router, mas este vivia no nosso código e não dependia da versão da biblioteca.
 
-### 1.5 BAIXO — ausência de cabeçalhos de segurança no frontend
+### 1.5 ALTO — operador recebia todas as reservas da plataforma
+
+Segunda passada, depois da revisão do relatório. `GET /api/bookings` recortava
+**apenas o turista**: operador e agência recebiam **todas as reservas da
+plataforma**, paginadas, incluindo as de concorrentes — com destino, cliente e
+valores. `GET /api/bookings/:id` tinha o mesmo buraco: barrava só o turista de
+outro, então um operador abria qualquer reserva, com contato do cliente.
+
+Eu havia classificado isso como risco aceito ("operadores precisam ver a fila").
+**Estava errado**: a fila de aceite tem rota própria, `GET /api/operator/bookings`,
+que filtra `operator_id IS NULL` e **não seleciona nenhum dado pessoal do
+cliente** (conferido: sem join com `users`, sem `phone`, `email`, `full_name` ou
+`cpf`). O app do operador só chama `/api/bookings/:id/status` — nunca a lista
+genérica. Recortar era seguro e foi feito.
+
+**Correção:** operador e agência veem apenas `operator_id = req.user.id`; perfil
+desconhecido recebe lista **vazia** (negar é o padrão); `GET /:id` responde 404
+para quem não é dono, operador atribuído ou admin.
+
+### 1.6 BAIXO — ausência de cabeçalhos de segurança no frontend
 
 Confirmado. Ver §3 — é limitação da hospedagem, não descuido de código.
 
@@ -139,8 +158,10 @@ Mitigação que **foi** feita, e que ataca o vetor de verdade: CSP sem `unsafe-i
 Restantes, todas moderadas, **conscientemente não corrigidas**:
 
 - **`react-router`** — a correção é `react-router-dom@7`, mudança de major nas quatro SPAs. O aviso relevante era o open redirect por barra invertida, que **foi corrigido no nosso próprio código** (§1.4), então a exposição prática está fechada. A atualização de major deve ser feita como tarefa própria, com regressão de rotas.
-- **`ws`** (era a alta, via `@supabase/realtime-js` no admin) e **`uuid`** (via SDK do Mercado Pago) — resolvidas pelo `audit fix`.
-- **`qs`** — DoS via Express; sem correção sem major.
+- **`ws`** (era a **alta**, `8.20.0` via `@supabase/realtime-js` → `@supabase/supabase-js`, só no **admin**) e **`uuid`** (`<11.1.1`, via SDK `mercadopago`) — **resolvidas** pelo `audit fix`.
+- **`qs@6.14.2`** (moderada, 3 avisos: `GHSA-4mjr-xmp4-gh2g`, `GHSA-q8mj-m7cp-5q26`, `GHSA-x5fp-wj9c-mxmx`). Vem de `express@4.22.1`, que **fixa `qs` em `~6.14.0`** — por isso o `audit fix` não conseguiu subir. A versão corrigida é `6.16.0`, e `body-parser@1.20.8` **já a usa** nesta mesma árvore; o `qs` vulnerável fica só no parser de query string do Express. Tentei forçar via `overrides` no `package.json`: o npm 10.9.7 aplica a substituição em `express` mas deixa a raiz em `6.14.2` marcada como `invalid`, e `npm ls` passa a sair com erro — o que quebraria CI. **Revertido.** A correção real é **Express 5** (major), que deve ser tarefa própria.
+
+**Impacto no uso real:** os três avisos do `qs` são DoS por query string maliciosa. O app não expõe endpoint que dependa de query aninhada complexa, e há `express-rate-limit` em toda a `/api/`. Risco baixo na prática, mas continua aberto.
 
 ## 6. Segredos
 

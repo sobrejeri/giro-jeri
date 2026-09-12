@@ -301,9 +301,18 @@ router.get('/', authenticate, async (req, res, next) => {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    // Turista vê apenas suas reservas
+    // Recorte por perfil. Antes SÓ o turista era recortado — operador e agência
+    // recebiam TODAS as reservas da plataforma, paginadas, incluindo as de
+    // concorrentes. A fila de aceite não passa por aqui: ela tem rota própria
+    // (GET /api/operator/bookings), com as regras dela. Aqui o operador vê
+    // apenas o que já é dele.
     if (req.user.user_type === 'tourist') {
       query = query.eq('user_id', req.user.id);
+    } else if (req.user.user_type === 'operator' || req.user.user_type === 'agency') {
+      query = query.eq('operator_id', req.user.id);
+    } else if (req.user.user_type !== 'admin' && req.user.user_type !== 'finance') {
+      // Perfil desconhecido não recebe lista nenhuma — negar é o padrão seguro.
+      return res.json({ data: [], total: 0, page: Number(page), limit: Number(limit) });
     }
 
     if (status_commercial)  query = query.eq('status_commercial', status_commercial);
@@ -353,8 +362,18 @@ router.get('/:id', authenticate, async (req, res, next) => {
     if (error || !data) return res.status(404).json({ error: 'Reserva não encontrada' });
 
     // Turista só acessa sua própria reserva
-    if (req.user.user_type === 'tourist' && data.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Sem permissão' });
+    // Quem pode abrir ESTA reserva. Operador só a sua: ver a fila para aceitar
+    // é outra rota (GET /api/operator/bookings) e não justifica ler qualquer
+    // reserva da plataforma — aqui vêm contato e dados do cliente.
+    const dono = req.user.user_type === 'admin' || req.user.user_type === 'finance'
+      || (req.user.user_type === 'tourist' && data.user_id === req.user.id)
+      || ((req.user.user_type === 'operator' || req.user.user_type === 'agency')
+          && data.operator_id === req.user.id);
+    if (!dono) {
+      console.warn('[bookings] leitura negada: reserva=%s usuário=%s tipo=%s',
+        req.params.id, req.user.id, req.user.user_type);
+      // 404, não 403: não confirma que a reserva existe.
+      return res.status(404).json({ error: 'Reserva não encontrada' });
     }
 
     // Mesma identificação visual da lista (nome + foto do serviço) no detalhe.
