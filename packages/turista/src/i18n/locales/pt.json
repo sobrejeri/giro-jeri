@@ -41,7 +41,8 @@
     "passwordTooShort": "A senha deve ter no mínimo 8 caracteres.",
     "invalidCredentials": "E-mail ou senha incorretos",
     "registerError": "Erro ao criar conta",
-    "accountCreated": "Conta criada! Faça login para continuar."
+    "accountCreated": "Conta criada! Faça login para continuar.",
+    "forgotSent": "Se a conta existir, enviamos um link pelo WhatsApp para redefinir a senha."
   },
   "profile": {
     "title": "Perfil",

@@ -106,7 +106,11 @@ export default function Auth({ defaultTab = 'login' }) {
         identifier:   forgotEmail,
         redirect_url: window.location.origin + (import.meta.env.BASE_URL || '/'),
       })
-      setSuccess('Se a conta existir, enviamos um link para redefinir a senha (WhatsApp ou e-mail).')
+      // Mensagem ÚNICA, exista a conta ou não — dizer o canal real seria um
+      // oráculo de existência. E ela fala só em WhatsApp porque é o único
+      // canal ativo: prometer e-mail mandaria o cliente esperar algo que
+      // não sai enquanto o provedor não estiver configurado.
+      setSuccess(t('auth.forgotSent'))
       setTab('login')
     } catch (err) {
       setError(err.message || 'Não foi possível enviar o e-mail. Tente novamente.')

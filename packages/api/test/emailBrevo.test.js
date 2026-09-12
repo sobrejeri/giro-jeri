@@ -24,6 +24,17 @@ const email = await import('../src/services/email.js')
 const { signResetToken, verifyResetToken } = await import('../src/lib/resetToken.js')
 const { linkPasswordReset } = await import('../src/services/whatsapp.js')
 
+
+// Recorta uma rota inteira: do início dela até a declaração da rota seguinte.
+// Fatiar por tamanho fixo era frágil — bastou acrescentar um comentário para a
+// resposta cair fora da janela e o teste acusar falha que não existia.
+function corpoDaRota(fonte, assinatura) {
+  const i = fonte.indexOf(assinatura)
+  assert.notEqual(i, -1, `rota não encontrada: ${assinatura}`)
+  const proxima = fonte.indexOf('\nrouter.', i + assinatura.length)
+  return fonte.slice(i, proxima === -1 ? fonte.length : proxima)
+}
+
 // Captura a chamada HTTP em vez de enviar
 function interceptar(resposta = { ok: true, json: async () => ({ messageId: 'x' }) }) {
   const original = globalThis.fetch
@@ -196,8 +207,9 @@ test('a rota de forgot-password não usa mais o mecanismo paralelo do Supabase',
 test('a resposta continua idêntica exista a conta ou não (anti-enumeração)', async () => {
   const fs = await import('node:fs')
   const fonte = fs.readFileSync(new URL('../src/routes/auth.js', import.meta.url), 'utf8')
-  const i = fonte.indexOf("router.post('/forgot-password'")
-  const rota = fonte.slice(i, i + 2200)
+  // Sem comentários também aqui: a explicação de por que o canal não é
+  // revelado contém as palavras que o teste procura.
+  const rota = corpoDaRota(fonte, "router.post('/forgot-password'").replace(/\/\/.*$/gm, '')
   const respostas = rota.match(/res\.json\([^)]*\)/g) || []
   assert.equal(respostas.length, 1,
     'mais de uma resposta de sucesso vira oráculo de existência de conta')

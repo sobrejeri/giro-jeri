@@ -557,7 +557,21 @@ router.post('/forgot-password', async (req, res, next) => {
         // propósito e o rate limit de /api/auth/reset-password. Agora os dois
         // canais entregam o mesmo link e caem na mesma validação.
         sendPasswordReset({ to: user.email, url: linkPasswordReset(token) })
+          .then((r) => {
+            // Hoje NÃO há provedor de e-mail configurado: o envio vira no-op e
+            // o cliente fica esperando uma mensagem que não sai. A resposta da
+            // API continua genérica (anti-enumeração), então o único lugar
+            // onde isso aparece é aqui. Sem este log, uma conta sem telefone
+            // some do funil sem deixar rastro.
+            if (r?.skipped) {
+              console.warn('[reset] conta %s não tem telefone e não há provedor de ' +
+                'e-mail configurado — NADA foi enviado. Redefina pelo admin.', user.id);
+            }
+          })
           .catch((err) => console.error('[reset] email falhou:', err?.message));
+      } else {
+        console.warn('[reset] conta %s não tem telefone nem e-mail — nenhum canal ' +
+          'de recuperação disponível.', user.id);
       }
     }
     // Resposta SEMPRE idêntica, exista a conta ou não. Devolver o canal real

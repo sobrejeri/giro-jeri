@@ -41,7 +41,8 @@
     "passwordTooShort": "Password must be at least 8 characters.",
     "invalidCredentials": "Incorrect email or password",
     "registerError": "Error creating account",
-    "accountCreated": "Account created! Please sign in to continue."
+    "accountCreated": "Account created! Please sign in to continue.",
+    "forgotSent": "If the account exists, we sent a password reset link via WhatsApp."
   },
   "profile": {
     "title": "Profile",
