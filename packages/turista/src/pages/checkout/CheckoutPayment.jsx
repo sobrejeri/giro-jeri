@@ -511,7 +511,11 @@ export default function CheckoutPayment() {
       corAtiva: '#F3F4F6',
       texto: '#1F2937',
       borda: true,
-      logo: 'pagarme.svg',
+      // cartao.svg, não 'pagarme.svg': esse arquivo nunca existiu em
+      // public/logos/ e dava 404 no console a cada abertura do checkout.
+      // O ícone genérico de cartão é o certo aqui — o botão diz
+      // "Pagar com cartão", não carrega a marca do adquirente.
+      logo: 'cartao.svg',
       primario: false,
     },
   }
