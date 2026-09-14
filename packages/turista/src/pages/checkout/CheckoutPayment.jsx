@@ -506,7 +506,12 @@ export default function CheckoutPayment() {
       primario: true,
     },
     pagarme: {
-      rotulo: 'Pagar com cartão',
+      // Nomeia o adquirente, como o do Mercado Pago já fazia. Estava só
+      // "Pagar com cartão", idêntico ao rótulo do formulário embutido logo
+      // abaixo — dois botões com o mesmo texto e comportamentos opostos: um
+      // sai do site, o outro abre um formulário aqui. Ninguém tinha como
+      // saber qual era qual antes de clicar.
+      rotulo: 'Pagar com Pagar.me',
       // Neutro de propósito: fica visualmente em segundo plano quando os dois
       // aparecem, que é a hierarquia certa — e continua legível quando é o
       // único botão da tela.

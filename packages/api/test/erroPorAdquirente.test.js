@@ -69,3 +69,30 @@ test('o ícone do botão de cartão aponta para um arquivo que existe', () => {
       `logos/${m[1]} não existe em public/logos/ — daria 404 no checkout`)
   }
 })
+
+// ── Rótulos dos botões de cartão ────────────────────────────────────────────
+// Existiam DOIS botões com o texto idêntico "Pagar com cartão" e
+// comportamentos opostos: um redireciona para fora do site (adquirente
+// hospedado) e o outro abre o formulário aqui dentro. O cliente clicava
+// esperando o formulário e era mandado embora — ou clicava esperando sair e
+// abria um formulário.
+
+test('nenhum rótulo de botão de cartão se repete', () => {
+  const rotulos = [
+    ...[...fonte.matchAll(/rotulo:\s*'([^']+)'/g)].map((m) => m[1]),
+    ...[...fonte.matchAll(/rotulo="([^"]+)"/g)].map((m) => m[1]),
+  ]
+  const repetidos = rotulos.filter((r, i) => rotulos.indexOf(r) !== i)
+  assert.deepEqual(repetidos, [],
+    `rótulo duplicado em botões com comportamentos diferentes: ${repetidos.join(', ')}`)
+})
+
+test('botão hospedado nomeia o adquirente — a convenção que já existia', () => {
+  // pagarme.test.js já fixava isto para o Mercado Pago; o Pagar.me é que não
+  // seguia e ficou com "Pagar com cartão", colidindo com o formulário do site.
+  assert.match(fonte, /rotulo: 'Pagar com Pagar\.me'/,
+    'o botão que redireciona precisa dizer para onde leva')
+  assert.match(fonte, /rotulo: 'Pagar com Mercado Pago'/)
+  assert.match(fonte, /estilo=\{ESTILO_CARTAO_SITE\}[\s\S]{0,140}rotulo="Pagar com cartão"/,
+    '"Pagar com cartão" pertence ao formulário embutido')
+})
