@@ -429,6 +429,29 @@ async function modaisDasReservas(bookings) {
 // `metodo` decide a taxa que a plataforma absorve. O padrão é o cartão à vista
 // — a maior — porque quem não informa o método (a tela que só pergunta a chave
 // pública) deve receber a resposta mais conservadora.
+// Percentual da plataforma, PONDERADO pelo valor de cada reserva.
+//
+// Extraído de contextoSplitOperadorUnico para o Pagar.me usar a MESMA regra:
+// duas cópias divergiriam, e divergir aqui significa dividir dinheiro de dois
+// jeitos diferentes dependendo de qual adquirente atendeu o cliente.
+//
+// A ordem de precedência é: percentual do MODAL → percentual do OPERADOR →
+// percentual geral do admin. Um combo pode juntar modais com percentuais
+// diferentes (terrestre 20%, aquático 15%), e o resultado precisa representar
+// a soma das partes — por isso a média é ponderada pelo valor, não simples.
+export function mediaPonderadaDoPercentual(modais, pctDoOperador, cfg) {
+  const geral = (pctDoOperador != null ? Number(pctDoOperador) : Number(cfg?.payment_split_admin_pct)) || 0
+  let somaValor = 0
+  let somaPeso  = 0
+  for (const m of modais) {
+    const v   = Number(m.booking.total_amount) || 0
+    const pct = m.platform_commission_pct != null ? Number(m.platform_commission_pct) : geral
+    somaValor += v
+    somaPeso  += v * pct
+  }
+  return somaValor > 0 ? somaPeso / somaValor : geral
+}
+
 async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg, metodo = 'credit_card') {
   if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return null
 
@@ -458,16 +481,7 @@ async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg, metodo = 
   // 15%), e um único application_fee precisa representar a soma das partes.
   // Aplicado sobre o COBRADO, não sobre a soma dos totais: cupom e acréscimo
   // de data mudam o que entrou, e a divisão tem que fechar com isso.
-  const geral = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
-  let somaValor = 0
-  let somaPeso  = 0
-  for (const m of modais) {
-    const v   = Number(m.booking.total_amount) || 0
-    const pct = m.platform_commission_pct != null ? Number(m.platform_commission_pct) : geral
-    somaValor += v
-    somaPeso  += v * pct
-  }
-  const pct = somaValor > 0 ? somaPeso / somaValor : geral
+  const pct = mediaPonderadaDoPercentual(modais, opMp.platformPct, cfg)
 
   // ── A PLATAFORMA ABSORVE A TAXA DO GATEWAY ────────────────────────────────
   //
