@@ -58,6 +58,9 @@ const PAYMENT_KEYS = new Set([
   // Lista de adquirentes de cartão + a chave PRÓPRIA do Pagar.me (a genérica é
   // do gateway padrão, que é outro).
   'payment_card_acquirers', 'payment_pagarme_api_key',
+  // Recebedor da PRÓPRIA plataforma no split do Pagar.me. Sem ele o split
+  // não fecha 100% e a cobrança é recusada antes de sair.
+  'payment_pagarme_platform_recipient_id',
   'payment_card_form_inline',
   // Split de 2 recebedores (migration 087). A chave existia no banco e NÃO
   // aparecia em lugar nenhum do painel: não dava para ver se estava ligada nem
@@ -155,6 +158,7 @@ const PAYMENT_DEFAULTS = {
   // nenhuma ter aberto esta tela.
   payment_card_acquirers:         '',
   payment_pagarme_api_key:        '',
+  payment_pagarme_platform_recipient_id: '',
   // Formulário de cartão dentro do site, como TERCEIRA opção ao lado dos
   // botões. Ligado por padrão: com o Checkout Pro exigindo conta no Mercado
   // Pago, sem ele quem não tem conta fica sem nenhum caminho de cartão.

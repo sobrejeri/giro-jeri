@@ -42,3 +42,32 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
 
   return data.id
 }
+
+// Lista os recebedores da conta. Só leitura, usada pelo admin para descobrir o
+// `rp_...` da própria plataforma sem ter de caçá-lo no painel do gateway —
+// que foi exatamente onde a integração do split emperrou.
+export async function listarRecebedores(apiKey, pagina = 1) {
+  if (!apiKey) throw new Error('API Key do Pagar.me não configurada em Configurações → Pagamentos')
+  const auth = Buffer.from(`${apiKey}:`).toString('base64')
+  const r = await fetch(`${BASE}/recipients?page=${Number(pagina) || 1}&size=30`, {
+    headers: { Authorization: `Basic ${auth}` },
+  })
+  if (!r.ok) {
+    const corpo = await r.text().catch(() => '')
+    const e = new Error(`Pagar.me respondeu ${r.status} ao listar recebedores`)
+    e.status = r.status >= 400 && r.status < 500 ? 422 : 502
+    // O corpo pode trazer dado do recebedor — fica no log, não na resposta.
+    console.error('[pagarme] listar recebedores falhou:', r.status, corpo.slice(0, 300))
+    throw e
+  }
+  const json = await r.json().catch(() => ({}))
+  // Devolve só o que serve para escolher: id, nome, documento mascarado e
+  // status. Nada de conta bancária ou chave PIX numa tela de configuração.
+  return (json?.data || []).map((x) => ({
+    id:       x.id,
+    nome:     x.name,
+    status:   x.status,
+    tipo:     x.type,
+    documento: String(x.document || '').replace(/^(\d{3})\d+(\d{2})$/, '$1***$2'),
+  }))
+}

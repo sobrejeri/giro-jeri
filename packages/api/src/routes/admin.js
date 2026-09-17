@@ -607,6 +607,36 @@ router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next
 // Só leitura no Mercado Pago: consulta status e, quando ele responde
 // 'approved', roda o MESMO caminho de aprovação do webhook (financeiro,
 // repasses, notificações). Nada aqui cria cobrança nem estorna.
+// ── GET /api/admin/pagarme/recipients ─────────────────────────────────────
+// Lista os recebedores da conta no Pagar.me. Só leitura, só admin.
+//
+// Existe porque o split precisa do `rp_...` da PRÓPRIA plataforma, e esse id
+// não aparece em lugar nenhum do nosso banco — só no painel do gateway. Ter de
+// sair do admin, achar o painel certo (empresa vs loja) e copiar à mão foi
+// justamente onde a configuração do split emperrou.
+router.get('/pagarme/recipients', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: rows = [] } = await supabase
+      .from('system_settings').select('setting_key, setting_value').like('setting_key', 'payment_%');
+    const cfg = Object.fromEntries(rows.map((s) => [s.setting_key, s.setting_value]));
+
+    const { chaveDoPagarme } = await import('./payments.js');
+    const apiKey = chaveDoPagarme(cfg);
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Configure a API Key do Pagar.me antes de listar recebedores.' });
+    }
+
+    const { listarRecebedores } = await import('../payments/pagarme.js');
+    const recebedores = await listarRecebedores(apiKey, req.query.page);
+
+    res.json({
+      recebedores,
+      // Qual deles já está escolhido como o da plataforma, para a tela marcar.
+      plataforma_atual: cfg.payment_pagarme_platform_recipient_id || null,
+    });
+  } catch (err) { next(err); }
+});
+
 router.post('/payments/reconcile', requireAdmin, async (req, res, next) => {
   try {
     const { reconciliarLote } = await import('../services/paymentReconcile.js');

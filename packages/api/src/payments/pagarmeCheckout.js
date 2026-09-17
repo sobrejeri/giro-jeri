@@ -101,6 +101,10 @@ export async function criarCheckoutCartao({
   apiKey, amount, description, bookingId, retornoUrl,
   clienteNome, clienteEmail, clienteDoc, clienteTelefone,
   maxParcelas = 12, item,
+  // Array pronto, montado por pagarmeSplit.montarSplit(). Ausente = pedido sem
+  // divisão (o valor inteiro fica na conta da chave). Quem decide se isso é
+  // aceitável é o chamador — aqui só se envia o que chegou.
+  split,
 }) {
   if (!clienteEmail) {
     const e = new Error('Sua conta está sem e-mail cadastrado, e o gateway exige o e-mail do pagador. Adicione um e-mail no seu perfil e tente de novo.')
@@ -132,6 +136,9 @@ export async function criarCheckoutCartao({
     },
     payments: [{
       payment_method: 'checkout',
+      // O split vive DENTRO do payment, não no nível do pedido. A soma dos
+      // percentuais tem de fechar 100 — o gateway recusa o contrário.
+      ...(Array.isArray(split) && split.length ? { split } : {}),
       checkout: {
         expires_in:               30,          // minutos
         default_payment_method:   'credit_card',

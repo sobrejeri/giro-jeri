@@ -143,3 +143,73 @@ test('o percentual do MP alimenta o split do Pagar.me de ponta a ponta', () => {
   assert.equal(s[1].amount, 81)
   assert.ok(fecha100(s))
 })
+
+// ── Ligação com o checkout ─────────────────────────────────────────────────
+
+import fs from 'node:fs'
+const checkoutJs = fs.readFileSync(new URL('../src/payments/pagarmeCheckout.js', import.meta.url), 'utf8')
+const pagamentos = fs.readFileSync(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+const adminJs    = fs.readFileSync(new URL('../src/routes/admin.js', import.meta.url), 'utf8')
+
+test('o split vai DENTRO de payments[], não no nível do pedido', () => {
+  const i = checkoutJs.indexOf('payments: [{')
+  assert.notEqual(i, -1)
+  const bloco = checkoutJs.slice(i, i + 600)
+  assert.match(bloco, /\{ split \}/, 'o split precisa entrar no objeto do payment')
+  // E não pode estar solto no corpo do pedido, ao lado de items/customer.
+  const corpo = checkoutJs.slice(checkoutJs.indexOf('const corpo = {'), i)
+  assert.ok(!/\bsplit\b/.test(corpo), 'split no nível do pedido é o lugar errado')
+})
+
+test('pedido sem split continua saindo — ausência não vira array vazio', () => {
+  // Array vazio seria recusado pelo gateway; a ausência do campo, não.
+  assert.match(checkoutJs, /Array\.isArray\(split\) && split\.length \? \{ split \} : \{\}/)
+})
+
+test('a cobrança é RECUSADA quando não dá para dividir', () => {
+  const i = pagamentos.indexOf('const divisao = await splitDoPagarme')
+  assert.notEqual(i, -1, 'o checkout precisa resolver o split')
+  const bloco = pagamentos.slice(i, i + 700)
+  assert.match(bloco, /if \(divisao\.erro\)/, 'erro no split tem de barrar')
+  assert.match(bloco, /e\.status = 503/, 'recusa antes de chamar o gateway')
+  // E a recusa vem ANTES da chamada ao gateway.
+  assert.ok(i < pagamentos.indexOf('const checkout = await criarCheckoutCartao'),
+    'o split tem de ser resolvido antes de criar a cobrança')
+})
+
+test('o motivo real do erro fica no log, não na resposta ao cliente', () => {
+  const i = pagamentos.indexOf('const divisao = await splitDoPagarme')
+  const bloco = pagamentos.slice(i, i + 700)
+  assert.match(bloco, /console\.error\('\[pagarme\] split impossível/)
+  assert.ok(!/new Error\([^)]*divisao\.erro/.test(bloco),
+    'o texto interno ("operador sem recebedor") não pode ir para a tela do cliente')
+})
+
+test('o resolvedor exige operador único, recebedor dos dois lados e usa a regra do MP', () => {
+  const i = pagamentos.indexOf('async function splitDoPagarme')
+  assert.notEqual(i, -1)
+  const fn = pagamentos.slice(i, pagamentos.indexOf('\n}', i))
+  assert.match(fn, /ops\.length !== 1/,                          'operador único')
+  assert.match(fn, /payment_pagarme_platform_recipient_id/,      'recebedor da plataforma')
+  assert.match(fn, /gateway_recipient_id/,                       'recebedor do operador')
+  assert.match(fn, /mediaPonderadaDoPercentual/,                 'a MESMA regra de percentual do MP')
+})
+
+test('a rota que lista recebedores é de admin e só leitura', () => {
+  const i = adminJs.indexOf("router.get('/pagarme/recipients'")
+  assert.notEqual(i, -1, 'rota não encontrada')
+  const rota = adminJs.slice(i, adminJs.indexOf('\nrouter.', i + 10))
+  assert.match(rota, /requireAdmin/, 'listar recebedores é ação de admin')
+  assert.ok(!/\b(insert|update|upsert|delete)\b/i.test(rota), 'a rota não pode escrever nada')
+})
+
+test('a listagem não devolve conta bancária nem chave PIX', () => {
+  const pagarmeJs = fs.readFileSync(new URL('../src/payments/pagarme.js', import.meta.url), 'utf8')
+  const i = pagarmeJs.indexOf('export async function listarRecebedores')
+  assert.notEqual(i, -1)
+  const fn = pagarmeJs.slice(i)
+  for (const campo of ['bank_account', 'pix_key', 'account_number']) {
+    assert.ok(!new RegExp(`${campo}`).test(fn.slice(fn.indexOf('return ('))),
+      `a listagem não pode expor ${campo} numa tela de configuração`)
+  }
+})

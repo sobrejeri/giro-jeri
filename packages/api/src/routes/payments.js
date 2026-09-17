@@ -429,6 +429,48 @@ async function modaisDasReservas(bookings) {
 // `metodo` decide a taxa que a plataforma absorve. O padrão é o cartão à vista
 // — a maior — porque quem não informa o método (a tela que só pergunta a chave
 // pública) deve receber a resposta mais conservadora.
+
+// Split do Pagar.me para UMA reserva/grupo, usando a MESMA regra de percentual
+// do Mercado Pago. Devolve { split } ou { erro } — nunca "segue sem dividir".
+//
+// Fail-closed de propósito: cobrar sem split deixa o valor inteiro na conta da
+// plataforma e o acerto vira repasse manual. Isso até funciona, mas some do
+// radar — e some DEPOIS de o cliente já ter pago, que é quando ninguém está
+// olhando. Melhor recusar antes da cobrança, com mensagem, do que descobrir na
+// conciliação do mês.
+async function splitDoPagarme(bookings, cfg) {
+  const { montarSplit } = await import('../payments/pagarmeSplit.js')
+
+  const lista = (bookings || []).filter(Boolean)
+  const ops = [...new Set(lista.map((b) => b.operator_id).filter(Boolean))]
+  if (ops.length !== 1 || lista.some((b) => !b.operator_id)) {
+    return { erro: 'reserva sem operador único — não dá para dividir' }
+  }
+  const operatorId = ops[0]
+
+  const recebedorPlataforma = String(cfg?.payment_pagarme_platform_recipient_id || '').trim()
+  if (!recebedorPlataforma) {
+    return { erro: 'recebedor da PLATAFORMA não configurado em Configurações → Pagamentos' }
+  }
+
+  const { data: op } = await supabase.from('users')
+    .select('gateway_recipient_id, platform_split_pct').eq('id', operatorId).maybeSingle()
+  const recebedorOperador = String(op?.gateway_recipient_id || '').trim()
+  if (!recebedorOperador) {
+    return { erro: `operador ${operatorId} não tem recebedor cadastrado no gateway` }
+  }
+
+  // Mesma regra do MP: média ponderada pelo valor, modal > operador > geral.
+  const modais = await modaisDasReservas(lista)
+  const pct = modais
+    ? mediaPonderadaDoPercentual(modais, op?.platform_split_pct, cfg)
+    : ((op?.platform_split_pct != null ? Number(op.platform_split_pct) : Number(cfg?.payment_split_admin_pct)) || 0)
+
+  const split = montarSplit({ pctPlataforma: pct, recebedorPlataforma, recebedorOperador })
+  if (!split) return { erro: `percentual inválido para split (${pct}%)` }
+  return { split, pct, operatorId }
+}
+
 // Percentual da plataforma, PONDERADO pelo valor de cada reserva.
 //
 // Extraído de contextoSplitOperadorUnico para o Pagar.me usar a MESMA regra:
@@ -1867,8 +1909,20 @@ router.post('/intent', authenticate, async (req, res, next) => {
       })
       if (erroLinha) throw erroLinha
 
+      // Split ANTES de chamar o gateway: se não dá para dividir, não se cobra.
+      const divisao = await splitDoPagarme([booking], cfg)
+      if (divisao.erro) {
+        console.error('[pagarme] split impossível na reserva %s: %s', booking.id, divisao.erro)
+        const e = new Error('O pagamento com cartão está temporariamente indisponível. Use PIX, ou tente pelo Mercado Pago.')
+        e.status = 503
+        throw e
+      }
+      console.log('[pagarme] split %s%% plataforma / %s%% operador na reserva %s',
+        divisao.split[0].amount, divisao.split[1].amount, booking.id)
+
       const checkout = await criarCheckoutCartao({
         apiKey:          chavePagarme,
+        split:           divisao.split,
         amount:          chargedTotal,
         description:     service_name || `Reserva ${bookingCode}`,
         bookingId:       booking.id,
