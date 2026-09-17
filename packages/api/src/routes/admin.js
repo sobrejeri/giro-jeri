@@ -548,8 +548,18 @@ router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next
       .like('setting_key', 'payment_%');
     const cfg     = Object.fromEntries(settingsRows.map((s) => [s.setting_key, s.setting_value]));
     const gateway = cfg.payment_gateway || 'manual';
-    const apiKey  = cfg.payment_gateway_api_key || '';
     const env     = cfg.payment_gateway_env || 'sandbox';
+    // A chave do Pagar.me tem UMA fonte de verdade: chaveDoPagarme(). Aqui se
+    // lia só `payment_gateway_api_key`, enquanto a COBRANÇA prefere
+    // `payment_pagarme_api_key`. São dois campos distintos no admin — se eles
+    // divergirem (uma de teste, outra de produção, ou de lojas diferentes), o
+    // recebedor nasce numa conta e a cobrança acontece em outra. O
+    // `recipient_id` não existe lá, e o split é recusado no momento do
+    // pagamento, não no cadastro — ou seja, o erro aparece longe da causa.
+    const { chaveDoPagarme } = await import('./payments.js');
+    const apiKey  = gateway === 'pagarme'
+      ? chaveDoPagarme(cfg)
+      : (cfg.payment_gateway_api_key || '');
 
     let recipientId;
 
