@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Settings, RotateCcw, CreditCard, Landmark, SplitSquareHorizontal,
-  Eye, EyeOff, CheckCircle, Pencil, Image as ImageIcon, Upload, Trash2,
+  Eye, EyeOff, CheckCircle, Pencil, Image as ImageIcon, Upload, Trash2, Route,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -749,19 +749,28 @@ function TabPagamentos({ settings, qc }) {
         </CardBody>
       </Card>
 
-      {/* Gateway */}
+      {/* ── 1. Roteamento: QUEM cobra cada meio ─────────────────────────────
+          Este card não configura integração nenhuma — ele só decide para onde
+          a cobrança vai. As credenciais de cada adquirente moram no card DELE,
+          abaixo. Antes tudo estava num card só chamado "Gateway de Pagamento",
+          com ajuda do Mercado Pago aparecendo sobre campos do Pagar.me. */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <CreditCard size={16} className="text-gray-500" />
-            <h2 className="text-sm font-semibold text-gray-200">Gateway de Pagamento</h2>
+            <Route size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">Roteamento de cobrança</h2>
           </div>
         </CardHeader>
         <CardBody>
           <div className="space-y-4">
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Decide <b>qual adquirente</b> atende cada meio de pagamento. As chaves de
+              cada um ficam nos cards de integração abaixo.
+            </p>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Select
-                label="Gateway ativo"
+                label="Gateway padrão"
                 value={form.payment_gateway}
                 onChange={(e) => set('payment_gateway', e.target.value)}
               >
@@ -779,50 +788,124 @@ function TabPagamentos({ settings, qc }) {
                 ))}
               </Select>
             </div>
-            {form.payment_gateway !== 'manual' && form.payment_gateway !== 'test' && (
-              <>
-                <MaskedInput
-                  label="API Key"
-                  value={form.payment_gateway_api_key}
-                  onChange={(e) => set('payment_gateway_api_key', e.target.value)}
-                  placeholder="Chave da API do gateway"
-                />
-                <MaskedInput
-                  label="Webhook Secret"
-                  value={form.payment_gateway_webhook_secret}
-                  onChange={(e) => set('payment_gateway_webhook_secret', e.target.value)}
-                  placeholder="Secret para validar callbacks"
-                />
-                <p className="text-xs text-amber-500/80">
-                  Estas chaves são armazenadas no banco e nunca expostas ao cliente final.
+
+            <Select
+              label="PIX"
+              value={form.payment_gateway_pix}
+              onChange={(e) => set('payment_gateway_pix', e.target.value)}
+              className="max-w-xs"
+            >
+              <option value="">Usar o gateway padrão</option>
+              {GATEWAYS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </Select>
+
+            {/* ── Cartão: MAIS DE UM adquirente ao mesmo tempo ───────────
+                Deixou de ser uma escolha única porque os dois cobrem
+                públicos diferentes: o Mercado Pago aprova quem tem conta lá
+                e recusa o resto por risco; o Pagar.me atende quem não tem
+                conta nenhuma. Marcar os dois mostra as duas opções no
+                checkout e o cliente escolhe. */}
+            <div className="space-y-2 border-t border-gray-800 pt-4">
+              <p className="text-xs font-semibold text-gray-300">Cartão (crédito e débito)</p>
+              {ACQUIRERS_CARTAO.map((a) => (
+                <label key={a.value} className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cartaoMarcado(a.value)}
+                    onChange={(e) => set('payment_card_acquirers',
+                      listaDeCartao(form.payment_card_acquirers, a.value, e.target.checked))}
+                    className="mt-1 w-4 h-4 accent-brand shrink-0"
+                  />
+                  <div>
+                    <p className="text-sm text-gray-200">{a.label}</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">{a.nota}</p>
+                  </div>
+                </label>
+              ))}
+              {!cartaoMarcado('mercado_pago') && !cartaoMarcado('pagarme') && (
+                <p className="text-xs text-amber-500/80 leading-relaxed">
+                  Nenhum adquirente marcado: o checkout não vai oferecer cartão nenhum,
+                  só PIX.
                 </p>
-                {/* No Mercado Pago o servidor NÃO usa a API Key daqui: ele lê o
-                    Access Token da variável de ambiente. Sem dizer isso, quem
-                    cola a chave neste campo e vê o PIX continuar falhando não
-                    tem como descobrir por quê — o campo parece o lugar certo. */}
-                {form.payment_gateway === 'mercado_pago' && (
-                  <p className="text-xs text-gray-500">
-                    No Mercado Pago o servidor usa o Access Token da variável
-                    <code className="mx-1 text-gray-400">MERCADO_PAGO_ACCESS_TOKEN</code>
-                    (no Render) — o campo API Key acima <b>não</b> é lido. Token que
-                    começa com <code className="mx-1 text-gray-400">TEST-</code> cobra
-                    em sandbox; para cobrar de verdade ele precisa começar com
-                    <code className="mx-1 text-gray-400">APP_USR-</code>.
-                  </p>
-                )}
-                {/* O texto acima dizia só metade: o servidor lê primeiro a
-                    variável de ambiente do Render, e este campo é a reserva.
-                    Sem essa explicação, preencher aqui e ver o webhook falhar
-                    não fazia sentido nenhum para quem opera. */}
-                <p className="text-xs text-gray-500">
-                  O Webhook Secret preenchido aqui só é usado se a variável
-                  <code className="mx-1 text-gray-400">MERCADO_PAGO_WEBHOOK_SECRET</code>
-                  não estiver definida no servidor — ela tem prioridade.
+              )}
+              {cartaoMarcado('pagarme') && !form.payment_pagarme_api_key && (
+                <p className="text-xs text-amber-500/80 leading-relaxed">
+                  Pagar.me marcado mas <b>sem API Key</b> no card do Pagar.me, abaixo.
+                  Enquanto ela faltar, o botão dele <b>não aparece</b> no checkout —
+                  melhor sumir do que dar erro depois do clique.
                 </p>
-              </>
-            )}
+              )}
+              {form.payment_gateway === 'asaas' || form.payment_gateway_pix === 'asaas' ? (
+                <p className="text-xs text-amber-500/80 leading-relaxed">
+                  Asaas ainda <b>não tem integração</b>. Escolhê-lo faz o pagamento falhar com
+                  aviso — nunca passar silenciosamente como manual.
+                </p>
+              ) : null}
+            </div>
+
+            <SaveRow
+              onSave={() => saveSection(
+                // Toda chave editada NESTE card precisa estar aqui: o Salvar
+                // manda uma lista explícita, e o que ficar de fora é marcado na
+                // tela e nunca gravado — o pior tipo de silêncio.
+                ['payment_gateway', 'payment_gateway_card', 'payment_gateway_pix',
+                 'payment_gateway_env', 'payment_card_acquirers'],
+                'roteamento',
+              )}
+              pending={saveMut.isPending}
+              saved={savedSection === 'roteamento'}
+              erro={erroSecao?.secao === 'roteamento' ? erroSecao.mensagem : null}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* ── 2. Integração: Mercado Pago ─────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CreditCard size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">Integração — Mercado Pago</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-4">
+            {/* Credenciais do gateway padrão. Elas são genéricas no banco
+                (payment_gateway_api_key), mas na prática só valem para o
+                gateway escolhido acima — por isso o aviso muda com ele. */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-300">Credenciais</p>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                No Mercado Pago o servidor usa o Access Token da variável
+                <code className="mx-1 text-gray-400">MERCADO_PAGO_ACCESS_TOKEN</code>
+                (no Render) — os campos abaixo são <b>reserva</b>. Token que começa com
+                <code className="mx-1 text-gray-400">TEST-</code> cobra em sandbox; para
+                cobrar de verdade ele precisa começar com
+                <code className="mx-1 text-gray-400">APP_USR-</code>.
+              </p>
+              <MaskedInput
+                label="Access Token (reserva)"
+                value={form.payment_gateway_api_key}
+                onChange={(e) => set('payment_gateway_api_key', e.target.value)}
+                placeholder="APP_USR-..."
+              />
+              <MaskedInput
+                label="Webhook Secret (reserva)"
+                value={form.payment_gateway_webhook_secret}
+                onChange={(e) => set('payment_gateway_webhook_secret', e.target.value)}
+                placeholder="Secret para validar callbacks"
+              />
+              <p className="text-xs text-gray-500 leading-relaxed">
+                O Webhook Secret preenchido aqui só é usado se a variável
+                <code className="mx-1 text-gray-400">MERCADO_PAGO_WEBHOOK_SECRET</code>
+                não estiver definida no servidor — ela tem prioridade. As chaves são
+                armazenadas no banco e nunca expostas ao cliente final.
+              </p>
+            </div>
+
             {/* ── Onde o cartão é digitado ──────────────────────────────── */}
             <div className="border-t border-gray-800 pt-4">
+              <p className="text-xs font-semibold text-gray-300 mb-3">Como o cartão é cobrado</p>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -927,7 +1010,7 @@ function TabPagamentos({ settings, qc }) {
                 />
                 <div>
                   <p className="text-sm font-semibold text-gray-200">
-                    Dividir a cobrança no ato (split)
+                    Dividir a cobrança no ato (split do Mercado Pago)
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
                     <b className="text-gray-400">Ligado:</b> o operador recebe a parte dele
@@ -940,112 +1023,97 @@ function TabPagamentos({ settings, qc }) {
                     Só vale para reserva de UM operador que tenha conta do Mercado Pago
                     conectada e cujo modal não tenha executor fixo. Combo continua sempre
                     manual. Não ligue antes de uma cobrança real ter funcionado do início ao fim.
+                    O split do Pagar.me é outro e tem card próprio — esta caixa não o afeta.
                   </p>
                 </div>
               </label>
             </div>
 
-            {/* ── Adquirente por método ─────────────────────────────────── */}
+            <SaveRow
+              onSave={() => saveSection(
+                ['payment_gateway_api_key', 'payment_gateway_webhook_secret',
+                 'payment_card_flow', 'payment_mp_wallet_only',
+                 'payment_card_form_inline', 'payment_split_single_operator'],
+                'mercadopago',
+              )}
+              pending={saveMut.isPending}
+              saved={savedSection === 'mercadopago'}
+              erro={erroSecao?.secao === 'mercadopago' ? erroSecao.mensagem : null}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* ── 3. Integração: Pagar.me (Stone) ─────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CreditCard size={16} className="text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-200">Integração — Pagar.me (Stone)</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-4">
+            {/* A chave do Pagar.me tem campo PRÓPRIO: a do card do Mercado Pago
+                é a do gateway padrão. Usar aquela para chamar o Pagar.me
+                mandaria o token do MP no Authorization deles. */}
+            <MaskedInput
+              label="API Key (Secret Key)"
+              value={form.payment_pagarme_api_key}
+              onChange={(e) => set('payment_pagarme_api_key', e.target.value)}
+              placeholder="sk_..."
+            />
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Dashboard do Pagar.me → Configurações → Chaves. Use a <b>Secret Key</b>
+              {' '}(<code className="text-gray-400">sk_</code>), não a pública.
+              {' '}<code className="text-gray-400">sk_test_</code> cobra em teste. A variável
+              {' '}<code className="text-gray-400">PAGARME_API_KEY</code> no servidor tem
+              prioridade sobre este campo.
+            </p>
+
             <div className="border-t border-gray-800 pt-4 space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-200">Adquirente por meio de pagamento</p>
-                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                  Deixe em branco para usar o gateway padrão acima. Serve para separar: o PIX
-                  aprova no Mercado Pago e o cartão vem sendo recusado por risco lá, então dá para
-                  mover só o cartão sem tocar no que funciona.
-                </p>
-              </div>
-              <Select
-                label="PIX"
-                value={form.payment_gateway_pix}
-                onChange={(e) => set('payment_gateway_pix', e.target.value)}
-                className="max-w-xs"
-              >
-                <option value="">Usar o padrão</option>
-                {GATEWAYS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
-              </Select>
-
-              {/* ── Cartão: MAIS DE UM adquirente ao mesmo tempo ───────────
-                  Deixou de ser uma escolha única porque os dois cobrem
-                  públicos diferentes: o Mercado Pago aprova quem tem conta lá
-                  e recusa o resto por risco; o Pagar.me atende quem não tem
-                  conta nenhuma. Marcar os dois mostra as duas opções no
-                  checkout e o cliente escolhe. */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-300">Cartão (crédito e débito)</p>
-                {ACQUIRERS_CARTAO.map((a) => (
-                  <label key={a.value} className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={cartaoMarcado(a.value)}
-                      onChange={(e) => set('payment_card_acquirers',
-                        listaDeCartao(form.payment_card_acquirers, a.value, e.target.checked))}
-                      className="mt-1 w-4 h-4 accent-brand shrink-0"
-                    />
-                    <div>
-                      <p className="text-sm text-gray-200">{a.label}</p>
-                      <p className="text-xs text-gray-500 leading-relaxed">{a.nota}</p>
-                    </div>
-                  </label>
-                ))}
-                {!cartaoMarcado('mercado_pago') && !cartaoMarcado('pagarme') && (
-                  <p className="text-xs text-amber-500/80 leading-relaxed">
-                    Nenhum adquirente marcado: o checkout não vai oferecer cartão nenhum,
-                    só PIX.
-                  </p>
-                )}
-                {cartaoMarcado('pagarme') && !form.payment_pagarme_api_key && (
-                  <p className="text-xs text-amber-500/80 leading-relaxed">
-                    Pagar.me marcado mas <b>sem API Key</b> abaixo. Enquanto ela faltar, o
-                    botão dele <b>não aparece</b> no checkout — melhor sumir do que dar erro
-                    depois do clique.
-                  </p>
-                )}
-              </div>
-
-              {/* A chave do Pagar.me tem campo PRÓPRIO: a de cima é a do gateway
-                  padrão (hoje o Mercado Pago). Usar aquela para chamar o
-                  Pagar.me mandaria o token do MP no Authorization deles. */}
-              <MaskedInput
-                label="Pagar.me — API Key (Secret Key)"
-                value={form.payment_pagarme_api_key}
-                onChange={(e) => set('payment_pagarme_api_key', e.target.value)}
-                placeholder="sk_..."
+              <p className="text-xs font-semibold text-gray-300">Split</p>
+              {/* Sem este id o split não fecha 100% e a cobrança é RECUSADA
+                  antes de sair (fail-closed em pagarmeSplit.js). O campo
+                  existia na allowlist e não tinha lugar na tela: só dava para
+                  preencher por SQL. */}
+              <Input
+                label="Recebedor da plataforma (recipient_id)"
+                value={form.payment_pagarme_platform_recipient_id}
+                onChange={(e) => set('payment_pagarme_platform_recipient_id', e.target.value)}
+                placeholder="re_..."
               />
               <p className="text-xs text-gray-500 leading-relaxed">
-                Dashboard do Pagar.me → Configurações → Chaves. Use a <b>Secret Key</b>
-                {' '}(<code className="text-gray-400">sk_</code>), não a pública. A variável
-                {' '}<code className="text-gray-400">PAGARME_API_KEY</code> no servidor tem
-                prioridade sobre este campo.
+                Dashboard do Pagar.me → Recebedores. É a conta da <b>própria plataforma</b>,
+                que entra no split como recebedora principal: responde pelo chargeback, paga a
+                taxa do gateway e absorve o arredondamento. O operador recebe a fatia dele limpa.
               </p>
+              <p className="text-xs text-amber-500/80 leading-relaxed">
+                O percentual é o <b>mesmo</b> da Divisão de Recebimento abaixo (com os
+                overrides por operador) — não há regra separada aqui. Sem este recebedor,
+                ou sem o recebedor do operador cadastrado, a cobrança pelo Pagar.me é
+                recusada antes de chegar ao gateway, em vez de entrar inteira numa conta só.
+              </p>
+            </div>
+
+            <div className="border-t border-gray-800 pt-4">
+              <p className="text-xs font-semibold text-gray-300 mb-2">Webhook</p>
               <p className="text-xs text-gray-500 leading-relaxed">
-                Webhook a cadastrar no painel do Pagar.me:
+                Cadastrar no painel do Pagar.me:
                 {' '}<code className="text-gray-400">/api/payments/webhook/pagarme</code>
                 {' '}— eventos <code className="text-gray-400">order.paid</code> e
                 {' '}<code className="text-gray-400">order.payment_failed</code>.
-              </p>
-              <p className="text-xs text-amber-500/80 leading-relaxed">
-                Asaas ainda <b>não tem integração</b>. Escolhê-lo faz o pagamento falhar com
-                aviso — nunca passar silenciosamente como manual.
               </p>
             </div>
 
             <SaveRow
               onSave={() => saveSection(
-                // Toda chave editada NESTE card precisa estar aqui: o Salvar
-                // manda uma lista explícita, e o que ficar de fora é marcado na
-                // tela e nunca gravado — o pior tipo de silêncio.
-                ['payment_gateway', 'payment_gateway_card', 'payment_gateway_pix',
-                 'payment_gateway_env', 'payment_gateway_api_key',
-                 'payment_gateway_webhook_secret', 'payment_split_single_operator',
-                 'payment_card_flow', 'payment_mp_wallet_only',
-                 'payment_card_acquirers', 'payment_pagarme_api_key',
-                 'payment_card_form_inline'],
-                'gateway',
+                ['payment_pagarme_api_key', 'payment_pagarme_platform_recipient_id'],
+                'pagarme',
               )}
               pending={saveMut.isPending}
-              saved={savedSection === 'gateway'}
-              erro={erroSecao?.secao === 'gateway' ? erroSecao.mensagem : null}
+              saved={savedSection === 'pagarme'}
+              erro={erroSecao?.secao === 'pagarme' ? erroSecao.mensagem : null}
             />
           </div>
         </CardBody>
@@ -1061,9 +1129,11 @@ function TabPagamentos({ settings, qc }) {
         </CardHeader>
         <CardBody>
           <div className="space-y-4">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 leading-relaxed">
               Define como cada pagamento é dividido entre a plataforma e o operador.
-              O operador repassa seus motoristas manualmente.
+              O operador repassa seus motoristas manualmente. Vale para <b>os dois
+              adquirentes</b>: é o mesmo percentual que alimenta o split do Mercado
+              Pago e o do Pagar.me — não existe regra separada por integração.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
