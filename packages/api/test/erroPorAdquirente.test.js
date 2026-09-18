@@ -31,17 +31,29 @@ test('erroCartao é um mapa por adquirente, não um campo único', () => {
 test('a limpeza e a gravação do erro são por adquirente', () => {
   assert.match(fonte, /setErroCartao\(\(e\) => \(\{ \.\.\.e, \[acquirer\]: '' \}\)\)/,
     'limpar tem de afetar só o adquirente que está sendo tentado')
-  assert.match(fonte, /\[acquirer\]:\s*'Não foi possível abrir o pagamento com cartão por aqui/,
+  // A gravação continua sendo na chave do adquirente; o que mudou é que o
+  // valor passou a ser escolhido entre a mensagem do servidor e a genérica.
+  assert.match(fonte, /\[acquirer\]:\s*err\?\.cliente/,
     'gravar tem de ser na chave do adquirente que falhou')
 })
 
 test('a mensagem crua do gateway NÃO vai para o cliente', () => {
   const i = fonte.indexOf('async function pagarComCartaoHospedado')
   const fn = fonte.slice(i, fonte.indexOf('\n  }', i) + 4)
-  assert.ok(!/setErroCartao\([^)]*err\?\.message/.test(fn),
-    'err.message do gateway vem em inglês e sobre a configuração DELES')
   assert.match(fn, /console\.error\('\[checkout\] %s recusou:'/,
     'o texto original tem de ir para o console, onde serve para diagnóstico')
+
+  // A regra original aqui era "nunca exibir err.message". Ela estava larga
+  // demais e custou caro: derrubava junto as mensagens que o NOSSO servidor
+  // escreve em português para o turista ("Use PIX, ou tente pelo Mercado
+  // Pago"), que são exatamente as acionáveis. O servidor marca essas com
+  // `cliente: true`; a regra agora é a marca, não a origem.
+  assert.ok(!/setErroCartao\([^)]*[^.]err\?\.message/.test(fn.replace(/err\?\.cliente && err\?\.message/g, '')),
+    'err.message sem a marca `cliente` pode ser o texto do gateway, em inglês')
+  assert.match(fn, /err\?\.cliente && err\?\.message\s*\?\s*err\.message/,
+    'a mensagem do servidor só aparece quando ele a marcou como texto para o cliente')
+  assert.match(fn, /:\s*'Não foi possível abrir o pagamento com cartão por aqui/,
+    'sem a marca, continua valendo o texto genérico')
 })
 
 test('o erro é renderizado DENTRO do bloco do adquirente, depois do botão', () => {

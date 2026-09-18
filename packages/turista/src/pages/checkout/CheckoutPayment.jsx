@@ -787,10 +787,16 @@ export default function CheckoutPayment() {
       // ainda parece defeito do site. Ele lê algo acionável; o texto original
       // fica no console, que é onde ele serve para alguém.
       console.error('[checkout] %s recusou:', acquirer, err?.message)
+      // ...MAS a mensagem que o NOSSO servidor escreve é em português e é para
+      // o turista ler ("Use PIX, ou tente pelo Mercado Pago"). Ela vem marcada
+      // com `cliente: true`. Descartá-la junto com a do gateway trocava um
+      // conselho certo por um vago — e era o que acontecia aqui.
       setErroCartao((e) => ({
         ...e,
-        [acquirer]: 'Não foi possível abrir o pagamento com cartão por aqui. '
-          + 'Tente outra forma de pagamento abaixo.',
+        [acquirer]: err?.cliente && err?.message
+          ? err.message
+          : 'Não foi possível abrir o pagamento com cartão por aqui. '
+            + 'Tente outra forma de pagamento abaixo.',
       }))
     }
   }

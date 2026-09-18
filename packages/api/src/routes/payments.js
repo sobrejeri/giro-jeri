@@ -1882,6 +1882,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         console.error('[pagarme] escolhido para a reserva %s mas não há API Key configurada', booking.id)
         const e = new Error('O pagamento com cartão está temporariamente indisponível. Use PIX, ou tente pelo Mercado Pago.')
         e.status = 503
+        e.cliente = true   // texto escrito para o turista ler
         throw e
       }
 
@@ -1915,6 +1916,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         console.error('[pagarme] split impossível na reserva %s: %s', booking.id, divisao.erro)
         const e = new Error('O pagamento com cartão está temporariamente indisponível. Use PIX, ou tente pelo Mercado Pago.')
         e.status = 503
+        e.cliente = true   // texto escrito para o turista ler
         throw e
       }
       console.log('[pagarme] split %s%% plataforma / %s%% operador na reserva %s',
@@ -1966,6 +1968,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         `O meio de pagamento selecionado ainda não está disponível. ` +
         `Use PIX, ou fale com o suporte.`)
       e.status = 503
+      e.cliente = true   // texto escrito para o turista ler
       throw e
     }
 
@@ -2037,6 +2040,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
           'confira em Minhas Reservas antes de tentar de novo.',
         )
         e.status = 502
+        e.cliente = true   // texto escrito para o turista ler
         e.gatewayTransactionId = gatewayTransactionId
         throw e
       }

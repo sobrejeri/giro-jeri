@@ -120,6 +120,11 @@ async function request(path, options = {}, isRetry = false) {
     const err = new Error(data.error || `Erro ${res.status}`)
     err.status  = res.status
     err.payload = data // ex.: verification_required traz signup_token/channels
+    // O servidor marca assim o texto que foi escrito para o usuário ler. Sem
+    // a marca, a tela não sabe se `message` é uma frase útil em português ou
+    // um genérico (ou, pior, a mensagem crua do gateway em inglês) — e a saída
+    // segura acaba sendo descartar tudo, inclusive o que ajudaria.
+    err.cliente = data.cliente === true
     throw err
   }
   return data
