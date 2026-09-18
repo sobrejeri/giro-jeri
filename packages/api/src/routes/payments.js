@@ -1910,21 +1910,28 @@ router.post('/intent', authenticate, async (req, res, next) => {
       })
       if (erroLinha) throw erroLinha
 
-      // Split ANTES de chamar o gateway: se não dá para dividir, não se cobra.
+      // Split ANTES de chamar o gateway. Quando NÃO dá para dividir (cooperativa
+      // ainda não atribuída, ou sem recebedor cadastrado no gateway), a
+      // plataforma cobra o valor INTEIRO na conta dela e faz o repasse à
+      // cooperativa MANUALMENTE — decisão de negócio: concluir a venda vale mais
+      // que recusar o cartão. Só a falta da API Key (barrada acima) impede a
+      // cobrança; o resto vira cobrança sem split.
       const divisao = await splitDoPagarme([booking], cfg)
+      let splitCobranca = null
+      let repasseManual = false
       if (divisao.erro) {
-        console.error('[pagarme] split impossível na reserva %s: %s', booking.id, divisao.erro)
-        const e = new Error('O pagamento com cartão está temporariamente indisponível. Use PIX, ou tente pelo Mercado Pago.')
-        e.status = 503
-        e.cliente = true   // texto escrito para o turista ler
-        throw e
+        repasseManual = true
+        console.warn('[pagarme] sem split (%s) — cobrança inteira na plataforma, repasse manual · reserva %s',
+          divisao.erro, booking.id)
+      } else {
+        splitCobranca = divisao.split
+        console.log('[pagarme] split %s%% plataforma / %s%% operador na reserva %s',
+          divisao.split[0].amount, divisao.split[1].amount, booking.id)
       }
-      console.log('[pagarme] split %s%% plataforma / %s%% operador na reserva %s',
-        divisao.split[0].amount, divisao.split[1].amount, booking.id)
 
       const checkout = await criarCheckoutCartao({
         apiKey:          chavePagarme,
-        split:           divisao.split,
+        split:           splitCobranca,
         amount:          chargedTotal,
         description:     service_name || `Reserva ${bookingCode}`,
         bookingId:       booking.id,
@@ -1939,10 +1946,11 @@ router.post('/intent', authenticate, async (req, res, next) => {
 
       await supabase.from('payments')
         .update({ raw_response_json: { pagarme: true, pedido_id: checkout.pedido_id,
-          redirect_url: checkout.redirect_url } })
+          redirect_url: checkout.redirect_url, repasse_manual: repasseManual } })
         .eq('id', linha.id)
 
-      console.log('[pagarme] pedido %s criado para a reserva %s', checkout.pedido_id, booking.id)
+      console.log('[pagarme] pedido %s criado para a reserva %s (repasse_manual=%s)',
+        checkout.pedido_id, booking.id, repasseManual)
 
       return res.json({
         success: true, status: 'redirect',
