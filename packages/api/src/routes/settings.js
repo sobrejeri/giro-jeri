@@ -6,6 +6,9 @@ import { supabase } from '../supabase.js';
 const router = Router();
 
 // Apenas chaves seguras para exposição pública.
+// IMPORTANTE: nunca inclua a Secret Key (payment_gateway_api_key) nem o webhook
+// secret. A chave pública do Pagar.me (pk_xxx) é feita para o navegador —
+// tokeniza o cartão sem que o número passe pelo nosso servidor.
 const PUBLIC_KEYS = [
   'home_banner_image_url',
   'home_banner_title',
@@ -13,6 +16,8 @@ const PUBLIC_KEYS = [
   'whatsapp_support_number',
   'app_version',
   'default_currency',
+  'payment_gateway',
+  'payment_gateway_public_key',
 ];
 
 // ── GET /api/settings/public ───────────────────────────

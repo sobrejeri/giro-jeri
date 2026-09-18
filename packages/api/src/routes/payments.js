@@ -44,9 +44,12 @@ const intentSchema = z.object({
   (d) => d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
   { message: 'Dados incompletos para criar reserva' },
 ).refine(
+  // payment_method_id é específico do Mercado Pago (o Brick sempre envia). O
+  // Pagar.me não usa esse campo, então a validação comum exige apenas o token
+  // do cartão e o CPF/CNPJ do pagador; cada adapter valida o que é seu.
   (d) => !['credit_card', 'debit_card'].includes(d.payment_method) ||
-          (d.card_token && d.payment_method_id && d.payer_doc),
-  { message: 'Dados do cartão incompletos (card_token, payment_method_id, payer_doc)' },
+          (d.card_token && d.payer_doc),
+  { message: 'Dados do cartão incompletos (card_token, payer_doc)' },
 )
 
 // Solicitação de reserva (sem pagamento): subconjunto do intent, sem cartão.
@@ -210,6 +213,44 @@ async function getSplitContext(booking, chargedTotal, cfg) {
   const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
   const applicationFee = Math.round(chargedTotal * (pct / 100) * 100) / 100
   return { sellerAccessToken: opMp.token, applicationFee }
+}
+
+// Regras de split do Pagar.me: recebedor da plataforma (principal — responde
+// pelo chargeback, paga a taxa do gateway e absorve o arredondamento) +
+// recebedor da cooperativa. Percentuais somam 100. Retorna null quando não há
+// como dividir (sem recebedor da plataforma, sem cooperativa atribuída, sem
+// recebedor da cooperativa, ou fatia da cooperativa ≤ 0) — aí a cobrança fica
+// inteira na conta da plataforma.
+async function getPagarmeSplit(booking, platformRecipient, cfg) {
+  if (!platformRecipient || !booking?.operator_id) return null
+  const { data: op } = await supabase
+    .from('users')
+    .select('gateway_recipient_id, platform_split_pct')
+    .eq('id', booking.operator_id)
+    .single()
+  const operatorRecipient = op?.gateway_recipient_id
+  if (!operatorRecipient) return null
+
+  const adminPct = Math.round(
+    (op?.platform_split_pct != null ? Number(op.platform_split_pct) : Number(cfg?.payment_split_admin_pct)) || 0
+  )
+  const operatorPct = 100 - adminPct
+  if (operatorPct <= 0 || adminPct < 0) return null
+
+  return [
+    {
+      recipient_id: platformRecipient,
+      type:         'percentage',
+      amount:       adminPct,
+      options:      { charge_processing_fee: true, charge_remainder: true, liable: true },
+    },
+    {
+      recipient_id: operatorRecipient,
+      type:         'percentage',
+      amount:       operatorPct,
+      options:      { charge_processing_fee: false, charge_remainder: false, liable: false },
+    },
+  ]
 }
 
 // ── POST /api/payments/intent ───────────────────────────
@@ -416,8 +457,78 @@ router.post('/intent', authenticate, async (req, res, next) => {
           })
         }
       }
+    } else if (gateway === 'pagarme') {
+      const apiKey = process.env.PAGARME_API_KEY || cfg.payment_gateway_api_key
+      if (!apiKey) {
+        return res.status(422).json({ error: 'Pagar.me não configurado: informe a Secret Key em Configurações → Pagamentos.' })
+      }
+      const platformRecipient = process.env.PAGARME_RECIPIENT_ID || cfg.payment_gateway_recipient_id || ''
+      const isCard = ['credit_card', 'debit_card'].includes(payment_method)
+
+      const { data: u } = await supabase
+        .from('users').select('full_name, email, document_number, document_type')
+        .eq('id', req.user.id).single()
+
+      const docDigits = String(payer_doc || u?.document_number || '').replace(/\D/g, '')
+      const customer = {
+        name:     u?.full_name || 'Cliente',
+        email:    u?.email,
+        document: docDigits,
+        type:     u?.document_type === 'cnpj' ? 'company' : 'individual',
+      }
+
+      // Split: plataforma (principal) + cooperativa. Null → cobrança inteira na
+      // conta da plataforma (sem cooperativa atribuída ou sem recebedor).
+      const split = await getPagarmeSplit(booking, platformRecipient, cfg)
+
+      const { createOrder } = await import('../payments/pagarme.js')
+      let order
+      try {
+        order = await createOrder({
+          apiKey,
+          method:       isCard ? 'credit_card' : 'pix',
+          amount:       chargedTotal,
+          description:  service_name || `Reserva ${bookingCode}`,
+          customer,
+          code:         bookingCode,
+          metadata:     { booking_id: booking.id, booking_code: bookingCode },
+          cardToken:    card_token,
+          installments: cardInstallments,
+          split,
+          pixExpiresIn: 30 * 60,
+        })
+      } catch (pmErr) {
+        console.error('[intent] Pagar.me falhou:', pmErr.message)
+        return res.status(422).json({
+          error: `Não foi possível ${isCard ? 'processar o cartão' : 'gerar o PIX'} no Pagar.me: ${pmErr.message}`,
+        })
+      }
+
+      if (isCard) {
+        gatewayTransactionId = order.id
+        cardResult           = { raw: order.raw }
+        cardPaymentStatus    = order.paid ? 'approved' : (order.failed ? 'rejected' : 'in_process')
+        cardStatusDetail     = order.status_detail
+        cardInstallments     = order.installments || cardInstallments
+        cardLastFour         = order.card_last_four
+        cardBrand            = order.card_brand
+        cardHolderName       = order.card_holder_name
+        // Estimativa de taxa (ajustável): crédito ~3.99%, débito ~2.49%.
+        cardGatewayFeePct    = payment_method === 'debit_card' ? 0.0249 : 0.0399
+      } else {
+        if (order.pix_code) {
+          gatewayTransactionId = order.id
+          expiresAt            = order.expires_at || expiresAt
+          pixCode              = order.pix_code
+          // qrBase64 fica null: a tela de Processando gera o QR a partir do pix_code.
+        } else {
+          return res.status(422).json({
+            error: `Não foi possível gerar o PIX no Pagar.me (status: ${order.status}).`,
+          })
+        }
+      }
     }
-    // asaas / pagarme: adapters a implementar quando credentials disponíveis
+    // asaas: adapter a implementar quando credentials disponíveis
 
     // Gateway efetivo: se o MP (ou outro) não devolveu transação, o pagamento
     // é apresentado como manual — então grava 'manual' para o botão de
@@ -669,6 +780,25 @@ router.get('/:id/status', authenticate, async (req, res, next) => {
       } catch { /* ignora erros de rede no polling */ }
     }
 
+    // Pagar.me pendente (PIX): confirma consultando a order real na API.
+    if (payment.status === 'pending' && payment.gateway_name === 'pagarme' && payment.gateway_transaction_id) {
+      try {
+        const cfg    = await getPaymentSettings()
+        const apiKey = process.env.PAGARME_API_KEY || cfg.payment_gateway_api_key
+        const { getOrder } = await import('../payments/pagarme.js')
+        const order = await getOrder({ apiKey, orderId: payment.gateway_transaction_id })
+        if (order?.status === 'paid') {
+          await onPaymentApproved(payment)
+          return res.json({ status: 'approved', booking_id: payment.booking_id, booking_code: payment.bookings?.booking_code })
+        }
+        if (['failed', 'canceled'].includes(order?.status)) {
+          await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+          await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', payment.booking_id)
+          return res.json({ status: 'failed', booking_id: payment.booking_id })
+        }
+      } catch { /* ignora erros de rede no polling */ }
+    }
+
     res.json({
       status:       payment.status,
       booking_id:   payment.booking_id,
@@ -778,6 +908,78 @@ router.post('/webhook', async (req, res, next) => {
         await supabase.from('payments').update({ status: 'failed' }).eq('id', paymentForEvent.id)
         await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', paymentForEvent.booking_id)
       }
+    }
+
+    res.status(200).json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+// ── POST /api/payments/webhook/pagarme ─────────────────
+// Eventos do Pagar.me (order.paid, charge.paid, order.payment_failed, ...).
+// Segurança: NUNCA confiamos no status do payload — refazemos a consulta da
+// order na API do Pagar.me com a nossa Secret Key. Um webhook forjado não
+// consegue aprovar um pagamento, pois o status vem da fonte autoritativa.
+// O body chega como Buffer bruto (express.raw cobre /api/payments/webhook*).
+router.post('/webhook/pagarme', async (req, res, next) => {
+  try {
+    let event = req.body
+    if (Buffer.isBuffer(event)) {
+      try { event = JSON.parse(event.toString('utf8')) }
+      catch { return res.status(400).json({ error: 'JSON inválido' }) }
+    }
+
+    const eventType = event.type || event.event || 'unknown'
+    const data      = event.data || {}
+    // O id da order pode vir direto (data.id = or_xxx) ou dentro de um charge.
+    const orderId =
+      (typeof data.id === 'string' && data.id.startsWith('or_')) ? data.id
+      : (data.order?.id || null)
+
+    // Localiza o pagamento pela order (gravada como gateway_transaction_id).
+    let paymentForEvent = null
+    if (orderId) {
+      const { data: p } = await supabase
+        .from('payments')
+        .select('*, bookings(*)')
+        .eq('gateway_transaction_id', orderId)
+        .maybeSingle()
+      paymentForEvent = p
+    }
+
+    // Registra o evento (idempotência via UNIQUE em payment_events).
+    const evIns = await supabase.from('payment_events').insert({
+      payment_id:         paymentForEvent?.id || null,
+      event_name:         eventType,
+      event_payload_json: event,
+      processing_status:  'pending',
+    })
+    if (evIns.error && evIns.error.code !== '23505') {
+      console.error('[webhook/pagarme] falha ao gravar payment_events code=%s msg=%s',
+        evIns.error.code, evIns.error.message)
+    }
+
+    // Sem pagamento correspondente: ack para o Pagar.me não reencaminhar.
+    if (!paymentForEvent || !orderId) return res.status(200).json({ ok: true })
+
+    // Confirma o status real na API (fonte autoritativa).
+    const cfg    = await getPaymentSettings()
+    const apiKey = process.env.PAGARME_API_KEY || cfg.payment_gateway_api_key
+    let realStatus = null
+    try {
+      const { getOrder } = await import('../payments/pagarme.js')
+      const order = await getOrder({ apiKey, orderId })
+      realStatus = order?.status || null
+    } catch (e) {
+      console.error('[webhook/pagarme] refetch da order falhou:', e.message)
+      // Sem confirmar, não altera nada — 200 e o polling resolve depois.
+      return res.status(200).json({ ok: true, unverified: true })
+    }
+
+    if (realStatus === 'paid' && paymentForEvent.status !== 'approved') {
+      await onPaymentApproved(paymentForEvent)
+    } else if (['failed', 'canceled'].includes(realStatus)) {
+      await supabase.from('payments').update({ status: 'failed' }).eq('id', paymentForEvent.id)
+      await supabase.from('bookings').update({ status_commercial: 'payment_failed', payment_status: 'failed' }).eq('id', paymentForEvent.booking_id)
     }
 
     res.status(200).json({ ok: true })

@@ -44,7 +44,8 @@ const SETTING_LABELS = {
 
 const PAYMENT_KEYS = new Set([
   'payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key',
-  'payment_gateway_webhook_secret', 'payment_split_admin_pct',
+  'payment_gateway_webhook_secret', 'payment_gateway_recipient_id',
+  'payment_gateway_public_key', 'payment_split_admin_pct',
   'payment_admin_pix_key_type', 'payment_admin_pix_key',
   'payment_admin_bank_name', 'payment_admin_bank_agency',
   'payment_admin_bank_account', 'payment_admin_bank_account_type',
@@ -82,6 +83,8 @@ const PAYMENT_DEFAULTS = {
   payment_gateway_env:            'sandbox',
   payment_gateway_api_key:        '',
   payment_gateway_webhook_secret: '',
+  payment_gateway_recipient_id:   '',
+  payment_gateway_public_key:     '',
   payment_split_admin_pct:        '15',
   payment_admin_pix_key_type:     'cnpj',
   payment_admin_pix_key:          '',
@@ -452,12 +455,48 @@ function TabPagamentos({ settings, qc }) {
                 />
                 <p className="text-xs text-amber-500/80">
                   Estas chaves são armazenadas no banco e nunca expostas ao cliente final.
+                  A variável <span className="font-mono">PAGARME_API_KEY</span> no servidor tem
+                  prioridade sobre a API Key acima.
                 </p>
               </>
             )}
+            {form.payment_gateway === 'pagarme' && (
+              <div className="space-y-4 border-t border-gray-800 pt-4">
+                <p className="text-xs font-semibold text-gray-300">Split &amp; checkout (Pagar.me)</p>
+                <Input
+                  label="Recebedor da plataforma (recipient_id)"
+                  value={form.payment_gateway_recipient_id}
+                  onChange={(e) => set('payment_gateway_recipient_id', e.target.value)}
+                  placeholder="re_xxxxxxxxxxxxxxxxx"
+                />
+                <p className="text-xs text-gray-500 -mt-2">
+                  Dashboard do Pagar.me → Recebedores. É a conta da própria plataforma, que entra no
+                  split como recebedora principal: responde pelo chargeback, paga a taxa do gateway e
+                  absorve o arredondamento. A cooperativa recebe a fatia dela limpa. O percentual é o
+                  mesmo da Divisão de Recebimento abaixo (com overrides por cooperativa).
+                </p>
+                <MaskedInput
+                  label="Chave pública (pk_)"
+                  value={form.payment_gateway_public_key}
+                  onChange={(e) => set('payment_gateway_public_key', e.target.value)}
+                  placeholder="pk_xxxxxxxxxxxxxxxxx"
+                />
+                <p className="text-xs text-gray-500 -mt-2">
+                  Usada pelo app para tokenizar o cartão no navegador — o número do cartão nunca passa
+                  pelo nosso servidor. A Secret Key (sk_) vai no campo API Key acima.
+                </p>
+                <div className="bg-gray-900 rounded-lg p-3 text-xs text-gray-500 space-y-1">
+                  <p className="text-gray-400 font-medium">Webhook</p>
+                  <p>Cadastre no painel do Pagar.me a URL terminada em <span className="font-mono text-gray-300">/api/payments/webhook/pagarme</span>.</p>
+                  <p>Eventos: <span className="font-mono text-gray-300">order.paid</span> e <span className="font-mono text-gray-300">order.payment_failed</span>.</p>
+                </div>
+              </div>
+            )}
             <SaveRow
               onSave={() => saveSection(
-                ['payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key', 'payment_gateway_webhook_secret'],
+                ['payment_gateway', 'payment_gateway_env', 'payment_gateway_api_key',
+                 'payment_gateway_webhook_secret', 'payment_gateway_recipient_id',
+                 'payment_gateway_public_key'],
                 'gateway',
               )}
               pending={saveMut.isPending}

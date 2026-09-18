@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ShieldCheck, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ShieldCheck, AlertCircle, QrCode, CreditCard, Loader2 } from 'lucide-react'
 import { api } from '../../lib/api'
 
 // ─── helpers ────────────────────────────────────────────────
@@ -81,7 +81,7 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
               try {
                 // PIX (transferência bancária) → cria o pagamento e abre o QR.
                 if (selectedPaymentMethod === 'bank_transfer' || formData?.payment_method_id === 'pix') {
-                  await onPix(formData)
+                  await onPix(formData?.payer?.identification?.number)
                   return Promise.resolve()
                 }
 
@@ -153,6 +153,224 @@ function PaymentBrick({ amount, publicKey, onCard, onPix }) {
   )
 }
 
+// ─── Pagar.me: tokenização do cartão ────────────────────────
+// O número do cartão vai direto do navegador para o Pagar.me (com a chave
+// pública) e volta como um token. Nada de dado sensível passa pelo nosso
+// servidor — só o token é enviado à nossa API.
+async function tokenizePagarmeCard(publicKey, card) {
+  const res = await fetch(`https://api.pagar.me/core/v5/tokens?appId=${encodeURIComponent(publicKey)}`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'card',
+      card: {
+        number:      card.number.replace(/\D/g, ''),
+        holder_name: card.holder.trim(),
+        exp_month:   Number(card.expMonth),
+        exp_year:    Number(card.expYear),
+        cvv:         card.cvv,
+      },
+    }),
+  })
+  let data = null
+  try { data = await res.json() } catch { /* corpo vazio */ }
+  if (!res.ok || !data?.id) {
+    throw new Error(data?.message || 'Não foi possível validar os dados do cartão.')
+  }
+  return data.id
+}
+
+const onlyDigits = (s) => String(s || '').replace(/\D/g, '')
+
+// ─── PagarmeCheckout ────────────────────────────────────────
+// Checkout transparente do Pagar.me: PIX (server-side) e cartão (tokenizado no
+// navegador). Usado quando o gateway ativo é 'pagarme'.
+function PagarmeCheckout({ amount, publicKey, onPix, onCard }) {
+  const { t } = useTranslation()
+  const [tab,   setTab]   = useState('pix')   // 'pix' | 'card'
+  const [cpf,   setCpf]   = useState('')
+  const [busy,  setBusy]  = useState(false)
+  const [error, setError] = useState('')
+
+  const [number, setNumber] = useState('')
+  const [holder, setHolder] = useState('')
+  const [exp,    setExp]    = useState('')    // MM/AA
+  const [cvv,    setCvv]    = useState('')
+  const [inst,   setInst]   = useState(1)
+
+  const cpfDigits = onlyDigits(cpf)
+  const docValid  = cpfDigits.length === 11 || cpfDigits.length === 14
+
+  function fmtCpf(v) {
+    const d = onlyDigits(v).slice(0, 14)
+    if (d.length <= 11) {
+      return d
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+    }
+    return d
+      .replace(/(\d{2})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1/$2')
+      .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
+  }
+  const fmtCard = (v) => onlyDigits(v).slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ').trim()
+  const fmtExp  = (v) => {
+    const d = onlyDigits(v).slice(0, 4)
+    return d.length >= 3 ? `${d.slice(0, 2)}/${d.slice(2)}` : d
+  }
+
+  async function handlePixSubmit() {
+    setError('')
+    if (!docValid) { setError('Informe um CPF válido para gerar o PIX.'); return }
+    setBusy(true)
+    try {
+      await onPix(cpfDigits)   // navega para a tela de acompanhamento
+    } catch (err) {
+      setError(err?.message || t('payment.errorGeneric'))
+      setBusy(false)
+    }
+  }
+
+  async function handleCardSubmit() {
+    setError('')
+    const numDigits = onlyDigits(number)
+    const [mm, aa]  = exp.split('/')
+    if (!docValid)             { setError('Informe um CPF válido.'); return }
+    if (numDigits.length < 13) { setError('Número do cartão inválido.'); return }
+    if (!holder.trim())        { setError('Informe o nome impresso no cartão.'); return }
+    if (!mm || !aa || Number(mm) < 1 || Number(mm) > 12) { setError('Validade inválida (MM/AA).'); return }
+    if (onlyDigits(cvv).length < 3) { setError('CVV inválido.'); return }
+    if (!publicKey)            { setError('Pagamento com cartão indisponível no momento. Use o PIX.'); return }
+
+    setBusy(true)
+    try {
+      const token = await tokenizePagarmeCard(publicKey, {
+        number:   numDigits,
+        holder,
+        expMonth: mm,
+        expYear:  aa.length === 2 ? `20${aa}` : aa,
+        cvv:      onlyDigits(cvv),
+      })
+      const result = await onCard({
+        payment_method: 'credit_card',
+        card_token:     token,
+        installments:   Number(inst) || 1,
+        payer_doc:      cpfDigits,
+      })
+      if (result?.status === 'rejected') {
+        setError(result.message_key ? t(result.message_key) : t('payment.rejected.generic'))
+        setBusy(false)
+      }
+      // approved / in_process → o componente pai navega de tela.
+    } catch (err) {
+      setError(err?.message || t('payment.rejected.generic'))
+      setBusy(false)
+    }
+  }
+
+  const inputCls = 'w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[14px] outline-none focus:border-brand'
+  const instOptions = Array.from({ length: 12 }, (_, i) => i + 1)
+
+  return (
+    <div className="space-y-4">
+      {/* Abas */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => { setTab('pix'); setError('') }}
+          className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px] font-bold border transition-colors ${tab === 'pix' ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200'}`}
+        >
+          <QrCode size={15} /> PIX
+        </button>
+        <button
+          type="button"
+          onClick={() => { setTab('card'); setError('') }}
+          className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px] font-bold border transition-colors ${tab === 'card' ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200'}`}
+        >
+          <CreditCard size={15} /> Cartão
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-3">
+          <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-red-600">{error}</p>
+        </div>
+      )}
+
+      {/* CPF do pagador (comum aos dois métodos) */}
+      <div>
+        <label className="block text-[12px] font-medium text-gray-500 mb-1">CPF do pagador</label>
+        <input
+          inputMode="numeric"
+          value={cpf}
+          onChange={(e) => setCpf(fmtCpf(e.target.value))}
+          placeholder="000.000.000-00"
+          className={inputCls}
+        />
+      </div>
+
+      {tab === 'pix' ? (
+        <div className="space-y-3">
+          <p className="text-[12px] text-gray-500 leading-relaxed">
+            Você recebe o QR Code e o código copia-e-cola na próxima tela. A reserva é confirmada
+            na hora, assim que o pagamento cair.
+          </p>
+          <button
+            type="button"
+            onClick={handlePixSubmit}
+            disabled={busy}
+            className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98] transition-transform disabled:opacity-60"
+          >
+            {busy ? <Loader2 size={17} className="animate-spin" /> : <QrCode size={17} />}
+            {busy ? 'Gerando PIX…' : `Gerar PIX · R$ ${fmt(amount)}`}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[12px] font-medium text-gray-500 mb-1">Número do cartão</label>
+            <input inputMode="numeric" value={number} onChange={(e) => setNumber(fmtCard(e.target.value))} placeholder="0000 0000 0000 0000" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-gray-500 mb-1">Nome impresso no cartão</label>
+            <input value={holder} onChange={(e) => setHolder(e.target.value.toUpperCase())} placeholder="COMO ESTÁ NO CARTÃO" className={inputCls} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[12px] font-medium text-gray-500 mb-1">Validade</label>
+              <input inputMode="numeric" value={exp} onChange={(e) => setExp(fmtExp(e.target.value))} placeholder="MM/AA" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-500 mb-1">CVV</label>
+              <input inputMode="numeric" value={cvv} onChange={(e) => setCvv(onlyDigits(e.target.value).slice(0, 4))} placeholder="123" className={inputCls} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-gray-500 mb-1">Parcelas</label>
+            <select value={inst} onChange={(e) => setInst(Number(e.target.value))} className={`${inputCls} bg-white`}>
+              {instOptions.map((n) => (
+                <option key={n} value={n}>{n}x de R$ {fmt(amount / n)}{n === 1 ? ' à vista' : ''}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={handleCardSubmit}
+            disabled={busy}
+            className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98] transition-transform disabled:opacity-60"
+          >
+            {busy ? <Loader2 size={17} className="animate-spin" /> : <CreditCard size={17} />}
+            {busy ? 'Processando…' : `Pagar R$ ${fmt(amount)}`}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── CheckoutPayment (página principal) ─────────────────────
 export default function CheckoutPayment() {
   const navigate   = useNavigate()
@@ -162,6 +380,9 @@ export default function CheckoutPayment() {
   // existentes (pagamento pós-aceite). keyChecked evita montar o Brick antes.
   const [sellerKey,  setSellerKey]  = useState(null)
   const [keyChecked, setKeyChecked] = useState(() => !state?.existing_booking_id)
+  // Gateway ativo + chave pública do Pagar.me (config pública do servidor).
+  // null enquanto carrega. Decide qual checkout renderizar.
+  const [payCfg, setPayCfg] = useState(null)
 
   useEffect(() => {
     const bid = state?.existing_booking_id
@@ -173,6 +394,17 @@ export default function CheckoutPayment() {
       .finally(() => { if (active) setKeyChecked(true) })
     return () => { active = false }
   }, [state?.existing_booking_id])
+
+  useEffect(() => {
+    let active = true
+    api.getPublicSettings()
+      .then((s) => { if (active) setPayCfg({
+        gateway:    s?.payment_gateway || 'mercado_pago',
+        pagarmeKey: s?.payment_gateway_public_key || '',
+      }) })
+      .catch(() => { if (active) setPayCfg({ gateway: 'mercado_pago', pagarmeKey: '' }) })
+    return () => { active = false }
+  }, [])
 
   if (!state) { navigate(-1); return null }
 
@@ -192,8 +424,9 @@ export default function CheckoutPayment() {
     `${people_count} ${people_count === 1 ? 'pessoa' : 'pessoas'}`,
   ].filter(Boolean)
 
-  // PIX pelo Brick: cria o pagamento e leva à tela de QR + acompanhamento.
-  async function handlePix(formData) {
+  // PIX: cria o pagamento e leva à tela de QR + acompanhamento. Recebe o
+  // CPF/CNPJ do pagador já normalizado (Brick do MP ou form do Pagar.me).
+  async function handlePix(payerDoc) {
     const result = await api.createPaymentIntent({
       service_type, service_id, booking_mode,
       service_date, service_date_iso, service_time,
@@ -202,7 +435,7 @@ export default function CheckoutPayment() {
       total_price, payment_method: 'pix',
       service_name, cover_image_url,
       existing_booking_id: existing_booking_id || undefined,
-      payer_doc: formData?.payer?.identification?.number,
+      payer_doc: payerDoc || undefined,
     })
     if (!result) throw new Error(t('payment.errorGeneric'))
 
@@ -307,11 +540,23 @@ export default function CheckoutPayment() {
           </div>
         </div>
 
-        {/* Pagamento (Brick unificado: cartão + PIX) */}
+        {/* Pagamento — Pagar.me (checkout próprio) ou Mercado Pago (Brick) */}
         <div className="bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
           <p className="text-[14px] font-bold text-gray-900 px-4 pt-4 pb-1">{t('payment.choose')}</p>
           <div className="px-3 pb-3 pt-1">
-            {keyChecked ? (
+            {!payCfg ? (
+              <div className="flex items-center justify-center py-8 gap-2 text-gray-400">
+                <div className="w-5 h-5 border-2 border-gray-300 border-t-brand rounded-full animate-spin" />
+                <span className="text-[13px]">Preparando pagamento seguro…</span>
+              </div>
+            ) : payCfg.gateway === 'pagarme' ? (
+              <PagarmeCheckout
+                amount={total_price}
+                publicKey={payCfg.pagarmeKey}
+                onPix={handlePix}
+                onCard={handleCardPayment}
+              />
+            ) : keyChecked ? (
               <PaymentBrick
                 amount={total_price}
                 publicKey={sellerKey}
