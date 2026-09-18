@@ -657,6 +657,21 @@ function TabPagamentos({ settings, qc }) {
     return legado === valor
   }
 
+  // A lista COMO A TELA ESTÁ MOSTRANDO, não como está gravada.
+  //
+  // Enquanto `payment_card_acquirers` está vazio, as caixas são desenhadas a
+  // partir do gateway padrão (o "legado" acima) — o Mercado Pago aparece
+  // marcado sem constar da lista. Alternar uma caixa partindo da string
+  // gravada fazia a lista nascer com um item só: marcar o Pagar.me APAGAVA o
+  // Mercado Pago, que estava marcado na tela e continuava cobrando. O botão
+  // dele sumia do checkout sem ninguém ter desmarcado nada.
+  //
+  // Partir do que está na tela faz o clique significar o que ele aparenta.
+  function alternarCartao(valor, marcado) {
+    const visivel = ACQUIRERS_CARTAO.filter((a) => cartaoMarcado(a.value)).map((a) => a.value)
+    return listaDeCartao(visivel.join(','), valor, marcado)
+  }
+
   const adminPct   = Number(form.payment_split_admin_pct) || 0
   const operatorPct = Math.max(0, 100 - adminPct)
 
@@ -813,7 +828,7 @@ function TabPagamentos({ settings, qc }) {
                     type="checkbox"
                     checked={cartaoMarcado(a.value)}
                     onChange={(e) => set('payment_card_acquirers',
-                      listaDeCartao(form.payment_card_acquirers, a.value, e.target.checked))}
+                      alternarCartao(a.value, e.target.checked))}
                     className="mt-1 w-4 h-4 accent-brand shrink-0"
                   />
                   <div>

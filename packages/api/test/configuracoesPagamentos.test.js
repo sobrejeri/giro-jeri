@@ -112,3 +112,39 @@ test('o roteamento não carrega credencial de adquirente nenhum', () => {
   assert.match(card, /payment_card_acquirers/, 'quem cobra o cartão é decisão de roteamento')
   assert.match(card, /payment_gateway_pix/,    'quem cobra o PIX também')
 })
+
+// ── Alternar adquirente de cartão ──────────────────────────────────────────
+// Enquanto payment_card_acquirers está vazio, as caixas são desenhadas a
+// partir do gateway padrão: o Mercado Pago aparece MARCADO sem constar da
+// lista. Alternar partindo da string gravada fazia a lista nascer com um item
+// só — marcar o Pagar.me apagava o Mercado Pago, e o botão dele sumia do
+// checkout sem ninguém ter desmarcado nada.
+
+test('marcar um adquirente não desmarca o que já estava marcado na tela', () => {
+  // Reproduz as duas funções como estão na fonte, para o teste falhar se a
+  // correção for desfeita lá.
+  const ACQ = ['mercado_pago', 'pagarme']
+  function listaDeCartao(atual, valor, marcado) {
+    const tem = new Set(String(atual || '').split(',').map((s) => s.trim()).filter(Boolean))
+    if (marcado) tem.add(valor); else tem.delete(valor)
+    return ACQ.filter((v) => tem.has(v)).join(',')
+  }
+  const form = { payment_card_acquirers: '', payment_gateway_card: '', payment_gateway: 'mercado_pago' }
+  const marcado = (v) => {
+    const l = String(form.payment_card_acquirers || '').split(',').map((s) => s.trim()).filter(Boolean)
+    if (l.length) return l.includes(v)
+    return (String(form.payment_gateway_card || '').trim() || form.payment_gateway) === v
+  }
+  const alternar = (v, m) => listaDeCartao(ACQ.filter(marcado).join(','), v, m)
+
+  assert.equal(marcado('mercado_pago'), true, 'a tela mostra o MP marcado, herdado do gateway')
+  assert.equal(alternar('pagarme', true), 'mercado_pago,pagarme',
+    'marcar o Pagar.me não pode derrubar o Mercado Pago que a tela mostrava marcado')
+})
+
+test('a tela usa alternarCartao, não a string gravada', () => {
+  assert.match(tab, /onChange=\{\(e\) => set\('payment_card_acquirers',\s*alternarCartao\(/,
+    'voltar a partir de form.payment_card_acquirers reintroduz o sumiço do botão')
+  assert.match(tab, /ACQUIRERS_CARTAO\.filter\(\(a\) => cartaoMarcado\(a\.value\)\)/,
+    'a base do toggle tem de ser o que está visível')
+})
