@@ -17,8 +17,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'chave-de-teste'
 const { montarSplit, fecha100 } = await import('../src/payments/pagarmeSplit.js')
 const { mediaPonderadaDoPercentual } = await import('../src/routes/payments.js')
 
-const PLAT = 'rp_plataforma'
-const OPER = 'rp_operador'
+const PLAT = 're_plataforma'
+const OPER = 're_operador'
 
 test('o split fecha 100% e nomeia os dois recebedores', () => {
   const s = montarSplit({ pctPlataforma: 10, recebedorPlataforma: PLAT, recebedorOperador: OPER })

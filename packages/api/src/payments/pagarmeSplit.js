@@ -30,8 +30,11 @@ const CEM = 100
  *
  * @param {object}  p
  * @param {number}  p.pctPlataforma  percentual da plataforma (0–100)
- * @param {string}  p.recebedorPlataforma  rp_... da plataforma
- * @param {string}  p.recebedorOperador    rp_... do operador
+ * @param {string}  p.recebedorPlataforma  id do recebedor da plataforma
+ *   O prefixo nesta conta é `re_` (visto no painel: re_cmu2...). Não valido o
+ *   formato aqui de propósito: o gateway é quem decide o que é id válido, e
+ *   um regex nosso viraria falso negativo no dia em que eles mudarem.
+ * @param {string}  p.recebedorOperador    re_... do operador
  * @returns {Array|null} o array de split, ou null quando não dá para dividir
  */
 export function montarSplit({ pctPlataforma, recebedorPlataforma, recebedorOperador }) {

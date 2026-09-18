@@ -610,7 +610,7 @@ router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next
 // ── GET /api/admin/pagarme/recipients ─────────────────────────────────────
 // Lista os recebedores da conta no Pagar.me. Só leitura, só admin.
 //
-// Existe porque o split precisa do `rp_...` da PRÓPRIA plataforma, e esse id
+// Existe porque o split precisa do `re_...` da PRÓPRIA plataforma, e esse id
 // não aparece em lugar nenhum do nosso banco — só no painel do gateway. Ter de
 // sair do admin, achar o painel certo (empresa vs loja) e copiar à mão foi
 // justamente onde a configuração do split emperrou.

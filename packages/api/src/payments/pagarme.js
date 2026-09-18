@@ -44,7 +44,7 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
 }
 
 // Lista os recebedores da conta. Só leitura, usada pelo admin para descobrir o
-// `rp_...` da própria plataforma sem ter de caçá-lo no painel do gateway —
+// `re_...` da própria plataforma sem ter de caçá-lo no painel do gateway —
 // que foi exatamente onde a integração do split emperrou.
 export async function listarRecebedores(apiKey, pagina = 1) {
   if (!apiKey) throw new Error('API Key do Pagar.me não configurada em Configurações → Pagamentos')
