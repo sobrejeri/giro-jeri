@@ -59,3 +59,13 @@ test('a tela de Reservas honra ?tab=mine e limpa da URL depois', () => {
   assert.match(reservas, /abaValida\.includes\(t\)/, 'só aceita aba conhecida — nada de tab inválida')
   assert.match(reservas, /p\.delete\('tab'\)/, 'não pode "grudar" a aba num reload')
 })
+
+test('Minhas corridas é ordenada por data de solicitação (mais recente primeiro)', () => {
+  const reservas = fs.readFileSync(
+    new URL('../../operador/src/pages/Reservas.jsx', import.meta.url), 'utf8')
+  const i = reservas.indexOf('const mineItems')
+  const bloco = reservas.slice(i, reservas.indexOf('const openGroupBookings', i))
+  assert.match(bloco, /created_at/, 'a ordem é pela data de solicitação')
+  assert.match(bloco, /out\.sort\(/, 'a lista precisa ser ordenada')
+  assert.match(bloco, /solicitadoEm\(b\) - solicitadoEm\(a\)/, 'mais recente primeiro')
+})

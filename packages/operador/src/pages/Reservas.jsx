@@ -794,6 +794,16 @@ export default function Reservas() {
       else out.push({ type: 'single', booking: arr[0] })
     }
     for (const b of singles) out.push({ type: 'single', booking: b })
+
+    // Ordena por DATA DE SOLICITAÇÃO (created_at), mais recente primeiro. Antes
+    // a ordem era a de inserção (grupos, depois avulsas) — sem relação com
+    // quando o cliente pediu. Um pedido agrupado usa a data mais recente entre
+    // os seus serviços.
+    const solicitadoEm = (it) => {
+      const bs = it.type === 'group' ? it.bookings : [it.booking]
+      return Math.max(...bs.map((b) => new Date(b?.created_at || 0).getTime()))
+    }
+    out.sort((a, b) => solicitadoEm(b) - solicitadoEm(a))
     return out
   })()
 
