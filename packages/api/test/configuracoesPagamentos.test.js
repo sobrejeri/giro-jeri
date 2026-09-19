@@ -100,7 +100,8 @@ test('a ajuda do Mercado Pago não aparece no card do Pagar.me', () => {
 test('o recebedor da plataforma tem campo e é salvo com a chave do Pagar.me', () => {
   const secoes = listasDeSalvamento(tab)
   assert.deepEqual(secoes.pagarme,
-    ['payment_pagarme_api_key', 'payment_pagarme_platform_recipient_id'])
+    ['payment_pagarme_api_key', 'payment_pagarme_public_key',
+     'payment_pagarme_platform_recipient_id'])
   assert.match(tab, /placeholder="re_\.\.\."/,
     'o prefixo do recebedor nesta conta é re_, não rp_')
 })

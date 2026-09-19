@@ -608,7 +608,7 @@ test('o botão do Pagar.me se chama "Pagar com cartão", sem nome de adquirente'
 test('com o Pagar.me na tela, o formulário embutido muda de nome', async () => {
   const jsx = await readFile(
     new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
-  assert.match(jsx, /acquirersDisponiveis\.includes\('pagarme'\)\s*\?\s*'Pagar com cartão sem sair do site'\s*:\s*'Pagar com cartão'/,
+  assert.match(jsx, /acquirersDisponiveis\.includes\('pagarme'\)\s*\?\s*'Pagar com cartão \(Mercado Pago\)'\s*:\s*'Pagar com cartão'/,
     'rótulo fixo aqui reintroduziria dois botões iguais com comportamentos opostos')
   assert.match(jsx, /estilo=\{ESTILO_CARTAO_SITE\}[\s\S]{0,160}rotulo=\{rotuloFormularioNoSite\}/,
     'o botão embutido tem de usar o rótulo condicional')

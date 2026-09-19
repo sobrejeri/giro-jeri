@@ -166,21 +166,39 @@ test('pedido sem split continua saindo — ausência não vira array vazio', () 
   assert.match(checkoutJs, /Array\.isArray\(split\) && split\.length \? \{ split \} : \{\}/)
 })
 
-test('a cobrança é RECUSADA quando não dá para dividir', () => {
+// ── MUDANÇA DE CONTRATO (commit f960109, outra sessão) ────────────────────
+//
+// Antes: sem conseguir dividir, a cobrança era RECUSADA (503). O raciocínio
+// era que cobrar inteiro numa conta só e "acertar depois" vira divergência de
+// caixa.
+//
+// Agora: a venda é concluída, a plataforma recebe 100% e o pagamento fica
+// marcado com `repasse_manual: true`. A decisão é de negócio — concluir a
+// venda vale mais que recusar o cartão — e só se sustenta enquanto essa marca
+// EXISTIR. Sem ela, o operador fica credor de um valor que não aparece em
+// lugar nenhum. Por isso o teste mudou de "recusa" para "marca".
+test('sem split, a cobrança segue MAS fica marcada como repasse manual', () => {
   const i = pagamentos.indexOf('const divisao = await splitDoPagarme')
   assert.notEqual(i, -1, 'o checkout precisa resolver o split')
   const bloco = pagamentos.slice(i, i + 700)
-  assert.match(bloco, /if \(divisao\.erro\)/, 'erro no split tem de barrar')
-  assert.match(bloco, /e\.status = 503/, 'recusa antes de chamar o gateway')
-  // E a recusa vem ANTES da chamada ao gateway.
+  assert.match(bloco, /if \(divisao\.erro\)/, 'o erro de split tem de ser tratado')
+  assert.match(bloco, /repasseManual = true/,
+    'sem a marca, o dinheiro do operador entra na plataforma sem registro')
   assert.ok(i < pagamentos.indexOf('const checkout = await criarCheckoutCartao'),
     'o split tem de ser resolvido antes de criar a cobrança')
+})
+
+test('a marca de repasse manual é PERSISTIDA, não só logada', () => {
+  // Log de servidor não é registro contábil: ele expira, ninguém consulta e
+  // não dá para cruzar com a reserva. A marca precisa ir para o banco.
+  assert.match(pagamentos, /raw_response_json:\s*\{[^}]*repasse_manual: repasseManual/,
+    'o repasse manual tem de ficar gravado no pagamento')
 })
 
 test('o motivo real do erro fica no log, não na resposta ao cliente', () => {
   const i = pagamentos.indexOf('const divisao = await splitDoPagarme')
   const bloco = pagamentos.slice(i, i + 700)
-  assert.match(bloco, /console\.error\('\[pagarme\] split impossível/)
+  assert.match(bloco, /console\.warn\('\[pagarme\] sem split/)
   assert.ok(!/new Error\([^)]*divisao\.erro/.test(bloco),
     'o texto interno ("operador sem recebedor") não pode ir para a tela do cliente')
 })

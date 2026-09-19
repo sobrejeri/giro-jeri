@@ -757,13 +757,14 @@ export default function CheckoutPayment() {
       // "Pagar com cartão", sem nome de adquirente: para o turista, "Pagar.me"
       // não quer dizer nada — ele quer saber que vai pagar com cartão.
       //
-      // Esse texto só pode viver aqui porque o formulário embutido do Mercado
-      // Pago (que o usava) fica DESLIGADO. Os dois juntos seriam dois botões
-      // com o mesmo rótulo e comportamentos opostos — um sai do site, o outro
-      // abre um formulário aqui —, que já confundiu antes. Se alguém religar
-      // `payment_card_form_inline`, a colisão volta: por isso o teste
-      // 'nenhum rótulo de botão de cartão se repete' continua de pé, e a
-      // desambiguação passa a ser obrigatória antes de religar.
+      // Esse texto era do formulário embutido do Mercado Pago, que agora fica
+      // DESLIGADO por padrão. Se alguém o religar, quem cede o nome é ele — o
+      // rótulo dele é condicional (`rotuloFormularioNoSite`), então dois
+      // botões de cartão com o mesmo texto não voltam a existir.
+      //
+      // O rótulo não promete redirecionamento de propósito: este botão abre um
+      // formulário AQUI quando há chave pública do Pagar.me, e só redireciona
+      // sem ela. "Pagar com cartão" é verdade nos dois casos.
       rotulo: 'Pagar com cartão',
       // Neutro de propósito: fica visualmente em segundo plano quando os dois
       // aparecem, que é a hierarquia certa — e continua legível quando é o
@@ -799,14 +800,18 @@ export default function CheckoutPayment() {
   // crédito nem débito, o Brick montaria vazio.
   const formasCartao = formasAtivas(settings)
   const ofereceFormulario = acquirersDisponiveis.length > 0 && formularioNoSite
+    && (formasCartao.credito || formasCartao.debito)
 
   // Se o Pagar.me está na tela, ele é quem se chama "Pagar com cartão" — este
-  // formulário precisa de outro nome, e o nome tem de dizer o que o diferencia:
-  // ele não sai do site. Sem o Pagar.me, "Pagar com cartão" volta a ser dele.
+  // formulário precisa de outro nome.
+  //
+  // O que os diferencia é o ADQUIRENTE, não o lugar: o botão do Pagar.me abre
+  // um formulário aqui dentro quando há chave pública dele, e só redireciona
+  // sem ela. Chamar este de "sem sair do site" seria falso justamente no caso
+  // em que os dois aparecem juntos e ambos são formulários locais.
   const rotuloFormularioNoSite = acquirersDisponiveis.includes('pagarme')
-    ? 'Pagar com cartão sem sair do site'
+    ? 'Pagar com cartão (Mercado Pago)'
     : 'Pagar com cartão'
-    && (formasCartao.credito || formasCartao.debito)
 
   // O Brick do formulário fica só com o CARTÃO: o Pix tem bloco próprio logo
   // abaixo, e oferecê-lo duas vezes na mesma tela é convite a erro.

@@ -1005,7 +1005,7 @@ function TabPagamentos({ settings, qc }) {
                       Acrescenta um botão que abre o formulário do Mercado Pago aqui mesmo,
                       em vez de redirecionar. Não substitui o Checkout Pro — soma a ele.
                       Com o Pagar.me na tela ele se chama
-                      {' '}<b className="text-gray-400">Pagar com cartão sem sair do site</b>,
+                      {' '}<b className="text-gray-400">Pagar com cartão (Mercado Pago)</b>,
                       porque <b className="text-gray-400">Pagar com cartão</b> passou a ser o
                       botão do Pagar.me.
                     </p>

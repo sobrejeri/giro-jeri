@@ -57,14 +57,27 @@ test('a mensagem crua do gateway NÃO vai para o cliente', () => {
 })
 
 test('o erro é renderizado DENTRO do bloco do adquirente, depois do botão', () => {
+  // Janela de tamanho fixo NÃO serve aqui: o bloco do Pagar.me inline foi
+  // inserido antes do genérico e empurrou o erro para fora dos 1400
+  // caracteres, quebrando o teste sem que nada de errado tivesse acontecido.
+  // A verificação passou a ser estrutural — para CADA lugar que mostra o erro,
+  // existe um botão antes dele, e nenhum fica órfão.
   const i = fonte.indexOf('acquirersDisponiveis.map')
   assert.notEqual(i, -1)
-  const bloco = fonte.slice(i, i + 1400)
-  const iBotao = bloco.indexOf('<BotaoAdquirente')
-  const iErro  = bloco.indexOf('erroCartao[g]')
-  assert.ok(iBotao !== -1 && iErro !== -1, 'botão e erro precisam estar no mesmo bloco')
-  assert.ok(iErro > iBotao, 'o erro tem de vir depois do botão que falhou')
-  assert.match(bloco, /erroCartao\[g\] &&/, 'a exibição é condicionada ao adquirente da iteração')
+  const regiao = fonte.slice(i)
+
+  const ocorrencias = [...regiao.matchAll(/erroCartao\[g\] &&/g)].map((m) => m.index)
+  assert.ok(ocorrencias.length >= 2,
+    'cada caminho de cartão (inline do Pagar.me e o que redireciona) mostra o próprio erro')
+
+  for (const pos of ocorrencias) {
+    const antes = regiao.lastIndexOf('<BotaoAdquirente', pos)
+    assert.notEqual(antes, -1, 'erro exibido sem um botão antes dele')
+    // Nada de outro adquirente pode se meter entre o botão e o seu erro.
+    const entre = regiao.slice(antes, pos)
+    assert.ok(!entre.includes('acquirersDisponiveis.map'),
+      'o erro precisa pertencer ao botão imediatamente anterior')
+  }
 })
 
 test('não sobrou caixa de erro global acima dos botões', () => {
@@ -112,7 +125,7 @@ test('nenhum rótulo de botão de cartão se repete', () => {
   }
   // E o ramo que repete "Pagar com cartão" só vale quando o Pagar.me NÃO está
   // na tela — que é exatamente a condição escrita no código.
-  assert.match(fonte, /acquirersDisponiveis\.includes\('pagarme'\)\s*\?\s*'Pagar com cartão sem sair do site'/,
+  assert.match(fonte, /acquirersDisponiveis\.includes\('pagarme'\)\s*\?\s*'Pagar com cartão \(Mercado Pago\)'/,
     'com o Pagar.me presente, o formulário TEM de ceder o nome')
 
   const repetidos = rotulos.filter((r, i) => rotulos.indexOf(r) !== i)
