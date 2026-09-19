@@ -129,6 +129,8 @@ export const api = {
   // Frota liberada por operador (roteamento por veículo operado)
   // Repasses a pagar (080): comissões e valores de executor.
   getPayouts:          (params = {})                   => request(`/api/admin/payouts?${new URLSearchParams(params)}`),
+  getPayoutsFila:      (params = {})                   => request(`/api/admin/payouts/fila?${new URLSearchParams(params)}`),
+  getPayoutsIndicadores: ()                            => request('/api/admin/payouts/indicadores'),
   updatePayout:        (id, body)                      => request(`/api/admin/payouts/${id}`, { method: 'PUT', body }),
   payAllPayouts:       (body)                          => request('/api/admin/payouts/pay-all', { method: 'POST', body }),
   // Cria os repasses que faltaram em reservas já pagas. Idempotente.

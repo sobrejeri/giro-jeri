@@ -1964,6 +1964,61 @@ router.get('/payouts/fila', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── GET /api/admin/payouts/indicadores ──────────────────────────────────────
+// Cards da aba, SEM somar valor duplicado: cada reserva cai em UM balde só.
+// Adaptado ao modelo manual — NÃO existe "aguardando saldo do gateway" nem
+// "transferência em processamento" aqui, porque o repasse é manual; esses
+// voltam quando a transferência automática (Parte 4/5) existir.
+router.get('/payouts/indicadores', requireAdmin, async (req, res, next) => {
+  try {
+    // Aguardando conclusão: pago pelo cliente, serviço ainda NÃO concluído.
+    // Conjunto disjunto dos demais (que são todos de reservas concluídas).
+    const { count: aguardandoConclusao } = await supabase
+      .from('bookings').select('id', { count: 'exact', head: true })
+      .eq('status_commercial', 'paid').neq('status_operational', 'completed');
+
+    // Concluídas: classifica cada uma pela MESMA regra da fila e agrega.
+    const SELECT = `
+      id, booking_code, service_type, service_date, total_amount,
+      status_commercial, status_operational, completed_at,
+      operator:operator_id ( id, full_name ),
+      booking_payouts ( id, kind, amount, status, payee_user_id ),
+      payments ( id, gateway_name, amount_gross, status, split_operator_id )
+    `;
+    const { data: concluidas, error } = await supabase
+      .from('bookings').select(SELECT)
+      .eq('status_operational', 'completed').limit(3000);
+    if (error && !['42P01', '42703'].includes(error.code)) throw error;
+
+    const z = () => ({ qtd: 0, valor: 0 });
+    const ind = {
+      aguardando_conclusao: { qtd: aguardandoConclusao || 0 },
+      pronto_para_liberar:  z(),
+      repassados:           z(),   // pago manual + split direto (histórico)
+      conciliacao:          { qtd: 0 },
+      bloqueados:           { qtd: 0 },
+    };
+    for (const b of concluidas || []) {
+      const l = montarLinhaFila(b);
+      const v = Number(l.operador_valor) || 0;
+      switch (l.situacao) {
+        case 'pronto_para_liberar': ind.pronto_para_liberar.qtd++; ind.pronto_para_liberar.valor += v; break;
+        case 'pago':
+        case 'repassado_gateway':   ind.repassados.qtd++; ind.repassados.valor += v; break;
+        case 'conciliacao':         ind.conciliacao.qtd++; break;
+        case 'bloqueado':
+        case 'cancelado':           ind.bloqueados.qtd++; break;
+        // 'aguardando_pagamento' (concluído sem pagamento) é raro e fica fora
+        // dos cards principais para não confundir.
+      }
+    }
+    ind.pronto_para_liberar.valor = Math.round(ind.pronto_para_liberar.valor * 100) / 100;
+    ind.repassados.valor          = Math.round(ind.repassados.valor * 100) / 100;
+
+    res.json(ind);
+  } catch (err) { next(err); }
+});
+
 router.get('/payouts', requireAdmin, async (req, res, next) => {
   try {
     const { status = 'pending', payee } = req.query;

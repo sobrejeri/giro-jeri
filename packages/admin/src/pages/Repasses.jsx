@@ -61,11 +61,11 @@ function ChavePix({ chave, tipo, className = '' }) {
 //   • MOTORISTA — pagamento de uma corrida despachada pela casa, com valor
 //     combinado à mão (migration 066). Já existia.
 export default function Repasses() {
-  const [aba, setAba] = useState('operadores')
+  const [aba, setAba] = useState('fila')
   return (
     <div className="space-y-4">
       <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
-        {[['operadores', 'Operadores'], ['motoristas', 'Motoristas']].map(([id, label]) => (
+        {[['fila', 'Fila de liberação'], ['operadores', 'Operadores'], ['motoristas', 'Motoristas']].map(([id, label]) => (
           <button key={id} onClick={() => setAba(id)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               aba === id ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'
@@ -74,7 +74,170 @@ export default function Repasses() {
           </button>
         ))}
       </div>
-      {aba === 'operadores' ? <RepassesOperadores /> : <RepassesMotorista />}
+      {aba === 'fila' ? <FilaLiberacao />
+        : aba === 'operadores' ? <RepassesOperadores />
+        : <RepassesMotorista />}
+    </div>
+  )
+}
+
+// ── Fila de liberação ────────────────────────────────────────────────────────
+// Reservas CONCLUÍDAS com repasse do operador, ordenadas pela conclusão mais
+// antiga (completed_at ASC), com paginação/ordenação no servidor. READ-ONLY: a
+// ação "Liberar" (marcar pago, com revalidação e auditoria) entra na próxima
+// fase. Datas exibidas em America/Fortaleza.
+function fmtDataHora(iso) {
+  if (!iso) return '—'
+  try {
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Fortaleza', day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(iso))
+  } catch { return '—' }
+}
+function fmtR$(v) { return `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }
+function gwLabel(g) {
+  return g === 'pagarme' ? 'Pagar.me'
+    : g === 'mercado_pago' ? 'Mercado Pago'
+    : g === 'manual' ? 'Manual' : (g || '—')
+}
+const SIT_TAG = {
+  pronto_para_liberar:  ['Pronto para liberar',   'bg-green-500/15 text-green-400'],
+  pago:                 ['Repassado',             'bg-gray-600/30 text-gray-300'],
+  repassado_gateway:    ['Repassado (gateway)',   'bg-gray-600/30 text-gray-300'],
+  aguardando_pagamento: ['Aguardando pagamento',  'bg-yellow-500/15 text-yellow-400'],
+  conciliacao:          ['Conciliação',           'bg-yellow-500/15 text-yellow-400'],
+  bloqueado:            ['Bloqueado',             'bg-red-500/15 text-red-400'],
+  cancelado:            ['Cancelado',             'bg-red-500/15 text-red-400'],
+}
+function SituacaoTag({ r }) {
+  const [label, cls] = SIT_TAG[r.situacao] || [r.situacao, 'bg-gray-700 text-gray-300']
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${cls}`}
+      title={r.motivo_bloqueio || ''}>{label}</span>
+  )
+}
+function CardInd({ titulo, qtd, valor, destaque }) {
+  return (
+    <div className={`rounded-xl border p-3 ${destaque ? 'border-brand/40 bg-brand/5' : 'border-gray-800 bg-gray-900/40'}`}>
+      <p className="text-[11px] text-gray-500 leading-tight">{titulo}</p>
+      <p className="text-lg font-bold text-gray-100">{qtd ?? '—'}</p>
+      {valor != null && <p className="text-[11px] text-gray-400">{fmtR$(valor)}</p>}
+    </div>
+  )
+}
+
+function FilaLiberacao() {
+  const [page, setPage] = useState(1)
+  const [q, setQ] = useState('')
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
+  const [conciliacao, setConciliacao] = useState(false)
+  const pageSize = 30
+
+  const params = {
+    page, pageSize,
+    ...(q ? { q } : {}),
+    ...(de ? { from: de } : {}),
+    ...(ate ? { to: ate } : {}),
+    ...(conciliacao ? { conciliacao: '1' } : {}),
+  }
+
+  const ind  = useQuery({ queryKey: ['payout-indicadores'], queryFn: () => api.getPayoutsIndicadores() })
+  const fila = useQuery({ queryKey: ['payout-fila', params], queryFn: () => api.getPayoutsFila(params) })
+
+  const rows       = fila.data?.rows || []
+  const total      = fila.data?.total || 0
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <CardInd titulo="Aguardando conclusão" qtd={ind.data?.aguardando_conclusao?.qtd} />
+        <CardInd titulo="Prontos para liberar" qtd={ind.data?.pronto_para_liberar?.qtd} valor={ind.data?.pronto_para_liberar?.valor} destaque />
+        <CardInd titulo="Repassados"           qtd={ind.data?.repassados?.qtd}          valor={ind.data?.repassados?.valor} />
+        <CardInd titulo="Conciliação"          qtd={ind.data?.conciliacao?.qtd} />
+        <CardInd titulo="Bloqueados"           qtd={ind.data?.bloqueados?.qtd} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1) }} placeholder="Código da reserva"
+          className="rounded-lg bg-gray-800 border border-gray-700 px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-brand" />
+        <label className="text-xs text-gray-500">Conclusão de
+          <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPage(1) }}
+            className="ml-1 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-sm text-gray-200" /></label>
+        <label className="text-xs text-gray-500">até
+          <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPage(1) }}
+            className="ml-1 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-sm text-gray-200" /></label>
+        <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+          <input type="checkbox" checked={conciliacao} onChange={(e) => { setConciliacao(e.target.checked); setPage(1) }}
+            className="accent-brand" />
+          Conciliação (sem data de conclusão)
+        </label>
+      </div>
+
+      <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-x-auto">
+        {fila.isLoading ? <div className="py-10"><PageSpinner /></div> : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase text-gray-500 border-b border-gray-800">
+                <th className="px-3 py-2">Reserva</th>
+                <th className="px-3 py-2">Operador</th>
+                <th className="px-3 py-2">Conclusão</th>
+                <th className="px-3 py-2">Gateway</th>
+                <th className="px-3 py-2 text-right">Pago</th>
+                <th className="px-3 py-2 text-right">Plataforma</th>
+                <th className="px-3 py-2 text-right">Operador</th>
+                <th className="px-3 py-2">Situação</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-500">Nada na fila para este filtro.</td></tr>
+              )}
+              {rows.map((r) => (
+                <tr key={r.booking_id} className="border-b border-gray-800/60">
+                  <td className="px-3 py-2">
+                    <span className="font-mono text-gray-200">{r.booking_code}</span>
+                    <span className="block text-[11px] text-gray-500">{r.service_type === 'transfer' ? 'Transfer' : 'Passeio'}</span>
+                  </td>
+                  <td className="px-3 py-2 text-gray-300">{r.operador?.nome || '—'}</td>
+                  <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{fmtDataHora(r.completed_at)}</td>
+                  <td className="px-3 py-2 text-gray-400">{gwLabel(r.gateway)}</td>
+                  <td className="px-3 py-2 text-right text-gray-300 whitespace-nowrap">{fmtR$(r.valor_pago)}</td>
+                  <td className="px-3 py-2 text-right text-gray-400 whitespace-nowrap">{fmtR$(r.plataforma_valor)}</td>
+                  <td className="px-3 py-2 text-right font-medium text-gray-200 whitespace-nowrap">{r.operador_valor != null ? fmtR$(r.operador_valor) : '—'}</td>
+                  <td className="px-3 py-2"><SituacaoTag r={r} /></td>
+                  <td className="px-3 py-2 text-right">
+                    <button disabled title="Disponível na próxima fase (com revalidação e auditoria no servidor)"
+                      className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-500 cursor-not-allowed">
+                      Liberar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between text-sm text-gray-500">
+        <span>{total} reserva(s){fila.isFetching ? ' · atualizando…' : ''}</span>
+        <div className="flex items-center gap-2">
+          <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="px-3 py-1 rounded-lg bg-gray-800 disabled:opacity-40">Anterior</button>
+          <span>{page} / {totalPages}</span>
+          <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}
+            className="px-3 py-1 rounded-lg bg-gray-800 disabled:opacity-40">Próxima</button>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-amber-500/70 leading-relaxed">
+        Somente leitura por enquanto. A ação <b>Liberar</b> (marcar o repasse como pago,
+        com revalidação de todas as condições e auditoria no servidor) entra na próxima
+        fase. Ordenado pela conclusão mais antiga; datas em America/Fortaleza.
+      </p>
     </div>
   )
 }
