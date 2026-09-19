@@ -178,3 +178,80 @@ test('o cliente do operador expõe os dois métodos', () => {
   assert.match(apiJs, /getRecipientStatus:\s*\(\) => request\('\/api\/operator\/recipient-status'\)/)
   assert.match(apiJs, /registerRecipient:\s*\(\) => request\('\/api\/operator\/register-recipient'/)
 })
+
+// ── Status ao vivo e link de verificação ───────────────────────────────────
+
+const { getRecipient, kycLink } = await import('../src/payments/pagarme.js')
+
+test('getRecipient devolve só status e KYC — nunca conta bancária ou PIX', async () => {
+  const i = interceptar({ ok: true, status: 200, json: async () => ({
+    id: 're_x', status: 'active',
+    default_bank_account: { account_number: '55555' }, // veio na resposta…
+    kyc_details: { status: 'approved' },
+  }) })
+  try {
+    const info = await getRecipient('sk_test', 're_x')
+    assert.deepEqual(info, { id: 're_x', status: 'active', kyc_status: 'approved' })
+    assert.ok(!('default_bank_account' in info), '…mas não pode sair daqui')
+    assert.match(i.chamadas[0].url, /\/recipients\/re_x$/)
+  } finally { i.restaurar() }
+})
+
+test('kycLink devolve a URL do link de verificação', async () => {
+  const i = interceptar({ ok: true, status: 200, json: async () => ({ url: 'https://kyc.pagar.me/abc', base64_qrcode: 'iVBOR' }) })
+  try {
+    const r = await kycLink('sk_test', 're_x')
+    assert.equal(r.url, 'https://kyc.pagar.me/abc')
+    assert.equal(r.qrcode, 'iVBOR')
+    assert.match(i.chamadas[0].url, /\/recipients\/re_x\/kyc_link$/)
+    assert.equal(i.chamadas[0].init.method, 'POST')
+  } finally { i.restaurar() }
+})
+
+test('kycLink sem URL na resposta vira erro tratado, não sucesso vazio', async () => {
+  const i = interceptar({ ok: true, status: 200, json: async () => ({}) })
+  try {
+    await assert.rejects(() => kycLink('sk_test', 're_x'), /link de verificação/)
+  } finally { i.restaurar() }
+})
+
+test('o mapa de situação: só active é apto', () => {
+  // Reproduz a regra da rota para travá-la aqui — o único verde é 'active'.
+  const map = (s) => {
+    switch (String(s || '').toLowerCase()) {
+      case 'active': return 'apto'
+      case 'refused': return 'recusado'
+      case 'suspended': case 'blocked': case 'inactive': return 'suspenso'
+      default: return 'analise'
+    }
+  }
+  assert.equal(map('active'), 'apto')
+  assert.equal(map('registration'), 'analise')
+  assert.equal(map('refused'), 'recusado')
+  assert.equal(map('suspended'), 'suspenso')
+  assert.equal(map('coisa_nova'), 'analise', 'status desconhecido é conservador: análise, não apto')
+})
+
+test('a rota de status consulta o Pagar.me ao vivo quando já cadastrado', () => {
+  const i = rota.indexOf("router.get('/recipient-status'")
+  const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
+  assert.match(fn, /getRecipient/, 'ter o id não basta — o status decide se está apto')
+  assert.match(fn, /mapSituacaoRecebedor/)
+  assert.match(fn, /apto/)
+  // Falha do gateway não pode derrubar a tela de perfil.
+  assert.match(fn, /catch \(e\)/)
+})
+
+test('a rota de KYC gera o link só do recebedor do próprio operador', () => {
+  const i = rota.indexOf("router.post('/recipient-kyc-link'")
+  assert.notEqual(i, -1, 'rota de KYC não encontrada')
+  const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
+  assert.match(fn, /\.eq\('id', req\.user\.id\)/)
+  assert.ok(!/req\.params/.test(fn), 'nada de id vindo da URL')
+  assert.match(fn, /kycLink/)
+})
+
+test('o cliente do operador expõe o link de KYC', () => {
+  const apiJs = fs.readFileSync(new URL('../../operador/src/lib/api.js', import.meta.url), 'utf8')
+  assert.match(apiJs, /recipientKycLink:\s*\(\) => request\('\/api\/operator\/recipient-kyc-link'/)
+})

@@ -72,6 +72,58 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
   return data.id
 }
 
+// Consulta o status ATUAL de um recebedor. Só leitura. Devolve apenas o que a
+// tela precisa para dizer se a conta está apta — nunca conta bancária ou chave
+// PIX. O `status` do Pagar.me é a fonte da verdade: um recebedor recém-criado
+// nasce 'registration' (em análise de KYC) e só recebe com split quando vira
+// 'active'.
+export async function getRecipient(apiKey, recipientId) {
+  if (!apiKey) throw new Error('API Key do Pagar.me não configurada')
+  if (!recipientId) throw new Error('recipientId ausente')
+  const auth = Buffer.from(`${apiKey}:`).toString('base64')
+  const r = await fetch(`${BASE}/recipients/${encodeURIComponent(recipientId)}`, {
+    headers: { Authorization: `Basic ${auth}` },
+  })
+  if (!r.ok) {
+    const corpo = await r.text().catch(() => '')
+    console.error('[pagarme] consultar recebedor falhou:', r.status, corpo.slice(0, 200))
+    const e = new Error(`Pagar.me respondeu ${r.status} ao consultar o recebedor`)
+    e.status = r.status >= 400 && r.status < 500 ? 422 : 502
+    throw e
+  }
+  const x = await r.json().catch(() => ({}))
+  // Só o essencial. `status` e, quando houver, o detalhe do KYC — nada de dado
+  // bancário numa resposta que chega até a tela do operador.
+  return {
+    id:         x.id,
+    status:     x.status || null,
+    kyc_status: x?.kyc_details?.status || null,
+  }
+}
+
+// Gera o link de verificação (KYC) de um recebedor. É por ele que o operador
+// resolve pendências — ele não tem acesso ao painel do Pagar.me, só a
+// plataforma tem. Devolve a URL (e o QR, quando vier) para a plataforma repassar
+// ao operador.
+export async function kycLink(apiKey, recipientId) {
+  if (!apiKey) throw new Error('API Key do Pagar.me não configurada')
+  if (!recipientId) throw new Error('recipientId ausente')
+  const auth = Buffer.from(`${apiKey}:`).toString('base64')
+  const r = await fetch(`${BASE}/recipients/${encodeURIComponent(recipientId)}/kyc_link`, {
+    method:  'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+    body:    '{}',
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok || !data?.url) {
+    console.error('[pagarme] kyc_link falhou:', r.status, JSON.stringify(data).slice(0, 200))
+    const e = new Error('Não foi possível gerar o link de verificação agora. Tente de novo em instantes.')
+    e.status = r.status >= 400 && r.status < 500 ? 422 : 502
+    throw e
+  }
+  return { url: data.url, qrcode: data.base64_qrcode || null, expires_at: data.expires_at || null }
+}
+
 // Lista os recebedores da conta. Só leitura, usada pelo admin para descobrir o
 // `re_...` da própria plataforma sem ter de caçá-lo no painel do gateway —
 // que foi exatamente onde a integração do split emperrou.

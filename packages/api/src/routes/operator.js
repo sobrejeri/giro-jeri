@@ -67,6 +67,25 @@ async function mpGate(operatorId) {
 // Rótulo amigável do serviço para o texto da notificação
 const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
+// Traduz o `status` cru do recebedor Pagar.me para o que a tela precisa saber:
+// a conta está apta a receber com split, ou está em análise, recusada, ou
+// suspensa. 'active' é o único estado que recebe. Um status desconhecido é
+// tratado como análise (conservador): melhor pedir para aguardar do que
+// afirmar que está apto sem certeza.
+function mapSituacaoRecebedor(status) {
+  switch (String(status || '').toLowerCase()) {
+    case 'active':                        return 'apto';
+    case 'refused':                       return 'recusado';
+    case 'suspended':
+    case 'blocked':
+    case 'inactive':                      return 'suspenso';
+    case 'registration':
+    case 'affiliation':
+    case '':                              return 'analise';
+    default:                              return 'analise';
+  }
+}
+
 const PROFILE_FIELDS = `
   id, full_name, email, phone, document_type, document_number, birth_date,
   profile_photo_url, address, cep, partner_slug,
@@ -297,6 +316,24 @@ router.get('/recipient-status', async (req, res, next) => {
     if (!(user?.pix_key && user?.pix_key_type))                  missing.push('pix');
 
     const rid = user?.gateway_recipient_id || null;
+
+    // Estando cadastrado, o que decide de verdade é o STATUS no Pagar.me — não
+    // basta ter o id. Consulta ao vivo; se o gateway não responder, a tela
+    // ainda mostra "cadastrado", só sem o desfecho da análise.
+    let situacao = null;   // 'apto' | 'analise' | 'recusado' | 'suspenso' | 'desconhecido'
+    let apto = false;
+    if (rid && configured) {
+      try {
+        const { getRecipient } = await import('../payments/pagarme.js');
+        const info = await getRecipient(apiKey, rid);
+        situacao = mapSituacaoRecebedor(info.status);
+        apto = situacao === 'apto';
+      } catch (e) {
+        console.error('[operator] status do recebedor indisponível op=%s: %s', req.user.id, e.message);
+        situacao = 'desconhecido';
+      }
+    }
+
     res.json({
       configured,
       registered:   !!rid,
@@ -304,8 +341,43 @@ router.get('/recipient-status', async (req, res, next) => {
       recipient_id: rid ? String(rid).replace(/^(.{7}).+(.{4})$/, '$1…$2') : null,
       can_register: configured && !rid && missing.length === 0,
       missing,
+      situacao,
+      apto,
     });
   } catch (err) { next(err); }
+});
+
+// ── POST /api/operator/recipient-kyc-link ──────────────
+// Gera o link de verificação (KYC) do recebedor do operador. É como ele resolve
+// pendências sem acesso ao painel do Pagar.me (que é só da plataforma). Só do
+// PRÓPRIO recebedor (req.user.id).
+router.post('/recipient-kyc-link', async (req, res, next) => {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('gateway_recipient_id')
+      .eq('id', req.user.id)
+      .single();
+    const rid = user?.gateway_recipient_id;
+    if (!rid) return res.status(400).json({ error: 'Ative o recebimento automático antes de resolver pendências.' });
+
+    const { data: rows = [] } = await supabase
+      .from('system_settings')
+      .select('setting_key, setting_value')
+      .like('setting_key', 'payment_%');
+    const cfg = Object.fromEntries((rows || []).map((s) => [s.setting_key, s.setting_value]));
+    const { chaveDoPagarme } = await import('./payments.js');
+    const apiKey = chaveDoPagarme(cfg);
+    if (!apiKey) return res.status(400).json({ error: 'Pagar.me não está configurado.' });
+
+    const { kycLink } = await import('../payments/pagarme.js');
+    const link = await kycLink(apiKey, rid);
+    res.json(link);
+  } catch (err) {
+    if (err.status && err.message) return res.status(err.status).json({ error: err.message });
+    if (err.message) return res.status(400).json({ error: err.message });
+    next(err);
+  }
 });
 
 // ── POST /api/operator/register-recipient ──────────────

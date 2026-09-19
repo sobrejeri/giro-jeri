@@ -199,6 +199,7 @@ export const api = {
   // Pagar.me (recebedor do split) — self-service a partir dos dados do perfil
   getRecipientStatus: () => request('/api/operator/recipient-status'),
   registerRecipient:  () => request('/api/operator/register-recipient', { method: 'POST', body: {} }),
+  recipientKycLink:   () => request('/api/operator/recipient-kyc-link', { method: 'POST', body: {} }),
 
   // Notificações
   getNotifications:      ()    => request('/api/notifications'),

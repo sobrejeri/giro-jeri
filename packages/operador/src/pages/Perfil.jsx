@@ -73,11 +73,23 @@ function MeuLink({ slug }) {
 // aqui (documento + chave PIX). Sem isso, o split não fecha e a venda pelo
 // cartão cai inteira na plataforma, com repasse manual depois. O card só
 // aparece quando o administrador habilitou o Pagar.me.
+// A situação vinda do servidor vira uma faixa de status legível. 'apto' é o
+// único estado verde — é o que recebe com split. Os demais explicam o que
+// está acontecendo e o que dá para fazer.
+const SITUACAO = {
+  apto:        { cor: 'text-green-700',  Icone: CheckCircle, texto: 'Apto a receber com split' },
+  analise:     { cor: 'text-amber-700',  Icone: Loader2,     texto: 'Cadastro em análise pelo Pagar.me' },
+  recusado:    { cor: 'text-red-600',    Icone: AlertCircle, texto: 'Verificação recusada — precisa corrigir os dados' },
+  suspenso:    { cor: 'text-red-600',    Icone: AlertCircle, texto: 'Recebedor suspenso — fale com o suporte' },
+  desconhecido:{ cor: 'text-gray-500',   Icone: AlertCircle, texto: 'Cadastrado — status indisponível no momento' },
+}
+
 function PagarmeRecipient() {
   const qc = useQueryClient()
   const [err, setErr] = useState(null)
+  const [kyc, setKyc] = useState(null)   // { url } quando a plataforma gera o link
 
-  const { data: status, isLoading } = useQuery({
+  const { data: status, isLoading, isFetching } = useQuery({
     queryKey: ['pagarme-recipient-status'],
     queryFn:  () => api.getRecipientStatus(),
   })
@@ -92,12 +104,20 @@ function PagarmeRecipient() {
     onError: (e) => setErr(e?.message || 'Não foi possível ativar agora.'),
   })
 
+  const kycMut = useMutation({
+    mutationFn: () => api.recipientKycLink(),
+    onSuccess: (r) => { setErr(null); setKyc(r); if (r?.url) window.open(r.url, '_blank', 'noopener') },
+    onError: (e) => setErr(e?.message || 'Não foi possível gerar o link agora.'),
+  })
+
   // Enquanto carrega, ou quando a plataforma não habilitou o Pagar.me, o card
   // não aparece — evita oferecer algo que ainda não cobra por aqui.
   if (isLoading || !status?.configured) return null
 
   const faltaDoc = status.missing?.includes('documento')
   const faltaPix = status.missing?.includes('pix')
+  const sit = SITUACAO[status.situacao] || SITUACAO.desconhecido
+  const pendente = status.registered && !status.apto && status.situacao !== 'desconhecido'
 
   return (
     <Card>
@@ -114,11 +134,50 @@ function PagarmeRecipient() {
         </p>
 
         {status.registered ? (
-          <div className="flex items-center gap-1.5 text-sm font-medium text-green-700">
-            <CheckCircle size={15} /> Recebedor ativo
-            {status.recipient_id
-              ? <span className="text-gray-400 font-normal font-mono">· {status.recipient_id}</span>
-              : null}
+          <div className="space-y-3">
+            {/* Faixa de status ao vivo do Pagar.me */}
+            <div className={`flex items-center gap-1.5 text-sm font-medium ${sit.cor}`}>
+              <sit.Icone size={15} className={status.situacao === 'analise' ? 'animate-spin' : ''} />
+              {sit.texto}
+              <button
+                type="button"
+                onClick={() => qc.invalidateQueries({ queryKey: ['pagarme-recipient-status'] })}
+                disabled={isFetching}
+                className="ml-1 text-xs text-gray-400 hover:text-gray-600 underline disabled:opacity-50"
+              >
+                {isFetching ? 'atualizando…' : 'atualizar'}
+              </button>
+            </div>
+            {status.recipient_id && (
+              <p className="text-xs text-gray-400 font-mono">{status.recipient_id}</p>
+            )}
+
+            {status.apto && (
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Tudo certo — sua parte cai direto na sua chave PIX a cada venda no cartão.
+              </p>
+            )}
+
+            {/* Pendência: link de verificação do Pagar.me (o operador não tem
+                acesso ao painel; a plataforma gera o link para ele). */}
+            {pendente && (
+              <div>
+                <p className="text-xs text-gray-500 mb-2 leading-relaxed">
+                  {status.situacao === 'recusado'
+                    ? 'A verificação foi recusada. Reenvie seus dados pelo link abaixo para liberar os repasses.'
+                    : 'Falta concluir a verificação do Pagar.me. Abra o link, confirme seus dados e a conta fica apta a receber.'}
+                </p>
+                <Button type="button" variant="secondary" onClick={() => kycMut.mutate()} disabled={kycMut.isPending}>
+                  {kycMut.isPending ? 'Gerando link…' : 'Resolver pendência'}
+                </Button>
+                {kyc?.url && (
+                  <p className="text-xs text-gray-500 mt-2 break-all">
+                    Se a aba não abrir: <a href={kyc.url} target="_blank" rel="noreferrer" className="text-brand underline">{kyc.url}</a>
+                  </p>
+                )}
+              </div>
+            )}
+            {err && <p className="text-sm text-red-500">{err}</p>}
           </div>
         ) : status.can_register ? (
           <div>
@@ -127,8 +186,9 @@ function PagarmeRecipient() {
             </Button>
             {err && <p className="text-sm text-red-500 mt-2">{err}</p>}
             <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-              Usa o documento e a chave PIX do seu perfil. A ativação pode passar
-              por uma verificação do Pagar.me antes de liberar os repasses.
+              Usa o documento e a chave PIX do seu perfil. Depois de ativar, o
+              Pagar.me faz uma verificação — o status aparece aqui e você resolve
+              qualquer pendência por um link, sem sair do Turiva.
             </p>
           </div>
         ) : (
