@@ -4,7 +4,7 @@ import { z }         from 'zod'
 import { supabase }  from '../supabase.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
-import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived } from '../services/whatsapp.js'
+import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived, notifyOperatorDirectSale } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateAdvance, applyCoupon } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
@@ -2511,6 +2511,10 @@ router.post('/request', authenticate, async (req, res, next) => {
         title:       'Venda direta pelo seu link 🎉',
         body:        `${isTransfer ? 'Translado' : 'Passeio'}${rota ? ` · ${rota}` : ''} para ${fmtDateBR(booking.service_date)} (${bookingCode}). O cliente já pode pagar.`,
       })
+      // ...e no WhatsApp do operador também. A central do app avisava; o
+      // telefone não. Fire-and-forget: WhatsApp nunca derruba a criação da venda.
+      notifyOperatorDirectSale(supabase, booking, partner.id).catch((err) =>
+        console.error('[whatsapp] aviso de venda direta falhou:', err.message))
     } else {
       // Notifica os operadores da nova solicitação (ANTES do pagamento) —
       // elas aceitam e só então o cliente paga.
@@ -2705,6 +2709,12 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
         title:       'Venda direta pelo seu link 🎉',
         body:        `Pedido com ${bookings.length} serviço(s) pelo seu link. O cliente já pode pagar tudo junto.`,
       })
+      // WhatsApp do operador também (um aviso pelo pedido, usando o 1º serviço
+      // como resumo). Fire-and-forget.
+      if (bookings[0]) {
+        notifyOperatorDirectSale(supabase, bookings[0], partner.id).catch((err) =>
+          console.error('[whatsapp] aviso de venda direta (carrinho) falhou:', err.message))
+      }
     }
 
     res.json({

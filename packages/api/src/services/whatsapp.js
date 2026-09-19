@@ -582,6 +582,30 @@ export async function notifyOperatorPaymentReceived(supabase, booking) {
   await sendToMany([phone], message)
 }
 
+// Venda direta pelo link do operador: a reserva já nasce dela e o cliente vai
+// pagar. Diferente da fila, aqui NÃO há aceite — então o WhatsApp é o mesmo
+// aviso que a central do app dá, agora também no telefone. Vai só para o
+// operador dono do link.
+export async function notifyOperatorDirectSale(supabase, booking, operatorId) {
+  const alvo = operatorId || booking?.operator_id
+  if (!isWhatsappEnabled() || !alvo) return { skipped: true }
+  const phone = await userPhone(supabase, alvo)
+  if (!phone) return { skipped: true }
+  const { tipo, rota, data } = bookingSummary(booking)
+  const message =
+    `*TURIVA* · Venda direta pelo seu link 🎉\n` +
+    `\n` +
+    `${tipo}${rota ? `\n${rota}` : ''}\n` +
+    `🗓 ${data}\n` +
+    `💰 *${fmtBRL(booking.total_amount)}*\n` +
+    `🔖 ${booking.booking_code || '-'}\n` +
+    `\n` +
+    `O cliente já pode pagar. Assim que pagar, você recebe o aviso para seguir.\n` +
+    `👉 Abrir corrida: ${linkCoopRides()}`
+  await sendToMany([phone], message)
+  return { sent: true }
+}
+
 export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {
   if (!isWhatsappEnabled()) return { skipped: true };
 
