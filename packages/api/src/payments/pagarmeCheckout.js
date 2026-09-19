@@ -245,6 +245,10 @@ export async function criarCobrancaCartao({
         statement_descriptor: 'TURIVA',            // máx. 13 caracteres na fatura
         operation_type:       'auth_and_capture',
         card_token:           cardToken,
+        // O endereço de cobrança NÃO é tokenizado — ao cobrar com token, ele
+        // vai AQUI: payments[].credit_card.card.billing_address (confirmado na
+        // doc v5). Era o que faltava; nem o token nem customer.address bastavam.
+        ...(endereco ? { card: { billing_address: endereco } } : {}),
       },
     }],
   }
