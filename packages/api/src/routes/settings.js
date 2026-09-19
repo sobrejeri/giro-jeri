@@ -70,6 +70,13 @@ router.get('/public', async (_req, res, next) => {
     if (!map.payment_pagarme_public_key && process.env.PAGARME_PUBLIC_KEY) {
       map.payment_pagarme_public_key = process.env.PAGARME_PUBLIC_KEY;
     }
+    // Blindagem: esta rota é PÚBLICA. Só expõe a chave se ela for realmente
+    // pública (pk_). Se alguém digitar a Secret Key (sk_) no campo errado, ela
+    // é REMOVIDA em vez de vazar um segredo para clientes anônimos.
+    if (map.payment_pagarme_public_key &&
+        !String(map.payment_pagarme_public_key).trim().startsWith('pk_')) {
+      delete map.payment_pagarme_public_key;
+    }
 
     // ── Quais botões de cartão o checkout pode mostrar ───────────────────
     // CALCULADO, e só com o que está REALMENTE PRONTO. A lista bruta diria

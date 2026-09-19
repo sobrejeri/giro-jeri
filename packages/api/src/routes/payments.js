@@ -1968,6 +1968,10 @@ router.post('/intent', authenticate, async (req, res, next) => {
           card_last_four:         cobranca.ultimos4,
           card_brand:             cobranca.bandeira,
           installments:           cobranca.parcelas,
+          // Registra QUEM já foi pago pelo split — senão a tela de Repasses paga
+          // o operador de NOVO (o gateway já pagou). Mesma regra do Mercado Pago.
+          // null quando não houve split (repasse manual, aí o Repasses paga).
+          split_operator_id:      splitCobranca ? divisao.operatorId : null,
           raw_response_json:      { pagarme: true, inline: true, pedido_id: cobranca.pedido_id, repasse_manual: repasseManual },
         }).eq('id', linha.id)
 

@@ -439,6 +439,12 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
   const [cidade,  setCidade]  = useState('')
   const [uf,      setUf]      = useState('')
   const [cepBusca, setCepBusca] = useState(false)
+  // Idempotência: chave da TENTATIVA de pagar. Nasce UMA vez e sobrevive a erro
+  // ambíguo (timeout/rede) — repetir com a MESMA chave bate na UNIQUE de
+  // payment_attempt_id no servidor e NÃO gera segunda cobrança. Só é descartada
+  // num desfecho DEFINITIVO (aprovado/recusado), quando um novo envio é de fato
+  // uma cobrança nova. Mesmo padrão do Brick do Mercado Pago.
+  const tentativaRef = useRef(null)
 
   // Preenche rua/cidade/UF a partir do CEP (ViaCEP). Falha em silêncio: se não
   // achar, os campos ficam para o cliente digitar.
@@ -489,6 +495,8 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
     if (!cidade.trim() || uf.trim().length !== 2) { setErro('Informe cidade e UF (2 letras) do endereço.'); return }
 
     setBusy(true)
+    // Uma chave por tentativa; sobrevive a erro ambíguo para o retry dedupe.
+    if (!tentativaRef.current) tentativaRef.current = crypto.randomUUID()
     try {
       const billing = {
         line_1:   [numero.trim(), rua.trim()].filter(Boolean).join(', ').slice(0, 256) || numero.trim(),
@@ -511,13 +519,23 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
         // O antifraude lê o endereço no pedido (customer.address), não só no
         // token — por isso vai também pro backend.
         billing_address: billing,
+        // Idempotência: mesma tentativa → mesma chave. O servidor barra a
+        // segunda cobrança pela UNIQUE de payment_attempt_id.
+        payment_attempt_id: tentativaRef.current,
       })
       // Aprovado/processando → o pai já navegou. Recusado → mostra o motivo.
       if (result?.status === 'rejected') {
+        // DEFINITIVO: o próximo envio é uma cobrança nova (outro cartão) e
+        // precisa de chave nova, senão o servidor recusaria como duplicada.
+        tentativaRef.current = null
         setErro(result.message_key ? t(result.message_key) : t('payment.rejected.generic'))
         setBusy(false)
+      } else if (result?.status === 'approved') {
+        tentativaRef.current = null   // definitivo (o pai navega)
       }
     } catch (err) {
+      // AMBÍGUO (rede/timeout): NÃO descarta a chave — não sabemos se a cobrança
+      // saiu, e repetir com a mesma chave é o que impede a segunda.
       setErro(err?.message || t('payment.rejected.generic'))
       setBusy(false)
     }
