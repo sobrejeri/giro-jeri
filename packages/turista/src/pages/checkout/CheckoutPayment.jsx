@@ -484,15 +484,19 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
     setErro('')
     const num = soDigitos(number)
     const [mm, aa] = exp.split('/')
-    if (!docOk)                { setErro('Informe um CPF válido.'); return }
-    if (num.length < 13)       { setErro('Número do cartão inválido.'); return }
-    if (!holder.trim())        { setErro('Informe o nome impresso no cartão.'); return }
-    if (!mm || !aa || Number(mm) < 1 || Number(mm) > 12) { setErro('Validade inválida (MM/AA).'); return }
-    if (soDigitos(cvv).length < 3) { setErro('CVV inválido.'); return }
     const cepD = soDigitos(cep)
-    if (cepD.length !== 8)     { setErro('Informe um CEP válido (8 dígitos).'); return }
-    if (!numero.trim())        { setErro('Informe o número do endereço.'); return }
-    if (!cidade.trim() || uf.trim().length !== 2) { setErro('Informe cidade e UF (2 letras) do endereço.'); return }
+    // Todos os campos são obrigatórios — cada um com uma mensagem específica de
+    // "confira/informe", para o cliente saber exatamente o que corrigir.
+    if (!docOk)                     { setErro('Confira o CPF do pagador — informe os 11 dígitos.'); return }
+    if (num.length < 13)            { setErro('Confira o número do cartão — ele parece incompleto.'); return }
+    if (!holder.trim())             { setErro('Informe o nome impresso no cartão.'); return }
+    if (!mm || !aa || Number(mm) < 1 || Number(mm) > 12) { setErro('Confira a validade do cartão (MM/AA).'); return }
+    if (soDigitos(cvv).length < 3)  { setErro('Confira o CVV — são os 3 (ou 4) dígitos do verso.'); return }
+    if (cepD.length !== 8)          { setErro('Informe um CEP válido (8 dígitos).'); return }
+    if (!rua.trim())                { setErro('Informe a rua do endereço de cobrança.'); return }
+    if (!numero.trim())             { setErro('Informe o número do endereço de cobrança.'); return }
+    if (!cidade.trim())             { setErro('Informe a cidade do endereço de cobrança.'); return }
+    if (uf.trim().length !== 2)     { setErro('Informe a UF (2 letras) do endereço.'); return }
 
     setBusy(true)
     // Uma chave por tentativa; sobrevive a erro ambíguo para o retry dedupe.
@@ -528,7 +532,12 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
         // DEFINITIVO: o próximo envio é uma cobrança nova (outro cartão) e
         // precisa de chave nova, senão o servidor recusaria como duplicada.
         tentativaRef.current = null
-        setErro(result.message_key ? t(result.message_key) : t('payment.rejected.generic'))
+        // Mensagem acionável: o cliente confere os dados e tenta de novo. Se o
+        // servidor mandou um motivo específico (message_key ≠ genérico), usa ele.
+        const especifico = result.message_key && result.message_key !== 'payment.rejected.generic'
+          ? t(result.message_key) : ''
+        setErro(especifico ||
+          'Pagamento não aprovado. Confira os dados do cartão (número, validade, CVV) e o endereço, e tente novamente — ou use outro cartão.')
         setBusy(false)
       } else if (result?.status === 'approved') {
         tentativaRef.current = null   // definitivo (o pai navega)
@@ -536,7 +545,8 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
     } catch (err) {
       // AMBÍGUO (rede/timeout): NÃO descarta a chave — não sabemos se a cobrança
       // saiu, e repetir com a mesma chave é o que impede a segunda.
-      setErro(err?.message || t('payment.rejected.generic'))
+      setErro(err?.message ||
+        'Não foi possível concluir o pagamento agora. Confira sua conexão e os dados do cartão, e tente novamente.')
       setBusy(false)
     }
   }
@@ -547,11 +557,14 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
   return (
     <div className="rounded-2xl border border-gray-100 bg-gray-50/50 p-3 space-y-3">
       {erro && (
-        <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
-          <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
-          <p className="text-[12px] text-red-700 leading-relaxed">{erro}</p>
+        <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2.5">
+          <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
+          <p className="text-[12.5px] text-red-700 leading-relaxed font-medium">{erro}</p>
         </div>
       )}
+      <p className="text-[11px] text-gray-500 leading-relaxed">
+        Preencha <strong>todos os campos</strong> — são obrigatórios para aprovar o cartão.
+      </p>
       <div>
         <label className="block text-[12px] font-semibold text-gray-700 mb-1">CPF do pagador</label>
         <input inputMode="numeric" value={cpf} onChange={(e) => setCpf(fmtCpf(e.target.value))} placeholder="000.000.000-00" className={campo} />
