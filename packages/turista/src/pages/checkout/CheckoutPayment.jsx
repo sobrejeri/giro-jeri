@@ -508,6 +508,9 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
         card_token:     token,
         installments:   Number(inst) || 1,
         payer_doc:      cpfDigitos,
+        // O antifraude lê o endereço no pedido (customer.address), não só no
+        // token — por isso vai também pro backend.
+        billing_address: billing,
       })
       // Aprovado/processando → o pai já navegou. Recusado → mostra o motivo.
       if (result?.status === 'rejected') {

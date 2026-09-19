@@ -94,6 +94,16 @@ export const intentSchema = z.object({
     (v) => (typeof v === 'string' ? v.replace(/\D/g, '') : v),
     z.string().regex(/^(\d{11}|\d{14})$/, 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos)').optional(),
   ),
+  // Endereço de cobrança do cartão (Pagar.me inline). O antifraude da conta
+  // exige — vira customer.address no pedido. Campos livres e curtos; ausente
+  // simplesmente não adiciona o endereço.
+  billing_address: z.object({
+    line_1:   z.string().max(256).optional(),
+    zip_code: z.string().max(16).optional(),
+    city:     z.string().max(80).optional(),
+    state:    z.string().max(4).optional(),
+    country:  z.string().max(4).optional(),
+  }).optional(),
 }).refine(
   (d) => d.order_group_id || d.existing_booking_id || (d.service_id && d.service_date_iso && d.total_price),
   { message: 'Dados incompletos para criar reserva' },
@@ -1162,7 +1172,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       coupon_code, existing_booking_id, order_group_id,
       card_token, installments = 1, payment_method_id, issuer_id, payer_doc, device_id,
       payment_attempt_id, payer_email, checkout_pro, card_acquirer,
-      mp_public_key,
+      mp_public_key, billing_address,
     } = parsed.data
 
     const isGroup = !!order_group_id
@@ -1947,6 +1957,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
           clienteTelefone: usuario.data?.phone,
           cardToken:       card_token,
           parcelas:        installments,
+          billing:         billing_address,
           item: { id: service_id || booking.id, title: service_name || `Reserva ${bookingCode}` },
         })
 

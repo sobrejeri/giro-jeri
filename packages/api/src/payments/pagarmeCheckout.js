@@ -178,10 +178,29 @@ export async function criarCheckoutCartao({
 // Cobrança SÍNCRONA (auth_and_capture): o pedido volta pago ou recusado na
 // hora, então o chamador decide o desfecho no mesmo request — sem redirect,
 // sem esperar webhook. O split, quando existe, é o mesmo array do checkout.
+// Endereço de cobrança para o antifraude. Só entra se estiver COMPLETO — um
+// endereço parcial é pior que nenhum (o antifraude lê como dado inconsistente),
+// e o Pagar.me recusa o pedido inteiro por campo faltando.
+function enderecoDoCliente(billing) {
+  if (!billing) return null
+  const zip    = String(billing.zip_code || '').replace(/\D/g, '')
+  const city   = String(billing.city  || '').trim()
+  const state  = String(billing.state || '').trim().toUpperCase().slice(0, 2)
+  const line_1 = String(billing.line_1 || '').trim()
+  if (zip.length !== 8 || !city || state.length !== 2 || !line_1) return null
+  return {
+    line_1,
+    zip_code: zip,
+    city,
+    state,
+    country: String(billing.country || 'BR').trim().toUpperCase().slice(0, 2) || 'BR',
+  }
+}
+
 export async function criarCobrancaCartao({
   apiKey, amount, description, bookingId,
   clienteNome, clienteEmail, clienteDoc, clienteTelefone,
-  cardToken, parcelas = 1, item, split,
+  cardToken, parcelas = 1, item, split, billing,
 }) {
   if (!clienteEmail) {
     const e = new Error('Sua conta está sem e-mail cadastrado, e o gateway exige o e-mail do pagador. Adicione um e-mail no seu perfil e tente de novo.')
@@ -196,6 +215,7 @@ export async function criarCobrancaCartao({
   const centavos   = emCentavos(amount)
   const doc        = documentoDoCliente(clienteDoc)
   const tel        = telefonesDoCliente(clienteTelefone)
+  const endereco   = enderecoDoCliente(billing)
   const nParcelas  = Math.max(1, Math.min(Number(parcelas) || 1, 12))
 
   const corpo = {
@@ -211,6 +231,9 @@ export async function criarCobrancaCartao({
       email: clienteEmail,
       ...(doc ? doc : {}),
       ...(tel ? { phones: tel } : {}),
+      // Endereço de cobrança que o antifraude exige (o Pagar.me recusava com
+      // "billing | value is required" sem ele).
+      ...(endereco ? { address: endereco } : {}),
     },
     payments: [{
       payment_method: 'credit_card',
