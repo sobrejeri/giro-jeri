@@ -366,11 +366,14 @@ test('cartão no Pagar.me não cai na guarda de adquirente sem integração', as
 // falhasse — sobrando uma cobrança pendente sem desfecho possível.
 test('sem API Key, o Pagar.me recusa ANTES de gravar a linha', async () => {
   const src = await readFile(new URL('../src/routes/payments.js', import.meta.url), 'utf8')
+  // Sem janela de tamanho fixo: procura no bloco inteiro do Pagar.me. A janela
+  // de 2500 chars quebrava sempre que esse bloco crescia (split, endereço),
+  // acusando uma inversão que não existe.
   const i = src.indexOf("if (gateway === 'pagarme' && ['credit_card'")
-  const bloco = src.slice(i, i + 2500)
-  const iChave = bloco.indexOf('if (!chavePagarme)')
-  const iInsert = bloco.indexOf('inserirPagamento({')
-  assert.ok(iChave > 0 && iInsert > 0, 'os dois trechos precisam existir')
+  assert.ok(i > 0, 'o bloco do Pagar.me precisa existir')
+  const iChave = src.indexOf('if (!chavePagarme)', i)
+  const iInsert = src.indexOf('inserirPagamento({', i)
+  assert.ok(iChave > i && iInsert > i, 'os dois trechos precisam existir')
   assert.ok(iChave < iInsert, 'a checagem da chave precisa vir antes do INSERT')
 })
 
