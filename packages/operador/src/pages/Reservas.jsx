@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarCheck, Users, MapPin, Car, CheckCircle2, Compass,
@@ -606,7 +606,24 @@ export default function Reservas() {
   const { user }    = useAuth()
   const navigate    = useNavigate()
   const isElevated  = user?.user_type === 'admin'
-  const [tab,        setTab]       = useState('pending')
+  // Aba inicial pode vir da navegação (?tab=mine) — é assim que o pop-up de
+  // nova solicitação, depois de Aceitar, cai direto em "Minhas corridas".
+  const [searchParams, setSearchParams] = useSearchParams()
+  const abaValida = ['pending', 'cotacoes', 'mine']
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get('tab')
+    return abaValida.includes(t) ? t : 'pending'
+  })
+
+  // Depois de honrar o ?tab= inicial, limpa da URL para não "grudar" a aba num
+  // reload ou ao voltar pelo histórico.
+  useEffect(() => {
+    if (searchParams.get('tab')) {
+      const p = new URLSearchParams(searchParams)
+      p.delete('tab')
+      setSearchParams(p, { replace: true })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [toast,      setToast]     = useState(null)
   const [accepting,  setAccepting] = useState(null)
   const [acceptingCombo, setAcceptingCombo] = useState(null)

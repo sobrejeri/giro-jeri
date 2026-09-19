@@ -45,3 +45,17 @@ test('o pop-up é montado no Layout — aparece em qualquer tela', () => {
   assert.match(layout, /import NovaSolicitacaoPopup/)
   assert.match(layout, /<NovaSolicitacaoPopup \/>/)
 })
+
+test('aceitar leva às Solicitações na aba Minhas corridas', () => {
+  assert.match(fonte, /navigate\('\/reservas\?tab=mine'\)/,
+    'depois de aceitar, o operador deve cair direto em Minhas corridas')
+})
+
+test('a tela de Reservas honra ?tab=mine e limpa da URL depois', () => {
+  const reservas = fs.readFileSync(
+    new URL('../../operador/src/pages/Reservas.jsx', import.meta.url), 'utf8')
+  assert.match(reservas, /useSearchParams/, 'a aba inicial vem da navegação')
+  assert.match(reservas, /searchParams\.get\('tab'\)/)
+  assert.match(reservas, /abaValida\.includes\(t\)/, 'só aceita aba conhecida — nada de tab inválida')
+  assert.match(reservas, /p\.delete\('tab'\)/, 'não pode "grudar" a aba num reload')
+})

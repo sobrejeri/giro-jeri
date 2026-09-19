@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarCheck, Users, MapPin, Check, X, BellRing } from 'lucide-react'
 import { api } from '../lib/api'
@@ -41,6 +42,7 @@ const fmtBRL = (v) =>
 
 export default function NovaSolicitacaoPopup() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [dispensadas, setDispensadas] = useState(lerDispensadas)
   const [acao, setAcao] = useState(null)   // { id, tipo:'aceitar' } enquanto processa
   const [aviso, setAviso] = useState(null) // mensagem curta após aceitar/erro
@@ -80,6 +82,8 @@ export default function NovaSolicitacaoPopup() {
       setAviso({ tipo: 'ok', texto: 'Solicitação aceita! Aguardando o cliente pagar.' })
       setTimeout(() => setAviso(null), 3500)
       // Não precisa dispensar: aceita, ela sai de `pending` no próximo feed.
+      // Leva direto às Solicitações, já na aba "Minhas corridas".
+      navigate('/reservas?tab=mine')
     } catch (err) {
       const jaAceita = err?.message?.includes('já foi aceita') || err?.status === 409
       qc.invalidateQueries({ queryKey: ['operator-bookings'] })
