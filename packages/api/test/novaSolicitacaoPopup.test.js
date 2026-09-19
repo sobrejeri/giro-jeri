@@ -69,3 +69,26 @@ test('Minhas corridas é ordenada por data de solicitação (mais recente primei
   assert.match(bloco, /out\.sort\(/, 'a lista precisa ser ordenada')
   assert.match(bloco, /solicitadoEm\(b\) - solicitadoEm\(a\)/, 'mais recente primeiro')
 })
+
+test('venda direta e pagamento aparecem como aviso flutuante (não só no sino)', () => {
+  // Esses eventos não passam por aceite — a reserva já é do operador e paga —,
+  // então não entram em `pending`. O pop-up lê as notificações e os flutua.
+  assert.match(fonte, /queryKey:\s*\['notifications'\]/, 'o pop-up também observa as notificações')
+  assert.match(fonte, /\^Venda direta\|\^Pagamento recebido/, 'detecta os avisos informativos pelo título')
+  assert.match(fonte, /read_at/, 'só flutua o que ainda não foi lido')
+  assert.match(fonte, /JANELA_AVISO_MS/, 'só notificação recente, para não chover histórico ao abrir')
+})
+
+test('o card informativo tem "Ver reserva" e não tem aceitar/recusar', () => {
+  const i = fonte.indexOf('Card INFORMATIVO')
+  assert.notEqual(i, -1, 'o ramo do card informativo precisa existir')
+  const bloco = fonte.slice(i, fonte.indexOf('const tipo', i))
+  assert.match(bloco, /Ver reserva/)
+  assert.match(bloco, /dispensarAviso/)
+  assert.ok(!/aceitar\(/.test(bloco), 'venda direta já é do operador — nada de aceitar')
+})
+
+test('a solicitação a aceitar tem prioridade sobre o aviso informativo', () => {
+  assert.match(fonte, /const avisoAtual = !atual \? avisosInfo\[0\] : null/,
+    'com pendência de aceite, o aviso informativo espera')
+})

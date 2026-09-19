@@ -18,24 +18,38 @@ import { api } from '../lib/api'
 // atualizado; na de Reservas, os dois compartilham o cache.
 
 const CHAVE_DISPENSADAS = 'girojeri_op_solicitacoes_dispensadas'
+const CHAVE_AVISOS      = 'girojeri_op_avisos_vistos'
+
+// Avisos INFORMATIVOS (venda direta, pagamento recebido): esses não passam por
+// aceite — a reserva já é do operador e já paga —, então não entram no feed de
+// `pending`. Por isso o pop-up também lê as notificações e flutua estes como
+// aviso (com "Ver", sem aceitar/recusar). Detectados pelo início do título.
+const ehAvisoInformativo = (n) =>
+  /^Venda direta|^Pagamento recebido/.test(String(n?.title || ''))
+
+// Só flutua notificação recente — senão, ao abrir o app, choveria histórico.
+const JANELA_AVISO_MS = 20 * 60 * 1000
 
 function idDoItem(it) {
   return it.kind === 'leg' ? it.leg_id : it.id
 }
 
-function lerDispensadas() {
+function lerLista(chave) {
   try {
-    const arr = JSON.parse(localStorage.getItem(CHAVE_DISPENSADAS) || '[]')
+    const arr = JSON.parse(localStorage.getItem(chave) || '[]')
     return Array.isArray(arr) ? arr : []
   } catch { return [] }
 }
 
-function gravarDispensadas(ids) {
+function gravarLista(chave, ids) {
   try {
     // Guarda só as últimas 200 — o localStorage não é um histórico.
-    localStorage.setItem(CHAVE_DISPENSADAS, JSON.stringify(ids.slice(-200)))
+    localStorage.setItem(chave, JSON.stringify(ids.slice(-200)))
   } catch { /* modo privado / bloqueado — o aviso só volta a aparecer, sem quebrar */ }
 }
+
+const lerDispensadas   = () => lerLista(CHAVE_DISPENSADAS)
+const gravarDispensadas = (ids) => gravarLista(CHAVE_DISPENSADAS, ids)
 
 const fmtBRL = (v) =>
   `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -44,6 +58,7 @@ export default function NovaSolicitacaoPopup() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [dispensadas, setDispensadas] = useState(lerDispensadas)
+  const [avisosVistos, setAvisosVistos] = useState(() => lerLista(CHAVE_AVISOS))
   const [acao, setAcao] = useState(null)   // { id, tipo:'aceitar' } enquanto processa
   const [aviso, setAviso] = useState(null) // mensagem curta após aceitar/erro
 
@@ -54,14 +69,43 @@ export default function NovaSolicitacaoPopup() {
     staleTime:       3000,
   })
 
+  // Mesma query do sino (['notifications']); aqui num intervalo curto para o
+  // aviso de venda direta aparecer logo. Observadores compartilham o cache.
+  const { data: notifData } = useQuery({
+    queryKey:        ['notifications'],
+    queryFn:         () => api.getNotifications(),
+    refetchInterval: 12000,
+    staleTime:       6000,
+  })
+
   const pendentes = useMemo(() => {
     const lista = data?.pending || []
     const vistas = new Set(dispensadas)
     return lista.filter((it) => !vistas.has(idDoItem(it)))
   }, [data, dispensadas])
 
+  const avisosInfo = useMemo(() => {
+    const itens = notifData?.items || []
+    const vistos = new Set(avisosVistos)
+    const agora = Date.now()
+    return itens.filter((n) =>
+      ehAvisoInformativo(n) &&
+      !n.read_at &&
+      !vistos.has(n.id) &&
+      (agora - new Date(n.created_at).getTime()) < JANELA_AVISO_MS,
+    )
+  }, [notifData, avisosVistos])
+
   const atual = pendentes[0]
   const restantes = pendentes.length - 1
+  // Aceitar/recusar tem prioridade; o aviso informativo só aparece sem pendências.
+  const avisoAtual = !atual ? avisosInfo[0] : null
+
+  function dispensarAviso(n) {
+    const nova = [...avisosVistos, n.id]
+    setAvisosVistos(nova)
+    gravarLista(CHAVE_AVISOS, nova)
+  }
 
   function dispensar(item) {
     const nova = [...dispensadas, idDoItem(item)]
@@ -99,7 +143,46 @@ export default function NovaSolicitacaoPopup() {
     }
   }
 
-  if (!atual && !aviso) return null
+  if (!atual && !aviso && !avisoAtual) return null
+
+  // ── Card INFORMATIVO (venda direta / pagamento) — sem aceitar/recusar ──────
+  // Tem prioridade menor que a solicitação a aceitar, mas quando não há
+  // pendência ele é o que aparece. Só "Ver" (leva às Operações) e dispensar.
+  if (!atual && !aviso && avisoAtual) {
+    return (
+      <div className="fixed inset-x-0 bottom-0 sm:inset-x-auto sm:right-5 sm:bottom-5 z-[60] p-3 sm:p-0 pointer-events-none">
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-auto w-full sm:w-[360px] mx-auto bg-white rounded-2xl border-2 border-brand/30 shadow-2xl shadow-brand/20 overflow-hidden animate-[slideUp_.25s_ease-out]"
+        >
+          <div className="bg-brand px-4 py-2.5 flex items-center gap-2 text-white">
+            <BellRing size={15} className="animate-pulse" />
+            <span className="text-[12px] font-bold uppercase tracking-wide truncate">{avisoAtual.title}</span>
+          </div>
+          <div className="p-4 space-y-3">
+            <p className="text-[13px] text-gray-700 leading-relaxed">{avisoAtual.message_body}</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => dispensarAviso(avisoAtual)}
+                className="flex-1 flex items-center justify-center gap-1.5 border border-gray-200 text-gray-600 font-bold px-3 py-2.5 rounded-xl text-[13px] active:scale-95 transition-all"
+              >
+                <X size={15} /> Dispensar
+              </button>
+              <button
+                type="button"
+                onClick={() => { dispensarAviso(avisoAtual); navigate('/reservas?tab=mine') }}
+                className="flex-[1.4] flex items-center justify-center gap-1.5 bg-brand text-white font-bold px-3 py-2.5 rounded-xl text-[13px] active:scale-95 transition-all shadow-md shadow-brand/30"
+              >
+                <Check size={15} /> Ver reserva
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const tipo   = atual?.service_type === 'tour' ? 'Passeio' : 'Transfer'
   const isLeg  = atual?.kind === 'leg'
