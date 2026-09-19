@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import NovaSolicitacaoPopup from '../NovaSolicitacaoPopup'
 
 export default function Layout() {
   const [navOpen, setNavOpen] = useState(false)
@@ -15,6 +16,8 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+      {/* Aviso flutuante de nova solicitação — em qualquer tela do operador. */}
+      <NovaSolicitacaoPopup />
     </div>
   )
 }
