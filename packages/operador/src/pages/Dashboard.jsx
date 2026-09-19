@@ -24,6 +24,9 @@ const TODAY = format(new Date(), 'yyyy-MM-dd')
 
 // Ordem do pipeline + estilos de status
 const STATUS = {
+  // Antes do pagamento a corrida não é despachável — este selo deixa isso
+  // explícito na linha, no lugar de "Atribuído" (que sugeria pronta para sair).
+  awaiting_payment:  { label: 'Aguardando pagamento', pct: 15, dot: 'bg-amber-500', chip: 'bg-amber-50 text-amber-600', bar: '#f59e0b' },
   new:               { label: 'Novo',         pct: 12,  dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-600',     bar: '#3b82f6' },
   awaiting_dispatch: { label: 'Ag. Despacho', pct: 28,  dot: 'bg-amber-500',  chip: 'bg-amber-50 text-amber-600',   bar: '#f59e0b' },
   confirmed:         { label: 'Confirmado',   pct: 42,  dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-600',     bar: '#14b8a6' },
@@ -53,6 +56,18 @@ function andamentoDe(b) {
   const s = b?.status_operational || 'new'
   if (POSTERIORES.includes(s)) return s
   return hasOS(b) ? 'dispatched' : s
+}
+
+// Só reserva PAGA pode ser despachada. Antes do pagamento a tela mostrava
+// "Atribuído" com botão Despachar — o operador despachava algo que o cliente
+// ainda não pagou. A tela de Despacho já filtrava por isso; a de Operações não.
+const estaPago = (b) => b?.status_commercial === 'paid'
+
+// O selo da linha: sem pagamento (e não cancelada), é "Aguardando pagamento",
+// não o estado operacional — que só passa a valer depois que a corrida é paga.
+function seloDe(b) {
+  if (!estaPago(b) && b?.status_operational !== 'cancelled') return STATUS.awaiting_payment
+  return STATUS[andamentoDe(b)] || STATUS.new
 }
 
 const AVATAR_COLORS = [
@@ -115,7 +130,8 @@ function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
 
 // ── Linha da tabela ────────────────────────────────────
 function BookingRow({ b, onAssign, operador }) {
-  const st       = STATUS[andamentoDe(b)] || STATUS.new
+  const pago     = estaPago(b)
+  const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?'
   const dateStr  = b.service_date
@@ -196,27 +212,37 @@ function BookingRow({ b, onAssign, operador }) {
       {/* Ações */}
       <td className="py-3 pl-3 pr-5">
         <div className="flex items-center justify-end gap-1">
-          {dispatched && (
-            <button
-              onClick={() => downloadOrderPDF(b, formForOS, operador)}
-              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Baixar OS em PDF"
-            >
-              <FileText size={15} />
-            </button>
+          {/* Sem pagamento não há despacho. Em vez do botão, um rótulo — a
+              corrida aparece na lista, mas não dá para despachá-la ainda. */}
+          {!pago ? (
+            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-600 bg-amber-50 rounded-lg px-2.5 py-1.5">
+              <Clock size={13} /> Aguardando pagamento
+            </span>
+          ) : (
+            <>
+              {dispatched && (
+                <button
+                  onClick={() => downloadOrderPDF(b, formForOS, operador)}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Baixar OS em PDF"
+                >
+                  <FileText size={15} />
+                </button>
+              )}
+              <button
+                onClick={() => onAssign(b)}
+                className={`flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors ${
+                  dispatched
+                    ? 'text-gray-500 hover:bg-gray-100 border border-gray-200'
+                    : 'text-white bg-brand hover:bg-brand/90'
+                }`}
+                title={dispatched ? 'Editar despacho' : 'Despachar'}
+              >
+                {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
+                {dispatched ? 'Editar' : 'Despachar'}
+              </button>
+            </>
           )}
-          <button
-            onClick={() => onAssign(b)}
-            className={`flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors ${
-              dispatched
-                ? 'text-gray-500 hover:bg-gray-100 border border-gray-200'
-                : 'text-white bg-brand hover:bg-brand/90'
-            }`}
-            title={dispatched ? 'Editar despacho' : 'Despachar'}
-          >
-            {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
-            {dispatched ? 'Editar' : 'Despachar'}
-          </button>
         </div>
       </td>
     </tr>
@@ -225,7 +251,8 @@ function BookingRow({ b, onAssign, operador }) {
 
 // ── Card mobile (mesma info da linha da tabela) ────────
 function BookingCardMobile({ b, onAssign, operador }) {
-  const st       = STATUS[andamentoDe(b)] || STATUS.new
+  const pago     = estaPago(b)
+  const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
   const dateStr  = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), 'dd MMM', { locale: ptBR }) : '—'
@@ -269,26 +296,34 @@ function BookingCardMobile({ b, onAssign, operador }) {
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <span className="text-[13px] font-extrabold text-gray-800">{fmt(b.total_amount)}</span>
         <div className="flex items-center gap-1.5">
-          {dispatched && (
-            <button
-              onClick={() => downloadOrderPDF(b, formForOS, operador)}
-              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Baixar OS em PDF"
-            >
-              <FileText size={15} />
-            </button>
+          {!pago ? (
+            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-600 bg-amber-50 rounded-lg px-2.5 py-1.5">
+              <Clock size={13} /> Aguardando pagamento
+            </span>
+          ) : (
+            <>
+              {dispatched && (
+                <button
+                  onClick={() => downloadOrderPDF(b, formForOS, operador)}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Baixar OS em PDF"
+                >
+                  <FileText size={15} />
+                </button>
+              )}
+              <button
+                onClick={() => onAssign(b)}
+                className={`flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors ${
+                  dispatched
+                    ? 'text-gray-500 hover:bg-gray-100 border border-gray-200'
+                    : 'text-white bg-brand hover:bg-brand/90'
+                }`}
+              >
+                {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
+                {dispatched ? 'Editar' : 'Despachar'}
+              </button>
+            </>
           )}
-          <button
-            onClick={() => onAssign(b)}
-            className={`flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors ${
-              dispatched
-                ? 'text-gray-500 hover:bg-gray-100 border border-gray-200'
-                : 'text-white bg-brand hover:bg-brand/90'
-            }`}
-          >
-            {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
-            {dispatched ? 'Editar' : 'Despachar'}
-          </button>
         </div>
       </div>
     </div>
