@@ -25,13 +25,16 @@ export default function Rotas() {
   const prefMap = useMemo(() => {
     const map = {}
     for (const p of preferences) {
-      if (p.entity_type === 'transfer_route') map[p.entity_id] = p.is_active
+      // entity_type do backend é 'transfer' (enum + CHECK do banco só aceitam
+      // tour/vehicle/transfer/modal). O antigo 'transfer_route' era recusado
+      // com 400 "entity_type inválido", então o toggle nunca salvava.
+      if (p.entity_type === 'transfer') map[p.entity_id] = p.is_active
     }
     return map
   }, [preferences])
 
   const toggleMut = useMutation({
-    mutationFn: ({ id, next }) => api.setPreference('transfer_route', id, next),
+    mutationFn: ({ id, next }) => api.setPreference('transfer', id, next),
     onSuccess:  () => {
       setToggleError(null)
       qc.invalidateQueries({ queryKey: ['operator-prefs'] })
