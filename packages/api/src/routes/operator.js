@@ -71,7 +71,8 @@ const PROFILE_FIELDS = `
   id, full_name, email, phone, document_type, document_number, birth_date,
   profile_photo_url, address, cep, partner_slug,
   pix_key_type, pix_key,
-  bank_name, bank_agency, bank_account_number, bank_account_type, bank_document
+  bank_name, bank_agency, bank_account_number, bank_account_type, bank_document,
+  gateway_recipient_id
 `.trim();
 
 const profileSchema = z.object({
@@ -266,6 +267,102 @@ router.patch('/profile', async (req, res, next) => {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
     }
+    next(err);
+  }
+});
+
+// ── GET /api/operator/recipient-status ─────────────────
+// O que a tela de Perfil precisa para mostrar o recebimento automático pelo
+// Pagar.me: se a plataforma habilitou (tem chave), se este operador já é
+// recebedor, e — se ainda não — o que falta cadastrar. Só leitura; o id vem
+// mascarado (a tela não precisa do valor inteiro).
+router.get('/recipient-status', async (req, res, next) => {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('gateway_recipient_id, document_number, pix_key, pix_key_type')
+      .eq('id', req.user.id)
+      .single();
+
+    const { data: rows = [] } = await supabase
+      .from('system_settings')
+      .select('setting_key, setting_value')
+      .like('setting_key', 'payment_%');
+    const cfg = Object.fromEntries((rows || []).map((s) => [s.setting_key, s.setting_value]));
+    const { chaveDoPagarme } = await import('./payments.js');
+    const configured = !!chaveDoPagarme(cfg);
+
+    const missing = [];
+    if (!String(user?.document_number || '').replace(/\D/g, '')) missing.push('documento');
+    if (!(user?.pix_key && user?.pix_key_type))                  missing.push('pix');
+
+    const rid = user?.gateway_recipient_id || null;
+    res.json({
+      configured,
+      registered:   !!rid,
+      // re_abcd…wxyz — o suficiente para conferir, sem carregar o id inteiro na tela.
+      recipient_id: rid ? String(rid).replace(/^(.{7}).+(.{4})$/, '$1…$2') : null,
+      can_register: configured && !rid && missing.length === 0,
+      missing,
+    });
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/operator/register-recipient ──────────────
+// O operador se cadastra como recebedor no Pagar.me a partir dos dados que já
+// preencheu no perfil. Sem isso o split não fecha e a venda cai inteira na
+// plataforma (repasse manual). É self-service e só com os dados do PRÓPRIO
+// operador (req.user.id) — nunca de outro.
+router.post('/register-recipient', async (req, res, next) => {
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select(`id, full_name, email, user_type, document_type, document_number,
+               gateway_recipient_id, pix_key_type, pix_key,
+               bank_name, bank_agency, bank_account_number, bank_account_type, bank_document`)
+      .eq('id', req.user.id)
+      .single();
+    if (error) throw error;
+
+    // Idempotente: já sendo recebedor, não cria outro (recebedor duplicado é
+    // dinheiro caindo em dois lugares e reconciliação manual depois).
+    if (user.gateway_recipient_id) {
+      return res.json({ recipient_id: user.gateway_recipient_id, already: true });
+    }
+
+    // MESMA fonte de verdade da cobrança: se o recebedor nascer numa conta e a
+    // cobrança acontecer em outra, o split é recusado no pagamento, longe daqui.
+    const { data: rows = [] } = await supabase
+      .from('system_settings')
+      .select('setting_key, setting_value')
+      .like('setting_key', 'payment_%');
+    const cfg = Object.fromEntries((rows || []).map((s) => [s.setting_key, s.setting_value]));
+    const { chaveDoPagarme } = await import('./payments.js');
+    const apiKey = chaveDoPagarme(cfg);
+    if (!apiKey) {
+      return res.status(400).json({ error: 'O recebimento pelo Pagar.me ainda não foi habilitado pelo administrador.' });
+    }
+
+    const { createRecipient } = await import('../payments/pagarme.js');
+    const recipientId = await createRecipient(user, apiKey, cfg.payment_gateway_env || 'sandbox');
+
+    await supabase.from('users')
+      .update({ gateway_recipient_id: recipientId, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    await supabase.from('audit_logs').insert({
+      user_id:         req.user.id,
+      entity_type:     'users',
+      entity_id:       user.id,
+      action_type:     'register_recipient_self',
+      new_values_json: { gateway: 'pagarme', recipient_id: recipientId },
+    });
+
+    res.json({ recipient_id: recipientId });
+  } catch (err) {
+    // A mensagem de createRecipient é sobre os dados do próprio operador —
+    // acionável e não é segredo.
+    if (err.message) return res.status(400).json({ error: err.message });
     next(err);
   }
 });

@@ -68,6 +68,83 @@ function MeuLink({ slug }) {
   )
 }
 
+// ── Recebimento automático via Pagar.me (recebedor do split) ───
+// O operador vira recebedor no Pagar.me a partir dos dados que já preencheu
+// aqui (documento + chave PIX). Sem isso, o split não fecha e a venda pelo
+// cartão cai inteira na plataforma, com repasse manual depois. O card só
+// aparece quando o administrador habilitou o Pagar.me.
+function PagarmeRecipient() {
+  const qc = useQueryClient()
+  const [err, setErr] = useState(null)
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: ['pagarme-recipient-status'],
+    queryFn:  () => api.getRecipientStatus(),
+  })
+
+  const registerMut = useMutation({
+    mutationFn: () => api.registerRecipient(),
+    onSuccess: () => {
+      setErr(null)
+      qc.invalidateQueries({ queryKey: ['pagarme-recipient-status'] })
+      qc.invalidateQueries({ queryKey: ['operator-profile'] })
+    },
+    onError: (e) => setErr(e?.message || 'Não foi possível ativar agora.'),
+  })
+
+  // Enquanto carrega, ou quando a plataforma não habilitou o Pagar.me, o card
+  // não aparece — evita oferecer algo que ainda não cobra por aqui.
+  if (isLoading || !status?.configured) return null
+
+  const faltaDoc = status.missing?.includes('documento')
+  const faltaPix = status.missing?.includes('pix')
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <CreditCard size={16} className="text-gray-400" />
+          <h2 className="text-sm font-semibold text-gray-700">Recebimento automático (Pagar.me)</h2>
+        </div>
+      </CardHeader>
+      <CardBody>
+        <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+          Ative para receber sua parte de cada venda no cartão direto pela sua
+          chave PIX, já com a comissão da plataforma descontada — sem repasse manual.
+        </p>
+
+        {status.registered ? (
+          <div className="flex items-center gap-1.5 text-sm font-medium text-green-700">
+            <CheckCircle size={15} /> Recebedor ativo
+            {status.recipient_id
+              ? <span className="text-gray-400 font-normal font-mono">· {status.recipient_id}</span>
+              : null}
+          </div>
+        ) : status.can_register ? (
+          <div>
+            <Button type="button" onClick={() => registerMut.mutate()} disabled={registerMut.isPending}>
+              {registerMut.isPending ? 'Ativando…' : 'Ativar recebimento automático'}
+            </Button>
+            {err && <p className="text-sm text-red-500 mt-2">{err}</p>}
+            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+              Usa o documento e a chave PIX do seu perfil. A ativação pode passar
+              por uma verificação do Pagar.me antes de liberar os repasses.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">
+            Para ativar, cadastre
+            {faltaDoc && faltaPix ? ' seu CPF/CNPJ e uma chave PIX'
+              : faltaDoc ? ' seu CPF/CNPJ'
+              : ' uma chave PIX'}
+            {' '}acima e salve o perfil.
+          </p>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
 // ── Recebimento via Mercado Pago (split de pagamentos) ─────────
 // O operador conecta a própria conta MP por OAuth; depois disso, sua parte de
 // cada reserva cai direto na conta dela, já com a comissão da plataforma
@@ -240,6 +317,9 @@ export default function Perfil() {
     mutationFn: (body) => api.updateProfile(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['operator-profile'] })
+      // Documento ou PIX podem ter mudado — o card do Pagar.me recalcula se já
+      // dá para ativar (missing → can_register).
+      qc.invalidateQueries({ queryKey: ['pagarme-recipient-status'] })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     },
@@ -477,6 +557,9 @@ export default function Perfil() {
 
       {/* Recebimento via Mercado Pago (split automático) */}
       <MercadoPagoConnect />
+
+      {/* Recebimento automático via Pagar.me (recebedor do split) */}
+      <PagarmeRecipient />
 
       {/* Dados Bancários */}
       <Card>

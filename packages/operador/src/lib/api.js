@@ -196,6 +196,10 @@ export const api = {
   getMpConnectUrl: () => request('/api/mp/connect-url'),
   disconnectMp:    () => request('/api/mp/disconnect', { method: 'POST', body: {} }),
 
+  // Pagar.me (recebedor do split) — self-service a partir dos dados do perfil
+  getRecipientStatus: () => request('/api/operator/recipient-status'),
+  registerRecipient:  () => request('/api/operator/register-recipient', { method: 'POST', body: {} }),
+
   // Notificações
   getNotifications:      ()    => request('/api/notifications'),
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
