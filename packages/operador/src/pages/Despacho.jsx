@@ -188,6 +188,20 @@ function GroupedList({ list, onDispatch, onStart, onComplete, operador }) {
 // nomeado. São OPCIONAIS: sem a chave o despacho segue e a corrida sai — o que
 // fica pendente é o repasse, que o admin resolve depois. Travar a operação por
 // causa de um dado de pagamento seria pior que pagar com um dia de atraso.
+// Tudo obrigatório para despachar, MENOS as observações. Uma fonte só de
+// verdade para o botão e para o submit — se divergirem, o botão libera algo
+// que o submit recusa (ou o contrário).
+function podeDespachar(f) {
+  return !!(
+    f.real_vehicle_text.trim() &&
+    f.driver_name.trim() &&
+    f.driver_phone.trim() &&
+    f.driver_document.trim() &&
+    f.driver_pix_key.trim() &&
+    f.driver_pix_key_type.trim()
+  )
+}
+
 const FORM_VAZIO = {
   real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '',
   driver_document: '', driver_pix_key: '', driver_pix_key_type: '',
@@ -341,8 +355,10 @@ export default function Despacho() {
 
   function handleSubmit(e) {
     e.preventDefault()
-    // Obrigatórios (item 9): veículo, motorista e WhatsApp do motorista.
-    if (!form.real_vehicle_text.trim() || !form.driver_name.trim() || !form.driver_phone.trim()) return
+    // Obrigatórios: veículo, motorista, WhatsApp E os dados de repasse (CPF/CNPJ,
+    // chave PIX e tipo). Só Observações fica livre. Espelha o `podeDespachar`
+    // usado para habilitar o botão — os dois têm de concordar.
+    if (!podeDespachar(form)) return
     // O despacho vai SOZINHO, com o mesmo corpo de sempre. O PDF da OS é um
     // extra e sai numa chamada separada, depois (ver onSuccess do assignMut) —
     // assim nada relacionado ao anexo pode atrasar ou impedir o despacho.
@@ -492,17 +508,17 @@ export default function Despacho() {
             <div>
               <p className="text-[12px] font-bold text-gray-800">Dados para o repasse</p>
               <p className="text-[11px] text-gray-500">
-                Opcional — sem isso a corrida sai igual, só o pagamento fica pendente.
+                Obrigatório — é para onde o admin manda o valor da corrida.
               </p>
             </div>
-            <Input label="CPF / CNPJ de quem executa" placeholder="000.000.000-00"
+            <Input label="CPF / CNPJ de quem executa *" placeholder="000.000.000-00"
               value={form.driver_document}
               onChange={(e) => setForm({ ...form, driver_document: e.target.value })} />
             <div className="grid grid-cols-[1fr_9rem] gap-2">
-              <Input label="Chave PIX" placeholder="chave para receber"
+              <Input label="Chave PIX *" placeholder="chave para receber"
                 value={form.driver_pix_key}
                 onChange={(e) => setForm({ ...form, driver_pix_key: e.target.value })} />
-              <Select label="Tipo" value={form.driver_pix_key_type}
+              <Select label="Tipo *" value={form.driver_pix_key_type}
                 onChange={(e) => setForm({ ...form, driver_pix_key_type: e.target.value })}>
                 {TIPOS_PIX.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </Select>
@@ -512,11 +528,11 @@ export default function Despacho() {
           <Textarea label="Observações para o motorista" rows={2} value={form.dispatch_notes}
             onChange={(e) => setForm({ ...form, dispatch_notes: e.target.value })} />
           {(() => {
-            const canDispatch = form.real_vehicle_text.trim() && form.driver_name.trim() && form.driver_phone.trim()
+            const canDispatch = podeDespachar(form)
             return (
               <>
                 {!canDispatch && (
-                  <p className="text-[11px] text-amber-600">Preencha veículo, motorista e WhatsApp para confirmar o despacho.</p>
+                  <p className="text-[11px] text-amber-600">Preencha veículo, motorista, WhatsApp e os dados de repasse (CPF/CNPJ, chave PIX e tipo). Só as observações são opcionais.</p>
                 )}
                 {errMsg && (
                   <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{errMsg}</p>
