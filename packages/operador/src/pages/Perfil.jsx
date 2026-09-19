@@ -121,17 +121,15 @@ function PagarmeRecipient() {
   const pendente = status.registered && !status.apto && status.situacao !== 'desconhecido'
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CreditCard size={16} className="text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Recebimento automático (Pagar.me)</h2>
-        </div>
-      </CardHeader>
-      <CardBody>
+    <div className="mt-4 pt-4 border-t border-gray-100">
+      <div className="flex items-center gap-2 mb-2">
+        <CreditCard size={15} className="text-gray-400" />
+        <h3 className="text-sm font-semibold text-gray-700">Recebimento automático no cartão</h3>
+      </div>
+      <div>
         <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-          Ative para receber sua parte de cada venda no cartão direto pela sua
-          chave PIX, já com a comissão da plataforma descontada — sem repasse manual.
+          Ative para receber sua parte de cada venda no cartão direto nesta chave
+          PIX, já com a comissão da plataforma descontada — sem repasse manual.
         </p>
 
         {status.registered ? (
@@ -196,18 +194,18 @@ function PagarmeRecipient() {
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">
             {faltaTipoPix && !faltaDoc ? (
               <>Sua chave PIX está preenchida, mas falta escolher o <b>tipo</b> dela
-                {' '}(CPF, e-mail, telefone…) em <b>Chave PIX para Recebimento</b> acima. Selecione e salve o perfil.</>
+                {' '}(CPF, e-mail, telefone…) acima. Selecione e salve o perfil.</>
             ) : (
               <>Para ativar, cadastre
-                {faltaDoc && (faltaPix || faltaTipoPix) ? ' seu CPF/CNPJ e o tipo + a chave PIX'
-                  : faltaDoc ? ' seu CPF/CNPJ'
-                  : ' uma chave PIX'}
-                {' '}acima e salve o perfil.</>
+                {faltaDoc && (faltaPix || faltaTipoPix) ? ' seu CPF/CNPJ (nos Dados Pessoais) e o tipo + a chave PIX acima'
+                  : faltaDoc ? ' seu CPF/CNPJ nos Dados Pessoais'
+                  : ' uma chave PIX acima'}
+                {' '}e salve o perfil.</>
             )}
           </p>
         )}
-      </CardBody>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -579,12 +577,14 @@ export default function Perfil() {
         </CardBody>
       </Card>
 
-      {/* Chave PIX */}
+      {/* Chave PIX + recebimento automático (Pagar.me) no MESMO card: a chave
+          PIX é o destino do repasse automático, então separá-los em dois cards
+          de "PIX" só confundia. */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <CreditCard size={16} className="text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-700">Chave PIX para Recebimento</h2>
+            <h2 className="text-sm font-semibold text-gray-700">Recebimento por PIX</h2>
           </div>
         </CardHeader>
         <CardBody>
@@ -618,14 +618,15 @@ export default function Perfil() {
               Os repasses serão enviados para esta chave após a conclusão dos serviços.
             </p>
           )}
+
+          {/* Ativação do recebimento automático (Pagar.me), no mesmo card —
+              some sozinho quando o Pagar.me não está habilitado. */}
+          <PagarmeRecipient />
         </CardBody>
       </Card>
 
       {/* Recebimento via Mercado Pago (split automático) */}
       <MercadoPagoConnect />
-
-      {/* Recebimento automático via Pagar.me (recebedor do split) */}
-      <PagarmeRecipient />
 
       {/* Dados Bancários */}
       <Card>
