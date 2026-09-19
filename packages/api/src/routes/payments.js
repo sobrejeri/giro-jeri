@@ -860,6 +860,35 @@ async function reconciliarTentativa(payment) {
     booking_id: payment.booking_id, gateway_transaction_id: payment.gateway_transaction_id }
 }
 
+// Versão Pagar.me da reconciliação: a tentativa já virou pedido, então em vez de
+// cobrar de novo consulta o estado real no gateway e devolve ao app o desfecho —
+// aprovado, recusado ou ainda pendente. `consultarPedido` nunca lança.
+async function reconciliarTentativaPagarme(payment, apiKey) {
+  const { consultarPedido, estadoDoPedido } = await import('../payments/pagarmeCheckout.js')
+  const pedidoId = payment.gateway_transaction_id || payment.raw_response_json?.pedido_id || null
+  let estado = 'pending'
+  if (pedidoId) {
+    const pedido = await consultarPedido(apiKey, pedidoId)
+    if (pedido) estado = estadoDoPedido(pedido)
+  }
+  if (estado === 'approved') {
+    await onPaymentApproved(payment)
+    return { success: true, reconciliado: true, status: 'approved',
+      payment_id: payment.id, booking_id: payment.booking_id,
+      booking_code: payment.bookings?.booking_code, amount: payment.amount_gross }
+  }
+  if (estado === 'failed') {
+    await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+    return { status: 'rejected', payment_id: payment.id, booking_id: payment.booking_id,
+      booking_code: payment.bookings?.booking_code, amount: payment.amount_gross,
+      message_key: 'payment.rejected.generic', error_code: payment.status_detail || null }
+  }
+  // Indefinido: o app segue pelo /status, sem segunda cobrança.
+  return { success: true, reconciliado: true, status: 'in_process',
+    payment_id: payment.id, booking_id: payment.booking_id,
+    booking_code: payment.bookings?.booking_code, amount: payment.amount_gross }
+}
+
 // Estados comerciais em que a reserva AINDA PODE SER PAGA.
 //
 // `payment_failed` anda junto com `awaiting_payment`: nos dois o dinheiro não
@@ -1902,9 +1931,38 @@ router.post('/intent', authenticate, async (req, res, next) => {
       const base = String(process.env.TURISTA_URL || '').replace(/\/+$/, '')
       if (!base) console.error('[pagarme] TURISTA_URL não configurada — cliente ficará sem link de volta')
 
+      // ── Idempotência do cartão INLINE (mesma proteção do Mercado Pago) ──────
+      // Reserva a tentativa ANTES de cobrar. Retry com a MESMA chave NÃO gera
+      // segunda cobrança: se já virou pedido, reconcilia e devolve o estado real
+      // ("já pago"); se está em voo, 202 e o app acompanha pelo /status. Só o
+      // cartão inline entra aqui — o checkout hospedado segue insert direto.
+      if (card_token && payment_attempt_id) {
+        const reserva = await reservarTentativa({
+          attemptId:     payment_attempt_id,
+          bookingId:     booking.id,
+          orderGroupId:  isGroup ? order_group_id : null,
+          amount:        chargedTotal,
+          paymentMethod: payment_method,
+          gateway:       'pagarme',
+        })
+        if (reserva.modo === 'existente') {
+          return res.json(await reconciliarTentativaPagarme(reserva.payment, chavePagarme))
+        }
+        if (reserva.modo === 'em_voo') {
+          return res.status(202).json({
+            success: true, status: 'processing',
+            payment_id: reserva.paymentId, booking_id: booking.id,
+            booking_code: bookingCode, amount: chargedTotal,
+            user_message: 'Estamos confirmando seu pagamento. Aguarde alguns instantes.',
+          })
+        }
+        if (reserva.modo !== 'indisponivel') tentativaReservadaId = reserva.paymentId
+      }
+
       // A linha ANTES do pedido, pelo mesmo motivo do Checkout Pro: o link de
       // retorno carrega o id DELA, e é assim que a tela de processamento sabe
-      // o que consultar quando o cliente volta.
+      // o que consultar quando o cliente volta. Com tentativa reservada (inline),
+      // isto ATUALIZA a linha reservada em vez de inserir outra.
       const { payment: linha, error: erroLinha } = await inserirPagamento({
         booking_id:         booking.id,
         ...(isGroup ? { order_group_id } : {}),
@@ -1917,7 +1975,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
         currency:           'BRL',
         status:             'pending',
         ...(payment_attempt_id ? { payment_attempt_id } : {}),
-      })
+      }, tentativaReservadaId)
       if (erroLinha) throw erroLinha
 
       // Split ANTES de chamar o gateway. Quando NÃO dá para dividir (cooperativa
@@ -1945,7 +2003,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       // Sem token, segue o fluxo hospedado (redirect) de sempre, logo abaixo.
       if (card_token) {
         const { criarCobrancaCartao } = await import('../payments/pagarmeCheckout.js')
-        const cobranca = await criarCobrancaCartao({
+        const cobranca = await comChamadaMarcada(tentativaReservadaId, () => criarCobrancaCartao({
           apiKey:          chavePagarme,
           split:           splitCobranca,
           amount:          chargedTotal,
@@ -1959,7 +2017,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
           parcelas:        installments,
           billing:         billing_address,
           item: { id: service_id || booking.id, title: service_name || `Reserva ${bookingCode}` },
-        })
+        }))
 
         // Grava o pedido na linha (pedido_id vira o gateway_transaction_id, que
         // o /status usa para consultar o desfecho no caso raro de pendência).
