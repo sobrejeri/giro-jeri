@@ -114,9 +114,8 @@ function PagarmeRecipient() {
   // não aparece — evita oferecer algo que ainda não cobra por aqui.
   if (isLoading || !status?.configured) return null
 
-  const faltaDoc     = status.missing?.includes('documento')
-  const faltaPix     = status.missing?.includes('pix')
-  const faltaTipoPix = status.missing?.includes('pix_tipo')
+  const faltaDoc   = status.missing?.includes('documento')
+  const faltaBanco = status.missing?.includes('banco')
   const sit = SITUACAO[status.situacao] || SITUACAO.desconhecido
   const pendente = status.registered && !status.apto && status.situacao !== 'desconhecido'
 
@@ -128,8 +127,8 @@ function PagarmeRecipient() {
       </div>
       <div>
         <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-          Ative para receber sua parte de cada venda no cartão direto nesta chave
-          PIX, já com a comissão da plataforma descontada — sem repasse manual.
+          Ative para receber sua parte de cada venda no cartão direto na sua conta
+          bancária, já com a comissão da plataforma descontada — sem repasse manual.
         </p>
 
         {status.registered ? (
@@ -153,7 +152,7 @@ function PagarmeRecipient() {
 
             {status.apto && (
               <p className="text-xs text-gray-500 leading-relaxed">
-                Tudo certo — sua parte cai direto na sua chave PIX a cada venda no cartão.
+                Tudo certo — sua parte cai na sua conta bancária a cada venda no cartão.
               </p>
             )}
 
@@ -185,23 +184,18 @@ function PagarmeRecipient() {
             </Button>
             {err && <p className="text-sm text-red-500 mt-2">{err}</p>}
             <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-              Usa o documento e a chave PIX do seu perfil. Depois de ativar, o
+              Usa o documento e a conta bancária do seu perfil. Depois de ativar, o
               Pagar.me faz uma verificação — o status aparece aqui e você resolve
               qualquer pendência por um link, sem sair do Turiva.
             </p>
           </div>
         ) : (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">
-            {faltaTipoPix && !faltaDoc ? (
-              <>Sua chave PIX está preenchida, mas falta escolher o <b>tipo</b> dela
-                {' '}(CPF, e-mail, telefone…) acima. Selecione e salve o perfil.</>
-            ) : (
-              <>Para ativar, cadastre
-                {faltaDoc && (faltaPix || faltaTipoPix) ? ' seu CPF/CNPJ (nos Dados Pessoais) e o tipo + a chave PIX acima'
-                  : faltaDoc ? ' seu CPF/CNPJ nos Dados Pessoais'
-                  : ' uma chave PIX acima'}
-                {' '}e salve o perfil.</>
-            )}
+            Para ativar, cadastre
+            {faltaDoc && faltaBanco ? ' seu CPF/CNPJ (nos Dados Pessoais) e o banco, agência e conta (em Dados Bancários, abaixo)'
+              : faltaDoc ? ' seu CPF/CNPJ nos Dados Pessoais'
+              : ' seu banco, agência e conta em Dados Bancários (abaixo)'}
+            {' '}e salve o perfil. O Pagar.me exige conta bancária — a chave PIX sozinha não basta.
           </p>
         )}
       </div>
@@ -321,6 +315,23 @@ const ACCOUNT_TYPES = [
   { value: 'corrente', label: 'Conta Corrente' },
   { value: 'poupanca', label: 'Conta Poupança' },
 ]
+
+// Bancos com o CÓDIGO febraban — o Pagar.me exige o código, não o nome. O valor
+// é salvo em `bank_name` como "260 - Nubank" (sem migration nova): o backend lê
+// os 3 dígitos da esquerda. Lista dos bancos e carteiras digitais mais usados
+// por aqui; dá para crescer sem tocar em mais nada.
+const BANCOS = [
+  ['001', 'Banco do Brasil'], ['104', 'Caixa Econômica'], ['237', 'Bradesco'],
+  ['341', 'Itaú'],            ['033', 'Santander'],       ['260', 'Nubank'],
+  ['077', 'Banco Inter'],     ['336', 'C6 Bank'],         ['323', 'Mercado Pago'],
+  ['290', 'PagBank (PagSeguro)'], ['380', 'PicPay'],      ['212', 'Banco Original'],
+  ['756', 'Sicoob'],          ['748', 'Sicredi'],         ['085', 'Ailos'],
+  ['422', 'Banco Safra'],     ['041', 'Banrisul'],        ['070', 'BRB'],
+  ['208', 'BTG Pactual'],     ['655', 'Neon'],            ['136', 'Unicred'],
+]
+
+// "260 - Nubank" → "260". Casa o valor salvo em bank_name com o item da lista.
+const codigoDoNome = (nome) => (String(nome || '').match(/^\s*(\d{3})\b/) || [])[1] || ''
 
 const DOC_TYPES = [
   { value: 'cpf',  label: 'CPF',  placeholder: '000.000.000-00',      maxLength: 14 },
@@ -634,17 +645,29 @@ export default function Perfil() {
           <div className="flex items-center gap-2">
             <Building2 size={16} className="text-gray-400" />
             <h2 className="text-sm font-semibold text-gray-700">Dados Bancários</h2>
-            <span className="text-xs text-gray-400 font-normal">(opcional — para TED/DOC)</span>
+            <span className="text-xs text-gray-400 font-normal">para o recebimento automático</span>
           </div>
         </CardHeader>
         <CardBody>
           <div className="space-y-4">
-            <Input
+            {/* Seletor com o CÓDIGO do banco: o Pagar.me exige o código, não o
+                nome. O valor é salvo como "260 - Nubank" em bank_name; o backend
+                lê os 3 dígitos. Um banco fora da lista pode ser digitado como
+                "código - nome" no campo, mas a lista cobre o comum. */}
+            <Select
               label="Banco"
-              placeholder="Ex: Nubank, Banco do Brasil, Caixa"
-              value={form.bank_name}
-              onChange={(e) => set('bank_name', e.target.value)}
-            />
+              value={codigoDoNome(form.bank_name)}
+              onChange={(e) => {
+                const cod = e.target.value
+                const nome = BANCOS.find(([c]) => c === cod)?.[1] || ''
+                set('bank_name', cod ? `${cod} - ${nome}` : '')
+              }}
+            >
+              <option value="">Selecione o banco</option>
+              {BANCOS.map(([cod, nome]) => (
+                <option key={cod} value={cod}>{cod} — {nome}</option>
+              ))}
+            </Select>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <Input
                 label="Agência"

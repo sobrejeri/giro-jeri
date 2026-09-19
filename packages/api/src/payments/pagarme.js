@@ -1,11 +1,37 @@
 const BASE = 'https://api.pagar.me/core/v5'
 
+// Código febraban (3 dígitos) do banco. Preferimos a coluna `bank_code`; se ela
+// não existir (ainda não há migration), caímos nos dígitos à ESQUERDA de
+// `bank_name`, porque o seletor de bancos salva "260 - Nubank". Nunca os
+// dígitos da AGÊNCIA — esse era o bug antigo (agência "1234" virava banco 123).
+export function codigoDoBanco(user) {
+  const doCampo = String(user?.bank_code || '').replace(/\D/g, '')
+  if (doCampo.length === 3) return doCampo
+  const m = String(user?.bank_name || '').match(/^\s*(\d{3})\b/)
+  return m ? m[1] : ''
+}
+
+// Separa a conta em número e dígito verificador. "55555-0" → {num:'55555',
+// dv:'0'}. Sem traço, o último dígito é o DV. O Pagar.me v5 quer os dois campos
+// separados.
+function separaConta(bruto) {
+  const s = String(bruto || '').trim()
+  if (s.includes('-')) {
+    const [a, b] = s.split('-')
+    return { num: a.replace(/\D/g, ''), dv: b.replace(/\D/g, '').slice(0, 2) }
+  }
+  const d = s.replace(/\D/g, '')
+  return { num: d.slice(0, -1), dv: d.slice(-1) }
+}
+
 // Cria um recebedor no Pagar.me (o destino da fatia do operador no split).
 // Devolve o id (re_xxx) que entra na regra de split de cada cobrança.
 //
-// Fail-closed e SEM inventar dado: sem documento, ou sem uma forma de repasse
-// de verdade (PIX ou conta com código de banco), a função recusa com uma
-// mensagem acionável em vez de mandar um recebedor pela metade para o gateway.
+// Fail-closed e SEM inventar dado: sem documento ou sem conta bancária
+// completa, recusa com mensagem acionável em vez de mandar um recebedor pela
+// metade. O Pagar.me EXIGE a conta bancária (`default_bank_account`) — provado
+// em produção: "The default_bank_account field is required." A chave PIX
+// sozinha não basta; ela entra como método extra quando existe.
 export async function createRecipient(user, apiKey, env = 'sandbox') {
   if (!apiKey) throw new Error('API Key do Pagar.me não configurada em Configurações → Pagamentos')
 
@@ -15,19 +41,16 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
   }
   const isCompany = user.document_type === 'cnpj' || doc.length === 14
 
-  const temPix = !!(user.pix_key && user.pix_key_type)
+  const bankCode = codigoDoBanco(user)
+  const agencia  = String(user.bank_agency || '').replace(/\D/g, '')
+  const conta    = separaConta(user.bank_account_number)
+  const contaOk  = bankCode.length === 3 && agencia.length >= 1 && conta.num.length >= 1 && conta.dv.length >= 1
 
-  // Conta bancária só entra com o CÓDIGO do banco (febraban, 3 dígitos). O
-  // perfil guarda o nome do banco como texto livre ("Nubank"), sem código — e o
-  // Pagar.me exige o código. Antes, o campo `bank` recebia os 3 primeiros
-  // dígitos da AGÊNCIA, o que apontava para um banco aleatório. Enquanto não
-  // coletarmos o código de verdade, o repasse vai pela chave PIX.
-  const bankCode = String(user.bank_code || '').replace(/\D/g, '')
-  const temConta = bankCode.length === 3 && !!user.bank_account_number && !!user.bank_agency
-
-  if (!temPix && !temConta) {
-    throw new Error('Cadastre uma chave PIX no perfil para receber sua parte automaticamente')
+  if (!contaOk) {
+    throw new Error('Cadastre banco (na lista), agência e conta com dígito em Dados Bancários para ativar o recebimento')
   }
+
+  const temPix = !!(user.pix_key && user.pix_key_type)
 
   const auth = Buffer.from(`${apiKey}:`).toString('base64')
 
@@ -40,18 +63,18 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
     // Referência externa = id do operador. Deixa reconciliar recebedor↔usuário
     // depois sem ter de casar nome ou documento.
     ...(user.id ? { code: String(user.id) } : {}),
+    default_bank_account: {
+      holder_name:        user.full_name,
+      holder_type:        isCompany ? 'company' : 'individual',
+      holder_document:    String(user.bank_document || doc).replace(/\D/g, ''),
+      bank:               bankCode,
+      branch_number:      agencia,
+      account_number:     conta.num,
+      account_check_digit: conta.dv,
+      type:               user.bank_account_type === 'poupanca' ? 'savings' : 'checking',
+    },
+    // PIX é método EXTRA quando existe — não substitui a conta bancária.
     ...(temPix ? { pix_key: { type: user.pix_key_type, key: String(user.pix_key).trim() } } : {}),
-    ...(temConta ? {
-      default_bank_account: {
-        holder_name:     user.full_name,
-        holder_type:     isCompany ? 'company' : 'individual',
-        holder_document: String(user.bank_document || doc).replace(/\D/g, ''),
-        bank:            bankCode,
-        branch_number:   String(user.bank_agency).replace(/\D/g, ''),
-        account_number:  String(user.bank_account_number).replace(/\D/g, ''),
-        type:            user.bank_account_type === 'poupanca' ? 'savings' : 'checking',
-      },
-    } : {}),
   }
 
   const res = await fetch(`${BASE}/recipients`, {

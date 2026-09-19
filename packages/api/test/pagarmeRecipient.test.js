@@ -1,15 +1,16 @@
 // Cadastro de recebedor do operador no Pagar.me (o destino da fatia dele no
-// split). Duas metades:
+// split). Três metades:
 //
 // 1. `createRecipient` monta o corpo certo e RECUSA (sem chamar o gateway)
-//    quando falta dado — em vez de mandar um recebedor pela metade. O bug que
-//    isto trava: o campo `bank` era preenchido com os 3 primeiros dígitos da
-//    AGÊNCIA, apontando para um banco aleatório; e recebedor sem PIX nem conta
-//    válida era enviado assim mesmo.
+//    quando falta dado. O Pagar.me EXIGE conta bancária — provado em produção:
+//    "The default_bank_account field is required." A chave PIX sozinha não
+//    basta. E o código do banco (febraban) NUNCA sai dos dígitos da agência —
+//    esse era o bug antigo (agência "1234" virava banco 123).
 //
 // 2. A rota self-service do operador é só dos dados DELE, idempotente e usa a
-//    MESMA chave da cobrança — senão o recebedor nasce numa conta e a cobrança
-//    acontece em outra, e o split é recusado longe da causa.
+//    MESMA chave da cobrança.
+//
+// 3. Status ao vivo e link de KYC para resolver pendências.
 //
 // Nenhuma chamada real ao Pagar.me: o fetch é interceptado.
 
@@ -20,7 +21,7 @@ import fs from 'node:fs'
 process.env.SUPABASE_URL ||= 'https://exemplo.supabase.co'
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'chave-de-teste'
 
-const { createRecipient } = await import('../src/payments/pagarme.js')
+const { createRecipient, codigoDoBanco } = await import('../src/payments/pagarme.js')
 
 function interceptar(resposta = { ok: true, status: 200, json: async () => ({ id: 're_novo', status: 'registration' }) }) {
   const original = globalThis.fetch
@@ -32,108 +33,107 @@ function interceptar(resposta = { ok: true, status: 200, json: async () => ({ id
   return { chamadas, restaurar: () => { globalThis.fetch = original } }
 }
 
-const OPERADOR_PIX = {
+// Operador completo: CNPJ + conta bancária (banco pelo nome "260 - Nubank",
+// como o seletor salva) + PIX como extra.
+const OPERADOR = {
   id: 'op-1', full_name: 'Copper Transportes', email: 'copper@exemplo.com',
-  document_type: 'cpf', document_number: '390.533.447-05',
+  document_type: 'cnpj', document_number: '20.653.342/0001-18',
+  bank_name: '260 - Nubank', bank_agency: '0001', bank_account_number: '55555-0',
+  bank_account_type: 'corrente',
   pix_key_type: 'cpf', pix_key: '39053344705',
 }
+
+// ── codigoDoBanco ──────────────────────────────────────────────────────────
+
+test('o código do banco vem do bank_code, ou dos 3 dígitos à esquerda do nome', () => {
+  assert.equal(codigoDoBanco({ bank_code: '260' }), '260')
+  assert.equal(codigoDoBanco({ bank_name: '260 - Nubank' }), '260')
+  assert.equal(codigoDoBanco({ bank_name: '001 — Banco do Brasil' }), '001')
+  assert.equal(codigoDoBanco({ bank_name: 'Nubank' }), '', 'nome sem código não vira código')
+  assert.equal(codigoDoBanco({ bank_agency: '1234' }), '', 'agência NUNCA é código de banco')
+})
 
 // ── createRecipient: monta e recusa ────────────────────────────────────────
 
 test('sem API Key não chama o gateway', async () => {
   const i = interceptar()
   try {
-    await assert.rejects(() => createRecipient(OPERADOR_PIX, ''), /API Key/)
+    await assert.rejects(() => createRecipient(OPERADOR, ''), /API Key/)
     assert.equal(i.chamadas.length, 0)
   } finally { i.restaurar() }
 })
 
-test('sem documento, recusa com mensagem acionável — não inventa recebedor', async () => {
+test('sem documento, recusa sem chamar o gateway', async () => {
   const i = interceptar()
   try {
-    await assert.rejects(
-      () => createRecipient({ ...OPERADOR_PIX, document_number: '' }, 'sk_test'),
-      /CPF ou CNPJ/)
-    assert.equal(i.chamadas.length, 0, 'não pode chamar o gateway sem documento')
-  } finally { i.restaurar() }
-})
-
-test('sem PIX e sem conta com código de banco, recusa', async () => {
-  const i = interceptar()
-  try {
-    await assert.rejects(
-      () => createRecipient({ ...OPERADOR_PIX, pix_key: '', pix_key_type: '' }, 'sk_test'),
-      /chave PIX/)
+    await assert.rejects(() => createRecipient({ ...OPERADOR, document_number: '' }, 'sk_test'), /CPF ou CNPJ/)
     assert.equal(i.chamadas.length, 0)
   } finally { i.restaurar() }
 })
 
-test('com PIX, monta o corpo e devolve o id do recebedor', async () => {
+test('sem conta bancária completa, recusa — PIX sozinho não basta', async () => {
   const i = interceptar()
   try {
-    const id = await createRecipient(OPERADOR_PIX, 'sk_test')
+    await assert.rejects(
+      () => createRecipient({ id: 'x', full_name: 'X', email: 'x@x.com',
+        document_type: 'cpf', document_number: '39053344705',
+        pix_key_type: 'cpf', pix_key: '39053344705' }, 'sk_test'),
+      /banco|agência|conta|Dados Bancários/)
+    assert.equal(i.chamadas.length, 0, 'não pode chamar o gateway sem conta bancária')
+  } finally { i.restaurar() }
+})
+
+test('banco sem código (nome livre) recusa — e a agência não vira código', async () => {
+  const i = interceptar()
+  try {
+    await assert.rejects(
+      () => createRecipient({ ...OPERADOR, bank_name: 'Nubank', bank_agency: '1234' }, 'sk_test'),
+      /banco|Dados Bancários/)
+    assert.equal(i.chamadas.length, 0, 'sem código de banco, nada é enviado')
+  } finally { i.restaurar() }
+})
+
+test('com conta completa, monta default_bank_account e devolve o id', async () => {
+  const i = interceptar()
+  try {
+    const id = await createRecipient(OPERADOR, 'sk_test')
     assert.equal(id, 're_novo')
     assert.equal(i.chamadas.length, 1)
     const [c] = i.chamadas
     assert.match(c.url, /\/core\/v5\/recipients$/)
-    assert.match(c.init.headers.Authorization, /^Basic /, 'auth Basic com a chave')
+    assert.match(c.init.headers.Authorization, /^Basic /)
     const body = JSON.parse(c.init.body)
-    assert.equal(body.document, '39053344705', 'documento só com dígitos')
-    assert.equal(body.type, 'individual')
-    assert.deepEqual(body.pix_key, { type: 'cpf', key: '39053344705' })
-    assert.equal(body.code, 'op-1', 'referência externa = id do operador, para reconciliar')
-    assert.ok(!('default_bank_account' in body), 'sem código de banco, não manda conta')
-  } finally { i.restaurar() }
-})
-
-test('CNPJ vira recebedor company', async () => {
-  const i = interceptar()
-  try {
-    await createRecipient({ ...OPERADOR_PIX, document_type: 'cnpj', document_number: '64.984.203/0001-42',
-      pix_key_type: 'cnpj', pix_key: '64984203000142' }, 'sk_test')
-    const body = JSON.parse(i.chamadas[0].init.body)
+    assert.equal(body.document, '20653342000118', 'documento só com dígitos')
     assert.equal(body.type, 'company')
-    assert.equal(body.document_type, 'cnpj')
+    assert.equal(body.code, 'op-1')
+    const conta = body.default_bank_account
+    assert.ok(conta, 'a conta bancária é obrigatória para o Pagar.me')
+    assert.equal(conta.bank, '260', 'código vem do nome "260 - Nubank", nunca da agência')
+    assert.equal(conta.branch_number, '0001')
+    assert.equal(conta.account_number, '55555', 'número sem o dígito verificador')
+    assert.equal(conta.account_check_digit, '0', 'o dígito verificador vai separado')
+    assert.equal(conta.type, 'checking')
+    // PIX é extra quando existe, não substitui a conta.
+    assert.deepEqual(body.pix_key, { type: 'cpf', key: '39053344705' })
   } finally { i.restaurar() }
 })
 
-test('NUNCA usa os 3 primeiros dígitos da agência como código do banco', async () => {
-  // O bug original: bank = bank_agency.slice(0,3). Uma agência "1234" viraria
-  // banco "123", que é outro banco. Agora conta bancária só entra com um
-  // bank_code de verdade — que o cadastro ainda não coleta —, então o corpo
-  // não pode conter default_bank_account montado a partir da agência.
+test('poupança e código pelo bank_code também funcionam', async () => {
   const i = interceptar()
   try {
-    await createRecipient({
-      ...OPERADOR_PIX,
-      bank_name: 'Nubank', bank_agency: '1234', bank_account_number: '55555-0',
-      bank_account_type: 'corrente',
-    }, 'sk_test')
-    const body = JSON.parse(i.chamadas[0].init.body)
-    assert.ok(!body.default_bank_account,
-      'conta bancária sem código febraban não pode ser enviada')
+    await createRecipient({ ...OPERADOR, bank_name: '', bank_code: '104',
+      bank_account_type: 'poupanca', bank_account_number: '12345-6' }, 'sk_test')
+    const conta = JSON.parse(i.chamadas[0].init.body).default_bank_account
+    assert.equal(conta.bank, '104')
+    assert.equal(conta.type, 'savings')
+    assert.equal(conta.account_check_digit, '6')
   } finally { i.restaurar() }
 })
 
-test('com código de banco de verdade, a conta é montada com o código', async () => {
-  const i = interceptar()
-  try {
-    await createRecipient({
-      ...OPERADOR_PIX, pix_key: '', pix_key_type: '',
-      bank_code: '260', bank_agency: '0001', bank_account_number: '55555-0',
-      bank_account_type: 'poupanca', bank_document: '39053344705',
-    }, 'sk_test')
-    const body = JSON.parse(i.chamadas[0].init.body)
-    assert.equal(body.default_bank_account.bank, '260', 'o código vem do bank_code, não da agência')
-    assert.equal(body.default_bank_account.type, 'savings')
-    assert.equal(body.default_bank_account.account_number, '555550', 'só dígitos')
-  } finally { i.restaurar() }
-})
-
-test('erro do gateway vira mensagem — e o corpo bruto NÃO vai junto', async () => {
+test('erro do gateway vira mensagem — corpo bruto fica no log', async () => {
   const i = interceptar({ ok: false, status: 422, json: async () => ({ message: 'document is invalid' }) })
   try {
-    await assert.rejects(() => createRecipient(OPERADOR_PIX, 'sk_test'), /document is invalid/)
+    await assert.rejects(() => createRecipient(OPERADOR, 'sk_test'), /document is invalid/)
   } finally { i.restaurar() }
 })
 
@@ -146,37 +146,39 @@ test('a rota registra o recebedor SÓ do próprio operador', () => {
   assert.notEqual(i, -1, 'rota self-service não encontrada')
   const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
   assert.match(fn, /\.eq\('id', req\.user\.id\)/, 'os dados são do operador logado, não de :id')
-  assert.ok(!/req\.params\.id/.test(fn), 'nada de id vindo da URL — seria porta para recebedor de outro')
+  assert.ok(!/req\.params\.id/.test(fn), 'nada de id vindo da URL')
 })
 
 test('a rota é idempotente — não cria um segundo recebedor', () => {
   const i = rota.indexOf("router.post('/register-recipient'")
   const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
-  assert.match(fn, /if \(user\.gateway_recipient_id\)/, 'já sendo recebedor, devolve o existente')
+  assert.match(fn, /if \(user\.gateway_recipient_id\)/)
   assert.match(fn, /already: true/)
 })
 
 test('a rota usa a MESMA chave da cobrança e registra auditoria', () => {
   const i = rota.indexOf("router.post('/register-recipient'")
   const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
-  assert.match(fn, /chaveDoPagarme/, 'uma fonte de verdade para a chave')
-  assert.match(fn, /gateway_recipient_id: recipientId/, 'grava o id no usuário')
-  assert.match(fn, /register_recipient_self/, 'audita quem se cadastrou')
+  assert.match(fn, /chaveDoPagarme/)
+  assert.match(fn, /gateway_recipient_id: recipientId/)
+  assert.match(fn, /register_recipient_self/)
 })
 
-test('o status diz o que falta, sem vazar o id inteiro', () => {
+test('o status exige conta bancária (não PIX) e não vaza o id inteiro', () => {
   const i = rota.indexOf("router.get('/recipient-status'")
   assert.notEqual(i, -1)
   const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
-  assert.match(fn, /missing/, 'a tela precisa saber o que falta cadastrar')
+  assert.match(fn, /codigoDoBanco/, 'o que libera a ativação é a conta bancária com código')
+  assert.match(fn, /missing\.push\('banco'\)/)
   assert.match(fn, /can_register/)
   assert.match(fn, /\.replace\(\/\^\(\.\{7\}\)\.\+\(\.\{4\}\)\$\//, 'o id vai mascarado')
 })
 
-test('o cliente do operador expõe os dois métodos', () => {
+test('o cliente do operador expõe os métodos', () => {
   const apiJs = fs.readFileSync(new URL('../../operador/src/lib/api.js', import.meta.url), 'utf8')
   assert.match(apiJs, /getRecipientStatus:\s*\(\) => request\('\/api\/operator\/recipient-status'\)/)
   assert.match(apiJs, /registerRecipient:\s*\(\) => request\('\/api\/operator\/register-recipient'/)
+  assert.match(apiJs, /recipientKycLink:\s*\(\) => request\('\/api\/operator\/recipient-kyc-link'/)
 })
 
 // ── Status ao vivo e link de verificação ───────────────────────────────────
@@ -186,13 +188,13 @@ const { getRecipient, kycLink } = await import('../src/payments/pagarme.js')
 test('getRecipient devolve só status e KYC — nunca conta bancária ou PIX', async () => {
   const i = interceptar({ ok: true, status: 200, json: async () => ({
     id: 're_x', status: 'active',
-    default_bank_account: { account_number: '55555' }, // veio na resposta…
+    default_bank_account: { account_number: '55555' },
     kyc_details: { status: 'approved' },
   }) })
   try {
     const info = await getRecipient('sk_test', 're_x')
     assert.deepEqual(info, { id: 're_x', status: 'active', kyc_status: 'approved' })
-    assert.ok(!('default_bank_account' in info), '…mas não pode sair daqui')
+    assert.ok(!('default_bank_account' in info))
     assert.match(i.chamadas[0].url, /\/recipients\/re_x$/)
   } finally { i.restaurar() }
 })
@@ -202,65 +204,31 @@ test('kycLink devolve a URL do link de verificação', async () => {
   try {
     const r = await kycLink('sk_test', 're_x')
     assert.equal(r.url, 'https://kyc.pagar.me/abc')
-    assert.equal(r.qrcode, 'iVBOR')
     assert.match(i.chamadas[0].url, /\/recipients\/re_x\/kyc_link$/)
     assert.equal(i.chamadas[0].init.method, 'POST')
   } finally { i.restaurar() }
 })
 
-test('kycLink sem URL na resposta vira erro tratado, não sucesso vazio', async () => {
+test('kycLink sem URL na resposta vira erro tratado', async () => {
   const i = interceptar({ ok: true, status: 200, json: async () => ({}) })
   try {
     await assert.rejects(() => kycLink('sk_test', 're_x'), /link de verificação/)
   } finally { i.restaurar() }
 })
 
-test('o mapa de situação: só active é apto', () => {
-  // Reproduz a regra da rota para travá-la aqui — o único verde é 'active'.
-  const map = (s) => {
-    switch (String(s || '').toLowerCase()) {
-      case 'active': return 'apto'
-      case 'refused': return 'recusado'
-      case 'suspended': case 'blocked': case 'inactive': return 'suspenso'
-      default: return 'analise'
-    }
-  }
-  assert.equal(map('active'), 'apto')
-  assert.equal(map('registration'), 'analise')
-  assert.equal(map('refused'), 'recusado')
-  assert.equal(map('suspended'), 'suspenso')
-  assert.equal(map('coisa_nova'), 'analise', 'status desconhecido é conservador: análise, não apto')
-})
-
 test('a rota de status consulta o Pagar.me ao vivo quando já cadastrado', () => {
   const i = rota.indexOf("router.get('/recipient-status'")
   const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
-  assert.match(fn, /getRecipient/, 'ter o id não basta — o status decide se está apto')
+  assert.match(fn, /getRecipient/)
   assert.match(fn, /mapSituacaoRecebedor/)
-  assert.match(fn, /apto/)
-  // Falha do gateway não pode derrubar a tela de perfil.
-  assert.match(fn, /catch \(e\)/)
+  assert.match(fn, /catch \(e\)/, 'falha do gateway não derruba a tela')
 })
 
 test('a rota de KYC gera o link só do recebedor do próprio operador', () => {
   const i = rota.indexOf("router.post('/recipient-kyc-link'")
-  assert.notEqual(i, -1, 'rota de KYC não encontrada')
+  assert.notEqual(i, -1)
   const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
   assert.match(fn, /\.eq\('id', req\.user\.id\)/)
-  assert.ok(!/req\.params/.test(fn), 'nada de id vindo da URL')
+  assert.ok(!/req\.params/.test(fn))
   assert.match(fn, /kycLink/)
-})
-
-test('o cliente do operador expõe o link de KYC', () => {
-  const apiJs = fs.readFileSync(new URL('../../operador/src/lib/api.js', import.meta.url), 'utf8')
-  assert.match(apiJs, /recipientKycLink:\s*\(\) => request\('\/api\/operator\/recipient-kyc-link'/)
-})
-
-test('status separa "sem chave PIX" de "chave sem tipo"', () => {
-  // Chave preenchida sem o tipo parece cadastrada na tela; a mensagem precisa
-  // dizer "escolha o tipo", não "cadastre uma chave".
-  const i = rota.indexOf("router.get('/recipient-status'")
-  const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
-  assert.match(fn, /if \(!user\?\.pix_key\)\s+missing\.push\('pix'\)/)
-  assert.match(fn, /else if \(!user\?\.pix_key_type\)\s+missing\.push\('pix_tipo'\)/)
 })

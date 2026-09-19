@@ -299,7 +299,7 @@ router.get('/recipient-status', async (req, res, next) => {
   try {
     const { data: user } = await supabase
       .from('users')
-      .select('gateway_recipient_id, document_number, pix_key, pix_key_type')
+      .select('gateway_recipient_id, document_number, bank_name, bank_agency, bank_account_number')
       .eq('id', req.user.id)
       .single();
 
@@ -311,14 +311,14 @@ router.get('/recipient-status', async (req, res, next) => {
     const { chaveDoPagarme } = await import('./payments.js');
     const configured = !!chaveDoPagarme(cfg);
 
-    // Granularidade importa: uma chave PIX preenchida SEM o tipo selecionado
-    // parece cadastrada na tela, mas o Pagar.me exige o tipo (e ele não dá para
-    // adivinhar — 11 dígitos tanto é CPF quanto telefone). Sem separar, a tela
-    // diria "cadastre uma chave PIX" com a chave à vista, o que confunde.
+    // O Pagar.me EXIGE conta bancária no recebedor (provado em produção: "The
+    // default_bank_account field is required."). Então o que libera a ativação é
+    // documento + conta bancária completa — banco (com código, via o seletor),
+    // agência e conta. A chave PIX é método extra, não requisito.
+    const { codigoDoBanco } = await import('../payments/pagarme.js');
     const missing = [];
     if (!String(user?.document_number || '').replace(/\D/g, '')) missing.push('documento');
-    if (!user?.pix_key)            missing.push('pix');
-    else if (!user?.pix_key_type)  missing.push('pix_tipo');
+    if (!(codigoDoBanco(user) && user?.bank_agency && user?.bank_account_number)) missing.push('banco');
 
     const rid = user?.gateway_recipient_id || null;
 
