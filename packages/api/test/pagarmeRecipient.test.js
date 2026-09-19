@@ -255,3 +255,12 @@ test('o cliente do operador expõe o link de KYC', () => {
   const apiJs = fs.readFileSync(new URL('../../operador/src/lib/api.js', import.meta.url), 'utf8')
   assert.match(apiJs, /recipientKycLink:\s*\(\) => request\('\/api\/operator\/recipient-kyc-link'/)
 })
+
+test('status separa "sem chave PIX" de "chave sem tipo"', () => {
+  // Chave preenchida sem o tipo parece cadastrada na tela; a mensagem precisa
+  // dizer "escolha o tipo", não "cadastre uma chave".
+  const i = rota.indexOf("router.get('/recipient-status'")
+  const fn = rota.slice(i, rota.indexOf('\nrouter.', i + 10))
+  assert.match(fn, /if \(!user\?\.pix_key\)\s+missing\.push\('pix'\)/)
+  assert.match(fn, /else if \(!user\?\.pix_key_type\)\s+missing\.push\('pix_tipo'\)/)
+})

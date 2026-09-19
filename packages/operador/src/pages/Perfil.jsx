@@ -114,8 +114,9 @@ function PagarmeRecipient() {
   // não aparece — evita oferecer algo que ainda não cobra por aqui.
   if (isLoading || !status?.configured) return null
 
-  const faltaDoc = status.missing?.includes('documento')
-  const faltaPix = status.missing?.includes('pix')
+  const faltaDoc     = status.missing?.includes('documento')
+  const faltaPix     = status.missing?.includes('pix')
+  const faltaTipoPix = status.missing?.includes('pix_tipo')
   const sit = SITUACAO[status.situacao] || SITUACAO.desconhecido
   const pendente = status.registered && !status.apto && status.situacao !== 'desconhecido'
 
@@ -193,11 +194,16 @@ function PagarmeRecipient() {
           </div>
         ) : (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">
-            Para ativar, cadastre
-            {faltaDoc && faltaPix ? ' seu CPF/CNPJ e uma chave PIX'
-              : faltaDoc ? ' seu CPF/CNPJ'
-              : ' uma chave PIX'}
-            {' '}acima e salve o perfil.
+            {faltaTipoPix && !faltaDoc ? (
+              <>Sua chave PIX está preenchida, mas falta escolher o <b>tipo</b> dela
+                {' '}(CPF, e-mail, telefone…) em <b>Chave PIX para Recebimento</b> acima. Selecione e salve o perfil.</>
+            ) : (
+              <>Para ativar, cadastre
+                {faltaDoc && (faltaPix || faltaTipoPix) ? ' seu CPF/CNPJ e o tipo + a chave PIX'
+                  : faltaDoc ? ' seu CPF/CNPJ'
+                  : ' uma chave PIX'}
+                {' '}acima e salve o perfil.</>
+            )}
           </p>
         )}
       </CardBody>

@@ -311,9 +311,14 @@ router.get('/recipient-status', async (req, res, next) => {
     const { chaveDoPagarme } = await import('./payments.js');
     const configured = !!chaveDoPagarme(cfg);
 
+    // Granularidade importa: uma chave PIX preenchida SEM o tipo selecionado
+    // parece cadastrada na tela, mas o Pagar.me exige o tipo (e ele não dá para
+    // adivinhar — 11 dígitos tanto é CPF quanto telefone). Sem separar, a tela
+    // diria "cadastre uma chave PIX" com a chave à vista, o que confunde.
     const missing = [];
     if (!String(user?.document_number || '').replace(/\D/g, '')) missing.push('documento');
-    if (!(user?.pix_key && user?.pix_key_type))                  missing.push('pix');
+    if (!user?.pix_key)            missing.push('pix');
+    else if (!user?.pix_key_type)  missing.push('pix_tipo');
 
     const rid = user?.gateway_recipient_id || null;
 
