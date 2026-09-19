@@ -397,6 +397,10 @@ async function tokenizarCartaoPagarme(publicKey, card) {
         exp_month:   Number(card.expMonth),
         exp_year:    Number(card.expYear),
         cvv:         card.cvv,
+        // Endereço de cobrança: o antifraude da conta EXIGE (o Pagar.me recusava
+        // com "validation_error | billing | value is required" sem ele). O token
+        // carrega o endereço, então a cobrança já sai completa.
+        ...(card.billing ? { billing_address: card.billing } : {}),
       },
     }),
   })
@@ -428,6 +432,31 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
   const [inst,   setInst]   = useState(1)
   const [busy,   setBusy]   = useState(false)
   const [erro,   setErro]   = useState('')
+  // Endereço de cobrança — exigido pelo antifraude da conta Pagar.me.
+  const [cep,     setCep]     = useState('')
+  const [rua,     setRua]     = useState('')
+  const [numero,  setNumero]  = useState('')
+  const [cidade,  setCidade]  = useState('')
+  const [uf,      setUf]      = useState('')
+  const [cepBusca, setCepBusca] = useState(false)
+
+  // Preenche rua/cidade/UF a partir do CEP (ViaCEP). Falha em silêncio: se não
+  // achar, os campos ficam para o cliente digitar.
+  async function buscarCep(valor) {
+    const d = soDigitos(valor)
+    if (d.length !== 8) return
+    setCepBusca(true)
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${d}/json/`)
+      const j = await r.json()
+      if (!j?.erro) {
+        if (j.logradouro) setRua(j.logradouro)
+        if (j.localidade) setCidade(j.localidade)
+        if (j.uf)         setUf(j.uf)
+      }
+    } catch { /* sem preenchimento automático */ }
+    finally { setCepBusca(false) }
+  }
 
   const cpfDigitos = soDigitos(cpf)
   const docOk = cpfDigitos.length === 11 || cpfDigitos.length === 14
@@ -454,12 +483,24 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
     if (!holder.trim())        { setErro('Informe o nome impresso no cartão.'); return }
     if (!mm || !aa || Number(mm) < 1 || Number(mm) > 12) { setErro('Validade inválida (MM/AA).'); return }
     if (soDigitos(cvv).length < 3) { setErro('CVV inválido.'); return }
+    const cepD = soDigitos(cep)
+    if (cepD.length !== 8)     { setErro('Informe um CEP válido (8 dígitos).'); return }
+    if (!numero.trim())        { setErro('Informe o número do endereço.'); return }
+    if (!cidade.trim() || uf.trim().length !== 2) { setErro('Informe cidade e UF (2 letras) do endereço.'); return }
 
     setBusy(true)
     try {
+      const billing = {
+        line_1:   [numero.trim(), rua.trim()].filter(Boolean).join(', ').slice(0, 256) || numero.trim(),
+        zip_code: cepD,
+        city:     cidade.trim(),
+        state:    uf.trim().toUpperCase().slice(0, 2),
+        country:  'BR',
+      }
       const token = await tokenizarCartaoPagarme(publicKey, {
         number: num, holder, expMonth: mm,
         expYear: aa.length === 2 ? `20${aa}` : aa, cvv: soDigitos(cvv),
+        billing,
       })
       const result = await onPagar({
         payment_method: 'credit_card',
@@ -520,6 +561,49 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
           ))}
         </select>
       </div>
+
+      {/* Endereço de cobrança — exigido pelo antifraude do Pagar.me. CEP
+          preenche rua/cidade/UF automaticamente (ViaCEP). */}
+      <div className="border-t border-gray-200 pt-3 space-y-3">
+        <p className="text-[12px] font-semibold text-gray-700">Endereço de cobrança</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">
+              CEP {cepBusca && <span className="text-gray-400">· buscando…</span>}
+            </label>
+            <input
+              inputMode="numeric"
+              value={cep}
+              onChange={(e) => {
+                const v = soDigitos(e.target.value).slice(0, 8).replace(/(\d{5})(\d)/, '$1-$2')
+                setCep(v)
+                if (soDigitos(v).length === 8) buscarCep(v)
+              }}
+              placeholder="00000-000"
+              className={campo}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Número</label>
+            <input inputMode="numeric" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="123" className={campo} />
+          </div>
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-1">Rua</label>
+          <input value={rua} onChange={(e) => setRua(e.target.value)} placeholder="Rua / Avenida" className={campo} />
+        </div>
+        <div className="grid grid-cols-[1fr_84px] gap-3">
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Cidade</label>
+            <input value={cidade} onChange={(e) => setCidade(e.target.value)} placeholder="Cidade" className={campo} />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">UF</label>
+            <input value={uf} onChange={(e) => setUf(e.target.value.toUpperCase().slice(0, 2))} placeholder="CE" className={campo} />
+          </div>
+        </div>
+      </div>
+
       <button
         type="button"
         onClick={pagar}
