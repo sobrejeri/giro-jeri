@@ -1033,20 +1033,21 @@ function TabPagamentos({ settings, qc }) {
                 />
                 <div>
                   <p className="text-sm font-semibold text-gray-200">
-                    Dividir a cobrança no ato (split do Mercado Pago)
+                    Dividir a cobrança no ato (split — Mercado Pago e Pagar.me)
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
                     <b className="text-gray-400">Ligado:</b> o operador recebe a parte dele
-                    direto do Mercado Pago, na conta dele, no momento do pagamento. A plataforma
-                    fica só com a comissão. Não há repasse a fazer.<br />
+                    direto no gateway (Mercado Pago ou Pagar.me), na conta dele, no momento do
+                    pagamento. A plataforma fica só com a comissão. Não há repasse a fazer.<br />
                     <b className="text-gray-400">Desligado:</b> a plataforma recebe 100% e você
                     paga cada operador depois, dando baixa na tela de Repasses.
                   </p>
                   <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
-                    Só vale para reserva de UM operador que tenha conta do Mercado Pago
-                    conectada e cujo modal não tenha executor fixo. Combo continua sempre
-                    manual. Não ligue antes de uma cobrança real ter funcionado do início ao fim.
-                    O split do Pagar.me é outro e tem card próprio — esta caixa não o afeta.
+                    Esta chave vale para os DOIS gateways: desligada, nem o Mercado Pago nem o
+                    Pagar.me dividem no ato — a plataforma recebe 100% e o repasse é manual.
+                    Só divide reserva de UM operador com recebedor cadastrado no gateway e cujo
+                    modal não tenha executor fixo. Combo continua sempre manual. Não ligue antes
+                    de uma cobrança real ter funcionado do início ao fim.
                   </p>
                 </div>
               </label>
