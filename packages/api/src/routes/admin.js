@@ -1828,6 +1828,142 @@ router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, nex
 // =============================================================================
 
 // ── GET /api/admin/payouts ─────────────────────────────
+// ── Monta uma linha da fila de repasse a partir da reserva concluída ─────────
+// Distingue CONCLUSÃO × PAGAMENTO do cliente × REPASSE ao operador — status
+// separados, nunca um só para tudo. Não estima taxa: usa os valores reais do
+// repasse calculado na venda; ausente vira null, não um chute.
+function montarLinhaFila(b) {
+  const pagamentos = b.payments || [];
+  const aprovado   = pagamentos.find((p) => p.status === 'approved') || null;
+  const gateway    = aprovado?.gateway_name || pagamentos[0]?.gateway_name || null;
+  const valorPago  = aprovado ? Number(aprovado.amount_gross) : Number(b.total_amount) || 0;
+  const pagoCliente = !!aprovado;
+
+  const payouts = b.booking_payouts || [];
+  // O repasse do OPERADOR é a comissão (de quem aceitou). Execução é de terceiro
+  // e tem linha própria — não entra como valor do operador aqui.
+  const doOperador = payouts.find((p) => p.kind === 'commission')
+    || (b.operator ? payouts.find((p) => p.payee_user_id === b.operator.id) : null)
+    || null;
+  const execucao = payouts.find((p) => p.kind === 'execution') || null;
+  // Split antigo pagou o operador direto na conta dele (histórico) — não pode
+  // ser liberado de novo.
+  const pagoPeloGateway = !!(b.operator &&
+    pagamentos.some((p) => p.split_operator_id && p.split_operator_id === b.operator.id));
+
+  const somaRepasses = (doOperador ? Number(doOperador.amount) : 0)
+    + (execucao ? Number(execucao.amount) : 0);
+  // Parte da plataforma = o que sobra depois dos repasses (valor REAL, não taxa
+  // estimada). Inclui a taxa do gateway, que a plataforma absorve.
+  const plataformaValor = Math.round((valorPago - somaRepasses) * 100) / 100;
+
+  let situacao, motivoBloqueio = null, elegivel = false;
+  if (['cancelled', 'refunded', 'disputed'].includes(b.status_commercial)) {
+    situacao = 'bloqueado';
+    motivoBloqueio = b.status_commercial === 'refunded' ? 'reserva reembolsada'
+      : b.status_commercial === 'disputed' ? 'reserva em contestação' : 'reserva cancelada';
+  } else if (!b.completed_at) {
+    situacao = 'conciliacao'; motivoBloqueio = 'sem data de conclusão registrada';
+  } else if (pagoPeloGateway) {
+    situacao = 'repassado_gateway';   // split direto na conta do operador
+  } else if (!pagoCliente) {
+    situacao = 'aguardando_pagamento';
+  } else if (!doOperador) {
+    situacao = 'conciliacao'; motivoBloqueio = 'reserva sem repasse calculado — conferir';
+  } else if (doOperador.status === 'cancelled') {
+    situacao = 'cancelado';
+  } else if (doOperador.status === 'paid') {
+    situacao = 'pago';
+  } else {
+    situacao = 'pronto_para_liberar'; elegivel = true;   // concluído + pago + pendente
+  }
+
+  return {
+    booking_id:      b.id,
+    booking_code:    b.booking_code,
+    service_type:    b.service_type,          // 'tour' | 'transfer'
+    service_date:    b.service_date,
+    completed_at:    b.completed_at,          // UTC — a UI exibe em America/Fortaleza
+    operador:        b.operator ? { id: b.operator.id, nome: b.operator.full_name } : null,
+    gateway,
+    valor_pago:      valorPago,
+    plataforma_valor: plataformaValor,
+    operador_valor:  doOperador ? Number(doOperador.amount) : null,   // previsto, do cálculo da venda
+    payout_id:       doOperador?.id || null,
+    payout_status:   doOperador?.status || null,
+    situacao,
+    motivo_bloqueio: motivoBloqueio,
+    elegivel_liberar: elegivel,
+  };
+}
+
+// ── GET /api/admin/payouts/fila ────────────────────────────────────────────
+// Fila de LIBERAÇÃO (modelo manual): reservas CONCLUÍDAS com repasse do
+// operador, ordenadas pela conclusão real (completed_at) ASC — as mais antigas
+// primeiro, com desempate estável por id. Paginação, ordenação e contagem no
+// SERVIDOR. READ-ONLY: não libera nada aqui (liberar é ação própria, revalidada).
+//
+// Reservas concluídas SEM completed_at (backfill sem registro de auditoria) NÃO
+// entram na fila: vão para a visão de conciliação (?conciliacao=1), pois não há
+// data real para ordenar — e não se inventa uma.
+router.get('/payouts/fila', requireAdmin, async (req, res, next) => {
+  try {
+    const page     = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 30));
+    const offset   = (page - 1) * pageSize;
+    const conciliacao = String(req.query.conciliacao || '') === '1';
+
+    const ISO = /^\d{4}-\d{2}-\d{2}$/;
+    const de  = ISO.test(req.query.from || '') ? req.query.from : null;
+    const ate = ISO.test(req.query.to   || '') ? req.query.to   : null;
+    const operador = /^[0-9a-fA-F-]{36}$/.test(req.query.operator || '') ? req.query.operator : null;
+    const q = String(req.query.q || '').trim().slice(0, 40).replace(/[%,]/g, '');
+
+    // Recorte comum à contagem e à página. Fila = concluídas COM completed_at;
+    // conciliação = concluídas SEM completed_at.
+    const recorte = (x) => {
+      x = x.eq('status_operational', 'completed');
+      x = conciliacao ? x.is('completed_at', null) : x.not('completed_at', 'is', null);
+      if (operador) x = x.eq('operator_id', operador);
+      if (de)  x = x.gte('completed_at', `${de}T00:00:00Z`);
+      if (ate) x = x.lte('completed_at', `${ate}T23:59:59Z`);
+      if (q)   x = x.ilike('booking_code', `%${q}%`);
+      return x;
+    };
+
+    const { count: total } = await recorte(
+      supabase.from('bookings').select('id', { count: 'exact', head: true })
+    );
+
+    const SELECT = `
+      id, booking_code, service_type, service_date,
+      total_amount, status_commercial, status_operational, completed_at,
+      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type ),
+      booking_payouts ( id, kind, amount, status, payee_user_id, paid_at ),
+      payments ( id, gateway_name, amount_gross, status, paid_at, split_operator_id )
+    `;
+    let consulta = recorte(supabase.from('bookings').select(SELECT));
+    consulta = conciliacao
+      ? consulta.order('service_date', { ascending: true }).order('id', { ascending: true })
+      : consulta.order('completed_at', { ascending: true }).order('id', { ascending: true });
+
+    const { data: rows, error } = await consulta.range(offset, offset + pageSize - 1);
+    if (error) {
+      if (['42P01', '42703'].includes(error.code)) {
+        return res.json({ rows: [], total: 0, page, pageSize,
+          aviso: 'Migrations de repasse pendentes (080/087/090/091).' });
+      }
+      throw error;
+    }
+
+    res.json({
+      rows:  (rows || []).map(montarLinhaFila),
+      total: total || 0,
+      page, pageSize,
+    });
+  } catch (err) { next(err); }
+});
+
 router.get('/payouts', requireAdmin, async (req, res, next) => {
   try {
     const { status = 'pending', payee } = req.query;
