@@ -4,6 +4,10 @@ import { ToggleLeft, ToggleRight, Compass, Clock, Users } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import FiltroCategorias, { categoriasDe } from '../components/FiltroCategorias'
+
+// Categoria do passeio = a categoria do catálogo (tours.category_id → join).
+const catDoPasseio = (t) => [t.categories?.name || '—', t.categories?.name || 'Sem categoria']
 
 const GRADIENTS = [
   'from-orange-400 to-amber-300',
@@ -18,6 +22,7 @@ function gi(id = '') {
 export default function Passeios() {
   const qc = useQueryClient()
   const [toggleError, setToggleError] = useState(null)
+  const [cat, setCat] = useState(null)
 
   const { data: tours = [], isLoading: lt } = useQuery({
     queryKey: ['catalog-tours'],
@@ -48,8 +53,10 @@ export default function Passeios() {
 
   if (lt || lp) return <PageSpinner />
 
-  const active   = tours.filter((t) => prefMap[t.id] !== false)
-  const inactive = tours.filter((t) => prefMap[t.id] === false)
+  const categorias = categoriasDe(tours, catDoPasseio)
+  const visiveis   = cat === null ? tours : tours.filter((t) => catDoPasseio(t)[0] === cat)
+  const active     = visiveis.filter((t) => prefMap[t.id] !== false)
+  const inactive   = visiveis.filter((t) => prefMap[t.id] === false)
 
   return (
     <div className="space-y-4">
@@ -64,6 +71,8 @@ export default function Passeios() {
       {toggleError && (
         <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{toggleError}</p>
       )}
+
+      <FiltroCategorias categorias={categorias} valor={cat} onChange={setCat} />
 
       {/* Ativos */}
       <Card>

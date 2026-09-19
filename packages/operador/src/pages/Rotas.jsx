@@ -4,6 +4,11 @@ import { ToggleLeft, ToggleRight, ArrowRight } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import FiltroCategorias, { categoriasDe } from '../components/FiltroCategorias'
+
+// Categoria de uma rota = o transfer pai (ex.: "Transfer Jericoacoara",
+// "Translado Aéreo — Helicóptero").
+const catDaRota = (r) => [r.transfers?.name || r.transfer?.name || '—', r.transfers?.name || r.transfer?.name || 'Sem categoria']
 
 const fmt = (v) =>
   v != null ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null
@@ -11,6 +16,7 @@ const fmt = (v) =>
 export default function Rotas() {
   const qc = useQueryClient()
   const [toggleError, setToggleError] = useState(null)
+  const [cat, setCat] = useState(null)
 
   const { data: routes = [], isLoading: lr } = useQuery({
     queryKey: ['catalog-routes'],
@@ -44,8 +50,10 @@ export default function Rotas() {
 
   if (lr || lp) return <PageSpinner />
 
-  const active   = routes.filter((r) => prefMap[r.id] !== false)
-  const inactive = routes.filter((r) => prefMap[r.id] === false)
+  const categorias = categoriasDe(routes, catDaRota)
+  const visiveis   = cat === null ? routes : routes.filter((r) => catDaRota(r)[0] === cat)
+  const active     = visiveis.filter((r) => prefMap[r.id] !== false)
+  const inactive   = visiveis.filter((r) => prefMap[r.id] === false)
 
   return (
     <div className="space-y-4">
@@ -60,6 +68,8 @@ export default function Rotas() {
       {toggleError && (
         <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{toggleError}</p>
       )}
+
+      <FiltroCategorias categorias={categorias} valor={cat} onChange={setCat} />
 
       <Card>
         <CardHeader>

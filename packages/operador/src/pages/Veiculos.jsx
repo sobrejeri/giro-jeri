@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Car, Users, Info, MessageCircle, CheckCircle2, MinusCircle, AlertTriangle,
@@ -6,6 +6,7 @@ import {
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import FiltroCategorias, { categoriasDe } from '../components/FiltroCategorias'
 import { fleetCopy as t } from '../copy/fleet'
 
 const TYPE_LABEL = {
@@ -21,7 +22,11 @@ const TYPE_LABEL = {
 
 const ADMIN_WHATSAPP = import.meta.env.VITE_ADMIN_WHATSAPP
 
+// Categoria do veículo = o tipo (buggy, hilux_4x4, …), com rótulo amigável.
+const catDoVeiculo = (v) => [v.vehicle_type || '—', TYPE_LABEL[v.vehicle_type] || v.vehicle_type || 'Outro']
+
 export default function Veiculos() {
+  const [cat, setCat] = useState(null)
   const {
     data: vehicles = [],
     isLoading: lv,
@@ -74,9 +79,12 @@ export default function Veiculos() {
     )
   }
 
+  const categorias = categoriasDe(vehicles, catDoVeiculo)
+  const visiveis   = cat === null ? vehicles : vehicles.filter((v) => catDoVeiculo(v)[0] === cat)
+
   // Model B: veículo é operado a menos que exista preferência explícita is_active === false
-  const operating = vehicles.filter((v) => prefMap[v.id] !== false)
-  const blocked    = vehicles.filter((v) => prefMap[v.id] === false)
+  const operating = visiveis.filter((v) => prefMap[v.id] !== false)
+  const blocked    = visiveis.filter((v) => prefMap[v.id] === false)
 
   const waMsg = encodeURIComponent('Olá! Gostaria de solicitar uma mudança na frota liberada para meu operador.')
 
@@ -105,6 +113,8 @@ export default function Veiculos() {
           )}
         </div>
       </div>
+
+      <FiltroCategorias categorias={categorias} valor={cat} onChange={setCat} />
 
       {vehicles.length === 0 ? (
         <Card>
