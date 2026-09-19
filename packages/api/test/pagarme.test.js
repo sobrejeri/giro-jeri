@@ -586,14 +586,32 @@ test('o formulário de cartão no site é uma terceira opção, não um substitu
 
 // Dois botões com o mesmo rótulo e destinos diferentes é o pior resultado
 // possível: um sai do site, o outro abre um formulário aqui.
-test('o botão que redireciona nomeia o adquirente; "cartão" fica com o do site', async () => {
+// A convenção MUDOU a pedido: "Pagar.me" não diz nada para um turista, que só
+// quer saber que vai pagar com cartão. Então "Pagar com cartão" passou a ser o
+// botão do Pagar.me, e o formulário embutido cede o nome.
+//
+// O que NÃO mudou é a garantia: dois botões de cartão jamais podem ter o mesmo
+// texto, porque um sai do site e o outro abre um formulário aqui. Antes isso
+// dependia de cada rótulo ser fixo; agora depende do rótulo do formulário ser
+// CONDICIONAL — e é isso que se testa.
+test('o botão do Pagar.me se chama "Pagar com cartão", sem nome de adquirente', async () => {
   const jsx = await readFile(
     new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
   assert.match(jsx, /rotulo: 'Pagar com Mercado Pago'/,
-    'o botão hospedado precisa dizer para onde leva, sempre')
-  assert.doesNotMatch(jsx, /rotulo: cartaoSoComConta \?/,
-    'rótulo condicional colidia com o do formulário no site')
-  assert.match(jsx, /estilo=\{ESTILO_CARTAO_SITE\}[\s\S]{0,120}rotulo="Pagar com cartão"/)
+    'o do Mercado Pago continua nomeando: é conta lá que ele exige')
+  assert.doesNotMatch(jsx, /rotulo: 'Pagar com Pagar\.me'/,
+    'o nome do adquirente não diz nada para quem está pagando')
+  assert.match(jsx, /pagarme: \{[\s\S]{0,900}?rotulo: 'Pagar com cartão'/,
+    'o rótulo pedido pertence ao bloco do Pagar.me')
+})
+
+test('com o Pagar.me na tela, o formulário embutido muda de nome', async () => {
+  const jsx = await readFile(
+    new URL('../../turista/src/pages/checkout/CheckoutPayment.jsx', import.meta.url), 'utf8')
+  assert.match(jsx, /acquirersDisponiveis\.includes\('pagarme'\)\s*\?\s*'Pagar com cartão sem sair do site'\s*:\s*'Pagar com cartão'/,
+    'rótulo fixo aqui reintroduziria dois botões iguais com comportamentos opostos')
+  assert.match(jsx, /estilo=\{ESTILO_CARTAO_SITE\}[\s\S]{0,160}rotulo=\{rotuloFormularioNoSite\}/,
+    'o botão embutido tem de usar o rótulo condicional')
 })
 
 // O Pix tem bloco próprio logo abaixo. Oferecê-lo TAMBÉM dentro do formulário

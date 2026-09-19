@@ -90,21 +90,45 @@ test('o ícone do botão de cartão aponta para um arquivo que existe', () => {
 // abria um formulário.
 
 test('nenhum rótulo de botão de cartão se repete', () => {
+  // O rótulo do formulário embutido virou CONDICIONAL, então ele não aparece
+  // mais como literal num atributo — e este teste passaria a não enxergá-lo,
+  // ficando verde sem garantir nada. Por isso os dois valores possíveis do
+  // ternário entram na conta: a colisão que importa é justamente entre o ramo
+  // "Pagar com cartão" dele e o botão do Pagar.me.
+  const doTernario = [...fonte.matchAll(
+    /rotuloFormularioNoSite\s*=\s*[\s\S]{0,80}?\?\s*'([^']+)'\s*:\s*'([^']+)'/g)]
+    .flatMap((m) => [m[1], m[2]])
+  assert.equal(doTernario.length, 2, 'o rótulo condicional precisa ser legível pelo teste')
+
   const rotulos = [
     ...[...fonte.matchAll(/rotulo:\s*'([^']+)'/g)].map((m) => m[1]),
     ...[...fonte.matchAll(/rotulo="([^"]+)"/g)].map((m) => m[1]),
   ]
+  // Cada ramo do ternário é conferido contra os rótulos FIXOS. Os dois ramos
+  // entre si não colidem: nunca aparecem ao mesmo tempo.
+  for (const ramo of doTernario) {
+    assert.ok(!rotulos.includes(ramo) || ramo === 'Pagar com cartão',
+      `ramo "${ramo}" colide com um rótulo fixo`)
+  }
+  // E o ramo que repete "Pagar com cartão" só vale quando o Pagar.me NÃO está
+  // na tela — que é exatamente a condição escrita no código.
+  assert.match(fonte, /acquirersDisponiveis\.includes\('pagarme'\)\s*\?\s*'Pagar com cartão sem sair do site'/,
+    'com o Pagar.me presente, o formulário TEM de ceder o nome')
+
   const repetidos = rotulos.filter((r, i) => rotulos.indexOf(r) !== i)
   assert.deepEqual(repetidos, [],
     `rótulo duplicado em botões com comportamentos diferentes: ${repetidos.join(', ')}`)
 })
 
-test('botão hospedado nomeia o adquirente — a convenção que já existia', () => {
-  // pagarme.test.js já fixava isto para o Mercado Pago; o Pagar.me é que não
-  // seguia e ficou com "Pagar com cartão", colidindo com o formulário do site.
-  assert.match(fonte, /rotulo: 'Pagar com Pagar\.me'/,
-    'o botão que redireciona precisa dizer para onde leva')
-  assert.match(fonte, /rotulo: 'Pagar com Mercado Pago'/)
-  assert.match(fonte, /estilo=\{ESTILO_CARTAO_SITE\}[\s\S]{0,140}rotulo="Pagar com cartão"/,
-    '"Pagar com cartão" pertence ao formulário embutido')
+test('o botão do Pagar.me não carrega o nome do adquirente', () => {
+  // A convenção anterior era "todo botão hospedado nomeia o adquirente", e ela
+  // resolvia a colisão de rótulos dando um nome único a cada um. Mudou a
+  // pedido: "Pagar.me" não significa nada para um turista. A colisão passou a
+  // ser evitada pelo outro lado — o rótulo do formulário embutido é que é
+  // condicional (ver pagarme.test.js).
+  assert.doesNotMatch(fonte, /rotulo: 'Pagar com Pagar\.me'/)
+  assert.match(fonte, /rotulo: 'Pagar com Mercado Pago'/,
+    'o do Mercado Pago continua nomeando: é conta lá que ele exige')
+  assert.match(fonte, /estilo=\{ESTILO_CARTAO_SITE\}[\s\S]{0,160}rotulo=\{rotuloFormularioNoSite\}/,
+    'o formulário embutido usa o rótulo condicional')
 })

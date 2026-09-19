@@ -567,10 +567,13 @@ test('app e painel concordam no padrão do formulário no site', async () => {
     new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
   const rota  = await readFile(new URL('../src/routes/settings.js', import.meta.url), 'utf8')
 
-  assert.match(app, /payment_card_form_inline \?\? 'true'\) !== 'false'/,
-    'ausente = ligado, só um "false" explícito desliga')
-  assert.match(admin, /payment_card_form_inline:\s*'true'/,
-    'o painel precisa mostrar marcado o que o app considera ligado')
+  // O padrão VIROU DESLIGADO. Este formulário é o que vinha sendo recusado por
+  // risco; com o Pagar.me cobrindo quem não tem conta no Mercado Pago, ele
+  // deixou de ser a única saída e passou a ser o pior caminho oferecido.
+  assert.match(app, /payment_card_form_inline \?\? 'false'\) !== 'false'/,
+    'ausente = desligado; só um "true" explícito liga')
+  assert.match(admin, /payment_card_form_inline:\s*'false'/,
+    'o painel precisa mostrar desmarcado o que o app considera desligado')
   // E a chave precisa CHEGAR ao app: sem ela em /settings/public, o app cai no
   // padrão e o botão fica preso ligado, ignorando o admin.
   assert.match(rota, /'payment_card_form_inline'/,

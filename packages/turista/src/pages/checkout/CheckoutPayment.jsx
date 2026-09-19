@@ -699,9 +699,12 @@ export default function CheckoutPayment() {
   // Não substitui o Checkout Pro, soma a ele. São públicos diferentes: quem
   // tem conta no MP aprova muito melhor lá; quem não tem só tem esta.
   //
-  // MESMA REGRA DE PADRÃO das outras chaves de pagamento: ausente = ligado, só
-  // um 'false' explícito desliga.
-  const formularioNoSite = String(settings?.payment_card_form_inline ?? 'true') !== 'false'
+  // Padrão DESLIGADO, ao contrário das outras chaves de pagamento. Ele nasceu
+  // ligado para que quem não tem conta no Mercado Pago tivesse algum caminho de
+  // cartão — mas é justamente este formulário que vinha sendo recusado por
+  // risco (cc_rejected_high_risk). Com o Pagar.me atendendo esse público, ele
+  // deixou de ser a única saída e passou a ser o pior caminho oferecido.
+  const formularioNoSite = String(settings?.payment_card_form_inline ?? 'false') !== 'false'
 
   // ── Quais botões de cartão aparecem ────────────────────────────────────
   // A lista vem PRONTA do servidor (/settings/public): ele já removeu o
@@ -751,12 +754,17 @@ export default function CheckoutPayment() {
       primario: true,
     },
     pagarme: {
-      // Nomeia o adquirente, como o do Mercado Pago já fazia. Estava só
-      // "Pagar com cartão", idêntico ao rótulo do formulário embutido logo
-      // abaixo — dois botões com o mesmo texto e comportamentos opostos: um
-      // sai do site, o outro abre um formulário aqui. Ninguém tinha como
-      // saber qual era qual antes de clicar.
-      rotulo: 'Pagar com Pagar.me',
+      // "Pagar com cartão", sem nome de adquirente: para o turista, "Pagar.me"
+      // não quer dizer nada — ele quer saber que vai pagar com cartão.
+      //
+      // Esse texto só pode viver aqui porque o formulário embutido do Mercado
+      // Pago (que o usava) fica DESLIGADO. Os dois juntos seriam dois botões
+      // com o mesmo rótulo e comportamentos opostos — um sai do site, o outro
+      // abre um formulário aqui —, que já confundiu antes. Se alguém religar
+      // `payment_card_form_inline`, a colisão volta: por isso o teste
+      // 'nenhum rótulo de botão de cartão se repete' continua de pé, e a
+      // desambiguação passa a ser obrigatória antes de religar.
+      rotulo: 'Pagar com cartão',
       // Neutro de propósito: fica visualmente em segundo plano quando os dois
       // aparecem, que é a hierarquia certa — e continua legível quando é o
       // único botão da tela.
@@ -791,6 +799,13 @@ export default function CheckoutPayment() {
   // crédito nem débito, o Brick montaria vazio.
   const formasCartao = formasAtivas(settings)
   const ofereceFormulario = acquirersDisponiveis.length > 0 && formularioNoSite
+
+  // Se o Pagar.me está na tela, ele é quem se chama "Pagar com cartão" — este
+  // formulário precisa de outro nome, e o nome tem de dizer o que o diferencia:
+  // ele não sai do site. Sem o Pagar.me, "Pagar com cartão" volta a ser dele.
+  const rotuloFormularioNoSite = acquirersDisponiveis.includes('pagarme')
+    ? 'Pagar com cartão sem sair do site'
+    : 'Pagar com cartão'
     && (formasCartao.credito || formasCartao.debito)
 
   // O Brick do formulário fica só com o CARTÃO: o Pix tem bloco próprio logo
@@ -1153,9 +1168,16 @@ export default function CheckoutPayment() {
                         usar o Checkout Pro. */}
                     {ofereceFormulario && (
                       <div>
+                        {/* O rótulo DEPENDE de quem mais está na tela. "Pagar
+                            com cartão" agora pertence ao botão do Pagar.me;
+                            repetir o texto aqui traria de volta dois botões
+                            iguais com comportamentos opostos — um sai do site,
+                            este abre um formulário. Tornar o nome condicional
+                            faz a colisão ser impossível por construção, e não
+                            por alguém lembrar de manter a configuração certa. */}
                         <BotaoAdquirente
                           estilo={ESTILO_CARTAO_SITE}
-                          rotulo="Pagar com cartão"
+                          rotulo={rotuloFormularioNoSite}
                           desabilitado={!!redirecionando}
                           onClick={() => setFormularioAberto((v) => !v)}
                         />

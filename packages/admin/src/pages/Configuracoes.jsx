@@ -163,9 +163,11 @@ const PAYMENT_DEFAULTS = {
   payment_pagarme_public_key:     '',
   payment_pagarme_platform_recipient_id: '',
   // Formulário de cartão dentro do site, como TERCEIRA opção ao lado dos
-  // botões. Ligado por padrão: com o Checkout Pro exigindo conta no Mercado
-  // Pago, sem ele quem não tem conta fica sem nenhum caminho de cartão.
-  payment_card_form_inline:       'true',
+  // botões. Ficou DESLIGADO por padrão: ele existia porque, com o Checkout Pro
+  // exigindo conta no Mercado Pago, quem não tinha conta ficava sem caminho de
+  // cartão nenhum. O Pagar.me passou a cobrir esse público — e este formulário
+  // é justamente o que vinha sendo recusado por risco.
+  payment_card_form_inline:       'false',
 }
 
 function settingsToMap(list) {
@@ -1000,17 +1002,20 @@ function TabPagamentos({ settings, qc }) {
                       Também oferecer o formulário de cartão dentro do site
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                      Acrescenta um terceiro botão, <b className="text-gray-400">Pagar com cartão</b>,
-                      que abre o formulário do Mercado Pago aqui mesmo em vez de redirecionar.
-                      Não substitui o Checkout Pro — soma a ele.
+                      Acrescenta um botão que abre o formulário do Mercado Pago aqui mesmo,
+                      em vez de redirecionar. Não substitui o Checkout Pro — soma a ele.
+                      Com o Pagar.me na tela ele se chama
+                      {' '}<b className="text-gray-400">Pagar com cartão sem sair do site</b>,
+                      porque <b className="text-gray-400">Pagar com cartão</b> passou a ser o
+                      botão do Pagar.me.
                     </p>
                     <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
-                      Vem <b>ligado</b> porque, com a exigência de conta acima ativa, sem ele quem
-                      não tem conta no Mercado Pago fica sem <b>nenhum</b> caminho de cartão.
-                      Saiba do que se trata: é justamente este formulário que vinha sendo recusado
+                      Vem <b>desligado</b>. É justamente este formulário que vinha sendo recusado
                       por risco (<code className="text-gray-400">cc_rejected_high_risk</code>) —
-                      a aprovação aqui é pior que a do Checkout Pro. Ele existe como última
-                      tentativa para quem não tem alternativa, não como caminho principal.
+                      a aprovação aqui é pior que a do Checkout Pro. Ele existia porque, com a
+                      exigência de conta acima ativa, quem não tem conta no Mercado Pago ficava
+                      sem <b>nenhum</b> caminho de cartão; o Pagar.me passou a cobrir esse
+                      público. Ligue só se quiser voltar a testá-lo.
                     </p>
                   </div>
                 </label>
