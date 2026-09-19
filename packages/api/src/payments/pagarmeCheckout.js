@@ -167,6 +167,81 @@ export async function criarCheckoutCartao({
   return { pedido_id: String(pedido.id), checkout_id: pedido.checkouts[0]?.id || null, redirect_url: link }
 }
 
+// ── Cobrança de cartão INLINE (tokenizado no navegador) ──────────────────────
+//
+// Alternativa ao checkout hospedado, para contas SEM o produto "checkout"
+// habilitado (o erro "The checkout payment method is not available for this
+// account"). O cartão é tokenizado no NAVEGADOR com a chave pública, e só o
+// TOKEN chega aqui — o número do cartão nunca passa pelo nosso servidor (PCI
+// mínimo, igual ao que o Brick do Mercado Pago faz).
+//
+// Cobrança SÍNCRONA (auth_and_capture): o pedido volta pago ou recusado na
+// hora, então o chamador decide o desfecho no mesmo request — sem redirect,
+// sem esperar webhook. O split, quando existe, é o mesmo array do checkout.
+export async function criarCobrancaCartao({
+  apiKey, amount, description, bookingId,
+  clienteNome, clienteEmail, clienteDoc, clienteTelefone,
+  cardToken, parcelas = 1, item, split,
+}) {
+  if (!clienteEmail) {
+    const e = new Error('Sua conta está sem e-mail cadastrado, e o gateway exige o e-mail do pagador. Adicione um e-mail no seu perfil e tente de novo.')
+    e.status = 422
+    throw e
+  }
+  if (!cardToken) {
+    const e = new Error('Token do cartão ausente — recarregue a tela e tente de novo.')
+    e.status = 422
+    throw e
+  }
+  const centavos   = emCentavos(amount)
+  const doc        = documentoDoCliente(clienteDoc)
+  const tel        = telefonesDoCliente(clienteTelefone)
+  const nParcelas  = Math.max(1, Math.min(Number(parcelas) || 1, 12))
+
+  const corpo = {
+    code: String(bookingId),
+    items: [{
+      amount:      centavos,
+      description: String(item?.title || description || 'Reserva').slice(0, 255),
+      quantity:    1,
+      code:        String(item?.id || bookingId),
+    }],
+    customer: {
+      name:  String(clienteNome || '').trim() || 'Cliente',
+      email: clienteEmail,
+      ...(doc ? doc : {}),
+      ...(tel ? { phones: tel } : {}),
+    },
+    payments: [{
+      payment_method: 'credit_card',
+      // Mesmo split do checkout hospedado; ausente = valor inteiro na conta da
+      // chave (repasse manual, decidido pelo chamador).
+      ...(Array.isArray(split) && split.length ? { split } : {}),
+      credit_card: {
+        installments:         nParcelas,
+        statement_descriptor: 'TURIVA',            // máx. 13 caracteres na fatura
+        operation_type:       'auth_and_capture',
+        card_token:           cardToken,
+      },
+    }],
+  }
+
+  const pedido = await chamar('/orders', apiKey, { method: 'POST', body: JSON.stringify(corpo) })
+  const charge = pedido?.charges?.[0] || {}
+  const tx     = charge.last_transaction || {}
+  const card   = tx.card || {}
+  return {
+    pedido_id: String(pedido.id),
+    estado:    estadoDoPedido(pedido),             // approved | failed | pending
+    parcelas:  nParcelas,
+    ultimos4:  card.last_four_digits || null,
+    bandeira:  card.brand || null,
+    // Motivo legível da recusa, quando houver — vai para o log e o status_detail.
+    motivo:    tx.acquirer_message || tx.gateway_response?.errors?.[0]?.message || charge.status || null,
+    raw:       pedido,
+  }
+}
+
 // ── Consulta ─────────────────────────────────────────────────────────────────
 // Nunca lança: é usada no webhook e no polling, e ali "não consegui perguntar"
 // não pode virar HTTP 500 (o gateway reentrega em loop) nem decisão errada.

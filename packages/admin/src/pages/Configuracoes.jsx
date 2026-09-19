@@ -58,6 +58,8 @@ const PAYMENT_KEYS = new Set([
   // Lista de adquirentes de cartão + a chave PRÓPRIA do Pagar.me (a genérica é
   // do gateway padrão, que é outro).
   'payment_card_acquirers', 'payment_pagarme_api_key',
+  // Chave pública do Pagar.me (pk_): tokeniza o cartão no formulário inline.
+  'payment_pagarme_public_key',
   // Recebedor da PRÓPRIA plataforma no split do Pagar.me. Sem ele o split
   // não fecha 100% e a cobrança é recusada antes de sair.
   'payment_pagarme_platform_recipient_id',
@@ -158,6 +160,7 @@ const PAYMENT_DEFAULTS = {
   // nenhuma ter aberto esta tela.
   payment_card_acquirers:         '',
   payment_pagarme_api_key:        '',
+  payment_pagarme_public_key:     '',
   payment_pagarme_platform_recipient_id: '',
   // Formulário de cartão dentro do site, como TERCEIRA opção ao lado dos
   // botões. Ligado por padrão: com o Checkout Pro exigindo conta no Mercado
@@ -1086,6 +1089,20 @@ function TabPagamentos({ settings, qc }) {
               prioridade sobre este campo.
             </p>
 
+            <Input
+              label="Chave pública (pk_)"
+              value={form.payment_pagarme_public_key}
+              onChange={(e) => set('payment_pagarme_public_key', e.target.value)}
+              placeholder="pk_..."
+            />
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Dashboard do Pagar.me → Configurações → Chaves → <b>Chave pública</b>
+              {' '}(<code className="text-gray-400">pk_</code>). Ela tokeniza o cartão no
+              formulário dentro do app — o número do cartão não passa pelo nosso servidor.
+              Sem ela, o Pagar.me só aparece pelo checkout hospedado. Pode vir da variável
+              {' '}<code className="text-gray-400">PAGARME_PUBLIC_KEY</code> no servidor.
+            </p>
+
             <div className="border-t border-gray-800 pt-4 space-y-3">
               <p className="text-xs font-semibold text-gray-300">Split</p>
               {/* Sem este id o split não fecha 100% e a cobrança é RECUSADA
@@ -1123,7 +1140,8 @@ function TabPagamentos({ settings, qc }) {
 
             <SaveRow
               onSave={() => saveSection(
-                ['payment_pagarme_api_key', 'payment_pagarme_platform_recipient_id'],
+                ['payment_pagarme_api_key', 'payment_pagarme_public_key',
+                 'payment_pagarme_platform_recipient_id'],
                 'pagarme',
               )}
               pending={saveMut.isPending}

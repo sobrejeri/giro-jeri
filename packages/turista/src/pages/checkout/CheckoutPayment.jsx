@@ -380,6 +380,162 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
   )
 }
 
+// ─── Pagar.me: tokenização do cartão no navegador ───────────
+// O número do cartão vai DIRETO do navegador para o Pagar.me (com a chave
+// pública) e volta como um token. Nada de dado de cartão passa pelo nosso
+// servidor — só o token. É o mesmo princípio do Brick do Mercado Pago, e o que
+// mantém o PCI no mínimo.
+async function tokenizarCartaoPagarme(publicKey, card) {
+  const res = await fetch(`https://api.pagar.me/core/v5/tokens?appId=${encodeURIComponent(publicKey)}`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'card',
+      card: {
+        number:      card.number.replace(/\D/g, ''),
+        holder_name: card.holder.trim(),
+        exp_month:   Number(card.expMonth),
+        exp_year:    Number(card.expYear),
+        cvv:         card.cvv,
+      },
+    }),
+  })
+  let data = null
+  try { data = await res.json() } catch { /* corpo vazio */ }
+  if (!res.ok || !data?.id) {
+    const msg = data?.message
+      || (data?.errors && Object.values(data.errors).flat().join(' · '))
+      || 'Não foi possível validar os dados do cartão. Confira número, validade e CVV.'
+    throw new Error(msg)
+  }
+  return data.id
+}
+
+const soDigitos = (s) => String(s || '').replace(/\D/g, '')
+
+// ─── FormularioCartaoPagarme ────────────────────────────────
+// Formulário de cartão DENTRO do app (sem redirect), para contas Pagar.me sem
+// o checkout hospedado. Tokeniza no navegador e chama o MESMO handler de cartão
+// (onPagar = handleCardPayment), que já roteia por status (aprovado → sucesso,
+// recusado → mensagem). Não redireciona: a cobrança é síncrona.
+function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar }) {
+  const { t } = useTranslation()
+  const [cpf,    setCpf]    = useState('')
+  const [number, setNumber] = useState('')
+  const [holder, setHolder] = useState('')
+  const [exp,    setExp]    = useState('')   // MM/AA
+  const [cvv,    setCvv]    = useState('')
+  const [inst,   setInst]   = useState(1)
+  const [busy,   setBusy]   = useState(false)
+  const [erro,   setErro]   = useState('')
+
+  const cpfDigitos = soDigitos(cpf)
+  const docOk = cpfDigitos.length === 11 || cpfDigitos.length === 14
+
+  const fmtCpf = (v) => {
+    const d = soDigitos(v).slice(0, 14)
+    if (d.length <= 11) {
+      return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+    }
+    return d.replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2')
+  }
+  const fmtCartao = (v) => soDigitos(v).slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ').trim()
+  const fmtExp = (v) => {
+    const d = soDigitos(v).slice(0, 4)
+    return d.length >= 3 ? `${d.slice(0, 2)}/${d.slice(2)}` : d
+  }
+
+  async function pagar() {
+    setErro('')
+    const num = soDigitos(number)
+    const [mm, aa] = exp.split('/')
+    if (!docOk)                { setErro('Informe um CPF válido.'); return }
+    if (num.length < 13)       { setErro('Número do cartão inválido.'); return }
+    if (!holder.trim())        { setErro('Informe o nome impresso no cartão.'); return }
+    if (!mm || !aa || Number(mm) < 1 || Number(mm) > 12) { setErro('Validade inválida (MM/AA).'); return }
+    if (soDigitos(cvv).length < 3) { setErro('CVV inválido.'); return }
+
+    setBusy(true)
+    try {
+      const token = await tokenizarCartaoPagarme(publicKey, {
+        number: num, holder, expMonth: mm,
+        expYear: aa.length === 2 ? `20${aa}` : aa, cvv: soDigitos(cvv),
+      })
+      const result = await onPagar({
+        payment_method: 'credit_card',
+        card_acquirer:  'pagarme',
+        card_token:     token,
+        installments:   Number(inst) || 1,
+        payer_doc:      cpfDigitos,
+      })
+      // Aprovado/processando → o pai já navegou. Recusado → mostra o motivo.
+      if (result?.status === 'rejected') {
+        setErro(result.message_key ? t(result.message_key) : t('payment.rejected.generic'))
+        setBusy(false)
+      }
+    } catch (err) {
+      setErro(err?.message || t('payment.rejected.generic'))
+      setBusy(false)
+    }
+  }
+
+  const campo = 'w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[14px] outline-none focus:border-brand'
+  const parcelas = Array.from({ length: Math.max(1, Math.min(Number(maxParcelas) || 1, 12)) }, (_, i) => i + 1)
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-gray-50/50 p-3 space-y-3">
+      {erro && (
+        <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
+          <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-red-700 leading-relaxed">{erro}</p>
+        </div>
+      )}
+      <div>
+        <label className="block text-[12px] font-semibold text-gray-700 mb-1">CPF do pagador</label>
+        <input inputMode="numeric" value={cpf} onChange={(e) => setCpf(fmtCpf(e.target.value))} placeholder="000.000.000-00" className={campo} />
+      </div>
+      <div>
+        <label className="block text-[12px] font-semibold text-gray-700 mb-1">Número do cartão</label>
+        <input inputMode="numeric" autoComplete="cc-number" value={number} onChange={(e) => setNumber(fmtCartao(e.target.value))} placeholder="0000 0000 0000 0000" className={campo} />
+      </div>
+      <div>
+        <label className="block text-[12px] font-semibold text-gray-700 mb-1">Nome impresso no cartão</label>
+        <input autoComplete="cc-name" value={holder} onChange={(e) => setHolder(e.target.value.toUpperCase())} placeholder="COMO ESTÁ NO CARTÃO" className={campo} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-700 mb-1">Validade</label>
+          <input inputMode="numeric" autoComplete="cc-exp" value={exp} onChange={(e) => setExp(fmtExp(e.target.value))} placeholder="MM/AA" className={campo} />
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-700 mb-1">CVV</label>
+          <input inputMode="numeric" autoComplete="cc-csc" value={cvv} onChange={(e) => setCvv(soDigitos(e.target.value).slice(0, 4))} placeholder="123" className={campo} />
+        </div>
+      </div>
+      <div>
+        <label className="block text-[12px] font-semibold text-gray-700 mb-1">Parcelas</label>
+        <select value={inst} onChange={(e) => setInst(Number(e.target.value))} className={`${campo} bg-white`}>
+          {parcelas.map((n) => (
+            <option key={n} value={n}>{n}x de R$ {fmt(amount / n)}{n === 1 ? ' à vista' : ''}</option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="button"
+        onClick={pagar}
+        disabled={busy}
+        className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98] transition-transform disabled:opacity-60"
+      >
+        {busy && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+        {busy ? 'Processando…' : `Pagar R$ ${fmt(amount)}`}
+      </button>
+      <p className="text-[11px] text-gray-500 text-center leading-relaxed">
+        Seus dados de cartão são enviados com segurança ao Pagar.me e não passam pelos nossos servidores.
+      </p>
+    </div>
+  )
+}
+
 // ─── CheckoutPayment (página principal) ─────────────────────
 export default function CheckoutPayment() {
   const navigate   = useNavigate()
@@ -424,6 +580,8 @@ export default function CheckoutPayment() {
   // O formulário de cartão no site começa FECHADO, como o Pix: a tela abre com
   // as opções, e o cliente escolhe antes de ver campo nenhum.
   const [formularioAberto, setFormularioAberto] = useState(false)
+  // Idem para o formulário inline do Pagar.me (tokenização no navegador).
+  const [pagarmeAberto,   setPagarmeAberto]   = useState(false)
   const [emailPix,       setEmailPix]       = useState('')
   const [erroPix,        setErroPix]        = useState('')
   const [enviandoPix,    setEnviandoPix]    = useState(false)
@@ -847,6 +1005,37 @@ export default function CheckoutPayment() {
                     {acquirersDisponiveis.map((g) => {
                       const b = BOTOES_CARTAO[g]
                       if (!b) return null
+
+                      // Pagar.me COM chave pública → formulário inline
+                      // tokenizado (não redireciona). É o caminho para contas
+                      // sem o checkout hospedado habilitado. Sem a chave, cai no
+                      // botão que redireciona, logo abaixo.
+                      if (g === 'pagarme' && settings?.payment_pagarme_public_key) {
+                        return (
+                          <div key="bloco-pagarme" className="space-y-2">
+                            <BotaoAdquirente
+                              estilo={b}
+                              rotulo={b.rotulo}
+                              desabilitado={!!redirecionando}
+                              onClick={() => setPagarmeAberto((v) => !v)}
+                            />
+                            {pagarmeAberto && (
+                              <FormularioCartaoPagarme
+                                amount={total_price}
+                                publicKey={settings.payment_pagarme_public_key}
+                                maxParcelas={Number(settings?.payment_max_installments) || 12}
+                                onPagar={handleCardPayment}
+                              />
+                            )}
+                            {erroCartao[g] && (
+                              <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
+                                <p className="text-[12px] text-red-700 leading-relaxed">{erroCartao[g]}</p>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+
                       return (
                       <div key={`bloco-${g}`} className="space-y-2">
                         <BotaoAdquirente

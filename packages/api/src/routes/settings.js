@@ -40,6 +40,10 @@ const PUBLIC_KEYS = [
   // lado dos botões que redirecionam. É o caminho de quem não tem conta no
   // Mercado Pago e por isso não consegue usar o Checkout Pro.
   'payment_card_form_inline',
+  // Chave PÚBLICA do Pagar.me (pk_). NÃO é segredo — vive no navegador e serve
+  // para tokenizar o cartão no formulário inline, sem o número passar pelo
+  // nosso servidor. A Secret Key (sk_) e o webhook secret NUNCA saem daqui.
+  'payment_pagarme_public_key',
 ];
 
 // Chaves que decidem QUAIS botões de cartão o checkout mostra. Não vão na lista
@@ -59,6 +63,13 @@ router.get('/public', async (_req, res, next) => {
     const todas = Object.fromEntries((data || []).map((s) => [s.setting_key, s.setting_value]));
     const map = Object.fromEntries(PUBLIC_KEYS.map((k) => [k, todas[k]])
       .filter(([, v]) => v !== undefined));
+
+    // A chave pública do Pagar.me pode vir do banco (campo do admin) ou do
+    // ambiente (Render) — o mesmo espelho da Secret Key. Sem nenhuma das duas,
+    // o app simplesmente não mostra o formulário inline do Pagar.me.
+    if (!map.payment_pagarme_public_key && process.env.PAGARME_PUBLIC_KEY) {
+      map.payment_pagarme_public_key = process.env.PAGARME_PUBLIC_KEY;
+    }
 
     // ── Quais botões de cartão o checkout pode mostrar ───────────────────
     // CALCULADO, e só com o que está REALMENTE PRONTO. A lista bruta diria

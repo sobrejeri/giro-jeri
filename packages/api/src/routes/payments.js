@@ -1929,6 +1929,72 @@ router.post('/intent', authenticate, async (req, res, next) => {
           divisao.split[0].amount, divisao.split[1].amount, booking.id)
       }
 
+      // ── Cartão INLINE (token) × checkout hospedado (redirect) ───────────────
+      // Com um token do navegador a cobrança é DIRETA e síncrona — não depende
+      // do produto "checkout" hospedado, que a conta pode não ter habilitado.
+      // Sem token, segue o fluxo hospedado (redirect) de sempre, logo abaixo.
+      if (card_token) {
+        const { criarCobrancaCartao } = await import('../payments/pagarmeCheckout.js')
+        const cobranca = await criarCobrancaCartao({
+          apiKey:          chavePagarme,
+          split:           splitCobranca,
+          amount:          chargedTotal,
+          description:     service_name || `Reserva ${bookingCode}`,
+          bookingId:       booking.id,
+          clienteNome:     usuario.data?.full_name,
+          clienteEmail:    usuario.data?.email || payer_email,
+          clienteDoc:      payer_doc,
+          clienteTelefone: usuario.data?.phone,
+          cardToken:       card_token,
+          parcelas:        installments,
+          item: { id: service_id || booking.id, title: service_name || `Reserva ${bookingCode}` },
+        })
+
+        // Grava o pedido na linha (pedido_id vira o gateway_transaction_id, que
+        // o /status usa para consultar o desfecho no caso raro de pendência).
+        await supabase.from('payments').update({
+          gateway_transaction_id: cobranca.pedido_id,
+          card_last_four:         cobranca.ultimos4,
+          card_brand:             cobranca.bandeira,
+          installments:           cobranca.parcelas,
+          raw_response_json:      { pagarme: true, inline: true, pedido_id: cobranca.pedido_id, repasse_manual: repasseManual },
+        }).eq('id', linha.id)
+
+        if (cobranca.estado === 'approved') {
+          // Mesma aprovação canônica do webhook/polling (idempotente): ledger,
+          // notificações e promoção da reserva num lugar só.
+          await onPaymentApproved({ id: linha.id, booking_id: booking.id, ...(isGroup ? { order_group_id } : {}) })
+          console.log('[pagarme] cartão inline APROVADO · reserva %s pedido %s (repasse_manual=%s)',
+            booking.id, cobranca.pedido_id, repasseManual)
+          return res.json({
+            success: true, status: 'approved',
+            payment_id: linha.id, booking_id: booking.id, booking_code: bookingCode,
+            amount: chargedTotal, installments: cobranca.parcelas,
+            card_last_four: cobranca.ultimos4, card_brand: cobranca.bandeira,
+          })
+        }
+
+        if (cobranca.estado === 'failed') {
+          await supabase.from('payments')
+            .update({ status: 'failed', status_detail: (cobranca.motivo || '').slice(0, 300) || null })
+            .eq('id', linha.id)
+          console.warn('[pagarme] cartão inline RECUSADO · reserva %s: %s', booking.id, cobranca.motivo)
+          return res.json({
+            success: false, status: 'rejected',
+            payment_id: linha.id, booking_id: booking.id,
+            message_key: 'payment.rejected.generic',
+            error_code: (cobranca.motivo || 'card_declined').slice(0, 200),
+          })
+        }
+
+        // Pendente (raro em auth_and_capture): a tela de processamento consulta.
+        console.log('[pagarme] cartão inline PENDENTE · reserva %s pedido %s', booking.id, cobranca.pedido_id)
+        return res.json({
+          success: true, status: 'in_process',
+          payment_id: linha.id, booking_id: booking.id, booking_code: bookingCode, amount: chargedTotal,
+        })
+      }
+
       const checkout = await criarCheckoutCartao({
         apiKey:          chavePagarme,
         split:           splitCobranca,
