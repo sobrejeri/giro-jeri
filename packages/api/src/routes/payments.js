@@ -449,6 +449,14 @@ async function modaisDasReservas(bookings) {
 // olhando. Melhor recusar antes da cobrança, com mensagem, do que descobrir na
 // conciliação do mês.
 async function splitDoPagarme(bookings, cfg) {
+  // Split no ato DESLIGADO (padrão do sistema) → a plataforma recebe 100% e o
+  // operador é pago pela tela de Repasses, DEPOIS da conclusão do serviço. É o
+  // MESMO flag master que governa o Mercado Pago (contextoSplitOperadorUnico):
+  // sem este check, o cartão do Pagar.me dividiria no ato mesmo com o split
+  // desligado — e o dinheiro sairia para o operador antes da conclusão.
+  if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') {
+    return { erro: 'split no ato desligado — repasse manual pela plataforma' }
+  }
   const { montarSplit } = await import('../payments/pagarmeSplit.js')
 
   const lista = (bookings || []).filter(Boolean)
