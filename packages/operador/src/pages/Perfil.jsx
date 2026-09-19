@@ -192,9 +192,9 @@ function PagarmeRecipient() {
         ) : (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">
             Para ativar, cadastre
-            {faltaDoc && faltaBanco ? ' seu CPF/CNPJ (nos Dados Pessoais) e o banco, agência e conta (em Dados Bancários, abaixo)'
-              : faltaDoc ? ' seu CPF/CNPJ nos Dados Pessoais'
-              : ' seu banco, agência e conta em Dados Bancários (abaixo)'}
+            {faltaDoc && faltaBanco ? ' seu CPF/CNPJ e o banco, agência e conta acima'
+              : faltaDoc ? ' seu CPF/CNPJ acima'
+              : ' seu banco, agência e conta acima'}
             {' '}e salve o perfil. O Pagar.me exige conta bancária — a chave PIX sozinha não basta.
           </p>
         )}
@@ -543,7 +543,33 @@ export default function Perfil() {
               />
             </div>
 
-            {/* CPF / CNPJ */}
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Recebimento via Mercado Pago (split automático) */}
+      <MercadoPagoConnect />
+
+      {/* ── Recebimento automático (Pagar.me) ─────────────────────────────
+          TUDO que o Pagar.me usa para criar o recebedor num card só:
+          documento, endereço, conta bancária e PIX. São os MESMOS campos do
+          perfil (mesmo estado `form`), reunidos aqui em vez de espalhados —
+          não há dado duplicado. A ativação e o status fecham o card. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Building2 size={16} className="text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-700">Recebimento automático (Pagar.me)</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Estes dados vão para o Pagar.me criar seu recebedor e liberar o
+              repasse da sua parte direto na sua conta, a cada venda no cartão.
+            </p>
+
+            {/* Documento */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Select
                 label="Tipo de documento"
@@ -584,121 +610,98 @@ export default function Perfil() {
               />
             </div>
 
-          </div>
-        </CardBody>
-      </Card>
-
-      {/* Chave PIX + recebimento automático (Pagar.me) no MESMO card: a chave
-          PIX é o destino do repasse automático, então separá-los em dois cards
-          de "PIX" só confundia. */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <CreditCard size={16} className="text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-700">Recebimento por PIX</h2>
-          </div>
-        </CardHeader>
-        <CardBody>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Select
-              label="Tipo de chave"
-              value={form.pix_key_type}
-              onChange={(e) => set('pix_key_type', e.target.value)}
-            >
-              <option value="">Selecione o tipo</option>
-              {PIX_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </Select>
-            <Input
-              label="Chave PIX"
-              placeholder={
-                form.pix_key_type === 'cpf'        ? '000.000.000-00'       :
-                form.pix_key_type === 'cnpj'       ? '00.000.000/0001-00'   :
-                form.pix_key_type === 'email'      ? 'seu@email.com'        :
-                form.pix_key_type === 'phone'      ? '+55 88 99999-9999'    :
-                form.pix_key_type === 'random_key' ? 'Cole a chave aleatória' :
-                'Informe a chave'
-              }
-              value={form.pix_key}
-              onChange={(e) => set('pix_key', e.target.value)}
-            />
-          </div>
-          {form.pix_key_type && form.pix_key && (
-            <p className="mt-2 text-xs text-gray-400">
-              Os repasses serão enviados para esta chave após a conclusão dos serviços.
-            </p>
-          )}
-
-          {/* Ativação do recebimento automático (Pagar.me), no mesmo card —
-              some sozinho quando o Pagar.me não está habilitado. */}
-          <PagarmeRecipient />
-        </CardBody>
-      </Card>
-
-      {/* Recebimento via Mercado Pago (split automático) */}
-      <MercadoPagoConnect />
-
-      {/* Dados Bancários */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Building2 size={16} className="text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-700">Dados Bancários</h2>
-            <span className="text-xs text-gray-400 font-normal">para o recebimento automático</span>
-          </div>
-        </CardHeader>
-        <CardBody>
-          <div className="space-y-4">
-            {/* Seletor com o CÓDIGO do banco: o Pagar.me exige o código, não o
-                nome. O valor é salvo como "260 - Nubank" em bank_name; o backend
-                lê os 3 dígitos. Um banco fora da lista pode ser digitado como
-                "código - nome" no campo, mas a lista cobre o comum. */}
-            <Select
-              label="Banco"
-              value={codigoDoNome(form.bank_name)}
-              onChange={(e) => {
-                const cod = e.target.value
-                const nome = BANCOS.find(([c]) => c === cod)?.[1] || ''
-                set('bank_name', cod ? `${cod} - ${nome}` : '')
-              }}
-            >
-              <option value="">Selecione o banco</option>
-              {BANCOS.map(([cod, nome]) => (
-                <option key={cod} value={cod}>{cod} — {nome}</option>
-              ))}
-            </Select>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <Input
-                label="Agência"
-                placeholder="0000"
-                value={form.bank_agency}
-                onChange={(e) => set('bank_agency', e.target.value)}
-              />
-              <Input
-                label="Conta"
-                placeholder="00000-0"
-                value={form.bank_account_number}
-                onChange={(e) => set('bank_account_number', e.target.value)}
-              />
-              <Select
-                label="Tipo"
-                value={form.bank_account_type}
-                onChange={(e) => set('bank_account_type', e.target.value)}
-              >
-                <option value="">Selecione</option>
-                {ACCOUNT_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </Select>
+            {/* Conta bancária (destino do repasse) */}
+            <div className="pt-2 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-600 mb-3">Conta bancária (destino do repasse)</p>
+              {/* Seletor com o CÓDIGO do banco: o Pagar.me exige o código, não o
+                  nome. O valor é salvo como "260 - Nubank" em bank_name; o
+                  backend lê os 3 dígitos. */}
+              <div className="space-y-4">
+                <Select
+                  label="Banco"
+                  value={codigoDoNome(form.bank_name)}
+                  onChange={(e) => {
+                    const cod = e.target.value
+                    const nome = BANCOS.find(([c]) => c === cod)?.[1] || ''
+                    set('bank_name', cod ? `${cod} - ${nome}` : '')
+                  }}
+                >
+                  <option value="">Selecione o banco</option>
+                  {BANCOS.map(([cod, nome]) => (
+                    <option key={cod} value={cod}>{cod} — {nome}</option>
+                  ))}
+                </Select>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <Input
+                    label="Agência"
+                    placeholder="0000"
+                    value={form.bank_agency}
+                    onChange={(e) => set('bank_agency', e.target.value)}
+                  />
+                  <Input
+                    label="Conta (com dígito)"
+                    placeholder="00000-0"
+                    value={form.bank_account_number}
+                    onChange={(e) => set('bank_account_number', e.target.value)}
+                  />
+                  <Select
+                    label="Tipo"
+                    value={form.bank_account_type}
+                    onChange={(e) => set('bank_account_type', e.target.value)}
+                  >
+                    <option value="">Selecione</option>
+                    {ACCOUNT_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </Select>
+                </div>
+                <Input
+                  label="CPF / CNPJ do titular"
+                  placeholder="CPF ou CNPJ do dono da conta"
+                  value={form.bank_document}
+                  onChange={(e) => set('bank_document', e.target.value)}
+                  maxLength={18}
+                />
+              </div>
             </div>
-            <Input
-              label="CPF / CNPJ do titular"
-              placeholder="CPF ou CNPJ do dono da conta"
-              value={form.bank_document}
-              onChange={(e) => set('bank_document', e.target.value)}
-              maxLength={18}
-            />
+
+            {/* Chave PIX — método EXTRA de repasse (o Pagar.me exige a conta
+                bancária; a chave PIX é opcional, para transferências mais
+                rápidas quando o gateway suportar). */}
+            <div className="pt-2 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-600 mb-3">
+                Chave PIX <span className="font-normal text-gray-400">(opcional)</span>
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Select
+                  label="Tipo de chave"
+                  value={form.pix_key_type}
+                  onChange={(e) => set('pix_key_type', e.target.value)}
+                >
+                  <option value="">Selecione o tipo</option>
+                  {PIX_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </Select>
+                <Input
+                  label="Chave PIX"
+                  placeholder={
+                    form.pix_key_type === 'cpf'        ? '000.000.000-00'       :
+                    form.pix_key_type === 'cnpj'       ? '00.000.000/0001-00'   :
+                    form.pix_key_type === 'email'      ? 'seu@email.com'        :
+                    form.pix_key_type === 'phone'      ? '+55 88 99999-9999'    :
+                    form.pix_key_type === 'random_key' ? 'Cole a chave aleatória' :
+                    'Informe a chave'
+                  }
+                  value={form.pix_key}
+                  onChange={(e) => set('pix_key', e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Ativação + status do recebedor. Some sozinho quando o Pagar.me
+                não está habilitado pelo administrador. */}
+            <PagarmeRecipient />
           </div>
         </CardBody>
       </Card>
