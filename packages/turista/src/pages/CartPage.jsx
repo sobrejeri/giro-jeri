@@ -458,6 +458,237 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
     : null
   const LBL = 'text-[11px] font-bold text-gray-500 uppercase tracking-wide inline-flex items-center gap-1'
 
+  // ── Foco num único campo (chip do card) ────────────────────────────────
+  // O chip abre DIRETO o seu seletor — nada de tela cheia com um campo só.
+  // Data → calendário; horário → lista de horários; local → buscador;
+  // veículo → contador de pessoas + veículos. Salva e fecha na escolha.
+  if (focus) {
+    // Total parcial recalculado com o acréscimo da data efetiva.
+    const totalCom = (dISO) => {
+      const acr = acrescimoDoDia(dISO ?? dateIso, seasonsData || [], subtotal)
+      return Math.round((subtotal + acr) * 100) / 100
+    }
+    const commit = (patch = {}) => onSave({
+      ...item,
+      dateIso, time, people,
+      ...(isTransfer ? {} : { origin_text: originText.trim(), mode }),
+      vehicles: compartilhado ? [] : vehicles,
+      total: totalCom(patch.dateIso),
+      ...patch,
+    })
+
+    // Data: o próprio calendário, sem invólucro extra. Escolheu → salva → fecha.
+    if (focus === 'date') {
+      return (
+        <DateSheet
+          value={dateIso ? new Date(`${dateIso}T12:00:00`) : minDate}
+          onChange={(d) => commit({ dateIso: format(d, 'yyyy-MM-dd') })}
+          onClose={onClose}
+          minDate={minDate}
+          seasons={seasonsData || []}
+          highSeasonMonths={highSeasonMonths}
+        />
+      )
+    }
+
+    const podeVeiculo = people >= 1 && (compartilhado || (qtyTotal >= 1 && capacityOk))
+    const titulo = focus === 'time' ? 'Escolher horário'
+      : focus === 'local' ? t('cartPg.editSheet.originLabel')
+      : 'Pessoas e veículos'
+
+    return createPortal(
+      <>
+        <div className="fixed inset-0 bg-black/40 z-[80]" onClick={onClose} />
+        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[80] max-h-[85dvh] flex flex-col">
+          <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
+          <div className="flex items-center justify-between px-5 py-2 shrink-0">
+            <p className="text-[16px] font-bold text-gray-900">{titulo}</p>
+            <button onClick={onClose} aria-label={t('cartPg.editSheet.closeAria')} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-95">
+              <X size={14} className="text-gray-500" />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto px-5 pb-[max(20px,env(safe-area-inset-bottom))] space-y-3">
+            {/* ── Horário: grade de horários válidos; toca e fecha ── */}
+            {focus === 'time' && (
+              <>
+                {timeHint && (
+                  <p className="text-[11.5px] font-semibold text-amber-600 flex items-start gap-1.5">
+                    <AlertTriangle size={13} className="shrink-0 mt-0.5" /> {timeHint}
+                  </p>
+                )}
+                {opcoesHorario.length === 0 ? (
+                  <p className="text-[13px] text-gray-500 py-4 text-center">Sem horário disponível para a data escolhida.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    {opcoesHorario.map((h) => (
+                      <button
+                        key={h}
+                        onClick={() => commit({ time: h })}
+                        className={`rounded-xl border px-2 py-3 text-[14px] font-bold active:scale-95 transition-transform ${
+                          time === h ? 'border-brand bg-brand/5 text-brand' : 'border-gray-200 text-gray-800'
+                        }`}
+                      >
+                        {h}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── Local de saída: buscador; confirma e fecha ── */}
+            {focus === 'local' && (
+              <>
+                <PlaceInput
+                  value={originText}
+                  onChange={setOrigin}
+                  onPick={(p) => { if (p) setOrigin(p.label || p.address || '') }}
+                  placeholder={t('cartPg.editSheet.originPlaceholder')}
+                  dotClass="bg-brand"
+                />
+                <button
+                  onClick={() => commit({ origin_text: originText.trim() })}
+                  disabled={!originText.trim()}
+                  className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-50"
+                >
+                  {t('cartPg.editSheet.save')}
+                </button>
+              </>
+            )}
+
+            {/* ── Veículo: nº de pessoas + seleção de veículos ── */}
+            {focus === 'vehicle' && (
+              <>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.peopleLabel')}</label>
+                  <div className="mt-1 flex items-center gap-4 bg-gray-50 rounded-xl px-4 py-3 w-fit">
+                    <button onClick={() => setPeople((p) => Math.max(1, p - 1))} aria-label={t('cartPg.editSheet.lessPeopleAria')}
+                      className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center active:scale-95">
+                      <Minus size={13} className="text-gray-600" />
+                    </button>
+                    <span className="text-[16px] font-bold text-gray-900 w-6 text-center tabular-nums">{people}</span>
+                    <button onClick={() => setPeople((p) => p + 1)} aria-label={t('cartPg.editSheet.morePeopleAria')}
+                      className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95">
+                      <Plus size={13} className="text-white" />
+                    </button>
+                  </div>
+                </div>
+
+                {compartilhado ? (
+                  <div className="bg-gray-50 rounded-2xl px-4 py-3">
+                    <p className="text-[12.5px] text-gray-600 leading-snug">
+                      No compartilhado você paga por pessoa e viaja com outros hóspedes —
+                      o veículo é definido pelo operador que atender.
+                    </p>
+                    {precoPorPessoa > 0 && (
+                      <p className="text-[12.5px] text-gray-700 font-semibold mt-1.5">
+                        {fmt(precoPorPessoa)} × {people} {people === 1 ? 'pessoa' : 'pessoas'} = {fmt(subtotal)}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className={LBL}>{t('cartPg.editSheet.vehiclesLabel')} <Ok on={qtyTotal >= 1 && capacityOk} /></label>
+                    <div className="mt-1 space-y-2">
+                      {vehicles.map((v, i) => (
+                        <div key={v.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
+                          <Car size={15} className="text-brand shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-semibold text-gray-800 truncate">{v.name}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {fmt(v.price)}{t('cartPg.editSheet.perVehicle')}{Number(v.cap) > 0 ? ` · ${t('cartPg.editSheet.upToPeople', { cap: v.cap })}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button onClick={() => bump(i, -1)} aria-label={t('cartPg.editSheet.lessVehicleAria', { name: v.name })}
+                              className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center active:scale-95">
+                              <Minus size={11} className="text-gray-600" />
+                            </button>
+                            <span className="text-[14px] font-bold text-gray-900 w-4 text-center tabular-nums">{v.qty || 0}</span>
+                            <button onClick={() => bump(i, +1)} aria-label={t('cartPg.editSheet.moreVehicleAria', { name: v.name })}
+                              className="w-7 h-7 rounded-full bg-brand flex items-center justify-center active:scale-95">
+                              <Plus size={11} className="text-white" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {!capacityOk && (
+                      <div className="mt-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 space-y-2">
+                        <p className="text-[11.5px] font-semibold text-amber-700 flex items-start gap-1.5">
+                          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                          {t('cartPg.editSheet.insufficientCapacity', { count: capacity, people })}
+                        </p>
+                        {suggestion && (
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[12px] text-amber-800">
+                              {t('cartPg.editSheet.suggestionLabel')} <span className="font-bold">+1x {suggestion.name}</span>
+                              {Number(suggestion.cap) > 0 ? ` ${t('cartPg.editSheet.suggestionCapacity', { cap: suggestion.cap })}` : ''}
+                            </p>
+                            <button onClick={() => addVehicle(suggestion)}
+                              className="shrink-0 bg-brand text-white text-[11.5px] font-bold px-3 py-1.5 rounded-lg active:scale-95 transition-transform">
+                              {t('cartPg.add')}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {available.length === 0 && vehicles.length === 0 && (
+                      <p className="mt-2 text-[12px] text-gray-500 leading-snug">
+                        {(isTransfer ? !rvFetched : !tvFetched)
+                          ? t('cartPg.editSheet.vehiclesLoading')
+                          : t('cartPg.editSheet.vehiclesNone')}
+                      </p>
+                    )}
+                    {extras.length > 0 && (
+                      <div className="mt-2">
+                        <button onClick={() => setShowExtras((s) => !s)}
+                          className="inline-flex items-center gap-1 text-[12px] font-bold text-brand active:scale-95 transition-transform">
+                          <Plus size={13} /> {showExtras
+                            ? t('cartPg.editSheet.hideOtherVehicles')
+                            : (vehicles.length === 0 ? 'Escolher veículo' : t('cartPg.editSheet.addOtherVehicle'))}
+                        </button>
+                        {showExtras && (
+                          <div className="mt-2 space-y-2">
+                            {extras.map((a) => (
+                              <div key={a.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-3 py-2.5">
+                                <Car size={15} className="text-gray-400 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[13px] font-semibold text-gray-800 truncate">{a.name}</p>
+                                  <p className="text-[11px] text-gray-400">
+                                    {fmt(a.price)}{t('cartPg.editSheet.perVehicle')}{Number(a.cap) > 0 ? ` · ${t('cartPg.editSheet.upToPeople', { cap: a.cap })}` : ''}
+                                  </p>
+                                </div>
+                                <button onClick={() => addVehicle(a)} aria-label={t('cartPg.editSheet.addVehicleAria', { name: a.name })}
+                                  className="w-7 h-7 rounded-full bg-brand flex items-center justify-center shrink-0 active:scale-95">
+                                  <Plus size={11} className="text-white" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => commit()}
+                  disabled={!podeVeiculo}
+                  className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-50"
+                >
+                  {t('cartPg.editSheet.save')}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </>,
+      document.body,
+    )
+  }
+
   // Um só corpo de editor, usado inline (dentro do card do carrinho) e em folha
   // (fallback). MESMA lógica de preço/capacidade/modo — só muda o invólucro.
   const conteudo = (

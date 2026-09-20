@@ -47,8 +47,10 @@ test('cada chip abre o editor mirando só a sua função', () => {
   assert.match(src, /CHIP_FOCUS = \{[^}]*data: 'date'[^}]*hora: 'time'[^}]*veiculo: 'vehicle'[^}]*origem: 'local'/)
   assert.match(src, /abrirEditor\(item, CHIP_FOCUS\[c\.key\] \|\| null\)/, 'o chip passa o foco ao editor')
   assert.match(src, /focus=\{editFocus\}/, 'o editor recebe o campo focado')
-  // Foco na data já abre o calendário; salvar parcial quando focado.
-  assert.match(src, /useState\(\(\) => focus === 'date'\)/)
+  // Focado, abre DIRETO o seletor — sem a tela cheia de um campo só.
+  assert.match(src, /if \(focus\) \{/, 'ramo dedicado ao campo focado')
+  assert.match(src, /if \(focus === 'date'\) \{[\s\S]*?<DateSheet/, 'data abre o próprio calendário')
+  assert.match(src, /const commit = \(patch = \{\}\) =>/, 'a escolha salva e fecha')
   assert.match(src, /const podeSalvar = focus \? true : canSave/)
 })
 
