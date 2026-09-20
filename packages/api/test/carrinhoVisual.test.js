@@ -47,3 +47,11 @@ test('o resumo flutuante cola embaixo (menu escondido) e é mais compacto', () =
   assert.match(src, /fixed bottom-0 left-1\/2/, 'o resumo desce para a base agora que o menu saiu')
   assert.ok(!/bottom-\[64px\]/.test(src), 'não deve mais reservar a faixa do menu')
 })
+
+test('o cupom fica atrás de "Tem cupom?" e abre sozinho se veio por link', () => {
+  assert.match(src, /const \[showCoupon,\s*setShowCoupon\]/, 'o campo de cupom é colapsável')
+  assert.match(src, /Tem cupom\?/, 'o gatilho ocupa só uma linha curta')
+  assert.match(src, /setShowCoupon\(true\)/, 'cupom vindo do link já abre o campo')
+  assert.ok(!/O total é atualizado ao completar os serviços/.test(src),
+    'a nota ilustrativa longa foi removida para poupar altura')
+})

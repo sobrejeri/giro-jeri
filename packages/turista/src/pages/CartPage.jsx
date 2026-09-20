@@ -770,12 +770,16 @@ export default function CartPage() {
   const [appliedCoupon, setAppliedCoupon] = useState(null) // {code, discount, applicable}
   const [couponErr,     setCouponErr]     = useState('')
   const [couponBusy,    setCouponBusy]    = useState(false)
+  // O campo de cupom fica escondido atrás de um "Tem cupom?" — a maioria não
+  // usa, e o input ocupava uma linha inteira do resumo numa tela já comprida.
+  const [showCoupon,    setShowCoupon]    = useState(false)
 
   // Cupom que chegou por WhatsApp: já vem preenchido, senão o cliente teria de
   // decorar o código da mensagem e digitar na mão — é aí que a oferta se perde.
+  // Nesse caso o campo já abre, senão o código preenchido ficaria escondido.
   useEffect(() => {
     const guardado = lerOferta()
-    if (guardado) setCouponInput(guardado)
+    if (guardado) { setCouponInput(guardado); setShowCoupon(true) }
   }, [])
 
 
@@ -1106,11 +1110,12 @@ export default function CartPage() {
                   </p>
                   <p className="text-[13px] font-bold text-emerald-600">− {fmt(appliedCoupon.discount)}</p>
                 </div>
-              ) : (
+              ) : showCoupon ? (
                 <div>
                   <div className="flex items-center gap-2">
                     <input
                       value={couponInput}
+                      autoFocus
                       onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponErr('') }}
                       placeholder={t('cartPg.footer.couponPlaceholder')}
                       className="flex-1 bg-gray-50 rounded-xl px-3 py-2 text-[12.5px] text-gray-800 uppercase tracking-wide outline-none focus:ring-2 focus:ring-brand/30 placeholder:normal-case placeholder:tracking-normal"
@@ -1125,17 +1130,21 @@ export default function CartPage() {
                   </div>
                   {couponErr && <p className="text-[11px] text-red-500 mt-1">{couponErr}</p>}
                 </div>
+              ) : (
+                <button
+                  onClick={() => setShowCoupon(true)}
+                  className="text-[12px] font-semibold text-brand active:scale-95 transition-transform"
+                >
+                  Tem cupom?
+                </button>
               )}
-              {/* Resumo definido × pendente — quando há item sem valor ainda,
-                  o total é PARCIAL: deixar isso explícito evita a surpresa de
-                  ver o preço subir depois de completar o serviço. */}
+              {/* Resumo definido × pendente numa linha só: quando há item sem
+                  valor, o total é PARCIAL — deixar explícito evita a surpresa
+                  de ver o preço subir depois de completar o serviço. */}
               {pendingCount > 0 && (
-                <div className="rounded-xl bg-gray-50 px-3 py-2 space-y-0.5">
-                  <div className="flex items-center justify-between text-[11.5px]">
-                    <span className="text-gray-500">{definedCount} com valor · <span className="text-amber-600 font-semibold">{pendingCount} a calcular</span></span>
-                    <span className="text-[10px] text-gray-400">Ilustrativo</span>
-                  </div>
-                  <p className="text-[10px] text-gray-400 leading-snug">O total é atualizado ao completar os serviços.</p>
+                <div className="flex items-center justify-between text-[11.5px]">
+                  <span className="text-gray-500">{definedCount} com valor · <span className="text-amber-600 font-semibold">{pendingCount} a calcular</span></span>
+                  <span className="text-[10px] text-gray-400">Valores ilustrativos</span>
                 </div>
               )}
               <div className="flex items-center justify-between">
