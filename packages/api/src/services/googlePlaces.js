@@ -248,12 +248,18 @@ export async function diagnosticarPlaces({ lat, lng } = {}) {
   try {
     const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.id' },
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.id,places.photos' },
       body: JSON.stringify({ includedTypes: ['restaurant'], maxResultCount: 5,
         locationRestriction: { circle: { center, radius: 15000 } } }),
     });
     const j = await r.json();
     out.new = { httpStatus: r.status, error: j.error?.status || j.error?.message || null, count: (j.places || []).length };
+    // Testa a foto da API New (mesmo caminho que o app usa: ?name=).
+    const pn = j.places?.find((p) => p.photos?.[0]?.name)?.photos?.[0]?.name;
+    if (pn) {
+      const foto = await fotoBytes({ name: pn, maxWidth: 400 });
+      out.newPhoto = foto ? { ok: true, contentType: foto.contentType, bytes: foto.buffer.byteLength } : { ok: false, name: pn };
+    } else { out.newPhoto = { ok: false, reason: 'sem photos no resultado New' }; }
   } catch (e) { out.new = { error: e.message }; }
   try {
     const u = new URL('https://maps.googleapis.com/maps/api/place/nearbysearch/json');
