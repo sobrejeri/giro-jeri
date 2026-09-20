@@ -192,6 +192,35 @@ export async function descobrirLugaresProximos({ lat, lng, radius = 15000, categ
   }
 }
 
+// Diagnóstico: faz uma chamada New e uma legada e devolve os status/erros
+// (sem a chave). Usado por /nearby?debug=1 para revelar por que veio vazio.
+export async function diagnosticarPlaces({ lat, lng } = {}) {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  const out = { keyPresent: !!key, keyTail: key ? `…${key.slice(-4)}` : null };
+  const center = Number.isFinite(lat) && Number.isFinite(lng)
+    ? { latitude: Number(lat), longitude: Number(lng) } : CENTRO_JERI;
+  if (!key) return out;
+  try {
+    const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.id' },
+      body: JSON.stringify({ includedTypes: ['restaurant'], maxResultCount: 5,
+        locationRestriction: { circle: { center, radius: 15000 } } }),
+    });
+    const j = await r.json();
+    out.new = { httpStatus: r.status, error: j.error?.status || j.error?.message || null, count: (j.places || []).length };
+  } catch (e) { out.new = { error: e.message }; }
+  try {
+    const u = new URL('https://maps.googleapis.com/maps/api/place/nearbysearch/json');
+    u.searchParams.set('location', `${center.latitude},${center.longitude}`);
+    u.searchParams.set('radius', '15000'); u.searchParams.set('type', 'restaurant'); u.searchParams.set('key', key);
+    const r = await fetch(u);
+    const j = await r.json();
+    out.legacy = { httpStatus: r.status, status: j.status, error: j.error_message || null, count: (j.results || []).length };
+  } catch (e) { out.legacy = { error: e.message }; }
+  return out;
+}
+
 // Resolve a URL final de uma foto do Places (usada pelo proxy /photo).
 const photoCache = new Map();
 const PHOTO_TTL = 24 * 60 * 60 * 1000;
