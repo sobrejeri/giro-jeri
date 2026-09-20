@@ -5,9 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
   ShoppingCart, Trash2, Calendar, Clock, Users, Car, MapPin, Pencil,
-  CheckCircle2, AlertTriangle, Loader2, Send, X, Plus, Minus, ChevronRight, ChevronDown, Sparkles,
+  CheckCircle2, AlertTriangle, Loader2, Send, X, Plus, Minus, ChevronRight, ChevronLeft, ChevronDown, Sparkles,
 } from 'lucide-react'
-import PageHeader from '../components/layout/PageHeader'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
@@ -23,6 +22,60 @@ import { highSeasonMonthSet, acrescimoDoDia, rotuloDoDia } from '../lib/season'
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 const todayIso = () => format(new Date(), 'yyyy-MM-dd')
+const base = import.meta.env.BASE_URL
+
+/* ── Cabeçalho da marca no carrinho ─────────────────────────────
+   Logo + assinatura da Turiva, com um degradê suave de areia/pôr do sol —
+   dá o tom "viagem" logo na abertura. Quando a reserva veio pelo link de um
+   operador, mostra "Reservando com <nome>", que é a promessa da venda direta. */
+function CartHeader({ count, partnerName }) {
+  const navigate = useNavigate()
+  return (
+    <header className="relative overflow-hidden bg-gradient-to-b from-[#FFF3E6] to-white">
+      {/* Sol/brilho decorativo, discreto, à direita */}
+      <div className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full bg-gradient-to-br from-[#FFB067]/40 to-transparent blur-2xl" />
+      <div className="relative px-4 pt-5 pb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              onClick={() => navigate(-1)}
+              aria-label="Voltar"
+              className="w-9 h-9 rounded-full bg-white/80 shadow-sm flex items-center justify-center active:scale-95 transition-transform shrink-0"
+            >
+              <ChevronLeft size={20} className="text-gray-700" />
+            </button>
+            <img src={base + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
+            <div className="min-w-0 leading-none">
+              <p className="font-giro font-bold text-[18px] text-gray-900 tracking-[0.02em]">TURIVA</p>
+              <p className="text-[11px] text-brand font-semibold mt-0.5">Viagens que ficam</p>
+            </div>
+          </div>
+          {count > 0 && (
+            <span className="shrink-0 inline-flex items-center gap-1.5 bg-white shadow-sm rounded-full pl-2.5 pr-3 py-1.5">
+              <ShoppingCart size={14} className="text-brand" />
+              <span className="text-[13px] font-extrabold text-gray-900">{count}</span>
+              <span className="text-[12px] text-gray-500">{count === 1 ? 'serviço' : 'serviços'}</span>
+            </span>
+          )}
+        </div>
+
+        {partnerName && (
+          <div className="mt-3 inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-full px-3 py-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[12.5px] font-semibold">Reservando com <b>{partnerName}</b></span>
+          </div>
+        )}
+
+        <div className="mt-3">
+          <h1 className="font-giro font-bold text-[26px] text-gray-900 leading-tight">Meu carrinho</h1>
+          <p className="text-[13px] text-gray-500 mt-0.5">
+            {count > 0 ? 'Tudo pronto para viver Jeri?' : 'Monte a sua viagem'}
+          </p>
+        </div>
+      </div>
+    </header>
+  )
+}
 
 // Relógio de referência das regras de antecedência: America/Fortaleza (UTC-3),
 // o mesmo fuso que o servidor usa para validar cutoff e antecedência mínima.
@@ -50,6 +103,23 @@ function dayLabel(iso) {
   if (!iso) return '—'
   try { return format(new Date(`${iso}T12:00:00`), "d 'de' MMM", { locale: ptBR }) }
   catch { return iso }
+}
+
+// Traduz os campos que faltam (itemMissing) em chips de ação. Agrupa as
+// variações de veículo/capacidade num chip só e evita repetir o mesmo campo.
+function missingChips(miss = []) {
+  const out = []
+  const add = (key, Icon, label) => { if (!out.some((c) => c.key === key)) out.push({ key, Icon, label }) }
+  for (const m of miss) {
+    if (m === 'data') add('data', Calendar, 'Escolher data')
+    else if (m === 'horário') add('hora', Clock, 'Escolher horário')
+    else if (m === 'pessoas') add('pessoas', Users, 'Nº de pessoas')
+    else if (m.startsWith('veículo')) add('veiculo', Car, 'Selecionar veículo')
+    else if (m === 'local de saída' || m === 'origem') add('origem', MapPin, 'Local de saída')
+    else if (m === 'destino') add('destino', MapPin, 'Destino')
+    else add(m, AlertTriangle, m)
+  }
+  return out
 }
 
 /* ── Edição de um item (bottom sheet) ───────────────────────────
@@ -749,6 +819,12 @@ export default function CartPage() {
   const okCount  = Object.values(results).filter((r) => r.status === 'ok').length
   const errCount = Object.values(results).filter((r) => r.status === 'error').length
 
+  // Operador da venda direta (link /c/<slug>), para o "Reservando com <nome>".
+  const partnerName = getPartnerAttribution()?.name || null
+  // Definido × pendente — alimenta o resumo ("X com valor definido / Y a calcular").
+  const definedCount = items.filter((i) => itemMissing(i).length === 0).length
+  const pendingCount = items.length - definedCount
+
   async function submitAll() {
     if (submitting || !allComplete) return
     if (!user) { navigate('/login', { state: { from: '/carrinho' } }); return }
@@ -799,7 +875,7 @@ export default function CartPage() {
 
   return (
     <div className="min-h-screen" style={{ paddingBottom: footerH ? footerH + 16 : 160 }}>
-      <PageHeader title={items.length ? t('cartPg.titleCount', { count: items.length }) : t('cartPg.title')} />
+      <CartHeader count={items.length} partnerName={partnerName} />
 
       {list.length === 0 && !done ? (
         <div className="px-6 pt-20 text-center">
@@ -877,37 +953,62 @@ export default function CartPage() {
                 {/* Descrição (expande/recolhe ao clicar no card) */}
                 {expandedId === item.id && <CartItemDetails item={item} />}
 
-                {/* Rodapé do card: status + editar */}
-                <div className="flex items-center justify-between px-3 pb-3">
-                  {st?.status === 'ok' ? (
+                {/* Rodapé do card: status + editar. Item incompleto ganha os
+                    campos que faltam como CHIPS (Escolher data, horário…) — cada
+                    um abre o editor. Deixa claro o que falta, em vez de um
+                    "Faltam: data, horário" corrido. */}
+                {st?.status === 'ok' ? (
+                  <div className="px-3 pb-3">
                     <span className="text-[11px] font-bold text-emerald-600">{t('cartPg.card.requestSent', { code: st.code })}</span>
-                  ) : st?.status === 'error' ? (
-                    <span className="text-[11px] font-bold text-red-500 flex-1 pr-2">{st.msg}</span>
-                  ) : complete ? (
+                  </div>
+                ) : st?.status === 'error' ? (
+                  <div className="px-3 pb-3">
+                    <span className="text-[11px] font-bold text-red-500">{st.msg}</span>
+                  </div>
+                ) : complete ? (
+                  <div className="flex items-center justify-between px-3 pb-3">
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
                       <CheckCircle2 size={12} /> {t('cartPg.card.complete')}
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-                      <AlertTriangle size={12} /> {t('cartPg.card.missing', { missing: miss.join(', ') })}
+                    {!batch && (
+                      <button
+                        onClick={() => setEditing(item)}
+                        className="inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border border-brand/30 text-brand active:scale-95 transition-transform"
+                      >
+                        <Pencil size={12} /> {t('cartPg.card.edit')}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-3 pb-3">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 mb-2">
+                      <AlertTriangle size={12} /> Faltam detalhes
                     </span>
-                  )}
-                  {!batch && (
-                    <button
-                      onClick={() => setEditing(item)}
-                      // Item que veio do atalho da vitrine nunca foi configurado:
-                      // "Editar" soaria como algo opcional. Em laranja cheio,
-                      // "Completar" diz que a solicitação depende disso.
-                      className={`inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl active:scale-95 transition-transform ${
-                        complete
-                          ? 'border border-brand/30 text-brand'
-                          : 'bg-brand text-white shadow-sm shadow-brand/20'
-                      }`}
-                    >
-                      <Pencil size={12} /> {complete ? t('cartPg.card.edit') : 'Completar'}
-                    </button>
-                  )}
-                </div>
+                    {!batch && (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          {missingChips(miss).map((c) => (
+                            <button
+                              key={c.label}
+                              onClick={() => setEditing(item)}
+                              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 border border-gray-200 rounded-xl px-3 py-2.5 active:scale-95 transition-transform"
+                            >
+                              <c.Icon size={14} className="text-brand shrink-0" />
+                              <span className="truncate">{c.label}</span>
+                              <ChevronRight size={13} className="text-gray-300 ml-auto shrink-0" />
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setEditing(item)}
+                          className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-[13px] font-bold px-3.5 py-3 rounded-2xl bg-brand text-white shadow-sm shadow-brand/20 active:scale-[0.98] transition-transform"
+                        >
+                          <Pencil size={13} /> Completar detalhes
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -1023,8 +1124,30 @@ export default function CartPage() {
                   {couponErr && <p className="text-[11px] text-red-500 mt-1">{couponErr}</p>}
                 </div>
               )}
+              {/* Resumo definido × pendente — quando há item sem valor ainda,
+                  o total é PARCIAL: deixar isso explícito evita a surpresa de
+                  ver o preço subir depois de completar o serviço. */}
+              {pendingCount > 0 && (
+                <div className="rounded-2xl bg-gray-50 px-3 py-2.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Resumo</span>
+                    <span className="text-[10.5px] text-gray-400">Valores ilustrativos</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="text-gray-500">{definedCount} {definedCount === 1 ? 'serviço com valor definido' : 'serviços com valor definido'}</span>
+                    <span className="font-semibold text-gray-700">{fmt(total)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="text-gray-500">{pendingCount} {pendingCount === 1 ? 'serviço pendente' : 'serviços pendentes'}</span>
+                    <span className="font-semibold text-gray-700">A calcular</span>
+                  </div>
+                  <p className="text-[10.5px] text-gray-400 pt-0.5">O total será atualizado após completar o serviço.</p>
+                </div>
+              )}
               <div className="flex items-center justify-between">
-                <p className="text-[12px] text-gray-500 font-semibold">{t('cartPg.footer.total')}</p>
+                <p className="text-[12px] text-gray-500 font-semibold">
+                  {pendingCount > 0 ? 'Subtotal parcial' : t('cartPg.footer.total')}
+                </p>
                 <div className="text-right">
                   {appliedCoupon && appliedCoupon.discount > 0 ? (
                     <>
