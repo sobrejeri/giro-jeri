@@ -33,45 +33,47 @@ function CartHeader({ count, partnerName }) {
   return (
     <header className="relative overflow-hidden bg-gradient-to-b from-[#FFF3E6] to-white">
       {/* Sol/brilho decorativo, discreto, à direita */}
-      <div className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full bg-gradient-to-br from-[#FFB067]/40 to-transparent blur-2xl" />
-      <div className="relative px-4 pt-5 pb-4">
+      <div className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 rounded-full bg-gradient-to-br from-[#FFB067]/40 to-transparent blur-2xl" />
+      <div className="relative px-4 pt-3 pb-2.5">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => navigate(-1)}
               aria-label="Voltar"
-              className="w-9 h-9 rounded-full bg-white/80 shadow-sm flex items-center justify-center active:scale-95 transition-transform shrink-0"
+              className="w-8 h-8 rounded-full bg-white/80 shadow-sm flex items-center justify-center active:scale-95 transition-transform shrink-0"
             >
-              <ChevronLeft size={20} className="text-gray-700" />
+              <ChevronLeft size={18} className="text-gray-700" />
             </button>
-            <img src={base + 'logo-icon.jpeg'} alt="" className="w-9 h-9 rounded-xl shrink-0" />
+            <img src={base + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
             <div className="min-w-0 leading-none">
-              <p className="font-giro font-bold text-[18px] text-gray-900 tracking-[0.02em]">TURIVA</p>
-              <p className="text-[11px] text-brand font-semibold mt-0.5">Viagens que ficam</p>
+              <p className="font-giro font-bold text-[15px] text-gray-900 tracking-[0.02em]">TURIVA</p>
+              <p className="text-[10px] text-brand font-semibold mt-0.5">Viagens que ficam</p>
             </div>
           </div>
           {count > 0 && (
-            <span className="shrink-0 inline-flex items-center gap-1.5 bg-white shadow-sm rounded-full pl-2.5 pr-3 py-1.5">
-              <ShoppingCart size={14} className="text-brand" />
+            <span className="shrink-0 inline-flex items-center gap-1.5 bg-white shadow-sm rounded-full pl-2.5 pr-3 py-1">
+              <ShoppingCart size={13} className="text-brand" />
               <span className="text-[13px] font-extrabold text-gray-900">{count}</span>
-              <span className="text-[12px] text-gray-500">{count === 1 ? 'serviço' : 'serviços'}</span>
+              <span className="text-[11px] text-gray-500">{count === 1 ? 'serviço' : 'serviços'}</span>
             </span>
           )}
         </div>
 
-        {partnerName && (
-          <div className="mt-3 inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-full px-3 py-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-[12.5px] font-semibold">Reservando com <b>{partnerName}</b></span>
-          </div>
-        )}
-
-        <div className="mt-3">
-          <h1 className="font-giro font-bold text-[26px] text-gray-900 leading-tight">Meu carrinho</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">
-            {count > 0 ? 'Tudo pronto para viver Jeri?' : 'Monte a sua viagem'}
+        {/* Título compacto na mesma linha da assinatura — o "Meu carrinho"
+            grande com respiro comia meia dobra numa tela já comprida. */}
+        <div className="mt-2 flex items-baseline gap-2 flex-wrap">
+          <h1 className="font-giro font-bold text-[19px] text-gray-900 leading-tight">Meu carrinho</h1>
+          <p className="text-[12px] text-gray-500">
+            {count > 0 ? '· Tudo pronto para viver Jeri?' : '· Monte a sua viagem'}
           </p>
         </div>
+
+        {partnerName && (
+          <div className="mt-1.5 inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-full px-2.5 py-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span className="text-[11.5px] font-semibold">Reservando com <b>{partnerName}</b></span>
+          </div>
+        )}
       </div>
     </header>
   )
