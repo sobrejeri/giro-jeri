@@ -235,49 +235,6 @@ export async function descobrirLugaresProximos({ lat, lng, radius = 15000, categ
   }
 }
 
-// Diagnóstico: faz uma chamada New e uma legada e devolve os status/erros
-// (sem a chave). Usado por /nearby?debug=1 para revelar por que veio vazio.
-export async function diagnosticarPlaces({ lat, lng } = {}) {
-  const key = process.env.GOOGLE_MAPS_API_KEY;
-  // Marcador de versão: se este campo aparecer, a API já está com o código do
-  // streaming de fotos. Se sumir, o Render ainda roda a versão antiga.
-  const out = { apiVersion: 'photos-stream-v2', keyPresent: !!key, keyTail: key ? `…${key.slice(-4)}` : null };
-  const center = Number.isFinite(lat) && Number.isFinite(lng)
-    ? { latitude: Number(lat), longitude: Number(lng) } : CENTRO_JERI;
-  if (!key) return out;
-  try {
-    const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.id,places.photos' },
-      body: JSON.stringify({ includedTypes: ['restaurant'], maxResultCount: 5,
-        locationRestriction: { circle: { center, radius: 15000 } } }),
-    });
-    const j = await r.json();
-    out.new = { httpStatus: r.status, error: j.error?.status || j.error?.message || null, count: (j.places || []).length };
-    // Testa a foto da API New (mesmo caminho que o app usa: ?name=).
-    const pn = j.places?.find((p) => p.photos?.[0]?.name)?.photos?.[0]?.name;
-    if (pn) {
-      const foto = await fotoBytes({ name: pn, maxWidth: 400 });
-      out.newPhoto = foto ? { ok: true, contentType: foto.contentType, bytes: foto.buffer.byteLength } : { ok: false, name: pn };
-    } else { out.newPhoto = { ok: false, reason: 'sem photos no resultado New' }; }
-  } catch (e) { out.new = { error: e.message }; }
-  try {
-    const u = new URL('https://maps.googleapis.com/maps/api/place/nearbysearch/json');
-    u.searchParams.set('location', `${center.latitude},${center.longitude}`);
-    u.searchParams.set('radius', '15000'); u.searchParams.set('type', 'restaurant'); u.searchParams.set('key', key);
-    const r = await fetch(u);
-    const j = await r.json();
-    out.legacy = { httpStatus: r.status, status: j.status, error: j.error_message || null, count: (j.results || []).length };
-    // Testa uma foto real: pega o photo_reference do 1º resultado e baixa.
-    const ref = j.results?.find((x) => x.photos?.[0]?.photo_reference)?.photos?.[0]?.photo_reference;
-    if (ref) {
-      const foto = await fotoBytes({ ref, maxWidth: 400 });
-      out.photo = foto ? { ok: true, contentType: foto.contentType, bytes: foto.buffer.byteLength } : { ok: false };
-    } else { out.photo = { ok: false, reason: 'sem photo_reference nos resultados' }; }
-  } catch (e) { out.legacy = { error: e.message }; }
-  return out;
-}
-
 // Baixa os BYTES da foto (New por `name`, legada por `ref`) para o proxy
 // transmitir direto ao cliente. Mais robusto que seguir redirect, e a chave
 // nunca sai do servidor. Devolve { buffer, contentType } ou null.

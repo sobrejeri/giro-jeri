@@ -6,7 +6,7 @@ import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { fetchNearby } from '../services/geoapify.js';
-import { buscarFotoDoLugar, descobrirLugaresProximos, fotoBytes, diagnosticarPlaces } from '../services/googlePlaces.js';
+import { buscarFotoDoLugar, descobrirLugaresProximos, fotoBytes } from '../services/googlePlaces.js';
 
 const router = Router();
 
@@ -141,12 +141,6 @@ router.get('/nearby', async (req, res, next) => {
     }
     const radius   = Math.min(Math.max(Number(req.query.radius) || 8000, 500), 50000);
     const category = req.query.category;
-
-    // Diagnóstico remoto: /nearby?debug=1 revela por que o Google veio vazio.
-    if (req.query.debug === '1') {
-      const diag = await diagnosticarPlaces({ lat, lng: lon });
-      return res.json({ debug: true, diag });
-    }
 
     // Base do proxy de fotos (URL absoluta, para o <img> do app). No Render a
     // API fica atrás de proxy, então req.protocol vem "http" — usar isso geraria
