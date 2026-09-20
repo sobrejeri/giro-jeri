@@ -551,6 +551,7 @@ export default function Feed() {
   const qc = useQueryClient()
   const FILTERS = useMemo(() => getFilters(t), [t])
   const cats = useMemo(() => getCats(t), [t])
+  const [searchFocus, setSearchFocus] = useState(false)
 
   // Publicação no feed (admin): compositor/editor. undefined = fechado,
   // null = nova publicação, objeto = editar aquele post.
@@ -619,6 +620,28 @@ export default function Feed() {
   const places = !q ? allPlaces : allPlaces.filter((p) => matches(p.name) || matches(p.locality) || matches(p.address))
 
   const loadingPlacesAll = loadingNearby
+
+  // Sugestões de autocomplete: nomes de lugares (com o ícone da categoria) e
+  // títulos de eventos que casam com o que está sendo digitado.
+  const suggestions = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase()
+    if (term.length < 2) return []
+    const out = []; const seen = new Set()
+    const add = (label, Icon) => {
+      const k = (label || '').toLowerCase()
+      if (!label || seen.has(k)) return
+      seen.add(k); out.push({ label, Icon })
+    }
+    for (const p of allPlaces) {
+      if (out.length >= 8) break
+      if ((p.name || '').toLowerCase().includes(term)) add(p.name, cats[p.category]?.Icon || MapPin)
+    }
+    for (const p of allPosts) {
+      if (out.length >= 8) break
+      if ((p.title || '').toLowerCase().includes(term)) add(p.title, CalendarDays)
+    }
+    return out
+  }, [searchQuery, allPlaces, allPosts, cats])
 
   const events   = posts.filter((p) => p.kind !== 'promo')
   const promos   = posts.filter((p) => p.kind === 'promo')
@@ -744,9 +767,28 @@ export default function Feed() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setSearchFocus(true)}
+            onBlur={() => setTimeout(() => setSearchFocus(false), 150)}
             placeholder={t('feedPg.searchPlaceholder')}
             className="w-full h-12 pl-12 pr-11 rounded-2xl bg-white border border-gray-200 shadow-sm text-[14px] text-gray-800 placeholder-gray-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition"
           />
+
+          {/* Sugestões enquanto digita — toca e preenche a busca. */}
+          {searchFocus && suggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 bg-white rounded-2xl border border-gray-100 shadow-lg overflow-hidden">
+              {suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { setSearchQuery(s.label); setSearchFocus(false) }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left active:bg-gray-50 border-b border-gray-50 last:border-0"
+                >
+                  <s.Icon size={15} className="text-brand shrink-0" />
+                  <span className="text-[13.5px] text-gray-800 truncate">{s.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
