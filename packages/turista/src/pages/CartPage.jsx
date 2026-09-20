@@ -107,6 +107,67 @@ function dayLabel(iso) {
   catch { return iso }
 }
 
+// Campos que faltam (itemMissing) → chips de ação. Agrupa variações de veículo
+// e não repete o mesmo campo. Cada chip abre o editor para preencher e fechar.
+function missingChips(miss = []) {
+  const out = []
+  const add = (key, Icon, label) => { if (!out.some((c) => c.key === key)) out.push({ key, Icon, label }) }
+  for (const m of miss) {
+    if (m === 'data') add('data', Calendar, 'Escolher data')
+    else if (m === 'horário') add('hora', Clock, 'Escolher horário')
+    else if (m === 'pessoas') add('pessoas', Users, 'Nº de pessoas')
+    else if (m.startsWith('veículo')) add('veiculo', Car, 'Selecionar veículo')
+    else if (m === 'local de saída' || m === 'origem') add('origem', MapPin, 'Local de saída')
+    else if (m === 'destino') add('destino', MapPin, 'Destino')
+    else add(m, AlertTriangle, m)
+  }
+  return out
+}
+
+// Seletor de Privativo × Compartilhado direto no card (passeios): é a escolha
+// que muda o PREÇO, então fica à mão, sem abrir o editor. Só troca o modo do
+// item (e zera veículos no compartilhado); o valor final é calculado ao
+// completar os detalhes. Modo indisponível aparece desabilitado, com o motivo.
+function ModoCard({ item, onChange }) {
+  if (item.kind === 'transfer') return null
+  const allowsPrivate = item.allows_private !== false
+  const allowsShared  = !!item.allows_shared
+  if (!allowsPrivate && !allowsShared) return null
+  const mode = item.mode === 'shared' ? 'shared' : 'private'
+  const pp = Number(item.shared_price_per_person) || 0
+  const opts = [
+    { id: 'private', label: 'Privativo',     Icon: Car,   ok: allowsPrivate, hint: 'Veículo só para o seu grupo' },
+    { id: 'shared',  label: 'Compartilhado', Icon: Users, ok: allowsShared,  hint: pp ? `${fmt(pp)} por pessoa` : 'Preço por pessoa' },
+  ]
+  return (
+    <div className="px-3 pt-2">
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Tipo de passeio</p>
+      <div className="grid grid-cols-2 gap-2">
+        {opts.map(({ id, label, Icon, ok, hint }) => (
+          <button
+            key={id}
+            onClick={() => ok && onChange(id)}
+            disabled={!ok}
+            className={`rounded-xl border px-2.5 py-2 text-left transition-colors ${
+              !ok ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                : mode === id ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
+            }`}
+          >
+            <span className={`inline-flex items-center gap-1.5 text-[12.5px] font-bold ${
+              !ok ? 'text-gray-400' : mode === id ? 'text-brand' : 'text-gray-700'
+            }`}>
+              <Icon size={13} /> {label}
+            </span>
+            <span className="block text-[10px] text-gray-400 leading-snug mt-0.5">
+              {ok ? hint : 'Não disponível neste passeio'}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ── Edição de um item (bottom sheet) ───────────────────────────
    Obrigatórios: data, horário, pessoas, veículo(s) e (passeio) local de
    saída. Aumentou pessoas → precisa de capacidade: o Salvar só ativa quando
@@ -751,7 +812,7 @@ export default function CartPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [inlineEdit, setInlineEdit] = useState(null) // item com editor inline aberto (quando já completo)
+  const [editing, setEditing] = useState(null)       // item em edição (folha)
   const [expandedId, setExpandedId] = useState(null) // item com descrição aberta
   const [results, setResults] = useState({})       // id → {status, code?, msg?}
   const [batch, setBatch] = useState(null)         // snapshot durante envio
@@ -1003,45 +1064,69 @@ export default function CartPage() {
                   <div className="px-3 pb-3">
                     <span className="text-[11px] font-bold text-red-500">{st.msg}</span>
                   </div>
-                ) : (
-                  <>
-                    {/* Cabeçalho do rodapé: Completo (+ Editar) ou "Faltam
-                        detalhes". A edição acontece AQUI DENTRO, sem abrir outra
-                        tela — os campos preenchem no próprio card. */}
-                    {complete ? (
-                      <div className="flex items-center justify-between px-3 pb-2">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
-                          <CheckCircle2 size={12} /> {t('cartPg.card.complete')}
-                        </span>
-                        {!batch && (
-                          <button
-                            onClick={() => setInlineEdit((cur) => cur === item.id ? null : item.id)}
-                            className="inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border border-brand/30 text-brand active:scale-95 transition-transform"
-                          >
-                            <Pencil size={12} /> {inlineEdit === item.id ? 'Fechar' : t('cartPg.card.edit')}
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="px-3 pt-1 pb-1">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600">
-                          <AlertTriangle size={12} /> Faltam detalhes
-                        </span>
-                      </div>
+                ) : complete ? (
+                  <div className="flex items-center justify-between px-3 pb-3">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+                      <CheckCircle2 size={12} /> {t('cartPg.card.complete')}
+                    </span>
+                    {!batch && (
+                      <button
+                        onClick={() => setEditing(item)}
+                        className="inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border border-brand/30 text-brand active:scale-95 transition-transform"
+                      >
+                        <Pencil size={12} /> {t('cartPg.card.edit')}
+                      </button>
                     )}
+                  </div>
+                ) : (
+                  <div className="pb-3">
+                    <div className="px-3">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600">
+                        <AlertTriangle size={12} /> Faltam detalhes
+                      </span>
+                    </div>
 
-                    {/* Editor INLINE: incompleto abre sempre; completo abre no
-                        "Editar". Mesma lógica do editor em folha (preço, modo,
-                        capacidade) — só muda que preenche dentro do card. */}
-                    {!batch && (complete ? inlineEdit === item.id : true) && (
-                      <EditSheet
-                        inline
+                    {/* Privativo × Compartilhado: escolha que muda o preço,
+                        direto no card (passeios). */}
+                    {!batch && (
+                      <ModoCard
                         item={item}
-                        onSave={(u) => { upsertItem(u); setInlineEdit(null) }}
-                        onClose={() => setInlineEdit(null)}
+                        onChange={(mode) => upsertItem({
+                          ...item, mode,
+                          ...(mode === 'shared' ? { vehicles: [] } : {}),
+                        })}
                       />
                     )}
-                  </>
+
+                    {/* Chips compactos: cada um abre o editor para preencher e
+                        fechar. Some o de veículo no compartilhado (não se
+                        escolhe veículo — o preço é por pessoa). */}
+                    {!batch && (
+                      <div className="px-3 pt-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          {missingChips(miss)
+                            .filter((c) => !(item.mode === 'shared' && c.key === 'veiculo'))
+                            .map((c) => (
+                            <button
+                              key={c.key}
+                              onClick={() => setEditing(item)}
+                              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 border border-gray-200 rounded-xl px-3 py-2.5 active:scale-95 transition-transform"
+                            >
+                              <c.Icon size={14} className="text-brand shrink-0" />
+                              <span className="truncate">{c.label}</span>
+                              <ChevronRight size={13} className="text-gray-300 ml-auto shrink-0" />
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setEditing(item)}
+                          className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-[13px] font-bold px-3.5 py-3 rounded-2xl bg-brand text-white shadow-sm shadow-brand/20 active:scale-[0.98] transition-transform"
+                        >
+                          <Pencil size={13} /> Completar detalhes
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )
@@ -1214,6 +1299,13 @@ export default function CartPage() {
         document.body,
       )}
 
+      {editing && (
+        <EditSheet
+          item={editing}
+          onClose={() => setEditing(null)}
+          onSave={(updated) => { upsertItem(updated); setEditing(null) }}
+        />
+      )}
     </div>
   )
 }

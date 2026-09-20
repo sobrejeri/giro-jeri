@@ -28,17 +28,17 @@ test('o resumo separa valor definido de pendente (a calcular)', () => {
   assert.match(src, /Subtotal parcial/, 'com item pendente, o total é parcial')
 })
 
-test('a edição acontece INLINE no card, sem abrir outra tela', () => {
-  // O editor virou inline: mesmo componente (EditSheet) com a prop `inline`,
-  // renderizado dentro do card. Item incompleto abre o editor direto; completo
-  // abre no "Editar".
-  assert.match(src, /function EditSheet\(\{ item, onSave, onClose, inline = false \}\)/,
-    'o editor aceita um modo inline')
-  assert.match(src, /if \(inline\) return <div[^>]*>\{conteudo\}<\/div>/,
-    'inline não usa portal/overlay — renderiza no fluxo do card')
-  assert.match(src, /<EditSheet\s+inline/, 'o card usa o editor inline')
-  assert.match(src, /complete \? inlineEdit === item\.id : true/,
-    'incompleto abre sempre; completo abre no Editar')
+test('card compacto: chips que abrem o editor + Privativo/Compartilhado no card', () => {
+  // Layout compacto de volta: cada campo que falta é um chip que abre o editor
+  // (preenche e fecha). O tipo do passeio (que muda o preço) fica no card.
+  assert.match(src, /function missingChips/)
+  assert.match(src, /missingChips\(miss\)/, 'os campos que faltam viram chips')
+  assert.match(src, /function ModoCard/, 'seletor Privativo × Compartilhado no card')
+  assert.match(src, /Tipo de passeio/)
+  // Trocar o modo só ajusta o item (o preço final é calculado ao completar).
+  assert.match(src, /onChange=\{\(mode\) => upsertItem\(\{/)
+  // No compartilhado o chip de veículo some (preço é por pessoa).
+  assert.match(src, /item\.mode === 'shared' && c\.key === 'veiculo'/)
 })
 
 test('campo preenchido fica "verdinho"', () => {
