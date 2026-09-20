@@ -6,7 +6,7 @@ import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { fetchNearby } from '../services/geoapify.js';
-import { buscarFotoDoLugar } from '../services/googlePlaces.js';
+import { buscarFotoDoLugar, descobrirLugaresProximos, resolverFotoUrl } from '../services/googlePlaces.js';
 
 const router = Router();
 
@@ -141,11 +141,38 @@ router.get('/nearby', async (req, res, next) => {
     }
     const radius   = Math.min(Math.max(Number(req.query.radius) || 8000, 500), 50000);
     const category = req.query.category;
+
+    // Base do proxy de fotos (URL absoluta, para o <img> do app).
+    const proxyBase = `${req.protocol}://${req.get('host')}/api/establishments/photo`;
+
+    // Google Places ao vivo (nota + foto reais, qualquer região). Se não houver
+    // chave ou falhar, cai no Geoapify (OSM), que ao menos lista nomes.
+    const g = await descobrirLugaresProximos({ lat, lng: lon, radius, category, photoBase: proxyBase });
+    if (g.enabled && g.results.length) return res.json(g);
+
     const data = await fetchNearby({ lat, lon, radius, category });
     res.json(data);
   } catch (err) {
     console.error('[establishments/nearby]', err.message);
     res.json({ enabled: true, results: [], error: 'provider_error' });
+  }
+});
+
+// ── GET /api/establishments/photo ──────────────────────
+// Proxy das fotos do Google Places: resolve a URL final e redireciona. Só é
+// chamado quando a foto aparece na tela — a chave nunca vai ao cliente e o
+// custo de foto fica sob demanda (com cache de 24h no serviço).
+router.get('/photo', async (req, res) => {
+  try {
+    const name = req.query.name;
+    const w = Math.min(Math.max(Number(req.query.w) || 800, 100), 1600);
+    if (!name) return res.status(400).end();
+    const url = await resolverFotoUrl(name, w);
+    if (!url) return res.status(404).end();
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.redirect(302, url);
+  } catch {
+    return res.status(404).end();
   }
 });
 

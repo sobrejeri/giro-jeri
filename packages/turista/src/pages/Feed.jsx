@@ -481,7 +481,7 @@ function PlaceCard({ place, compact = false, onReview }) {
             </span>
           </button>
         )}
-        {!place.avg_rating && !place.review_count && place.id && (
+        {!place.avg_rating && !place.review_count && place.id && onReview && (
           <button onClick={onReview} className="flex items-center gap-1 mt-1.5 text-[11px] text-gray-400 hover:text-brand">
             <Star size={11} /> {t('feedPg.rate')}
           </button>
@@ -634,11 +634,15 @@ export default function Feed() {
     <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user}
       isAdmin={isAdmin} onEdit={(post) => setComposerPost(post)} onDelete={handleDeletePost} />
   )
+  // Avaliação interna só vale para estabelecimento do NOSSO banco (id uuid).
+  // Item vindo do Google (id "g:..." / "geo:...") mostra a nota do próprio
+  // Google e não abre o formulário de avaliação — não há onde gravar.
+  const ehDoBanco = (p) => p.id && !String(p.id).includes(':')
   const renderPlace = (p) => (
-    <PlaceCard key={p.id} place={p} onReview={p.id ? () => setReviewPlace(p) : undefined} />
+    <PlaceCard key={p.id} place={p} onReview={ehDoBanco(p) ? () => setReviewPlace(p) : undefined} />
   )
   const renderPlaceCompact = (p) => (
-    <PlaceCard key={p.id} place={p} compact onReview={p.id ? () => setReviewPlace(p) : undefined} />
+    <PlaceCard key={p.id} place={p} compact onReview={ehDoBanco(p) ? () => setReviewPlace(p) : undefined} />
   )
 
   let content
