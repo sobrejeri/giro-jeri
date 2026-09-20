@@ -390,16 +390,23 @@ export default function Home() {
             </button>
           </div>
 
-          {/* ── Atalhos ──────────────────────────────────────── */}
-          <div className="grid grid-cols-4 gap-2.5">
-            <Atalho icon={Flame}  cor="text-brand"        label="Mais vendidos"
-                    onClick={() => navigate('/passeios', { state: { featured: true } })} />
-            <Atalho icon={Sun}    cor="text-orange-400"   label="Para hoje"
-                    onClick={() => navigate('/passeios', { state: { dateIso: hoje } })} />
-            <Atalho icon={Sunset} cor="text-orange-500"   label="Pôr do sol"
-                    onClick={() => navigate('/passeios', { state: { tag: 'pôr do sol' } })} />
-            <Atalho icon={Waves}  cor="text-sky-500"      label="Lagoas"
-                    onClick={() => navigate('/passeios', { state: { tag: 'lagoa' } })} />
+          {/* ── Descubra (subiu para o topo: quadros mais visíveis) ──────── */}
+          <div>
+            <h2 className="text-[18px] font-extrabold text-gray-900 mb-2.5">Descubra {primeiroNome}</h2>
+            <div className="grid grid-cols-4 gap-2.5">
+              <TileDescubra icon={UtensilsCrossed} label="Restaurantes" cor="text-rose-500"
+                            tom="from-rose-400 to-orange-300"    foto={fotoDescubra('restaurantes')}
+                            onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={PartyPopper} label="Eventos" cor="text-violet-500"
+                            tom="from-violet-500 to-fuchsia-400" foto={fotoDescubra('eventos')}
+                            onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={MapPin} label="Lugares" cor="text-emerald-500"
+                            tom="from-emerald-500 to-teal-300"   foto={fotoDescubra('lugares')}
+                            onClick={() => navigate('/eventos')} />
+              <TileDescubra icon={Lightbulb} label="Dicas" cor="text-amber-500"
+                            tom="from-amber-400 to-yellow-300"   foto={fotoDescubra('dicas')}
+                            onClick={() => navigate('/eventos')} />
+            </div>
           </div>
 
           {/* ── 2ª prioridade: Mais procurados ──────────────── */}
@@ -490,22 +497,18 @@ export default function Home() {
             <BuggyDoodle className="absolute bottom-1 right-2 w-[74px] opacity-90" />
           </button>
 
-          {/* ── Conteúdo secundário: Descubra ───────────────── */}
+          {/* ── Atalhos de passeios (desceram para o fim) ────────────────── */}
           <div>
-            <h2 className="text-[18px] font-extrabold text-gray-900 mb-2.5">Descubra {primeiroNome}</h2>
+            <h2 className="text-[18px] font-extrabold text-gray-900 mb-2.5">Atalhos</h2>
             <div className="grid grid-cols-4 gap-2.5">
-              <TileDescubra icon={UtensilsCrossed} label="Restaurantes" cor="text-rose-500"
-                            tom="from-rose-400 to-orange-300"    foto={fotoDescubra('restaurantes')}
-                            onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={PartyPopper} label="Eventos" cor="text-violet-500"
-                            tom="from-violet-500 to-fuchsia-400" foto={fotoDescubra('eventos')}
-                            onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={MapPin} label="Lugares" cor="text-emerald-500"
-                            tom="from-emerald-500 to-teal-300"   foto={fotoDescubra('lugares')}
-                            onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={Lightbulb} label="Dicas" cor="text-amber-500"
-                            tom="from-amber-400 to-yellow-300"   foto={fotoDescubra('dicas')}
-                            onClick={() => navigate('/eventos')} />
+              <Atalho icon={Flame}  cor="text-brand"        label="Mais vendidos"
+                      onClick={() => navigate('/passeios', { state: { featured: true } })} />
+              <Atalho icon={Sun}    cor="text-orange-400"   label="Para hoje"
+                      onClick={() => navigate('/passeios', { state: { dateIso: hoje } })} />
+              <Atalho icon={Sunset} cor="text-orange-500"   label="Pôr do sol"
+                      onClick={() => navigate('/passeios', { state: { tag: 'pôr do sol' } })} />
+              <Atalho icon={Waves}  cor="text-sky-500"      label="Lagoas"
+                      onClick={() => navigate('/passeios', { state: { tag: 'lagoa' } })} />
             </div>
           </div>
         </div>
