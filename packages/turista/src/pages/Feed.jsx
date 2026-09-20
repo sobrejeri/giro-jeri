@@ -550,6 +550,7 @@ export default function Feed() {
   const { userCoords, region } = useRegion()
   const qc = useQueryClient()
   const FILTERS = useMemo(() => getFilters(t), [t])
+  const cats = useMemo(() => getCats(t), [t])
 
   // Publicação no feed (admin): compositor/editor. undefined = fechado,
   // null = nova publicação, objeto = editar aquele post.
@@ -678,11 +679,29 @@ export default function Feed() {
         </section>
       )
     }
-    if (places.length) {
+    // Um carrossel por categoria, com a tag em cima. Cada categoria mostra uma
+    // prévia (10) que rola na horizontal; "Ver todos" abre a categoria cheia.
+    for (const catId of CATEGORY_IDS) {
+      const list = places.filter((p) => p.category === catId)
+      if (!list.length) continue
+      const c = cats[catId]
       blocks.push(
-        <section key="places" className="space-y-3">
-          <SectionTitle>📍 {t('feedPg.sectionPlaces')}</SectionTitle>
-          <div className="grid grid-cols-2 gap-3">{places.map(renderPlace)}</div>
+        <section key={catId} className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <SectionTitle>
+              <span className="inline-flex items-center gap-1.5">
+                <c.Icon size={16} className="text-brand" /> {c.label}
+              </span>
+            </SectionTitle>
+            {list.length > 6 && (
+              <button onClick={() => setFilter(catId)} className="text-[12px] font-bold text-brand active:scale-95">
+                {t('feedPg.seeAll', 'Ver todos')}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
+            {list.slice(0, 10).map(renderPlaceCompact)}
+          </div>
         </section>
       )
     }

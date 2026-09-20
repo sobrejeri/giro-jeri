@@ -264,6 +264,28 @@ export async function diagnosticarPlaces({ lat, lng } = {}) {
   return out;
 }
 
+// Baixa os BYTES da foto (New por `name`, legada por `ref`) para o proxy
+// transmitir direto ao cliente. Mais robusto que seguir redirect, e a chave
+// nunca sai do servidor. Devolve { buffer, contentType } ou null.
+export async function fotoBytes({ name, ref, maxWidth = 800 }) {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key || (!name && !ref)) return null;
+  const url = ref
+    ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photo_reference=${encodeURIComponent(ref)}&key=${encodeURIComponent(key)}`
+    : `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${maxWidth}&key=${encodeURIComponent(key)}`;
+  try {
+    const res = await fetch(url);   // segue o redirect até a imagem final
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok || !/^image\//.test(ct)) {
+      console.warn('[googlePlaces] fotoBytes status=%d ct=%s', res.status, ct);
+      return null;
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (!buffer.byteLength) return null;
+    return { buffer, contentType: ct };
+  } catch (e) { console.warn('[googlePlaces] fotoBytes falhou:', e.message); return null; }
+}
+
 // Resolve a URL final de uma foto do Places (usada pelo proxy /photo).
 const photoCache = new Map();
 const PHOTO_TTL = 24 * 60 * 60 * 1000;

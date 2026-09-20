@@ -6,7 +6,7 @@ import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { fetchNearby } from '../services/geoapify.js';
-import { buscarFotoDoLugar, descobrirLugaresProximos, resolverFotoUrl, resolverFotoLegadaUrl, diagnosticarPlaces } from '../services/googlePlaces.js';
+import { buscarFotoDoLugar, descobrirLugaresProximos, fotoBytes, diagnosticarPlaces } from '../services/googlePlaces.js';
 
 const router = Router();
 
@@ -173,11 +173,13 @@ router.get('/photo', async (req, res) => {
     const { name, ref } = req.query;
     const w = Math.min(Math.max(Number(req.query.w) || 800, 100), 1600);
     if (!name && !ref) return res.status(400).end();
-    // name = Places API (New); ref = photo_reference da API legada.
-    const url = ref ? await resolverFotoLegadaUrl(ref, w) : await resolverFotoUrl(name, w);
-    if (!url) return res.status(404).end();
+    // name = Places API (New); ref = photo_reference da API legada. Transmite os
+    // bytes (a chave nunca vai ao cliente).
+    const foto = await fotoBytes({ name, ref, maxWidth: w });
+    if (!foto) return res.status(404).end();
+    res.set('Content-Type', foto.contentType);
     res.set('Cache-Control', 'public, max-age=86400');
-    return res.redirect(302, url);
+    return res.end(foto.buffer);
   } catch {
     return res.status(404).end();
   }
