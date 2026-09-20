@@ -13,6 +13,7 @@ import { notifyUser } from '../services/notify.js';
 import { notifyDispatchOS } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
 import crypto from 'node:crypto';
+import { montarLinhaFila, conciliarReserva, ORDEM_CONCILIACAO } from '../services/payoutQueue.js';
 
 const router = Router();
 router.use(authenticate);
@@ -1833,75 +1834,8 @@ router.get('/operators/:operatorId/vehicles', requireAdmin, async (req, res, nex
 // Distingue CONCLUSÃO × PAGAMENTO do cliente × REPASSE ao operador — status
 // separados, nunca um só para tudo. Não estima taxa: usa os valores reais do
 // repasse calculado na venda; ausente vira null, não um chute.
-function montarLinhaFila(b) {
-  const pagamentos = b.payments || [];
-  const aprovado   = pagamentos.find((p) => p.status === 'approved') || null;
-  const gateway    = aprovado?.gateway_name || pagamentos[0]?.gateway_name || null;
-  const valorPago  = aprovado ? Number(aprovado.amount_gross) : Number(b.total_amount) || 0;
-  const pagoCliente = !!aprovado;
-
-  const payouts = b.booking_payouts || [];
-  // O repasse do OPERADOR é a comissão (de quem aceitou). Execução é de terceiro
-  // e tem linha própria — não entra como valor do operador aqui.
-  const doOperador = payouts.find((p) => p.kind === 'commission')
-    || (b.operator ? payouts.find((p) => p.payee_user_id === b.operator.id) : null)
-    || null;
-  const execucao = payouts.find((p) => p.kind === 'execution') || null;
-  // Split antigo pagou o operador direto na conta dele (histórico) — não pode
-  // ser liberado de novo.
-  const pagoPeloGateway = !!(b.operator &&
-    pagamentos.some((p) => p.split_operator_id && p.split_operator_id === b.operator.id));
-
-  const somaRepasses = (doOperador ? Number(doOperador.amount) : 0)
-    + (execucao ? Number(execucao.amount) : 0);
-  // Parte da plataforma = o que sobra depois dos repasses (valor REAL, não taxa
-  // estimada). Inclui a taxa do gateway, que a plataforma absorve.
-  const plataformaValor = Math.round((valorPago - somaRepasses) * 100) / 100;
-
-  let situacao, motivoBloqueio = null, elegivel = false;
-  if (['cancelled', 'refunded', 'disputed'].includes(b.status_commercial)) {
-    situacao = 'bloqueado';
-    motivoBloqueio = b.status_commercial === 'refunded' ? 'reserva reembolsada'
-      : b.status_commercial === 'disputed' ? 'reserva em contestação' : 'reserva cancelada';
-  } else if (!b.completed_at) {
-    situacao = 'conciliacao'; motivoBloqueio = 'sem data de conclusão registrada';
-  } else if (pagoPeloGateway) {
-    situacao = 'repassado_gateway';   // split direto na conta do operador
-  } else if (!pagoCliente) {
-    situacao = 'aguardando_pagamento';
-  } else if (!doOperador) {
-    situacao = 'conciliacao'; motivoBloqueio = 'reserva sem repasse calculado — conferir';
-  } else if (doOperador.status === 'cancelled') {
-    situacao = 'cancelado';
-  } else if (doOperador.status === 'paid') {
-    situacao = 'pago';
-  } else {
-    situacao = 'pronto_para_liberar'; elegivel = true;   // concluído + pago + pendente
-  }
-
-  return {
-    booking_id:      b.id,
-    booking_code:    b.booking_code,
-    service_type:    b.service_type,          // 'tour' | 'transfer'
-    service_date:    b.service_date,
-    completed_at:    b.completed_at,          // UTC — a UI exibe em America/Fortaleza
-    operador:        b.operator ? {
-      id: b.operator.id, nome: b.operator.full_name,
-      // Para onde o admin manda o PIX manual. Só vem quando o SELECT trouxe (a
-      // fila traz; os indicadores não — e aí fica null, sem quebrar nada).
-      pix_key: b.operator.pix_key || null, pix_key_type: b.operator.pix_key_type || null,
-    } : null,
-    gateway,
-    valor_pago:      valorPago,
-    plataforma_valor: plataformaValor,
-    operador_valor:  doOperador ? Number(doOperador.amount) : null,   // previsto, do cálculo da venda
-    payout_id:       doOperador?.id || null,
-    payout_status:   doOperador?.status || null,
-    situacao,
-    motivo_bloqueio: motivoBloqueio,
-    elegivel_liberar: elegivel,
-  };
-}
+// montarLinhaFila e conciliarReserva vivem em services/payoutQueue.js (regras
+// puras, testáveis em isolamento) — importadas no topo deste arquivo.
 
 // ── GET /api/admin/payouts/fila ────────────────────────────────────────────
 // Fila de LIBERAÇÃO (modelo manual): reservas CONCLUÍDAS com repasse do
@@ -2199,6 +2133,60 @@ router.post('/payouts/liberar', requireAdmin, async (req, res, next) => {
     }
     next(err);
   }
+});
+
+// ── GET /api/admin/payouts/conciliacao ───────────────────────────────────────
+// Conciliação: cruza o que a plataforma RECEBEU (pagamentos aprovados) com o que
+// ela DEVE/PAGOU (booking_payouts) e lista o que não fecha — pago sem receber,
+// pago em reserva revertida, repasse acima do recebido, split + comissão
+// pendente (risco de pagar 2x), concluída sem repasse, concluída sem data.
+//
+// SÓ LEITURA e SEM gateway: no modelo manual não há saldo nem transferência de
+// gateway para conferir, e inventar isso seria mentir. Confere o que ESTÁ no
+// banco. Janela limitada às reservas mais recentes (bound de segurança).
+router.get('/payouts/conciliacao', requireAdmin, async (req, res, next) => {
+  try {
+    const SELECT = `
+      id, booking_code, service_type,
+      status_commercial, status_operational, completed_at, total_amount, created_at,
+      operator:operator_id ( id ),
+      booking_payouts ( id, kind, amount, status ),
+      payments ( amount_gross, status, split_operator_id )
+    `;
+    const { data: bookings, error } = await supabase
+      .from('bookings').select(SELECT)
+      .order('created_at', { ascending: false })
+      .limit(3000);
+    if (error) {
+      if (['42P01', '42703'].includes(error.code)) {
+        return res.json({ grupos: [], total: 0, aviso: 'Migrations de repasse pendentes (080).' });
+      }
+      throw error;
+    }
+
+    const todas = [];
+    for (const b of bookings || []) todas.push(...conciliarReserva(b));
+
+    const porTipo = new Map();
+    for (const d of todas) {
+      if (!porTipo.has(d.tipo)) {
+        porTipo.set(d.tipo, { tipo: d.tipo, gravidade: d.gravidade, qtd: 0, total_valor: 0, itens: [] });
+      }
+      const g = porTipo.get(d.tipo);
+      g.qtd += 1;
+      if (d.valor) g.total_valor = Math.round((g.total_valor + Number(d.valor)) * 100) / 100;
+      if (g.itens.length < 100) g.itens.push(d);   // teto por grupo; qtd conta todos
+    }
+    const grupos = [...porTipo.values()]
+      .sort((a, b) => ORDEM_CONCILIACAO.indexOf(a.tipo) - ORDEM_CONCILIACAO.indexOf(b.tipo));
+
+    res.json({
+      grupos,
+      total: todas.length,
+      reservas_verificadas: (bookings || []).length,
+      janela: 'reservas mais recentes (até 3000)',
+    });
+  } catch (err) { next(err); }
 });
 
 router.get('/payouts', requireAdmin, async (req, res, next) => {

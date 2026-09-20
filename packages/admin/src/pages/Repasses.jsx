@@ -65,7 +65,7 @@ export default function Repasses() {
   return (
     <div className="space-y-4">
       <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
-        {[['fila', 'Fila de liberação'], ['operadores', 'Operadores'], ['motoristas', 'Motoristas']].map(([id, label]) => (
+        {[['fila', 'Fila de liberação'], ['conciliacao', 'Conciliação'], ['operadores', 'Operadores'], ['motoristas', 'Motoristas']].map(([id, label]) => (
           <button key={id} onClick={() => setAba(id)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               aba === id ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'
@@ -75,6 +75,7 @@ export default function Repasses() {
         ))}
       </div>
       {aba === 'fila' ? <FilaLiberacao />
+        : aba === 'conciliacao' ? <Conciliacao />
         : aba === 'operadores' ? <RepassesOperadores />
         : <RepassesMotorista />}
     </div>
@@ -363,6 +364,94 @@ function FilaLiberacao() {
         não transfere pelo gateway. Cada liberação é revalidada e auditada no servidor, e é
         idempotente (dois cliques não pagam em dobro). Ordenado pela conclusão mais antiga;
         datas em America/Fortaleza.
+      </p>
+    </div>
+  )
+}
+
+// ── Conciliação ──────────────────────────────────────────────────────────────
+// Cruza o que ENTROU (pagamentos aprovados) com o que a plataforma DEVE/PAGOU
+// (repasses) e mostra o que não fecha. Só leitura, sem gateway.
+const CONC_LABEL = {
+  pago_sem_recebimento:      'Pago sem recebimento do cliente',
+  pago_reserva_revertida:    'Pago em reserva revertida',
+  repasse_acima_do_recebido: 'Repasse acima do recebido',
+  split_e_pendente:          'Split no ato + comissão pendente',
+  aprovado_sem_repasse:      'Concluída e paga, sem repasse',
+  concluido_sem_data:        'Concluída sem data de conclusão',
+}
+function Conciliacao() {
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ['payout-conciliacao'],
+    queryFn:  () => api.getPayoutsConciliacao(),
+  })
+  if (isLoading) return <PageSpinner />
+  const grupos = data?.grupos || []
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm text-gray-400">
+          Confere o que <b className="text-gray-300">entrou</b> × o que a plataforma <b className="text-gray-300">deve/pagou</b>.
+          {data?.reservas_verificadas != null && (
+            <span className="text-gray-600"> · {data.reservas_verificadas} reserva(s) conferidas ({data?.janela})</span>
+          )}
+          {isFetching && <span className="ml-2 text-xs text-gray-600">atualizando…</span>}
+        </p>
+        <button onClick={() => refetch()}
+          className="text-xs font-semibold text-gray-400 hover:text-gray-200 border border-gray-700 rounded-lg px-3 py-1.5">
+          Reconferir
+        </button>
+      </div>
+
+      {data?.aviso && (
+        <p className="text-sm text-amber-300 bg-amber-900/20 border border-amber-800/40 rounded-xl px-4 py-3">{data.aviso}</p>
+      )}
+
+      {grupos.length === 0 ? (
+        <Card><CardBody>
+          <p className="text-center text-gray-400 py-8 text-sm flex items-center justify-center gap-2">
+            <ShieldCheck size={16} className="text-emerald-400" /> Nada divergente — o recebido bate com o devido/pago.
+          </p>
+        </CardBody></Card>
+      ) : grupos.map((g) => {
+        const alta = g.gravidade === 'alta'
+        return (
+          <Card key={g.tipo}>
+            <CardBody>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${alta ? 'text-red-400' : 'text-amber-400'}`}>
+                  <AlertTriangle size={15} /> {CONC_LABEL[g.tipo] || g.tipo}
+                </span>
+                <span className={`text-[11px] px-2 py-0.5 rounded-full ${alta ? 'bg-red-500/15 text-red-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                  {alta ? 'risco de dinheiro' : 'operacional'}
+                </span>
+                <span className="text-xs text-gray-500">{g.qtd} reserva(s){g.total_valor ? ` · ${fmtR$(g.total_valor)}` : ''}</span>
+              </div>
+              <ul className="mt-2 divide-y divide-gray-800">
+                {g.itens.map((it) => (
+                  <li key={it.booking_id} className="py-2 flex items-start justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <span className="font-mono text-gray-200 text-[13px]">{it.booking_code || String(it.booking_id).slice(0, 8)}</span>
+                      <span className="text-[11px] text-gray-500 ml-2">{it.service_type === 'transfer' ? 'Transfer' : 'Passeio'}</span>
+                      <p className="text-[12px] text-gray-400 mt-0.5">{it.detalhe}</p>
+                    </div>
+                    {it.valor ? <span className="text-[13px] font-semibold text-gray-200 tabular-nums shrink-0">{fmtR$(it.valor)}</span> : null}
+                  </li>
+                ))}
+                {g.qtd > g.itens.length && (
+                  <li className="py-2 text-[12px] text-gray-500">…e mais {g.qtd - g.itens.length}.</li>
+                )}
+              </ul>
+            </CardBody>
+          </Card>
+        )
+      })}
+
+      <p className="text-[11px] text-gray-500 leading-relaxed">
+        A conciliação <b>não</b> consulta saldo nem transferência de gateway — no modelo manual isso não existe.
+        Ela confere o que está registrado no banco. <b>Risco de dinheiro</b> pede ação; <b>operacional</b> é
+        ajuste de cadastro ou backfill.
       </p>
     </div>
   )
