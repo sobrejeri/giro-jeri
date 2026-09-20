@@ -12,6 +12,7 @@ import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.
 import { notifyUser } from '../services/notify.js';
 import { notifyDispatchOS } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
+import crypto from 'node:crypto';
 
 const router = Router();
 router.use(authenticate);
@@ -1884,7 +1885,12 @@ function montarLinhaFila(b) {
     service_type:    b.service_type,          // 'tour' | 'transfer'
     service_date:    b.service_date,
     completed_at:    b.completed_at,          // UTC — a UI exibe em America/Fortaleza
-    operador:        b.operator ? { id: b.operator.id, nome: b.operator.full_name } : null,
+    operador:        b.operator ? {
+      id: b.operator.id, nome: b.operator.full_name,
+      // Para onde o admin manda o PIX manual. Só vem quando o SELECT trouxe (a
+      // fila traz; os indicadores não — e aí fica null, sem quebrar nada).
+      pix_key: b.operator.pix_key || null, pix_key_type: b.operator.pix_key_type || null,
+    } : null,
     gateway,
     valor_pago:      valorPago,
     plataforma_valor: plataformaValor,
@@ -2017,6 +2023,182 @@ router.get('/payouts/indicadores', requireAdmin, async (req, res, next) => {
 
     res.json(ind);
   } catch (err) { next(err); }
+});
+
+// ── POST /api/admin/payouts/liberar ─────────────────────────────────────────
+// LIBERAÇÃO do repasse do operador no modelo MANUAL (a plataforma recebe 100% e
+// paga o operador por fora). "Liberar" marca a comissão como PAGA, registrando
+// que o pagamento foi feito FORA da plataforma (PIX/banco) — com trilha de
+// auditoria de QUEM liberou, QUANDO, QUANTO e para QUEM.
+//
+// NÃO executa transferência no gateway: não existe essa capacidade aqui, e
+// fingir uma (só mudar o status) seria mentir para a conferência. O que esta
+// rota faz é REGISTRAR um pagamento manual que o admin fez (ou vai fazer) por
+// fora — nada mais.
+//
+// Recebe booking_ids (1 = individual, N = em lote). Para CADA reserva REVALIDA
+// no servidor, pela MESMA regra da fila (montarLinhaFila), se ainda está
+// elegível — não confia no que a tela mandou: entre carregar a fila e clicar, a
+// reserva pode ter sido cancelada/estornada, ou o repasse já baixado por outro
+// admin. Idempotente: a baixa é atômica com WHERE status='pending', então dois
+// cliques (ou dois admins) concorrentes baixam UMA vez só; o segundo cai em
+// "já liberado", sem duplicar pagamento nem auditoria.
+const liberarSchema = z.object({
+  booking_ids: z.array(z.string().uuid()).min(1).max(200),
+  notes:       z.string().max(500).optional().nullable(),
+});
+
+router.post('/payouts/liberar', requireAdmin, async (req, res, next) => {
+  try {
+    const body    = liberarSchema.parse(req.body);
+    const ids     = [...new Set(body.booking_ids)];
+    const loteId  = crypto.randomUUID();          // correlaciona as baixas deste clique
+    const quando  = new Date().toISOString();
+    const nota    = (body.notes || '').trim().slice(0, 500) || null;
+
+    // Revalidação: reconstrói a fila para EXATAMENTE estes bookings, com o mesmo
+    // SELECT e a mesma classificação de montarLinhaFila. Nada vem da tela.
+    const SELECT = `
+      id, booking_code, service_type, service_date,
+      total_amount, status_commercial, status_operational, completed_at,
+      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type ),
+      booking_payouts ( id, kind, amount, status, payee_user_id, paid_at ),
+      payments ( id, gateway_name, amount_gross, status, paid_at, split_operator_id )
+    `;
+    const { data: rows, error } = await supabase
+      .from('bookings').select(SELECT).in('id', ids);
+    if (error) {
+      if (['42P01', '42703'].includes(error.code)) {
+        return res.status(409).json({ error: 'Migrations de repasse pendentes (080/090/091).' });
+      }
+      throw error;
+    }
+
+    const porId     = new Map((rows || []).map((b) => [b.id, b]));
+    const ignorados = [];
+    const elegiveis = [];   // { booking_id, booking_code, payout_id, operador, gateway }
+
+    for (const bid of ids) {
+      const b = porId.get(bid);
+      if (!b) { ignorados.push({ booking_id: bid, motivo: 'reserva não encontrada' }); continue; }
+      const linha = montarLinhaFila(b);
+      if (!linha.elegivel_liberar || !linha.payout_id) {
+        ignorados.push({
+          booking_id:   bid,
+          booking_code: linha.booking_code,
+          situacao:     linha.situacao,
+          motivo:       linha.motivo_bloqueio || `situação: ${linha.situacao}`,
+        });
+        continue;
+      }
+      elegiveis.push({
+        booking_id:   bid,
+        booking_code: linha.booking_code,
+        payout_id:    linha.payout_id,
+        operador:     linha.operador?.nome || null,
+        gateway:      linha.gateway,
+      });
+    }
+
+    // Baixa ATÔMICA e idempotente de todos os elegíveis de uma vez: só transita
+    // quem AINDA está 'pending'. O banco decide quem venceu a corrida — só as
+    // linhas realmente transitadas voltam no RETURNING (select).
+    let pagos = [];
+    if (elegiveis.length) {
+      // `notes` só entra quando veio de fato: sem isto, liberar sem observação
+      // apagaria uma nota que o admin já tivesse deixado no repasse pendente.
+      const patch = { status: 'paid', paid_at: quando, updated_at: quando };
+      if (nota) patch.notes = nota;
+      const { data: upd, error: upErr } = await supabase
+        .from('booking_payouts')
+        .update(patch)
+        .in('id', elegiveis.map((e) => e.payout_id))
+        .eq('status', 'pending')
+        .select('id, amount, payee_user_id, booking_id');
+      if (upErr) throw upErr;
+      pagos = upd || [];
+    }
+
+    const pagosPorPayout = new Map(pagos.map((p) => [p.id, p]));
+    const liberados = [];
+    const auditoria = [];
+    for (const e of elegiveis) {
+      const p = pagosPorPayout.get(e.payout_id);
+      if (!p) {
+        // Não transitou: alguém baixou entre a leitura e o update (ou já pago).
+        ignorados.push({
+          booking_id:   e.booking_id,
+          booking_code: e.booking_code,
+          situacao:     'pago',
+          motivo:       'já liberado',
+        });
+        continue;
+      }
+      liberados.push({
+        booking_id:   e.booking_id,
+        booking_code: e.booking_code,
+        payout_id:    p.id,
+        amount:       Number(p.amount),
+        operador:     e.operador,
+      });
+      // action_type usa 'manual_override' (valor VÁLIDO do enum audit_action_type)
+      // — 'payout_release' NÃO existe no enum e o insert falharia em silêncio
+      // (supabase-js devolve {error} sem lançar). O discriminador real vai no
+      // JSON: evento='payout_release'. Consulta: action_type='manual_override'
+      // AND new_values_json->>'evento'='payout_release'.
+      auditoria.push({
+        user_id:         req.user.id,
+        entity_type:     'booking_payouts',
+        entity_id:       p.id,
+        action_type:     'manual_override',
+        new_values_json: {
+          evento:        'payout_release',
+          lote_id:       loteId,
+          booking_id:    e.booking_id,
+          booking_code:  e.booking_code,
+          payee_user_id: p.payee_user_id,
+          operador:      e.operador,
+          amount:        Number(p.amount),
+          gateway:       e.gateway,
+          metodo:        'manual_externo',    // honesto: NÃO foi transferência de gateway
+          released_by:   req.user.full_name || req.user.id,
+          released_at:   quando,
+          notes:         nota,
+        },
+      });
+    }
+
+    // Auditoria em UM insert. Best-effort: uma liberação REAL nunca é perdida por
+    // falha de auditoria, mas o gap é sinalizado (auditoria_ok:false) em vez de
+    // engolido — diferente do resto do arquivo, que ignora o erro do insert.
+    let auditoriaOk = true;
+    if (auditoria.length) {
+      const { error: audErr } = await supabase.from('audit_logs').insert(auditoria);
+      if (audErr) {
+        auditoriaOk = false;
+        console.error('[payouts/liberar] auditoria falhou (baixa mantida):', audErr.message);
+      }
+    }
+
+    const total = liberados.reduce((s, r) => s + Number(r.amount || 0), 0);
+    res.json({
+      lote_id:      loteId,
+      liberados,
+      ignorados,
+      auditoria_ok: auditoriaOk,
+      resumo: {
+        solicitados: ids.length,
+        liberados:   liberados.length,
+        ignorados:   ignorados.length,
+        total:       Math.round(total * 100) / 100,
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    }
+    next(err);
+  }
 });
 
 router.get('/payouts', requireAdmin, async (req, res, next) => {

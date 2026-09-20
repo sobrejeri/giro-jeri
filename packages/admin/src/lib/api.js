@@ -133,6 +133,7 @@ export const api = {
   getPayoutsIndicadores: ()                            => request('/api/admin/payouts/indicadores'),
   updatePayout:        (id, body)                      => request(`/api/admin/payouts/${id}`, { method: 'PUT', body }),
   payAllPayouts:       (body)                          => request('/api/admin/payouts/pay-all', { method: 'POST', body }),
+  liberarRepasses:     (body)                          => request('/api/admin/payouts/liberar', { method: 'POST', body }),
   // Cria os repasses que faltaram em reservas já pagas. Idempotente.
   backfillPayouts:     (body = {})                     => request('/api/admin/payouts/backfill', { method: 'POST', body }),
   // Por que a tela de repasses está vazia. Só leitura.

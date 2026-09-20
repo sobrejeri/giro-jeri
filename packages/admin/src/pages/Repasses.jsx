@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Wallet, Check, Undo2, Car, Phone, Calendar, Copy, UserCheck } from 'lucide-react'
+import { Wallet, Check, Undo2, Car, Phone, Calendar, Copy, UserCheck, AlertTriangle, ShieldCheck } from 'lucide-react'
 import { format } from 'date-fns'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -83,9 +83,11 @@ export default function Repasses() {
 
 // ── Fila de liberação ────────────────────────────────────────────────────────
 // Reservas CONCLUÍDAS com repasse do operador, ordenadas pela conclusão mais
-// antiga (completed_at ASC), com paginação/ordenação no servidor. READ-ONLY: a
-// ação "Liberar" (marcar pago, com revalidação e auditoria) entra na próxima
-// fase. Datas exibidas em America/Fortaleza.
+// antiga (completed_at ASC), com paginação/ordenação no servidor. A ação
+// "Liberar" (individual ou em lote) marca o repasse como PAGO — registrando um
+// pagamento MANUAL feito por fora (PIX/banco), NÃO uma transferência de gateway.
+// O servidor REVALIDA cada reserva antes de baixar, é idempotente e AUDITA quem
+// liberou. Datas exibidas em America/Fortaleza.
 function fmtDataHora(iso) {
   if (!iso) return '—'
   try {
@@ -133,7 +135,10 @@ function FilaLiberacao() {
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   const [conciliacao, setConciliacao] = useState(false)
+  const [sel, setSel] = useState(() => new Set())   // booking_ids marcados (página atual)
+  const [resultado, setResultado] = useState(null)  // resumo da última liberação
   const pageSize = 30
+  const qc = useQueryClient()
 
   const params = {
     page, pageSize,
@@ -149,6 +154,57 @@ function FilaLiberacao() {
   const rows       = fila.data?.rows || []
   const total      = fila.data?.total || 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const aviso      = fila.data?.aviso
+
+  // A seleção é POR PÁGINA: ao trocar de página ou filtro, some. Assim o
+  // "Liberar N" nunca envia ids que o admin não está mais vendo.
+  useEffect(() => { setSel(new Set()) }, [page, q, de, ate, conciliacao])
+
+  // Só reservas prontas podem ser marcadas/liberadas. A revalidação DE VERDADE
+  // é no servidor — isto é só o filtro da UI para não oferecer o que não dá.
+  const elegiveis   = rows.filter((r) => r.elegivel_liberar)
+  const elegivelIds = elegiveis.map((r) => r.booking_id)
+  const marcados    = elegiveis.filter((r) => sel.has(r.booking_id))
+  const todosMarcados = elegiveis.length > 0 && marcados.length === elegiveis.length
+  const valorSel    = marcados.reduce((s, r) => s + (Number(r.operador_valor) || 0), 0)
+
+  const liberarMut = useMutation({
+    mutationFn: (ids) => api.liberarRepasses({ booking_ids: ids }),
+    onSuccess: (r) => {
+      setResultado(r)
+      setSel(new Set())
+      qc.invalidateQueries({ queryKey: ['payout-fila'] })
+      qc.invalidateQueries({ queryKey: ['payout-indicadores'] })
+    },
+    onError: (e) => alert(e?.message || 'Não foi possível liberar. Tente de novo.'),
+  })
+
+  function toggle(id) {
+    setSel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleTodos() {
+    setSel((prev) => {
+      const n = new Set(prev)
+      if (todosMarcados) elegivelIds.forEach((id) => n.delete(id))
+      else elegivelIds.forEach((id) => n.add(id))
+      return n
+    })
+  }
+  function liberarUm(r) {
+    const msg = `Liberar o repasse de ${fmtR$(r.operador_valor)} para ${r.operador?.nome || 'operador'}?\n\n`
+      + 'Isto REGISTRA um pagamento MANUAL feito por fora (PIX/banco) — a plataforma '
+      + 'NÃO transfere pelo gateway. A ação é revalidada e auditada no servidor.'
+    if (confirm(msg)) liberarMut.mutate([r.booking_id])
+  }
+  function liberarLote() {
+    const ids = marcados.map((r) => r.booking_id)
+    if (!ids.length) return
+    const msg = `Liberar ${ids.length} repasse(s) — ${fmtR$(valorSel)}?\n\n`
+      + 'Registra pagamentos MANUAIS feitos por fora (PIX/banco), não transferências '
+      + 'de gateway. O servidor revalida cada reserva; qualquer uma que já não esteja '
+      + 'elegível é ignorada, sem baixa.'
+    if (confirm(msg)) liberarMut.mutate(ids)
+  }
 
   return (
     <div className="space-y-4">
@@ -159,6 +215,43 @@ function FilaLiberacao() {
         <CardInd titulo="Conciliação"          qtd={ind.data?.conciliacao?.qtd} />
         <CardInd titulo="Bloqueados"           qtd={ind.data?.bloqueados?.qtd} />
       </div>
+
+      {aviso && (
+        <p className="text-sm text-amber-300 bg-amber-900/20 border border-amber-800/40 rounded-xl px-4 py-3">{aviso}</p>
+      )}
+
+      {/* Resumo da última liberação: quantas baixaram, quanto, e o que foi
+          ignorado (e por quê). Se a auditoria falhou, avisa em destaque — a baixa
+          é real, mas não pode ficar sem trilha em silêncio. */}
+      {resultado && (
+        <div className={`rounded-xl border px-4 py-3 ${resultado.auditoria_ok === false ? 'border-amber-600/50 bg-amber-900/20' : 'border-emerald-700/40 bg-emerald-900/15'}`}>
+          <div className="flex items-start gap-2">
+            {resultado.auditoria_ok === false
+              ? <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
+              : <ShieldCheck  size={16} className="text-emerald-400 mt-0.5 shrink-0" />}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-gray-200">
+                <b>{resultado.resumo?.liberados || 0}</b> repasse(s) liberado(s) · <b>{fmtR$(resultado.resumo?.total)}</b>
+                {resultado.resumo?.ignorados ? <> · <span className="text-amber-400">{resultado.resumo.ignorados} ignorado(s)</span></> : null}
+              </p>
+              {resultado.auditoria_ok === false && (
+                <p className="text-[12px] text-amber-300 mt-1">A baixa foi registrada, mas a auditoria falhou. Avise o suporte para não ficar sem trilha.</p>
+              )}
+              {resultado.ignorados?.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5">
+                  {resultado.ignorados.slice(0, 8).map((ig, i) => (
+                    <li key={i} className="text-[12px] text-gray-400">
+                      <span className="font-mono text-gray-300">{ig.booking_code || String(ig.booking_id || '').slice(0, 8)}</span>: {ig.motivo}
+                    </li>
+                  ))}
+                  {resultado.ignorados.length > 8 && <li className="text-[12px] text-gray-500">…e mais {resultado.ignorados.length - 8}.</li>}
+                </ul>
+              )}
+            </div>
+            <button onClick={() => setResultado(null)} className="ml-auto text-xs text-gray-500 hover:text-gray-300 shrink-0">fechar</button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1) }} placeholder="Código da reserva"
@@ -176,11 +269,29 @@ function FilaLiberacao() {
         </label>
       </div>
 
+      {/* Barra de lote — só quando há seleção nesta página. */}
+      {marcados.length > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-brand/40 bg-brand/5 px-4 py-2.5">
+          <p className="text-sm text-gray-200"><b>{marcados.length}</b> selecionado(s) · {fmtR$(valorSel)}</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSel(new Set())} className="text-xs text-gray-400 hover:text-gray-200 px-2">limpar</button>
+            <Button size="sm" disabled={liberarMut.isPending} onClick={liberarLote}>
+              <Check size={14} /> {liberarMut.isPending ? 'Liberando…' : `Liberar ${marcados.length}`}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-x-auto">
         {fila.isLoading ? <div className="py-10"><PageSpinner /></div> : (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase text-gray-500 border-b border-gray-800">
+                <th className="px-3 py-2 w-8">
+                  <input type="checkbox" className="accent-brand"
+                    checked={todosMarcados} disabled={elegiveis.length === 0}
+                    onChange={toggleTodos} title="Marcar todos os prontos desta página" />
+                </th>
                 <th className="px-3 py-2">Reserva</th>
                 <th className="px-3 py-2">Operador</th>
                 <th className="px-3 py-2">Conclusão</th>
@@ -194,15 +305,27 @@ function FilaLiberacao() {
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-500">Nada na fila para este filtro.</td></tr>
+                <tr><td colSpan={10} className="px-3 py-8 text-center text-gray-500">Nada na fila para este filtro.</td></tr>
               )}
               {rows.map((r) => (
-                <tr key={r.booking_id} className="border-b border-gray-800/60">
+                <tr key={r.booking_id} className={`border-b border-gray-800/60 ${sel.has(r.booking_id) ? 'bg-brand/5' : ''}`}>
+                  <td className="px-3 py-2">
+                    {r.elegivel_liberar ? (
+                      <input type="checkbox" className="accent-brand"
+                        checked={sel.has(r.booking_id)} onChange={() => toggle(r.booking_id)} />
+                    ) : null}
+                  </td>
                   <td className="px-3 py-2">
                     <span className="font-mono text-gray-200">{r.booking_code}</span>
                     <span className="block text-[11px] text-gray-500">{r.service_type === 'transfer' ? 'Transfer' : 'Passeio'}</span>
                   </td>
-                  <td className="px-3 py-2 text-gray-300">{r.operador?.nome || '—'}</td>
+                  <td className="px-3 py-2 text-gray-300">
+                    {r.operador?.nome || '—'}
+                    {/* Para onde mandar o PIX manual — só aparece nos prontos. */}
+                    {r.elegivel_liberar && (
+                      <span className="block mt-0.5"><ChavePix chave={r.operador?.pix_key} tipo={r.operador?.pix_key_type} /></span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{fmtDataHora(r.completed_at)}</td>
                   <td className="px-3 py-2 text-gray-400">{gwLabel(r.gateway)}</td>
                   <td className="px-3 py-2 text-right text-gray-300 whitespace-nowrap">{fmtR$(r.valor_pago)}</td>
@@ -210,10 +333,12 @@ function FilaLiberacao() {
                   <td className="px-3 py-2 text-right font-medium text-gray-200 whitespace-nowrap">{r.operador_valor != null ? fmtR$(r.operador_valor) : '—'}</td>
                   <td className="px-3 py-2"><SituacaoTag r={r} /></td>
                   <td className="px-3 py-2 text-right">
-                    <button disabled title="Disponível na próxima fase (com revalidação e auditoria no servidor)"
-                      className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-500 cursor-not-allowed">
-                      Liberar
-                    </button>
+                    {r.elegivel_liberar ? (
+                      <button onClick={() => liberarUm(r)} disabled={liberarMut.isPending}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 disabled:opacity-40 transition-colors">
+                        Liberar
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -233,10 +358,11 @@ function FilaLiberacao() {
         </div>
       </div>
 
-      <p className="text-[11px] text-amber-500/70 leading-relaxed">
-        Somente leitura por enquanto. A ação <b>Liberar</b> (marcar o repasse como pago,
-        com revalidação de todas as condições e auditoria no servidor) entra na próxima
-        fase. Ordenado pela conclusão mais antiga; datas em America/Fortaleza.
+      <p className="text-[11px] text-gray-500 leading-relaxed">
+        <b>Liberar</b> registra um pagamento <b>manual</b> feito por fora (PIX/banco) — a plataforma
+        não transfere pelo gateway. Cada liberação é revalidada e auditada no servidor, e é
+        idempotente (dois cliques não pagam em dobro). Ordenado pela conclusão mais antiga;
+        datas em America/Fortaleza.
       </p>
     </div>
   )
