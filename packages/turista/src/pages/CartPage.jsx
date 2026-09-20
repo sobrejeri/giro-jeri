@@ -259,12 +259,12 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
       // veículo escolhido custa o valor do trecho. Só a LISTA mudou.
       return daRota
         .filter((v) => v.is_transfer_allowed !== false && v.is_active !== false)
-        .map((v) => ({ id: v.id, name: v.name, price: unitPrice, cap: v.seat_capacity || null }))
+        .map((v) => ({ id: v.id, name: v.name, price: unitPrice, cap: v.seat_capacity || null, image_url: v.image_url || null }))
     }
     const list = (tourVehiclesData || []).length ? tourVehiclesData : all
     return list
       .filter((v) => v.is_tour_allowed !== false && v.is_private_allowed !== false && v.is_active !== false)
-      .map((v) => ({ id: v.id, name: v.name, price: Number(v.base_price) || 0, cap: v.seat_capacity || null }))
+      .map((v) => ({ id: v.id, name: v.name, price: Number(v.base_price) || 0, cap: v.seat_capacity || null, image_url: v.image_url || null }))
   }, [isTransfer, tourVehiclesData, routeVehiclesData, allVehiclesData, unitPrice])
 
   // Preenche capacidade/preço que faltarem nos veículos já escolhidos
@@ -277,6 +277,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
         ...v,
         cap:   Number(v.cap)   > 0 ? v.cap   : src.cap,
         price: Number(v.price) > 0 ? v.price : src.price,
+        image_url: v.image_url || src.image_url || null,
       }
     }))
   }, [available])
@@ -315,7 +316,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
     setVehicles((prev) => {
       const i = prev.findIndex((v) => v.id === a.id)
       if (i >= 0) return prev.map((v, j) => j === i ? { ...v, qty: (v.qty || 0) + 1 } : v)
-      return [...prev, { id: a.id, name: a.name, qty: 1, price: a.price, cap: a.cap }]
+      return [...prev, { id: a.id, name: a.name, qty: 1, price: a.price, cap: a.cap, image_url: a.image_url || null }]
     })
   }
 
@@ -594,7 +595,9 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
                     <div className="mt-1 space-y-2">
                       {vehicles.map((v, i) => (
                         <div key={v.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
-                          <Car size={15} className="text-brand shrink-0" />
+                          {v.image_url
+                            ? <img src={v.image_url} alt="" className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white" />
+                            : <Car size={15} className="text-brand shrink-0" />}
                           <div className="flex-1 min-w-0">
                             <p className="text-[13px] font-semibold text-gray-800 truncate">{v.name}</p>
                             <p className="text-[11px] text-gray-400">
@@ -654,7 +657,9 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
                           <div className="mt-2 space-y-2">
                             {extras.map((a) => (
                               <div key={a.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-3 py-2.5">
-                                <Car size={15} className="text-gray-400 shrink-0" />
+                                {a.image_url
+                                  ? <img src={a.image_url} alt="" className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white" />
+                                  : <Car size={15} className="text-gray-400 shrink-0" />}
                                 <div className="flex-1 min-w-0">
                                   <p className="text-[13px] font-semibold text-gray-800 truncate">{a.name}</p>
                                   <p className="text-[11px] text-gray-400">
@@ -847,7 +852,9 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
             <div className="mt-1 space-y-2">
               {vehicles.map((v, i) => (
                 <div key={v.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
-                  <Car size={15} className="text-brand shrink-0" />
+                  {v.image_url
+                    ? <img src={v.image_url} alt="" className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white" />
+                    : <Car size={15} className="text-brand shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-gray-800 truncate">{v.name}</p>
                     <p className="text-[11px] text-gray-400">
@@ -912,7 +919,9 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
                   <div className="mt-2 space-y-2">
                     {extras.map((a) => (
                       <div key={a.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-3 py-2.5">
-                        <Car size={15} className="text-gray-400 shrink-0" />
+                        {a.image_url
+                          ? <img src={a.image_url} alt="" className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white" />
+                          : <Car size={15} className="text-gray-400 shrink-0" />}
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-semibold text-gray-800 truncate">{a.name}</p>
                           <p className="text-[11px] text-gray-400">
