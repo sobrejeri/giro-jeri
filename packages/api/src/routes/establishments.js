@@ -6,8 +6,43 @@ import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { fetchNearby } from '../services/geoapify.js';
+import { buscarFotoDoLugar } from '../services/googlePlaces.js';
 
 const router = Router();
+
+// Preenche a foto pelo Google Places quando o estabelecimento não tem imagem.
+// Best-effort: baixa os bytes, sobe no bucket "avatars" (prefixo
+// establishments/) e grava a URL pública em image_url. Nunca lança — só
+// devolve o registro (com ou sem a foto nova).
+async function preencherFotoSeFaltar(rec) {
+  if (!rec || rec.image_url || !rec.name) return rec;
+  try {
+    const foto = await buscarFotoDoLugar({
+      name: rec.name, locality: rec.locality,
+      lat: rec.latitude, lng: rec.longitude,
+    });
+    if (!foto) return rec;
+    const ext  = (foto.contentType.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    const path = `establishments/${rec.id}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from('avatars')
+      .upload(path, foto.buffer, { contentType: foto.contentType, upsert: true });
+    if (upErr) { console.warn('[establishments] upload foto falhou:', upErr.message); return rec; }
+    // Cache-buster: o upsert reusa o caminho; sem query o CDN serviria a antiga.
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+    const imageUrl = `${publicUrl}?v=${Date.now()}`;
+    const { data: upd } = await supabase
+      .from('establishments')
+      .update({ image_url: imageUrl })
+      .eq('id', rec.id)
+      .select()
+      .single();
+    return upd || { ...rec, image_url: imageUrl };
+  } catch (err) {
+    console.warn('[establishments] preencherFoto falhou:', err.message);
+    return rec;
+  }
+}
 
 const schema = z.object({
   name:        z.string().min(1).max(200),
@@ -143,6 +178,38 @@ router.get('/admin', requireAdmin, async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/establishments/backfill-photos ───────────
+// Preenche via Google Places a foto dos estabelecimentos ativos que estão sem
+// imagem. Processa em lote pequeno (padrão 20) por chamada para conter o custo
+// e o tempo; retorne e chame de novo até "restantes: 0".
+router.post('/backfill-photos', requireAdmin, async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.body?.limit) || 20, 1), 40);
+    const { data: pendentes, error } = await supabase
+      .from('establishments')
+      .select('id, name, locality, latitude, longitude, image_url')
+      .eq('is_active', true)
+      .or('image_url.is.null,image_url.eq.')
+      .limit(limit);
+    if (error) throw error;
+
+    let preenchidos = 0;
+    for (const rec of pendentes || []) {
+      const upd = await preencherFotoSeFaltar(rec);
+      if (upd?.image_url) preenchidos += 1;
+    }
+
+    // Quantos ainda faltam depois deste lote (para saber se repete).
+    const { count: restantes } = await supabase
+      .from('establishments')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .or('image_url.is.null,image_url.eq.');
+
+    res.json({ processados: pendentes?.length || 0, preenchidos, restantes: restantes || 0 });
+  } catch (err) { next(err); }
+});
+
 router.post('/', requireAdmin, async (req, res, next) => {
   try {
     const body = schema.parse(req.body);
@@ -150,7 +217,9 @@ router.post('/', requireAdmin, async (req, res, next) => {
     const { data, error } = await supabase
       .from('establishments').insert(payload).select().single();
     if (error) throw error;
-    res.status(201).json(data);
+    // Sem imagem informada → tenta puxar do Google Places (best-effort).
+    const enriched = await preencherFotoSeFaltar(data);
+    res.status(201).json(enriched);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
     next(err);
@@ -188,7 +257,9 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
     const { data, error } = await supabase
       .from('establishments').update(payload).eq('id', req.params.id).select().single();
     if (error || !data) return res.status(404).json({ error: 'Estabelecimento não encontrado' });
-    res.json(data);
+    // Continua sem imagem depois de salvar → tenta puxar do Google (best-effort).
+    const enriched = await preencherFotoSeFaltar(data);
+    res.json(enriched);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
     next(err);

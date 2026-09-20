@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, Store, Upload, Loader2, Star,
   MapPin, Phone, Instagram, BedDouble, UtensilsCrossed, ShoppingBag,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -89,6 +90,28 @@ export default function Estabelecimentos() {
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['establishments-admin'] }),
   })
 
+  // Preenche via Google Places a foto dos que estão sem imagem. Roda em lotes;
+  // repete automaticamente enquanto "restantes" > 0.
+  const [fotosBusy, setFotosBusy] = useState(false)
+  const [fotosMsg,  setFotosMsg]  = useState('')
+  async function buscarFotosFaltantes() {
+    if (fotosBusy) return
+    setFotosBusy(true); setFotosMsg('Buscando fotos no Google…')
+    try {
+      let total = 0
+      for (let i = 0; i < 20; i++) {   // teto de segurança de lotes
+        const r = await api.backfillEstablishmentPhotos(20)
+        total += r.preenchidos || 0
+        setFotosMsg(`Preenchidas ${total} · faltam ${r.restantes}`)
+        qc.invalidateQueries({ queryKey: ['establishments-admin'] })
+        if (!r.restantes || !r.processados) break
+      }
+      setFotosMsg(`Concluído — ${total} foto(s) preenchida(s).`)
+    } catch (err) {
+      setFotosMsg(err?.message || 'Falha ao buscar fotos.')
+    } finally { setFotosBusy(false) }
+  }
+
   function openNew() { setForm(EMPTY); setImgError(''); setModal({ isNew: true }) }
   function openEdit(p) {
     setForm({
@@ -166,7 +189,13 @@ export default function Estabelecimentos() {
           <h1 className="text-lg font-semibold text-gray-100">Estabelecimentos</h1>
           <p className="text-sm text-gray-500">Diretório exibido na aba “Descubra a Vila”. Marque “Destaque” para anunciar no topo.</p>
         </div>
-        <Button onClick={openNew} className="ml-auto"><Plus size={16} /> Novo</Button>
+        <div className="ml-auto flex items-center gap-2">
+          {fotosMsg && <span className="text-xs text-gray-400">{fotosMsg}</span>}
+          <Button variant="secondary" onClick={buscarFotosFaltantes} disabled={fotosBusy}>
+            <ImageIcon size={16} /> {fotosBusy ? 'Buscando…' : 'Buscar fotos faltantes'}
+          </Button>
+          <Button onClick={openNew}><Plus size={16} /> Novo</Button>
+        </div>
       </div>
 
       {places.length === 0 ? (
