@@ -314,11 +314,33 @@ function EditSheet({ item, onSave, onClose }) {
   const winStart = toMin(item.service_window_start || null)
   const winEnd   = toMin(item.service_window_end   || null)
   const sameDay  = dateIso === fToday
-  // Horário mínimo aceito: o mais restritivo entre a antecedência (só hoje) e
-  // o início da janela. É o que alimenta o `min` do seletor de horário.
-  const minTimeMin = Math.max(sameDay ? earliestTodayMin : 0, winStart ?? 0)
   // Se hoje a janela já passou, não há horário possível — empurra para amanhã.
   const semHorarioHoje = winEnd != null && sameDay && earliestTodayMin > winEnd
+
+  // ── Horários OFERECIDOS (lista, não roda livre) ─────────────────────────
+  // O seletor nativo de horário (iOS) ignora min/max e deixava rolar até 23:58
+  // — dava para agendar passeio de madrugada, e só o "Salvar" barrava depois.
+  // Uma LISTA de horários válidos resolve na origem: o que não pode nem aparece.
+  //
+  // Faixa: a janela do serviço (admin) quando existe; senão um padrão. Passeio
+  // sem janela usa horário DIURNO (05:00–18:00) — não se faz passeio à noite.
+  // Translado sem janela fica livre: transfer de aeroporto de madrugada é real.
+  const SLOT_STEP = 30
+  const faixaIni = winStart ?? (isTransfer ? 0 : 5 * 60)
+  const faixaFim = winEnd   ?? (isTransfer ? 23 * 60 + 30 : 18 * 60)
+  // No mesmo dia, respeita também a antecedência mínima.
+  const primeiroSlot = Math.max(faixaIni, sameDay ? earliestTodayMin : 0)
+  const horariosDisponiveis = (() => {
+    const out = []
+    const ini = Math.ceil(primeiroSlot / SLOT_STEP) * SLOT_STEP
+    for (let m = ini; m <= faixaFim; m += SLOT_STEP) out.push(fromMin(m))
+    return out
+  })()
+  // Preserva um horário já salvo fora da grade (ex.: escolhido antes desta
+  // regra), para não sumir da tela sem o cliente perceber.
+  const opcoesHorario = time && !horariosDisponiveis.includes(time)
+    ? [time, ...horariosDisponiveis]
+    : horariosDisponiveis
 
   const dateOk = !!dateIso && dateIso >= minDateIso && !semHorarioHoje
   const dentroDaJanela = !time || (
@@ -462,13 +484,17 @@ function EditSheet({ item, onSave, onClose }) {
             </div>
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.timeLabel')}</label>
-              <input
-                type="time" value={time}
-                min={minTimeMin > 0 ? fromMin(minTimeMin) : undefined}
-                max={winEnd != null ? fromMin(winEnd) : undefined}
+              <select
+                value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="mt-1 w-full bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30"
-              />
+                disabled={horariosDisponiveis.length === 0}
+                className="mt-1 w-full bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60"
+              >
+                <option value="">{horariosDisponiveis.length === 0 ? 'Sem horário hoje' : t('cartPg.editSheet.chooseTime', 'Escolher horário')}</option>
+                {opcoesHorario.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
             </div>
           </div>
 
