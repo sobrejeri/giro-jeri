@@ -656,8 +656,14 @@ export default function Feed() {
       : <EmptyState icon={BadgePercent} title={t('feedPg.emptyPromos.title')} sub={t('feedPg.emptyPromos.sub')} />
   } else if (CATEGORY_IDS.includes(filter)) {
     const list = places.filter((p) => p.category === filter)
+    // Categoria selecionada: carrossel de DUAS linhas que rola na horizontal
+    // (grid-rows-2 + grid-flow-col), em vez de uma grade vertical comprida.
     content = (loadingPlacesAll && !list.length) ? Loader
-      : list.length ? <div className="grid grid-cols-2 gap-3">{list.map(renderPlace)}</div>
+      : list.length ? (
+          <div className="grid grid-rows-2 grid-flow-col auto-cols-[46%] gap-3 overflow-x-auto -mx-4 px-4 pb-2 scrollbar-hide snap-x">
+            {list.map((p) => <div key={p.id} className="snap-start">{renderPlace(p)}</div>)}
+          </div>
+        )
       : <EmptyState icon={CAT_ICONS[filter]} title={t('feedPg.emptyCategory.title')} sub={t('feedPg.emptyCategory.sub')} />
   } else {
     const blocks = []
