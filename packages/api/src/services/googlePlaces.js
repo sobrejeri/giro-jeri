@@ -62,6 +62,64 @@ async function buscarPorTipos({ center, radius, tipos, key }) {
   return json.places || [];
 }
 
+// ── Fallback LEGADO (Places API antiga) ────────────────────────────────────
+// A chave do projeto pode ter só a API legada habilitada (é o que faz o
+// Autocomplete funcionar via fallback). O Nearby (New) então volta vazio. Aqui
+// usamos o Nearby Search legado, que a mesma chave aceita, para o diretório não
+// ficar vazio sem precisar habilitar nada novo no Google Cloud.
+const TIPO_LEGADO = { hospedagem: 'lodging', gastronomia: 'restaurant', compras: 'store' };
+const FAIXA_LEGADO = { 1: '$', 2: '$$', 3: '$$$', 4: '$$$$' };
+
+async function buscarLegadoPorTipo({ center, radius, type, key }) {
+  const url = new URL('https://maps.googleapis.com/maps/api/place/nearbysearch/json');
+  url.searchParams.set('location', `${center.latitude},${center.longitude}`);
+  url.searchParams.set('radius', String(Math.min(Number(radius) || 15000, 50000)));
+  url.searchParams.set('type', type);
+  url.searchParams.set('language', 'pt-BR');
+  url.searchParams.set('key', key);
+  const res = await fetch(url);
+  const json = await res.json();
+  if (json.status && json.status !== 'OK' && json.status !== 'ZERO_RESULTS') {
+    console.warn('[googlePlaces] nearby legado status=%s %s', json.status, json.error_message || '');
+  }
+  return json.results || [];
+}
+
+async function descobrirLegado({ center, radius, cats, photoBase }) {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  const lotes = await Promise.all(cats.map((c) =>
+    buscarLegadoPorTipo({ center, radius, type: TIPO_LEGADO[c], key })
+      .then((rs) => rs.map((r) => ({ r, cat: c }))).catch(() => [])));
+  const seen = new Set();
+  const results = [];
+  for (const { r, cat } of lotes.flat()) {
+    if (!r.name || seen.has(r.place_id)) continue;
+    seen.add(r.place_id);
+    const ref = r.photos?.[0]?.photo_reference || null;
+    const loc = r.geometry?.location;
+    results.push({
+      id:           `g:${r.place_id}`,
+      source:       'google',
+      name:         r.name,
+      category:     cat,
+      description:  r.vicinity || null,
+      address:      r.vicinity || null,
+      image_url:    ref && photoBase ? `${photoBase}?ref=${encodeURIComponent(ref)}` : null,
+      rating:       r.rating || null,
+      avg_rating:   r.rating || null,
+      review_count: r.user_ratings_total || 0,
+      whatsapp:     null,
+      website:      null,
+      instagram:    null,
+      maps_url:     loc ? `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}&query_place_id=${r.place_id}` : null,
+      price_range:  FAIXA_LEGADO[r.price_level] || null,
+      is_featured:  false,
+    });
+  }
+  results.sort((a, b) => (b.rating || 0) - (a.rating || 0) || (b.review_count || 0) - (a.review_count || 0));
+  return results;
+}
+
 // Descoberta AO VIVO de estabelecimentos por região (Google Places New).
 // Mesma forma de saída do adaptador Geoapify, com nota + foto reais. As fotos
 // vêm como URL do nosso proxy (/photo) — resolvido só quando exibido, para
@@ -112,11 +170,25 @@ export async function descobrirLugaresProximos({ lat, lng, radius = 15000, categ
     }
     // Reputação primeiro: maior nota, depois mais avaliações.
     results.sort((a, b) => (b.rating || 0) - (a.rating || 0) || (b.review_count || 0) - (a.review_count || 0));
+
+    // Nada na API New (provável: só a API legada está habilitada) → tenta o
+    // Nearby legado com a mesma chave.
+    if (!results.length) {
+      const leg = await descobrirLegado({ center, radius, cats, photoBase });
+      nearbyCache.set(cacheKey, { at: Date.now(), data: leg });
+      return { enabled: leg.length > 0, results: leg };
+    }
+
     nearbyCache.set(cacheKey, { at: Date.now(), data: results });
     return { enabled: true, results };
   } catch (err) {
     console.warn('[googlePlaces] descobrir falhou:', err.message);
-    return { enabled: false, results: [] };
+    try {
+      const center2 = Number.isFinite(lat) && Number.isFinite(lng)
+        ? { latitude: Number(lat), longitude: Number(lng) } : CENTRO_JERI;
+      const leg = await descobrirLegado({ center: center2, radius, cats, photoBase });
+      return { enabled: leg.length > 0, results: leg };
+    } catch { return { enabled: false, results: [] }; }
   }
 }
 
@@ -137,6 +209,26 @@ export async function resolverFotoUrl(photoName, maxWidthPx = 800) {
     if (!res.ok || !json?.photoUri) return null;
     photoCache.set(ck, { at: Date.now(), url: json.photoUri });
     return json.photoUri;
+  } catch { return null; }
+}
+
+// Foto pela API LEGADA: o endpoint /place/photo responde 302 para a imagem
+// final (googleusercontent, sem a chave). Seguimos o redirect no servidor e
+// devolvemos só a URL final — a chave nunca sai daqui.
+export async function resolverFotoLegadaUrl(ref, maxWidth = 800) {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key || !ref) return null;
+  const ck = `leg:${ref}@${maxWidth}`;
+  const hit = photoCache.get(ck);
+  if (hit && Date.now() - hit.at < PHOTO_TTL) return hit.url;
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}`
+      + `&photo_reference=${encodeURIComponent(ref)}&key=${encodeURIComponent(key)}`;
+    const res = await fetch(url, { redirect: 'manual' });
+    const loc = res.headers.get('location');
+    if (!loc) return null;
+    photoCache.set(ck, { at: Date.now(), url: loc });
+    return loc;
   } catch { return null; }
 }
 

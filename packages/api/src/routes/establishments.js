@@ -6,7 +6,7 @@ import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { fetchNearby } from '../services/geoapify.js';
-import { buscarFotoDoLugar, descobrirLugaresProximos, resolverFotoUrl } from '../services/googlePlaces.js';
+import { buscarFotoDoLugar, descobrirLugaresProximos, resolverFotoUrl, resolverFotoLegadaUrl } from '../services/googlePlaces.js';
 
 const router = Router();
 
@@ -164,10 +164,11 @@ router.get('/nearby', async (req, res, next) => {
 // custo de foto fica sob demanda (com cache de 24h no serviço).
 router.get('/photo', async (req, res) => {
   try {
-    const name = req.query.name;
+    const { name, ref } = req.query;
     const w = Math.min(Math.max(Number(req.query.w) || 800, 100), 1600);
-    if (!name) return res.status(400).end();
-    const url = await resolverFotoUrl(name, w);
+    if (!name && !ref) return res.status(400).end();
+    // name = Places API (New); ref = photo_reference da API legada.
+    const url = ref ? await resolverFotoLegadaUrl(ref, w) : await resolverFotoUrl(name, w);
     if (!url) return res.status(404).end();
     res.set('Cache-Control', 'public, max-age=86400');
     return res.redirect(302, url);
