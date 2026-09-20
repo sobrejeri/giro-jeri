@@ -10,20 +10,24 @@
 
 const CENTRO_JERI = { latitude: -2.7975, longitude: -40.5137 };
 
-// Tipos do Places API (New) por categoria nossa.
-const TIPOS = {
-  hospedagem:  ['lodging', 'hotel', 'bed_and_breakfast', 'guest_house', 'resort_hotel', 'motel'],
-  gastronomia: ['restaurant', 'cafe', 'bar', 'bakery', 'coffee_shop', 'fast_food_restaurant', 'ice_cream_shop'],
-  compras:     ['store', 'clothing_store', 'gift_shop', 'shopping_mall', 'market', 'jewelry_store', 'book_store'],
+// Taxonomia de categorias do diretório. Cada uma mapeia para tipos do Places
+// (New e legado) e, quando não há tipo próprio (ex.: escola de kite), para uma
+// palavra-chave. A ORDEM importa: as específicas vêm antes da genérica "compras"
+// (store) para o mesmo lugar ser etiquetado na categoria mais precisa (dedupe
+// por place_id mantém a primeira ocorrência). Etiquetamos pela busca feita —
+// não pelo tipo devolvido — então a categoria fica correta.
+const CATEGORIAS = {
+  gastronomia: { new: ['restaurant', 'cafe', 'bakery'],                         legacy: ['restaurant'] },
+  bar:         { new: ['bar', 'pub'],                                           legacy: ['bar'] },
+  hospedagem:  { new: ['lodging', 'hotel', 'guest_house', 'resort_hotel', 'motel'], legacy: ['lodging'] },
+  mercado:     { new: ['supermarket', 'grocery_store', 'convenience_store'],    legacy: ['supermarket', 'convenience_store'] },
+  farmacia:    { new: ['pharmacy', 'drugstore'],                                legacy: ['pharmacy'] },
+  beleza:      { new: ['hair_salon', 'barber_shop', 'beauty_salon'],            legacy: ['hair_care', 'beauty_salon'] },
+  moda:        { new: ['clothing_store', 'shoe_store'],                         legacy: ['clothing_store', 'shoe_store'] },
+  kite:        { newKeyword: 'kitesurf', legacyKeyword: 'kitesurf' },
+  compras:     { new: ['store', 'gift_shop'],                                   legacy: ['store'] },
 };
-// Do primaryType do Google de volta para a nossa categoria (para etiquetar).
-function nossaCategoria(primaryType = '') {
-  for (const [cat, tipos] of Object.entries(TIPOS)) if (tipos.includes(primaryType)) return cat;
-  if (/hotel|lodging|guest|resort|motel|inn|hostel/i.test(primaryType)) return 'hospedagem';
-  if (/restaurant|cafe|bar|food|bakery|coffee|meal/i.test(primaryType))  return 'gastronomia';
-  if (/store|shop|market|mall/i.test(primaryType))                       return 'compras';
-  return 'gastronomia';
-}
+const ORDEM_CATS = Object.keys(CATEGORIAS);
 const FAIXA_PRECO = { PRICE_LEVEL_INEXPENSIVE: '$', PRICE_LEVEL_MODERATE: '$$', PRICE_LEVEL_EXPENSIVE: '$$$', PRICE_LEVEL_VERY_EXPENSIVE: '$$$$' };
 
 // Cache em memória do NEARBY. ToS do Google: conteúdo do Places não é
@@ -62,19 +66,43 @@ async function buscarPorTipos({ center, radius, tipos, key }) {
   return json.places || [];
 }
 
+// Busca por texto (New) — para categorias sem tipo próprio (ex.: escola de kite).
+async function buscarTextoNew({ center, radius, textQuery, key }) {
+  const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type':   'application/json',
+      'X-Goog-Api-Key': key,
+      'X-Goog-FieldMask': [
+        'places.id', 'places.displayName', 'places.primaryType', 'places.rating',
+        'places.userRatingCount', 'places.formattedAddress', 'places.location',
+        'places.googleMapsUri', 'places.photos', 'places.priceLevel',
+        'places.internationalPhoneNumber', 'places.websiteUri',
+      ].join(','),
+    },
+    body: JSON.stringify({
+      textQuery, languageCode: 'pt-BR', regionCode: 'BR', maxResultCount: 20,
+      locationBias: { circle: { center, radius: Math.min(Number(radius) || 15000, 50000) } },
+    }),
+  });
+  const json = await res.json();
+  if (!res.ok) { console.warn('[googlePlaces] searchText status=%d %s', res.status, json.error?.message || ''); return []; }
+  return json.places || [];
+}
+
 // ── Fallback LEGADO (Places API antiga) ────────────────────────────────────
 // A chave do projeto pode ter só a API legada habilitada (é o que faz o
 // Autocomplete funcionar via fallback). O Nearby (New) então volta vazio. Aqui
 // usamos o Nearby Search legado, que a mesma chave aceita, para o diretório não
 // ficar vazio sem precisar habilitar nada novo no Google Cloud.
-const TIPO_LEGADO = { hospedagem: 'lodging', gastronomia: 'restaurant', compras: 'store' };
 const FAIXA_LEGADO = { 1: '$', 2: '$$', 3: '$$$', 4: '$$$$' };
 
-async function buscarLegadoPorTipo({ center, radius, type, key }) {
+async function buscarLegadoNearby({ center, radius, type, keyword, key }) {
   const url = new URL('https://maps.googleapis.com/maps/api/place/nearbysearch/json');
   url.searchParams.set('location', `${center.latitude},${center.longitude}`);
   url.searchParams.set('radius', String(Math.min(Number(radius) || 15000, 50000)));
-  url.searchParams.set('type', type);
+  if (type)    url.searchParams.set('type', type);
+  if (keyword) url.searchParams.set('keyword', keyword);
   url.searchParams.set('language', 'pt-BR');
   url.searchParams.set('key', key);
   const res = await fetch(url);
@@ -87,9 +115,19 @@ async function buscarLegadoPorTipo({ center, radius, type, key }) {
 
 async function descobrirLegado({ center, radius, cats, photoBase }) {
   const key = process.env.GOOGLE_MAPS_API_KEY;
-  const lotes = await Promise.all(cats.map((c) =>
-    buscarLegadoPorTipo({ center, radius, type: TIPO_LEGADO[c], key })
-      .then((rs) => rs.map((r) => ({ r, cat: c }))).catch(() => [])));
+  const tarefas = [];
+  for (const c of cats) {
+    const cfg = CATEGORIAS[c]; if (!cfg) continue;
+    if (cfg.legacyKeyword) {
+      tarefas.push(buscarLegadoNearby({ center, radius, keyword: cfg.legacyKeyword, key })
+        .then((rs) => rs.map((r) => ({ r, cat: c }))).catch(() => []));
+    }
+    for (const type of (cfg.legacy || [])) {
+      tarefas.push(buscarLegadoNearby({ center, radius, type, key })
+        .then((rs) => rs.map((r) => ({ r, cat: c }))).catch(() => []));
+    }
+  }
+  const lotes = await Promise.all(tarefas);
   const seen = new Set();
   const results = [];
   for (const { r, cat } of lotes.flat()) {
@@ -130,15 +168,20 @@ export async function descobrirLugaresProximos({ lat, lng, radius = 15000, categ
   const center = Number.isFinite(lat) && Number.isFinite(lng)
     ? { latitude: Number(lat), longitude: Number(lng) } : CENTRO_JERI;
 
-  const cats = category && TIPOS[category] ? [category] : Object.keys(TIPOS);
+  const cats = category && CATEGORIAS[category] ? [category] : ORDEM_CATS;
   const cacheKey = `${center.latitude.toFixed(3)},${center.longitude.toFixed(3)},${radius},${category || 'all'}`;
   const hit = nearbyCache.get(cacheKey);
   if (hit && Date.now() - hit.at < NEARBY_TTL) return { enabled: true, results: hit.data };
 
   try {
     const lotes = await Promise.all(
-      cats.map((c) => buscarPorTipos({ center, radius, tipos: TIPOS[c], key })
-        .then((places) => places.map((p) => ({ p, catQuery: c })))),
+      cats.map((c) => {
+        const cfg = CATEGORIAS[c];
+        const req = cfg.newKeyword
+          ? buscarTextoNew({ center, radius, textQuery: cfg.newKeyword, key })
+          : buscarPorTipos({ center, radius, tipos: cfg.new, key });
+        return req.then((places) => places.map((p) => ({ p, catQuery: c }))).catch(() => []);
+      }),
     );
     const seen = new Set();
     const results = [];
@@ -151,7 +194,7 @@ export async function descobrirLugaresProximos({ lat, lng, radius = 15000, categ
         id:           `g:${p.id}`,
         source:       'google',
         name,
-        category:     nossaCategoria(p.primaryType) || catQuery,
+        category:     catQuery,
         description:  p.formattedAddress || null,
         address:      p.formattedAddress || null,
         image_url:    photoName && photoBase ? `${photoBase}?name=${encodeURIComponent(photoName)}` : null,

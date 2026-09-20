@@ -14,6 +14,7 @@ import {
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
   ChevronLeft, Search, Pencil, Plus,
+  Wine, ShoppingCart, Pill, Scissors, Shirt, Wind,
 } from 'lucide-react'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
@@ -45,28 +46,32 @@ function WhatsAppIcon({ size = 16 }) {
   )
 }
 
-const CAT_ICONS = {
-  hospedagem:  BedDouble,
-  gastronomia: UtensilsCrossed,
-  compras:     ShoppingBag,
-}
-
+// Categorias do diretório (mesmas chaves que a API devolve em place.category).
+// Ordem = ordem dos chips. Labels com default embutido (i18n opcional depois).
 function getCats(t) {
   return {
-    hospedagem:  { label: t('feedPg.catStay'), Icon: BedDouble },
-    gastronomia: { label: t('feedPg.catEat'),  Icon: UtensilsCrossed },
-    compras:     { label: t('feedPg.catShop'), Icon: ShoppingBag },
+    gastronomia: { label: t('feedPg.catEat', 'Onde comer'),        Icon: UtensilsCrossed },
+    bar:         { label: t('feedPg.catBar', 'Bares'),             Icon: Wine },
+    hospedagem:  { label: t('feedPg.catStay', 'Onde ficar'),       Icon: BedDouble },
+    mercado:     { label: t('feedPg.catMarket', 'Mercados'),       Icon: ShoppingCart },
+    farmacia:    { label: t('feedPg.catPharmacy', 'Farmácias'),    Icon: Pill },
+    beleza:      { label: t('feedPg.catBeauty', 'Beleza & Barbearia'), Icon: Scissors },
+    moda:        { label: t('feedPg.catFashion', 'Moda & Calçados'),   Icon: Shirt },
+    kite:        { label: t('feedPg.catKite', 'Kite & Aventura'),  Icon: Wind },
+    compras:     { label: t('feedPg.catShop', 'Lojas'),            Icon: ShoppingBag },
   }
 }
+const CATEGORY_IDS = ['gastronomia', 'bar', 'hospedagem', 'mercado', 'farmacia', 'beleza', 'moda', 'kite', 'compras']
+const CAT_ICONS = Object.fromEntries(
+  Object.entries(getCats((k, d) => d || k)).map(([k, v]) => [k, v.Icon]))
 
 function getFilters(t) {
+  const cats = getCats(t)
   return [
-    { id: 'tudo',        label: t('feedPg.filterAll'),    Icon: Sparkles },
-    { id: 'eventos',     label: t('feedPg.filterEvents'), Icon: CalendarDays },
-    { id: 'promocoes',   label: t('feedPg.filterPromos'), Icon: BadgePercent },
-    { id: 'hospedagem',  label: t('feedPg.catStay'),      Icon: BedDouble },
-    { id: 'gastronomia', label: t('feedPg.catEat'),       Icon: UtensilsCrossed },
-    { id: 'compras',     label: t('feedPg.catShop'),      Icon: ShoppingBag },
+    { id: 'tudo',      label: t('feedPg.filterAll'),    Icon: Sparkles },
+    { id: 'eventos',   label: t('feedPg.filterEvents'), Icon: CalendarDays },
+    { id: 'promocoes', label: t('feedPg.filterPromos'), Icon: BadgePercent },
+    ...CATEGORY_IDS.map((id) => ({ id, label: cats[id].label, Icon: cats[id].Icon })),
   ]
 }
 
@@ -648,7 +653,7 @@ export default function Feed() {
     content = loadingFeed ? Loader
       : promos.length ? promos.map(renderPost)
       : <EmptyState icon={BadgePercent} title={t('feedPg.emptyPromos.title')} sub={t('feedPg.emptyPromos.sub')} />
-  } else if (filter === 'hospedagem' || filter === 'gastronomia' || filter === 'compras') {
+  } else if (CATEGORY_IDS.includes(filter)) {
     const list = places.filter((p) => p.category === filter)
     content = (loadingPlacesAll && !list.length) ? Loader
       : list.length ? <div className="grid grid-cols-2 gap-3">{list.map(renderPlace)}</div>
