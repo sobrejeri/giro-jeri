@@ -85,7 +85,7 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
       // ~2,3 cartões na largura de um celular comum: o próximo aparece pela
       // metade e deixa claro que rola para o lado. O mínimo em px impede que em
       // telas de 360px o cartão fique menor do que o texto comporta.
-      className={`snap-start shrink-0 w-[44%] min-w-[166px] max-w-[230px] cursor-pointer rounded-[22px] overflow-hidden bg-white transition-all duration-200 active:scale-[0.98] ${
+      className={`snap-start shrink-0 w-[44%] min-w-[166px] max-w-[230px] flex flex-col cursor-pointer rounded-[22px] overflow-hidden bg-white transition-all duration-200 active:scale-[0.98] ${
         selected
           ? 'ring-2 ring-brand shadow-[0_6px_24px_rgba(255,101,0,0.18)]'
           : 'shadow-[0_4px_20px_rgba(0,0,0,0.06)]'
@@ -143,8 +143,12 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
         )}
       </div>
 
-      {/* ── Conteúdo ─────────────────────────────────────── */}
-      <div className="p-3">
+      {/* ── Conteúdo ───────────────────────────────────────
+          flex-col + o rodapé de preço em `mt-auto`: como os cartões esticam
+          para a mesma altura na linha (items-stretch), o preço cola no PÉ de
+          todos — antes ele ficava logo abaixo da descrição, que varia de
+          tamanho, e os valores saíam desalinhados de um cartão para o outro. */}
+      <div className="p-3 flex-1 flex flex-col">
         {/* stopPropagation: sem isso o clique subiria para o cartão e
             dispararia onSelect duas vezes — selecionando e desmarcando na
             mesma batida. */}
@@ -182,8 +186,11 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
           </p>
         )}
 
-        <div className="mt-3 pt-2.5 border-t border-gray-100">
-          {rotulo && <p className="text-[10px] text-gray-400 leading-none">{rotulo}</p>}
+        <div className="mt-auto pt-2.5 border-t border-gray-100">
+          {/* Altura fixa no rótulo (mesmo vazio): garante que a LINHA do preço
+              comece no mesmo ponto tenha o cartão "Por pessoa", "A partir de"
+              ou nada — os valores ficam na mesma altura em todos. */}
+          <p className="h-[12px] text-[10px] text-gray-400 leading-none">{rotulo || ''}</p>
           {/* O preço nunca quebra: "R$ 1.200" partido em duas linhas ("R$" em
               cima, número embaixo) é o tipo de coisa que faz o cliente
               desconfiar do valor. Quem cede espaço é a capacidade, ao lado. */}
