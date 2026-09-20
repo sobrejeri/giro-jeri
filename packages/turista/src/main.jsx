@@ -45,9 +45,32 @@ requestAnimationFrame(() =>
 )
 
 // PWA: registra o service worker (instalável + offline básico + push)
+//
+// Auto-atualização: o SW novo já faz skipWaiting()+clients.claim(), então ao
+// publicar um deploy ele assume o controle e dispara `controllerchange`. Aqui
+// recarregamos a página UMA vez nesse momento — assim o app pega o bundle novo
+// sozinho, sem depender de o usuário fechar e reabrir. Guardamos contra o
+// disparo da PRIMEIRA instalação (quando ainda não havia controller) para não
+// recarregar à toa no primeiro acesso.
 if ('serviceWorker' in navigator) {
+  let recarregando = false
+  let tinhaControle = !!navigator.serviceWorker.controller
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!tinhaControle) { tinhaControle = true; return } // 1ª instalação: não recarrega
+    if (recarregando) return
+    recarregando = true
+    window.location.reload()
+  })
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => {})
+    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js')
+      .then((reg) => {
+        reg.update?.()
+        // Ao voltar para o app, checa se há versão nova.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update?.()
+        })
+      })
+      .catch(() => {})
   })
 }
 

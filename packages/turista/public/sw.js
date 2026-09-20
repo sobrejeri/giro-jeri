@@ -10,7 +10,11 @@
 // v5: purga os caches antigos após o redesenho do carrinho (chips que abrem
 // direto o seletor). Sem o bump, aparelhos que já tinham o shell antigo podiam
 // seguir servindo o bundle anterior até uma navegação nova.
-const VERSION      = 'v5'
+//
+// v6: diretório de estabelecimentos 100% Google. Junto veio a auto-atualização
+// no main.jsx (recarrega ao trocar de controller), então a partir daqui novos
+// deploys aplicam sozinhos, sem o usuário precisar fechar e reabrir o app.
+const VERSION      = 'v6'
 const SHELL_CACHE  = `turiva-shell-${VERSION}`
 const ASSET_CACHE  = `turiva-assets-${VERSION}`
 const KEEP         = [SHELL_CACHE, ASSET_CACHE]
