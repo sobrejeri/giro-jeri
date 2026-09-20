@@ -458,9 +458,9 @@ function PlaceCard({ place, compact = false, onReview }) {
         {place.image_url
           ? <img src={place.image_url} alt={place.name} className="w-full h-full object-cover" />
           : <div className="w-full h-full bg-gradient-to-br from-orange-300 to-amber-200 flex items-center justify-center"><cat.Icon size={30} className="text-white/60" /></div>}
-        {place.is_featured && (
-          <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-amber-400 text-amber-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow">
-            <Star size={11} className="fill-amber-950" /> {t('feedPg.featured')}
+        {(place.sponsored || place.is_featured) && (
+          <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-brand text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow">
+            <Star size={11} className="fill-white" /> {t('feedPg.sponsored', 'Patrocinado')}
           </span>
         )}
         <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 bg-black/55 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full backdrop-blur-sm">
@@ -547,7 +547,7 @@ export default function Feed() {
   const [reviewPlace, setReviewPlace] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const { user } = useAuth()
-  const { userCoords, region } = useRegion()
+  const { userCoords, region, getServiceQuery } = useRegion()
   const qc = useQueryClient()
   const FILTERS = useMemo(() => getFilters(t), [t])
   const cats = useMemo(() => getCats(t), [t])
@@ -570,6 +570,14 @@ export default function Feed() {
         : JERI_CENTER)
 
   const { data: feedData,   isLoading: loadingFeed }   = useQuery({ queryKey: ['feed'],           queryFn: () => api.getFeed() })
+  // Patrocinados: estabelecimentos do NOSSO banco marcados como "Destaque" no
+  // admin. Entram fixos no topo do carrossel da categoria, com a tag
+  // "Patrocinado"; o resto do carrossel vem do Google.
+  const { data: sponsoredData } = useQuery({
+    queryKey: ['establishments-sponsored', region?.id],
+    queryFn:  () => api.getEstablishments(getServiceQuery()),
+    staleTime: 5 * 60_000,
+  })
   const { data: nearbyData, isLoading: loadingNearby } = useQuery({
     queryKey:  ['nearby', center.lat?.toFixed?.(3), center.lon?.toFixed?.(3)],
     queryFn:   () => api.getNearbyPlaces({ lat: center.lat, lon: center.lon }),
@@ -610,8 +618,18 @@ export default function Feed() {
   const allPosts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
   // Diretório 100% ao vivo do Google (via /nearby): sem lista curada do banco,
   // para não misturar duas fontes e evitar duplicidade/desatualização.
-  const allPlaces = nearbyData?.results || []
-  const usingNearby = !!nearbyData?.enabled && allPlaces.length > 0
+  const googlePlaces = nearbyData?.results || []
+  // Patrocinados (banco, is_featured) primeiro; o Google preenche o resto,
+  // sem repetir um lugar que já é patrocinado (dedupe por nome).
+  const sponsored = useMemo(
+    () => (sponsoredData || []).filter((p) => p.is_featured).map((p) => ({ ...p, sponsored: true })),
+    [sponsoredData])
+  const allPlaces = useMemo(() => {
+    const nomes = new Set(sponsored.map((p) => (p.name || '').toLowerCase().trim()))
+    const resto = googlePlaces.filter((g) => !nomes.has((g.name || '').toLowerCase().trim()))
+    return [...sponsored, ...resto]
+  }, [sponsored, googlePlaces])
+  const usingNearby = (!!nearbyData?.enabled && googlePlaces.length > 0) || sponsored.length > 0
 
   // Filtro de busca em memória — bate em title/name/location/locality/address.
   const q = searchQuery.trim().toLowerCase()
@@ -645,7 +663,6 @@ export default function Feed() {
 
   const events   = posts.filter((p) => p.kind !== 'promo')
   const promos   = posts.filter((p) => p.kind === 'promo')
-  const featured = places.filter((p) => p.is_featured)
 
   const Loader = (
     <div className="h-40 flex items-center justify-center">
@@ -690,16 +707,8 @@ export default function Feed() {
       : <EmptyState icon={CAT_ICONS[filter]} title={t('feedPg.emptyCategory.title')} sub={t('feedPg.emptyCategory.sub')} />
   } else {
     const blocks = []
-    if (featured.length) {
-      blocks.push(
-        <section key="destaques" className="space-y-3">
-          <SectionTitle>⭐ {t('feedPg.sectionFeatured')}</SectionTitle>
-          <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1 scrollbar-hide">
-            {featured.map(renderPlaceCompact)}
-          </div>
-        </section>
-      )
-    }
+    // Patrocinados não têm mais seção própria: aparecem primeiro no carrossel
+    // da sua categoria, com a tag "Patrocinado".
     if (posts.length) {
       blocks.push(
         <section key="feed" className="space-y-4">

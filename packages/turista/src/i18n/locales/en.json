@@ -534,6 +534,7 @@
       "subtitle": "Handpicked in this category"
     },
     "seeAll": "See all",
+    "sponsored": "Sponsored",
     "benefits": {
       "cancelTitle": "Flexible cancellation",
       "cancelText": "Up to 24h before the tour",
@@ -766,6 +767,7 @@
     "catFashion": "Fashion & Shoes",
     "catKite": "Kite & Adventure",
     "seeAll": "See all",
+    "sponsored": "Sponsored",
     "filterAll": "All",
     "filterEvents": "Events",
     "filterPromos": "Deals",

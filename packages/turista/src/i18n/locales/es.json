@@ -534,6 +534,7 @@
       "subtitle": "Seleccionados en esta categoría"
     },
     "seeAll": "Ver todos",
+    "sponsored": "Patrocinado",
     "benefits": {
       "cancelTitle": "Cancelación flexible",
       "cancelText": "Hasta 24h antes del paseo",
@@ -766,6 +767,7 @@
     "catFashion": "Moda y Calzado",
     "catKite": "Kite y Aventura",
     "seeAll": "Ver todos",
+    "sponsored": "Patrocinado",
     "filterAll": "Todo",
     "filterEvents": "Eventos",
     "filterPromos": "Promociones",
