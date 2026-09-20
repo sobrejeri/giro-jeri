@@ -1354,9 +1354,16 @@ export default function CartPage() {
                     {!batch && (
                       <div className="px-3 pt-2">
                         <div className="grid grid-cols-2 gap-2">
-                          {missingChips(miss)
-                            .filter((c) => !(item.mode === 'shared' && c.key === 'veiculo'))
-                            .map((c) => (
+                          {(() => {
+                            let chips = missingChips(miss)
+                              .filter((c) => !(item.mode === 'shared' && c.key === 'veiculo'))
+                            // Compartilhado: sem veículo, o que define o preço é o
+                            // Nº de pessoas (R$ x por pessoa). Entra no lugar do
+                            // chip de veículo, mesmo já havendo um número.
+                            if (item.mode === 'shared' && !chips.some((c) => c.key === 'pessoas')) {
+                              chips = [...chips, { key: 'pessoas', Icon: Users, label: 'Nº de pessoas' }]
+                            }
+                            return chips.map((c) => (
                             <button
                               key={c.key}
                               onClick={() => abrirEditor(item, CHIP_FOCUS[c.key] || null)}
@@ -1366,7 +1373,8 @@ export default function CartPage() {
                               <span className="truncate">{c.label}</span>
                               <ChevronRight size={13} className="text-gray-300 ml-auto shrink-0" />
                             </button>
-                          ))}
+                            ))
+                          })()}
                         </div>
                         <button
                           onClick={() => abrirEditor(item, null)}
