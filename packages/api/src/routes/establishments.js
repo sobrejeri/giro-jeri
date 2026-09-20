@@ -183,6 +183,10 @@ router.get('/photo', async (req, res) => {
     if (!foto) return res.status(404).end();
     res.set('Content-Type', foto.contentType);
     res.set('Cache-Control', 'public, max-age=86400');
+    // O helmet põe Cross-Origin-Resource-Policy: same-origin em tudo, o que faz
+    // o navegador BLOQUEAR esta imagem quando embutida no app (outra origem).
+    // Liberamos só esta resposta de foto para embed cross-origin.
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     return res.end(foto.buffer);
   } catch {
     return res.status(404).end();
