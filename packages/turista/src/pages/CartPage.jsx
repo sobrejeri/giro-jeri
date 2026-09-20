@@ -107,28 +107,11 @@ function dayLabel(iso) {
   catch { return iso }
 }
 
-// Traduz os campos que faltam (itemMissing) em chips de ação. Agrupa as
-// variações de veículo/capacidade num chip só e evita repetir o mesmo campo.
-function missingChips(miss = []) {
-  const out = []
-  const add = (key, Icon, label) => { if (!out.some((c) => c.key === key)) out.push({ key, Icon, label }) }
-  for (const m of miss) {
-    if (m === 'data') add('data', Calendar, 'Escolher data')
-    else if (m === 'horário') add('hora', Clock, 'Escolher horário')
-    else if (m === 'pessoas') add('pessoas', Users, 'Nº de pessoas')
-    else if (m.startsWith('veículo')) add('veiculo', Car, 'Selecionar veículo')
-    else if (m === 'local de saída' || m === 'origem') add('origem', MapPin, 'Local de saída')
-    else if (m === 'destino') add('destino', MapPin, 'Destino')
-    else add(m, AlertTriangle, m)
-  }
-  return out
-}
-
 /* ── Edição de um item (bottom sheet) ───────────────────────────
    Obrigatórios: data, horário, pessoas, veículo(s) e (passeio) local de
    saída. Aumentou pessoas → precisa de capacidade: o Salvar só ativa quando
    tudo está preenchido E os veículos comportam o grupo. */
-function EditSheet({ item, onSave, onClose }) {
+function EditSheet({ item, onSave, onClose, inline = false }) {
   const { t } = useTranslation()
   const isTransfer = item.kind === 'transfer'
   const [dateIso, setDateIso]   = useState(item.dateIso || '')
@@ -401,10 +384,18 @@ function EditSheet({ item, onSave, onClose }) {
   // abaixo da dobra — o fundo escurecia e nada aparecia. No celular ela ocupa
   // a viewport inteira (dvh acompanha a barra do navegador); em telas grandes
   // continua o cartão centralizado.
-  return createPortal(
+  // Check verde ao lado do rótulo quando o campo está preenchido/válido — é o
+  // "fica verdinho" pedido, para o cliente ver de relance o que já resolveu.
+  const Ok = ({ on }) => on
+    ? <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />
+    : null
+  const LBL = 'text-[11px] font-bold text-gray-500 uppercase tracking-wide inline-flex items-center gap-1'
+
+  // Um só corpo de editor, usado inline (dentro do card do carrinho) e em folha
+  // (fallback). MESMA lógica de preço/capacidade/modo — só muda o invólucro.
+  const conteudo = (
     <>
-      <div className="fixed inset-0 bg-black/40 z-[80]" onClick={onClose} />
-      <div className="fixed inset-0 h-[100dvh] z-[80] flex flex-col bg-white lg:inset-auto lg:h-auto lg:top-1/2 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:max-w-xl lg:w-full lg:max-h-[88dvh] lg:shadow-2xl">
+      {!inline && (
         <div
           className="flex items-center justify-between px-5 pb-3 border-b border-gray-100 shrink-0 lg:pt-4"
           style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
@@ -414,8 +405,9 @@ function EditSheet({ item, onSave, onClose }) {
             <X size={15} className="text-gray-600" />
           </button>
         </div>
+      )}
 
-        <div className="overflow-y-auto px-5 py-4 space-y-4 flex-1">
+        <div className={inline ? 'px-3 pt-3 pb-1 space-y-4' : 'overflow-y-auto px-5 py-4 space-y-4 flex-1'}>
           {mostraModo && (
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Tipo de passeio</label>
@@ -461,7 +453,7 @@ function EditSheet({ item, onSave, onClose }) {
 
           {!isTransfer && (
             <div>
-              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.originLabel')}</label>
+              <label className={LBL}>{t('cartPg.editSheet.originLabel')} <Ok on={!!originText.trim()} /></label>
               <div className="mt-1">
                 <PlaceInput
                   value={originText}
@@ -476,14 +468,14 @@ function EditSheet({ item, onSave, onClose }) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.dateLabel')}</label>
+              <label className={LBL}>{t('cartPg.editSheet.dateLabel')} <Ok on={dateOk} /></label>
               <button type="button" onClick={() => setShowDate(true)}
                 className="mt-1 w-full text-left bg-gray-50 rounded-xl px-3 py-3 text-[14px] text-gray-800 outline-none focus:ring-2 focus:ring-brand/30">
                 {dateIso ? dayLabel(dateIso) : t('cartPg.editSheet.chooseDate')}
               </button>
             </div>
             <div>
-              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.timeLabel')}</label>
+              <label className={LBL}>{t('cartPg.editSheet.timeLabel')} <Ok on={timeOk} /></label>
               <select
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
@@ -544,7 +536,7 @@ function EditSheet({ item, onSave, onClose }) {
             </div>
           ) : (
           <div>
-            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.vehiclesLabel')}</label>
+            <label className={LBL}>{t('cartPg.editSheet.vehiclesLabel')} <Ok on={qtyTotal >= 1 && capacityOk} /></label>
             <div className="mt-1 space-y-2">
               {vehicles.map((v, i) => (
                 <div key={v.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
@@ -634,7 +626,7 @@ function EditSheet({ item, onSave, onClose }) {
           )}
         </div>
 
-        <div className="px-5 py-4 border-t border-gray-100 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2 shrink-0">
+        <div className={inline ? 'px-3 py-3 mt-2 border-t border-gray-100 space-y-2' : 'px-5 py-4 border-t border-gray-100 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2 shrink-0'}>
           {/* O acréscimo aparece como linha, não embutido no total: preço que
               sobe sem explicação é o que faz o cliente desistir na hora de
               pagar. */}
@@ -663,6 +655,20 @@ function EditSheet({ item, onSave, onClose }) {
             </p>
           )}
         </div>
+    </>
+  )
+
+  // Inline: sem portal, sem overlay — o editor vive dentro do card.
+  if (inline) return <div className="border-t border-gray-100">{conteudo}</div>
+
+  // Portal para o <body>: dentro da árvore da página, um ancestral com
+  // transform vira o bloco de contenção do position:fixed e a folha ia parar
+  // abaixo da dobra. No celular ocupa a viewport; em telas grandes é um cartão.
+  return createPortal(
+    <>
+      <div className="fixed inset-0 bg-black/40 z-[80]" onClick={onClose} />
+      <div className="fixed inset-0 h-[100dvh] z-[80] flex flex-col bg-white lg:inset-auto lg:h-auto lg:top-1/2 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:max-w-xl lg:w-full lg:max-h-[88dvh] lg:shadow-2xl">
+        {conteudo}
       </div>
     </>,
     document.body,
@@ -745,7 +751,7 @@ export default function CartPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [editing, setEditing] = useState(null)     // item em edição
+  const [inlineEdit, setInlineEdit] = useState(null) // item com editor inline aberto (quando já completo)
   const [expandedId, setExpandedId] = useState(null) // item com descrição aberta
   const [results, setResults] = useState({})       // id → {status, code?, msg?}
   const [batch, setBatch] = useState(null)         // snapshot durante envio
@@ -997,49 +1003,45 @@ export default function CartPage() {
                   <div className="px-3 pb-3">
                     <span className="text-[11px] font-bold text-red-500">{st.msg}</span>
                   </div>
-                ) : complete ? (
-                  <div className="flex items-center justify-between px-3 pb-3">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
-                      <CheckCircle2 size={12} /> {t('cartPg.card.complete')}
-                    </span>
-                    {!batch && (
-                      <button
-                        onClick={() => setEditing(item)}
-                        className="inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border border-brand/30 text-brand active:scale-95 transition-transform"
-                      >
-                        <Pencil size={12} /> {t('cartPg.card.edit')}
-                      </button>
-                    )}
-                  </div>
                 ) : (
-                  <div className="px-3 pb-3">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 mb-2">
-                      <AlertTriangle size={12} /> Faltam detalhes
-                    </span>
-                    {!batch && (
-                      <>
-                        <div className="grid grid-cols-2 gap-2">
-                          {missingChips(miss).map((c) => (
-                            <button
-                              key={c.label}
-                              onClick={() => setEditing(item)}
-                              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 border border-gray-200 rounded-xl px-3 py-2.5 active:scale-95 transition-transform"
-                            >
-                              <c.Icon size={14} className="text-brand shrink-0" />
-                              <span className="truncate">{c.label}</span>
-                              <ChevronRight size={13} className="text-gray-300 ml-auto shrink-0" />
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          onClick={() => setEditing(item)}
-                          className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-[13px] font-bold px-3.5 py-3 rounded-2xl bg-brand text-white shadow-sm shadow-brand/20 active:scale-[0.98] transition-transform"
-                        >
-                          <Pencil size={13} /> Completar detalhes
-                        </button>
-                      </>
+                  <>
+                    {/* Cabeçalho do rodapé: Completo (+ Editar) ou "Faltam
+                        detalhes". A edição acontece AQUI DENTRO, sem abrir outra
+                        tela — os campos preenchem no próprio card. */}
+                    {complete ? (
+                      <div className="flex items-center justify-between px-3 pb-2">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+                          <CheckCircle2 size={12} /> {t('cartPg.card.complete')}
+                        </span>
+                        {!batch && (
+                          <button
+                            onClick={() => setInlineEdit((cur) => cur === item.id ? null : item.id)}
+                            className="inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border border-brand/30 text-brand active:scale-95 transition-transform"
+                          >
+                            <Pencil size={12} /> {inlineEdit === item.id ? 'Fechar' : t('cartPg.card.edit')}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="px-3 pt-1 pb-1">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600">
+                          <AlertTriangle size={12} /> Faltam detalhes
+                        </span>
+                      </div>
                     )}
-                  </div>
+
+                    {/* Editor INLINE: incompleto abre sempre; completo abre no
+                        "Editar". Mesma lógica do editor em folha (preço, modo,
+                        capacidade) — só muda que preenche dentro do card. */}
+                    {!batch && (complete ? inlineEdit === item.id : true) && (
+                      <EditSheet
+                        inline
+                        item={item}
+                        onSave={(u) => { upsertItem(u); setInlineEdit(null) }}
+                        onClose={() => setInlineEdit(null)}
+                      />
+                    )}
+                  </>
                 )}
               </div>
             )
@@ -1212,13 +1214,6 @@ export default function CartPage() {
         document.body,
       )}
 
-      {editing && (
-        <EditSheet
-          item={editing}
-          onClose={() => setEditing(null)}
-          onSave={(updated) => { upsertItem(updated); setEditing(null) }}
-        />
-      )}
     </div>
   )
 }

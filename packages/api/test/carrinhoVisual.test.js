@@ -28,11 +28,23 @@ test('o resumo separa valor definido de pendente (a calcular)', () => {
   assert.match(src, /Subtotal parcial/, 'com item pendente, o total é parcial')
 })
 
-test('campos que faltam viram chips de ação', () => {
-  assert.match(src, /function missingChips/)
-  assert.match(src, /Escolher data/)
-  assert.match(src, /Selecionar veículo/)
-  assert.match(src, /missingChips\(miss\)\.map/)
+test('a edição acontece INLINE no card, sem abrir outra tela', () => {
+  // O editor virou inline: mesmo componente (EditSheet) com a prop `inline`,
+  // renderizado dentro do card. Item incompleto abre o editor direto; completo
+  // abre no "Editar".
+  assert.match(src, /function EditSheet\(\{ item, onSave, onClose, inline = false \}\)/,
+    'o editor aceita um modo inline')
+  assert.match(src, /if \(inline\) return <div[^>]*>\{conteudo\}<\/div>/,
+    'inline não usa portal/overlay — renderiza no fluxo do card')
+  assert.match(src, /<EditSheet\s+inline/, 'o card usa o editor inline')
+  assert.match(src, /complete \? inlineEdit === item\.id : true/,
+    'incompleto abre sempre; completo abre no Editar')
+})
+
+test('campo preenchido fica "verdinho"', () => {
+  assert.match(src, /const Ok = \(\{ on \}\)/, 'check verde por campo')
+  assert.match(src, /<Ok on=\{dateOk\}/)
+  assert.match(src, /<Ok on=\{timeOk\}/)
 })
 
 test('o menu inferior some no carrinho para liberar espaço', () => {
