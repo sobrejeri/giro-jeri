@@ -148,8 +148,12 @@ router.get('/nearby', async (req, res, next) => {
       return res.json({ debug: true, diag });
     }
 
-    // Base do proxy de fotos (URL absoluta, para o <img> do app).
-    const proxyBase = `${req.protocol}://${req.get('host')}/api/establishments/photo`;
+    // Base do proxy de fotos (URL absoluta, para o <img> do app). No Render a
+    // API fica atrás de proxy, então req.protocol vem "http" — usar isso geraria
+    // uma imagem http:// dentro de um app https:// (mixed content, bloqueada).
+    // Respeita o x-forwarded-proto (https em produção).
+    const proto = req.headers['x-forwarded-proto']?.split(',')[0] || req.protocol;
+    const proxyBase = `${proto}://${req.get('host')}/api/establishments/photo`;
 
     // Google Places ao vivo (nota + foto reais, qualquer região). Se não houver
     // chave ou falhar, cai no Geoapify (OSM), que ao menos lista nomes.
