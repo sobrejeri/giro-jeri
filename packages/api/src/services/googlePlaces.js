@@ -253,11 +253,15 @@ export async function resolverFotoLegadaUrl(ref, maxWidth = 800) {
   try {
     const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}`
       + `&photo_reference=${encodeURIComponent(ref)}&key=${encodeURIComponent(key)}`;
-    const res = await fetch(url, { redirect: 'manual' });
-    const loc = res.headers.get('location');
-    if (!loc) return null;
-    photoCache.set(ck, { at: Date.now(), url: loc });
-    return loc;
+    // Segue o redirect (o fetch do Node com redirect:'manual' devolve resposta
+    // opaca, sem o Location). res.url passa a ser a URL final da imagem
+    // (googleusercontent, SEM a chave). Cancelamos o corpo para não baixar tudo.
+    const res = await fetch(url, { redirect: 'follow' });
+    const finalUrl = res.url;
+    try { await res.body?.cancel?.(); } catch { /* ignore */ }
+    if (!res.ok || !finalUrl || finalUrl.includes('maps.googleapis.com')) return null;
+    photoCache.set(ck, { at: Date.now(), url: finalUrl });
+    return finalUrl;
   } catch { return null; }
 }
 
