@@ -239,7 +239,9 @@ export async function descobrirLugaresProximos({ lat, lng, radius = 15000, categ
 // (sem a chave). Usado por /nearby?debug=1 para revelar por que veio vazio.
 export async function diagnosticarPlaces({ lat, lng } = {}) {
   const key = process.env.GOOGLE_MAPS_API_KEY;
-  const out = { keyPresent: !!key, keyTail: key ? `…${key.slice(-4)}` : null };
+  // Marcador de versão: se este campo aparecer, a API já está com o código do
+  // streaming de fotos. Se sumir, o Render ainda roda a versão antiga.
+  const out = { apiVersion: 'photos-stream-v2', keyPresent: !!key, keyTail: key ? `…${key.slice(-4)}` : null };
   const center = Number.isFinite(lat) && Number.isFinite(lng)
     ? { latitude: Number(lat), longitude: Number(lng) } : CENTRO_JERI;
   if (!key) return out;
@@ -260,6 +262,12 @@ export async function diagnosticarPlaces({ lat, lng } = {}) {
     const r = await fetch(u);
     const j = await r.json();
     out.legacy = { httpStatus: r.status, status: j.status, error: j.error_message || null, count: (j.results || []).length };
+    // Testa uma foto real: pega o photo_reference do 1º resultado e baixa.
+    const ref = j.results?.find((x) => x.photos?.[0]?.photo_reference)?.photos?.[0]?.photo_reference;
+    if (ref) {
+      const foto = await fotoBytes({ ref, maxWidth: 400 });
+      out.photo = foto ? { ok: true, contentType: foto.contentType, bytes: foto.buffer.byteLength } : { ok: false };
+    } else { out.photo = { ok: false, reason: 'sem photo_reference nos resultados' }; }
   } catch (e) { out.legacy = { error: e.message }; }
   return out;
 }
