@@ -7,6 +7,10 @@ export default function BottomNav() {
   const { pathname } = useLocation()
   const { t }        = useTranslation()
 
+  // No carrinho o menu sai de cena: a barra de resumo/pagamento fica colada
+  // embaixo e o menu só roubava espaço numa tela que já é comprida.
+  if (pathname === '/carrinho') return null
+
   // Cinco itens: com seis as legendas ficam apertadas no celular. "Descubra"
   // não sumiu — vive dentro da home, na grade do rodapé.
   const NAV = [

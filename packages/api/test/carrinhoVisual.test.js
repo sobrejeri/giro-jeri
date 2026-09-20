@@ -24,7 +24,7 @@ test('mostra "Reservando com <operador>" na venda direta', () => {
 test('o resumo separa valor definido de pendente (a calcular)', () => {
   assert.match(src, /const definedCount =/)
   assert.match(src, /const pendingCount =/)
-  assert.match(src, /A calcular/)
+  assert.match(src, /a calcular/i)
   assert.match(src, /Subtotal parcial/, 'com item pendente, o total é parcial')
 })
 
@@ -33,4 +33,17 @@ test('campos que faltam viram chips de ação', () => {
   assert.match(src, /Escolher data/)
   assert.match(src, /Selecionar veículo/)
   assert.match(src, /missingChips\(miss\)\.map/)
+})
+
+test('o menu inferior some no carrinho para liberar espaço', () => {
+  const nav = fs.readFileSync(
+    new URL('../../turista/src/components/layout/BottomNav.jsx', import.meta.url), 'utf8')
+  assert.match(nav, /pathname === '\/carrinho'\) return null/,
+    'sem o menu, a barra de resumo cola embaixo')
+})
+
+test('o resumo flutuante cola embaixo (menu escondido) e é mais compacto', () => {
+  // bottom-0 no mobile (antes era bottom-[64px] para desviar do menu).
+  assert.match(src, /fixed bottom-0 left-1\/2/, 'o resumo desce para a base agora que o menu saiu')
+  assert.ok(!/bottom-\[64px\]/.test(src), 'não deve mais reservar a faixa do menu')
 })

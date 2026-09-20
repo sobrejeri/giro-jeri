@@ -1069,9 +1069,9 @@ export default function CartPage() {
       {(items.length > 0 || done) && createPortal(
         <div
           ref={footerRef}
-          className="fixed bottom-[64px] left-1/2 -translate-x-1/2 w-full max-w-[430px] px-3 pb-3 z-30 pointer-events-none lg:bottom-0 lg:max-w-2xl lg:px-0 lg:pb-5"
+          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-3 pb-[max(10px,env(safe-area-inset-bottom))] z-30 pointer-events-none lg:max-w-2xl lg:px-0 lg:pb-5"
         >
-        <div className="pointer-events-auto bg-white rounded-3xl border border-gray-100 shadow-[0_10px_34px_rgba(0,0,0,0.16)] px-4 py-3.5 space-y-2.5">
+        <div className="pointer-events-auto bg-white rounded-3xl border border-gray-100 shadow-[0_10px_34px_rgba(0,0,0,0.16)] px-3.5 py-3 space-y-2">
           {done ? (
             <>
               <p className="text-[13px] text-gray-600 text-center">
@@ -1128,20 +1128,12 @@ export default function CartPage() {
                   o total é PARCIAL: deixar isso explícito evita a surpresa de
                   ver o preço subir depois de completar o serviço. */}
               {pendingCount > 0 && (
-                <div className="rounded-2xl bg-gray-50 px-3 py-2.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Resumo</span>
-                    <span className="text-[10.5px] text-gray-400">Valores ilustrativos</span>
+                <div className="rounded-xl bg-gray-50 px-3 py-2 space-y-0.5">
+                  <div className="flex items-center justify-between text-[11.5px]">
+                    <span className="text-gray-500">{definedCount} com valor · <span className="text-amber-600 font-semibold">{pendingCount} a calcular</span></span>
+                    <span className="text-[10px] text-gray-400">Ilustrativo</span>
                   </div>
-                  <div className="flex items-center justify-between text-[12px]">
-                    <span className="text-gray-500">{definedCount} {definedCount === 1 ? 'serviço com valor definido' : 'serviços com valor definido'}</span>
-                    <span className="font-semibold text-gray-700">{fmt(total)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[12px]">
-                    <span className="text-gray-500">{pendingCount} {pendingCount === 1 ? 'serviço pendente' : 'serviços pendentes'}</span>
-                    <span className="font-semibold text-gray-700">A calcular</span>
-                  </div>
-                  <p className="text-[10.5px] text-gray-400 pt-0.5">O total será atualizado após completar o serviço.</p>
+                  <p className="text-[10px] text-gray-400 leading-snug">O total é atualizado ao completar os serviços.</p>
                 </div>
               )}
               <div className="flex items-center justify-between">
@@ -1162,7 +1154,7 @@ export default function CartPage() {
               <button
                 onClick={submitAll}
                 disabled={!allComplete || submitting}
-                className="w-full inline-flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
+                className="w-full inline-flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
               >
                 {submitting
                   ? <><Loader2 size={16} className="animate-spin" /> {t('cartPg.footer.sending')}</>
