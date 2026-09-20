@@ -6,7 +6,11 @@
 // para a raiz. Quem abriu turivabrasil.com antes disso ficou com um shell
 // apontando para caminhos que não existem mais — tela branca e 404 no console.
 // Mudar a versão renomeia os caches, e o `activate` apaga os que sobraram.
-const VERSION      = 'v4'
+//
+// v5: purga os caches antigos após o redesenho do carrinho (chips que abrem
+// direto o seletor). Sem o bump, aparelhos que já tinham o shell antigo podiam
+// seguir servindo o bundle anterior até uma navegação nova.
+const VERSION      = 'v5'
 const SHELL_CACHE  = `turiva-shell-${VERSION}`
 const ASSET_CACHE  = `turiva-assets-${VERSION}`
 const KEEP         = [SHELL_CACHE, ASSET_CACHE]
