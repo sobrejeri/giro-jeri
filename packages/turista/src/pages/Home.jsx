@@ -6,7 +6,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   Star, Heart, ChevronDown, ChevronRight, ArrowRight, MapPin,
   Car, Bus, Flame, Sun, Sunset, Waves, Percent, CalendarCheck,
-  UtensilsCrossed, PartyPopper, Lightbulb, Clock,
+  UtensilsCrossed, PartyPopper, Lightbulb, Clock, Megaphone,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { precoDeEntrada } from '../lib/precoCartao'
@@ -279,7 +279,6 @@ export default function Home() {
 
   const nomeRegiao = region?.name || 'Jericoacoara'
   const primeiroNome = nomeRegiao.split(' ')[0]
-  const temOferta  = !!(settings?.home_banner_title || settings?.home_banner_subtitle)
 
   // "Amanhã • Litoral Leste • 09:00" — informação útil no lugar de texto morto.
   const resumoReserva = (() => {
@@ -441,31 +440,30 @@ export default function Home() {
             )}
           </div>
 
-          {/* ── Ofertas ──────────────────────────────────────── */}
-          {temOferta && (
-            <button
-              onClick={() => navigate('/passeios')}
-              className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand to-orange-400 p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
-            >
-              <Dunas className="absolute bottom-0 right-0 w-[45%] text-white/15" />
-              <div className="relative w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <Percent size={19} className="text-white" />
-              </div>
-              <div className="relative flex-1 min-w-0">
-                <p className="text-white font-extrabold text-[14.5px] leading-snug">
-                  {settings.home_banner_title || 'Ofertas para você'}
-                </p>
-                {settings.home_banner_subtitle && (
-                  <p className="text-white/85 text-[11.5px] leading-snug mt-0.5 line-clamp-2">
-                    {settings.home_banner_subtitle}
-                  </p>
-                )}
-              </div>
-              <span className="relative shrink-0 bg-white text-brand text-[12px] font-bold px-3.5 py-2 rounded-full">
-                Ver ofertas
-              </span>
-            </button>
-          )}
+          {/* ── Afiliado: "Divulgou, Ganhou" ─────────────────────
+              No lugar do antigo banner de ofertas: convida o turista a indicar
+              passeios e ganhar comissão. Leva para /afiliado (que pede login se
+              preciso). */}
+          <button
+            onClick={() => navigate('/afiliado')}
+            className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand to-orange-400 p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+          >
+            <Dunas className="absolute bottom-0 right-0 w-[45%] text-white/15" />
+            <div className="relative w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <Megaphone size={19} className="text-white" />
+            </div>
+            <div className="relative flex-1 min-w-0">
+              <p className="text-white font-extrabold text-[14.5px] leading-snug">
+                Divulgou, ganhou 🪙
+              </p>
+              <p className="text-white/85 text-[11.5px] leading-snug mt-0.5 line-clamp-2">
+                Indique passeios e ganhe comissão em cada reserva paga.
+              </p>
+            </div>
+            <span className="relative shrink-0 bg-white text-brand text-[12px] font-bold px-3.5 py-2 rounded-full">
+              Quero indicar
+            </span>
+          </button>
 
           {/* ── Contextual: próxima reserva ─────────────────── */}
           <button
