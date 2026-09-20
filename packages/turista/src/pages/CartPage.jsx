@@ -18,6 +18,7 @@ import { PlaceInput } from './Transfers'
 import { format, startOfDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import DateSheet from '../components/DateSheet'
+import RoteiroTrilha, { extrairParadas } from '../components/RoteiroTrilha'
 import { highSeasonMonthSet, acrescimoDoDia, rotuloDoDia } from '../lib/season'
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -997,6 +998,7 @@ function CartItemDetails({ item }) {
   const desc     = isTransfer
     ? (item.short_description || null)
     : (tour?.full_description || tour?.short_description || item.short_description || null)
+  const paradas  = isTransfer ? [] : extrairParadas(desc || '')
   const includes = !isTransfer ? tour?.includes_text : null
   const excludes = !isTransfer ? tour?.excludes_text : null
   const route    = isTransfer && (item.origin || item.dest)
@@ -1018,7 +1020,16 @@ function CartItemDetails({ item }) {
         {isLoading && !isTransfer ? (
           <p className="text-gray-400 inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> {t('cartPg.details.loading')}</p>
         ) : desc ? (
-          <p>{desc}</p>
+          // Roteiro em prosa vira uma trilha ilustrada com pinos; sem paradas
+          // reconhecíveis (ex.: transfer), mostra o texto normal.
+          paradas.length >= 2 ? (
+            <>
+              <RoteiroTrilha stops={paradas} />
+              <p className="text-gray-500">{desc}</p>
+            </>
+          ) : (
+            <p>{desc}</p>
+          )
         ) : (
           <p className="text-gray-400 italic">{t('cartPg.details.none')}</p>
         )}
