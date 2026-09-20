@@ -737,7 +737,7 @@
     "sectionFeatured": "Destaques",
     "sectionHappening": "Acontecendo na vila",
     "sectionPlaces": "Estabelecimentos",
-    "mapAttribution": "Locais por OpenStreetMap · Geoapify",
+    "mapAttribution": "Locais por Google",
     "confirmDelete": "Excluir \"{{title}}\"?",
     "deleteError": "Erro ao excluir",
     "emptyEvents": {

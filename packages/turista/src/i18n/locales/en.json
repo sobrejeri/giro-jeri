@@ -737,7 +737,7 @@
     "sectionFeatured": "Highlights",
     "sectionHappening": "Happening in the village",
     "sectionPlaces": "Places",
-    "mapAttribution": "Places by OpenStreetMap · Geoapify",
+    "mapAttribution": "Places by Google",
     "confirmDelete": "Delete \"{{title}}\"?",
     "deleteError": "Error deleting",
     "emptyEvents": {

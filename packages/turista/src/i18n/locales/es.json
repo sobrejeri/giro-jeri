@@ -737,7 +737,7 @@
     "sectionFeatured": "Destacados",
     "sectionHappening": "Sucediendo en el pueblo",
     "sectionPlaces": "Establecimientos",
-    "mapAttribution": "Lugares por OpenStreetMap · Geoapify",
+    "mapAttribution": "Lugares por Google",
     "confirmDelete": "¿Eliminar \"{{title}}\"?",
     "deleteError": "Error al eliminar",
     "emptyEvents": {

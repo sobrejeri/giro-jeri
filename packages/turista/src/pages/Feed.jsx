@@ -542,7 +542,7 @@ export default function Feed() {
   const [reviewPlace, setReviewPlace] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const { user } = useAuth()
-  const { userCoords, region, getServiceQuery } = useRegion()
+  const { userCoords, region } = useRegion()
   const qc = useQueryClient()
   const FILTERS = useMemo(() => getFilters(t), [t])
 
@@ -563,7 +563,6 @@ export default function Feed() {
         : JERI_CENTER)
 
   const { data: feedData,   isLoading: loadingFeed }   = useQuery({ queryKey: ['feed'],           queryFn: () => api.getFeed() })
-  const { data: placeData,  isLoading: loadingPlaces } = useQuery({ queryKey: ['establishments', region?.id], queryFn: () => api.getEstablishments(getServiceQuery()) })
   const { data: nearbyData, isLoading: loadingNearby } = useQuery({
     queryKey:  ['nearby', center.lat?.toFixed?.(3), center.lon?.toFixed?.(3)],
     queryFn:   () => api.getNearbyPlaces({ lat: center.lat, lon: center.lon }),
@@ -602,15 +601,10 @@ export default function Feed() {
   }, [user, likeMut])
 
   const allPosts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
-  const manual  = Array.isArray(placeData) ? placeData : (placeData?.data || [])
-  const organic = nearbyData?.results || []
-  const usingNearby = !!nearbyData?.enabled && organic.length > 0
-
-  const allPlaces = useMemo(() => {
-    const names = new Set(manual.map((p) => (p.name || '').toLowerCase().trim()))
-    const extra = organic.filter((o) => !names.has((o.name || '').toLowerCase().trim()))
-    return [...manual, ...extra]
-  }, [manual, organic])
+  // Diretório 100% ao vivo do Google (via /nearby): sem lista curada do banco,
+  // para não misturar duas fontes e evitar duplicidade/desatualização.
+  const allPlaces = nearbyData?.results || []
+  const usingNearby = !!nearbyData?.enabled && allPlaces.length > 0
 
   // Filtro de busca em memória — bate em title/name/location/locality/address.
   const q = searchQuery.trim().toLowerCase()
@@ -618,7 +612,7 @@ export default function Feed() {
   const posts  = !q ? allPosts  : allPosts.filter((p) => matches(p.title) || matches(p.location) || matches(p.body))
   const places = !q ? allPlaces : allPlaces.filter((p) => matches(p.name) || matches(p.locality) || matches(p.address))
 
-  const loadingPlacesAll = loadingPlaces || loadingNearby
+  const loadingPlacesAll = loadingNearby
 
   const events   = posts.filter((p) => p.kind !== 'promo')
   const promos   = posts.filter((p) => p.kind === 'promo')
