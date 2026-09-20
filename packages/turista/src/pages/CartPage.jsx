@@ -172,7 +172,7 @@ function ModoCard({ item, onChange }) {
    Obrigatórios: data, horário, pessoas, veículo(s) e (passeio) local de
    saída. Aumentou pessoas → precisa de capacidade: o Salvar só ativa quando
    tudo está preenchido E os veículos comportam o grupo. */
-function EditSheet({ item, onSave, onClose, inline = false }) {
+function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
   const { t } = useTranslation()
   const isTransfer = item.kind === 'transfer'
   const [dateIso, setDateIso]   = useState(item.dateIso || '')
@@ -336,7 +336,9 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
   const rotuloData    = acrescimoData > 0 ? rotuloDoDia(dateIso, seasonsData || []) : null
   const total         = Math.round((subtotal + acrescimoData) * 100) / 100
 
-  const [showDate, setShowDate] = useState(false)
+  // Chip "Escolher data" já abre o calendário: quando o editor entra focado
+  // na data, o DateSheet nasce aberto — um toque a menos.
+  const [showDate, setShowDate] = useState(() => focus === 'date')
 
   // Regras de antecedência (mesmo relógio do servidor — America/Fortaleza):
   // • Transfer: 4h de antecedência. • Passeio: cutoff do serviço (padrão
@@ -422,13 +424,17 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
   if (!compartilhado && qtyTotal < 1) missing.push(t('cartPg.editSheet.missingVehicle'))
   if (!isTransfer && !originText.trim()) missing.push(t('cartPg.editSheet.missingOrigin'))
   const canSave = missing.length === 0 && capacityOk
+  // Editor focado num só campo (chip do card): salva parcial. O botão fica
+  // sempre ativo — o que o cliente escolheu ali é gravado, e o restante segue
+  // pendente no card. Sem foco (editor completo) mantém a trava de tudo cheio.
+  const podeSalvar = focus ? true : canSave
 
   function bump(idx, delta) {
     setVehicles((prev) => prev.map((v, i) => i === idx ? { ...v, qty: Math.max(0, (v.qty || 0) + delta) } : v))
   }
 
   function save() {
-    if (!canSave) return
+    if (!podeSalvar) return
     onSave({
       ...item,
       dateIso, time, people,
@@ -469,7 +475,7 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
       )}
 
         <div className={inline ? 'px-3 pt-3 pb-1 space-y-4' : 'overflow-y-auto px-5 py-4 space-y-4 flex-1'}>
-          {mostraModo && (
+          {!focus && mostraModo && (
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Tipo de passeio</label>
               <div className="mt-1.5 grid grid-cols-2 gap-2">
@@ -503,7 +509,7 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
             </div>
           )}
 
-          {isTransfer && (
+          {!focus && isTransfer && (
             <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 text-[12.5px] text-gray-700">
               <MapPin size={13} className="text-brand shrink-0" />
               <span className="font-semibold">{item.origin}</span>
@@ -512,7 +518,7 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
             </div>
           )}
 
-          {!isTransfer && (
+          {(!focus || focus === 'local') && !isTransfer && (
             <div>
               <label className={LBL}>{t('cartPg.editSheet.originLabel')} <Ok on={!!originText.trim()} /></label>
               <div className="mt-1">
@@ -527,7 +533,9 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          {(!focus || focus === 'date' || focus === 'time') && (
+          <div className={focus === 'date' || focus === 'time' ? '' : 'grid grid-cols-2 gap-3'}>
+            {(!focus || focus === 'date') && (
             <div>
               <label className={LBL}>{t('cartPg.editSheet.dateLabel')} <Ok on={dateOk} /></label>
               <button type="button" onClick={() => setShowDate(true)}
@@ -535,6 +543,8 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
                 {dateIso ? dayLabel(dateIso) : t('cartPg.editSheet.chooseDate')}
               </button>
             </div>
+            )}
+            {(!focus || focus === 'time') && (
             <div>
               <label className={LBL}>{t('cartPg.editSheet.timeLabel')} <Ok on={timeOk} /></label>
               <select
@@ -549,7 +559,9 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
                 ))}
               </select>
             </div>
+            )}
           </div>
+          )}
 
           {showDate && (
             <DateSheet
@@ -562,12 +574,13 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
             />
           )}
 
-          {timeHint && (
+          {(!focus || focus === 'date' || focus === 'time') && timeHint && (
             <p className="text-[11.5px] font-semibold text-amber-600 flex items-start gap-1.5 -mt-1">
               <AlertTriangle size={13} className="shrink-0 mt-0.5" /> {timeHint}
             </p>
           )}
 
+          {(!focus || focus === 'vehicle') && (
           <div>
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{t('cartPg.editSheet.peopleLabel')}</label>
             <div className="mt-1 flex items-center gap-4 bg-gray-50 rounded-xl px-4 py-3 w-fit">
@@ -582,8 +595,9 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
               </button>
             </div>
           </div>
+          )}
 
-          {compartilhado ? (
+          {(!focus || focus === 'vehicle') && (compartilhado ? (
             <div className="bg-gray-50 rounded-2xl px-4 py-3">
               <p className="text-[12.5px] text-gray-600 leading-snug">
                 No compartilhado você paga por pessoa e viaja com outros hóspedes —
@@ -684,7 +698,7 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
               </div>
             )}
           </div>
-          )}
+          ))}
         </div>
 
         <div className={inline ? 'px-3 py-3 mt-2 border-t border-gray-100 space-y-2' : 'px-5 py-4 border-t border-gray-100 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2 shrink-0'}>
@@ -705,12 +719,12 @@ function EditSheet({ item, onSave, onClose, inline = false }) {
           </div>
           <button
             onClick={save}
-            disabled={!canSave}
+            disabled={!podeSalvar}
             className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
           >
             {t('cartPg.editSheet.save')}
           </button>
-          {!canSave && (
+          {!focus && !canSave && (
             <p className="text-[10.5px] text-gray-400 text-center">
               {!capacityOk ? t('cartPg.editSheet.adjustVehicles') : t('cartPg.editSheet.fillMissing', { missing: missing.join(', ') })}
             </p>
@@ -813,6 +827,11 @@ export default function CartPage() {
   const navigate = useNavigate()
 
   const [editing, setEditing] = useState(null)       // item em edição (folha)
+  const [editFocus, setEditFocus] = useState(null)   // chip → só aquele campo
+  // Cada chip abre o editor mirando só a sua função: data→calendário,
+  // horário→relógio, local→buscador, veículo→pessoas+veículos.
+  const CHIP_FOCUS = { data: 'date', hora: 'time', pessoas: 'vehicle', veiculo: 'vehicle', origem: 'local', destino: 'local' }
+  const abrirEditor = (item, foco = null) => { setEditFocus(foco); setEditing(item) }
   const [expandedId, setExpandedId] = useState(null) // item com descrição aberta
   const [results, setResults] = useState({})       // id → {status, code?, msg?}
   const [batch, setBatch] = useState(null)         // snapshot durante envio
@@ -1071,7 +1090,7 @@ export default function CartPage() {
                     </span>
                     {!batch && (
                       <button
-                        onClick={() => setEditing(item)}
+                        onClick={() => abrirEditor(item, null)}
                         className="inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border border-brand/30 text-brand active:scale-95 transition-transform"
                       >
                         <Pencil size={12} /> {t('cartPg.card.edit')}
@@ -1109,7 +1128,7 @@ export default function CartPage() {
                             .map((c) => (
                             <button
                               key={c.key}
-                              onClick={() => setEditing(item)}
+                              onClick={() => abrirEditor(item, CHIP_FOCUS[c.key] || null)}
                               className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 border border-gray-200 rounded-xl px-3 py-2.5 active:scale-95 transition-transform"
                             >
                               <c.Icon size={14} className="text-brand shrink-0" />
@@ -1119,7 +1138,7 @@ export default function CartPage() {
                           ))}
                         </div>
                         <button
-                          onClick={() => setEditing(item)}
+                          onClick={() => abrirEditor(item, null)}
                           className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-[13px] font-bold px-3.5 py-3 rounded-2xl bg-brand text-white shadow-sm shadow-brand/20 active:scale-[0.98] transition-transform"
                         >
                           <Pencil size={13} /> Completar detalhes
@@ -1302,8 +1321,9 @@ export default function CartPage() {
       {editing && (
         <EditSheet
           item={editing}
-          onClose={() => setEditing(null)}
-          onSave={(updated) => { upsertItem(updated); setEditing(null) }}
+          focus={editFocus}
+          onClose={() => { setEditing(null); setEditFocus(null) }}
+          onSave={(updated) => { upsertItem(updated); setEditing(null); setEditFocus(null) }}
         />
       )}
     </div>

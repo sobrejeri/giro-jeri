@@ -41,6 +41,17 @@ test('card compacto: chips que abrem o editor + Privativo/Compartilhado no card'
   assert.match(src, /item\.mode === 'shared' && c\.key === 'veiculo'/)
 })
 
+test('cada chip abre o editor mirando só a sua função', () => {
+  // data→calendário, horário→relógio, local→buscador, veículo→pessoas+veículos.
+  assert.match(src, /function EditSheet\(\{ item, onSave, onClose, inline = false, focus = null \}\)/)
+  assert.match(src, /CHIP_FOCUS = \{[^}]*data: 'date'[^}]*hora: 'time'[^}]*veiculo: 'vehicle'[^}]*origem: 'local'/)
+  assert.match(src, /abrirEditor\(item, CHIP_FOCUS\[c\.key\] \|\| null\)/, 'o chip passa o foco ao editor')
+  assert.match(src, /focus=\{editFocus\}/, 'o editor recebe o campo focado')
+  // Foco na data já abre o calendário; salvar parcial quando focado.
+  assert.match(src, /useState\(\(\) => focus === 'date'\)/)
+  assert.match(src, /const podeSalvar = focus \? true : canSave/)
+})
+
 test('campo preenchido fica "verdinho"', () => {
   assert.match(src, /const Ok = \(\{ on \}\)/, 'check verde por campo')
   assert.match(src, /<Ok on=\{dateOk\}/)
