@@ -447,6 +447,18 @@ export default function Home() {
             )}
           </div>
 
+          {/* ── Atalhos (sem título, logo acima do banner de afiliado) ───── */}
+          <div className="grid grid-cols-4 gap-2.5">
+            <Atalho icon={Flame}  cor="text-brand"        label="Mais vendidos"
+                    onClick={() => navigate('/passeios', { state: { featured: true } })} />
+            <Atalho icon={Sun}    cor="text-orange-400"   label="Para hoje"
+                    onClick={() => navigate('/passeios', { state: { dateIso: hoje } })} />
+            <Atalho icon={Sunset} cor="text-orange-500"   label="Pôr do sol"
+                    onClick={() => navigate('/passeios', { state: { tag: 'pôr do sol' } })} />
+            <Atalho icon={Waves}  cor="text-sky-500"      label="Lagoas"
+                    onClick={() => navigate('/passeios', { state: { tag: 'lagoa' } })} />
+          </div>
+
           {/* ── Afiliado: "Divulgou, Ganhou" ─────────────────────
               No lugar do antigo banner de ofertas: convida o turista a indicar
               passeios e ganhar comissão. Leva para /afiliado (que pede login se
@@ -497,20 +509,6 @@ export default function Home() {
             <BuggyDoodle className="absolute bottom-1 right-2 w-[74px] opacity-90" />
           </button>
 
-          {/* ── Atalhos de passeios (desceram para o fim) ────────────────── */}
-          <div>
-            <h2 className="text-[18px] font-extrabold text-gray-900 mb-2.5">Atalhos</h2>
-            <div className="grid grid-cols-4 gap-2.5">
-              <Atalho icon={Flame}  cor="text-brand"        label="Mais vendidos"
-                      onClick={() => navigate('/passeios', { state: { featured: true } })} />
-              <Atalho icon={Sun}    cor="text-orange-400"   label="Para hoje"
-                      onClick={() => navigate('/passeios', { state: { dateIso: hoje } })} />
-              <Atalho icon={Sunset} cor="text-orange-500"   label="Pôr do sol"
-                      onClick={() => navigate('/passeios', { state: { tag: 'pôr do sol' } })} />
-              <Atalho icon={Waves}  cor="text-sky-500"      label="Lagoas"
-                      onClick={() => navigate('/passeios', { state: { tag: 'lagoa' } })} />
-            </div>
-          </div>
         </div>
       </div>
     </>
