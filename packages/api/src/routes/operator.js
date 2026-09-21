@@ -1284,6 +1284,7 @@ router.post('/bookings/:id/start', async (req, res, next) => {
     // NÃO troca o código já informado ao motorista, e chamadas concorrentes não
     // sobrescrevem. Coluna ausente (migração pendente) ou qualquer erro é
     // ignorado: a corrida iniciou e o resto segue, só sem a trava.
+    let pinAtual = null
     if (b) {
       const pin = String(Math.floor(1000 + Math.random() * 9000))
       await supabase
@@ -1292,6 +1293,12 @@ router.post('/bookings/:id/start', async (req, res, next) => {
         .eq('id', b.id)
         .is('completion_pin', null)
         .then(() => {}, () => {})
+      // Lê o PIN efetivo (o recém-gerado, ou o que já existia num reinício) para
+      // avisar o cliente com o código real. Coluna ausente → segue sem PIN.
+      const { data: pinRow } = await supabase
+        .from('bookings').select('completion_pin').eq('id', b.id).maybeSingle()
+        .then((r) => r, () => ({ data: null }))
+      pinAtual = pinRow?.completion_pin || null
     }
     if (b) notifyUser({
       userId:      b.user_id,
@@ -1299,6 +1306,15 @@ router.post('/bookings/:id/start', async (req, res, next) => {
       templateKey: 'booking_in_progress',
       title:       'Seu serviço começou 🚀',
       body:        `Seu ${serviceLabel(b.service_type)} (${b.booking_code}) está em andamento. Bom passeio!`,
+    })
+    // Notificação dedicada do código de conclusão (096): chega no aparelho do
+    // cliente com o PIN e o aviso de segurança.
+    if (b && pinAtual) notifyUser({
+      userId:      b.user_id,
+      bookingId:   b.id,
+      templateKey: 'completion_pin',
+      title:       `Seu código de conclusão: ${pinAtual} 🔐`,
+      body:        `Informe o código ${pinAtual} SOMENTE ao motorista, e só ao final do serviço. Por segurança, nunca compartilhe por telefone, mensagem ou com terceiros.`,
     })
     // Item 3: WhatsApp "motorista a caminho" (best-effort).
     if (b) notifyClientRideStarted(supabase, b).catch((err) =>
