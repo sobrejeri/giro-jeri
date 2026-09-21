@@ -12,6 +12,7 @@ import {
 import { api } from '../lib/api'
 import { downloadOrderPDF } from '../lib/orderPDF'
 import SendOsButton from '../components/SendOsButton'
+import DespacharModal from '../components/DespacharModal'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -741,150 +742,13 @@ export default function Dashboard() {
         )}
       </Modal>
 
-      {/* ── Modal de despacho ──────────────────────────── */}
-      <Modal
-        open={!!assignModal}
-        onClose={() => { setAssign(null); setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '', driver_payout_amount: '' }) }}
-        title={`Despachar — ${assignModal?.booking_code || ''}`}
-        size="md"
-      >
-        {assignModal && (
-          <>
-            <div className="mb-5 rounded-xl border border-gray-200 overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2 flex items-center justify-between border-b border-gray-200">
-                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Resumo do serviço</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                  assignModal.service_type === 'tour' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {assignModal.service_type === 'tour' ? 'Passeio' : 'Transfer'}
-                </span>
-              </div>
-              <div className="px-4 py-3 space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Cliente</span>
-                  <span className="font-semibold text-gray-900">{assignModal.users?.full_name || '—'}</span>
-                </div>
-                {assignModal.users?.phone && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Tel. cliente</span>
-                    <a href={`https://wa.me/${(() => { const d = assignModal.users.phone.replace(/\D/g,''); return d.length <= 11 ? '55' + d : d })()}`}
-                       target="_blank" rel="noreferrer"
-                       className="font-medium text-green-600 hover:underline flex items-center gap-1">
-                      <MessageCircle size={12} />{assignModal.users.phone}
-                    </a>
-                  </div>
-                )}
-                {assignModal.service_date && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Data</span>
-                    <span className="font-medium text-gray-800">
-                      {format(new Date(assignModal.service_date + 'T12:00:00'), "dd 'de' MMMM", { locale: ptBR })}
-                      {assignModal.service_time ? ` às ${assignModal.service_time.slice(0, 5)}` : ''}
-                    </span>
-                  </div>
-                )}
-                {assignModal.people_count && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Pessoas</span>
-                    <span className="font-medium text-gray-800">{assignModal.people_count} pessoas</span>
-                  </div>
-                )}
-                {(assignModal.pickup_place_name || assignModal.origin_text) && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-gray-500 shrink-0">Embarque</span>
-                    <span className="font-medium text-gray-800 text-right line-clamp-1">
-                      {assignModal.pickup_place_name || assignModal.origin_text}
-                    </span>
-                  </div>
-                )}
-                {(assignModal.destination_place_name || assignModal.destination_text) && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-gray-500 shrink-0">Destino</span>
-                    <span className="font-medium text-gray-800 text-right line-clamp-1">
-                      {assignModal.destination_place_name || assignModal.destination_text}
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between pt-1 border-t border-gray-100 mt-1">
-                  <span className="text-gray-500">Valor</span>
-                  <span className="font-extrabold text-brand text-base">{fmt(assignModal.total_amount)}</span>
-                </div>
-              </div>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                assignMut.mutate({ id: assignModal.id, ...form })
-              }}
-              className="space-y-4"
-            >
-              <Input
-                label="Veículo (modelo / placa / cor)"
-                placeholder="Ex: Hilux Branca · GKR-1234"
-                value={form.real_vehicle_text}
-                onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })}
-              />
-              <Input
-                label="Nome do motorista"
-                placeholder="Ex: João da Silva"
-                value={form.driver_name}
-                onChange={(e) => setForm({ ...form, driver_name: e.target.value })}
-              />
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp do motorista</label>
-                <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-brand/30 focus-within:border-brand bg-white">
-                  <MessageCircle size={15} className="text-green-500 shrink-0" />
-                  <input
-                    type="tel"
-                    placeholder="(88) 99999-9999"
-                    value={form.driver_phone}
-                    onChange={(e) => setForm({ ...form, driver_phone: e.target.value })}
-                    className="flex-1 text-sm text-gray-900 bg-transparent outline-none placeholder-gray-400"
-                  />
-                </div>
-                {form.driver_phone && (
-                  <p className="text-[11px] text-green-600 mt-1 flex items-center gap-1">
-                    <Send size={10} /> Mensagem será enviada pelo WhatsApp
-                  </p>
-                )}
-              </div>
-
-              <Textarea
-                label="Observações para o motorista"
-                rows={2}
-                placeholder="Instruções especiais, ponto de referência…"
-                value={form.dispatch_notes}
-                onChange={(e) => setForm({ ...form, dispatch_notes: e.target.value })}
-              />
-
-              {/* Combinado com o motorista. Fica registrado na aba Repasses do
-                  admin, que controla o pagamento feito fora da plataforma. */}
-              <Input
-                label="Valor do repasse ao motorista (opcional)"
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="Ex: 120,00 — pode definir depois"
-                value={form.driver_payout_amount}
-                onChange={(e) => setForm({ ...form, driver_payout_amount: e.target.value })}
-              />
-
-              <Button
-                type="submit"
-                className={`w-full flex items-center justify-center gap-2 ${form.driver_phone ? 'bg-green-600 hover:bg-green-700' : ''}`}
-                disabled={assignMut.isPending}
-              >
-                {form.driver_phone
-                  ? <><MessageCircle size={15} />{assignMut.isPending ? 'Despachando…' : 'Despachar e enviar WhatsApp'}</>
-                  : <>{assignMut.isPending ? 'Despachando…' : 'Confirmar Despacho'}</>
-                }
-              </Button>
-            </form>
-          </>
-        )}
-      </Modal>
+      {/* Modal de despacho — compartilhado com a tela Despacho */}
+      <DespacharModal
+        booking={assignModal}
+        operador={operador}
+        onClose={() => setAssign(null)}
+        onDone={() => qc.invalidateQueries({ queryKey: ['operational'] })}
+      />
     </div>
   )
 }

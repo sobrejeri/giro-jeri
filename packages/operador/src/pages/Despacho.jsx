@@ -16,7 +16,8 @@ import Input, { Textarea, Select } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import { downloadOrderPDF, orderPDFBase64 } from '../lib/orderPDF'
 import SendOsButton from '../components/SendOsButton'
-import ConfirmarExecutor, { TIPOS_PIX } from '../components/ConfirmarExecutor'
+import ConfirmarExecutor from '../components/ConfirmarExecutor'
+import DespacharModal from '../components/DespacharModal'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -462,166 +463,13 @@ export default function Despacho() {
         </div>
       )}
 
-      {/* ── Modal de despacho ──────────────────────────── */}
-      <Modal open={!!modal} onClose={() => setModal(null)}
-        title={`Despachar — ${modal?.booking_code || ''}`} size="sm">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {modal && (
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2 flex items-center justify-between border-b border-gray-200">
-                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Resumo do serviço</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                  modal.service_type === 'tour' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {modal.service_type === 'tour' ? 'Passeio' : 'Transfer'}
-                </span>
-              </div>
-              <div className="px-4 py-3 space-y-2 text-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-gray-500 shrink-0">Cliente</span>
-                  <span className="font-semibold text-gray-900 text-right">{modal.users?.full_name || '—'}</span>
-                </div>
-                {modal.users?.phone && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-gray-500 shrink-0">Tel. cliente</span>
-                    <a href={`https://wa.me/${(() => { const d = modal.users.phone.replace(/\D/g,''); return d.length <= 11 ? '55' + d : d })()}`}
-                       target="_blank" rel="noreferrer"
-                       className="font-medium text-green-600 hover:underline flex items-center gap-1">
-                      <MessageCircle size={12} />{modal.users.phone}
-                    </a>
-                  </div>
-                )}
-                {modal.service_date && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-gray-500 shrink-0">Data</span>
-                    <span className="font-medium text-gray-800 text-right">
-                      {format(new Date(modal.service_date + 'T12:00:00'), "dd 'de' MMMM", { locale: ptBR })}
-                      {modal.service_time ? ` às ${modal.service_time.slice(0, 5)}` : ''}
-                    </span>
-                  </div>
-                )}
-                {modal.people_count && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-gray-500 shrink-0">Pessoas</span>
-                    <span className="font-medium text-gray-800">{modal.people_count} pessoas</span>
-                  </div>
-                )}
-                {veiculoDaReserva(modal) && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-gray-500 shrink-0">Veículo</span>
-                    <span className="font-medium text-gray-800 text-right">{veiculoDaReserva(modal)}</span>
-                  </div>
-                )}
-                {(modal.pickup_place_name || modal.origin_text) && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-gray-500 shrink-0">Embarque</span>
-                    <span className="font-medium text-gray-800 text-right line-clamp-1">
-                      {modal.pickup_place_name || modal.origin_text}
-                    </span>
-                  </div>
-                )}
-                {(modal.destination_place_name || modal.destination_text) && (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-gray-500 shrink-0">Destino</span>
-                    <span className="font-medium text-gray-800 text-right line-clamp-1">
-                      {modal.destination_place_name || modal.destination_text}
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between pt-1 border-t border-gray-100 mt-1">
-                  <span className="text-gray-500">Valor</span>
-                  <span className="font-extrabold text-brand text-base">{fmt(modal.total_amount)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-          <Input label="Placa do veículo *" placeholder="Ex: GKR-1234"
-            value={form.real_vehicle_text} required
-            onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })} />
-          {/* Quem já rodou por este operador. Um toque traz nome, telefone,
-              documento e chave PIX — sem redigitar chave a cada corrida. */}
-          {executores.length > 0 && (
-            <div>
-              <p className="text-[11px] font-medium text-gray-500 mb-1.5">Quem já rodou com vocês</p>
-              <div className="flex flex-wrap gap-1.5">
-                {executores.map((ex) => (
-                  <button
-                    key={ex.name} type="button" onClick={() => usarExecutor(ex)}
-                    className={`px-2.5 py-1 rounded-full text-[12px] border transition-colors ${
-                      form.driver_name === ex.name
-                        ? 'bg-brand text-white border-brand'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-brand hover:text-brand'
-                    }`}
-                  >
-                    {ex.name}{ex.pix_key ? '' : ' · sem PIX'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <Input label="Nome do motorista *" placeholder="Ex: João da Silva"
-            value={form.driver_name} required
-            onChange={(e) => setForm({ ...form, driver_name: e.target.value })} />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp do motorista *</label>
-            <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-brand/30 focus-within:border-brand bg-white">
-              <MessageCircle size={14} className="text-green-500 shrink-0" />
-              <input type="tel" placeholder="(88) 99999-9999" value={form.driver_phone} required
-                onChange={(e) => setForm({ ...form, driver_phone: e.target.value })}
-                className="flex-1 text-sm text-gray-900 bg-transparent outline-none placeholder-gray-400" />
-            </div>
-          </div>
-
-          {/* ── Para onde vai o repasse (081) ───────────────────
-              A plataforma recebe 100% e repassa depois. Sem estes dados o
-              admin vê o valor a pagar mas não tem para onde mandar. */}
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2.5">
-            <div>
-              <p className="text-[12px] font-bold text-gray-800">Dados para o repasse</p>
-              <p className="text-[11px] text-gray-500">
-                Obrigatório — é para onde o admin manda o valor da corrida.
-              </p>
-            </div>
-            <Input label="CPF / CNPJ de quem executa *" placeholder="000.000.000-00"
-              value={form.driver_document}
-              onChange={(e) => setForm({ ...form, driver_document: e.target.value })} />
-            <div className="grid grid-cols-[1fr_9rem] gap-2">
-              <Input label="Chave PIX *" placeholder="chave para receber"
-                value={form.driver_pix_key}
-                onChange={(e) => setForm({ ...form, driver_pix_key: e.target.value })} />
-              <Select label="Tipo *" value={form.driver_pix_key_type}
-                onChange={(e) => setForm({ ...form, driver_pix_key_type: e.target.value })}>
-                {TIPOS_PIX.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </Select>
-            </div>
-            {/* Valor combinado com o motorista pelo serviço — fica registrado na
-                aba Repasses do admin, facilitando o controle do pagamento. */}
-            <Input label="Valor do repasse ao motorista (opcional)" type="number" min={0} step="0.01"
-              placeholder="Ex: 120,00 — pode definir depois"
-              value={form.driver_payout_amount}
-              onChange={(e) => setForm({ ...form, driver_payout_amount: e.target.value })} />
-          </div>
-
-          <Textarea label="Observações para o motorista" rows={2} value={form.dispatch_notes}
-            onChange={(e) => setForm({ ...form, dispatch_notes: e.target.value })} />
-          {(() => {
-            const canDispatch = podeDespachar(form)
-            return (
-              <>
-                {!canDispatch && (
-                  <p className="text-[11px] text-amber-600">Preencha veículo, motorista, WhatsApp e os dados de repasse (CPF/CNPJ, chave PIX e tipo). Só as observações são opcionais.</p>
-                )}
-                {errMsg && (
-                  <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{errMsg}</p>
-                )}
-                <Button type="submit" className="w-full" disabled={assignMut.isPending || !canDispatch}>
-                  {assignMut.isPending ? 'Salvando…' : 'Confirmar Despacho'}
-                </Button>
-              </>
-            )
-          })()}
-        </form>
-      </Modal>
+      {/* Modal de despacho — compartilhado com a tela Operações */}
+      <DespacharModal
+        booking={modal}
+        operador={operador}
+        onClose={() => setModal(null)}
+        onDone={() => qc.invalidateQueries({ queryKey: ['dispatch'] })}
+      />
 
       <ConfirmarExecutor
         booking={concluindo}
