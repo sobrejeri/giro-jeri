@@ -62,6 +62,7 @@ export async function enablePush() {
     await api.pushSubscribe({
       endpoint: json.endpoint,
       keys:     { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      app:      'turista',
     })
     return { ok: true }
   } catch (err) {

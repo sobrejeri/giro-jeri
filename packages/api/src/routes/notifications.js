@@ -118,22 +118,27 @@ router.get('/vapid-public-key', (_req, res) => {
 // ── POST /api/notifications/push-subscribe — salva a inscrição do navegador ──
 router.post('/push-subscribe', authenticate, async (req, res) => {
   try {
-    const { endpoint, keys } = req.body || {}
+    const { endpoint, keys, app } = req.body || {}
     if (!endpoint || !keys?.p256dh || !keys?.auth) {
       return res.status(400).json({ error: 'Inscrição de push inválida' })
     }
-    await supabase
+    const appTag = ['turista', 'operador', 'admin'].includes(app) ? app : null
+    const row = {
+      user_id:    req.user.id,
+      endpoint,
+      p256dh:     keys.p256dh,
+      auth:       keys.auth,
+      user_agent: req.headers['user-agent'] || null,
+    }
+    if (appTag) row.app = appTag
+    const { error: upErr } = await supabase
       .from('push_subscriptions')
-      .upsert(
-        {
-          user_id:    req.user.id,
-          endpoint,
-          p256dh:     keys.p256dh,
-          auth:       keys.auth,
-          user_agent: req.headers['user-agent'] || null,
-        },
-        { onConflict: 'user_id,endpoint' },
-      )
+      .upsert(row, { onConflict: 'user_id,endpoint' })
+    // Fallback: coluna `app` ainda não existe (migração 095 não aplicada).
+    if (upErr && /app/.test(upErr.message || '')) {
+      delete row.app
+      await supabase.from('push_subscriptions').upsert(row, { onConflict: 'user_id,endpoint' })
+    }
     res.json({ ok: true })
   } catch (err) {
     console.error('[notifications] push-subscribe falhou:', err.message)

@@ -27,13 +27,24 @@ function ensureConfigured() {
 
 // Envia um push para TODOS os dispositivos inscritos de um usuário.
 // Remove inscrições expiradas (404/410). Nunca lança — é fire-and-forget.
-export async function sendPushToUser(userId, { title, body, bookingId = null, templateKey = null }) {
+export async function sendPushToUser(userId, { title, body, bookingId = null, templateKey = null, onlyApps = null }) {
   if (!userId || !ensureConfigured()) return
 
-  const { data: subs } = await supabase
+  let query = supabase
     .from('push_subscriptions')
     .select('id, endpoint, p256dh, auth')
     .eq('user_id', userId)
+  // Restringe a certos PWAs (ex.: avisos internos só no app do admin).
+  if (Array.isArray(onlyApps) && onlyApps.length) query = query.in('app', onlyApps)
+
+  let { data: subs, error } = await query
+  // Fallback: coluna `app` ainda não existe (migração 095) → ignora o filtro.
+  if (error && Array.isArray(onlyApps) && /app/.test(error.message || '')) {
+    ({ data: subs } = await supabase
+      .from('push_subscriptions')
+      .select('id, endpoint, p256dh, auth')
+      .eq('user_id', userId))
+  }
 
   if (!subs?.length) return
 

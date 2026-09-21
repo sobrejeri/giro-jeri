@@ -111,7 +111,9 @@ export async function notifyAdmins({ bookingId = null, templateKey = null, title
       sent_at:      now,
     }))
     await supabase.from('notifications').insert(rows)
-    for (const a of admins) firePush(a.id, { title: title || 'Turiva', body, bookingId, templateKey })
+    // Push SÓ no PWA do admin — não no aparelho do mesmo usuário logado no
+    // app do turista/operador.
+    for (const a of admins) firePush(a.id, { title: title || 'Turiva', body, bookingId, templateKey, onlyApps: ['admin'] })
   } catch (err) {
     console.error('[notify] insert (admins) falhou:', err.message)
   }
