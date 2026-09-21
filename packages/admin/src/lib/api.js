@@ -289,7 +289,7 @@ export const api = {
   purgeEstablishments: () => request('/api/establishments/purge-all', { method: 'DELETE' }),
 
   // Notificações
-  getNotifications:      ()    => request('/api/notifications'),
+  getNotifications:      ()    => request('/api/notifications?app=admin'),
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
   deleteNotification:    (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),

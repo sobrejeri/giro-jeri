@@ -240,7 +240,7 @@ export const api = {
   cancelBooking: (id, body) => request(`/api/bookings/${id}/cancel`, { method: 'POST', body }),
 
   // Notificações
-  getNotifications:      ()   => request('/api/notifications'),
+  getNotifications:      ()   => request('/api/notifications?app=turista'),
   markNotificationsRead: ()   => request('/api/notifications/read-all', { method: 'POST' }),
   deleteNotification:    (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),

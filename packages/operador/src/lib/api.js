@@ -202,7 +202,7 @@ export const api = {
   recipientKycLink:   () => request('/api/operator/recipient-kyc-link', { method: 'POST', body: {} }),
 
   // Notificações
-  getNotifications:      ()    => request('/api/notifications'),
+  getNotifications:      ()    => request('/api/notifications?app=operador'),
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
   deleteNotification:    (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),

@@ -29,7 +29,19 @@ router.post('/wa-test', authenticate, requireAdmin, async (req, res) => {
 })
 
 // ── GET /api/notifications — minhas notificações + total não lidas ──
+// Avisos internos (só fazem sentido no PWA do admin). Nos apps de
+// turista/operador eles são escondidos da central mesmo que o usuário tenha
+// os dois papéis na mesma conta.
+const ADMIN_ONLY_KEYS = ['admin_new_user', 'admin_payment_approved', 'admin_payment_rejected']
+function filtrarPorApp(items, app) {
+  if (app === 'turista' || app === 'operador') {
+    return items.filter((n) => !ADMIN_ONLY_KEYS.includes(n.template_key))
+  }
+  return items
+}
+
 router.get('/', authenticate, async (req, res) => {
+  const app = req.query.app
   // Caminho normal (após a migração 021, com a coluna read_at)
   const withRead = await supabase
     .from('notifications')
@@ -39,7 +51,7 @@ router.get('/', authenticate, async (req, res) => {
     .limit(30)
 
   if (!withRead.error) {
-    const items = withRead.data || []
+    const items = filtrarPorApp(withRead.data || [], app)
     return res.json({ items, unread: items.filter((n) => !n.read_at).length })
   }
 
@@ -56,7 +68,7 @@ router.get('/', authenticate, async (req, res) => {
     console.error('[notifications] list falhou:', basic.error.message)
     return res.json({ items: [], unread: 0 })
   }
-  const items = (basic.data || []).map((n) => ({ ...n, read_at: '1970-01-01T00:00:00Z' }))
+  const items = filtrarPorApp((basic.data || []).map((n) => ({ ...n, read_at: '1970-01-01T00:00:00Z' })), app)
   res.json({ items, unread: 0 })
 })
 
