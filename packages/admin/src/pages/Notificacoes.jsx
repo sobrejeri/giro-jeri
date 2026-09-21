@@ -11,6 +11,9 @@ const TEMPLATE_LABELS = {
   welcome:       { label: 'Boas-vindas', hint: 'Enviada quando o usuário cria a conta.' },
   birthday:      { label: 'Feliz aniversário', hint: 'Enviada no dia do aniversário (varredura diária ~9h).' },
   cart_reminder: { label: 'Reserva aguardando pagamento', hint: 'Lembrete ~3h após a reserva ficar sem pagamento.' },
+  admin_new_user:         { label: 'Admin · Novo cadastro', hint: 'Avisa os admins quando um novo usuário cria conta.' },
+  admin_payment_approved: { label: 'Admin · Recebimento aprovado', hint: 'Avisa os admins quando um pagamento é aprovado (valor + método).' },
+  admin_payment_rejected: { label: 'Admin · Pagamento recusado', hint: 'Avisa os admins quando uma tentativa de pagamento é recusada.' },
 }
 const AUDIENCES = [
   { value: 'all',         label: 'Todos os turistas' },

@@ -10,7 +10,7 @@ import { validateUsername, normalizeUsername } from '../lib/username.js';
 import { notifyPasswordReset, linkPasswordReset } from '../services/whatsapp.js';
 import { sendPasswordReset }                 from '../services/email.js';
 import { requestOtp, maskDestination }       from '../services/otp.js';
-import { notifyUser, getTemplate }           from '../services/notify.js';
+import { notifyUser, getTemplate, notifyAdmins } from '../services/notify.js';
 import { buildChannels }                     from './otp.js';
 
 const router = Router();
@@ -199,6 +199,13 @@ router.post('/register', async (req, res, next) => {
     // Fire-and-forget — não atrasa nem quebra o cadastro.
     getTemplate('welcome').then((tpl) => {
       if (tpl?.enabled) notifyUser({ userId: profile.id, templateKey: 'welcome', title: tpl.title, body: tpl.body })
+    }).catch(() => {})
+
+    // Aviso interno pro admin: novo usuário cadastrado (estilo Hotmart).
+    notifyAdmins({
+      templateKey: 'admin_new_user',
+      title:       'Novo cadastro 👤',
+      body:        `${profile.full_name || 'Novo usuário'} criou uma conta na Turiva.`,
     }).catch(() => {})
 
     // ── Cadastro direto (sem OTP): abre a sessão e já entra logado ──────

@@ -164,7 +164,10 @@ router.post('/push-test', authenticate, async (req, res) => {
 // ADMIN — modelos automáticos + envio manual (broadcast)
 // =============================================================================
 
-const TEMPLATE_KEYS = ['welcome', 'birthday', 'cart_reminder']
+const TEMPLATE_KEYS = [
+  'welcome', 'birthday', 'cart_reminder',
+  'admin_new_user', 'admin_payment_approved', 'admin_payment_rejected',
+]
 
 // ── GET /api/notifications/templates (admin) ──
 router.get('/templates', authenticate, requireAdmin, async (_req, res) => {

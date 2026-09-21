@@ -15,6 +15,11 @@ export const DEFAULT_TEMPLATES = {
   welcome:       { enabled: true, title: 'Bem-vindo(a) à Turiva! 🌴', body: 'Sua conta está pronta. Explore passeios e transfers em Jericoacoara e viva momentos inesquecíveis.' },
   birthday:      { enabled: true, title: 'Feliz aniversário! 🎉',      body: 'A Turiva deseja um dia incrível! Que tal comemorar com um passeio em Jeri?' },
   cart_reminder: { enabled: true, title: 'Sua reserva está esperando 🛒', body: 'Você tem uma reserva aguardando pagamento. Conclua antes que a vaga seja liberada!' },
+  // Avisos internos do admin (estilo Hotmart) — os textos abaixo são só o
+  // fallback; a mensagem real é montada com os dados do evento no código.
+  admin_new_user:          { enabled: true, title: 'Novo cadastro 👤',        body: 'Um novo usuário acabou de criar conta na Turiva.' },
+  admin_payment_approved:  { enabled: true, title: 'Recebimento aprovado 💰', body: 'Um pagamento foi aprovado.' },
+  admin_payment_rejected:  { enabled: true, title: 'Pagamento recusado ⚠️',   body: 'Uma tentativa de pagamento foi recusada.' },
 }
 
 // Lê um modelo do banco; se a tabela não existir ou não houver linha, cai no
@@ -74,6 +79,42 @@ export async function notifyUser({ userId, bookingId = null, templateKey = null,
     console.error('[notify] insert (user) falhou:', err.message)
   }
   firePush(userId, { title: title || 'Turiva', body, bookingId, templateKey })
+}
+
+// Notifica só os ADMINs ativos (avisos internos: novo cadastro, recebimento
+// aprovado/recusado). Respeita o toggle "ativa/desativada" do modelo no admin.
+export async function notifyAdmins({ bookingId = null, templateKey = null, title, body }) {
+  if (!body) return
+  try {
+    // Se houver um modelo com este key desligado no admin, não dispara nada.
+    if (templateKey) {
+      const tpl = await getTemplate(templateKey)
+      if (tpl && tpl.enabled === false) return
+    }
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .eq('user_type', 'admin')
+      .eq('is_active', true)
+    const admins = data || []
+    if (!admins.length) return
+
+    const now = new Date().toISOString()
+    const rows = admins.map((a) => ({
+      user_id:      a.id,
+      booking_id:   bookingId,
+      channel:      'internal',
+      template_key: templateKey,
+      title:        title || 'Turiva',
+      message_body: body,
+      send_status:  'sent',
+      sent_at:      now,
+    }))
+    await supabase.from('notifications').insert(rows)
+    for (const a of admins) firePush(a.id, { title: title || 'Turiva', body, bookingId, templateKey })
+  } catch (err) {
+    console.error('[notify] insert (admins) falhou:', err.message)
+  }
 }
 
 // Notifica TODAS os operadores ativos + admins (ex.: nova solicitação).

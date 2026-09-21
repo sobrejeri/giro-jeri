@@ -5,7 +5,7 @@ import { supabase }  from '../supabase.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
 import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived, notifyOperatorDirectSale } from '../services/whatsapp.js'
-import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
+import { notifyUser, notifyOperatorsAndAdmin, notifyAdmins } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateAdvance, applyCoupon } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
 import { sweepExpiredLegBookings } from '../services/legFlow.js'
@@ -2060,6 +2060,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
             .update({ status: 'failed', status_detail: (cobranca.motivo || '').slice(0, 300) || null })
             .eq('id', linha.id)
           console.warn('[pagarme] cartão inline RECUSADO · reserva %s: %s', booking.id, cobranca.motivo)
+          avisarAdminRecusa({ bookingId: booking.id, code: bookingCode, valor: brl(chargedTotal), motivo: 'Cartão' })
           return res.json({
             success: false, status: 'rejected',
             payment_id: linha.id, booking_id: booking.id,
@@ -2216,6 +2217,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
     } else if (isCard && cardPaymentStatus === 'rejected') {
       // rejected: booking permanece awaiting_payment (não altera status_commercial)
       // O status 'failed' já foi gravado em payments acima
+      avisarAdminRecusa({ bookingId: booking.id, code: bookingCode, valor: brl(chargedTotal), motivo: 'Cartão' })
     }
     // in_process / pending: polling existente cuida via GET /:id/status
 
@@ -3330,6 +3332,13 @@ router.post('/webhook', async (req, res, next) => {
           .update({ status_commercial: 'payment_failed', payment_status: 'failed' })
           .eq('id', paymentForEvent.booking_id)
           .in('status_commercial', ['awaiting_payment', 'payment_failed'])
+        // Aviso interno pro admin (cobre recusas assíncronas, ex.: Pix/webhook).
+        if (mpStatus === 'rejected') {
+          avisarAdminRecusa({
+            bookingId: paymentForEvent.booking_id,
+            valor:     brl(paymentForEvent.amount_gross),
+          })
+        }
       }
 
       // Só agora o evento está concluído. Marcar antes faria uma queda no meio
@@ -3761,17 +3770,63 @@ export async function onPaymentApproved(payment) {
       console.error('[email] confirmação de reserva falhou:', err.message))
 
     // Central no app: confirma para o turista e avisa quem precisa.
-    if (booking) notifyBookingPaid(booking)
+    if (booking) notifyBookingPaid(booking, payment)
   }
 }
 
 // Notificações de "pagamento confirmado" de UMA reserva (app + WhatsApp).
 // Extraído para ser reusado pelo pagamento único de grupo (carrinho universal).
-function notifyBookingPaid(booking) {
+// Formata valor em reais para os avisos (estilo "R$ 350,00").
+function brl(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return null
+  return `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+// Rótulo amigável do meio de pagamento a partir do que o gateway devolve.
+function labelMetodo(payment) {
+  const m = String(payment?.payment_method || payment?.method || '').toLowerCase()
+  if (m.includes('pix')) return 'Pix'
+  if (m.includes('card') || m.includes('cart') || m.includes('credit')) return 'Cartão'
+  if (m.includes('boleto')) return 'Boleto'
+  return null
+}
+
+// Aviso interno pro admin: uma tentativa de pagamento foi recusada (Hotmart).
+// Fire-and-forget; aceita valor/código/motivo soltos porque as recusas
+// acontecem em vários pontos, nem sempre com o booking carregado.
+function avisarAdminRecusa({ bookingId = null, code = null, valor = null, motivo = null } = {}) {
+  const linha1 = valor ? `Pagamento recusado — ${valor}` : 'Pagamento recusado'
+  const detalhe = [code, motivo].filter(Boolean).join(' · ')
+  notifyAdmins({
+    bookingId,
+    templateKey: 'admin_payment_rejected',
+    title:       'Pagamento recusado ⚠️',
+    body:        detalhe ? `${linha1} · ${detalhe}` : linha1,
+  }).catch(() => {})
+}
+
+function notifyBookingPaid(booking, payment = null) {
   if (!booking) return
   const isTransfer = booking.service_type === 'transfer'
   const tipo  = isTransfer ? 'translado' : 'passeio'
   const rota  = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')
+
+  // Aviso interno pro admin: recebimento aprovado (estilo Hotmart).
+  {
+    const valor  = brl(payment?.amount_gross ?? booking.total_amount)
+    const metodo = labelMetodo(payment)
+    const partes = ['Recebimento aprovado']
+    if (valor)  partes.push(valor)
+    const linha1 = partes.join(' — ')
+    const detalhe = [metodo, booking.booking_code].filter(Boolean).join(' · ')
+    notifyAdmins({
+      bookingId:   booking.id,
+      templateKey: 'admin_payment_approved',
+      title:       'Recebimento aprovado 💰',
+      body:        detalhe ? `${linha1} · ${detalhe}` : linha1,
+    }).catch(() => {})
+  }
 
   notifyUser({
     userId:      booking.user_id,
@@ -3910,7 +3965,7 @@ async function onGroupPaymentApproved(payment) {
     if (primeiraAprovacao) {
       sendConfirmationEmail(b).catch((err) =>
         console.error('[email] confirmação (grupo) falhou:', err.message))
-      notifyBookingPaid(b)
+      notifyBookingPaid(b, payment)
     }
   }
 }
