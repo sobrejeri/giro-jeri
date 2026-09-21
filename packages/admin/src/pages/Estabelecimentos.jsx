@@ -12,17 +12,28 @@ import Modal from '../components/ui/Modal'
 import Input, { Textarea, Select } from '../components/ui/Input'
 import Card, { CardBody } from '../components/ui/Card'
 
+// Mesmas chaves que o app (turista/Feed) usa para agrupar nos carrosséis.
 const CATEGORIES = [
-  { value: 'hospedagem',  label: 'Pousadas & Hotéis',   Icon: BedDouble },
-  { value: 'gastronomia', label: 'Restaurantes & Bares', Icon: UtensilsCrossed },
-  { value: 'compras',     label: 'Lojas & Compras',      Icon: ShoppingBag },
+  { value: 'gastronomia', label: 'Onde comer',          Icon: UtensilsCrossed },
+  { value: 'bar',         label: 'Bares',               Icon: UtensilsCrossed },
+  { value: 'hospedagem',  label: 'Onde ficar',          Icon: BedDouble },
+  { value: 'mercado',     label: 'Mercados',            Icon: ShoppingBag },
+  { value: 'farmacia',    label: 'Farmácias',           Icon: ShoppingBag },
+  { value: 'beleza',      label: 'Beleza & Barbearia',  Icon: ShoppingBag },
+  { value: 'moda',        label: 'Moda & Calçados',     Icon: ShoppingBag },
+  { value: 'kite',        label: 'Kite & Aventura',     Icon: ShoppingBag },
+  { value: 'compras',     label: 'Lojas',               Icon: ShoppingBag },
 ]
-const catOf = (v) => CATEGORIES.find((c) => c.value === v) || CATEGORIES[1]
+const NOVA = '__nova__'
+const isKnownCat = (v) => CATEGORIES.some((c) => c.value === v)
+// Categoria conhecida → usa o rótulo; personalizada → mostra o próprio texto.
+const catOf = (v) => CATEGORIES.find((c) => c.value === v)
+  || { value: v, label: v || 'Outra', Icon: ShoppingBag }
 
 const PRICE_RANGES = ['', '$', '$$', '$$$']
 
 const EMPTY = {
-  name: '', category: 'gastronomia', description: '', image_url: '',
+  name: '', category: 'gastronomia', categoryCustom: '', description: '', image_url: '',
   whatsapp: '', instagram: '', maps_url: '', address: '',
   locality: '', price_range: '', price_note: '',
   latitude: '', longitude: '',
@@ -131,9 +142,11 @@ export default function Estabelecimentos() {
 
   function openNew() { setForm(EMPTY); setImgError(''); setModal({ isNew: true }) }
   function openEdit(p) {
+    const conhecida = isKnownCat(p.category)
     setForm({
       name:        p.name || '',
-      category:    p.category || 'gastronomia',
+      category:    conhecida ? p.category : NOVA,
+      categoryCustom: conhecida ? '' : (p.category || ''),
       description: p.description || '',
       image_url:   p.image_url || '',
       whatsapp:    p.whatsapp || '',
@@ -175,9 +188,13 @@ export default function Estabelecimentos() {
 
   function handleSubmit(e) {
     e.preventDefault()
+    const categoriaFinal = form.category === NOVA
+      ? (form.categoryCustom || '').trim().slice(0, 40)
+      : form.category
+    if (!categoriaFinal) { alert('Informe a categoria.'); return }
     saveMut.mutate({
       name:        form.name,
-      category:    form.category,
+      category:    categoriaFinal,
       description: form.description || null,
       image_url:   form.image_url || null,
       whatsapp:    form.whatsapp || null,
@@ -303,8 +320,19 @@ export default function Estabelecimentos() {
             <Input label="Nome *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Pousada do Sol" required />
             <Select label="Categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              <option value={NOVA}>+ Nova categoria…</option>
             </Select>
           </div>
+
+          {form.category === NOVA && (
+            <Input
+              label="Nome da nova categoria *"
+              value={form.categoryCustom}
+              onChange={(e) => setForm({ ...form, categoryCustom: e.target.value })}
+              placeholder="Ex: Aluguel de buggy, Passeio de barco…"
+              maxLength={40}
+            />
+          )}
 
           <Textarea label="Descrição" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Breve descrição / diferenciais" />
 

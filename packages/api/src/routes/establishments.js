@@ -46,7 +46,8 @@ async function preencherFotoSeFaltar(rec) {
 
 const schema = z.object({
   name:        z.string().min(1).max(200),
-  category:    z.enum(['hospedagem', 'gastronomia', 'compras']).optional(),
+  // Categoria livre (VARCHAR(40)): as 9 conhecidas do app + personalizadas.
+  category:    z.string().min(1).max(40).optional(),
   description: z.string().max(5000).optional().nullable(),
   image_url:   z.string().max(3000).optional().nullable(),
   whatsapp:    z.string().max(30).optional().nullable(),

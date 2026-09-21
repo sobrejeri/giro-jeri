@@ -446,7 +446,9 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
 function PlaceCard({ place, compact = false, onReview }) {
   const { t } = useTranslation()
   const CATS = getCats(t)
-  const cat = CATS[place.category] || CATS.gastronomia
+  // Categoria conhecida → rótulo/ícone; personalizada (patrocinado) → o próprio
+  // texto com ícone genérico.
+  const cat = CATS[place.category] || { label: place.category || '', Icon: MapPin }
   const wa  = waLink(place.whatsapp)
   const ig  = igLink(place.instagram)
   const web = place.website || null
@@ -631,6 +633,19 @@ export default function Feed() {
   }, [sponsored, googlePlaces])
   const usingNearby = (!!nearbyData?.enabled && googlePlaces.length > 0) || sponsored.length > 0
 
+  // Categorias personalizadas: as que vêm dos patrocinados e não estão nas 9
+  // fixas. Ganham carrossel e chip próprios (só patrocinados, sem Google).
+  const customCats = useMemo(() => {
+    const s = new Set()
+    for (const p of sponsored) if (p.category && !CATEGORY_IDS.includes(p.category)) s.add(p.category)
+    return [...s]
+  }, [sponsored])
+  const allCatIds = useMemo(() => [...CATEGORY_IDS, ...customCats], [customCats])
+  const catInfo = (id) => cats[id] || { label: id, Icon: MapPin }
+  const filtersAll = useMemo(
+    () => [...FILTERS, ...customCats.map((id) => ({ id, label: id, Icon: MapPin }))],
+    [FILTERS, customCats])
+
   // Filtro de busca em memória — bate em title/name/location/locality/address.
   const q = searchQuery.trim().toLowerCase()
   const matches = (s) => !q || String(s || '').toLowerCase().includes(q)
@@ -694,7 +709,7 @@ export default function Feed() {
     content = loadingFeed ? Loader
       : promos.length ? promos.map(renderPost)
       : <EmptyState icon={BadgePercent} title={t('feedPg.emptyPromos.title')} sub={t('feedPg.emptyPromos.sub')} />
-  } else if (CATEGORY_IDS.includes(filter)) {
+  } else if (allCatIds.includes(filter)) {
     const list = places.filter((p) => p.category === filter)
     // Categoria selecionada: carrossel de DUAS linhas que rola na horizontal
     // (grid-rows-2 + grid-flow-col), em vez de uma grade vertical comprida.
@@ -706,7 +721,7 @@ export default function Feed() {
             {list.map((p) => <div key={p.id} className="snap-start h-full [&>div]:h-full">{renderPlace(p)}</div>)}
           </div>
         )
-      : <EmptyState icon={CAT_ICONS[filter]} title={t('feedPg.emptyCategory.title')} sub={t('feedPg.emptyCategory.sub')} />
+      : <EmptyState icon={CAT_ICONS[filter] || MapPin} title={t('feedPg.emptyCategory.title')} sub={t('feedPg.emptyCategory.sub')} />
   } else {
     const blocks = []
     // Patrocinados não têm mais seção própria: aparecem primeiro no carrossel
@@ -721,10 +736,10 @@ export default function Feed() {
     }
     // Um carrossel por categoria, com a tag em cima. Cada categoria mostra uma
     // prévia (10) que rola na horizontal; "Ver todos" abre a categoria cheia.
-    for (const catId of CATEGORY_IDS) {
+    for (const catId of allCatIds) {
       const list = places.filter((p) => p.category === catId)
       if (!list.length) continue
-      const c = cats[catId]
+      const c = catInfo(catId)
       blocks.push(
         <section key={catId} className="space-y-2">
           <div className="flex items-center justify-between px-1">
@@ -827,7 +842,7 @@ export default function Feed() {
       <div className="mt-3">
         <div className="max-w-2xl mx-auto px-4 py-2.5">
           <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
-            {FILTERS.map(({ id, label, Icon }) => {
+            {filtersAll.map(({ id, label, Icon }) => {
               const active = filter === id
               return (
                 <button
