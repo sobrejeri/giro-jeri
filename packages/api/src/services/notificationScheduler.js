@@ -62,8 +62,44 @@ async function runCartReminders() {
   }
 }
 
+// Carrinho montado mas NÃO solicitado (097): o app manda um snapshot leve
+// enquanto há itens; ao solicitar/esvaziar, o snapshot vai a 0. Lembra quem
+// deixou o carrinho parado por 3h+, no máximo 1x por "abandono" (reminded_at).
+// Uma nova mexida no carrinho zera o reminded_at (a rota faz isso) e reabre a
+// janela, então quem volta e some de novo é lembrado outra vez.
+async function runCartPending() {
+  const tpl = await getTemplate('cart_pending')
+  if (!tpl?.enabled) return
+  const agora = Date.now()
+  const min = new Date(agora - 72 * HORA).toISOString() // ignora carrinhos velhos
+  const max = new Date(agora - 3 * HORA).toISOString()  // espera 3h de inatividade
+  const { data: carts } = await supabase
+    .from('cart_snapshots')
+    .select('user_id, item_count, updated_at, reminded_at')
+    .gt('item_count', 0)
+    .lte('updated_at', max)
+    .gte('updated_at', min)
+    .is('reminded_at', null)
+  for (const c of carts || []) {
+    if (!c.user_id) continue
+    // Trava o lembrete ANTES de enviar (condição no reminded_at nulo) para não
+    // duplicar entre ticks/reinícios concorrentes.
+    const { data: claimed } = await supabase
+      .from('cart_snapshots')
+      .update({ reminded_at: new Date().toISOString() })
+      .eq('user_id', c.user_id)
+      .is('reminded_at', null)
+      .gt('item_count', 0)
+      .select('user_id')
+      .maybeSingle()
+    if (!claimed) continue
+    await notifyUser({ userId: c.user_id, templateKey: 'cart_pending', title: tpl.title, body: tpl.body })
+  }
+}
+
 async function tick() {
   try { await runCartReminders() } catch (e) { console.error('[scheduler] cart:', e.message) }
+  try { await runCartPending() } catch (e) { console.error('[scheduler] cart-pending:', e.message) }
   try {
     // Aniversário uma vez ao dia, por volta das 9h (Fortaleza); o dedupe por
     // ano garante 1x mesmo se o horário casar em ticks seguidos.

@@ -19,6 +19,27 @@ const serviceLabelBk = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
 const router = Router();
 
+// ── POST /api/bookings/cart-snapshot ───────────────────
+// Resumo leve do carrinho (que vive no localStorage) para o agendador poder
+// lembrar o cliente de finalizar. item_count=0 (ou carrinho vazio) limpa o
+// lembrete. Best-effort: se a tabela não existir (migração 097), responde ok.
+router.post('/cart-snapshot', authenticate, async (req, res) => {
+  try {
+    const item_count = Math.max(0, Math.min(99, Number(req.body?.item_count) || 0));
+    const summary    = String(req.body?.summary || '').slice(0, 300) || null;
+    // Zera o reminded_at sempre que o carrinho muda: uma nova mexida reabre a
+    // janela de lembrete (não spamma quem só ajustou algo em seguida — o
+    // agendador ainda espera 3h de inatividade).
+    const row = { user_id: req.user.id, item_count, summary, updated_at: new Date().toISOString(), reminded_at: null };
+    const { error } = await supabase.from('cart_snapshots').upsert(row, { onConflict: 'user_id' });
+    if (error && error.code !== '42P01') throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[cart-snapshot] falhou:', err.message);
+    res.json({ ok: false });
+  }
+});
+
 // ── Schema de criação de reserva ───────────────────────
 const createBookingSchema = z.object({
   region_id:         z.string().uuid(),

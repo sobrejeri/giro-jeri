@@ -182,7 +182,7 @@ router.post('/push-test', authenticate, async (req, res) => {
 // =============================================================================
 
 const TEMPLATE_KEYS = [
-  'welcome', 'birthday', 'cart_reminder',
+  'welcome', 'birthday', 'cart_reminder', 'cart_pending',
   'admin_new_user', 'admin_payment_approved', 'admin_payment_rejected',
 ]
 

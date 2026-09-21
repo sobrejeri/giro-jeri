@@ -15,6 +15,7 @@ export const DEFAULT_TEMPLATES = {
   welcome:       { enabled: true, title: 'Bem-vindo(a) à Turiva! 🌴', body: 'Sua conta está pronta. Explore passeios e transfers em Jericoacoara e viva momentos inesquecíveis.' },
   birthday:      { enabled: true, title: 'Feliz aniversário! 🎉',      body: 'A Turiva deseja um dia incrível! Que tal comemorar com um passeio em Jeri?' },
   cart_reminder: { enabled: true, title: 'Sua reserva está esperando 🛒', body: 'Você tem uma reserva aguardando pagamento. Conclua antes que a vaga seja liberada!' },
+  cart_pending:  { enabled: true, title: 'Você deixou itens no carrinho 🛒', body: 'Volte e finalize sua solicitação em Jericoacoara — é rápido e sua reserva fica garantida!' },
   // Avisos internos do admin (estilo Hotmart) — os textos abaixo são só o
   // fallback; a mensagem real é montada com os dados do evento no código.
   admin_new_user:          { enabled: true, title: 'Novo cadastro 👤',        body: 'Um novo usuário acabou de criar conta na Turiva.' },

@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { api } from '../lib/api'
 
 // ── Carrinho persistido ────────────────────────────────────────
 // Guarda no aparelho (localStorage) os rascunhos de combinação que o turista
@@ -23,6 +24,22 @@ export function CartProvider({ children }) {
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)) } catch {}
+  }, [items])
+
+  // Sincroniza um resumo leve do carrinho com o servidor (só logado), para o
+  // lembrete automático de "carrinho não finalizado". Debounce para não bater a
+  // cada tecla; best-effort, nunca atrapalha a navegação. A primeira montagem
+  // também sincroniza — inclusive o carrinho vazio, o que limpa um lembrete
+  // pendente de quem já solicitou/esvaziou.
+  const primeiraSync = useRef(true)
+  useEffect(() => {
+    if (!localStorage.getItem('giro_token')) return // só clientes logados
+    const t = setTimeout(() => {
+      const summary = items.slice(0, 5).map((i) => i.name).filter(Boolean).join(', ')
+      api.cartSnapshot({ item_count: items.length, summary }).catch(() => {})
+    }, primeiraSync.current ? 1500 : 2500)
+    primeiraSync.current = false
+    return () => clearTimeout(t)
   }, [items])
 
   // Cria/atualiza o rascunho de um serviço (upsert pela chave id)
