@@ -453,12 +453,28 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
 
     let { data, error } = await req.supabase
       .from('tours').update(update).eq('id', req.params.id).select().single();
-    if (error?.code === '42703' && update.category_ids !== undefined) {
-      const { category_ids: _drop, ...semArray } = update;
+    // Coluna ausente (migração pendente): tenta de novo sem a coluna problemática
+    // em vez de derrubar o salvamento inteiro. Cobre category_ids, region_ids e
+    // as janelas de operação — qualquer uma pode faltar num ambiente atrasado.
+    if (error?.code === '42703') {
+      const semColunas = { ...update };
+      delete semColunas.category_ids;
+      delete semColunas.region_ids;
+      delete semColunas.service_window_start;
+      delete semColunas.service_window_end;
+      delete semColunas.is_exclusive;
       ({ data, error } = await req.supabase
-        .from('tours').update(semArray).eq('id', req.params.id).select().single());
+        .from('tours').update(semColunas).eq('id', req.params.id).select().single());
     }
-    if (error || !data) return res.status(404).json({ error: 'Passeio não encontrado' });
+    // Distingue erro real (banco) de passeio inexistente — antes tudo virava
+    // "Passeio não encontrado" e escondia a causa (ex.: coluna/constraint).
+    if (error) {
+      console.error('[catalog] update tour falhou id=%s code=%s msg=%s', req.params.id, error.code, error.message);
+      // PGRST116 = 0 linhas no .single() → realmente não existe.
+      if (error.code === 'PGRST116') return res.status(404).json({ error: 'Passeio não encontrado' });
+      return res.status(500).json({ error: `Falha ao salvar: ${error.message}` });
+    }
+    if (!data) return res.status(404).json({ error: 'Passeio não encontrado' });
     res.json(data);
   } catch (err) { next(err); }
 });
