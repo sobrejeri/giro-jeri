@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import NovaSolicitacaoPopup from '../NovaSolicitacaoPopup'
+import PushPrompt from '../PushPrompt'
 
 export default function Layout() {
   const [navOpen, setNavOpen] = useState(false)
@@ -18,6 +19,8 @@ export default function Layout() {
       </div>
       {/* Aviso flutuante de nova solicitação — em qualquer tela do operador. */}
       <NovaSolicitacaoPopup />
+      {/* Convite para ativar notificações no celular. */}
+      <PushPrompt />
     </div>
   )
 }
