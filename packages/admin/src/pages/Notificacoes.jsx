@@ -15,6 +15,11 @@ const TEMPLATE_LABELS = {
   admin_payment_approved: { label: 'Admin · Recebimento aprovado', hint: 'Avisa os admins quando um pagamento é aprovado (valor + método).' },
   admin_payment_rejected: { label: 'Admin · Pagamento recusado', hint: 'Avisa os admins quando uma tentativa de pagamento é recusada.' },
 }
+const TARGETS = [
+  { value: 'turista',  label: 'Turistas (app do cliente)' },
+  { value: 'operador', label: 'Operadores (app da cooperativa)' },
+  { value: 'admin',    label: 'Admins (painel)' },
+]
 const AUDIENCES = [
   { value: 'all',         label: 'Todos os turistas' },
   { value: 'subscribed',  label: 'Só quem ativou notificações' },
@@ -73,18 +78,30 @@ export default function Notificacoes() {
   const qc = useQueryClient()
   const { data: history } = useQuery({ queryKey: ['notif-broadcasts'], queryFn: () => api.getBroadcasts() })
 
-  const [msg, setMsg] = useState({ title: 'Turiva', body: '', audience: 'all' })
+  const [msg, setMsg] = useState({ title: 'Turiva', body: '', target: 'turista', audience: 'all' })
   const [result, setResult] = useState('')
   const broadcast = useMutation({
     mutationFn: () => api.broadcastNotif(msg),
     onSuccess:  (r) => { setResult(`Enviado para ${r?.alvo ?? 0} usuário(s).`); qc.invalidateQueries({ queryKey: ['notif-broadcasts'] }) },
     onError:    (e) => setResult(e?.message || 'Falha ao enviar.'),
   })
-  const audienceLabel = (v) => AUDIENCES.find((a) => a.value === v)?.label || v
+  // Histórico grava "target:audience"; mostra um rótulo amigável.
+  const audienceLabel = (v) => {
+    const [tgt, aud] = String(v || '').includes(':') ? v.split(':') : ['turista', v]
+    const t = TARGETS.find((x) => x.value === tgt)?.label || tgt
+    if (tgt !== 'turista') return t
+    return `${t} · ${AUDIENCES.find((a) => a.value === aud)?.label || aud}`
+  }
+
+  function destinoLabel() {
+    const t = TARGETS.find((x) => x.value === msg.target)?.label || msg.target
+    if (msg.target !== 'turista') return t
+    return `${t} · ${AUDIENCES.find((a) => a.value === msg.audience)?.label}`
+  }
 
   function enviar() {
     if (!msg.body.trim()) { setResult('Escreva a mensagem.'); return }
-    if (!confirm(`Enviar esta notificação para "${AUDIENCES.find((a) => a.value === msg.audience)?.label}"?`)) return
+    if (!confirm(`Enviar esta notificação para "${destinoLabel()}"?`)) return
     setResult('')
     broadcast.mutate()
   }
@@ -107,10 +124,16 @@ export default function Notificacoes() {
           <Textarea label="Mensagem" rows={3} value={msg.body} maxLength={400}
             placeholder="Ex: Promoção de feriado! Passeios com 10% OFF hoje."
             onChange={(e) => setMsg({ ...msg, body: e.target.value })} />
-          <Select label="Público" value={msg.audience}
-            onChange={(e) => setMsg({ ...msg, audience: e.target.value })}>
-            {AUDIENCES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+          <Select label="Destino (qual app)" value={msg.target}
+            onChange={(e) => setMsg({ ...msg, target: e.target.value })}>
+            {TARGETS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </Select>
+          {msg.target === 'turista' && (
+            <Select label="Público" value={msg.audience}
+              onChange={(e) => setMsg({ ...msg, audience: e.target.value })}>
+              {AUDIENCES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+            </Select>
+          )}
           <div className="flex items-center gap-3">
             <Button onClick={enviar} disabled={broadcast.isPending}>
               <Send size={16} /> {broadcast.isPending ? 'Enviando…' : 'Enviar agora'}

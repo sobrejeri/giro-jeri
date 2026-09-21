@@ -224,12 +224,24 @@ router.post('/broadcast', authenticate, requireAdmin, async (req, res) => {
     const title = String(req.body?.title || 'Turiva').slice(0, 120)
     const body  = String(req.body?.body || '').trim().slice(0, 400)
     const audience = req.body?.audience || 'all'
+    // Destino = qual público/PWA recebe. 'turista' (padrão) mantém os
+    // sub-filtros de audiência; 'operador'/'admin' vão para todos do tipo.
+    const target = ['turista', 'operador', 'admin'].includes(req.body?.target) ? req.body.target : 'turista'
     if (!body) return res.status(400).json({ error: 'Escreva a mensagem' })
 
     let userIds = []
-    if (audience === 'subscribed') {
-      const { data } = await supabase.from('push_subscriptions').select('user_id')
-      userIds = [...new Set((data || []).map((r) => r.user_id).filter(Boolean))]
+    if (target === 'operador') {
+      const { data: us } = await supabase.from('users').select('id').eq('user_type', 'operator').eq('is_active', true)
+      userIds = (us || []).map((u) => u.id)
+    } else if (target === 'admin') {
+      const { data: us } = await supabase.from('users').select('id').eq('user_type', 'admin').eq('is_active', true)
+      userIds = (us || []).map((u) => u.id)
+    } else if (audience === 'subscribed') {
+      // Turistas que ativaram push (inscrições do app do turista).
+      const { data } = await supabase.from('push_subscriptions').select('user_id, app')
+      const tur = new Set((data || []).filter((r) => !r.app || r.app === 'turista').map((r) => r.user_id).filter(Boolean))
+      const { data: us } = await supabase.from('users').select('id').eq('user_type', 'tourist')
+      userIds = (us || []).map((u) => u.id).filter((id) => tur.has(id))
     } else if (audience === 'with_booking' || audience === 'no_booking') {
       const { data: us } = await supabase.from('users').select('id').eq('user_type', 'tourist')
       const todos = (us || []).map((u) => u.id)
@@ -241,12 +253,14 @@ router.post('/broadcast', authenticate, requireAdmin, async (req, res) => {
       userIds = (us || []).map((u) => u.id)
     }
 
+    // Push só no PWA do destino escolhido.
+    const onlyApps = [target]
     // Fire-and-forget em lotes pequenos para não travar a resposta.
     let enviados = 0
-    for (const uid of userIds) { notifyUser({ userId: uid, title, body }); enviados += 1 }
+    for (const uid of userIds) { notifyUser({ userId: uid, title, body, onlyApps }); enviados += 1 }
     // Registra no histórico (best-effort; ignora se a migração 093 não rodou).
     supabase.from('notification_broadcasts')
-      .insert({ title, body, audience, sent_count: enviados, created_by: req.user.id })
+      .insert({ title, body, audience: `${target}:${audience}`, sent_count: enviados, created_by: req.user.id })
       .then(() => {}, () => {})
     res.json({ ok: true, alvo: enviados })
   } catch (err) {
