@@ -29,6 +29,14 @@ function hasDispatch(b) {
   return !!(a && (a.real_vehicle_text || a.driver_name))
 }
 
+// Veículo(s) que o cliente escolheu na solicitação (ex.: "2x Buggy").
+function veiculoDaReserva(b) {
+  return (b?.booking_vehicles || [])
+    .map((v) => `${v.quantity > 1 ? v.quantity + 'x ' : ''}${v.vehicle_name_snapshot || ''}`.trim())
+    .filter(Boolean)
+    .join(' + ')
+}
+
 function BookingRow({ b, onDispatch, onStart, onComplete, operador }) {
   const dateStr = b.service_date
     ? format(new Date(b.service_date + 'T12:00:00'), "dd/MM", { locale: ptBR }) : ''
@@ -276,7 +284,9 @@ export default function Despacho() {
       // desfaz nada: o despacho está feito e o cliente/motorista já receberam
       // as mensagens de texto.
       const snapshot = modal
-      const formSnap = { ...form }
+      // Usa o corpo enviado (vars) — ele já traz o real_vehicle_text combinado
+      // (veículo + placa), então a OS/PDF mostram modelo e placa.
+      const formSnap = { ...form, ...vars }
       ;(async () => {
         try {
           const pdf = await orderPDFBase64(snapshot, formSnap, operador)
@@ -320,16 +330,11 @@ export default function Despacho() {
 
   function handleDispatch(booking) {
     const assign = booking.operational_assignments?.[0]
-    // Puxa o veículo escolhido pelo cliente na solicitação como sugestão inicial
-    // (item 10) — a coop confirma/ajusta com o modelo/placa reais.
-    const selectedVehicle = (booking.booking_vehicles || [])
-      .map((v) => `${v.quantity > 1 ? v.quantity + 'x ' : ''}${v.vehicle_name_snapshot || ''}`.trim())
-      .filter(Boolean)
-      .join(' + ')
     setModal(booking)
     setForm({
       ...FORM_VAZIO,
-      real_vehicle_text:   assign?.real_vehicle_text   || selectedVehicle || '',
+      // Campo agora é só a PLACA — o veículo escolhido aparece no Resumo.
+      real_vehicle_text:   assign?.real_vehicle_text   || '',
       driver_name:         assign?.driver_name         || '',
       dispatch_notes:      assign?.dispatch_notes      || '',
       driver_phone:        assign?.driver_phone        || '',
@@ -361,10 +366,18 @@ export default function Despacho() {
     // chave PIX e tipo). Só Observações fica livre. Espelha o `podeDespachar`
     // usado para habilitar o botão — os dois têm de concordar.
     if (!podeDespachar(form)) return
+    // Combina o veículo escolhido (Resumo) com a placa digitada, para a OS/PDF
+    // continuarem mostrando modelo + placa (ex.: "2x Buggy · GKR-1234"). Se a
+    // placa já contiver o veículo (edição de um despacho antigo), não duplica.
+    const veic  = veiculoDaReserva(modal)
+    const placa = form.real_vehicle_text.trim()
+    const real_vehicle_text = (veic && !placa.toLowerCase().includes(veic.toLowerCase()))
+      ? `${veic} · ${placa}`
+      : placa
     // O despacho vai SOZINHO, com o mesmo corpo de sempre. O PDF da OS é um
     // extra e sai numa chamada separada, depois (ver onSuccess do assignMut) —
     // assim nada relacionado ao anexo pode atrasar ou impedir o despacho.
-    assignMut.mutate({ id: modal.id, ...form })
+    assignMut.mutate({ id: modal.id, ...form, real_vehicle_text })
   }
 
   // Só reservas PAGAS entram no despacho (não se despacha antes do pagamento);
@@ -493,6 +506,12 @@ export default function Despacho() {
                     <span className="font-medium text-gray-800">{modal.people_count} pessoas</span>
                   </div>
                 )}
+                {veiculoDaReserva(modal) && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-gray-500 shrink-0">Veículo</span>
+                    <span className="font-medium text-gray-800 text-right">{veiculoDaReserva(modal)}</span>
+                  </div>
+                )}
                 {(modal.pickup_place_name || modal.origin_text) && (
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-gray-500 shrink-0">Embarque</span>
@@ -516,7 +535,7 @@ export default function Despacho() {
               </div>
             </div>
           )}
-          <Input label="Veículo (modelo / placa / cor) *" placeholder="Ex: Hilux Branca · GKR-1234"
+          <Input label="Placa do veículo *" placeholder="Ex: GKR-1234"
             value={form.real_vehicle_text} required
             onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })} />
           {/* Quem já rodou por este operador. Um toque traz nome, telefone,
