@@ -122,7 +122,7 @@ export function PlaceInput({ value, onChange, onPick, placeholder, dotClass }) {
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-y-auto max-h-[46vh]">
           {results.map(r => (
             <button key={r.id} onClick={() => handlePick(r)}
               className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0"

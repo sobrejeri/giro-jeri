@@ -510,7 +510,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
             </button>
           </div>
 
-          <div className="overflow-y-auto px-5 pb-[max(20px,env(safe-area-inset-bottom))] space-y-3">
+          <div className={`px-5 pb-[max(20px,env(safe-area-inset-bottom))] space-y-3 ${focus === 'local' ? 'flex-1 overflow-visible' : 'overflow-y-auto'}`}>
             {/* ── Horário: grade de horários válidos; toca e fecha ── */}
             {focus === 'time' && (
               <>
