@@ -6,6 +6,7 @@ import TopNav from './TopNav'
 import BottomNav from './BottomNav'
 import RegionPicker from '../RegionPicker'
 import CartFab from '../CartFab'
+import PushPrompt from '../PushPrompt'
 import OfflineBanner from '../OfflineBanner'
 import PullToRefresh from '../PullToRefresh'
 import { getPartner, clearPartner } from '../../lib/partner'
@@ -70,6 +71,7 @@ export default function Layout() {
 
       <CartFab />
       <BottomNav />
+      <PushPrompt />
       <RegionPicker />
     </div>
   )
