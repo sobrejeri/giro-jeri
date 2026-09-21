@@ -67,13 +67,17 @@ export default function Notificacoes() {
     queryFn:  () => api.getNotifTemplates(),
   })
 
+  const qc = useQueryClient()
+  const { data: history } = useQuery({ queryKey: ['notif-broadcasts'], queryFn: () => api.getBroadcasts() })
+
   const [msg, setMsg] = useState({ title: 'Turiva', body: '', audience: 'all' })
   const [result, setResult] = useState('')
   const broadcast = useMutation({
     mutationFn: () => api.broadcastNotif(msg),
-    onSuccess:  (r) => setResult(`Enviado para ${r?.alvo ?? 0} usuário(s).`),
+    onSuccess:  (r) => { setResult(`Enviado para ${r?.alvo ?? 0} usuário(s).`); qc.invalidateQueries({ queryKey: ['notif-broadcasts'] }) },
     onError:    (e) => setResult(e?.message || 'Falha ao enviar.'),
   })
+  const audienceLabel = (v) => AUDIENCES.find((a) => a.value === v)?.label || v
 
   function enviar() {
     if (!msg.body.trim()) { setResult('Escreva a mensagem.'); return }
@@ -113,6 +117,29 @@ export default function Notificacoes() {
           <p className="text-[11px] text-gray-500">Só chega no aparelho de quem ativou as notificações; todos veem na central (sininho).</p>
         </CardBody>
       </Card>
+
+      {/* Histórico de envios manuais */}
+      {(history || []).length > 0 && (
+        <Card>
+          <CardBody className="space-y-2">
+            <p className="font-semibold text-gray-100">Últimos envios</p>
+            <div className="divide-y divide-gray-800">
+              {history.map((h) => (
+                <div key={h.id} className="py-2 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-200 font-medium truncate">{h.title}</p>
+                    <p className="text-xs text-gray-500 line-clamp-1">{h.body}</p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">
+                      {audienceLabel(h.audience)} · {new Date(h.created_at).toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                  <span className="text-[11px] text-gray-400 shrink-0">{h.sent_count} envio(s)</span>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Automáticas */}
       <div>

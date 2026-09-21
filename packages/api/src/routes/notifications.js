@@ -224,10 +224,29 @@ router.post('/broadcast', authenticate, requireAdmin, async (req, res) => {
     // Fire-and-forget em lotes pequenos para não travar a resposta.
     let enviados = 0
     for (const uid of userIds) { notifyUser({ userId: uid, title, body }); enviados += 1 }
+    // Registra no histórico (best-effort; ignora se a migração 093 não rodou).
+    supabase.from('notification_broadcasts')
+      .insert({ title, body, audience, sent_count: enviados, created_by: req.user.id })
+      .then(() => {}, () => {})
     res.json({ ok: true, alvo: enviados })
   } catch (err) {
     console.error('[notifications] broadcast falhou:', err.message)
     res.status(500).json({ error: 'Falha ao enviar' })
+  }
+})
+
+// ── GET /api/notifications/broadcasts (admin) — histórico dos últimos envios ──
+router.get('/broadcasts', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('notification_broadcasts')
+      .select('id, title, body, audience, sent_count, created_at')
+      .order('created_at', { ascending: false })
+      .limit(30)
+    if (error) throw error
+    res.json(data || [])
+  } catch {
+    res.json([]) // tabela ausente → lista vazia
   }
 })
 

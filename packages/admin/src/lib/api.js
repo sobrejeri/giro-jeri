@@ -112,6 +112,7 @@ export const api = {
   getNotifTemplates: ()            => request('/api/notifications/templates'),
   saveNotifTemplate: (key, body)   => request(`/api/notifications/templates/${key}`, { method: 'PUT', body }),
   broadcastNotif:    (body)        => request('/api/notifications/broadcast', { method: 'POST', body }),
+  getBroadcasts:     ()            => request('/api/notifications/broadcasts'),
 
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
