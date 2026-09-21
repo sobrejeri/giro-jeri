@@ -29,6 +29,16 @@ services:
       # transfers via Places API (New). Habilite "Places API (New)" no projeto.
       - key: GOOGLE_MAPS_API_KEY
         sync: false
+      # Web Push (notificações no aparelho). Gere as chaves com:
+      #   npx web-push generate-vapid-keys
+      # e cole os valores aqui no painel do Render. Sem elas, o app não pede
+      # permissão nem envia notificação. VAPID_SUBJECT é um mailto de contato.
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
       # Mercado Pago — produção. Token em mercadopago.com.br > Suas integrações.
       # O código lê MP_ACCESS_TOKEN (services/mercadoPago.js).
       - key: MP_ACCESS_TOKEN

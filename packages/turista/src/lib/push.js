@@ -21,6 +21,20 @@ export function pushPermission() {
   return pushSupported() ? Notification.permission : 'unsupported'
 }
 
+// iPhone/iPad: o Web Push SÓ funciona com o app instalado na Tela de Início.
+export function isIOS() {
+  if (typeof navigator === 'undefined') return false
+  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+}
+
+// App aberto pelo ícone (PWA instalado) x aba do navegador.
+export function isStandalone() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia?.('(display-mode: standalone)').matches
+    || window.navigator.standalone === true
+}
+
 // Registra o service worker, pede permissão e inscreve o navegador no push.
 // Retorna { ok, reason }. Nunca lança.
 export async function enablePush() {

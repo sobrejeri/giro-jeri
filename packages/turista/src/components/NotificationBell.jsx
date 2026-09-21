@@ -6,7 +6,7 @@ import { Bell, BellRing } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
-import { enablePush, pushSupported, pushPermission } from '../lib/push'
+import { enablePush, pushSupported, pushPermission, isIOS, isStandalone } from '../lib/push'
 import { useAuth } from '../contexts/AuthContext'
 
 function timeAgo(iso) {
@@ -136,6 +136,18 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
               {perm === 'denied' && (
                 <p className="text-[10px] text-gray-400 text-center mt-1">{t('notifCmp.permissionDenied')}</p>
               )}
+            </div>
+          )}
+          {/* iPhone: push só existe com o app instalado na Tela de Início. Se
+              está no Safari (não instalado), ensina a instalar. */}
+          {!pushSupported() && isIOS() && !isStandalone() && (
+            <div className="px-4 py-3 border-t border-gray-50 bg-gray-50/40 text-center">
+              <p className="text-[12px] font-bold text-gray-800 flex items-center justify-center gap-1.5">
+                <BellRing size={13} className="text-brand" /> {t('notifCmp.iosInstallTitle', 'Receba avisos no celular')}
+              </p>
+              <p className="text-[11px] text-gray-500 mt-1 leading-snug">
+                {t('notifCmp.iosInstallBody', 'No iPhone, toque em Compartilhar e em "Adicionar à Tela de Início". Abra o app pelo ícone e ative as notificações aqui.')}
+              </p>
             </div>
           )}
         </div>

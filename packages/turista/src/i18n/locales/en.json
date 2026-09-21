@@ -1443,6 +1443,8 @@
     "empty": "No notifications yet",
     "enabling": "Enabling…",
     "enablePush": "Enable device notifications",
+    "iosInstallTitle": "Get alerts on your phone",
+    "iosInstallBody": "On iPhone, tap Share and \"Add to Home Screen\". Open the app from the icon and enable notifications here.",
     "permissionDenied": "Permission denied — enable it in your browser settings."
   },
   "pickersCmp": {

@@ -1443,6 +1443,8 @@
     "empty": "Aún no hay notificaciones",
     "enabling": "Activando…",
     "enablePush": "Activar notificaciones en el dispositivo",
+    "iosInstallTitle": "Recibe avisos en el móvil",
+    "iosInstallBody": "En iPhone, toca Compartir y \"Añadir a pantalla de inicio\". Abre la app desde el ícono y activa las notificaciones aquí.",
     "permissionDenied": "Permiso denegado — actívalo en la configuración del navegador."
   },
   "pickersCmp": {
