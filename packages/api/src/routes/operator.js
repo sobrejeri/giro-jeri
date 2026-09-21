@@ -64,6 +64,27 @@ async function mpGate(operatorId) {
   return 'Conecte sua conta Mercado Pago no Perfil para aceitar corridas — é por ela que você recebe a sua parte de cada reserva.';
 }
 
+// Bloqueia aceitar uma NOVA solicitação enquanto o operador tiver uma reserva
+// já aceita e ainda AGUARDANDO O PAGAMENTO do cliente. Assim ele foca em uma de
+// cada vez e não segura várias vagas paradas. Admin não é barrado. Retorna a
+// mensagem de bloqueio, ou null quando pode aceitar. Nunca lança.
+async function pagamentoPendenteGate(operatorId) {
+  try {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('booking_code')
+      .eq('operator_id', operatorId)
+      .in('status_commercial', ['awaiting_payment', 'payment_failed'])
+      .limit(1);
+    if (error) return null;              // instabilidade não pode barrar trabalho
+    const pend = data?.[0];
+    if (!pend) return null;
+    return `Você tem a reserva ${pend.booking_code} aguardando o pagamento do cliente. Conclua ou aguarde o pagamento antes de aceitar uma nova solicitação.`;
+  } catch {
+    return null;
+  }
+}
+
 // Rótulo amigável do serviço para o texto da notificação
 const serviceLabel = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
@@ -963,6 +984,8 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
     if (req.user?.user_type !== 'admin') {
       const bloqueio = await mpGate(req.user.id);
       if (bloqueio) return res.status(409).json({ error: bloqueio });
+      const pend = await pagamentoPendenteGate(req.user.id);
+      if (pend) return res.status(409).json({ error: pend });
     }
 
     const isAdmin = req.user?.user_type === 'admin';
@@ -1080,6 +1103,8 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
     if (!isAdmin) {
       const bloqueio = await mpGate(req.user.id)
       if (bloqueio) return res.status(409).json({ error: bloqueio })
+      const pend = await pagamentoPendenteGate(req.user.id)
+      if (pend) return res.status(409).json({ error: pend })
     }
 
     const { data: groupRows, error: gErr } = await supabase
@@ -1165,6 +1190,8 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
     if (!isAdmin) {
       const bloqueio = await mpGate(req.user.id)
       if (bloqueio) return res.status(409).json({ error: bloqueio })
+      const pend = await pagamentoPendenteGate(req.user.id)
+      if (pend) return res.status(409).json({ error: pend })
     }
 
     // Motor de pernas ON: pedidos com booking_legs (privativo/transfer de

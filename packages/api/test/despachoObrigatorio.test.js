@@ -9,8 +9,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 
+// A validação e o formulário de despacho vivem no componente compartilhado
+// DespacharModal, usado pelas telas Despacho e Operações (Dashboard).
 const fonte = fs.readFileSync(
-  new URL('../../operador/src/pages/Despacho.jsx', import.meta.url), 'utf8')
+  new URL('../../operador/src/components/DespacharModal.jsx', import.meta.url), 'utf8')
 
 const i = fonte.indexOf('function podeDespachar')
 assert.notEqual(i, -1, 'a validação centralizada precisa existir')
