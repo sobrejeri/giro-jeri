@@ -3,6 +3,7 @@ import { supabase }     from '../supabase.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { isWhatsappEnabled, sendTestMessage } from '../services/whatsapp.js'
 import { sendPushToUser } from '../services/webpush.js'
+import { notifyUser, getTemplate, DEFAULT_TEMPLATES } from '../services/notify.js'
 
 const router = Router()
 
@@ -156,6 +157,77 @@ router.post('/push-test', authenticate, async (req, res) => {
   } catch (err) {
     console.error('[notifications] push-test falhou:', err.message)
     res.status(500).json({ error: 'Falha ao enviar teste' })
+  }
+})
+
+// =============================================================================
+// ADMIN — modelos automáticos + envio manual (broadcast)
+// =============================================================================
+
+const TEMPLATE_KEYS = ['welcome', 'birthday', 'cart_reminder']
+
+// ── GET /api/notifications/templates (admin) ──
+router.get('/templates', authenticate, requireAdmin, async (_req, res) => {
+  const out = []
+  for (const key of TEMPLATE_KEYS) {
+    const t = await getTemplate(key)
+    out.push({ key, enabled: t?.enabled ?? true, title: t?.title || '', body: t?.body || '' })
+  }
+  res.json(out)
+})
+
+// ── PUT /api/notifications/templates/:key (admin) ──
+router.put('/templates/:key', authenticate, requireAdmin, async (req, res) => {
+  const { key } = req.params
+  if (!TEMPLATE_KEYS.includes(key)) return res.status(400).json({ error: 'Modelo inválido' })
+  const enabled = req.body?.enabled !== false
+  const title = String(req.body?.title || DEFAULT_TEMPLATES[key].title).slice(0, 120)
+  const body  = String(req.body?.body  || DEFAULT_TEMPLATES[key].body).slice(0, 400)
+  try {
+    const { data, error } = await supabase
+      .from('notification_templates')
+      .upsert({ key, enabled, title, body, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      .select().single()
+    if (error) throw error
+    res.json(data)
+  } catch (err) {
+    console.error('[notifications] update template falhou:', err.message)
+    res.status(500).json({ error: 'Falha ao salvar (rodou a migração 092?)' })
+  }
+})
+
+// ── POST /api/notifications/broadcast (admin) ──
+// Envia um push + notificação na central para um público.
+//   audience: 'all' | 'subscribed' | 'with_booking' | 'no_booking'
+router.post('/broadcast', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const title = String(req.body?.title || 'Turiva').slice(0, 120)
+    const body  = String(req.body?.body || '').trim().slice(0, 400)
+    const audience = req.body?.audience || 'all'
+    if (!body) return res.status(400).json({ error: 'Escreva a mensagem' })
+
+    let userIds = []
+    if (audience === 'subscribed') {
+      const { data } = await supabase.from('push_subscriptions').select('user_id')
+      userIds = [...new Set((data || []).map((r) => r.user_id).filter(Boolean))]
+    } else if (audience === 'with_booking' || audience === 'no_booking') {
+      const { data: us } = await supabase.from('users').select('id').eq('user_type', 'tourist')
+      const todos = (us || []).map((u) => u.id)
+      const { data: bk } = await supabase.from('bookings').select('user_id')
+      const comReserva = new Set((bk || []).map((b) => b.user_id).filter(Boolean))
+      userIds = todos.filter((id) => audience === 'with_booking' ? comReserva.has(id) : !comReserva.has(id))
+    } else {
+      const { data: us } = await supabase.from('users').select('id').eq('user_type', 'tourist')
+      userIds = (us || []).map((u) => u.id)
+    }
+
+    // Fire-and-forget em lotes pequenos para não travar a resposta.
+    let enviados = 0
+    for (const uid of userIds) { notifyUser({ userId: uid, title, body }); enviados += 1 }
+    res.json({ ok: true, alvo: enviados })
+  } catch (err) {
+    console.error('[notifications] broadcast falhou:', err.message)
+    res.status(500).json({ error: 'Falha ao enviar' })
   }
 })
 

@@ -108,6 +108,11 @@ export const api = {
   diagnosticarCartao: (operatorId) =>
     request(`/api/payments/diagnostico-cartao${operatorId ? `?operator_id=${operatorId}` : ''}`),
 
+  // Notificações (modelos automáticos + envio manual)
+  getNotifTemplates: ()            => request('/api/notifications/templates'),
+  saveNotifTemplate: (key, body)   => request(`/api/notifications/templates/${key}`, { method: 'PUT', body }),
+  broadcastNotif:    (body)        => request('/api/notifications/broadcast', { method: 'POST', body }),
+
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),

@@ -18,6 +18,7 @@ import Reservas from './pages/Reservas'
 import Feed from './pages/Feed'
 import Estabelecimentos from './pages/Estabelecimentos'
 import Stories from './pages/Stories'
+import Notificacoes from './pages/Notificacoes'
 import Perfil from './pages/Perfil'
 import Repasses from './pages/Repasses'
 
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="financeiro"   element={<Financeiro />} />
         <Route path="repasses"     element={<Repasses />} />
         <Route path="auditoria"    element={<Auditoria />} />
+        <Route path="notificacoes"  element={<Notificacoes />} />
         <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="perfil"        element={<Perfil />} />
       </Route>

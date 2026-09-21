@@ -10,6 +10,7 @@ import { validateUsername, normalizeUsername } from '../lib/username.js';
 import { notifyPasswordReset, linkPasswordReset } from '../services/whatsapp.js';
 import { sendPasswordReset }                 from '../services/email.js';
 import { requestOtp, maskDestination }       from '../services/otp.js';
+import { notifyUser, getTemplate }           from '../services/notify.js';
 import { buildChannels }                     from './otp.js';
 
 const router = Router();
@@ -193,6 +194,12 @@ router.post('/register', async (req, res, next) => {
       console.error('[register] profileError:', profileError.message);
       return res.status(400).json({ error: profileError.message });
     }
+
+    // Boas-vindas: notificação na central (e push, se já houver inscrição).
+    // Fire-and-forget — não atrasa nem quebra o cadastro.
+    getTemplate('welcome').then((tpl) => {
+      if (tpl?.enabled) notifyUser({ userId: profile.id, templateKey: 'welcome', title: tpl.title, body: tpl.body })
+    }).catch(() => {})
 
     // ── Cadastro direto (sem OTP): abre a sessão e já entra logado ──────
     if (!REQUIRE_SIGNUP_VERIFICATION) {

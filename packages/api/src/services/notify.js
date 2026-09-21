@@ -9,6 +9,28 @@
 
 import { supabase } from '../supabase.js'
 
+// Textos padrão das notificações automáticas — usados como fallback caso a
+// tabela notification_templates ainda não exista (migração 092 não aplicada).
+export const DEFAULT_TEMPLATES = {
+  welcome:       { enabled: true, title: 'Bem-vindo(a) à Turiva! 🌴', body: 'Sua conta está pronta. Explore passeios e transfers em Jericoacoara e viva momentos inesquecíveis.' },
+  birthday:      { enabled: true, title: 'Feliz aniversário! 🎉',      body: 'A Turiva deseja um dia incrível! Que tal comemorar com um passeio em Jeri?' },
+  cart_reminder: { enabled: true, title: 'Sua reserva está esperando 🛒', body: 'Você tem uma reserva aguardando pagamento. Conclua antes que a vaga seja liberada!' },
+}
+
+// Lê um modelo do banco; se a tabela não existir ou não houver linha, cai no
+// padrão. Nunca lança.
+export async function getTemplate(key) {
+  try {
+    const { data } = await supabase
+      .from('notification_templates')
+      .select('enabled, title, body')
+      .eq('key', key)
+      .maybeSingle()
+    if (data) return data
+  } catch { /* tabela ausente → fallback */ }
+  return DEFAULT_TEMPLATES[key] || null
+}
+
 // Importa o sender de Web Push de forma preguiçosa e tolerante: se o módulo
 // ou a dependência não existir ainda (Fase 1), vira no-op silencioso.
 let _pushFn = null

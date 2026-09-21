@@ -221,6 +221,10 @@ if (executadoDireto) {
     console.log(`🚀 Turiva API v2 rodando na porta ${PORT}`);
     console.log(`   Ambiente: ${process.env.NODE_ENV || 'development'}`);
   });
+  // Agendador das notificações automáticas (aniversário, lembrete de reserva).
+  import('./services/notificationScheduler.js')
+    .then((m) => m.startNotificationScheduler())
+    .catch((e) => console.error('[scheduler] não iniciou:', e.message));
 }
 
 export default app;

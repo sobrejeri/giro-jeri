@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, BookOpen, Tag, Globe, Ticket, Megaphone,
   Sun, BarChart3, ScrollText, Settings, LogOut, CalendarCheck, UserCircle, X,
-  Newspaper, Store, PlayCircle, Wallet,
+  Newspaper, Store, PlayCircle, Wallet, Bell,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -22,6 +22,7 @@ const NAV = [
   { to: '/cupons',       icon: Ticket,          label: 'Cupons'        },
   { to: '/afiliados',    icon: Megaphone,       label: 'Afiliados'     },
   { to: '/temporada',    icon: Sun,             label: 'Alta Temporada' },
+  { to: '/notificacoes', icon: Bell,         label: 'Notificações'  },
   { separator: true, label: 'Backoffice' },
   { to: '/financeiro',   icon: BarChart3,       label: 'Financeiro'    },
   { to: '/repasses',     icon: Wallet,          label: 'Repasses'      },
