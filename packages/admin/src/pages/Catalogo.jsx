@@ -27,6 +27,42 @@ const CUTOFF_TIME_OPTIONS = (() => {
   return opts
 })()
 
+// Campo de tempo no formato Horas : Minutos, guardando o valor em horas
+// decimais (ex.: 1.5 = 1h30). Aceita mais de 24h (antecedência), então não usa
+// <input type="time">, que trava em 23:59. Vazio = "" (usa o padrão).
+function HoraMinInput({ value, onChange, placeholderHoras = '0' }) {
+  const num = value === '' || value === null || value === undefined ? null : Number(value)
+  const h = num != null && !Number.isNaN(num) ? Math.floor(num) : ''
+  const m = num != null && !Number.isNaN(num) ? Math.round((num - Math.floor(num)) * 60) : ''
+
+  const emit = (hh, mm) => {
+    const H = hh === '' ? null : Math.max(0, parseInt(hh, 10) || 0)
+    const M = mm === '' ? null : Math.min(59, Math.max(0, parseInt(mm, 10) || 0))
+    if (H == null && M == null) return onChange('')
+    onChange(String((H || 0) + (M || 0) / 60))
+  }
+
+  const box = 'w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand'
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1">
+        <input type="number" min="0" step="1" inputMode="numeric" placeholder={placeholderHoras}
+          value={h} onChange={(e) => emit(e.target.value, m === '' ? '' : String(m))} className={box} />
+        <span className="block text-[10px] text-gray-500 mt-0.5 text-center">horas</span>
+      </div>
+      <span className="text-gray-400 font-bold pb-4">:</span>
+      <div className="flex-1">
+        <select value={m === '' ? '' : String(m)}
+          onChange={(e) => emit(h === '' ? '' : String(h), e.target.value)} className={box}>
+          <option value="">00</option>
+          {[0, 15, 30, 45].map((x) => <option key={x} value={x}>{String(x).padStart(2, '0')}</option>)}
+        </select>
+        <span className="block text-[10px] text-gray-500 mt-0.5 text-center">min</span>
+      </div>
+    </div>
+  )
+}
+
 function slugify(text) {
   return text.toString().toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -1086,18 +1122,10 @@ export default function Catalogo() {
             {/* Antecedência mínima */}
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                Antecedência mínima (horas)
+                Antecedência mínima
               </label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                inputMode="numeric"
-                placeholder="Padrão"
-                value={form.min_advance_hours ?? ''}
-                onChange={(e) => setForm({ ...form, min_advance_hours: e.target.value })}
-                className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
-              />
+              <HoraMinInput value={form.min_advance_hours ?? ''}
+                onChange={(v) => setForm({ ...form, min_advance_hours: v })} placeholderHoras="24" />
               <p className="text-[11px] text-gray-500 mt-1">
                 Horas mínimas entre a reserva e o passeio. Deixe em branco para usar o padrão.
               </p>
@@ -1274,8 +1302,11 @@ export default function Catalogo() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input label="Duração (horas)" type="number" min={0.5} step={0.5}
-                value={form.duration_hours || ''} onChange={(e) => setForm({ ...form, duration_hours: e.target.value })} />
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">Duração</label>
+                <HoraMinInput value={form.duration_hours ?? ''}
+                  onChange={(v) => setForm({ ...form, duration_hours: v })} placeholderHoras="2" />
+              </div>
               <Input label="Capacidade máx." type="number" min={1}
                 value={form.max_people || ''} onChange={(e) => setForm({ ...form, max_people: e.target.value })} />
             </div>
@@ -1328,18 +1359,10 @@ export default function Catalogo() {
             {/* Antecedência mínima */}
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                Antecedência mínima (horas)
+                Antecedência mínima
               </label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                inputMode="numeric"
-                placeholder="Padrão"
-                value={form.min_advance_hours ?? ''}
-                onChange={(e) => setForm({ ...form, min_advance_hours: e.target.value })}
-                className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand"
-              />
+              <HoraMinInput value={form.min_advance_hours ?? ''}
+                onChange={(v) => setForm({ ...form, min_advance_hours: v })} placeholderHoras="24" />
               <p className="text-[11px] text-gray-500 mt-1">
                 Horas mínimas entre a reserva e o transfer. Deixe em branco para usar o padrão.
               </p>
