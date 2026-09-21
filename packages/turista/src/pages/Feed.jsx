@@ -701,7 +701,9 @@ export default function Feed() {
     content = (loadingPlacesAll && !list.length) ? Loader
       : list.length ? (
           <div className="grid grid-rows-2 grid-flow-col auto-cols-[46%] gap-3 overflow-x-auto -mx-4 px-4 pb-2 scrollbar-hide snap-x">
-            {list.map((p) => <div key={p.id} className="snap-start">{renderPlace(p)}</div>)}
+            {/* h-full + [&>div]:h-full: a célula estica na grade e o card preenche
+                a célula, então os botões ficam alinhados entre todos. */}
+            {list.map((p) => <div key={p.id} className="snap-start h-full [&>div]:h-full">{renderPlace(p)}</div>)}
           </div>
         )
       : <EmptyState icon={CAT_ICONS[filter]} title={t('feedPg.emptyCategory.title')} sub={t('feedPg.emptyCategory.sub')} />
