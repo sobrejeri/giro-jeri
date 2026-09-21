@@ -2,6 +2,7 @@ import { Router }       from 'express'
 import { supabase }     from '../supabase.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { isWhatsappEnabled, sendTestMessage } from '../services/whatsapp.js'
+import { sendPushToUser } from '../services/webpush.js'
 
 const router = Router()
 
@@ -136,6 +137,25 @@ router.post('/push-subscribe', authenticate, async (req, res) => {
   } catch (err) {
     console.error('[notifications] push-subscribe falhou:', err.message)
     res.status(500).json({ error: 'Falha ao salvar inscrição de push' })
+  }
+})
+
+// ── POST /api/notifications/push-test — envia um push de teste para si mesmo ──
+router.post('/push-test', authenticate, async (req, res) => {
+  try {
+    const { count } = await supabase
+      .from('push_subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', req.user.id)
+    if (!count) return res.json({ ok: false, reason: 'no_subscription' })
+    await sendPushToUser(req.user.id, {
+      title: 'Turiva 🔔',
+      body:  'Notificações ativadas! É assim que você vai receber avisos.',
+    })
+    res.json({ ok: true, devices: count })
+  } catch (err) {
+    console.error('[notifications] push-test falhou:', err.message)
+    res.status(500).json({ error: 'Falha ao enviar teste' })
   }
 })
 

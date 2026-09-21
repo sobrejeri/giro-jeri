@@ -52,6 +52,15 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
       alert(t('notifCmp.pushUnsupported'))
     }
   }
+  async function handleTestPush() {
+    setBusy(true)
+    try {
+      const r = await api.pushTest()
+      if (r?.ok) alert('Enviamos uma notificação de teste. Confira a barra do seu celular. 🔔')
+      else alert('Ative as notificações neste aparelho primeiro.')
+    } catch { alert('Não foi possível enviar o teste agora.') }
+    finally { setBusy(false) }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -136,6 +145,17 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
               {perm === 'denied' && (
                 <p className="text-[10px] text-gray-400 text-center mt-1">{t('notifCmp.permissionDenied')}</p>
               )}
+            </div>
+          )}
+          {pushSupported() && perm === 'granted' && (
+            <div className="px-3 py-2 border-t border-gray-50 bg-gray-50/40">
+              <button
+                onClick={handleTestPush}
+                disabled={busy}
+                className="w-full text-[12px] font-semibold text-gray-500 flex items-center justify-center gap-1.5 py-1 disabled:opacity-60"
+              >
+                <BellRing size={13} /> {busy ? 'Enviando…' : 'Enviar notificação de teste'}
+              </button>
             </div>
           )}
           {/* iPhone: push só existe com o app instalado na Tela de Início. Se
