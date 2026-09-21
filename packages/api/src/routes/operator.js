@@ -562,15 +562,16 @@ async function attachServiceNames(bookings) {
   const tourIds = [...new Set(list.filter((b) => b.service_type === 'tour' && b.service_id).map((b) => b.service_id))]
   const trIds   = [...new Set(list.filter((b) => b.service_type !== 'tour' && b.service_id).map((b) => b.service_id))]
   const names = new Map()
+  const imgs  = new Map()
 
   if (tourIds.length) {
-    const { data } = await supabase.from('tours').select('id, name').in('id', tourIds)
-    for (const t of data || []) names.set(t.id, t.name)
+    const { data } = await supabase.from('tours').select('id, name, cover_image_url').in('id', tourIds)
+    for (const t of data || []) { names.set(t.id, t.name); if (t.cover_image_url) imgs.set(t.id, t.cover_image_url) }
   }
   if (trIds.length) {
     const { data } = await supabase.from('transfer_routes')
-      .select('id, origin_name, destination_name').in('id', trIds)
-    for (const r of data || []) names.set(r.id, `${r.origin_name} → ${r.destination_name}`)
+      .select('id, origin_name, destination_name, cover_image_url').in('id', trIds)
+    for (const r of data || []) { names.set(r.id, `${r.origin_name} → ${r.destination_name}`); if (r.cover_image_url) imgs.set(r.id, r.cover_image_url) }
   }
 
   return list.map((b) => {
@@ -578,7 +579,7 @@ async function attachServiceNames(bookings) {
     const fallback = b.service_type !== 'tour'
       ? [b.origin_text, b.destination_text].filter(Boolean).join(' → ') || null
       : null
-    return { ...b, service_name: names.get(b.service_id) || fallback }
+    return { ...b, service_name: names.get(b.service_id) || fallback, service_image_url: imgs.get(b.service_id) || null }
   })
 }
 
