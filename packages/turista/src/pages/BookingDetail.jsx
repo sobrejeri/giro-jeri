@@ -361,7 +361,10 @@ export default function BookingDetail() {
                 <span key={i} className="w-12 h-14 rounded-xl bg-brand/10 border border-brand/30 flex items-center justify-center text-3xl font-bold font-mono text-brand">{d}</span>
               ))}
             </div>
-            <p className="text-[11px] text-gray-400 text-center mt-3">{t('bookingDetailPg.completionPin.warning')}</p>
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2">
+              <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
+              <p className="text-[12px] font-medium text-red-700 leading-snug">{t('bookingDetailPg.completionPin.warning')}</p>
+            </div>
           </div>
         )}
 

@@ -1055,8 +1055,8 @@
     },
     "completionPin": {
       "title": "Completion code",
-      "hint": "Give this code to the driver only when the service ends. They close the ride with this PIN.",
-      "warning": "Don't share the code before the service is over."
+      "hint": "This code ends the ride. Give it ONLY to the driver serving you, and only when the service is over.",
+      "warning": "For your safety, never share this code by phone, message or with third parties — only in person with the driver at the end."
     },
     "partial": {
       "acceptedCount": "{{accepted}} of {{total}} vehicles accepted",

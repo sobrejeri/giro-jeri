@@ -1055,8 +1055,8 @@
     },
     "completionPin": {
       "title": "Código de finalización",
-      "hint": "Dale este código al conductor solo al terminar el servicio. Él cierra el viaje con este PIN.",
-      "warning": "No compartas el código antes de que termine el servicio."
+      "hint": "Este código finaliza el viaje. Dáselo SOLO al conductor que te atiende, y únicamente al terminar el servicio.",
+      "warning": "Por seguridad, nunca compartas este código por teléfono, mensaje ni con terceros — solo en persona con el conductor al finalizar."
     },
     "partial": {
       "acceptedCount": "{{accepted}} de {{total}} vehículos aceptados",

@@ -1055,8 +1055,8 @@
     },
     "completionPin": {
       "title": "Código de conclusão",
-      "hint": "Informe este código ao motorista somente ao final do serviço. Ele encerra a corrida com este PIN.",
-      "warning": "Não passe o código antes do serviço terminar."
+      "hint": "Este código encerra a corrida. Informe-o APENAS ao motorista que está te atendendo, e somente ao final do serviço.",
+      "warning": "Por segurança, nunca compartilhe este código por telefone, mensagem ou com terceiros — só com o motorista, presencialmente, ao terminar."
     },
     "partial": {
       "acceptedCount": "{{accepted}} de {{total}} veículos aceitos",
