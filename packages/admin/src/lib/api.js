@@ -280,6 +280,7 @@ export const api = {
   updateEstablishment: (id, body) => request(`/api/establishments/${id}`, { method: 'PUT', body }),
   deleteEstablishment: (id)       => request(`/api/establishments/${id}`, { method: 'DELETE' }),
   backfillEstablishmentPhotos: (limit = 20) => request('/api/establishments/backfill-photos', { method: 'POST', body: { limit } }),
+  purgeEstablishments: () => request('/api/establishments/purge-all', { method: 'DELETE' }),
 
   // Notificações
   getNotifications:      ()    => request('/api/notifications'),

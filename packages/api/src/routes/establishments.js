@@ -248,6 +248,21 @@ router.post('/backfill-photos', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── DELETE /api/establishments/purge-all ───────────────
+// Apaga TODOS os estabelecimentos (e suas avaliações). Usado para limpar os
+// cadastros defasados antes de recomeçar. Definido ANTES de "/:id" para não ser
+// interpretado como um id. Irreversível — a UI confirma antes.
+router.delete('/purge-all', requireAdmin, async (req, res, next) => {
+  try {
+    // Reviews primeiro (FK aponta para establishment_id).
+    await supabase.from('establishment_reviews').delete().not('id', 'is', null);
+    const { data, error } = await supabase
+      .from('establishments').delete().not('id', 'is', null).select('id');
+    if (error) throw error;
+    res.json({ ok: true, deleted: data?.length || 0 });
+  } catch (err) { next(err); }
+});
+
 router.post('/', requireAdmin, async (req, res, next) => {
   try {
     const body = schema.parse(req.body);

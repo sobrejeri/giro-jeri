@@ -90,6 +90,23 @@ export default function Estabelecimentos() {
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['establishments-admin'] }),
   })
 
+  // Exclui TODOS os estabelecimentos (limpeza dos cadastros defasados).
+  const [purgeBusy, setPurgeBusy] = useState(false)
+  async function excluirTodos() {
+    if (purgeBusy) return
+    const total = places.length
+    if (!confirm(`Excluir TODOS os ${total} estabelecimentos? Esta ação não pode ser desfeita.`)) return
+    if (!confirm('Tem certeza? Isso apaga todos os cadastros e suas avaliações.')) return
+    setPurgeBusy(true)
+    try {
+      const r = await api.purgeEstablishments()
+      qc.invalidateQueries({ queryKey: ['establishments-admin'] })
+      alert(`Excluídos: ${r?.deleted ?? 0} estabelecimento(s).`)
+    } catch (err) {
+      alert(err?.message || 'Falha ao excluir.')
+    } finally { setPurgeBusy(false) }
+  }
+
   // Preenche via Google Places a foto dos que estão sem imagem. Roda em lotes;
   // repete automaticamente enquanto "restantes" > 0.
   const [fotosBusy, setFotosBusy] = useState(false)
@@ -194,6 +211,12 @@ export default function Estabelecimentos() {
           <Button variant="secondary" onClick={buscarFotosFaltantes} disabled={fotosBusy}>
             <ImageIcon size={16} /> {fotosBusy ? 'Buscando…' : 'Buscar fotos faltantes'}
           </Button>
+          {places.length > 0 && (
+            <Button variant="secondary" onClick={excluirTodos} disabled={purgeBusy}
+              className="!text-red-400 !border-red-500/40 hover:!bg-red-500/10">
+              <Trash2 size={16} /> {purgeBusy ? 'Excluindo…' : 'Excluir todos'}
+            </Button>
+          )}
           <Button onClick={openNew}><Plus size={16} /> Novo</Button>
         </div>
       </div>
