@@ -454,16 +454,66 @@ export default function Despacho() {
         title={`Despachar — ${modal?.booking_code || ''}`} size="sm">
         <form onSubmit={handleSubmit} className="space-y-4">
           {modal && (
-            <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1 border border-gray-200">
-              <p className="font-bold text-gray-900">{modal.users?.full_name}</p>
-              <p className="text-gray-500">
-                {modal.service_date
-                  ? format(new Date(modal.service_date + 'T12:00:00'), "dd 'de' MMMM", { locale: ptBR })
-                  : '—'}
-                {modal.service_time ? ` · ${modal.service_time.slice(0,5)}` : ''}
-                {modal.people_count ? ` · ${modal.people_count} pax` : ''}
-              </p>
-              <p className="font-bold text-brand">{fmt(modal.total_amount)}</p>
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-4 py-2 flex items-center justify-between border-b border-gray-200">
+                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Resumo do serviço</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                  modal.service_type === 'tour' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {modal.service_type === 'tour' ? 'Passeio' : 'Transfer'}
+                </span>
+              </div>
+              <div className="px-4 py-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-gray-500 shrink-0">Cliente</span>
+                  <span className="font-semibold text-gray-900 text-right">{modal.users?.full_name || '—'}</span>
+                </div>
+                {modal.users?.phone && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-gray-500 shrink-0">Tel. cliente</span>
+                    <a href={`https://wa.me/${(() => { const d = modal.users.phone.replace(/\D/g,''); return d.length <= 11 ? '55' + d : d })()}`}
+                       target="_blank" rel="noreferrer"
+                       className="font-medium text-green-600 hover:underline flex items-center gap-1">
+                      <MessageCircle size={12} />{modal.users.phone}
+                    </a>
+                  </div>
+                )}
+                {modal.service_date && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-gray-500 shrink-0">Data</span>
+                    <span className="font-medium text-gray-800 text-right">
+                      {format(new Date(modal.service_date + 'T12:00:00'), "dd 'de' MMMM", { locale: ptBR })}
+                      {modal.service_time ? ` às ${modal.service_time.slice(0, 5)}` : ''}
+                    </span>
+                  </div>
+                )}
+                {modal.people_count && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-gray-500 shrink-0">Pessoas</span>
+                    <span className="font-medium text-gray-800">{modal.people_count} pessoas</span>
+                  </div>
+                )}
+                {(modal.pickup_place_name || modal.origin_text) && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-gray-500 shrink-0">Embarque</span>
+                    <span className="font-medium text-gray-800 text-right line-clamp-1">
+                      {modal.pickup_place_name || modal.origin_text}
+                    </span>
+                  </div>
+                )}
+                {(modal.destination_place_name || modal.destination_text) && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-gray-500 shrink-0">Destino</span>
+                    <span className="font-medium text-gray-800 text-right line-clamp-1">
+                      {modal.destination_place_name || modal.destination_text}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-1 border-t border-gray-100 mt-1">
+                  <span className="text-gray-500">Valor</span>
+                  <span className="font-extrabold text-brand text-base">{fmt(modal.total_amount)}</span>
+                </div>
+              </div>
             </div>
           )}
           <Input label="Veículo (modelo / placa / cor) *" placeholder="Ex: Hilux Branca · GKR-1234"
