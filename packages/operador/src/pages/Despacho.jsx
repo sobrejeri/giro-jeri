@@ -527,8 +527,8 @@ export default function Despacho() {
             </div>
             {/* Valor combinado com o motorista pelo serviço — fica registrado na
                 aba Repasses do admin, facilitando o controle do pagamento. */}
-            <Input label="Valor do repasse ao motorista (R$)" type="number" min={0} step="0.01"
-              placeholder="Ex: 120,00"
+            <Input label="Valor do repasse ao motorista (opcional)" type="number" min={0} step="0.01"
+              placeholder="Ex: 120,00 — pode definir depois"
               value={form.driver_payout_amount}
               onChange={(e) => setForm({ ...form, driver_payout_amount: e.target.value })} />
           </div>
