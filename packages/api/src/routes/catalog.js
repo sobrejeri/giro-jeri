@@ -342,6 +342,17 @@ router.delete('/categories/:id', requireAdmin, async (req, res, next) => {
 // tela (e integrações) mandam só `category_id`. A primeira do array é a
 // PRINCIPAL e vai também para `category_id`, que continua existindo para quem
 // só sabe ler uma categoria.
+// Extrai o nome da coluna ausente de um erro de coluna do Postgres (42703) ou
+// do PostgREST ("Could not find the 'X' column ... schema cache", PGRST204).
+// Devolve null quando o erro não é de coluna faltante.
+function colunaFaltante(error) {
+  if (!error) return null
+  const msg = String(error.message || '')
+  const m = msg.match(/Could not find the '([^']+)' column/i)
+    || msg.match(/column "?([a-z0-9_]+)"? .* does not exist/i)
+  return m ? m[1] : null
+}
+
 function normalizarCategorias({ category_ids, category_id }) {
   const lista = Array.isArray(category_ids)
     ? category_ids.filter(Boolean)
@@ -451,26 +462,28 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (service_radius_km  !== undefined) update.service_radius_km       = service_radius_km === '' || service_radius_km === null ? null : Number(service_radius_km);
     if (region_ids         !== undefined) update.region_ids              = Array.isArray(region_ids) ? region_ids : [];
 
-    let { data, error } = await req.supabase
-      .from('tours').update(update).eq('id', req.params.id).select().single();
-    // Coluna ausente (migração pendente): tenta de novo sem a coluna problemática
-    // em vez de derrubar o salvamento inteiro. Cobre category_ids, region_ids e
-    // as janelas de operação — qualquer uma pode faltar num ambiente atrasado.
-    if (error?.code === '42703') {
-      const semColunas = { ...update };
-      delete semColunas.category_ids;
-      delete semColunas.region_ids;
-      delete semColunas.service_window_start;
-      delete semColunas.service_window_end;
-      delete semColunas.is_exclusive;
+    // Salva tolerando colunas ausentes (migração atrasada): se o banco/PostgREST
+    // reclamar de uma coluna que não existe, remove SÓ ela e tenta de novo, até
+    // o passeio salvar com o que existe. Cobre tanto o 42703 do Postgres quanto
+    // o "Could not find the '<col>' column ... schema cache" do PostgREST.
+    let payloadUpd = { ...update };
+    let data, error;
+    for (let i = 0; i < 8; i++) {
       ({ data, error } = await req.supabase
-        .from('tours').update(semColunas).eq('id', req.params.id).select().single());
+        .from('tours').update(payloadUpd).eq('id', req.params.id).select().single());
+      if (!error) break;
+      const faltante = colunaFaltante(error);
+      if (faltante && faltante in payloadUpd) {
+        console.warn('[catalog] tours sem a coluna %s — salvando sem ela (migração pendente)', faltante);
+        delete payloadUpd[faltante];
+        continue;
+      }
+      break;
     }
     // Distingue erro real (banco) de passeio inexistente — antes tudo virava
-    // "Passeio não encontrado" e escondia a causa (ex.: coluna/constraint).
+    // "Passeio não encontrado" e escondia a causa.
     if (error) {
       console.error('[catalog] update tour falhou id=%s code=%s msg=%s', req.params.id, error.code, error.message);
-      // PGRST116 = 0 linhas no .single() → realmente não existe.
       if (error.code === 'PGRST116') return res.status(404).json({ error: 'Passeio não encontrado' });
       return res.status(500).json({ error: `Falha ao salvar: ${error.message}` });
     }
