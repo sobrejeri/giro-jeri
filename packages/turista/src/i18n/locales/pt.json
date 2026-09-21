@@ -1053,6 +1053,11 @@
       "waitingPayment": "Operador aceitou — pague para confirmar",
       "cancelled": "Esta reserva foi cancelada"
     },
+    "completionPin": {
+      "title": "Código de conclusão",
+      "hint": "Informe este código ao motorista somente ao final do serviço. Ele encerra a corrida com este PIN.",
+      "warning": "Não passe o código antes do serviço terminar."
+    },
     "partial": {
       "acceptedCount": "{{accepted}} de {{total}} veículos aceitos",
       "confirmPrompt": "Confirme para pagar só o que foi aceito.",

@@ -1132,6 +1132,67 @@ router.get('/bookings/:id/routing', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/admin/bookings/:id/force-complete ────────
+// Exceção do PIN (096): quando o cliente está sem acesso ao código, o admin
+// encerra a corrida manualmente. Fica registrado que foi por override e quem
+// fez. O repasse do motorista é gerado a partir do despacho já existente.
+router.post('/bookings/:id/force-complete', requireAdmin, async (req, res, next) => {
+  try {
+    const patch = {
+      status_operational: 'completed',
+      completed_at:       new Date().toISOString(),
+    };
+    let upd = await supabase
+      .from('bookings')
+      .update({ ...patch, completion_confirmed_via: 'admin_override', completion_confirmed_by: req.user.id })
+      .eq('id', req.params.id)
+      .eq('status_commercial', 'paid')
+      .select('id, user_id, service_type, booking_code');
+    if (upd.error?.code === '42703') {
+      upd = await supabase
+        .from('bookings')
+        .update(patch)
+        .eq('id', req.params.id)
+        .eq('status_commercial', 'paid')
+        .select('id, user_id, service_type, booking_code');
+    }
+    if (upd.error) throw upd.error;
+    const b = upd.data?.[0];
+    if (!b) return res.status(409).json({ error: 'Reserva não encontrada ou ainda não paga.' });
+
+    // Repasse do motorista a partir do despacho gravado (idempotente).
+    try {
+      const { data: a } = await supabase
+        .from('operational_assignments')
+        .select('driver_name, driver_document, driver_pix_key, driver_pix_key_type')
+        .eq('booking_id', b.id)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      const alvo = a?.[0];
+      if (alvo?.driver_name) {
+        const { gerarRepasseExecucao } = await import('../services/payouts.js');
+        await gerarRepasseExecucao(b.id, {
+          name:         alvo.driver_name,
+          document:     alvo.driver_document,
+          pix_key:      alvo.driver_pix_key,
+          pix_key_type: alvo.driver_pix_key_type,
+        });
+      }
+    } catch (err) {
+      console.error('[admin] repasse na conclusão forçada falhou:', err.message);
+    }
+
+    notifyUser({
+      userId:      b.user_id,
+      bookingId:   b.id,
+      templateKey: 'booking_completed',
+      title:       'Serviço finalizado ✅',
+      body:        `Seu serviço (${b.booking_code}) foi concluído. Conte como foi: avalie sua experiência!`,
+    });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // ── GET /api/admin/audit-logs ──────────────────────────
 router.get('/audit-logs', requireAdmin, async (req, res, next) => {
   try {

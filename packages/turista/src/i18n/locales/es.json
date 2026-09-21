@@ -1053,6 +1053,11 @@
       "waitingPayment": "El operador aceptó — paga para confirmar",
       "cancelled": "Esta reserva fue cancelada"
     },
+    "completionPin": {
+      "title": "Código de finalización",
+      "hint": "Dale este código al conductor solo al terminar el servicio. Él cierra el viaje con este PIN.",
+      "warning": "No compartas el código antes de que termine el servicio."
+    },
     "partial": {
       "acceptedCount": "{{accepted}} de {{total}} vehículos aceptados",
       "confirmPrompt": "Confirma para pagar solo lo que fue aceptado.",

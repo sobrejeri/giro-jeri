@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
-import { Search, ChevronLeft, ChevronRight, CalendarDays, Radio, Check, X } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, CalendarDays, Radio, Check, X, CheckCircle2 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card from '../components/ui/Card'
@@ -189,6 +189,16 @@ export default function Reservas() {
     }),
     keepPreviousData: true,
   })
+
+  const qc = useQueryClient()
+  const forceComplete = useMutation({
+    mutationFn: (id) => api.forceCompleteBooking(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-bookings'] }),
+  })
+  function concluirSemPin(b) {
+    if (!confirm(`Concluir a corrida ${b.booking_code} SEM o PIN do cliente?\n\nUse só em exceção (cliente sem acesso ao código). Ficará registrado que foi conclusão forçada pelo admin.`)) return
+    forceComplete.mutate(b.id)
+  }
 
   const bookings = data?.data || []
   const total    = data?.total || 0
@@ -406,6 +416,16 @@ export default function Reservas() {
                       >
                         <Radio size={14} />
                       </button>
+                      {b.status_operational === 'in_progress' && (
+                        <button
+                          onClick={() => concluirSemPin(b)}
+                          disabled={forceComplete.isPending}
+                          title="Concluir sem o PIN (exceção — cliente sem acesso ao código)"
+                          className="p-1 text-gray-600 hover:text-emerald-500 transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

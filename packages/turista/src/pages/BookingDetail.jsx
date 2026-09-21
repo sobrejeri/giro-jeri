@@ -9,7 +9,7 @@ import ReviewSheet from '../components/ReviewSheet'
 import {
   ChevronLeft, MapPin, Calendar, Clock, Users, Car, Shield,
   MessageCircle, CheckCircle, AlertTriangle, Phone, Copy,
-  XCircle, Loader2, Zap, Sun, Waves, Anchor, Star,
+  XCircle, Loader2, Zap, Sun, Waves, Anchor, Star, ShieldCheck,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -346,6 +346,24 @@ export default function BookingDetail() {
             </div>
           </div>
         </div>
+
+        {/* PIN de conclusão (096) — em andamento: o cliente informa este código
+            ao motorista para que a corrida seja encerrada com segurança. */}
+        {booking.status_operational === 'in_progress' && booking.completion_pin && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-brand/30">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldCheck size={18} className="text-brand" />
+              <p className="text-sm font-bold text-gray-900">{t('bookingDetailPg.completionPin.title')}</p>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">{t('bookingDetailPg.completionPin.hint')}</p>
+            <div className="flex items-center justify-center gap-2">
+              {String(booking.completion_pin).split('').map((d, i) => (
+                <span key={i} className="w-12 h-14 rounded-xl bg-brand/10 border border-brand/30 flex items-center justify-center text-3xl font-bold font-mono text-brand">{d}</span>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 text-center mt-3">{t('bookingDetailPg.completionPin.warning')}</p>
+          </div>
+        )}
 
         {/* Aceite parcial (R3) — 1+ veículo aceito, ainda há pendentes.
             O cliente confirma e paga só o aceito, ou cancela a corrida. */}

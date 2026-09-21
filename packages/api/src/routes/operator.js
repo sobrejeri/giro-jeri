@@ -1264,6 +1264,7 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
 // ── POST /api/operator/bookings/:id/start ──────────────
 router.post('/bookings/:id/start', async (req, res, next) => {
   try {
+    // Marca a corrida como em andamento.
     const { data, error } = await supabase
       .from('bookings')
       .update({ status_operational: 'in_progress' })
@@ -1277,6 +1278,21 @@ router.post('/bookings/:id/start', async (req, res, next) => {
       return res.status(409).json({ error: 'Aguardando o pagamento do cliente para iniciar a corrida.' })
     }
     const b = data?.[0]
+
+    // PIN de conclusão (096): 4 dígitos gerados ao iniciar, exibidos SÓ no app
+    // do cliente. Só grava se ainda não houver um (guard `.is null`) — reiniciar
+    // NÃO troca o código já informado ao motorista, e chamadas concorrentes não
+    // sobrescrevem. Coluna ausente (migração pendente) ou qualquer erro é
+    // ignorado: a corrida iniciou e o resto segue, só sem a trava.
+    if (b) {
+      const pin = String(Math.floor(1000 + Math.random() * 9000))
+      await supabase
+        .from('bookings')
+        .update({ completion_pin: pin })
+        .eq('id', b.id)
+        .is('completion_pin', null)
+        .then(() => {}, () => {})
+    }
     if (b) notifyUser({
       userId:      b.user_id,
       bookingId:   b.id,
@@ -1437,16 +1453,61 @@ router.get('/executores', async (req, res, next) => {
 // quem foi escalado — e o que interessa para o repasse é quem rodou.
 router.post('/bookings/:id/complete', async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    // Trava do PIN (096): busca a reserva do operador e confere o código.
+    // Se a coluna não existir (migração pendente), `alvo.completion_pin` vem
+    // undefined e a conclusão segue sem trava, como antes.
+    let { data: alvo, error: eAlvo } = await supabase
       .from('bookings')
-      .update({
-        status_operational: 'completed',
-        completed_at:       new Date().toISOString(),
-      })
+      .select('id, completion_pin')
+      .eq('id', req.params.id)
+      .eq('operator_id', req.user.id)
+      .eq('status_commercial', 'paid')
+      .maybeSingle()
+    if (eAlvo && eAlvo.code === '42703') {
+      ({ data: alvo, error: eAlvo } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('id', req.params.id)
+        .eq('operator_id', req.user.id)
+        .eq('status_commercial', 'paid')
+        .maybeSingle())
+    }
+    if (eAlvo) throw eAlvo
+    if (!alvo) {
+      return res.status(409).json({ error: 'Esta corrida ainda não foi paga pelo cliente.' })
+    }
+    // Só valida quando HÁ um PIN gravado. Corridas antigas (iniciadas antes
+    // desta trava) não têm código e concluem como antes.
+    const pinInformado = String(req.body?.pin || '').trim()
+    if (alvo.completion_pin) {
+      if (pinInformado !== String(alvo.completion_pin)) {
+        return res.status(422).json({ error: 'PIN incorreto. Peça ao cliente o código que aparece no app dele.', code: 'pin_mismatch' })
+      }
+    }
+
+    const patch = {
+      status_operational: 'completed',
+      completed_at:       new Date().toISOString(),
+    }
+    // Registra como a conclusão foi confirmada (best-effort: se as colunas 096
+    // não existirem, o update abaixo reexecuta sem elas).
+    let updateRes = await supabase
+      .from('bookings')
+      .update({ ...patch, completion_confirmed_via: 'pin', completion_confirmed_by: req.user.id })
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
       .eq('status_commercial', 'paid')
       .select('id, user_id, service_type, booking_code, service_date, service_time, origin_text, destination_text, pickup_place_name')
+    if (updateRes.error?.code === '42703') {
+      updateRes = await supabase
+        .from('bookings')
+        .update(patch)
+        .eq('id', req.params.id)
+        .eq('operator_id', req.user.id)
+        .eq('status_commercial', 'paid')
+        .select('id, user_id, service_type, booking_code, service_date, service_time, origin_text, destination_text, pickup_place_name')
+    }
+    const { data, error } = updateRes
 
     if (error) throw error
     if (!data || data.length === 0) {

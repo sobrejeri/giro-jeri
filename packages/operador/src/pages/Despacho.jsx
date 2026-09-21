@@ -297,13 +297,14 @@ export default function Despacho() {
   // Ciclo da corrida no Despacho (item 13): iniciar após o despacho, depois concluir.
   const startMut    = useMutation({ mutationFn: (id) => api.startBooking(id),    onSuccess: () => qc.invalidateQueries({ queryKey: ['dispatch'] }) })
   const completeMut = useMutation({
-    mutationFn: ({ id, executor }) => api.completeBooking(id, executor),
+    mutationFn: ({ id, executor, pin }) => api.completeBooking(id, executor, pin),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dispatch'] })
       // O executor confirmado agora alimenta a lista de reaproveitáveis.
       qc.invalidateQueries({ queryKey: ['executores'] })
       setConcluindo(null)
     },
+    // PIN errado (422) → mantém o modal aberto com a mensagem.
   })
   function handleStart(b)    { if (!startMut.isPending) startMut.mutate(b.id) }
   // Concluir passa pela confirmação de quem executou (081) — é o único momento
@@ -550,8 +551,9 @@ export default function Despacho() {
         booking={concluindo}
         executores={executores}
         isSending={completeMut.isPending}
-        onCancel={() => setConcluindo(null)}
-        onConfirm={(executor) => completeMut.mutate({ id: concluindo.id, executor })}
+        errorMsg={completeMut.isError ? (completeMut.error?.message || 'Não foi possível concluir.') : ''}
+        onCancel={() => { setConcluindo(null); completeMut.reset() }}
+        onConfirm={(executor, pin) => completeMut.mutate({ id: concluindo.id, executor, pin })}
       />
     </div>
   )

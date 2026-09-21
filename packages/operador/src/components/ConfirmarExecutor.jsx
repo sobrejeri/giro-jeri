@@ -29,8 +29,9 @@ export const TIPOS_PIX = [
 
 const VAZIO = { name: '', phone: '', document: '', pix_key: '', pix_key_type: '' }
 
-export default function ConfirmarExecutor({ booking, executores = [], onCancel, onConfirm, isSending }) {
+export default function ConfirmarExecutor({ booking, executores = [], onCancel, onConfirm, isSending, errorMsg }) {
   const [form, setForm] = useState(VAZIO)
+  const [pin, setPin]   = useState('')
 
   // Recarrega a cada corrida aberta — sem isto o formulário manteria os dados
   // da corrida anterior e o operador confirmaria o motorista errado.
@@ -43,6 +44,7 @@ export default function ConfirmarExecutor({ booking, executores = [], onCancel, 
       pix_key:      a?.driver_pix_key      || '',
       pix_key_type: a?.driver_pix_key_type || '',
     })
+    setPin('')
   }, [booking?.id])
 
   function usar(ex) {
@@ -57,10 +59,28 @@ export default function ConfirmarExecutor({ booking, executores = [], onCancel, 
 
   const temNome = !!form.name.trim()
   const semPix  = temNome && !form.pix_key.trim()
+  const pinOk   = /^\d{4}$/.test(pin.trim())
 
   return (
-    <Modal open={!!booking} onClose={onCancel} title="Quem executou esta corrida?" size="md">
+    <Modal open={!!booking} onClose={onCancel} title="Concluir corrida" size="md">
       <div className="space-y-4">
+        {/* ── PIN de conclusão (trava de segurança) ───────────────── */}
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-3 space-y-2">
+          <p className="text-[13px] font-bold text-gray-900">Código de conclusão (PIN)</p>
+          <p className="text-[12px] text-gray-600">
+            Peça ao cliente o código de 4 dígitos que aparece no app dele e digite abaixo para encerrar.
+          </p>
+          <input
+            inputMode="numeric" maxLength={4} placeholder="0000"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            className="w-full text-center tracking-[0.5em] text-2xl font-bold font-mono border border-gray-300 rounded-lg py-2 focus:ring-2 focus:ring-brand/30 focus:border-brand outline-none"
+          />
+          {errorMsg && (
+            <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{errorMsg}</p>
+          )}
+        </div>
+
         <p className="text-[13px] text-gray-600">
           Confira quem foi a campo. É por aqui que o pagamento chega até a pessoa.
         </p>
@@ -109,22 +129,18 @@ export default function ConfirmarExecutor({ booking, executores = [], onCancel, 
         )}
 
         <div className="flex flex-col gap-2 pt-1">
-          <Button onClick={() => onConfirm(temNome ? form : null)} disabled={isSending} className="w-full">
+          <Button onClick={() => onConfirm(temNome ? form : null, pin.trim())} disabled={isSending || !pinOk} className="w-full">
             {isSending
               ? 'Concluindo…'
               : <span className="flex items-center justify-center gap-2">
                   <UserCheck size={16} /> Confirmar e concluir
                 </span>}
           </Button>
-          {/* Escape hatch: quem não tem os dados em mãos ainda encerra a corrida. */}
-          <button
-            type="button" onClick={() => onConfirm(null)} disabled={isSending}
-            className="text-[12px] text-gray-500 hover:text-gray-700 underline disabled:opacity-50"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 size={13} /> Concluir sem informar agora
-            </span>
-          </button>
+          {!pinOk && (
+            <p className="text-[11px] text-amber-600 text-center">Digite o PIN de 4 dígitos do cliente para concluir.</p>
+          )}
+          {/* Sem escape hatch: a conclusão exige o PIN. Se o cliente estiver sem
+              acesso ao código, o admin conclui pela exceção no painel. */}
         </div>
       </div>
     </Modal>

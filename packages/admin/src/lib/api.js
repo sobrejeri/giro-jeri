@@ -226,6 +226,7 @@ export const api = {
   // Quem recebeu a solicitação e por quê (mesmas funções do roteamento real).
   getBookingRouting: (id) => request(`/api/admin/bookings/${id}/routing`),
   getAdminBookings:     (params = {}) => request(`/api/admin/bookings?${new URLSearchParams(params)}`),
+  forceCompleteBooking: (id) => request(`/api/admin/bookings/${id}/force-complete`, { method: 'POST', body: {} }),
   createManualBooking:  (body) => request('/api/admin/bookings/manual', { method: 'POST', body }),
   confirmPaymentManual: (body) => request('/api/payments/manual-confirm', { method: 'POST', body }),
 

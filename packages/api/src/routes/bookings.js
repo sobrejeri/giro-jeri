@@ -376,6 +376,11 @@ router.get('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Reserva não encontrada' });
     }
 
+    // PIN de conclusão (096) é segredo do CLIENTE — o operador não pode vê-lo,
+    // senão ele concluiria sozinho e a trava não valeria nada. Só o próprio
+    // turista dono da reserva recebe o código.
+    const donoTurista = req.user.user_type === 'tourist' && data.user_id === req.user.id;
+    if (!donoTurista) delete data.completion_pin;
     // Mesma identificação visual da lista (nome + foto do serviço) no detalhe.
     await enrichServiceInfo([data]).catch(() => {});
 

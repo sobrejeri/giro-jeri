@@ -187,8 +187,8 @@ export const api = {
   confirmBooking:      (id) => request(`/api/operator/bookings/${id}/confirm`,  { method: 'POST', body: {} }),
   // `executor` confirma quem de fato rodou (081) e é o que a tela de repasses
   // do admin mostra. Opcional: sem ele a conclusão funciona como sempre.
-  completeBooking:     (id, executor) => request(`/api/operator/bookings/${id}/complete`,
-                                                 { method: 'POST', body: executor ? { executor } : {} }),
+  completeBooking:     (id, executor, pin) => request(`/api/operator/bookings/${id}/complete`,
+                                                 { method: 'POST', body: { ...(executor ? { executor } : {}), ...(pin ? { pin } : {}) } }),
   getExecutores:       () => request('/api/operator/executores'),
 
   // Mercado Pago (split de pagamentos / marketplace)
