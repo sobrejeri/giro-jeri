@@ -1453,8 +1453,8 @@
     "permissionDenied": "Permiso denegado — actívalo en la configuración del navegador."
   },
   "pickersCmp": {
-    "regionTitle": "¿Dónde estás?",
-    "regionSubtitle": "Busca tu ciudad o usa el GPS",
+    "regionTitle": "¿Qué ciudad buscas?",
+    "regionSubtitle": "Busca la ciudad o usa el GPS",
     "regionSearchPlaceholder": "Ej: Jericoacoara, Fortaleza...",
     "outsideCoverage": "Ubicación fuera de las áreas cubiertas. Selecciona una región abajo.",
     "gpsDetecting": "Detectando...",
