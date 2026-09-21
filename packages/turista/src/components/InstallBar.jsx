@@ -1,18 +1,18 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Download, X, Share, Plus, ArrowUpFromLine } from 'lucide-react'
+import { Download, X, Share, Plus, ArrowUpFromLine, ChevronRight } from 'lucide-react'
 import { isIOS, isStandalone } from '../lib/push'
 
-// Atalho na Home para instalar o PWA. Em Android/desktop (Chrome/Edge) usa o
-// instalador nativo capturado do evento `beforeinstallprompt`. No iPhone não
-// existe instalação por código — mostra o passo a passo (Compartilhar →
-// Adicionar à Tela de Início). Some quando o app já está instalado (standalone)
-// ou quando o cliente fecha (guarda por alguns dias).
-const KEY = 'install_card_dismissed_at'
+// Faixa fina no topo (estilo do selo de operador) convidando a instalar o PWA
+// para acompanhar a corrida em tempo real. Ao tocar, dispara o instalador
+// nativo (Android/desktop) ou abre o passo a passo (iPhone). Some quando o app
+// já está instalado (standalone), quando a instalação conclui, ou quando o
+// cliente fecha (guarda por alguns dias).
+const KEY = 'install_bar_dismissed_at'
 const SNOOZE = 7 * 24 * 60 * 60 * 1000 // 7 dias
 
-export default function InstallAppCard() {
-  const [deferred, setDeferred] = useState(null) // evento nativo (Android/desktop)
+export default function InstallBar() {
+  const [deferred, setDeferred] = useState(null)
   const [show, setShow] = useState(false)
   const [guiaIOS, setGuiaIOS] = useState(false)
 
@@ -22,7 +22,6 @@ export default function InstallAppCard() {
     try { dismissed = Number(localStorage.getItem(KEY)) || 0 } catch { /* ignore */ }
     const snoozed = Date.now() - dismissed < SNOOZE
 
-    // Android/desktop: o navegador avisa que dá para instalar.
     const onPrompt = (e) => {
       e.preventDefault()
       setDeferred(e)
@@ -30,11 +29,9 @@ export default function InstallAppCard() {
     }
     window.addEventListener('beforeinstallprompt', onPrompt)
 
-    // iPhone/iPad: não há evento; se estiver no Safari (não instalado), oferece
-    // o passo a passo.
+    // iPhone/iPad no Safari: não há evento; oferece o passo a passo.
     if (!snoozed && isIOS()) setShow(true)
 
-    // Instalou pelo caminho nativo → some.
     const onInstalled = () => setShow(false)
     window.addEventListener('appinstalled', onInstalled)
 
@@ -49,14 +46,12 @@ export default function InstallAppCard() {
 
   async function instalar() {
     if (deferred) {
-      // Android/desktop: dispara o instalador nativo do navegador.
       deferred.prompt()
       try { await deferred.userChoice } catch { /* ignore */ }
       setDeferred(null)
       setShow(false)
       return
     }
-    // iPhone: abre o guia com os passos.
     setGuiaIOS(true)
   }
 
@@ -64,23 +59,20 @@ export default function InstallAppCard() {
 
   return (
     <>
-      <div className="mt-3 rounded-2xl bg-gradient-to-br from-brand to-orange-400 text-white p-3.5 shadow-sm flex items-center gap-3 relative overflow-hidden">
-        <button onClick={fechar} aria-label="Fechar"
-          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/20 flex items-center justify-center active:scale-90 transition-transform">
-          <X size={13} />
+      <div className="sticky top-0 z-40 bg-brand text-white px-4 py-2 flex items-center gap-2">
+        <Download size={15} className="shrink-0" />
+        <button onClick={instalar} className="flex-1 min-w-0 text-left flex items-center gap-1">
+          <span className="text-[12px] font-semibold truncate">
+            Instale o app para acompanhar sua corrida em tempo real
+          </span>
+          <ChevronRight size={14} className="shrink-0 opacity-90" />
         </button>
-        <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-          <Download size={22} />
-        </div>
-        <div className="flex-1 min-w-0 pr-5">
-          <p className="text-[14px] font-extrabold leading-tight">Instale o app da Turiva</p>
-          <p className="text-[11.5px] text-white/90 leading-snug mt-0.5">
-            Acesso rápido na tela do celular e avisos de reservas em tempo real.
-          </p>
-        </div>
-        <button onClick={instalar}
-          className="bg-white text-brand text-[12.5px] font-extrabold px-3.5 py-2 rounded-xl active:scale-95 transition-transform shrink-0">
-          Instalar
+        <button
+          onClick={fechar}
+          aria-label="Fechar"
+          className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center active:scale-95 shrink-0"
+        >
+          <X size={12} />
         </button>
       </div>
 
@@ -94,7 +86,9 @@ export default function InstallAppCard() {
                 <X size={16} className="text-gray-500" />
               </button>
             </div>
-            <p className="text-[13px] text-gray-500 mb-4">Em 3 passos, no Safari:</p>
+            <p className="text-[13px] text-gray-500 mb-4">
+              Instale para receber o PIN e acompanhar a corrida em tempo real. Em 3 passos, no Safari:
+            </p>
             <ol className="space-y-3">
               <li className="flex items-center gap-3">
                 <span className="w-7 h-7 rounded-full bg-brand text-white text-[13px] font-bold flex items-center justify-center shrink-0">1</span>
