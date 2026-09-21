@@ -204,7 +204,7 @@ function podeDespachar(f) {
 
 const FORM_VAZIO = {
   real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '',
-  driver_document: '', driver_pix_key: '', driver_pix_key_type: '',
+  driver_document: '', driver_pix_key: '', driver_pix_key_type: '', driver_payout_amount: '',
 }
 
 export default function Despacho() {
@@ -336,6 +336,7 @@ export default function Despacho() {
       driver_document:     assign?.driver_document     || '',
       driver_pix_key:      assign?.driver_pix_key      || '',
       driver_pix_key_type: assign?.driver_pix_key_type || '',
+      driver_payout_amount: assign?.driver_payout_amount != null ? String(assign.driver_payout_amount) : '',
     })
   }
 
@@ -524,6 +525,12 @@ export default function Despacho() {
                 {TIPOS_PIX.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </Select>
             </div>
+            {/* Valor combinado com o motorista pelo serviço — fica registrado na
+                aba Repasses do admin, facilitando o controle do pagamento. */}
+            <Input label="Valor do repasse ao motorista (R$)" type="number" min={0} step="0.01"
+              placeholder="Ex: 120,00"
+              value={form.driver_payout_amount}
+              onChange={(e) => setForm({ ...form, driver_payout_amount: e.target.value })} />
           </div>
 
           <Textarea label="Observações para o motorista" rows={2} value={form.dispatch_notes}
