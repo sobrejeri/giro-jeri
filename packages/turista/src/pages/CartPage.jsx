@@ -501,7 +501,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
     return createPortal(
       <>
         <div className="fixed inset-0 bg-black/40 z-[80]" onClick={onClose} />
-        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[80] max-h-[85dvh] flex flex-col">
+        <div className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[80] flex flex-col ${focus === 'local' ? 'h-[88dvh]' : 'max-h-[85dvh]'}`}>
           <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
           <div className="flex items-center justify-between px-5 py-2 shrink-0">
             <p className="text-[16px] font-bold text-gray-900">{titulo}</p>
