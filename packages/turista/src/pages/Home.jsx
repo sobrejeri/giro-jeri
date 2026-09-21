@@ -14,6 +14,7 @@ import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import NotificationBell from '../components/NotificationBell'
+import InstallAppCard from '../components/InstallAppCard'
 import HomeDesktop from './HomeDesktop'
 import { duracao as fmtDuracao } from '../lib/formato'
 
@@ -335,6 +336,9 @@ export default function Home() {
             <span className="text-[13.5px] font-bold text-gray-900 truncate">{nomeRegiao}</span>
             <ChevronDown size={15} className="text-gray-400 shrink-0" />
           </button>
+
+          {/* Atalho para instalar o PWA (some quando já instalado ou fechado). */}
+          <InstallAppCard />
         </div>
 
         <div className="px-4 pt-5 space-y-5">
