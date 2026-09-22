@@ -169,12 +169,24 @@ function PostsGrid({ posts }) {
               onClick={() => navigate('/eventos')}
               className="relative aspect-square bg-gray-100 overflow-hidden active:opacity-80"
             >
-              <img
-                src={p.image_url || p.video_url}
-                alt={p.title || ''}
-                loading="lazy"
-                className="absolute inset-0 w-full h-full object-cover"
-              />
+              {p.image_url ? (
+                <img
+                  src={p.image_url}
+                  alt={p.title || ''}
+                  loading="lazy"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              ) : (
+                // Vídeo sem capa: mostra o 1º frame via <video> (um <img> com
+                // src de vídeo quebra e vira o "?"). #t=0.1 força o quadro.
+                <video
+                  src={`${p.video_url}#t=0.1`}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              )}
               {p.video_url && (
                 <span className="absolute top-1 right-1 text-white drop-shadow">
                   <Play size={13} className="fill-white" />
