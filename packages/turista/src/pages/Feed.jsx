@@ -1022,13 +1022,15 @@ export default function Feed() {
       <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-[57px] z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="max-w-2xl mx-auto">
           <div className="relative flex items-center justify-center min-h-[32px]">
-            <button
-              onClick={() => navigate(-1)}
-              className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
-              aria-label={t('feedPg.back')}
-            >
-              <ChevronLeft size={20} className="text-gray-700" />
-            </button>
+            {!isCreator && (
+              <button
+                onClick={() => navigate(-1)}
+                className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
+                aria-label={t('feedPg.back')}
+              >
+                <ChevronLeft size={20} className="text-gray-700" />
+              </button>
+            )}
             <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('feedPg.title')}</h1>
             {/* Lupa no topo: abre/fecha o buscador para economizar espaço. */}
             <button
