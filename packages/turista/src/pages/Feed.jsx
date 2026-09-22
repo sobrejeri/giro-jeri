@@ -20,6 +20,24 @@ import {
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
 
 /* ── helpers ───────────────────────────────────────────── */
+// Embaralhamento estável (mulberry32) — mesma semente ⇒ mesma ordem no dia,
+// então os carrosséis não "pulam" a cada render, mas variam de um dia p/ outro.
+function shuffleStable(arr, seed) {
+  let s = seed >>> 0
+  const rnd = () => {
+    s |= 0; s = (s + 0x6D2B79F5) | 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  const out = arr.slice()
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
 function fmtDate(d) {
   if (!d) return null
   const [y, m, day] = d.split('-')
@@ -828,25 +846,10 @@ export default function Feed() {
       : <EmptyState icon={CAT_ICONS[filter] || MapPin} title={t('feedPg.emptyCategory.title')} sub={t('feedPg.emptyCategory.sub')} />
   } else {
     const blocks = []
-    // Patrocinados não têm mais seção própria: aparecem primeiro no carrossel
-    // da sua categoria, com a tag "Patrocinado".
-    if (posts.length) {
-      blocks.push(
-        <section key="feed" className="space-y-3">
-          <SectionTitle>🎉 {t('feedPg.sectionHappening')}</SectionTitle>
-          <div className="space-y-1.5">
-            {posts.map(renderPost)}
-          </div>
-        </section>
-      )
-    }
-    // Um carrossel por categoria, com a tag em cima. Cada categoria mostra uma
-    // prévia (10) que rola na horizontal; "Ver todos" abre a categoria cheia.
-    for (const catId of allCatIds) {
-      const list = places.filter((p) => p.category === catId)
-      if (!list.length) continue
+    // Carrossel de uma categoria (tag em cima + prévia horizontal).
+    const renderCatSection = ({ catId, list }) => {
       const c = catInfo(catId)
-      blocks.push(
+      return (
         <section key={catId} className="space-y-2">
           <div className="flex items-center justify-between px-1">
             <SectionTitle>
@@ -866,6 +869,36 @@ export default function Feed() {
         </section>
       )
     }
+    // Categorias com conteúdo, embaralhadas p/ o feed não ficar padronizado
+    // (mesma ordem no dia, muda a cada dia).
+    const catSections = []
+    for (const catId of allCatIds) {
+      const list = places.filter((p) => p.category === catId)
+      if (list.length) catSections.push({ catId, list })
+    }
+    const daySeed = Math.floor(Date.now() / 86400000)
+    const shuffledCats = shuffleStable(catSections, daySeed)
+
+    // Intercala publicações e carrosséis: alguns posts, um carrossel, mais
+    // posts, outro carrossel… em vez de todos os posts e depois todos os
+    // carrosséis. Assim a rolagem vai alternando e não fica monótona.
+    const postEls = posts.map(renderPost)
+    const CHUNK = 2
+    let ci = 0
+    for (let i = 0; i < postEls.length; i += CHUNK) {
+      blocks.push(
+        <section key={`posts-${i}`} className={i === 0 ? 'space-y-3' : 'space-y-1.5'}>
+          {i === 0 && <SectionTitle>🎉 {t('feedPg.sectionHappening')}</SectionTitle>}
+          <div className="space-y-1.5">
+            {postEls.slice(i, i + CHUNK)}
+          </div>
+        </section>
+      )
+      if (ci < shuffledCats.length) blocks.push(renderCatSection(shuffledCats[ci++]))
+    }
+    // Carrosséis que sobraram (mais categorias que grupos de posts) vão ao fim.
+    for (; ci < shuffledCats.length; ci++) blocks.push(renderCatSection(shuffledCats[ci]))
+
     content = blocks.length ? blocks
       : (loadingFeed || loadingPlacesAll) ? Loader
       : <EmptyState icon={Sparkles} title={t('feedPg.emptyAll.title')} sub={t('feedPg.emptyAll.sub')} />
