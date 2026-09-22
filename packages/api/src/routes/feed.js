@@ -45,7 +45,7 @@ router.get('/', async (_req, res, next) => {
       supabase.from('post_likes').select('post_id').in('post_id', ids),
       supabase.from('post_comments').select('post_id').in('post_id', ids),
       authorIds.length
-        ? supabase.from('users').select('id, full_name, profile_photo_url').in('id', authorIds)
+        ? supabase.from('users').select('id, full_name, profile_photo_url, user_type').in('id', authorIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -62,6 +62,7 @@ router.get('/', async (_req, res, next) => {
       comment_count: commentMap[p.id] || 0,
       author_avatar: authorMap[p.created_by_user_id]?.profile_photo_url || null,
       author_name:   authorMap[p.created_by_user_id]?.full_name || null,
+      author_type:   authorMap[p.created_by_user_id]?.user_type || null,
     })));
   } catch (err) { next(err); }
 });

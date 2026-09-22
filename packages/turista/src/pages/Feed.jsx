@@ -437,6 +437,14 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
+  // Autor: operador (perfil próprio + sem story) ou Turiva (admin, com story).
+  const isOperatorPost = post.author_type === 'operator'
+  const authorName = isOperatorPost ? (post.author_name || 'Operador') : 'Turiva'
+  const showRing = !isOperatorPost && hasStories   // anel de story só na Turiva
+  function openAuthor() {
+    if (isOperatorPost) navigate(`/op/${post.created_by_user_id}`)
+    else navigate('/turiva')
+  }
 
   function share() {
     const parts = [post.title]
@@ -472,13 +480,13 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
         {/* Gradiente + cabeçalho SOBRE a imagem */}
         <div className="absolute top-0 inset-x-0 h-24 z-20 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
         <div className="absolute top-3 inset-x-0 z-20 px-4 flex items-center gap-2.5">
-          {/* Foto → abre o story SOBRE o feed (anel colorido = story novo) */}
+          {/* Foto → Turiva abre o story; operador abre o perfil dele */}
           <button
-            onClick={() => { if (hasStories) setStoryOpen(true) }}
-            aria-label={hasStories ? 'Ver story da Turiva' : 'Turiva'}
-            className={`shrink-0 rounded-full ${hasStories ? (hasUnseen ? 'p-[2px] bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600' : 'p-[2px] bg-white/70') : ''} ${hasStories ? 'active:scale-95 transition-transform' : ''}`}
+            onClick={() => { if (showRing) setStoryOpen(true); else openAuthor() }}
+            aria-label={authorName}
+            className={`shrink-0 rounded-full ${showRing ? (hasUnseen ? 'p-[2px] bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600' : 'p-[2px] bg-white/70') : ''} active:scale-95 transition-transform`}
           >
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden ${hasStories ? 'ring-2 ring-white' : 'border-2 border-white/70'} ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden ${showRing ? 'ring-2 ring-white' : 'border-2 border-white/70'} ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
               {post.author_avatar ? (
                 <img src={post.author_avatar} alt="" className="w-full h-full object-cover" />
               ) : isPromo ? (
@@ -488,10 +496,10 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
               )}
             </div>
           </button>
-          {/* Nome → abre o perfil público da Turiva */}
-          <button onClick={() => navigate('/turiva')} className="min-w-0 text-left active:opacity-80">
+          {/* Nome → abre o perfil (Turiva ou operador) */}
+          <button onClick={openAuthor} className="min-w-0 text-left active:opacity-80">
             <p className="text-[13px] font-bold text-white leading-tight drop-shadow flex items-center gap-1">
-              Turiva <VerifiedBadge size={13} />
+              {authorName} {!isOperatorPost && <VerifiedBadge size={13} />}
             </p>
             <p className="text-[11px] text-white/80 leading-tight drop-shadow">{isPromo ? t('feedPg.promoLabel') : t('feedPg.eventLabel')} · Jericoacoara</p>
           </button>

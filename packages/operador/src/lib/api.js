@@ -212,4 +212,11 @@ export const api = {
   deleteNotification:    (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
+
+  // Feed — publicação do operador (atribuída a ele; some ao ser excluída)
+  getFeed:             ()      => request('/api/feed'),
+  createPost:          (body)  => request('/api/feed', { method: 'POST', body }),
+  deletePost:          (id)    => request('/api/feed/' + id, { method: 'DELETE' }),
+  uploadSiteImage:     (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
+  getStorageSignedUrl: (body)  => request('/api/admin/storage-sign', { method: 'POST', body }),
 }

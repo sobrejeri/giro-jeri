@@ -1249,7 +1249,7 @@ router.put('/settings/:key', requireAdmin, async (req, res, next) => {
 // ── POST /api/admin/site-image ─────────────────────────
 // Faz upload de uma imagem do site (ex: banner da home) e devolve a URL pública.
 // Reaproveita o bucket público "avatars" sob o prefixo "site/".
-router.post('/site-image', requireAdmin, async (req, res, next) => {
+router.post('/site-image', requireOperator, async (req, res, next) => {
   try {
     const { photo_data, name } = req.body;
     if (!photo_data || typeof photo_data !== 'string') {
@@ -1295,7 +1295,7 @@ router.post('/site-image', requireAdmin, async (req, res, next) => {
 // Gera uma URL assinada para upload direto do browser ao Supabase Storage.
 // Usado para vídeos (Stories) e imagens (catálogo) grandes, evitando rotear
 // os arquivos pelo servidor. Aceita `filename` (Stories) ou `path` (catálogo).
-router.post('/storage-sign', requireAdmin, async (req, res, next) => {
+router.post('/storage-sign', requireOperator, async (req, res, next) => {
   try {
     const { filename, path: clientPath, content_type } = req.body;
     const ref = filename || clientPath;

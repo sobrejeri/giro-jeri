@@ -265,6 +265,9 @@ export const api = {
   uploadSiteImage:    (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
   getStorageSignedUrl: (body)     => request('/api/admin/storage-sign', { method: 'POST', body }),
 
+  // Perfil público do operador
+  getOperatorPublic: (id) => request('/api/operator/' + id + '/public'),
+
   // Stories efêmeros do perfil (24h, círculo colorido na foto) + visualizações
   getLiveStories:     ()        => request('/api/stories/live'),
   addLiveStory:       (body)    => request('/api/stories/live', { method: 'POST', body }),

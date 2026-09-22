@@ -6,6 +6,7 @@ import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Input, { Select } from '../components/ui/Input'
 import Button from '../components/ui/Button'
+import PublicarFeed from '../components/PublicarFeed'
 
 // ── Meu link de vendas (venda direta, sem fila) ────────────────
 // Reservas feitas por este link nascem atribuídas ao operador e já vão
@@ -462,6 +463,9 @@ export default function Perfil() {
 
       {/* Link de vendas direto */}
       <MeuLink slug={profile?.partner_slug} />
+
+      {/* Publicar na Descubra (fotos/vídeos dos serviços) */}
+      <PublicarFeed meId={profile?.id} />
 
       {/* Dados Pessoais */}
       <Card>
