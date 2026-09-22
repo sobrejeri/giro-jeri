@@ -833,8 +833,8 @@ export default function Tours() {
     <div className="lg:hidden min-h-screen pb-4">
 
       {/* ── Header ──────────────────────────────────────────── */}
-      <div className="bg-white px-4 pt-5 pb-3 shadow-sm lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
-        <div className={`relative flex items-center min-h-[32px] ${isCreator ? 'justify-start' : 'justify-center'}`}>
+      <div className={`px-4 pt-5 pb-3 lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl ${isCreator ? '' : 'bg-white shadow-sm'}`}>
+        <div className={`relative flex items-center min-h-[44px] ${isCreator ? 'justify-start' : 'justify-center'}`}>
           {!isCreator && (
             <button
               onClick={() => navigate(-1)}
@@ -844,9 +844,19 @@ export default function Tours() {
               <ChevronLeft size={20} className="text-gray-700" />
             </button>
           )}
-          <h1 className={`font-giro font-semibold text-gray-900 tracking-wide ${isCreator ? 'text-[17px]' : 'text-[22px]'}`}>
-            {isCreator ? 'Turiva Brasil' : t('toursPg.header.title')}
-          </h1>
+          {isCreator ? (
+            <div className="flex items-center gap-2.5 min-w-0">
+              <img src={(import.meta.env.BASE_URL || '/') + 'logo-icon.jpeg'} alt="" className="w-10 h-10 rounded-2xl shrink-0" />
+              <div className="min-w-0 leading-none">
+                <p className="font-giro font-bold text-[19px] text-gray-900 tracking-[0.02em] leading-none">TURIVA</p>
+                <p className="text-[11.5px] text-gray-500 leading-none mt-1">Passeios &amp; Transfers</p>
+              </div>
+            </div>
+          ) : (
+            <h1 className="font-giro font-semibold text-gray-900 tracking-wide text-[22px]">
+              {t('toursPg.header.title')}
+            </h1>
+          )}
           <div className="absolute right-0 flex items-center gap-2">
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
