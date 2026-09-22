@@ -92,6 +92,7 @@
     },
     "menu": {
       "bookings": "Mis Reservas",
+      "favorites": "Favoritos",
       "reviews": "Mis Reseñas",
       "notifications": "Notificaciones",
       "privacy": "Privacidad y seguridad",

@@ -13,7 +13,7 @@ import Stories from '../components/Stories'
 import LiveAvatarStories from '../components/LiveAvatarStories'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
-  Camera, Pencil, Check, X,
+  Camera, Pencil, Check, X, Heart,
   Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard, Play,
 } from 'lucide-react'
 
@@ -261,6 +261,7 @@ export default function Profile() {
 
   const MENU = [
     { icon: CalendarCheck, label: t('profile.menu.bookings'), to: '/minhas-reservas' },
+    { icon: Heart,         label: t('profile.menu.favorites'), to: '/favoritos' },
     { icon: Megaphone,     label: 'Divulgou, Ganhou · Afiliado', to: '/afiliado' },
   ]
 

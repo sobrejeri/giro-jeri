@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Home, Compass, Car, CalendarCheck, User } from 'lucide-react'
+import { Home, Compass, CalendarCheck, User, Sparkles } from 'lucide-react'
 
 export default function BottomNav() {
   const navigate     = useNavigate()
@@ -11,43 +11,64 @@ export default function BottomNav() {
   // embaixo e o menu só roubava espaço numa tela que já é comprida.
   if (pathname === '/carrinho') return null
 
-  // Cinco itens: com seis as legendas ficam apertadas no celular. "Descubra"
-  // não sumiu — vive dentro da home, na grade do rodapé.
-  const NAV = [
-    { to: '/',                icon: Home,          label: t('nav.home'),      exact: true },
-    { to: '/passeios',        icon: Compass,       label: t('nav.tours') },
-    { to: '/transfers',       icon: Car,           label: t('nav.transfers') },
+  // Dois itens de cada lado + um BOTÃO CENTRAL destacado (Descubra) — a tela de
+  // destaque, que antes só vivia dentro da home. Para o botão ficar no meio, a
+  // barra tem 4 abas: Transfers saiu daqui, mas continua a um toque pelo card
+  // grande da home e pela rota /transfers.
+  const LADO_ESQ = [
+    { to: '/',          icon: Home,    label: t('nav.home'), exact: true },
+    { to: '/passeios',  icon: Compass, label: t('nav.tours') },
+  ]
+  const LADO_DIR = [
     { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings') },
     { to: '/perfil',          icon: User,          label: t('nav.profile') },
   ]
 
+  const Aba = ({ to, icon: Icon, label, exact }) => {
+    const active = exact ? pathname === to : pathname.startsWith(to)
+    return (
+      <button
+        onClick={() => navigate(to)}
+        className="flex-1 min-w-0 flex flex-col items-center gap-[2px] py-1.5 px-0.5 active:scale-95 transition-transform"
+      >
+        <div className="w-7 h-7 rounded-full flex items-center justify-center">
+          <Icon size={20}
+            className={active ? 'text-brand' : 'text-gray-400'}
+            strokeWidth={active ? 2.5 : 1.75}
+            fill={active ? 'currentColor' : 'none'} />
+        </div>
+        <span className={`text-[10px] leading-tight max-w-full truncate transition-colors ${active ? 'text-brand font-semibold' : 'text-gray-400 font-medium'}`}>
+          {label}
+        </span>
+        <span className={`h-[3px] w-5 rounded-full transition-colors ${active ? 'bg-brand' : 'bg-transparent'}`} />
+      </button>
+    )
+  }
+
+  const descubraAtivo = pathname.startsWith('/eventos')
+
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100 lg:hidden">
-      <div className="flex items-center justify-around px-2 pt-1.5 pb-2">
-        {NAV.map(({ to, icon: Icon, label, exact }) => {
-          const active = exact ? pathname === to : pathname.startsWith(to)
-          return (
-            <button
-              key={to}
-              onClick={() => navigate(to)}
-              className="flex-1 min-w-0 flex flex-col items-center gap-[2px] py-1.5 px-0.5 rounded-xl active:scale-95 transition-transform"
-            >
-              {/* Item ativo: ícone preenchido + risco embaixo. */}
-              <div className="w-7 h-7 rounded-full flex items-center justify-center">
-                <Icon
-                  size={20}
-                  className={active ? 'text-brand' : 'text-gray-400'}
-                  strokeWidth={active ? 2.5 : 1.75}
-                  fill={active ? 'currentColor' : 'none'}
-                />
-              </div>
-              <span className={`text-[10px] leading-tight max-w-full truncate transition-colors ${active ? 'text-brand font-semibold' : 'text-gray-400 font-medium'}`}>
-                {label}
-              </span>
-              <span className={`h-[3px] w-5 rounded-full transition-colors ${active ? 'bg-brand' : 'bg-transparent'}`} />
-            </button>
-          )
-        })}
+      <div className="flex items-end justify-around px-2 pt-1.5 pb-2">
+        {LADO_ESQ.map((it) => <Aba key={it.to} {...it} />)}
+
+        {/* Botão central destacado — abre a tela de destaque (Descubra). Sobe
+            acima da barra, em círculo laranja, para virar o ponto focal. */}
+        <div className="flex-1 min-w-0 flex flex-col items-center justify-end">
+          <button
+            onClick={() => navigate('/eventos')}
+            aria-label={t('nav.events')}
+            className="-mt-7 w-14 h-14 rounded-full bg-brand flex items-center justify-center shadow-lg shadow-brand/40 ring-4 ring-white active:scale-95 transition-transform"
+          >
+            <Sparkles size={24} className="text-white" fill="currentColor" strokeWidth={1.5} />
+          </button>
+          <span className={`text-[10px] leading-tight mt-1 transition-colors ${descubraAtivo ? 'text-brand font-semibold' : 'text-gray-500 font-medium'}`}>
+            {t('nav.events')}
+          </span>
+          <span className={`h-[3px] w-5 rounded-full mt-[2px] transition-colors ${descubraAtivo ? 'bg-brand' : 'bg-transparent'}`} />
+        </div>
+
+        {LADO_DIR.map((it) => <Aba key={it.to} {...it} />)}
       </div>
     </nav>
   )
