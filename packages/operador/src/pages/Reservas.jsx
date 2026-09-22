@@ -9,6 +9,7 @@ import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import ChatReserva from '../components/ChatReserva'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 import { elevatedModeCopy } from '../copy/fleet'
@@ -278,6 +279,7 @@ function ComboCard({ items, onAccept, onAcceptAll, accepting, acceptingCombo }) 
 
 // ── Card de corrida aceita (minhas) ───────────────────────
 function MyCard({ booking, onConfirm, onRequestInfo, onStart, onComplete, onDispatch, busy }) {
+  const [chatOpen, setChatOpen] = useState(false)
   const type = booking.service_type === 'tour' ? 'Passeio' : 'Transfer'
   const mode = booking.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'
   const clientPhone = booking.users?.phone
@@ -420,7 +422,15 @@ function MyCard({ booking, onConfirm, onRequestInfo, onStart, onComplete, onDisp
               </button>
             </>
           )}
+          {/* Chat da reserva (in-app, com o cliente) */}
+          <button
+            onClick={() => setChatOpen(true)}
+            className="w-full flex items-center justify-center gap-2 border border-brand/30 text-brand font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-all"
+          >
+            <MessageCircle size={15} /> Chat com o cliente
+          </button>
         </div>
+        <ChatReserva bookingId={booking.id} open={chatOpen} onClose={() => setChatOpen(false)} />
       </div>
     </div>
   )

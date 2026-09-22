@@ -1060,6 +1060,7 @@
       "title": "Detalhes da reserva",
       "copied": "Copiado!"
     },
+    "chat": { "open": "Falar com o operador" },
     "statusBanner": {
       "waitingAcceptance": "Assim que um operador aceitar, você poderá pagar",
       "waitingPayment": "Operador aceitou — pague para confirmar",

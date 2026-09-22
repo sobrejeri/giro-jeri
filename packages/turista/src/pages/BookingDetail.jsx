@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import { resolveStatusReserva } from '../lib/statusReserva'
 import { PageSpinner } from '../components/ui/Spinner'
 import ReviewSheet from '../components/ReviewSheet'
+import ChatReserva from '../components/ChatReserva'
 import {
   ChevronLeft, MapPin, Calendar, Clock, Users, Car, Shield,
   MessageCircle, CheckCircle, AlertTriangle, Phone, Copy,
@@ -108,6 +109,7 @@ export default function BookingDetail() {
   }
 
   const [copied,          setCopied]          = useState(false)
+  const [chatOpen,        setChatOpen]        = useState(false)
   const [showCancel,      setShowCancel]      = useState(false)
   const [cancelLoading,   setCancelLoading]   = useState(false)
   const [cancelError,     setCancelError]     = useState(null)
@@ -366,6 +368,16 @@ export default function BookingDetail() {
               <p className="text-[12px] font-medium text-red-700 leading-snug">{t('bookingDetailPg.completionPin.warning')}</p>
             </div>
           </div>
+        )}
+
+        {/* Falar com o operador (chat da reserva) — quando já há operador. */}
+        {booking.operator_id && !['cancelled'].includes(booking.status_commercial) && (
+          <button
+            onClick={() => setChatOpen(true)}
+            className="w-full flex items-center justify-center gap-2 bg-white border border-brand/30 text-brand font-bold rounded-2xl py-3 text-[14px] active:scale-[0.99] transition-transform shadow-sm"
+          >
+            <MessageCircle size={17} /> {t('bookingDetailPg.chat.open', 'Falar com o operador')}
+          </button>
         )}
 
         {/* Aceite parcial (R3) — 1+ veículo aceito, ainda há pendentes.
@@ -723,6 +735,8 @@ export default function BookingDetail() {
           </button>
         )}
       </main>
+
+      <ChatReserva bookingId={booking.id} open={chatOpen} onClose={() => setChatOpen(false)} meuPapel="tourist" />
 
       {/* Cancel Dialog */}
       {avaliando && booking && (

@@ -666,4 +666,76 @@ async function getServiceSnapshot(serviceType, serviceId) {
   }
 }
 
+// =============================================================================
+// CHAT POR RESERVA (item 7) — cliente ↔ operador (admin vê tudo)
+// =============================================================================
+
+// Quem pode ver/enviar mensagens desta reserva, e com qual papel.
+async function acessoChat(req, bookingId) {
+  const { data: b } = await supabase
+    .from('bookings').select('id, user_id, operator_id').eq('id', bookingId).maybeSingle();
+  if (!b) return { ok: false, code: 404 };
+  const u = req.user;
+  if (u.user_type === 'admin' || u.user_type === 'finance') return { ok: true, role: 'admin', booking: b };
+  if (u.user_type === 'tourist' && b.user_id === u.id)      return { ok: true, role: 'tourist', booking: b };
+  if ((u.user_type === 'operator' || u.user_type === 'agency') && b.operator_id === u.id)
+    return { ok: true, role: 'operator', booking: b };
+  return { ok: false, code: 404 };
+}
+
+// ── GET /api/bookings/:id/messages ─────────────────────
+router.get('/:id/messages', authenticate, async (req, res, next) => {
+  try {
+    const acc = await acessoChat(req, req.params.id);
+    if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
+    const { data, error } = await supabase
+      .from('booking_messages')
+      .select('id, sender_user_id, sender_role, body, created_at')
+      .eq('booking_id', req.params.id)
+      .order('created_at', { ascending: true })
+      .limit(500);
+    if (error) { if (error.code === '42P01') return res.json([]); throw error; }
+    // Marca como lidas as mensagens que NÃO são deste papel (best-effort).
+    supabase.from('booking_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('booking_id', req.params.id).is('read_at', null).neq('sender_role', acc.role)
+      .then(() => {}, () => {});
+    res.json(data || []);
+  } catch (err) { next(err); }
+});
+
+// ── POST /api/bookings/:id/messages ────────────────────
+router.post('/:id/messages', authenticate, async (req, res, next) => {
+  try {
+    const acc = await acessoChat(req, req.params.id);
+    if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
+    const body = String(req.body?.body || '').trim().slice(0, 2000);
+    if (!body) return res.status(400).json({ error: 'Mensagem vazia' });
+
+    const { data, error } = await supabase
+      .from('booking_messages')
+      .insert({ booking_id: req.params.id, sender_user_id: req.user.id, sender_role: acc.role, body })
+      .select('id, sender_user_id, sender_role, body, created_at')
+      .single();
+    if (error) {
+      if (error.code === '42P01') return res.status(503).json({ error: 'Chat indisponível (migração 100 pendente).' });
+      throw error;
+    }
+
+    // Avisa a OUTRA parte (push + central). Cliente→operador ou operador→cliente.
+    const b = acc.booking;
+    const destino = acc.role === 'tourist' ? b.operator_id : b.user_id;
+    if (destino) {
+      notifyUser({
+        userId:      destino,
+        bookingId:   b.id,
+        templateKey: 'chat_message',
+        title:       acc.role === 'tourist' ? 'Nova mensagem do cliente 💬' : 'Nova mensagem do operador 💬',
+        body:        body.slice(0, 140),
+      });
+    }
+    res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
 export default router;
