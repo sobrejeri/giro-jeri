@@ -425,7 +425,7 @@ function FeedVideo({ src, poster }) {
   )
 }
 
-export function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
+export function PostCard({ post, liked, onLike, user, isAdmin, canEdit, onEdit, onDelete }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { stories: liveStories, hasStories, hasUnseen, bumpSeen } = useLiveStories()
@@ -527,7 +527,7 @@ export function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete 
         <button onClick={share} className="active:scale-90 transition-transform" aria-label={t('feedPg.share')}>
           <Share2 size={22} className="text-gray-800" />
         </button>
-        {isAdmin && (
+        {canEdit && (
           <div className="ml-auto flex items-center gap-3">
             <button onClick={() => onEdit?.(post)} className="active:scale-90 transition-transform" aria-label={t('feedPg.edit')}>
               <Pencil size={19} className="text-gray-500" />
@@ -761,9 +761,12 @@ export default function Feed() {
     return () => window.removeEventListener('app:pull-refresh', onRefresh)
   }, [])
 
-  // Publicação no feed (admin): compositor/editor. undefined = fechado,
-  // null = nova publicação, objeto = editar aquele post.
+  // Publicação no feed: compositor/editor. undefined = fechado, null = nova
+  // publicação, objeto = editar aquele post. Admin E operador podem publicar
+  // (o backend aceita operador em POST /feed e a baixa é por dono).
   const isAdmin = user?.user_type === 'admin'
+  const isOperator = user?.user_type === 'operator'
+  const isCreator = isAdmin || isOperator
   const [composerPost, setComposerPost] = useState(undefined)
   async function handleDeletePost(post) {
     if (!confirm(t('feedPg.confirmDelete', { title: post.title }))) return
@@ -905,7 +908,9 @@ export default function Feed() {
 
   const renderPost = (p) => (
     <PostCard key={p.id} post={p} liked={likedSet.has(p.id)} onLike={() => handleLike(p.id)} user={user}
-      isAdmin={isAdmin} onEdit={(post) => setComposerPost(post)} onDelete={handleDeletePost} />
+      isAdmin={isAdmin}
+      canEdit={isAdmin || (isOperator && p.created_by_user_id === user?.id)}
+      onEdit={(post) => setComposerPost(post)} onDelete={handleDeletePost} />
   )
   // Avaliação interna só vale para estabelecimento do NOSSO banco (id uuid).
   // Item vindo do Google (id "g:..." / "geo:...") mostra a nota do próprio
@@ -1078,8 +1083,8 @@ export default function Feed() {
         </div>
       )}
 
-      {/* Nova publicação (admin) — sempre visível, independente da busca. */}
-      {isAdmin && (
+      {/* Nova publicação (admin/operador) — sempre visível, independente da busca. */}
+      {isCreator && (
         <div className="max-w-2xl mx-auto px-4 pt-3">
           <button
             onClick={() => setComposerPost(null)}
