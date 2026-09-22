@@ -9,6 +9,7 @@ import { setLang, LANGS } from '../i18n/index.js'
 import { validateBrDoc } from '../lib/document'
 import ProfileDesktop from './ProfileDesktop'
 import VerifiedBadge from '../components/VerifiedBadge'
+import Stories from '../components/Stories'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
@@ -532,6 +533,13 @@ export default function Profile() {
               </div>
               )}
             </div>
+
+            {/* Destaques (stories) — como os destaques do perfil do Instagram */}
+            {isAdmin && (
+              <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <Stories />
+              </div>
+            )}
 
             {/* Grade de publicações (estilo Instagram) — só admin */}
             {isAdmin && <PostsGrid posts={adminPosts} />}
