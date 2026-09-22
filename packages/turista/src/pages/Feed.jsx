@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -14,7 +14,7 @@ import {
   BadgePercent, BedDouble, UtensilsCrossed, ShoppingBag, Sparkles,
   Star, Instagram, Navigation, Globe, MessageCircle, Send, Trash2, X,
   ChevronLeft, Search, Pencil, Plus,
-  Wine, ShoppingCart, Pill, Scissors, Shirt, Wind,
+  Wine, ShoppingCart, Pill, Scissors, Shirt, Wind, Volume2, VolumeX,
 } from 'lucide-react'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
@@ -326,6 +326,71 @@ function ReviewModal({ place, onClose, user }) {
 }
 
 /* ── feed card (evento / promoção) ─────────────────────── */
+// Vídeo do feed estilo reels: autoplay MUDO quando entra na tela (exigência dos
+// navegadores para autoplay), pausa ao sair, e um botão 🔈 para ligar/desligar
+// o som. O estado de som é compartilhado por todos os vídeos via um "mudo
+// global" simples, para não sair som de dois ao mesmo tempo.
+let _feedMutedGlobal = true
+const _feedMuteListeners = new Set()
+function setFeedMuted(v) { _feedMutedGlobal = v; _feedMuteListeners.forEach((fn) => fn(v)) }
+
+function FeedVideo({ src, poster }) {
+  const ref = useRef(null)
+  const [muted, setMuted] = useState(_feedMutedGlobal)
+
+  // Sincroniza com o mudo global (quando outro vídeo liga/desliga o som).
+  useEffect(() => {
+    const fn = (v) => setMuted(v)
+    _feedMuteListeners.add(fn)
+    return () => { _feedMuteListeners.delete(fn) }
+  }, [])
+
+  // Play/pause conforme a visibilidade na tela.
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting && e.intersectionRatio >= 0.6) {
+          el.play?.().catch(() => {})
+        } else {
+          el.pause?.()
+        }
+      }
+    }, { threshold: [0, 0.6, 1] })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  function toggleMute(e) {
+    e.stopPropagation()
+    const novo = !muted
+    setFeedMuted(novo)
+    // Ao LIGAR o som, garante que o vídeo esteja tocando.
+    if (!novo) ref.current?.play?.().catch(() => {})
+  }
+
+  return (
+    <>
+      <video
+        ref={ref}
+        src={src}
+        poster={poster || undefined}
+        muted={muted}
+        autoPlay loop playsInline
+        className="relative z-10 w-full h-full object-cover bg-black"
+      />
+      <button
+        onClick={toggleMute}
+        aria-label={muted ? 'Ativar som' : 'Silenciar'}
+        className="absolute bottom-3 right-3 z-30 w-9 h-9 rounded-full bg-black/55 text-white flex items-center justify-center active:scale-90 transition-transform"
+      >
+        {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+      </button>
+    </>
+  )
+}
+
 function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
   const { t } = useTranslation()
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -353,12 +418,7 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
           desfocado completa as laterais sem cortar/ampliar a imagem ── */}
       <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-900">
         {post.video_url ? (
-          <video
-            src={post.video_url}
-            poster={post.image_url || undefined}
-            controls playsInline loop
-            className="relative z-10 w-full h-full object-cover bg-black"
-          />
+          <FeedVideo src={post.video_url} poster={post.image_url} />
         ) : post.image_url ? (
           <>
             <img src={post.image_url} alt="" aria-hidden="true"
