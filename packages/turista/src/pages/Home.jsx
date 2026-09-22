@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { precoDeEntrada } from '../lib/precoCartao'
+import { resolveStatusReserva } from '../lib/statusReserva'
 import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -321,6 +322,11 @@ export default function Home() {
   const proxima = reservas
     .filter((b) => (b.service_date || '') >= hoje && b.status_commercial !== 'cancelled')
     .sort((a, b) => (a.service_date || '').localeCompare(b.service_date || ''))[0] || null
+  // Contador vermelho no ícone de reservas: quantas ainda esperam pagamento do
+  // cliente. Usa a MESMA regra da lista (resolveStatusReserva === 'waiting_payment'),
+  // que já exclui cancelada/expirada/concluída — o número bate com o que a tela
+  // de reservas mostra como "aguardando pagamento".
+  const reservasAPagar = reservas.filter((b) => resolveStatusReserva(b) === 'waiting_payment').length
 
   const [lento, setLento] = useState(false)
   useEffect(() => {
@@ -378,9 +384,16 @@ export default function Home() {
                 className="w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
                 <Search size={22} className="text-gray-700" />
               </button>
-              <button onClick={() => navigate(user ? '/minhas-reservas' : '/login')} aria-label="Minhas reservas"
-                className="w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+              <button onClick={() => navigate(user ? '/minhas-reservas' : '/login')}
+                aria-label={reservasAPagar > 0 ? `Minhas reservas — ${reservasAPagar} aguardando pagamento` : 'Minhas reservas'}
+                className="relative w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
                 <CalendarCheck size={22} className="text-gray-700" />
+                {/* Contador vermelho estilo Reels: nº de reservas esperando pagamento. */}
+                {reservasAPagar > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none flex items-center justify-center ring-2 ring-white">
+                    {reservasAPagar > 9 ? '9+' : reservasAPagar}
+                  </span>
+                )}
               </button>
               <InboxChat />
               <NotificationBell />
