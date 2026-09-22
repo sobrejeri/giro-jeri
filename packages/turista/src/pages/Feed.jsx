@@ -8,6 +8,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import Stories from '../components/Stories'
 import VerifiedBadge from '../components/VerifiedBadge'
+import LiveStoryOverlay from '../components/LiveStoryOverlay'
+import { useLiveStories } from '../hooks/useLiveStories'
 import FeedPublisher from '../components/FeedPublisher'
 import {
   MapPin, Calendar, Clock, Heart, Share2, CalendarDays, PartyPopper,
@@ -425,6 +427,9 @@ function FeedVideo({ src, poster }) {
 
 function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { stories: liveStories, hasStories, hasUnseen, bumpSeen } = useLiveStories()
+  const [storyOpen, setStoryOpen] = useState(false)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [expandido, setExpandido] = useState(false)
   // Legenda longa fica recolhida (estilo Instagram) com "ver mais".
@@ -467,21 +472,29 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
         {/* Gradiente + cabeçalho SOBRE a imagem */}
         <div className="absolute top-0 inset-x-0 h-24 z-20 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
         <div className="absolute top-3 inset-x-0 z-20 px-4 flex items-center gap-2.5">
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 border-white/70 ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
-            {post.author_avatar ? (
-              <img src={post.author_avatar} alt="" className="w-full h-full object-cover" />
-            ) : isPromo ? (
-              <BadgePercent size={16} className="text-white" />
-            ) : (
-              <MapPin size={16} className="text-white" />
-            )}
-          </div>
-          <div className="min-w-0">
+          {/* Foto → abre o story SOBRE o feed (anel colorido = story novo) */}
+          <button
+            onClick={() => { if (hasStories) setStoryOpen(true) }}
+            aria-label={hasStories ? 'Ver story da Turiva' : 'Turiva'}
+            className={`shrink-0 rounded-full ${hasStories ? (hasUnseen ? 'p-[2px] bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600' : 'p-[2px] bg-white/70') : ''} ${hasStories ? 'active:scale-95 transition-transform' : ''}`}
+          >
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden ${hasStories ? 'ring-2 ring-white' : 'border-2 border-white/70'} ${isPromo ? 'bg-emerald-500' : 'bg-brand'}`}>
+              {post.author_avatar ? (
+                <img src={post.author_avatar} alt="" className="w-full h-full object-cover" />
+              ) : isPromo ? (
+                <BadgePercent size={16} className="text-white" />
+              ) : (
+                <MapPin size={16} className="text-white" />
+              )}
+            </div>
+          </button>
+          {/* Nome → abre o perfil público da Turiva */}
+          <button onClick={() => navigate('/turiva')} className="min-w-0 text-left active:opacity-80">
             <p className="text-[13px] font-bold text-white leading-tight drop-shadow flex items-center gap-1">
               Turiva <VerifiedBadge size={13} />
             </p>
             <p className="text-[11px] text-white/80 leading-tight drop-shadow">{isPromo ? t('feedPg.promoLabel') : t('feedPg.eventLabel')} · Jericoacoara</p>
-          </div>
+          </button>
           {dateLabel && !isPromo && (
             <span className="ml-auto inline-flex items-center gap-1 bg-white/90 backdrop-blur text-brand text-[11px] font-bold px-2.5 py-1 rounded-full shadow">
               <Calendar size={12} /> {dateLabel}
@@ -560,6 +573,17 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
       {/* Sheet de comentários — só monta quando aberto. */}
       <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user}
         open={commentsOpen} setOpen={setCommentsOpen} />
+
+      {/* Story SOBRE o feed (sem trocar de tela) */}
+      {storyOpen && hasStories && (
+        <LiveStoryOverlay
+          stories={liveStories}
+          avatarUrl={post.author_avatar}
+          isAdmin={isAdmin}
+          onClose={() => setStoryOpen(false)}
+          onSeen={bumpSeen}
+        />
+      )}
     </article>
   )
 }

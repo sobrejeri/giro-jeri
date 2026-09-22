@@ -10,6 +10,7 @@ import CheckoutProcessando from './pages/checkout/CheckoutProcessando'
 import CheckoutSucesso     from './pages/checkout/CheckoutSucesso'
 import Home            from './pages/Home'
 import Feed            from './pages/Feed'
+import PerfilPublico   from './pages/PerfilPublico'
 import Tours           from './pages/Tours'
 import TourDetail      from './pages/TourDetail'
 import Transfers       from './pages/Transfers'
@@ -87,6 +88,7 @@ export default function App() {
       <Route path="/" element={<Layout />}>
         <Route index                      element={<Home />} />
         <Route path="eventos"             element={<Feed />} />
+        <Route path="turiva"              element={<PerfilPublico />} />
         <Route path="passeios"            element={<Tours />} />
         <Route path="passeios/:id"        element={<TourDetail />} />
         <Route path="transfers"           element={<Transfers />} />
