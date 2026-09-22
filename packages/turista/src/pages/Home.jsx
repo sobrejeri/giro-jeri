@@ -378,12 +378,9 @@ export default function Home() {
                 className="w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
                 <Search size={22} className="text-gray-700" />
               </button>
-              <button onClick={() => navigate('/favoritos')} aria-label="Favoritos"
-                className="relative w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
-                <Heart size={22} className={favs.size ? 'fill-brand text-brand' : 'text-gray-700'} />
-                {favs.size > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center">{favs.size}</span>
-                )}
+              <button onClick={() => navigate(user ? '/minhas-reservas' : '/login')} aria-label="Minhas reservas"
+                className="w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+                <CalendarCheck size={22} className="text-gray-700" />
               </button>
               <InboxChat />
               <NotificationBell />
