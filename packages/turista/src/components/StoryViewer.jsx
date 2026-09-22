@@ -15,7 +15,7 @@ import VerifiedBadge from './VerifiedBadge'
  *   onClose    — fecha o visualizador (ou ao passar do último item)
  *   isAdmin / onDelete — menu de excluir (somente admin)
  */
-export default function StoryViewer({ highlights = [], startGroup = 0, onClose, isAdmin = false, onDelete, onView, onShowViewers, onShare }) {
+export default function StoryViewer({ highlights = [], startGroup = 0, onClose, isAdmin = false, onDelete, onView, onShowViewers, onShare, onAuthor, verified = true }) {
   const { t } = useTranslation()
   const [groupIndex, setGroupIndex] = useState(startGroup)
   const [storyIndex, setStoryIndex] = useState(0)
@@ -236,10 +236,20 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
           )}
         </div>
 
-        <div className="flex-1 min-w-0 flex items-center gap-1">
-          <p className="text-white text-sm font-semibold drop-shadow truncate">{headerTitle}</p>
-          <VerifiedBadge size={15} />
-        </div>
+        {onAuthor ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAuthor() }}
+            className="flex-1 min-w-0 flex items-center gap-1 text-left active:opacity-80"
+          >
+            <span className="text-white text-sm font-semibold drop-shadow truncate">{headerTitle}</span>
+            {verified && <VerifiedBadge size={15} />}
+          </button>
+        ) : (
+          <div className="flex-1 min-w-0 flex items-center gap-1">
+            <p className="text-white text-sm font-semibold drop-shadow truncate">{headerTitle}</p>
+            {verified && <VerifiedBadge size={15} />}
+          </div>
+        )}
 
         {isVideo && (
           <button onClick={toggleMute} className="p-1.5 text-white active:scale-90 transition-transform" aria-label={muted ? 'Ativar som' : 'Silenciar'}>

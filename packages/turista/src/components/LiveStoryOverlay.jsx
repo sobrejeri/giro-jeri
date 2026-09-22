@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { api } from '../lib/api'
@@ -50,11 +51,20 @@ function ViewersSheet({ storyId, onClose }) {
  */
 export default function LiveStoryOverlay({ stories = [], avatarUrl, isAdmin = false, onClose, onSeen }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [viewersFor, setViewersFor] = useState(null)
 
   // Foto de perfil de quem publicou (vem da API); cai no avatar passado.
   const authorAvatar = stories.find((s) => s.author_avatar)?.author_avatar || avatarUrl || null
   const authorName   = stories.find((s) => s.author_name)?.author_name || 'Turiva'
+  const authorId     = stories.find((s) => s.author_id)?.author_id || null
+  const authorType   = stories.find((s) => s.author_type)?.author_type || null
+  const isTuriva     = authorType === 'admin' || !authorType
+  // Clicar no nome abre o perfil do autor (operador → /op/:id; Turiva → /turiva).
+  function irAoPerfil() {
+    onClose()
+    navigate(isTuriva ? '/turiva' : `/op/${authorId}`)
+  }
   const grupo = [{
     id: 'perfil',
     title: authorName,
@@ -102,6 +112,8 @@ export default function LiveStoryOverlay({ stories = [], avatarUrl, isAdmin = fa
         onView={handleView}
         onShare={handleShare}
         onShowViewers={isAdmin ? ((s) => setViewersFor(s.id)) : undefined}
+        onAuthor={(authorId || isTuriva) ? irAoPerfil : undefined}
+        verified={isTuriva}
       />
       {viewersFor && <ViewersSheet storyId={viewersFor} onClose={() => setViewersFor(null)} />}
     </>
