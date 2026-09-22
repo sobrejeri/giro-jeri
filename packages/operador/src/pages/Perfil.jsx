@@ -341,6 +341,7 @@ const DOC_TYPES = [
 
 const EMPTY = {
   full_name:           '',
+  username:            '',
   phone:               '',
   document_type:       'cpf',
   document_number:     '',
@@ -373,6 +374,7 @@ export default function Perfil() {
     if (!profile) return
     setForm({
       full_name:           profile.full_name           || '',
+      username:            profile.username            || '',
       phone:               profile.phone               || '',
       document_type:       profile.document_type       || 'cpf',
       document_number:     profile.document_number     || '',
@@ -434,7 +436,7 @@ export default function Perfil() {
 
   function handleSubmit(e) {
     e.preventDefault()
-    saveMut.mutate({
+    const payload = {
       full_name:           form.full_name           || undefined,
       phone:               form.phone               || undefined,
       document_type:       form.document_number ? form.document_type : null,
@@ -449,7 +451,13 @@ export default function Perfil() {
       bank_account_number: form.bank_account_number || null,
       bank_account_type:   form.bank_account_type   || null,
       bank_document:       form.bank_document       || null,
-    })
+    }
+    // Só envia o username se REALMENTE mudou — evita reprocessar a unicidade
+    // e limpar sem querer o que já estava salvo.
+    if ((form.username || '') !== (profile?.username || '')) {
+      payload.username = form.username?.trim() ? form.username.trim() : null
+    }
+    saveMut.mutate(payload)
   }
 
   if (isLoading) return <PageSpinner />
@@ -524,6 +532,26 @@ export default function Perfil() {
                 readOnly
                 className="bg-gray-50 cursor-not-allowed"
               />
+            </div>
+
+            {/* Nome de usuário: o que permite ENTRAR no app de turista
+                (turivabrasil.com), cujo login é por @usuário — o operador é
+                criado só com e-mail e sem usuário, então define aqui. */}
+            <div>
+              <Input
+                label="Nome de usuário"
+                value={form.username}
+                onChange={(e) => set('username', e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''))}
+                placeholder="seu_usuario"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={30}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Necessário para entrar no app de turista (turivabrasil.com) com seu usuário e ver seu perfil por lá.
+                Letras, números, ponto e sublinhado — de 3 a 30 caracteres.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

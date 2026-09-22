@@ -17,6 +17,7 @@ import {
 } from '../services/whatsapp.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
 import { isMarketplaceConfigured } from '../services/mercadoPago.js';
+import { validateUsername } from '../lib/username.js';
 import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
 
 // Porteiro do Mercado Pago: devolve a MENSAGEM de bloqueio, ou null se pode
@@ -108,7 +109,7 @@ function mapSituacaoRecebedor(status) {
 }
 
 const PROFILE_FIELDS = `
-  id, full_name, email, phone, document_type, document_number, birth_date,
+  id, full_name, username, email, phone, document_type, document_number, birth_date,
   profile_photo_url, address, cep, partner_slug,
   pix_key_type, pix_key,
   bank_name, bank_agency, bank_account_number, bank_account_type, bank_document,
@@ -117,6 +118,7 @@ const PROFILE_FIELDS = `
 
 const profileSchema = z.object({
   full_name:           z.string().min(2).max(200).optional(),
+  username:            z.string().max(30).optional().nullable(),
   phone:               z.string().min(10).max(30).optional().nullable(),
   document_type:       z.enum(['cpf', 'cnpj', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
   document_number:     z.string().max(30).optional().nullable(),
@@ -312,11 +314,11 @@ router.get('/profile', async (req, res, next) => {
       .eq('id', req.user.id)
       .single();
     if (error?.code === '42703') {
-      // Migration 054 (partner_slug) ainda não rodou — devolve o perfil sem o
-      // campo em vez de quebrar a tela do operador.
+      // Migration 054 (partner_slug) ou 061 (username) ainda não rodou — devolve
+      // o perfil sem esses campos em vez de quebrar a tela do operador.
       const retry = await supabase
         .from('users')
-        .select(PROFILE_FIELDS.replace(', partner_slug', ''))
+        .select(PROFILE_FIELDS.replace(', username', '').replace(', partner_slug', ''))
         .eq('id', req.user.id)
         .single();
       data = retry.data; error = retry.error;
@@ -330,6 +332,28 @@ router.get('/profile', async (req, res, next) => {
 router.patch('/profile', async (req, res, next) => {
   try {
     const body = profileSchema.parse(req.body);
+
+    // Nome de usuário: é o que permite ao operador ENTRAR no app de turista
+    // (login por @usuário) e ver o próprio perfil lá. Valida formato e unicidade
+    // (case-insensitive); vazio limpa; guardado em minúsculas. Mesma regra do
+    // PATCH /api/auth/me, para não haver duas definições divergentes.
+    if (body.username !== undefined) {
+      if (body.username === null || body.username.trim() === '') {
+        body.username = null;
+      } else {
+        const { username, error: uErr } = validateUsername(body.username);
+        if (uErr) return res.status(400).json({ error: uErr });
+        const { data: taken, error: tErr } = await supabase
+          .from('users').select('id').eq('username', username).neq('id', req.user.id).maybeSingle();
+        if (tErr?.code === '42703') {
+          return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 061 (coluna username) no banco.' });
+        }
+        if (tErr) return res.status(500).json({ error: tErr.message });
+        if (taken) return res.status(409).json({ error: 'Este nome de usuário já está em uso.' });
+        body.username = username;
+      }
+    }
+
     if (body.document_number) {
       if (body.document_type === 'cpf' || body.document_type === 'cnpj') {
         body.document_number = String(body.document_number).replace(/\D/g, '');
