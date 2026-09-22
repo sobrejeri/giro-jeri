@@ -6,7 +6,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   Star, Heart, ChevronDown, ChevronRight, ArrowRight, MapPin,
   Car, Bus, Flame, Sun, Sunset, Waves, Percent, CalendarCheck,
-  UtensilsCrossed, PartyPopper, Lightbulb, Clock, Megaphone, Search,
+  Clock, Megaphone, Search,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { precoDeEntrada } from '../lib/precoCartao'
@@ -200,37 +200,6 @@ function Atalho({ icon: Icon, label, cor, onClick }) {
   )
 }
 
-// Quadro do "Descubra": foto de fundo com véu escuro, ícone em bolha branca no
-// alto e legenda embaixo. A foto vem das configurações (o admin troca sem
-// depender de deploy) e é opcional — sem ela o degradê fica no lugar, e o <img>
-// se esconde sozinho se a URL quebrar.
-function TileDescubra({ icon: Icon, label, foto, tom, cor, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className="relative h-[74px] rounded-2xl overflow-hidden active:scale-95 transition-transform"
-    >
-      <div className={`absolute inset-0 bg-gradient-to-br ${tom}`} />
-      {foto && (
-        <img
-          src={foto}
-          alt=""
-          loading="lazy"
-          className="absolute inset-0 w-full h-full object-cover"
-          onError={(e) => { e.currentTarget.style.display = 'none' }}
-        />
-      )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/5" />
-      <span className="absolute top-1.5 left-1.5 w-[26px] h-[26px] rounded-full bg-white/95 flex items-center justify-center">
-        <Icon size={13} className={cor} strokeWidth={2.2} />
-      </span>
-      <span className="absolute bottom-1.5 left-1.5 right-1 text-white text-[9.5px] font-bold leading-tight text-left">
-        {label}
-      </span>
-    </button>
-  )
-}
-
 // Busca rápida da Home: filtra passeios por nome e leva ao detalhe. Busca numa
 // lista maior (não só os 12 da vitrine) para achar qualquer passeio.
 function HomeSearch({ onClose, value, setValue, navigate }) {
@@ -356,12 +325,6 @@ export default function Home() {
 
   const base = import.meta.env.BASE_URL
 
-  // Foto de fundo dos quadros "Descubra": vem de Configurações → Aparência, no
-  // admin. Sem foto, devolve vazio e o quadro fica no degradê — de propósito não
-  // há caminho fixo de arquivo, senão quem nunca enviar foto pagaria quatro 404
-  // em toda abertura da home.
-  const fotoDescubra = (nome) => settings?.[`descubra_${nome}_image_url`] || null
-
   return (
     <>
       <div className="hidden lg:block"><HomeDesktop /></div>
@@ -484,26 +447,7 @@ export default function Home() {
             </button>
           </div>
 
-          {/* ── Descubra (subiu para o topo: quadros mais visíveis) ──────── */}
-          <div>
-            <h2 className="text-[18px] font-extrabold text-gray-900 mb-2.5">Descubra {primeiroNome}</h2>
-            <div className="grid grid-cols-4 gap-2.5">
-              <TileDescubra icon={UtensilsCrossed} label="Restaurantes" cor="text-rose-500"
-                            tom="from-rose-400 to-orange-300"    foto={fotoDescubra('restaurantes')}
-                            onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={PartyPopper} label="Eventos" cor="text-violet-500"
-                            tom="from-violet-500 to-fuchsia-400" foto={fotoDescubra('eventos')}
-                            onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={MapPin} label="Lugares" cor="text-emerald-500"
-                            tom="from-emerald-500 to-teal-300"   foto={fotoDescubra('lugares')}
-                            onClick={() => navigate('/eventos')} />
-              <TileDescubra icon={Lightbulb} label="Dicas" cor="text-amber-500"
-                            tom="from-amber-400 to-yellow-300"   foto={fotoDescubra('dicas')}
-                            onClick={() => navigate('/eventos')} />
-            </div>
-          </div>
-
-          {/* ── 2ª prioridade: Mais procurados ──────────────── */}
+          {/* ── Mais procurados ──────────────── */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-[18px] font-extrabold text-gray-900">Mais procurados</h2>
