@@ -8,6 +8,7 @@ import { useCart } from '../../contexts/CartContext'
 import { checkoutStateFor } from '../../lib/cartCheckout'
 import { horasDeAntecedencia, primeiroReservavel } from '../../lib/antecedencia'
 import { getPartner as getPartnerAttribution } from '../../lib/partner'
+import { getPreferredOp } from '../../lib/preferredOp'
 import { getAffiliate as getAffiliateAttribution } from '../../lib/affiliate'
 import {
   ChevronLeft, ChevronRight, MapPin, Calendar, Clock, Users, Car,
@@ -412,6 +413,9 @@ function CheckoutSummaryInner() {
     // Venda direta (link /c/<slug>): a reserva nasce atribuída ao operador
     // e pronta para pagar — o servidor valida o slug.
     partner_slug:    getPartnerAttribution()?.slug || undefined,
+    // Prioridade da lojinha do operador (janela de 45s): a reserva segue o
+    // fluxo normal, mas fica exclusiva desse operador por alguns segundos.
+    preferred_operator_id: getPreferredOp()?.id || undefined,
     // Indicação de afiliado (/a/<código>): 5% de comissão quando a reserva
     // indicada é paga — o servidor resolve o código e trava autoindicação.
     affiliate_code:  getAffiliateAttribution()?.code || undefined,

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, Play, Star, Loader2, Store, Grid3x3, Plus } from 'lucide-react'
 import { api } from '../lib/api'
-import { setPartner } from '../lib/partner'
+import { setPreferredOp } from '../lib/preferredOp'
 
 // Perfil público do operador (aberto pelo nome/foto nas publicações do feed).
 // Mostra as fotos/vídeos dos serviços que ele publicou. A lojinha com
@@ -32,9 +32,9 @@ export default function PerfilOperador() {
   // passeio para configurar/reservar. Reaproveita o mesmo mecanismo do link
   // "Meu link de vendas" (/c/:slug) já existente.
   function reservarComOperador(service) {
-    if (op?.partner_slug) {
-      setPartner({ slug: op.partner_slug, name: op.full_name, photo: op.profile_photo_url })
-    }
+    // Prioridade (janela de 45s), não venda direta: a reserva segue o fluxo
+    // normal, mas fica exclusiva deste operador por alguns segundos.
+    setPreferredOp({ id: op.id, name: op.full_name, photo: op.profile_photo_url })
     navigate(`/passeios/${service.id}`)
   }
 

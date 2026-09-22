@@ -13,6 +13,7 @@ import { api } from '../lib/api'
 import { lerOferta } from '../lib/oferta'
 import { itemMissing, requestPayloadFor } from '../lib/cartCheckout'
 import { getPartner as getPartnerAttribution } from '../lib/partner'
+import { getPreferredOp } from '../lib/preferredOp'
 import { getAffiliate as getAffiliateAttribution } from '../lib/affiliate'
 import { PlaceInput } from './Transfers'
 import { format, startOfDay } from 'date-fns'
@@ -1209,10 +1210,13 @@ export default function CartPage() {
       // Com link de operador ativo, o grupo inteiro nasce atribuído a ela.
       const partner = getPartnerAttribution()
       const affiliate = getAffiliateAttribution()
+      const preferredOp = getPreferredOp()
       const created = await api.cartRequest(
         snapshot.map((it) => ({
           ...requestPayloadFor(it),
           ...(appliedCoupon && couponEligible(it) ? { coupon_code: appliedCoupon.code } : {}),
+          // Prioridade da lojinha (janela de 45s) — só quando não é venda direta.
+          ...(!partner?.slug && preferredOp?.id ? { preferred_operator_id: preferredOp.id } : {}),
         })),
         {
           ...(partner?.slug ? { partner_slug: partner.slug } : {}),

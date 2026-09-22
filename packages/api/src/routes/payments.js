@@ -144,6 +144,10 @@ const requestSchema = z.object({
   // reserva nasce atribuída (sem fila, sem aceite). NUNCA aceitar operator_id
   // cru do cliente — só o slug, validado aqui.
   partner_slug:     z.string().max(80).optional(),
+  // Lojinha do operador: prioridade temporária (janela de 45s) — a reserva
+  // segue o fluxo normal de aceite, mas fica exclusiva desse operador por
+  // alguns segundos. Só o id do operador (validado como uuid); não é venda direta.
+  preferred_operator_id: z.string().uuid().optional(),
   // Programa de afiliados (/a/<código> ou código digitado): o servidor resolve
   // o código e grava bookings.affiliate_id — NUNCA aceita o id cru. A comissão
   // só nasce quando a reserva é paga (onPaymentApproved).
@@ -2400,7 +2404,12 @@ router.post('/request', authenticate, async (req, res, next) => {
       service_type, service_id, booking_mode,
       service_date_iso, service_time, people_count, region_id,
       vehicles = [], origin_text, destination_text, partner_slug,
+      preferred_operator_id,
     } = parsed.data
+    // Prioridade da lojinha só vale se NÃO for venda direta por link (partner).
+    const prioridade = (!partner_slug && preferred_operator_id)
+      ? { preferred_operator_id, priority_until: new Date(Date.now() + 45_000).toISOString() }
+      : null
 
     // Antecedência mínima. Vale para PASSEIO e para TRANSLADO: a regra do
     // passeio (tours.min_advance_hours) existia no cadastro desde a 049 e não
@@ -2471,17 +2480,20 @@ router.post('/request', authenticate, async (req, res, next) => {
     }
     // 24h para algum operador aceitar; depois passa só pro admin. Se a
     // migration 037 ainda não rodou (coluna ausente = 42703), reusa o insert
-    // sem o campo pra não bloquear novas solicitações.
+    // sem o campo pra não bloquear novas solicitações. A prioridade da lojinha
+    // (migration 102) segue o mesmo padrão tolerante: se a coluna faltar, o
+    // pedido nasce normal (sem janela) em vez de falhar.
     let { data: booking, error: bErr } = await supabase
       .from('bookings')
       .insert({
         ...baseBooking,
+        ...(prioridade || {}),
         acceptance_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
       .select()
       .single()
     if (bErr?.code === '42703') {
-      console.warn('[payments/request] coluna acceptance_expires_at ausente — rodar migration 037.')
+      console.warn('[payments/request] coluna ausente (037/102?) — reinserindo sem os campos extras.')
       const retry = await supabase.from('bookings').insert(baseBooking).select().single()
       booking = retry.data; bErr = retry.error
     }
@@ -2650,9 +2662,18 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     const bySrc     = new Map(rows.map((r, i) => [r.booking_code, prepared[i].it]))
     const prepByCode = new Map(rows.map((r, i) => [r.booking_code, prepared[i]]))
 
+    // Prioridade da lojinha (janela de 45s) por item — só quando NÃO é venda
+    // direta por link. Fica só na 1ª tentativa; os retries (colunas ausentes)
+    // usam as linhas-base, sem os campos novos.
+    const priorityFor = (bookingCode) => {
+      const it = prepByCode.get(bookingCode)?.it
+      return (!partner && it?.preferred_operator_id)
+        ? { preferred_operator_id: it.preferred_operator_id, priority_until: new Date(now + 45_000).toISOString() }
+        : {}
+    }
     let { data: bookings, error: bErr } = await supabase
       .from('bookings')
-      .insert(rows.map((r) => ({ ...r, acceptance_expires_at: acceptanceExpiresAt })))
+      .insert(rows.map((r) => ({ ...r, ...priorityFor(r.booking_code), acceptance_expires_at: acceptanceExpiresAt })))
       .select()
     if (bErr?.code === '42703') {
       // Coluna nova ausente. Tenta sem acceptance_expires_at (037); se ainda

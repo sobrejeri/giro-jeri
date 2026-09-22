@@ -889,7 +889,7 @@ router.get('/bookings', async (req, res, next) => {
     // Busca TODAS as solicitações aguardando aceite (sem filtrar a janela no
     // SQL — o filtro .gt/.lt do PostgREST exclui NULL e já se mostrou frágil).
     // A partição da janela de 24h é feita em memória logo abaixo.
-    let reqRes = await supabase.from('bookings').select(`${BOOKING_COLUMNS}, acceptance_expires_at`)
+    let reqRes = await supabase.from('bookings').select(`${BOOKING_COLUMNS}, acceptance_expires_at, preferred_operator_id, priority_until`)
       .is('operator_id', null)
       .eq('status_commercial', 'awaiting_acceptance');
     if (reqRes.error?.code === '42703') {
@@ -908,6 +908,19 @@ router.get('/bookings', async (req, res, next) => {
     const within  = all.filter((b) => !b.acceptance_expires_at || new Date(b.acceptance_expires_at).getTime() > nowMs);
     const expired = all.filter((b) =>  b.acceptance_expires_at && new Date(b.acceptance_expires_at).getTime() <= nowMs);
     let acceptanceRows = isAdmin ? expired : within;
+
+    // Janela de prioridade da lojinha (migration 102): dentro da janela, o
+    // pedido só aparece para o operador preferido; passados os ~45s, entra na
+    // fila de todos. Colunas ausentes (sem migration) → campo undefined → sem
+    // efeito. Admin não é filtrado (só vê expiradas, muito depois da janela).
+    if (!isAdmin) {
+      const nowP = Date.now();
+      acceptanceRows = acceptanceRows.filter((b) => {
+        if (!b.priority_until || !b.preferred_operator_id) return true;
+        if (new Date(b.priority_until).getTime() <= nowP) return true;
+        return b.preferred_operator_id === req.user.id;
+      });
+    }
 
     console.log('[operator/bookings] role=%s aguardando=%d dentro_prazo=%d fora_prazo=%d mostra=%d',
       req.user?.user_type, all.length, within.length, expired.length, acceptanceRows.length);
@@ -1273,6 +1286,19 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
       if (bloqueio) return res.status(409).json({ error: bloqueio })
       const pend = await pagamentoPendenteGate(req.user.id)
       if (pend) return res.status(409).json({ error: pend })
+
+      // Janela de prioridade da lojinha (102): dentro dos ~45s, só o operador
+      // preferido aceita. Coluna ausente/erro → guarda ignorada (fail-open).
+      const { data: prio } = await supabase
+        .from('bookings')
+        .select('preferred_operator_id, priority_until')
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (prio?.preferred_operator_id && prio?.priority_until
+          && new Date(prio.priority_until).getTime() > Date.now()
+          && prio.preferred_operator_id !== req.user.id) {
+        return res.status(409).json({ error: 'Reservada por alguns segundos para outro operador. Tente de novo em instantes.' });
+      }
     }
 
     // Motor de pernas ON: pedidos com booking_legs (privativo/transfer de
