@@ -24,6 +24,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
   const [muted, setMuted] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [mediaError, setMediaError] = useState(false)
+  const [dragY, setDragY] = useState(0)     // arraste vertical (segue o dedo)
   const intervalRef = useRef(null)
   const videoRef = useRef(null)
   const touchStartRef = useRef(null)
@@ -112,7 +113,8 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
     else goNext()
   }
 
-  // ── Toque: segurar pausa, arrastar lateral troca destaque, vertical fecha ──
+  // ── Toque: segurar pausa, arrastar lateral troca destaque,
+  //    arrastar p/ baixo fecha (seguindo o dedo), p/ cima abre "quem viu". ──
   function handleTouchStart(e) {
     const t0 = e.touches[0]
     touchStartRef.current = { x: t0.clientX, y: t0.clientY }
@@ -120,19 +122,37 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
     setPaused(true)
     if (videoRef.current) videoRef.current.pause()
   }
+  function handleTouchMove(e) {
+    const start = touchStartRef.current
+    if (!start) return
+    const tt = e.touches[0]
+    const dx = tt.clientX - start.x
+    const dy = tt.clientY - start.y
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+      swipedRef.current = true
+      // Para baixo segue 1:1; para cima tem resistência e limite (só um "peek").
+      setDragY(dy > 0 ? dy : Math.max(dy / 3, -70))
+    }
+  }
   function handleTouchEnd(e) {
     setPaused(false)
     const start = touchStartRef.current
     touchStartRef.current = null
+    const curDrag = dragY
+    setDragY(0)
     if (start) {
       const tt = e.changedTouches[0]
       const dx = tt.clientX - start.x
       const dy = tt.clientY - start.y
       const adx = Math.abs(dx), ady = Math.abs(dy)
-      // Vertical → fecha
-      if (ady > 70 && ady > adx) { swipedRef.current = true; onClose(); return }
-      // Horizontal → troca de destaque (Instagram)
-      if (adx > 55 && adx > ady) {
+      if (ady > adx && ady > 40) {
+        // Baixo → fecha (se puxou o suficiente)
+        if (dy > 110) { onClose(); return }
+        // Cima → abre "quem viu" (quando disponível)
+        if (dy < -55 && onShowViewers) { videoRef.current?.pause(); onShowViewers(story); return }
+        // Não passou do limite: volta ao lugar (curDrag já animado pelo snap)
+        void curDrag
+      } else if (adx > 55 && adx > ady) {
         swipedRef.current = true
         if (dx < 0) nextGroup(); else prevGroup()
         return
@@ -180,7 +200,14 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
   // (ex.: o wrapper do PullToRefresh), que "prende" o position:fixed e impede
   // o viewer de cobrir a tela toda e centralizar a mídia corretamente.
   return createPortal(
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col select-none">
+    <div
+      className="fixed inset-0 z-[100] bg-black flex flex-col select-none overflow-hidden"
+      style={{
+        transform: `translateY(${dragY}px) scale(${dragY > 0 ? Math.max(1 - dragY / 1400, 0.9) : 1})`,
+        transition: dragY === 0 ? 'transform .25s ease' : 'none',
+        borderRadius: dragY > 0 ? 22 : 0,
+      }}
+    >
       {/* Gradiente superior para o cabeçalho ficar legível sobre mídia clara */}
       <div className="absolute top-0 inset-x-0 h-28 z-20 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
 
@@ -259,6 +286,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
         className="flex-1 min-h-0 w-full relative overflow-hidden cursor-pointer touch-none"
         onClick={handleTap}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         {story.media_url && !mediaError ? (
