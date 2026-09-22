@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useQuery } from '@tanstack/react-query'
-import { MessageCircle, X } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { MessageCircle, X, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import ChatReserva from './ChatReserva'
@@ -18,8 +18,11 @@ function quando(iso) {
 // Caixa de conversas do cliente (estilo WhatsApp), ao lado do sino.
 export default function InboxChat() {
   const { user } = useAuth()
+  const qc = useQueryClient()
   const [aberto, setAberto]     = useState(false)
   const [conversa, setConversa] = useState(null)
+  const [menu, setMenu]         = useState(null) // booking_id com opção de excluir
+  const holdRef = useRef(null)
 
   const { data: convs } = useQuery({
     queryKey: ['conversations'],
@@ -27,6 +30,13 @@ export default function InboxChat() {
     enabled:  !!user,
     refetchInterval: 20000,
   })
+
+  const del = useMutation({
+    mutationFn: (bid) => api.deleteConversation(bid),
+    onSuccess:  () => { setMenu(null); qc.invalidateQueries({ queryKey: ['conversations'] }) },
+  })
+  function pressStart(bid) { holdRef.current = setTimeout(() => setMenu(bid), 500) }
+  function pressEnd() { if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = null } }
   const lista = Array.isArray(convs) ? convs : []
   const naoLidas = lista.reduce((s, c) => s + (c.unread || 0), 0)
 
@@ -60,7 +70,12 @@ export default function InboxChat() {
                   <p className="text-[12px] text-gray-400 mt-1">Fale com o operador pela tela da sua reserva.</p>
                 </div>
               ) : lista.map((c) => (
-                <button key={c.booking_id} onClick={() => setConversa(c)}
+                <div key={c.booking_id} className="relative">
+                <button
+                  onClick={() => setConversa(c)}
+                  onTouchStart={() => pressStart(c.booking_id)} onTouchEnd={pressEnd} onTouchMove={pressEnd}
+                  onMouseDown={() => pressStart(c.booking_id)} onMouseUp={pressEnd} onMouseLeave={pressEnd}
+                  onContextMenu={(e) => { e.preventDefault(); setMenu(c.booking_id) }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50">
                   <div className="w-12 h-12 rounded-full bg-gray-200 shrink-0 overflow-hidden flex items-center justify-center">
                     {c.avatar ? <img src={c.avatar} alt="" className="w-full h-full object-cover" />
@@ -82,6 +97,20 @@ export default function InboxChat() {
                     </div>
                   </div>
                 </button>
+                {menu === c.booking_id && (
+                  <>
+                    <div className="fixed inset-0 z-[1]" onClick={() => setMenu(null)} />
+                    <div className="absolute right-4 top-2 z-10 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                      <button
+                        onClick={() => { if (confirm('Excluir esta conversa?')) del.mutate(c.booking_id) }}
+                        disabled={del.isPending}
+                        className="flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-red-500 active:bg-red-50">
+                        <Trash2 size={15} /> Excluir conversa
+                      </button>
+                    </div>
+                  </>
+                )}
+                </div>
               ))}
             </div>
           </div>

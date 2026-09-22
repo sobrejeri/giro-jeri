@@ -206,6 +206,7 @@ export const api = {
   getBookingMessages: (id)       => request(`/api/bookings/${id}/messages`),
   sendBookingMessage: (id, body) => request(`/api/bookings/${id}/messages`, { method: 'POST', body: { body } }),
   deleteBookingMessage: (id, msgId) => request(`/api/bookings/${id}/messages/${msgId}`, { method: 'DELETE' }),
+  deleteConversation: (id) => request(`/api/bookings/${id}/conversation`, { method: 'DELETE' }),
   getNotifications:      ()    => request('/api/notifications?app=operador'),
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
   deleteNotification:    (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),

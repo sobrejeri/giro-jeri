@@ -822,4 +822,15 @@ router.delete('/:id/messages/:msgId', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── DELETE /api/bookings/:id/conversation — apaga a conversa inteira ───
+// Remove todas as mensagens da reserva. Acessível às partes da reserva.
+router.delete('/:id/conversation', authenticate, async (req, res, next) => {
+  try {
+    const acc = await acessoChat(req, req.params.id);
+    if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
+    await supabase.from('booking_messages').delete().eq('booking_id', req.params.id);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 export default router;
