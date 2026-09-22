@@ -176,6 +176,38 @@ router.get('/partners', async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/operator/:id/public — perfil público do operador (aberto a todos)
+router.get('/:id/public', async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, full_name, profile_photo_url, user_type, is_active')
+      .eq('id', req.params.id)
+      .eq('user_type', 'operator')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data || data.is_active === false) return res.status(404).json({ error: 'Operador não encontrado' });
+
+    let rating_average = null, rating_count = 0;
+    try {
+      const { data: revs } = await supabase
+        .from('reviews').select('rating').eq('is_public', true).eq('operator_id', data.id);
+      if (revs?.length) {
+        rating_count = revs.length;
+        rating_average = Math.round((revs.reduce((s, r) => s + r.rating, 0) / revs.length) * 10) / 10;
+      }
+    } catch { /* sem migration de reviews */ }
+
+    res.json({
+      id:                data.id,
+      full_name:         data.full_name,
+      profile_photo_url: data.profile_photo_url || null,
+      rating_average,
+      rating_count,
+    });
+  } catch (err) { next(err); }
+});
+
 router.use(authenticate, requireOperator);
 
 // ── GET /api/operator/reviews ──────────────────────────

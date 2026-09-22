@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -107,8 +107,20 @@ router.get('/admin', requireAdmin, async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/feed — cria post
-router.post('/', requireAdmin, async (req, res, next) => {
+// Só o autor do post ou um admin pode editar/excluir.
+async function podeMexer(req, res, next) {
+  try {
+    if (req.user.user_type === 'admin') return next();
+    const { data: post } = await supabase
+      .from('feed_posts').select('created_by_user_id').eq('id', req.params.id).maybeSingle();
+    if (!post) return res.status(404).json({ error: 'Post não encontrado' });
+    if (post.created_by_user_id !== req.user.id) return res.status(403).json({ error: 'Sem permissão' });
+    next();
+  } catch (err) { next(err); }
+}
+
+// POST /api/feed — cria post (admin ou operador; operador publica livre)
+router.post('/', requireOperator, async (req, res, next) => {
   try {
     const body = postSchema.parse(req.body);
     const payload = clean({ ...body, created_by_user_id: req.user.id });
@@ -159,7 +171,7 @@ router.post('/:id/comments', async (req, res, next) => {
 });
 
 // PUT /api/feed/:id — atualiza post
-router.put('/:id', requireAdmin, async (req, res, next) => {
+router.put('/:id', podeMexer, async (req, res, next) => {
   try {
     const body = postSchema.partial().parse(req.body);
     const payload = clean({ ...body, updated_at: new Date().toISOString() });
@@ -190,8 +202,8 @@ router.delete('/comments/:commentId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// DELETE /api/feed/:id — remove post
-router.delete('/:id', requireAdmin, async (req, res, next) => {
+// DELETE /api/feed/:id — remove post (autor ou admin; admin remove qualquer um)
+router.delete('/:id', podeMexer, async (req, res, next) => {
   try {
     const { error } = await supabase.from('feed_posts').delete().eq('id', req.params.id);
     if (error) throw error;
