@@ -264,4 +264,11 @@ export const api = {
   deleteStoryItem:    (id)        => request('/api/stories/items/' + id, { method: 'DELETE' }),
   uploadSiteImage:    (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
   getStorageSignedUrl: (body)     => request('/api/admin/storage-sign', { method: 'POST', body }),
+
+  // Stories efêmeros do perfil (24h, círculo colorido na foto) + visualizações
+  getLiveStories:     ()        => request('/api/stories/live'),
+  addLiveStory:       (body)    => request('/api/stories/live', { method: 'POST', body }),
+  viewLiveStory:      (id)      => request('/api/stories/live/' + id + '/view', { method: 'POST' }),
+  getLiveStoryViewers:(id)      => request('/api/stories/live/' + id + '/viewers'),
+  deleteLiveStory:    (id)      => request('/api/stories/live/' + id, { method: 'DELETE' }),
 }

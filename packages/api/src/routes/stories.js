@@ -85,6 +85,106 @@ router.get('/admin', authenticate, requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// Stories EFÊMEROS do perfil (24h) — círculo colorido na foto do perfil.
+// Diferente dos destaques (permanentes). Registram quem viu.
+// ═══════════════════════════════════════════════════════════════════════
+
+const liveStorySchema = z.object({
+  media_url:    z.string().url().max(3000),
+  media_type:   z.enum(['image', 'video']).optional(),
+  caption:      z.string().max(200).optional().nullable(),
+  duration_sec: z.number().int().min(1).max(60).optional(),
+});
+
+// GET /api/stories/live — público: stories ativos (não expirados) + nº de views
+router.get('/live', async (_req, res, next) => {
+  try {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('avatar_stories')
+      .select('id, media_url, media_type, caption, duration_sec, created_at, expires_at')
+      .gt('expires_at', nowIso)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    const ids = (data || []).map((s) => s.id);
+    let counts = {};
+    if (ids.length) {
+      const { data: views } = await supabase
+        .from('avatar_story_views')
+        .select('story_id')
+        .in('story_id', ids);
+      for (const v of (views || [])) counts[v.story_id] = (counts[v.story_id] || 0) + 1;
+    }
+    res.json((data || []).map((s) => ({ ...s, view_count: counts[s.id] || 0 })));
+  } catch (err) { next(err); }
+});
+
+// POST /api/stories/live/:id/view — usuário logado registra visualização
+router.post('/live/:id/view', authenticate, async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('avatar_story_views')
+      .upsert(
+        { story_id: req.params.id, viewer_user_id: req.user.id, viewed_at: new Date().toISOString() },
+        { onConflict: 'story_id,viewer_user_id', ignoreDuplicates: true },
+      );
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// GET /api/stories/live/:id/viewers — admin: quem viu (nome, avatar, quando)
+router.get('/live/:id/viewers', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('avatar_story_views')
+      .select('viewed_at, users:viewer_user_id ( id, full_name, profile_photo_url )')
+      .eq('story_id', req.params.id)
+      .order('viewed_at', { ascending: false });
+    if (error) throw error;
+    res.json((data || []).map((v) => ({
+      id:         v.users?.id,
+      name:       v.users?.full_name || 'Usuário',
+      avatar:     v.users?.profile_photo_url || null,
+      viewed_at:  v.viewed_at,
+    })));
+  } catch (err) { next(err); }
+});
+
+// POST /api/stories/live — admin publica um story efêmero
+router.post('/live', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const body = liveStorySchema.parse(req.body);
+    const { data, error } = await supabase
+      .from('avatar_stories')
+      .insert({
+        media_url:    body.media_url,
+        media_type:   body.media_type || 'image',
+        caption:      body.caption || null,
+        duration_sec: body.duration_sec || (body.media_type === 'video' ? 30 : 20),
+        created_by_user_id: req.user.id,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    next(err);
+  }
+});
+
+// DELETE /api/stories/live/:id — admin exclui
+router.delete('/live/:id', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { error } = await supabase.from('avatar_stories').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
 // ── Middleware admin para rotas abaixo ───────────────────
 router.use(authenticate, requireAdmin);
 

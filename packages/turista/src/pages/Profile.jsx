@@ -10,6 +10,7 @@ import { validateBrDoc } from '../lib/document'
 import ProfileDesktop from './ProfileDesktop'
 import VerifiedBadge from '../components/VerifiedBadge'
 import Stories from '../components/Stories'
+import LiveAvatarStories from '../components/LiveAvatarStories'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
@@ -458,20 +459,14 @@ export default function Profile() {
                    nome com selo verificado abaixo. */
                 <div className="px-5 py-5">
                   <div className="flex items-center gap-5">
-                    <div className="relative shrink-0">
-                      <div className="w-[82px] h-[82px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-2 ring-gray-100">
-                        {avatarUrl
-                          ? <img src={avatarUrl} alt="Foto de perfil" className="w-full h-full object-cover" />
-                          : <span className="text-brand font-bold text-[26px] leading-none select-none">{initials}</span>}
-                      </div>
-                      <button
-                        onClick={() => !uploadingPhoto && fileRef.current?.click()}
-                        className="absolute bottom-0 right-0 w-7 h-7 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"
-                      >
-                        {uploadingPhoto ? <Loader2 size={13} className="text-white animate-spin" /> : <Camera size={13} className="text-white" />}
-                      </button>
-                      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
-                    </div>
+                    <LiveAvatarStories
+                      avatarUrl={avatarUrl}
+                      initials={initials}
+                      isAdmin={isAdmin}
+                      uploadingPhoto={uploadingPhoto}
+                      onPickPhoto={() => fileRef.current?.click()}
+                    />
+                    <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
                     <div className="flex-1 flex justify-center text-center pl-8 pr-2">
                       <div>
                         <p className="text-[20px] font-extrabold text-gray-900 leading-none">{postCount}</p>

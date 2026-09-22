@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { X, Camera, Volume2, VolumeX, MoreVertical, Trash2, ImageOff } from 'lucide-react'
+import { X, Camera, Volume2, VolumeX, MoreVertical, Trash2, ImageOff, Eye, Send } from 'lucide-react'
 import VerifiedBadge from './VerifiedBadge'
 
 /**
@@ -15,7 +15,7 @@ import VerifiedBadge from './VerifiedBadge'
  *   onClose    — fecha o visualizador (ou ao passar do último item)
  *   isAdmin / onDelete — menu de excluir (somente admin)
  */
-export default function StoryViewer({ highlights = [], startGroup = 0, onClose, isAdmin = false, onDelete }) {
+export default function StoryViewer({ highlights = [], startGroup = 0, onClose, isAdmin = false, onDelete, onView, onShowViewers, onShare }) {
   const { t } = useTranslation()
   const [groupIndex, setGroupIndex] = useState(startGroup)
   const [storyIndex, setStoryIndex] = useState(0)
@@ -78,6 +78,12 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupIndex, storyIndex])
+
+  // ── Registra visualização ao exibir cada item (stories efêmeros) ───────────
+  useEffect(() => {
+    if (story?.id) onView?.(story.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [story?.id])
 
   // ── Timer de progresso (imagens) ───────────────────────────────────────────
   useEffect(() => {
@@ -214,6 +220,12 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
           </button>
         )}
 
+        {onShare && (
+          <button onClick={(e) => { e.stopPropagation(); onShare(story) }} className="p-1.5 text-white active:scale-90 transition-transform" aria-label="Compartilhar">
+            <Send size={20} />
+          </button>
+        )}
+
         {isAdmin && onDelete && (
           <button onClick={openMenu} className="p-1.5 text-white active:scale-90 transition-transform" aria-label="Mais opções">
             <MoreVertical size={22} />
@@ -307,6 +319,24 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
         <div className="absolute inset-y-0 left-0 w-[30%] z-20" />
         <div className="absolute inset-y-0 right-0 w-[70%] z-20" />
       </div>
+
+      {/* ── Rodapé: legenda + "visualizado por" (admin) ──────────────────── */}
+      {(story.caption || (isAdmin && onShowViewers)) && (
+        <div className="absolute bottom-0 inset-x-0 z-30 px-4 pb-5 pt-8 bg-gradient-to-t from-black/60 to-transparent pointer-events-none">
+          {story.caption && (
+            <p className="text-white text-[14px] font-medium text-center drop-shadow mb-2 line-clamp-3">{story.caption}</p>
+          )}
+          {isAdmin && onShowViewers && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setPaused(true); videoRef.current?.pause(); onShowViewers(story) }}
+              className="pointer-events-auto mx-auto flex items-center gap-1.5 text-white/90 text-[13px] font-semibold active:scale-95 transition-transform"
+            >
+              <Eye size={16} /> {story.view_count || 0}
+              <span className="text-white/60 font-normal">· ver quem viu</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>,
     document.body,
   )
