@@ -17,7 +17,7 @@ import TransfersDesktop from './TransfersDesktop'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
-  Plane, Compass,
+  Plane, Compass, ShoppingCart,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -382,7 +382,7 @@ export default function Transfers() {
   const navigate  = useNavigate()
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
-  const { upsertItem: saveCartItem, items: savedCartItems, removeItem: dropCartItem } = useCart()
+  const { upsertItem: saveCartItem, items: savedCartItems, removeItem: dropCartItem, count: cartCount } = useCart()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
 
@@ -754,6 +754,18 @@ export default function Transfers() {
               aria-label={t('transfersPg.searchReservation')}
             >
               <Search size={15} />
+            </button>
+            <button
+              onClick={() => navigate('/carrinho')}
+              className="relative w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform"
+              aria-label="Carrinho"
+            >
+              <ShoppingCart size={15} />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center">
+                  {cartCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
