@@ -54,14 +54,21 @@ export default function BottomNav() {
         {LADO_ESQ.map((it) => <Aba key={it.to} {...it} />)}
 
         {/* Botão central destacado — abre a tela de destaque (Descubra). Sobe
-            acima da barra, em círculo laranja, para virar o ponto focal. */}
+            acima da barra para virar o ponto focal. Só fica LARANJA CHEIO quando
+            a Descubra está ativa; fora dela é branco com o ícone laranja, para
+            não parecer "selecionado" nas outras telas. */}
         <div className="flex-1 min-w-0 flex flex-col items-center justify-end">
           <button
             onClick={() => navigate('/eventos')}
             aria-label={t('nav.events')}
-            className="-mt-7 w-14 h-14 rounded-full bg-brand flex items-center justify-center shadow-lg shadow-brand/40 ring-4 ring-white active:scale-95 transition-transform"
+            aria-current={descubraAtivo ? 'page' : undefined}
+            className={`-mt-7 w-14 h-14 rounded-full flex items-center justify-center ring-4 ring-white shadow-lg active:scale-95 transition-all ${
+              descubraAtivo
+                ? 'bg-brand text-white shadow-brand/40'
+                : 'bg-white text-brand border border-brand/25 shadow-brand/15'
+            }`}
           >
-            <Sparkles size={24} className="text-white" fill="currentColor" strokeWidth={1.5} />
+            <Sparkles size={24} fill="currentColor" strokeWidth={1.5} />
           </button>
           <span className={`text-[10px] leading-tight mt-1 transition-colors ${descubraAtivo ? 'text-brand font-semibold' : 'text-gray-500 font-medium'}`}>
             {t('nav.events')}
