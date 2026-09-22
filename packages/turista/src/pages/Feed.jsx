@@ -356,8 +356,8 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
           <video
             src={post.video_url}
             poster={post.image_url || undefined}
-            controls playsInline loop muted
-            className="relative z-10 w-full h-full object-contain bg-black"
+            controls playsInline loop
+            className="relative z-10 w-full h-full object-cover bg-black"
           />
         ) : post.image_url ? (
           <>
