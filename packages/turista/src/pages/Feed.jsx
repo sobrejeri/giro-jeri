@@ -6,9 +6,9 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
-import Stories from '../components/Stories'
 import VerifiedBadge from '../components/VerifiedBadge'
 import LiveStoryOverlay from '../components/LiveStoryOverlay'
+import LiveStoriesRow from '../components/LiveStoriesRow'
 import { useLiveStories } from '../hooks/useLiveStories'
 import FeedPublisher from '../components/FeedPublisher'
 import {
@@ -945,8 +945,8 @@ export default function Feed() {
         </div>
       </header>
 
-      {/* ── Destaques (highlights) — fixos na Descubra ───────────────────── */}
-      <Stories className="lg:max-w-2xl lg:mx-auto" />
+      {/* ── Stories 24h (perfis) no topo, estilo Instagram ───────────────── */}
+      <LiveStoriesRow className="lg:max-w-2xl lg:mx-auto" />
 
       {/* ── Buscador em destaque ──────────────────────────────────────────── */}
       <div className="max-w-2xl mx-auto px-4 pt-3">
