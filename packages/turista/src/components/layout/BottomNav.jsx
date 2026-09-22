@@ -1,9 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
-import { Home, Compass, Car, User, Sparkles, MessageCircle, Store, Plus } from 'lucide-react'
+import { Home, Compass, Car, User, Sparkles, Store, Plus, CalendarCheck } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { api } from '../../lib/api'
 
 export default function BottomNav() {
   const navigate     = useNavigate()
@@ -11,18 +9,8 @@ export default function BottomNav() {
   const { t }        = useTranslation()
   const { user }     = useAuth()
 
-  // Admin/operador têm o menu enxuto: o foco é publicar na Descubra. Só três
-  // abas — Bate-papo · Descubra · Perfil.
+  // Admin/operador têm o menu enxuto: Lojinha · Descubra · Publicar · Reservas · Perfil.
   const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
-
-  // Não lidas para o badge do Bate-papo (só admin/operador usam a aba).
-  const { data: convs } = useQuery({
-    queryKey: ['conversations'],
-    queryFn:  () => api.getConversations(),
-    enabled:  !!user && isCreator,
-    refetchInterval: 20000,
-  })
-  const naoLidas = (Array.isArray(convs) ? convs : []).reduce((s, c) => s + (c.unread || 0), 0)
 
   // No carrinho o menu sai de cena: a barra de resumo/pagamento fica colada
   // embaixo e o menu só roubava espaço numa tela que já é comprida.
@@ -96,30 +84,12 @@ export default function BottomNav() {
     return (
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100 lg:hidden">
         <div className="flex items-end justify-around px-2 pt-1.5 pb-2">
-          {/* Bate-papo — abre a caixa de conversas (evento global). */}
-          <button
-            onClick={() => window.dispatchEvent(new Event('open-inbox-chat'))}
-            aria-label={t('nav.chat', 'Bate-papo')}
-            className="flex-1 min-w-0 flex flex-col items-center gap-[2px] py-1.5 px-0.5 active:scale-95 transition-transform"
-          >
-            <div className="relative w-7 h-7 rounded-full flex items-center justify-center">
-              <MessageCircle size={20} className="text-gray-400" strokeWidth={1.75} />
-              {naoLidas > 0 && (
-                <span className="absolute -top-1 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
-                  {naoLidas > 99 ? '99+' : naoLidas}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] leading-tight text-gray-400 font-medium">{t('nav.chat', 'Bate-papo')}</span>
-            <span className="h-[3px] w-5 rounded-full bg-transparent" />
-          </button>
-
+          <Aba to="/passeios" icon={Store} label="Lojinha" />
           <Aba to="/eventos" icon={Sparkles} label={t('nav.events')} />
 
           {FabPublicar}
 
-          <Aba to="/passeios" icon={Store} label="Lojinha" />
-
+          <Aba to="/minhas-reservas" icon={CalendarCheck} label={t('nav.bookings', 'Reservas')} />
           <Aba to="/perfil" icon={User} label={t('nav.profile')} />
         </div>
       </nav>
