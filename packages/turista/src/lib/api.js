@@ -255,7 +255,7 @@ export const api = {
   pushTest:              ()   => request('/api/notifications/push-test', { method: 'POST' }),
 
   // Stories (Instagram-style)
-  getStories: () => request('/api/stories'),
+  getStories: (owner) => request('/api/stories' + (owner ? `?owner=${encodeURIComponent(owner)}` : '')),
 
   // Publicação de stories/destaques — exige token de admin (requireAdmin na API).
   // Disponível no app do turista apenas quando o usuário logado é admin.

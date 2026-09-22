@@ -9,21 +9,23 @@ import StoryPublisher from './StoryPublisher'
 // ── Destaques (stories) ────────────────────────────────
 // Autocontido: busca, estado, visualizador e publicação (admin) ficam aqui,
 // para poder ser exibido tanto na Home quanto na Descubra.
-export default function Stories({ className = '' }) {
+export default function Stories({ className = '', owner = null, canManage = null }) {
   const { user } = useAuth()
-  const isAdmin  = user?.user_type === 'admin'
+  // Gerenciar (publicar/excluir): admin sempre; ou o dono do perfil (operador
+  // vendo os próprios destaques). `canManage` sobrescreve quando informado.
+  const isManager = canManage != null ? canManage : (user?.user_type === 'admin')
   const qc = useQueryClient()
 
   const { data: stories = [] } = useQuery({
-    queryKey:  ['stories'],
-    queryFn:   () => api.getStories(),
+    queryKey:  ['stories', owner || 'all'],
+    queryFn:   () => api.getStories(owner),
     staleTime: 60_000,
   })
 
   const [viewerGroup, setViewerGroup]     = useState(null)
   const [showPublisher, setShowPublisher] = useState(false)
 
-  if (stories.length === 0 && !isAdmin) return null
+  if (stories.length === 0 && !isManager) return null
 
   return (
     <>
@@ -31,7 +33,7 @@ export default function Stories({ className = '' }) {
         <StoriesRow
           highlights={stories}
           onSelect={(i) => setViewerGroup(i)}
-          isAdmin={isAdmin}
+          isAdmin={isManager}
           onPublish={() => setShowPublisher(true)}
         />
       </div>
@@ -41,11 +43,11 @@ export default function Stories({ className = '' }) {
           highlights={stories}
           startGroup={viewerGroup}
           onClose={() => setViewerGroup(null)}
-          isAdmin={isAdmin}
+          isAdmin={isManager}
           onDelete={async (id) => {
             try { await api.deleteStoryItem(id) }
             catch (err) { alert(err?.message || 'Erro ao excluir'); return }
-            qc.invalidateQueries({ queryKey: ['stories'] })
+            qc.invalidateQueries({ queryKey: ['stories', owner || 'all'] })
             setViewerGroup(null)
           }}
         />
@@ -55,7 +57,7 @@ export default function Stories({ className = '' }) {
         <StoryPublisher
           highlights={stories}
           onClose={() => setShowPublisher(false)}
-          onPublished={() => qc.invalidateQueries({ queryKey: ['stories'] })}
+          onPublished={() => qc.invalidateQueries({ queryKey: ['stories', owner || 'all'] })}
         />
       )}
     </>

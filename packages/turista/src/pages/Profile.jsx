@@ -142,6 +142,50 @@ function PontosCard({ token }) {
   )
 }
 
+// Lojinha do operador (preview no próprio perfil) — os serviços que ele
+// oferece, como o cliente vê no perfil público. Editar quais serviços = tela
+// de Passeios (preferências), então aqui é só a prévia.
+function MinhaLojinha({ meId }) {
+  const [data, setData] = useState(null)
+  useEffect(() => {
+    if (!meId) return
+    let vivo = true
+    api.getOperatorPublic(meId)
+      .then((d) => { if (vivo) setData(d) })
+      .catch(() => { if (vivo) setData({ services: [] }) })
+    return () => { vivo = false }
+  }, [meId])
+  const servicos = data?.services || []
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
+        <span className="font-semibold text-gray-800 text-[14px]">🏪 Minha lojinha</span>
+        <span className="text-[12px] font-bold text-gray-400">{servicos.length} serviços</span>
+      </div>
+      {data === null ? (
+        <p className="text-center text-[13px] text-gray-400 py-8">Carregando…</p>
+      ) : servicos.length === 0 ? (
+        <p className="text-center text-[12.5px] text-gray-500 py-8 px-6">
+          Você ainda não habilitou serviços. Ative os passeios que você atende na aba Passeios.
+        </p>
+      ) : (
+        <div className="p-3 space-y-2">
+          <p className="text-[11.5px] text-gray-400 px-1">É o que seus clientes veem no seu perfil, com prioridade de atendimento para você.</p>
+          {servicos.slice(0, 6).map((s) => (
+            <div key={s.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-2">
+              <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-200 shrink-0">
+                {s.cover_image_url && <img src={s.cover_image_url} alt={s.name} className="w-full h-full object-cover" />}
+              </div>
+              <p className="flex-1 text-[13px] font-semibold text-gray-800 leading-tight line-clamp-2">{s.name}</p>
+              {s.price_from && <span className="text-[11.5px] text-gray-500 shrink-0">R$ {Number(s.price_from).toLocaleString('pt-BR')}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Grade de publicações estilo Instagram — só no perfil do admin, que é quem
 // publica na "Descubra". Assim o cliente que visita o perfil vê tudo
 // organizado numa grade de miniaturas; tocar leva ao feed.
@@ -257,13 +301,14 @@ export default function Profile() {
   // Contagem de destaques (highlights) para exibir ao lado de publicações.
   const [highlightCount, setHighlightCount] = useState(null)
   useEffect(() => {
-    if (!isAdmin) return
+    if (!isCreator) return
     let vivo = true
-    api.getStories()
+    // Admin: destaques globais (Turiva). Operador: só os dele (owner).
+    api.getStories(isOperator ? user.id : undefined)
       .then((d) => { if (vivo) setHighlightCount(Array.isArray(d) ? d.length : 0) })
       .catch(() => { if (vivo) setHighlightCount(0) })
     return () => { vivo = false }
-  }, [isAdmin])
+  }, [isCreator, isOperator, user?.id])
 
   const [editing,   setEditing]   = useState(false)
   const [saving,    setSaving]    = useState(false)
@@ -486,43 +531,25 @@ export default function Profile() {
                    selo/etiqueta abaixo. Vale para admin E operador. */
                 <div className="px-5 py-5">
                   <div className="flex items-center gap-5">
-                    {isAdmin ? (
-                      <LiveAvatarStories
-                        avatarUrl={avatarUrl}
-                        initials={initials}
-                        isAdmin={isAdmin}
-                        uploadingPhoto={uploadingPhoto}
-                        onPickPhoto={() => fileRef.current?.click()}
-                      />
-                    ) : (
-                      /* Operador: avatar simples (sem anel de story — o story é da Turiva). */
-                      <div className="relative shrink-0">
-                        <div className="w-[82px] h-[82px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-2 ring-gray-100">
-                          {avatarUrl
-                            ? <img src={avatarUrl} alt="Foto de perfil" className="w-full h-full object-cover" />
-                            : <span className="text-brand font-bold text-[26px] leading-none">{initials}</span>}
-                        </div>
-                        <button
-                          onClick={() => !uploadingPhoto && fileRef.current?.click()}
-                          className="absolute bottom-0 right-0 w-7 h-7 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"
-                          aria-label="Trocar foto"
-                        >
-                          {uploadingPhoto ? <Loader2 size={13} className="text-white animate-spin" /> : <Camera size={13} className="text-white" />}
-                        </button>
-                      </div>
-                    )}
+                    {/* Admin e operador: avatar com anel de story (24h) e "+"
+                        para adicionar/gerenciar o PRÓPRIO story (é o dono). */}
+                    <LiveAvatarStories
+                      avatarUrl={avatarUrl}
+                      initials={initials}
+                      isAdmin={isCreator}
+                      uploadingPhoto={uploadingPhoto}
+                      onPickPhoto={() => fileRef.current?.click()}
+                    />
                     <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
                     <div className="flex-1 flex justify-around text-center pl-4">
                       <div>
                         <p className="text-[20px] font-extrabold text-gray-900 leading-none">{postCount}</p>
                         <p className="text-[12px] text-gray-500 mt-0.5">publicações</p>
                       </div>
-                      {isAdmin && (
-                        <div>
-                          <p className="text-[20px] font-extrabold text-gray-900 leading-none">{highlightCount ?? '—'}</p>
-                          <p className="text-[12px] text-gray-500 mt-0.5">destaques</p>
-                        </div>
-                      )}
+                      <div>
+                        <p className="text-[20px] font-extrabold text-gray-900 leading-none">{highlightCount ?? '—'}</p>
+                        <p className="text-[12px] text-gray-500 mt-0.5">destaques</p>
+                      </div>
                       <div>
                         <p className="text-[20px] font-extrabold text-gray-900 leading-none">{fmtCompacto(totalCurtidas)}</p>
                         <p className="text-[12px] text-gray-500 mt-0.5">curtidas</p>
@@ -586,12 +613,16 @@ export default function Profile() {
               )}
             </div>
 
-            {/* Destaques (stories) — como os destaques do perfil do Instagram */}
-            {isAdmin && (
+            {/* Destaques (stories) — admin (Turiva) e operador (os próprios) */}
+            {isCreator && (
               <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                <Stories />
+                <Stories owner={isOperator ? user.id : undefined} canManage />
               </div>
             )}
+
+            {/* Lojinha do operador — os serviços que ele oferece (o que o
+                cliente vê no perfil público). */}
+            {isOperator && <MinhaLojinha meId={user.id} />}
 
             {/* Grade de publicações (estilo Instagram) — admin e operador */}
             {isCreator && <PostsGrid posts={meusPosts} onOpen={setPostoAberto} />}
