@@ -425,7 +425,7 @@ function FeedVideo({ src, poster }) {
   )
 }
 
-function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
+export function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { stories: liveStories, hasStories, hasUnseen, bumpSeen } = useLiveStories()
