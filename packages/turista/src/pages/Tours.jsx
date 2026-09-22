@@ -19,6 +19,7 @@ import {
   ChevronLeft, ChevronRight, X, Info, Bus, Search,
   Flame, Sparkles, ShoppingCart, ChevronDown,
   ShieldCheck, MessageCircle, Lock, User as UserIcon,
+  Compass, Car,
 } from 'lucide-react'
 import FilterChip from '../components/tours/FilterChip'
 import SectionHeader from '../components/tours/SectionHeader'
@@ -878,6 +879,22 @@ export default function Tours() {
       </div>
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
+
+        {/* ── Alternador Passeios | Translados (mesma lojinha) ───────── */}
+        <div className="flex bg-gray-100 rounded-2xl p-1">
+          <button
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold bg-white text-brand shadow-sm"
+            aria-current="page"
+          >
+            <Compass size={15} /> Passeios
+          </button>
+          <button
+            onClick={() => navigate('/transfers')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
+          >
+            <Car size={15} /> Translados
+          </button>
+        </div>
 
         {/* Saída, data e pessoas saíram DESTA tela.
             A vitrine só apresenta os passeios; quem cobra os dados da reserva é
