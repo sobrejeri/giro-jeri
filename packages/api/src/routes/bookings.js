@@ -756,7 +756,7 @@ router.get('/:id/messages', authenticate, async (req, res, next) => {
     if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
     const { data, error } = await supabase
       .from('booking_messages')
-      .select('id, sender_user_id, sender_role, body, created_at')
+      .select('id, sender_user_id, sender_role, body, created_at, read_at')
       .eq('booking_id', req.params.id)
       .order('created_at', { ascending: true })
       .limit(500);
@@ -801,6 +801,24 @@ router.post('/:id/messages', authenticate, async (req, res, next) => {
       });
     }
     res.status(201).json(data);
+  } catch (err) { next(err); }
+});
+
+// ── DELETE /api/bookings/:id/messages/:msgId ───────────
+// Só o AUTOR da mensagem (ou admin) pode excluir.
+router.delete('/:id/messages/:msgId', authenticate, async (req, res, next) => {
+  try {
+    const acc = await acessoChat(req, req.params.id);
+    if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
+    const { data: msg } = await supabase
+      .from('booking_messages').select('id, sender_user_id')
+      .eq('id', req.params.msgId).eq('booking_id', req.params.id).maybeSingle();
+    if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+    if (acc.role !== 'admin' && msg.sender_user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Só quem enviou pode excluir.' });
+    }
+    await supabase.from('booking_messages').delete().eq('id', req.params.msgId);
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

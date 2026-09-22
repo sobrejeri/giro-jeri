@@ -67,11 +67,12 @@ export default function InboxChat() {
                       : <span className="text-[16px] font-bold text-gray-500">{(c.name || '?')[0]}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[14px] font-bold text-gray-900 truncate">{c.name}</p>
-                      <span className="text-[11px] text-gray-400 shrink-0">{quando(c.last_at)}</span>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[14px] font-bold text-gray-900 truncate min-w-0">{c.name}</p>
+                      <span className="text-[10px] text-gray-300 font-mono shrink-0">{c.booking_code}</span>
+                      <span className="text-[11px] text-gray-400 shrink-0 ml-auto">{quando(c.last_at)}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
                       <p className={`text-[12.5px] truncate ${c.unread ? 'text-gray-800 font-semibold' : 'text-gray-500'}`}>
                         {c.last_mine ? 'Você: ' : ''}{c.last_body}
                       </p>
@@ -79,7 +80,6 @@ export default function InboxChat() {
                         <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center shrink-0">{c.unread}</span>
                       )}
                     </div>
-                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">{c.booking_code}</p>
                   </div>
                 </button>
               ))}

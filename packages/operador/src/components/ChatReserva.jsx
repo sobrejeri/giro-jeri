@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, Send, Loader2 } from 'lucide-react'
+import { X, Send, Loader2, Check, CheckCheck, Trash2 } from 'lucide-react'
 import { api } from '../lib/api'
 
 // Chat da reserva no lado do operador (↔ cliente). Sheet com polling curto.
 export default function ChatReserva({ bookingId, open, onClose }) {
   const qc = useQueryClient()
   const [text, setText] = useState('')
+  const [menu, setMenu] = useState(null)
+  const holdRef = useRef(null)
   const fimRef = useRef(null)
 
   const { data: msgs, isLoading } = useQuery({
@@ -21,6 +23,17 @@ export default function ChatReserva({ bookingId, open, onClose }) {
     mutationFn: () => api.sendBookingMessage(bookingId, text.trim()),
     onSuccess:  () => { setText(''); qc.invalidateQueries({ queryKey: ['booking-messages', bookingId] }) },
   })
+
+  const del = useMutation({
+    mutationFn: (msgId) => api.deleteBookingMessage(bookingId, msgId),
+    onSuccess:  () => { setMenu(null); qc.invalidateQueries({ queryKey: ['booking-messages', bookingId] }) },
+  })
+
+  function pressStart(m) {
+    if (m.sender_role !== 'operator') return
+    holdRef.current = setTimeout(() => setMenu({ id: m.id }), 500)
+  }
+  function pressEnd() { if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = null } }
 
   useEffect(() => {
     if (open) setTimeout(() => fimRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
@@ -51,13 +64,34 @@ export default function ChatReserva({ bookingId, open, onClose }) {
             const meu = m.sender_role === 'operator'
             return (
               <div key={m.id} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[78%] px-3 py-2 rounded-2xl text-[13.5px] leading-snug ${
-                  meu ? 'bg-brand text-white rounded-br-sm' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm'
-                }`}>
-                  {m.body}
-                  <span className={`block text-[9.5px] mt-0.5 ${meu ? 'text-white/70' : 'text-gray-400'}`}>
-                    {new Date(m.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                <div className="relative max-w-[78%]">
+                  <div
+                    onTouchStart={() => pressStart(m)} onTouchEnd={pressEnd} onTouchMove={pressEnd}
+                    onMouseDown={() => pressStart(m)} onMouseUp={pressEnd} onMouseLeave={pressEnd}
+                    onContextMenu={(e) => { if (meu) { e.preventDefault(); setMenu({ id: m.id }) } }}
+                    className={`px-3 py-2 rounded-2xl text-[13.5px] leading-snug select-none ${
+                      meu ? 'bg-brand text-white rounded-br-sm' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm'
+                    }`}
+                  >
+                    {m.body}
+                    <span className={`flex items-center gap-1 justify-end text-[9.5px] mt-0.5 ${meu ? 'text-white/70' : 'text-gray-400'}`}>
+                      {new Date(m.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      {meu && (m.read_at
+                        ? <CheckCheck size={13} className="text-white" />
+                        : <Check size={12} className="text-white/70" />)}
+                    </span>
+                  </div>
+                  {menu?.id === m.id && (
+                    <>
+                      <div className="fixed inset-0 z-[1]" onClick={() => setMenu(null)} />
+                      <div className="absolute right-0 -bottom-9 z-10 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                        <button onClick={() => del.mutate(m.id)} disabled={del.isPending}
+                          className="flex items-center gap-2 px-3 py-2 text-[13px] font-semibold text-red-500 active:bg-red-50">
+                          <Trash2 size={14} /> Excluir
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )

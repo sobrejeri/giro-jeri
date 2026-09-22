@@ -144,6 +144,7 @@ export const api = {
   getConversations:   ()          => request('/api/bookings/conversations'),
   getBookingMessages: (id)        => request(`/api/bookings/${id}/messages`),
   sendBookingMessage: (id, body)  => request(`/api/bookings/${id}/messages`, { method: 'POST', body: { body } }),
+  deleteBookingMessage: (id, msgId) => request(`/api/bookings/${id}/messages/${msgId}`, { method: 'DELETE' }),
   uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),
   whatsappStatus: ()    => request('/api/auth/me/whatsapp-status'),
   verifyWhatsapp: ()    => request('/api/auth/me/verify-whatsapp', { method: 'POST', body: {} }),
