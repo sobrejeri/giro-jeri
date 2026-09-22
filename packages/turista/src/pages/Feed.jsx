@@ -352,7 +352,14 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
       {/* ── Mídia full-bleed (estilo Instagram): preenche a largura toda; fundo
           desfocado completa as laterais sem cortar/ampliar a imagem ── */}
       <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-900">
-        {post.image_url ? (
+        {post.video_url ? (
+          <video
+            src={post.video_url}
+            poster={post.image_url || undefined}
+            controls playsInline loop muted
+            className="relative z-10 w-full h-full object-contain bg-black"
+          />
+        ) : post.image_url ? (
           <>
             <img src={post.image_url} alt="" aria-hidden="true"
               className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60" draggable={false} />

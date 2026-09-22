@@ -2,8 +2,10 @@ import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { X, ImagePlus, Loader2, CalendarDays, BadgePercent } from 'lucide-react'
+import { X, ImagePlus, Loader2, CalendarDays, BadgePercent, Film } from 'lucide-react'
 import { api } from '../lib/api'
+
+const MAX_VIDEO_BYTES = 60 * 1024 * 1024 // 60 MB
 
 // Redimensiona a imagem no cliente e devolve um data URL JPEG (base64).
 function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
@@ -43,6 +45,10 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
   const [preview,  setPreview]  = useState(post?.image_url || '')
   const [uploading, setUploading] = useState(false)
   const [error,    setError]    = useState('')
+  const videoRef   = useRef(null)
+  const [videoUrl,      setVideoUrl]      = useState(post?.video_url || '')
+  const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [videoPct,       setVideoPct]       = useState(0)
 
   const [eventDate,     setEventDate]     = useState(post?.event_date || '')
   const [eventTime,     setEventTime]     = useState(post?.event_time || '')
@@ -74,6 +80,41 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
     }
   }
 
+  async function handleVideo(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError('')
+    if (file.size > MAX_VIDEO_BYTES) {
+      setError('Vídeo muito grande (máx. 60 MB). Use um vídeo mais curto ou de menor resolução.')
+      e.target.value = ''
+      return
+    }
+    setUploadingVideo(true)
+    setVideoPct(0)
+    try {
+      const ct  = (file.type || 'video/mp4').split(';')[0].trim()
+      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
+      const { signed_url, public_url } = await api.getStorageSignedUrl({ filename: `feed-video.${ext}`, content_type: ct })
+      if (!signed_url) throw new Error('Não foi possível gerar URL de upload')
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', signed_url)
+        xhr.setRequestHeader('Content-Type', ct)
+        xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setVideoPct(Math.round((ev.loaded / ev.total) * 100)) }
+        xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Erro ${xhr.status} ao enviar`)))
+        xhr.onerror = () => reject(new Error('Falha de rede'))
+        xhr.send(file)
+      })
+      setVideoUrl(public_url)
+    } catch (err) {
+      setError(err?.message || 'Erro ao enviar o vídeo')
+    } finally {
+      setUploadingVideo(false)
+      setVideoPct(0)
+      e.target.value = ''
+    }
+  }
+
   const save = useMutation({
     mutationFn: () => {
       const payload = {
@@ -81,6 +122,7 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
         title:          title.trim(),
         body:           body.trim() || null,
         image_url:      imageUrl || null,
+        video_url:      videoUrl || null,
         location:       location.trim() || null,
         is_published:   true,
         event_date:     !isPromo ? (eventDate || null) : null,
@@ -94,7 +136,7 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
     onError:   (err) => setError(err?.message || t('publisherCmp.errors.publish')),
   })
 
-  const canSave = title.trim().length > 0 && !uploading && !save.isPending
+  const canSave = title.trim().length > 0 && !uploading && !uploadingVideo && !save.isPending
 
   // Portal p/ document.body: escapa do wrapper do PullToRefresh (transform),
   // que prenderia o position:fixed e abriria o compositor no fim da página.
@@ -136,6 +178,27 @@ export default function FeedPublisher({ post, onClose, onSaved }) {
               {uploading && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
             </button>
             <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+          </div>
+
+          {/* Vídeo (reels) — opcional. Quando presente, o post mostra o player. */}
+          <div>
+            <button type="button" onClick={() => videoRef.current?.click()} disabled={uploadingVideo}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 active:scale-[0.99] transition-transform disabled:opacity-60">
+              {uploadingVideo
+                ? <><Loader2 size={15} className="animate-spin" /> Enviando vídeo {videoPct}%</>
+                : <><Film size={15} className="text-brand" /> {videoUrl ? 'Trocar vídeo (reels)' : 'Adicionar vídeo (reels)'}</>}
+            </button>
+            <input ref={videoRef} type="file" accept="video/mp4,video/webm,video/quicktime,video/*" onChange={handleVideo} className="hidden" />
+            {videoUrl && (
+              <div className="mt-2 relative">
+                <video src={videoUrl} className="w-full max-h-56 rounded-xl bg-black" controls playsInline muted />
+                <button type="button" onClick={() => setVideoUrl('')}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+            <p className="text-[11px] text-gray-400 mt-1">Opcional. Com vídeo, o post vira um reels. Máx. 60 MB.</p>
           </div>
 
           {/* Título */}
