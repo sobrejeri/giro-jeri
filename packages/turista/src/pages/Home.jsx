@@ -6,13 +6,14 @@ import { ptBR } from 'date-fns/locale'
 import {
   Star, Heart, ChevronDown, ChevronRight, ArrowRight, MapPin,
   Car, Bus, Flame, Sun, Sunset, Waves, Percent, CalendarCheck,
-  UtensilsCrossed, PartyPopper, Lightbulb, Clock, Megaphone,
+  UtensilsCrossed, PartyPopper, Lightbulb, Clock, Megaphone, Search,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { precoDeEntrada } from '../lib/precoCartao'
 import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useFavorites } from '../contexts/FavoritesContext'
+import { useMoeda, MOEDAS } from '../lib/moeda'
 import NotificationBell from '../components/NotificationBell'
 import HomeDesktop from './HomeDesktop'
 import { duracao as fmtDuracao } from '../lib/formato'
@@ -228,11 +229,61 @@ function TileDescubra({ icon: Icon, label, foto, tom, cor, onClick }) {
   )
 }
 
+// Busca rápida da Home: filtra passeios por nome e leva ao detalhe. Busca numa
+// lista maior (não só os 12 da vitrine) para achar qualquer passeio.
+function HomeSearch({ onClose, value, setValue, navigate }) {
+  const { data } = useQuery({
+    queryKey: ['home-search-tours'],
+    queryFn:  () => api.getTours({ limit: 200 }),
+    staleTime: 5 * 60_000,
+  })
+  const all = Array.isArray(data?.tours) ? data.tours : Array.isArray(data) ? data : (data?.data || [])
+  const q = value.trim().toLowerCase()
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  const results = q.length < 2 ? [] : all.filter((tr) =>
+    norm(tr.name).includes(norm(q)) || norm(tr.short_description).includes(norm(q))).slice(0, 8)
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-2 bg-white rounded-full px-4 py-2.5 shadow-sm border border-gray-100">
+        <Search size={16} className="text-brand shrink-0" />
+        <input
+          autoFocus value={value} onChange={(e) => setValue(e.target.value)}
+          placeholder="Buscar passeios e transfers…"
+          className="flex-1 text-[14px] text-gray-800 placeholder-gray-400 bg-transparent outline-none"
+        />
+        <button onClick={onClose} className="text-[13px] text-gray-400 font-semibold shrink-0">Fechar</button>
+      </div>
+      {q.length >= 2 && (
+        <div className="mt-2 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          {results.length === 0 ? (
+            <p className="text-[13px] text-gray-400 text-center py-4">Nada encontrado para “{value}”.</p>
+          ) : results.map((tr) => (
+            <button key={tr.id}
+              onClick={() => { onClose(); navigate('/passeios', { state: { selectedId: tr.id } }) }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 border-b border-gray-50 last:border-0">
+              <div className="w-11 h-11 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+                {tr.cover_image_url
+                  ? <img src={tr.cover_image_url} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full bg-gradient-to-br from-orange-400 to-amber-300" />}
+              </div>
+              <span className="text-[13.5px] font-semibold text-gray-800 line-clamp-2">{tr.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Home() {
   const navigate = useNavigate()
   const { region, openPicker, userCoords, getServiceQuery } = useRegion()
   const { user } = useAuth()
   const { favs, toggleFav } = useFavorites()
+  const { moeda, setMoeda } = useMoeda()
+  const [buscaAberta, setBuscaAberta] = useState(false)
+  const [busca, setBusca] = useState('')
 
   const geo = getServiceQuery()
   const coarseLat = userCoords?.lat != null ? Math.round(userCoords.lat * 100) / 100 : null
@@ -321,8 +372,27 @@ export default function Home() {
                 <p className="text-[12px] text-gray-500 leading-none mt-1">Passeios &amp; Transfers</p>
               </div>
             </div>
-            <NotificationBell />
+            <div className="flex items-center gap-1">
+              <button onClick={() => setBuscaAberta((v) => !v)} aria-label="Buscar"
+                className="w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+                <Search size={22} className="text-gray-700" />
+              </button>
+              <button onClick={() => navigate('/favoritos')} aria-label="Favoritos"
+                className="relative w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+                <Heart size={22} className={favs.size ? 'fill-brand text-brand' : 'text-gray-700'} />
+                {favs.size > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center">{favs.size}</span>
+                )}
+              </button>
+              <NotificationBell />
+            </div>
           </div>
+
+          {/* Busca rápida de passeios/transfers */}
+          {buscaAberta && (
+            <HomeSearch tours={tours} onClose={() => { setBuscaAberta(false); setBusca('') }}
+              value={busca} setValue={setBusca} navigate={navigate} />
+          )}
 
           {/* Região como pastilha: no mockup ela é um botão com corpo próprio,
               não um texto solto — é o filtro que manda em tudo abaixo. */}
@@ -335,6 +405,18 @@ export default function Home() {
             <span className="text-[13.5px] font-bold text-gray-900 truncate">{nomeRegiao}</span>
             <ChevronDown size={15} className="text-gray-400 shrink-0" />
           </button>
+
+          {/* Moeda de exibição (preço oficial segue em BRL; estrangeira é ~aprox.) */}
+          <div className="mt-2 inline-flex items-center gap-1 bg-white rounded-full p-0.5 shadow-sm border border-gray-100 align-middle ml-2">
+            {['BRL', 'USD', 'EUR'].map((c) => (
+              <button key={c} onClick={() => setMoeda(c)}
+                className={`px-2.5 py-1 rounded-full text-[12px] font-bold transition-colors ${
+                  moeda === c ? 'bg-brand text-white' : 'text-gray-500'
+                }`}>
+                {MOEDAS[c].flag} {c}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="px-4 pt-5 space-y-5">

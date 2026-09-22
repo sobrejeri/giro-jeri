@@ -682,6 +682,7 @@
     "instagramAria": "Turiva on Instagram"
   },
   "tourDetailPg": {
+    "reviews": { "title": "Reviews", "empty": "No comments yet — be the first to review!" },
     "backToTours": "Tours",
     "notFound": "Tour not found.",
     "durationHours": "{{hours}}h duration",
@@ -727,6 +728,13 @@
     "peopleBadge": "{{count}} people",
     "suggestionFor": "Suggestion for {{count}} people",
     "noVehicles": "No vehicles available for this tour at the moment."
+  },
+  "favoritesPg": {
+    "title": "Favorites",
+    "emptyTitle": "Nothing saved yet",
+    "emptySubtitle": "Tap the heart on a tour to keep it here.",
+    "explore": "Explore tours",
+    "count": "{{count}} saved"
   },
   "feedPg": {
     "back": "Back",

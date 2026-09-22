@@ -682,6 +682,7 @@
     "instagramAria": "Turiva en Instagram"
   },
   "tourDetailPg": {
+    "reviews": { "title": "Reseñas", "empty": "Aún sin comentarios — ¡sé el primero en evaluar!" },
     "backToTours": "Tours",
     "notFound": "Tour no encontrado.",
     "durationHours": "{{hours}}h de duración",
@@ -727,6 +728,13 @@
     "peopleBadge": "{{count}} personas",
     "suggestionFor": "Sugerencia para {{count}} personas",
     "noVehicles": "No hay vehículos disponibles para este tour por el momento."
+  },
+  "favoritesPg": {
+    "title": "Favoritos",
+    "emptyTitle": "Nada guardado aún",
+    "emptySubtitle": "Toca el corazón de un paseo para guardarlo aquí.",
+    "explore": "Explorar paseos",
+    "count": "{{count}} guardado(s)"
   },
   "feedPg": {
     "back": "Volver",

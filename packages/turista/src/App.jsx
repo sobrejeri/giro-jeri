@@ -16,6 +16,7 @@ import Transfers       from './pages/Transfers'
 import Bookings        from './pages/Bookings'
 import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
+import Favoritos       from './pages/Favoritos'
 import Auth            from './pages/Auth'
 import Oferta from './pages/Oferta'
 import SairDasOfertas from './pages/SairDasOfertas'
@@ -91,6 +92,7 @@ export default function App() {
         <Route path="transfers"           element={<Transfers />} />
         <Route path="carrinho"            element={<CartPage />} />
         <Route path="avaliacoes"          element={<Avaliacoes />} />
+        <Route path="favoritos"           element={<Favoritos />} />
         <Route path="minhas-reservas"     element={<PrivateRoute><Bookings /></PrivateRoute>} />
         <Route path="minhas-reservas/:id" element={<PrivateRoute><BookingDetail /></PrivateRoute>} />
         <Route path="perfil"              element={<Profile />} />

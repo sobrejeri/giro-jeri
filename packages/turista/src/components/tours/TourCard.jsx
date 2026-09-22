@@ -2,6 +2,7 @@ import { Heart, Clock, Users, Check, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { precoDeEntrada } from '../../lib/precoCartao'
 import { duracao as fmtDuracao } from '../../lib/formato'
+import { useMoeda } from '../../lib/moeda'
 
 /* ── Degradê de reserva para passeio sem foto ────────────────────────────── */
 const GRADS = [
@@ -68,7 +69,10 @@ function etiquetaDe(tour, t) {
 
 export default function TourCard({ tour, mode = 'private', selected, onSelect, isFav, onFav, inCart, onToggleCart }) {
   const { t } = useTranslation()
+  const { aprox } = useMoeda()
   const { valor, rotulo } = precoDe(tour, mode, t)
+  const precoNum = precoDeEntrada(tour)?.valor
+  const aproxTxt = aprox(precoNum)
   const dur  = fmtDuracao(tour.duration_hours)
   const dif  = dificuldade(tour.difficulty_level, t)
   const selo = etiquetaDe(tour, t)
@@ -198,9 +202,12 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
               capacidade não cabia ao lado e virava "12 pes…". Descer de linha
               não esconde nada; reticências em número, sim. */}
           <div className="flex flex-wrap items-end justify-between gap-x-1 gap-y-1 mt-1">
-            <p className="shrink-0 whitespace-nowrap text-[16px] font-extrabold text-brand leading-none">
-              {valor || t('toursPg.card.onRequest')}
-            </p>
+            <div className="shrink-0 min-w-0">
+              <p className="whitespace-nowrap text-[16px] font-extrabold text-brand leading-none">
+                {valor || t('toursPg.card.onRequest')}
+              </p>
+              {aproxTxt && <p className="text-[10px] text-gray-400 leading-none mt-0.5">{aproxTxt}</p>}
+            </div>
             {cap && (
               <span className="min-w-0 inline-flex items-center gap-0.5 text-[9.5px] text-gray-500 leading-none">
                 <Users size={9} className="text-gray-400 shrink-0" />

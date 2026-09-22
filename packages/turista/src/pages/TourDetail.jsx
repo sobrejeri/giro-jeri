@@ -9,6 +9,8 @@ import { useRegion } from '../contexts/RegionContext'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card from '../components/ui/Card'
 import OriginPicker from '../components/OriginPicker'
+import TourReviews from '../components/TourReviews'
+import { useMoeda } from '../lib/moeda'
 import { hora } from '../lib/formato'
 import {
   Clock, Users, ChevronLeft, CheckCircle, XCircle,
@@ -123,6 +125,7 @@ export default function TourDetail() {
   const location  = useLocation()
   const { token } = useAuth()
   const { region, userCoords } = useRegion()
+  const { aprox } = useMoeda()
 
   const [mode,   setMode]   = useState('shared')
   const [people, setPeople] = useState(location.state?.people || 2)
@@ -298,6 +301,10 @@ export default function TourDetail() {
               )}
             </div>
             <p className="text-gray-600 leading-relaxed">{tour.full_description || tour.short_description}</p>
+
+            <div className="mt-6">
+              <TourReviews tourId={tour.id} ratingAverage={tour.rating_average} ratingCount={tour.rating_count} />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -560,8 +567,9 @@ export default function TourDetail() {
                           {t('tourDetailPg.paxCount', { capacity: cartCapacity, people })}
                         </span>
                       </div>
-                      <span className="text-[16px] font-extrabold text-brand">
+                      <span className="text-[16px] font-extrabold text-brand text-right">
                         R$ {cartTotal.toLocaleString('pt-BR')}
+                        {aprox(cartTotal) && <span className="block text-[10px] font-medium text-gray-400">{aprox(cartTotal)}</span>}
                       </span>
                     </div>
                   </div>

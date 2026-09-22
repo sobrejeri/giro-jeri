@@ -24,7 +24,7 @@ const todayIsoFortaleza = () =>
 // ?operator_id=…&service_type=tour|transfer&min_rating=1..5&limit=…&offset=…
 reviewsRouter.get('/', async (req, res, next) => {
   try {
-    const { operator_id, service_type, min_rating } = req.query;
+    const { operator_id, service_type, service_id, min_rating } = req.query;
     const limit  = Math.min(Number(req.query.limit) || 20, 50);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
 
@@ -36,6 +36,7 @@ reviewsRouter.get('/', async (req, res, next) => {
       .range(offset, offset + limit - 1);
     if (operator_id)  q = q.eq('operator_id', operator_id);
     if (service_type) q = q.eq('service_type', service_type);
+    if (service_id)   q = q.eq('service_id', service_id);
     if (min_rating)   q = q.gte('rating', Number(min_rating));
 
     const { data: rows, error, count } = await q;
