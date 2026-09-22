@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase }                   from '../supabase.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { notifyTourists } from '../services/notify.js';
 
 const router = Router();
 
@@ -145,6 +146,31 @@ router.post('/highlights/:id/items', authenticate, requireAdmin, async (req, res
       .select()
       .single();
     if (error) throw error;
+
+    // Notificação automática (estilo Instagram): toda publicação avisa os
+    // turistas, com prévia da imagem quando o item for foto. Best-effort — nunca
+    // derruba a criação do post.
+    ;(async () => {
+      try {
+        const { data: hl } = await supabase
+          .from('story_highlights')
+          .select('title, cover_image_url, is_active')
+          .eq('id', req.params.id)
+          .maybeSingle();
+        if (!hl || hl.is_active === false) return; // destaque oculto não avisa
+        const imagem = data.media_type === 'image' ? data.media_url : (hl.cover_image_url || null);
+        await notifyTourists({
+          title:       hl.title || 'Novidade na Turiva 🌴',
+          body:        data.display_name || `Nova publicação em ${hl.title || 'Jericoacoara'}. Confira!`,
+          image:       imagem,
+          url:         'eventos',        // abre a "Descubra a Vila"
+          templateKey: 'nova_publicacao',
+        });
+      } catch (err) {
+        console.error('[stories] notificação de publicação falhou:', err.message);
+      }
+    })();
+
     res.status(201).json(data);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });

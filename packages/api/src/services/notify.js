@@ -82,6 +82,20 @@ export async function notifyUser({ userId, bookingId = null, templateKey = null,
   firePush(userId, { title: title || 'Turiva', body, bookingId, templateKey, onlyApps, image, url })
 }
 
+// Notifica TODOS os turistas (ex.: nova publicação/story). Fire-and-forget;
+// push só no app do turista (onlyApps). Nunca lança.
+export async function notifyTourists({ title, body, image = null, url = null, templateKey = null }) {
+  if (!body) return
+  try {
+    const { data } = await supabase.from('users').select('id').eq('user_type', 'tourist')
+    for (const u of data || []) {
+      notifyUser({ userId: u.id, title, body, image, url, templateKey, onlyApps: ['turista'] })
+    }
+  } catch (err) {
+    console.error('[notify] tourists falhou:', err.message)
+  }
+}
+
 // Notifica só os ADMINs ativos (avisos internos: novo cadastro, recebimento
 // aprovado/recusado). Respeita o toggle "ativa/desativada" do modelo no admin.
 export async function notifyAdmins({ bookingId = null, templateKey = null, title, body }) {
