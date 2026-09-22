@@ -14,7 +14,7 @@
 // v6: diretório de estabelecimentos 100% Google. Junto veio a auto-atualização
 // no main.jsx (recarrega ao trocar de controller), então a partir daqui novos
 // deploys aplicam sozinhos, sem o usuário precisar fechar e reabrir o app.
-const VERSION      = 'v6'
+const VERSION      = 'v7'
 const SHELL_CACHE  = `turiva-shell-${VERSION}`
 const ASSET_CACHE  = `turiva-assets-${VERSION}`
 const KEEP         = [SHELL_CACHE, ASSET_CACHE]
@@ -98,13 +98,19 @@ self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch (_) {}
   const title = data.title || 'Turiva'
+  // Destino do clique: url explícita (ex.: post/promoção) tem prioridade; senão
+  // vai para a reserva, ou para a lista.
   const path  = data.bookingId ? ('minhas-reservas/' + data.bookingId) : 'minhas-reservas'
+  const url   = data.url ? (self.registration.scope + String(data.url).replace(/^\//, '')) : (self.registration.scope + path)
   const options = {
     body:    data.body || '',
     tag:     data.templateKey || 'turiva',
-    data:    { url: self.registration.scope + path },
+    data:    { url },
     vibrate: [80, 40, 80],
   }
+  // Prévia grande da imagem (estilo Instagram) — Android/Chrome mostram; iOS
+  // ignora sem quebrar. `image` é a foto grande; deixa o ícone/badge padrão.
+  if (data.image) options.image = data.image
   event.waitUntil(self.registration.showNotification(title, options))
 })
 

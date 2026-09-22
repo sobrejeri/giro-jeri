@@ -63,7 +63,7 @@ async function firePush(userId, payload) {
 }
 
 // Notifica UM usuário (turista, em geral).
-export async function notifyUser({ userId, bookingId = null, templateKey = null, title, body, onlyApps = null }) {
+export async function notifyUser({ userId, bookingId = null, templateKey = null, title, body, onlyApps = null, image = null, url = null }) {
   if (!userId || !body) return
   try {
     await supabase.from('notifications').insert({
@@ -79,7 +79,7 @@ export async function notifyUser({ userId, bookingId = null, templateKey = null,
   } catch (err) {
     console.error('[notify] insert (user) falhou:', err.message)
   }
-  firePush(userId, { title: title || 'Turiva', body, bookingId, templateKey, onlyApps })
+  firePush(userId, { title: title || 'Turiva', body, bookingId, templateKey, onlyApps, image, url })
 }
 
 // Notifica só os ADMINs ativos (avisos internos: novo cadastro, recebimento

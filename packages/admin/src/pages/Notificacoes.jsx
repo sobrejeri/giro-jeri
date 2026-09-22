@@ -79,7 +79,7 @@ export default function Notificacoes() {
   const qc = useQueryClient()
   const { data: history } = useQuery({ queryKey: ['notif-broadcasts'], queryFn: () => api.getBroadcasts() })
 
-  const [msg, setMsg] = useState({ title: 'Turiva', body: '', target: 'turista', audience: 'all' })
+  const [msg, setMsg] = useState({ title: 'Turiva', body: '', target: 'turista', audience: 'all', image: '', url: '' })
   const [result, setResult] = useState('')
   const broadcast = useMutation({
     mutationFn: () => api.broadcastNotif(msg),
@@ -125,6 +125,16 @@ export default function Notificacoes() {
           <Textarea label="Mensagem" rows={3} value={msg.body} maxLength={400}
             placeholder="Ex: Promoção de feriado! Passeios com 10% OFF hoje."
             onChange={(e) => setMsg({ ...msg, body: e.target.value })} />
+          <Input label="Imagem (opcional — prévia estilo Instagram)" value={msg.image} maxLength={1000}
+            placeholder="https://… (link da imagem do post)"
+            onChange={(e) => setMsg({ ...msg, image: e.target.value })} />
+          {msg.image?.startsWith('http') && (
+            <img src={msg.image} alt="" className="w-full max-h-40 object-cover rounded-xl border border-gray-700" />
+          )}
+          <Input label="Abrir ao tocar (opcional)" value={msg.url} maxLength={300}
+            placeholder="Ex: descubra  (deixe em branco para o padrão)"
+            onChange={(e) => setMsg({ ...msg, url: e.target.value })} />
+          <p className="text-[11px] text-gray-500">A prévia da imagem aparece em Android/Chrome. No iPhone o push mostra só título e texto (limitação do iOS).</p>
           <Select label="Destino (qual app)" value={msg.target}
             onChange={(e) => setMsg({ ...msg, target: e.target.value })}>
             {TARGETS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}

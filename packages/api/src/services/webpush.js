@@ -27,7 +27,7 @@ function ensureConfigured() {
 
 // Envia um push para TODOS os dispositivos inscritos de um usuário.
 // Remove inscrições expiradas (404/410). Nunca lança — é fire-and-forget.
-export async function sendPushToUser(userId, { title, body, bookingId = null, templateKey = null, onlyApps = null }) {
+export async function sendPushToUser(userId, { title, body, bookingId = null, templateKey = null, onlyApps = null, image = null, url = null }) {
   if (!userId || !ensureConfigured()) return
 
   let query = supabase
@@ -53,6 +53,8 @@ export async function sendPushToUser(userId, { title, body, bookingId = null, te
     body:  body || '',
     bookingId,
     templateKey,
+    ...(image ? { image } : {}),
+    ...(url ? { url } : {}),
   })
 
   await Promise.allSettled(

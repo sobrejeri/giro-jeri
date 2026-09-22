@@ -224,6 +224,9 @@ router.post('/broadcast', authenticate, requireAdmin, async (req, res) => {
     const title = String(req.body?.title || 'Turiva').slice(0, 120)
     const body  = String(req.body?.body || '').trim().slice(0, 400)
     const audience = req.body?.audience || 'all'
+    // Prévia de imagem (estilo Instagram) e destino do clique — opcionais.
+    const image = /^https?:\/\//.test(req.body?.image || '') ? String(req.body.image).slice(0, 1000) : null
+    const url   = req.body?.url ? String(req.body.url).slice(0, 300) : null
     // Destino = qual público/PWA recebe. 'turista' (padrão) mantém os
     // sub-filtros de audiência; 'operador'/'admin' vão para todos do tipo.
     const target = ['turista', 'operador', 'admin'].includes(req.body?.target) ? req.body.target : 'turista'
@@ -257,7 +260,7 @@ router.post('/broadcast', authenticate, requireAdmin, async (req, res) => {
     const onlyApps = [target]
     // Fire-and-forget em lotes pequenos para não travar a resposta.
     let enviados = 0
-    for (const uid of userIds) { notifyUser({ userId: uid, title, body, onlyApps }); enviados += 1 }
+    for (const uid of userIds) { notifyUser({ userId: uid, title, body, onlyApps, image, url }); enviados += 1 }
     // Registra no histórico (best-effort; ignora se a migração 093 não rodou).
     supabase.from('notification_broadcasts')
       .insert({ title, body, audience: `${target}:${audience}`, sent_count: enviados, created_by: req.user.id })
