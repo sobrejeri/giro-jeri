@@ -416,7 +416,8 @@ export default function Profile() {
             <PontosCard token={token} />
             {/* Identity card */}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              {/* Capa editável */}
+              {/* Capa editável — some no perfil do admin (visual limpo, estilo Instagram) */}
+              {user.user_type !== 'admin' && (
               <div className="relative h-24">
                 {coverUrl
                   ? <img src={coverUrl} alt="Capa do perfil" className="absolute inset-0 w-full h-full object-cover" />
@@ -431,8 +432,9 @@ export default function Profile() {
                 </button>
                 <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleCoverChange} />
               </div>
+              )}
 
-              <div className="px-6 pb-6 -mt-10 flex flex-col items-center text-center">
+              <div className={`px-6 pb-6 flex flex-col items-center text-center ${user.user_type === 'admin' ? 'pt-6' : '-mt-10'}`}>
                 <div className="relative mb-4">
                   <div className="w-[88px] h-[88px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-4 ring-white shadow-md">
                     {avatarUrl ? (
@@ -478,7 +480,8 @@ export default function Profile() {
             {/* Grade de publicações (estilo Instagram) — só admin */}
             {user.user_type === 'admin' && <PostsGrid />}
 
-            {/* Personal data card */}
+            {/* Dados pessoais — ocultos no perfil do admin (visual limpo) */}
+            {user.user_type !== 'admin' && (
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
                 <span className="font-semibold text-gray-800 text-[14px]">{t('profile.personalData')}</span>
@@ -661,6 +664,7 @@ export default function Profile() {
                 })()}
               </div>
             </div>
+            )}
           </>
         ) : (
           /* Guest card */
