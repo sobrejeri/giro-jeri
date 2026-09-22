@@ -823,6 +823,22 @@ router.get('/me/whatsapp-status', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Sobe o arquivo no bucket 'avatars'. Se o bucket ainda não existir (causa
+// comum de "não consigo atualizar a foto"), cria como público e tenta de novo.
+async function uploadAvatar(path, buffer, mimeType) {
+  const bucket = () => supabase.storage.from('avatars');
+  let { error } = await bucket().upload(path, buffer, { contentType: mimeType, upsert: true });
+  if (error && /bucket.*not.*found|not.*found.*bucket|does not exist/i.test(error.message || '')) {
+    const { error: createErr } = await supabase.storage.createBucket('avatars', {
+      public: true, fileSizeLimit: '10MB',
+    });
+    // "already exists" não é erro real (corrida entre requests).
+    if (createErr && !/already exists/i.test(createErr.message || '')) return createErr;
+    ({ error } = await bucket().upload(path, buffer, { contentType: mimeType, upsert: true }));
+  }
+  return error;
+}
+
 // ── POST /api/auth/me/photo ───────────────────────────────
 router.post('/me/photo', authenticate, async (req, res, next) => {
   try {
@@ -846,20 +862,21 @@ router.post('/me/photo', authenticate, async (req, res, next) => {
     const ext  = mimeType.split('/')[1];
     const path = `${req.user.id}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, buffer, { contentType: mimeType, upsert: true });
-
-    if (uploadError) return res.status(500).json({ error: uploadError.message });
+    const uploadError = await uploadAvatar(path, buffer, mimeType);
+    if (uploadError) {
+      console.error('[auth] upload avatar falhou:', uploadError.message);
+      return res.status(500).json({ error: `Não foi possível enviar a foto: ${uploadError.message}` });
+    }
 
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+    const versionedUrl = `${publicUrl}?v=${Date.now()}`;
 
     await supabase
       .from('users')
-      .update({ profile_photo_url: publicUrl, updated_at: new Date().toISOString() })
+      .update({ profile_photo_url: versionedUrl, updated_at: new Date().toISOString() })
       .eq('id', req.user.id);
 
-    res.json({ url: publicUrl });
+    res.json({ url: versionedUrl });
   } catch (err) { next(err); }
 });
 
@@ -886,11 +903,11 @@ router.post('/me/cover', authenticate, async (req, res, next) => {
     const ext  = mimeType.split('/')[1];
     const path = `cover-${req.user.id}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, buffer, { contentType: mimeType, upsert: true });
-
-    if (uploadError) return res.status(500).json({ error: uploadError.message });
+    const uploadError = await uploadAvatar(path, buffer, mimeType);
+    if (uploadError) {
+      console.error('[auth] upload capa falhou:', uploadError.message);
+      return res.status(500).json({ error: `Não foi possível enviar a capa: ${uploadError.message}` });
+    }
 
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
     const versionedUrl = `${publicUrl}?v=${Date.now()}`;
