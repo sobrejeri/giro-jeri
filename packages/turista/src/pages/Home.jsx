@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format, startOfDay, isToday, isTomorrow, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -324,6 +324,12 @@ export default function Home() {
   })()
 
   const base = import.meta.env.BASE_URL
+
+  // Admin/operador não usam a home de turista: o foco deles é a Descubra. Manda
+  // direto para lá (o menu deles nem tem "Início"). Depois de todos os hooks.
+  if (user?.user_type === 'admin' || user?.user_type === 'operator') {
+    return <Navigate to="/eventos" replace />
+  }
 
   return (
     <>

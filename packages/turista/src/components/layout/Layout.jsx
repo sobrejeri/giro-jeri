@@ -10,6 +10,8 @@ import PushPrompt from '../PushPrompt'
 import InstallBar from '../InstallBar'
 import OfflineBanner from '../OfflineBanner'
 import PullToRefresh from '../PullToRefresh'
+import InboxChat from '../InboxChat'
+import { useAuth } from '../../contexts/AuthContext'
 import { getPartner, clearPartner } from '../../lib/partner'
 
 // Selo de venda direta: enquanto ativo, toda solicitação vai atribuída à
@@ -38,6 +40,10 @@ function PartnerBadge() {
 
 export default function Layout() {
   const qc = useQueryClient()
+  const { user } = useAuth()
+  // Admin/operador têm o menu enxuto (Descubra · Bate-papo · Perfil); a aba
+  // "Bate-papo" abre esta caixa global por evento, de qualquer tela.
+  const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
   async function handleRefresh() {
     // Revalida tudo o que estiver em uso na tela atual.
     await qc.refetchQueries({ type: 'active' })
@@ -76,6 +82,8 @@ export default function Layout() {
 
       <CartFab />
       <BottomNav />
+      {/* Caixa de conversas global para admin/operador — aberta pela aba Bate-papo. */}
+      {isCreator && <InboxChat variant="listener" />}
       <PushPrompt />
       <RegionPicker />
     </div>

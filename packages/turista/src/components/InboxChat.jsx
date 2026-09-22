@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessageCircle, X, Trash2 } from 'lucide-react'
@@ -16,10 +16,21 @@ function quando(iso) {
 }
 
 // Caixa de conversas do cliente (estilo WhatsApp), ao lado do sino.
-export default function InboxChat() {
+// variant 'button' (padrão) = ícone no cabeçalho que abre a caixa.
+// variant 'listener' = SÓ a caixa (sem ícone), aberta por um evento global
+// ('open-inbox-chat'). Serve para a aba "Bate-papo" do menu (admin/operador)
+// disparar a caixa de qualquer tela.
+export default function InboxChat({ variant = 'button' }) {
   const { user } = useAuth()
   const qc = useQueryClient()
   const [aberto, setAberto]     = useState(false)
+
+  useEffect(() => {
+    if (variant !== 'listener') return
+    const abrir = () => setAberto(true)
+    window.addEventListener('open-inbox-chat', abrir)
+    return () => window.removeEventListener('open-inbox-chat', abrir)
+  }, [variant])
   const [conversa, setConversa] = useState(null)
   const [menu, setMenu]         = useState(null) // booking_id com opção de excluir
   const holdRef = useRef(null)
@@ -44,15 +55,17 @@ export default function InboxChat() {
 
   return (
     <>
-      <button onClick={() => setAberto(true)} aria-label="Conversas"
-        className="relative w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
-        <MessageCircle size={22} className="text-gray-700" />
-        {naoLidas > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-            {naoLidas > 99 ? '99+' : naoLidas}
-          </span>
-        )}
-      </button>
+      {variant !== 'listener' && (
+        <button onClick={() => setAberto(true)} aria-label="Conversas"
+          className="relative w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+          <MessageCircle size={22} className="text-gray-700" />
+          {naoLidas > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+              {naoLidas > 99 ? '99+' : naoLidas}
+            </span>
+          )}
+        </button>
+      )}
 
       {aberto && createPortal(
         <>
