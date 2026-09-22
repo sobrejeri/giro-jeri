@@ -241,6 +241,17 @@ export default function Profile() {
   }, [isAdmin])
   const postCount = (adminPosts || []).filter((p) => p.image_url || p.video_url).length
 
+  // Contagem de destaques (highlights) para exibir ao lado de publicações.
+  const [highlightCount, setHighlightCount] = useState(null)
+  useEffect(() => {
+    if (!isAdmin) return
+    let vivo = true
+    api.getStories()
+      .then((d) => { if (vivo) setHighlightCount(Array.isArray(d) ? d.length : 0) })
+      .catch(() => { if (vivo) setHighlightCount(0) })
+    return () => { vivo = false }
+  }, [isAdmin])
+
   const [editing,   setEditing]   = useState(false)
   const [saving,    setSaving]    = useState(false)
   const [saveError, setSaveError] = useState(null)
@@ -467,10 +478,14 @@ export default function Profile() {
                       onPickPhoto={() => fileRef.current?.click()}
                     />
                     <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
-                    <div className="flex-1 flex justify-center text-center pl-8 pr-2">
+                    <div className="flex-1 flex justify-around text-center pl-4">
                       <div>
                         <p className="text-[20px] font-extrabold text-gray-900 leading-none">{postCount}</p>
                         <p className="text-[12px] text-gray-500 mt-0.5">publicações</p>
+                      </div>
+                      <div>
+                        <p className="text-[20px] font-extrabold text-gray-900 leading-none">{highlightCount ?? '—'}</p>
+                        <p className="text-[12px] text-gray-500 mt-0.5">destaques</p>
                       </div>
                     </div>
                   </div>
