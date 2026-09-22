@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { X, Store } from 'lucide-react'
 import TopNav from './TopNav'
@@ -8,6 +8,7 @@ import RegionPicker from '../RegionPicker'
 import CartFab from '../CartFab'
 import PushPrompt from '../PushPrompt'
 import InstallBar from '../InstallBar'
+import RegionBar from '../RegionBar'
 import OfflineBanner from '../OfflineBanner'
 import PullToRefresh from '../PullToRefresh'
 import InboxChat from '../InboxChat'
@@ -44,6 +45,9 @@ export default function Layout() {
   // Admin/operador têm o menu enxuto (Descubra · Bate-papo · Perfil); a aba
   // "Bate-papo" abre esta caixa global por evento, de qualquer tela.
   const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
+  // Barra de localização só onde a região manda no conteúdo (loja/vitrine).
+  const { pathname } = useLocation()
+  const mostraRegiao = pathname === '/' || pathname.startsWith('/passeios') || pathname.startsWith('/transfers')
   async function handleRefresh() {
     // Revalida tudo o que estiver em uso na tela atual.
     await qc.refetchQueries({ type: 'active' })
@@ -73,6 +77,7 @@ export default function Layout() {
         <OfflineBanner />
         <PartnerBadge />
         <InstallBar />
+        {mostraRegiao && <RegionBar />}
         <div className="pb-[68px] lg:pb-0">
           <PullToRefresh onRefresh={handleRefresh}>
             <Outlet />

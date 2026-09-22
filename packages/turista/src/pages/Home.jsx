@@ -375,20 +375,10 @@ export default function Home() {
               value={busca} setValue={setBusca} navigate={navigate} />
           )}
 
-          {/* Região como pastilha: no mockup ela é um botão com corpo próprio,
-              não um texto solto — é o filtro que manda em tudo abaixo. */}
-          <button
-            onClick={openPicker}
-            className="mt-3.5 inline-flex items-center gap-2 bg-white rounded-full pl-3 pr-3.5 py-2.5 shadow-sm border border-gray-100 active:bg-gray-50 transition-colors max-w-full"
-          >
-            <MapPin size={15} className="text-brand shrink-0" />
-            <span className="text-[13.5px] text-gray-500 shrink-0">Saindo de:</span>
-            <span className="text-[13.5px] font-bold text-gray-900 truncate">{nomeRegiao}</span>
-            <ChevronDown size={15} className="text-gray-400 shrink-0" />
-          </button>
+          {/* A região agora fica na barra fina do topo (RegionBar). */}
 
           {/* Moeda de exibição (preço oficial segue em BRL; estrangeira é ~aprox.) */}
-          <div className="mt-2 inline-flex items-center gap-1 bg-white rounded-full p-0.5 shadow-sm border border-gray-100 align-middle ml-2">
+          <div className="mt-3 inline-flex items-center gap-1 bg-white rounded-full p-0.5 shadow-sm border border-gray-100 align-middle">
             {['BRL', 'USD', 'EUR'].map((c) => (
               <button key={c} onClick={() => setMoeda(c)}
                 className={`px-2.5 py-1 rounded-full text-[12px] font-bold transition-colors ${
