@@ -708,6 +708,7 @@ export default function Feed() {
   const FILTERS = useMemo(() => getFilters(t), [t])
   const cats = useMemo(() => getCats(t), [t])
   const [searchFocus, setSearchFocus] = useState(false)
+  const [buscaAberta, setBuscaAberta] = useState(false)   // lupa do topo abre/fecha o buscador
 
   // Publicação no feed (admin): compositor/editor. undefined = fechado,
   // null = nova publicação, objeto = editar aquele post.
@@ -949,6 +950,18 @@ export default function Feed() {
               <ChevronLeft size={20} className="text-gray-700" />
             </button>
             <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('feedPg.title')}</h1>
+            {/* Lupa no topo: abre/fecha o buscador para economizar espaço. */}
+            <button
+              onClick={() => {
+                if (buscaAberta) { setSearchQuery(''); setSearchFocus(false) }
+                setBuscaAberta((v) => !v)
+              }}
+              className={`absolute right-0 w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-transform ${buscaAberta ? 'bg-brand/10 text-brand' : 'bg-gray-50 text-gray-700'}`}
+              aria-label={t('feedPg.searchPlaceholder')}
+              aria-expanded={buscaAberta}
+            >
+              <Search size={19} />
+            </button>
           </div>
         </div>
       </header>
@@ -956,56 +969,63 @@ export default function Feed() {
       {/* ── Stories 24h (perfis) no topo, estilo Instagram ───────────────── */}
       <LiveStoriesRow className="lg:max-w-2xl lg:mx-auto" />
 
-      {/* ── Buscador em destaque ──────────────────────────────────────────── */}
-      <div className="max-w-2xl mx-auto px-4 pt-3">
-        <div className="relative">
-          <Search size={19} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setSearchFocus(true)}
-            onBlur={() => setTimeout(() => setSearchFocus(false), 150)}
-            placeholder={t('feedPg.searchPlaceholder')}
-            className="w-full h-12 pl-12 pr-11 rounded-2xl bg-white border border-gray-200 shadow-sm text-[14px] text-gray-800 placeholder-gray-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition"
-          />
+      {/* ── Buscador — escondido por padrão; a lupa do topo mostra/esconde ─── */}
+      {buscaAberta && (
+        <div className="max-w-2xl mx-auto px-4 pt-3">
+          <div className="relative">
+            <Search size={19} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand" />
+            <input
+              type="text"
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocus(true)}
+              onBlur={() => setTimeout(() => setSearchFocus(false), 150)}
+              placeholder={t('feedPg.searchPlaceholder')}
+              className="w-full h-12 pl-12 pr-11 rounded-2xl bg-white border border-gray-200 shadow-sm text-[14px] text-gray-800 placeholder-gray-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition"
+            />
 
-          {/* Sugestões enquanto digita — toca e preenche a busca. */}
-          {searchFocus && suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 bg-white rounded-2xl border border-gray-100 shadow-lg overflow-hidden">
-              {suggestions.map((s, i) => (
-                <button
-                  key={i}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => { setSearchQuery(s.label); setSearchFocus(false) }}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left active:bg-gray-50 border-b border-gray-50 last:border-0"
-                >
-                  <s.Icon size={15} className="text-brand shrink-0" />
-                  <span className="text-[13.5px] text-gray-800 truncate">{s.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform"
-              aria-label={t('feedPg.clearSearch')}
-            >
-              <X size={14} />
-            </button>
-          )}
+            {/* Sugestões enquanto digita — toca e preenche a busca. */}
+            {searchFocus && suggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 bg-white rounded-2xl border border-gray-100 shadow-lg overflow-hidden">
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { setSearchQuery(s.label); setSearchFocus(false) }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left active:bg-gray-50 border-b border-gray-50 last:border-0"
+                  >
+                    <s.Icon size={15} className="text-brand shrink-0" />
+                    <span className="text-[13.5px] text-gray-800 truncate">{s.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform"
+                aria-label={t('feedPg.clearSearch')}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <p className="text-[12px] text-gray-400 text-center mt-2">{t('feedPg.subtitle')}</p>
         </div>
-        <p className="text-[12px] text-gray-400 text-center mt-2">{t('feedPg.subtitle')}</p>
-        {isAdmin && (
+      )}
+
+      {/* Nova publicação (admin) — sempre visível, independente da busca. */}
+      {isAdmin && (
+        <div className="max-w-2xl mx-auto px-4 pt-3">
           <button
             onClick={() => setComposerPost(null)}
-            className="mt-3 w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform"
+            className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform"
           >
             <Plus size={18} /> {t('feedPg.newPost')}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Filtros (cards) — abaixo do buscador ───────────────────────────── */}
       {/* Sem faixa branca: sobre o fundo de areia ela virava uma listra no meio
