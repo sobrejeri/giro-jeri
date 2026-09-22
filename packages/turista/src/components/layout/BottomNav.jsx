@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Home, Compass, CalendarCheck, User, Sparkles } from 'lucide-react'
+import { Home, Compass, Car, User, Sparkles } from 'lucide-react'
 
 export default function BottomNav() {
   const navigate     = useNavigate()
@@ -12,16 +12,17 @@ export default function BottomNav() {
   if (pathname === '/carrinho') return null
 
   // Dois itens de cada lado + um BOTÃO CENTRAL destacado (Descubra) — a tela de
-  // destaque, que antes só vivia dentro da home. Para o botão ficar no meio, a
-  // barra tem 4 abas: Transfers saiu daqui, mas continua a um toque pelo card
-  // grande da home e pela rota /transfers.
+  // destaque, que antes só vivia dentro da home. Reservas saiu do menu: já fica
+  // no topo da home e dentro do Perfil (Minhas Reservas). Com a vaga aberta, o
+  // Transfers voltou, mantendo o Descubra exatamente no centro (2 abas de cada
+  // lado).
   const LADO_ESQ = [
     { to: '/',          icon: Home,    label: t('nav.home'), exact: true },
     { to: '/passeios',  icon: Compass, label: t('nav.tours') },
   ]
   const LADO_DIR = [
-    { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings') },
-    { to: '/perfil',          icon: User,          label: t('nav.profile') },
+    { to: '/transfers', icon: Car,  label: t('nav.transfers') },
+    { to: '/perfil',    icon: User, label: t('nav.profile') },
   ]
 
   const Aba = ({ to, icon: Icon, label, exact }) => {
