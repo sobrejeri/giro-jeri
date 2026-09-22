@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, Play, Star, Loader2, Store, Grid3x3, Plus } from 'lucide-react'
+import { ChevronLeft, Play, Star, Loader2, Store, Grid3x3, Plus, Check } from 'lucide-react'
 import { api } from '../lib/api'
 import { setPreferredOp } from '../lib/preferredOp'
+import { useCart } from '../contexts/CartContext'
+import { useRegion } from '../contexts/RegionContext'
+import { draftFromTour } from '../lib/cartDraft'
 
 // Perfil público do operador (aberto pelo nome/foto nas publicações do feed).
 // Mostra as fotos/vídeos dos serviços que ele publicou. A lojinha com
@@ -28,14 +31,19 @@ export default function PerfilOperador() {
 
   const services = op?.services || []
 
-  // Atribui a venda a este operador (prioridade no atendimento) e abre o
-  // passeio para configurar/reservar. Reaproveita o mesmo mecanismo do link
-  // "Meu link de vendas" (/c/:slug) já existente.
-  function reservarComOperador(service) {
-    // Prioridade (janela de 45s), não venda direta: a reserva segue o fluxo
-    // normal, mas fica exclusiva deste operador por alguns segundos.
+  const { items: cartItems, upsertItem, removeItem } = useCart()
+  const { region } = useRegion()
+  const cartIds = new Set((cartItems || []).map((i) => i.id))
+
+  // Joga o serviço no CARRINHO como rascunho leve (estilo Mercado Livre: os
+  // dados do passeio — data, pessoas, veículos — são pedidos depois, no
+  // carrinho) e marca este operador como PREFERIDO (prioridade na janela de
+  // aceite; o carrinho envia preferred_operator_id ao solicitar). Tocar de
+  // novo remove.
+  function toggleCarrinho(service) {
+    if (cartIds.has(service.id)) { removeItem(service.id); return }
     setPreferredOp({ id: op.id, name: op.full_name, photo: op.profile_photo_url })
-    navigate(`/passeios/${service.id}`)
+    upsertItem(draftFromTour(service, { region_id: region?.id || service.region_id || null }))
   }
 
   return (
@@ -177,10 +185,14 @@ export default function PerfilOperador() {
                           )}
                         </div>
                         <button
-                          onClick={() => reservarComOperador(s)}
-                          className="shrink-0 flex items-center gap-1 bg-brand text-white text-[12px] font-bold rounded-lg px-3 py-2 active:scale-95 transition-transform"
+                          onClick={() => toggleCarrinho(s)}
+                          className={`shrink-0 flex items-center gap-1 text-[12px] font-bold rounded-lg px-3 py-2 active:scale-95 transition-transform ${
+                            cartIds.has(s.id) ? 'bg-emerald-500 text-white' : 'bg-brand text-white'
+                          }`}
                         >
-                          <Plus size={13} /> Adicionar
+                          {cartIds.has(s.id)
+                            ? <><Check size={13} /> Adicionado</>
+                            : <><Plus size={13} /> Adicionar</>}
                         </button>
                       </div>
                     ))}
