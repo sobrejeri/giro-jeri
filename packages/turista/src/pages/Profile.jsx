@@ -472,7 +472,7 @@ export default function Profile() {
                       </button>
                       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
                     </div>
-                    <div className="flex-1 flex justify-center text-center">
+                    <div className="flex-1 flex justify-center text-center pl-8 pr-2">
                       <div>
                         <p className="text-[20px] font-extrabold text-gray-900 leading-none">{postCount}</p>
                         <p className="text-[12px] text-gray-500 mt-0.5">publicações</p>
