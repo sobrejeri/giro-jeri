@@ -96,7 +96,13 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-[min(340px,calc(100vw-24px))] bg-white rounded-2xl shadow-2xl border border-gray-100 z-[200] overflow-hidden">
+        <div
+          className="fixed w-[min(340px,calc(100vw-24px))] bg-white rounded-2xl shadow-2xl border border-gray-100 z-[200] overflow-hidden"
+          style={{
+            top: (ref.current?.getBoundingClientRect().bottom || 56) + 8,
+            right: 12,
+          }}
+        >
           <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
             <p className="text-[14px] font-bold text-gray-900">{t('notifCmp.title')}</p>
             {unread > 0 && <span className="text-[11px] text-gray-400">{t('notifCmp.unreadCount', { count: unread })}</span>}
