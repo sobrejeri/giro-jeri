@@ -8,6 +8,7 @@ import { versionLabel } from '../lib/version'
 import { setLang, LANGS } from '../i18n/index.js'
 import { validateBrDoc } from '../lib/document'
 import ProfileDesktop from './ProfileDesktop'
+import VerifiedBadge from '../components/VerifiedBadge'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
@@ -137,17 +138,8 @@ function PontosCard({ token }) {
 // Grade de publicações estilo Instagram — só no perfil do admin, que é quem
 // publica na "Descubra". Assim o cliente que visita o perfil vê tudo
 // organizado numa grade de miniaturas; tocar leva ao feed.
-function PostsGrid() {
+function PostsGrid({ posts }) {
   const navigate = useNavigate()
-  const [posts, setPosts] = useState(null)
-  useEffect(() => {
-    let vivo = true
-    api.getFeed()
-      .then((d) => { if (vivo) setPosts(Array.isArray(d) ? d : (d?.data || [])) })
-      .catch(() => { if (vivo) setPosts([]) })
-    return () => { vivo = false }
-  }, [])
-
   const lista = (posts || []).filter((p) => p.image_url || p.video_url)
 
   return (
@@ -220,6 +212,20 @@ export default function Profile() {
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setCoverUrl(user?.cover_photo_url || null) }, [user?.cover_photo_url])
+
+  // Perfil do admin no estilo Instagram: busca as publicações uma vez e
+  // reaproveita a contagem no cabeçalho e na grade.
+  const isAdmin = user?.user_type === 'admin'
+  const [adminPosts, setAdminPosts] = useState(null)
+  useEffect(() => {
+    if (!isAdmin) return
+    let vivo = true
+    api.getFeed()
+      .then((d) => { if (vivo) setAdminPosts(Array.isArray(d) ? d : (d?.data || [])) })
+      .catch(() => { if (vivo) setAdminPosts([]) })
+    return () => { vivo = false }
+  }, [isAdmin])
+  const postCount = (adminPosts || []).filter((p) => p.image_url || p.video_url).length
 
   const [editing,   setEditing]   = useState(false)
   const [saving,    setSaving]    = useState(false)
@@ -434,7 +440,45 @@ export default function Profile() {
               </div>
               )}
 
-              <div className={`px-6 pb-6 flex flex-col items-center text-center ${user.user_type === 'admin' ? 'pt-6' : '-mt-10'}`}>
+              {isAdmin ? (
+                /* Cabeçalho estilo Instagram: avatar à esquerda + stats,
+                   nome com selo verificado abaixo. */
+                <div className="px-5 py-5">
+                  <div className="flex items-center gap-5">
+                    <div className="relative shrink-0">
+                      <div className="w-[82px] h-[82px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-2 ring-gray-100">
+                        {avatarUrl
+                          ? <img src={avatarUrl} alt="Foto de perfil" className="w-full h-full object-cover" />
+                          : <span className="text-brand font-bold text-[26px] leading-none select-none">{initials}</span>}
+                      </div>
+                      <button
+                        onClick={() => !uploadingPhoto && fileRef.current?.click()}
+                        className="absolute bottom-0 right-0 w-7 h-7 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"
+                      >
+                        {uploadingPhoto ? <Loader2 size={13} className="text-white animate-spin" /> : <Camera size={13} className="text-white" />}
+                      </button>
+                      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
+                    </div>
+                    <div className="flex-1 flex justify-around text-center">
+                      <div>
+                        <p className="text-[20px] font-extrabold text-gray-900 leading-none">{postCount}</p>
+                        <p className="text-[12px] text-gray-500 mt-0.5">publicações</p>
+                      </div>
+                    </div>
+                  </div>
+                  {photoError && (
+                    <p className="text-[11px] text-red-500 bg-red-50 rounded-lg px-3 py-1.5 mt-2 text-center">{photoError}</p>
+                  )}
+                  <div className="mt-3">
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-gray-900 text-[15px] leading-tight break-words">{user.full_name}</p>
+                      <VerifiedBadge size={16} />
+                    </div>
+                    <p className="text-[12.5px] text-gray-400 break-all mt-0.5">{user.email}</p>
+                  </div>
+                </div>
+              ) : (
+              <div className="px-6 pb-6 -mt-10 flex flex-col items-center text-center">
                 <div className="relative mb-4">
                   <div className="w-[88px] h-[88px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-4 ring-white shadow-md">
                     {avatarUrl ? (
@@ -464,8 +508,7 @@ export default function Profile() {
                 </div>
                 <div className="flex items-center gap-2 mt-3">
                   <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-orange-50 text-brand">
-                    {user.user_type === 'admin' ? 'Admin'
-                      : user.user_type === 'operator' ? 'Operador'
+                    {user.user_type === 'operator' ? 'Operador'
                       : user.affiliate_code ? 'Turista · Afiliado' : 'Turista'}
                   </span>
                   {user.whatsapp_valid === true && (
@@ -475,10 +518,11 @@ export default function Profile() {
                   )}
                 </div>
               </div>
+              )}
             </div>
 
             {/* Grade de publicações (estilo Instagram) — só admin */}
-            {user.user_type === 'admin' && <PostsGrid />}
+            {isAdmin && <PostsGrid posts={adminPosts} />}
 
             {/* Dados pessoais — ocultos no perfil do admin (visual limpo) */}
             {user.user_type !== 'admin' && (
@@ -706,7 +750,8 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Menu */}
+        {/* Menu — oculto no perfil do admin (Minhas Reservas / Afiliado) */}
+        {!isAdmin && (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           {MENU.map(({ icon: Icon, label, to }, i) => (
             <button
@@ -722,6 +767,7 @@ export default function Profile() {
             </button>
           ))}
         </div>
+        )}
 
         {/* Logout */}
         {token && (
