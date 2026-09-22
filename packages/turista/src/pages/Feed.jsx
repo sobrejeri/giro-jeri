@@ -695,6 +695,39 @@ function SectionTitle({ children }) {
   return <h2 className="text-[15px] font-extrabold text-gray-900 px-1">{children}</h2>
 }
 
+// PRNG determinístico a partir de uma semente (mulberry32): a MESMA semente dá a
+// MESMA ordem. Assim curtir/re-renderizar não bagunça o feed — a ordem só muda
+// quando a semente muda (ao reabrir a Descubra ou puxar para atualizar).
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+function embaralhar(arr, seed) {
+  const rnd = mulberry32(seed || 1)
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+// Ordena o feed no estilo Instagram: publicações NOVAS (criadas depois da última
+// vez que o usuário abriu) vêm primeiro, em ordem cronológica; o restante é
+// embaralhado pela semente. Resultado: o feed não fica padronizado (a ordem
+// alterna a cada atualização), mas um post novo aparece no topo — e depois entra
+// no rodízio como os outros.
+function ordenarFeed(arr, seed, lastSeen) {
+  const sorted = [...arr].sort((x, y) =>
+    String(y.created_at || '').localeCompare(String(x.created_at || '')))
+  const novos  = sorted.filter((p) => String(p.created_at || '') > lastSeen)
+  const vistos = sorted.filter((p) => !(String(p.created_at || '') > lastSeen))
+  return [...novos, ...embaralhar(vistos, seed)]
+}
+
 /* ── página ────────────────────────────────────────────── */
 export default function Feed() {
   const { t } = useTranslation()
@@ -709,6 +742,24 @@ export default function Feed() {
   const cats = useMemo(() => getCats(t), [t])
   const [searchFocus, setSearchFocus] = useState(false)
   const [buscaAberta, setBuscaAberta] = useState(false)   // lupa do topo abre/fecha o buscador
+
+  // Ordem do feed estilo Instagram: embaralha a cada abertura/atualização, mas
+  // mantém o que é novo no topo. `feedSeed` troca no mount (reabrir a Descubra) e
+  // a cada "puxar para atualizar" (evento do PullToRefresh, no Layout). NÃO muda
+  // ao curtir — por isso o post não pula de lugar quando você toca no coração.
+  const [feedSeed, setFeedSeed] = useState(() => (Math.random() * 2 ** 32) >>> 0)
+  const [feedLastSeen] = useState(() => {
+    // Sem histórico (1ª visita): usa "agora" — assim tudo já entra no rodízio em
+    // vez de virar "tudo novo" (que deixaria o feed cronológico, sem embaralhar).
+    // Só publicações criadas DEPOIS de uma visita anterior contam como novas.
+    try { return localStorage.getItem('feed_seen_ts') || new Date().toISOString() }
+    catch { return new Date().toISOString() }
+  })
+  useEffect(() => {
+    const onRefresh = () => setFeedSeed((Math.random() * 2 ** 32) >>> 0)
+    window.addEventListener('app:pull-refresh', onRefresh)
+    return () => window.removeEventListener('app:pull-refresh', onRefresh)
+  }, [])
 
   // Publicação no feed (admin): compositor/editor. undefined = fechado,
   // null = nova publicação, objeto = editar aquele post.
@@ -772,7 +823,19 @@ export default function Feed() {
     likeMut.mutate(postId)
   }, [user, likeMut])
 
-  const allPosts   = Array.isArray(feedData)  ? feedData  : (feedData?.data  || [])
+  const allPostsRaw = Array.isArray(feedData) ? feedData : (feedData?.data || [])
+  // Reordena estilo Instagram: novos no topo, resto embaralhado pela semente.
+  const allPosts = useMemo(
+    () => ordenarFeed(allPostsRaw, feedSeed, feedLastSeen),
+    [allPostsRaw, feedSeed, feedLastSeen])
+  // Marca como "visto" até a publicação mais recente — na próxima abertura, o que
+  // hoje é novo já entra no rodízio em vez de ficar preso no topo.
+  useEffect(() => {
+    if (!allPostsRaw.length) return
+    const maxTs = allPostsRaw.reduce(
+      (m, p) => (String(p.created_at || '') > m ? String(p.created_at || '') : m), '')
+    if (maxTs) { try { localStorage.setItem('feed_seen_ts', maxTs) } catch { /* storage bloqueado */ } }
+  }, [allPostsRaw])
   // Diretório 100% ao vivo do Google (via /nearby): sem lista curada do banco,
   // para não misturar duas fontes e evitar duplicidade/desatualização.
   const googlePlaces = nearbyData?.results || []

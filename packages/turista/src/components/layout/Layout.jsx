@@ -41,6 +41,9 @@ export default function Layout() {
   async function handleRefresh() {
     // Revalida tudo o que estiver em uso na tela atual.
     await qc.refetchQueries({ type: 'active' })
+    // Telas que embaralham conteúdo (ex.: o feed da Descubra) trocam a ordem a
+    // cada "puxar para atualizar".
+    window.dispatchEvent(new Event('app:pull-refresh'))
   }
 
   return (
