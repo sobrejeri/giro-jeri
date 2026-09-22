@@ -20,7 +20,10 @@ export default function PerfilPublico() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = user?.user_type === 'admin'
-  const { stories, hasStories, hasUnseen, bumpSeen } = useLiveStories()
+  // Perfil da Turiva → só os stories da Turiva (admin), não os dos operadores.
+  const { grupoTuriva, bumpSeen } = useLiveStories()
+  const hasStories = !!grupoTuriva
+  const hasUnseen  = grupoTuriva?.hasUnseen
   const [storyOpen, setStoryOpen] = useState(false)
   const [postoAberto, setPostoAberto] = useState(null)   // id do post tocado (abre o feed no perfil)
 
@@ -119,9 +122,9 @@ export default function PerfilPublico() {
         </div>
       </main>
 
-      {storyOpen && hasStories && (
+      {storyOpen && grupoTuriva && (
         <LiveStoryOverlay
-          stories={stories}
+          stories={grupoTuriva.stories}
           avatarUrl={avatarUrl}
           isAdmin={isAdmin}
           onClose={() => setStoryOpen(false)}

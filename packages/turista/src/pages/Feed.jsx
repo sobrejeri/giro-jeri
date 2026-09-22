@@ -428,7 +428,7 @@ function FeedVideo({ src, poster }) {
 export function PostCard({ post, liked, onLike, user, isAdmin, canEdit, onEdit, onDelete }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { stories: liveStories, hasStories, hasUnseen, bumpSeen } = useLiveStories()
+  const { grupoDe, bumpSeen } = useLiveStories()
   const [storyOpen, setStoryOpen] = useState(false)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [expandido, setExpandido] = useState(false)
@@ -437,10 +437,13 @@ export function PostCard({ post, liked, onLike, user, isAdmin, canEdit, onEdit, 
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
-  // Autor: operador (perfil próprio + sem story) ou Turiva (admin, com story).
+  // Autor do post: operador (nome próprio) ou Turiva (admin).
   const isOperatorPost = post.author_type === 'operator'
   const authorName = isOperatorPost ? (post.author_name || 'Operador') : 'Turiva'
-  const showRing = !isOperatorPost && hasStories   // anel de story só na Turiva
+  // Anel de story do AUTOR do post (Turiva ou o operador que publicou).
+  const grupoAutor = grupoDe(post.created_by_user_id)
+  const hasUnseen  = grupoAutor?.hasUnseen
+  const showRing   = !!grupoAutor
   function openAuthor() {
     if (isOperatorPost) navigate(`/op/${post.created_by_user_id}`)
     else navigate('/turiva')
@@ -583,11 +586,11 @@ export function PostCard({ post, liked, onLike, user, isAdmin, canEdit, onEdit, 
         open={commentsOpen} setOpen={setCommentsOpen} />
 
       {/* Story SOBRE o feed (sem trocar de tela) */}
-      {storyOpen && hasStories && (
+      {storyOpen && showRing && (
         <LiveStoryOverlay
-          stories={liveStories}
+          stories={grupoAutor?.stories || []}
           avatarUrl={post.author_avatar}
-          isAdmin={isAdmin}
+          isAdmin={isAdmin || grupoAutor?.authorId === user?.id}
           onClose={() => setStoryOpen(false)}
           onSeen={bumpSeen}
         />

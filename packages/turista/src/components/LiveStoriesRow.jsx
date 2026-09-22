@@ -8,65 +8,86 @@ import LiveStoryComposer from './LiveStoryComposer'
 
 /**
  * LiveStoriesRow — fileira de stories (24h) no topo da Descubra, estilo
- * Instagram: bolinha com anel colorido (novo) ou cinza (visto) + nome embaixo.
- * Hoje só a Turiva publica; admin vê "Seu story" para adicionar.
+ * Instagram: um CÍRCULO POR AUTOR (Turiva + cada operador), com anel colorido
+ * (novo) ou cinza (visto) + nome embaixo. Admin/operador veem "Seu story" para
+ * publicar; o dono pode excluir e ver quem viu (o overlay cuida disso).
  */
 export default function LiveStoriesRow({ className = '' }) {
   const { user } = useAuth()
-  const isAdmin = user?.user_type === 'admin'
+  const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
   const qc = useQueryClient()
-  const { stories, hasStories, hasUnseen, bumpSeen } = useLiveStories()
-  const [open, setOpen] = useState(false)
+  const { grupos, hasStories, bumpSeen } = useLiveStories()
+  const [viewer, setViewer] = useState(null)   // grupo aberto no viewer
   const [composer, setComposer] = useState(false)
 
-  if (!hasStories && !isAdmin) return null
+  if (!hasStories && !isCreator) return null
 
-  // Miniatura da bolinha: foto do perfil de quem publicou (vem da API),
-  // depois a do admin logado, por fim a 1ª mídia.
-  const cover = stories.find((s) => s.author_avatar)?.author_avatar
-    || user?.profile_photo_url
-    || (stories.find((s) => s.media_type === 'image')?.media_url)
-    || null
+  const meuGrupo = grupos.find((g) => g.authorId === user?.id) || null
+  const outros   = grupos.filter((g) => g.authorId !== user?.id)
+  const meuAvatar = meuGrupo?.authorAvatar || user?.profile_photo_url || null
 
-  const ring = hasStories
-    ? (hasUnseen ? 'bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600' : 'bg-gray-300')
-    : 'bg-gray-200'
+  const anel = (hasUnseen) =>
+    hasUnseen ? 'bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600' : 'bg-gray-300'
 
   return (
     <div className={`bg-white ${className}`}>
       <div className="flex gap-4 overflow-x-auto px-4 py-3 scrollbar-hide">
-        {/* Seu story (admin) */}
-        {isAdmin && (
-          <button onClick={() => setComposer(true)} className="flex flex-col items-center gap-1 shrink-0 active:scale-95 transition-transform">
-            <div className="relative w-[64px] h-[64px] rounded-full bg-gray-100 flex items-center justify-center overflow-hidden ring-2 ring-gray-200">
-              {cover ? <img src={cover} alt="" className="w-full h-full object-cover" /> : <span className="text-brand font-bold text-[20px]">T</span>}
-              <span className="absolute bottom-0 right-0 w-5 h-5 bg-brand rounded-full flex items-center justify-center border-2 border-white">
+        {/* Seu story (admin/operador): abre o SEU story se já houver, senão o
+            compositor; o "+" sempre adiciona. */}
+        {isCreator && (
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            <div className="relative">
+              <button
+                onClick={() => (meuGrupo ? setViewer(meuGrupo) : setComposer(true))}
+                className="block active:scale-95 transition-transform"
+                aria-label="Seu story"
+              >
+                <div className={`rounded-full p-[2.5px] ${meuGrupo ? anel(meuGrupo.hasUnseen) : 'bg-gray-200'}`}>
+                  <div className="w-[64px] h-[64px] rounded-full bg-gray-100 flex items-center justify-center overflow-hidden ring-2 ring-white">
+                    {meuAvatar
+                      ? <img src={meuAvatar} alt="" className="w-full h-full object-cover" />
+                      : <span className="text-brand font-bold text-[20px]">{(user?.full_name || 'T')[0]}</span>}
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => setComposer(true)}
+                aria-label="Adicionar ao story"
+                className="absolute bottom-0 right-0 w-5 h-5 bg-brand rounded-full flex items-center justify-center border-2 border-white active:scale-90 z-10"
+              >
                 <Plus size={12} className="text-white" />
-              </span>
+              </button>
             </div>
             <span className="text-[11px] text-gray-600 max-w-[68px] truncate">Seu story</span>
-          </button>
+          </div>
         )}
 
-        {/* Story da Turiva */}
-        {hasStories && (
-          <button onClick={() => setOpen(true)} className="flex flex-col items-center gap-1 shrink-0 active:scale-95 transition-transform">
-            <div className={`rounded-full p-[2.5px] ${ring}`}>
+        {/* Um círculo por autor (Turiva + operadores). */}
+        {outros.map((g) => (
+          <button
+            key={g.authorId || g.authorName}
+            onClick={() => setViewer(g)}
+            className="flex flex-col items-center gap-1 shrink-0 active:scale-95 transition-transform"
+          >
+            <div className={`rounded-full p-[2.5px] ${anel(g.hasUnseen)}`}>
               <div className="w-[64px] h-[64px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-2 ring-white">
-                {cover ? <img src={cover} alt="Turiva" className="w-full h-full object-cover" /> : <span className="text-brand font-bold text-[20px]">T</span>}
+                {g.authorAvatar
+                  ? <img src={g.authorAvatar} alt={g.authorName} className="w-full h-full object-cover" />
+                  : <span className="text-brand font-bold text-[20px]">{(g.authorName || 'T')[0]}</span>}
               </div>
             </div>
-            <span className="text-[11px] text-gray-700 font-medium max-w-[68px] truncate">Turiva</span>
+            <span className="text-[11px] text-gray-700 font-medium max-w-[68px] truncate">{g.authorName}</span>
           </button>
-        )}
+        ))}
       </div>
 
-      {open && hasStories && (
+      {viewer && (
         <LiveStoryOverlay
-          stories={stories}
-          avatarUrl={cover}
-          isAdmin={isAdmin}
-          onClose={() => setOpen(false)}
+          stories={viewer.stories}
+          avatarUrl={viewer.authorAvatar}
+          // "Gerenciar" (excluir / ver quem viu) = admin OU dono do story.
+          isAdmin={user?.user_type === 'admin' || viewer.authorId === user?.id}
+          onClose={() => setViewer(null)}
           onSeen={bumpSeen}
         />
       )}

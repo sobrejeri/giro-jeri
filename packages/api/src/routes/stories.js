@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase }                   from '../supabase.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
 import { notifyTourists } from '../services/notify.js';
 
 const router = Router();
@@ -103,7 +103,7 @@ router.get('/live', async (_req, res, next) => {
     const nowIso = new Date().toISOString();
     const { data, error } = await supabase
       .from('avatar_stories')
-      .select('id, media_url, media_type, caption, duration_sec, created_at, expires_at, author:created_by_user_id ( full_name, profile_photo_url )')
+      .select('id, media_url, media_type, caption, duration_sec, created_at, expires_at, created_by_user_id, author:created_by_user_id ( full_name, profile_photo_url, user_type )')
       .gt('expires_at', nowIso)
       .order('created_at', { ascending: true });
     if (error) throw error;
@@ -120,7 +120,11 @@ router.get('/live', async (_req, res, next) => {
     res.json((data || []).map(({ author, ...s }) => ({
       ...s,
       view_count:    counts[s.id] || 0,
-      author_name:   author?.full_name || 'Turiva',
+      // author_id/author_type deixam a fileira agrupar por autor (cada operador
+      // com o próprio círculo); admin aparece como "Turiva".
+      author_id:     s.created_by_user_id || null,
+      author_type:   author?.user_type || null,
+      author_name:   author?.user_type === 'admin' ? 'Turiva' : (author?.full_name || 'Operador'),
       author_avatar: author?.profile_photo_url || null,
     })));
   } catch (err) { next(err); }
@@ -140,9 +144,14 @@ router.post('/live/:id/view', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/stories/live/:id/viewers — admin: quem viu (nome, avatar, quando)
-router.get('/live/:id/viewers', authenticate, requireAdmin, async (req, res, next) => {
+// GET /api/stories/live/:id/viewers — o DONO (ou admin): quem viu.
+router.get('/live/:id/viewers', authenticate, requireOperator, async (req, res, next) => {
   try {
+    if (req.user.user_type !== 'admin') {
+      const { data: st } = await supabase
+        .from('avatar_stories').select('created_by_user_id').eq('id', req.params.id).maybeSingle();
+      if (!st || st.created_by_user_id !== req.user.id) return res.status(403).json({ error: 'Sem permissão' });
+    }
     const { data, error } = await supabase
       .from('avatar_story_views')
       .select('viewed_at, users:viewer_user_id ( id, full_name, profile_photo_url )')
@@ -158,8 +167,9 @@ router.get('/live/:id/viewers', authenticate, requireAdmin, async (req, res, nex
   } catch (err) { next(err); }
 });
 
-// POST /api/stories/live — admin publica um story efêmero
-router.post('/live', authenticate, requireAdmin, async (req, res, next) => {
+// POST /api/stories/live — admin ou operador publica um story efêmero (fica
+// atribuído a quem publicou, via created_by_user_id).
+router.post('/live', authenticate, requireOperator, async (req, res, next) => {
   try {
     const body = liveStorySchema.parse(req.body);
     const { data, error } = await supabase
@@ -181,9 +191,15 @@ router.post('/live', authenticate, requireAdmin, async (req, res, next) => {
   }
 });
 
-// DELETE /api/stories/live/:id — admin exclui
-router.delete('/live/:id', authenticate, requireAdmin, async (req, res, next) => {
+// DELETE /api/stories/live/:id — o DONO (ou admin) exclui.
+router.delete('/live/:id', authenticate, requireOperator, async (req, res, next) => {
   try {
+    if (req.user.user_type !== 'admin') {
+      const { data: st } = await supabase
+        .from('avatar_stories').select('created_by_user_id').eq('id', req.params.id).maybeSingle();
+      if (!st) return res.status(404).json({ error: 'Story não encontrado' });
+      if (st.created_by_user_id !== req.user.id) return res.status(403).json({ error: 'Sem permissão' });
+    }
     const { error } = await supabase.from('avatar_stories').delete().eq('id', req.params.id);
     if (error) throw error;
     res.status(204).end();

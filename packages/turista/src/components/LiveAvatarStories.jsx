@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Camera, Loader2, Plus } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 import { useLiveStories } from '../hooks/useLiveStories'
 import LiveStoryOverlay from './LiveStoryOverlay'
 import LiveStoryComposer from './LiveStoryComposer'
@@ -11,10 +12,15 @@ import LiveStoryComposer from './LiveStoryComposer'
  * Admin: botão "+" para adicionar, "quem viu" e excluir.
  */
 export default function LiveAvatarStories({ avatarUrl, initials, isAdmin, uploadingPhoto, onPickPhoto }) {
+  const { user } = useAuth()
   const qc = useQueryClient()
   const [viewerOpen, setViewerOpen]   = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
-  const { stories, hasStories, hasUnseen, bumpSeen } = useLiveStories()
+  // Só os stories do DONO do perfil (não os de todo mundo).
+  const { grupoDe, bumpSeen } = useLiveStories()
+  const meu = grupoDe(user?.id)
+  const hasStories = !!meu
+  const hasUnseen  = meu?.hasUnseen
 
   const ring = hasStories
     ? (hasUnseen
@@ -59,7 +65,7 @@ export default function LiveAvatarStories({ avatarUrl, initials, isAdmin, upload
 
       {viewerOpen && hasStories && (
         <LiveStoryOverlay
-          stories={stories}
+          stories={meu.stories}
           avatarUrl={avatarUrl}
           isAdmin={isAdmin}
           onClose={() => setViewerOpen(false)}
