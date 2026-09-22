@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Home, Compass, Car, User, Sparkles, Store, Plus, CalendarCheck } from 'lucide-react'
+import { User, Sparkles, Store, Plus, CalendarCheck, Megaphone } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function BottomNav() {
@@ -79,7 +79,7 @@ export default function BottomNav() {
     </div>
   )
 
-  // ── Menu admin/operador: Bate-papo · Descubra · [Publicar] · Lojinha · Perfil ──
+  // ── Menu admin/operador: Lojinha · Descubra · [Publicar] · Reservas · Perfil ──
   if (isCreator) {
     return (
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100 lg:hidden">
@@ -96,14 +96,16 @@ export default function BottomNav() {
     )
   }
 
-  // ── Menu do turista: Início · Passeios · Descubra · Transfers · Perfil ─────
+  // ── Menu do turista: Lojinha · Afiliado · Descubra · Reservas · Perfil ─────
+  // Mesmo estilo do criador (Descubra central em destaque), mas o turista não
+  // publica — o botão do meio abre a Descubra, não o compositor de "Publicar".
   const LADO_ESQ = [
-    { to: '/',          icon: Home,    label: t('nav.home'), exact: true },
-    { to: '/passeios',  icon: Compass, label: t('nav.tours') },
+    { to: '/passeios',  icon: Store,     label: 'Lojinha' },
+    { to: '/afiliado',  icon: Megaphone, label: 'Afiliado' },
   ]
   const LADO_DIR = [
-    { to: '/transfers', icon: Car,  label: t('nav.transfers') },
-    { to: '/perfil',    icon: User, label: t('nav.profile') },
+    { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings', 'Reservas') },
+    { to: '/perfil',          icon: User,          label: t('nav.profile') },
   ]
 
   return (
