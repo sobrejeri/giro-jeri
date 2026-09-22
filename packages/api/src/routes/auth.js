@@ -839,6 +839,17 @@ async function uploadAvatar(path, buffer, mimeType) {
   return error;
 }
 
+// ── GET /api/auth/me/loyalty — saldo e extrato de pontos ──
+router.get('/me/loyalty', authenticate, async (req, res) => {
+  try {
+    const { saldoEExtrato } = await import('../services/loyalty.js');
+    const data = await saldoEExtrato(req.user.id);
+    res.json(data);
+  } catch {
+    res.json({ saldo: 0, itens: [] });
+  }
+});
+
 // ── POST /api/auth/me/photo ───────────────────────────────
 router.post('/me/photo', authenticate, async (req, res, next) => {
   try {

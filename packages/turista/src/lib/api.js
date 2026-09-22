@@ -140,6 +140,7 @@ export const api = {
   resetPassword:  (body) => request('/api/auth/reset-password',  { method: 'POST', body }),
   me:            ()     => request('/api/auth/me'),
   updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),
+  getLoyalty:    ()          => request('/api/auth/me/loyalty'),
   uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),
   whatsappStatus: ()    => request('/api/auth/me/whatsapp-status'),
   verifyWhatsapp: ()    => request('/api/auth/me/verify-whatsapp', { method: 'POST', body: {} }),

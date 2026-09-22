@@ -3808,6 +3808,11 @@ function avisarAdminRecusa({ bookingId = null, code = null, valor = null, motivo
 
 function notifyBookingPaid(booking, payment = null) {
   if (!booking) return
+
+  // Pontos de fidelidade (item 9): 1 ponto por R$ 1 pago. Idempotente.
+  import('../services/loyalty.js')
+    .then((m) => m.creditarPontosReserva(booking))
+    .catch(() => {})
   const isTransfer = booking.service_type === 'transfer'
   const tipo  = isTransfer ? 'translado' : 'passeio'
   const rota  = [booking.origin_text, booking.destination_text].filter(Boolean).join(' → ')

@@ -100,6 +100,40 @@ export function WhatsappCheck() {
   )
 }
 
+// Cartão de pontos de fidelidade (item 9). Ganha 1 ponto por R$ 1 pago.
+function PontosCard({ token }) {
+  const [data, setData] = useState(null)
+  useEffect(() => {
+    if (!token) return
+    let vivo = true
+    api.getLoyalty().then((d) => { if (vivo) setData(d) }).catch(() => {})
+    return () => { vivo = false }
+  }, [token])
+  const saldo = data?.saldo || 0
+  return (
+    <div className="rounded-2xl p-4 bg-gradient-to-br from-brand to-orange-400 text-white shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[12px] font-semibold text-white/90">⭐ Pontos Turiva</p>
+          <p className="text-[26px] font-extrabold leading-tight mt-0.5">{saldo.toLocaleString('pt-BR')}</p>
+          <p className="text-[11px] text-white/85 mt-0.5">Ganhe 1 ponto a cada R$ 1 em reservas pagas.</p>
+        </div>
+        <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl">🎁</div>
+      </div>
+      {data?.itens?.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-white/20 space-y-1">
+          {data.itens.slice(0, 3).map((i) => (
+            <div key={i.id} className="flex items-center justify-between text-[11.5px] text-white/90">
+              <span className="truncate pr-2">{i.description || (i.points >= 0 ? 'Pontos ganhos' : 'Resgate')}</span>
+              <span className="font-bold shrink-0">{i.points >= 0 ? '+' : ''}{i.points}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Profile() {
   const { user, token, logout, updateUser } = useAuth()
   const navigate = useNavigate()
@@ -317,6 +351,7 @@ export default function Profile() {
 
         {token && user ? (
           <>
+            <PontosCard token={token} />
             {/* Identity card */}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
               {/* Capa editável */}
