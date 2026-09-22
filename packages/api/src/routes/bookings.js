@@ -40,6 +40,72 @@ router.post('/cart-snapshot', authenticate, async (req, res) => {
   }
 });
 
+// ── GET /api/bookings/conversations — caixa de entrada (estilo WhatsApp) ──
+// Registrado ANTES de /:id (senão /:id capturaria "conversations"). Lista as
+// reservas do usuário que têm mensagens, com a última, não lidas e a outra parte.
+router.get('/conversations', authenticate, async (req, res, next) => {
+  try {
+    const u = req.user;
+    const ehOperador = u.user_type === 'operator' || u.user_type === 'agency';
+    const ehTurista  = u.user_type === 'tourist';
+    const ehAdmin    = u.user_type === 'admin' || u.user_type === 'finance';
+    if (!ehOperador && !ehTurista && !ehAdmin) return res.json([]);
+
+    let bq = supabase.from('bookings')
+      .select('id, booking_code, service_type, user_id, operator_id')
+      .order('created_at', { ascending: false }).limit(400);
+    if (ehOperador) bq = bq.eq('operator_id', u.id);
+    else if (ehTurista) bq = bq.eq('user_id', u.id);
+    const { data: bookings, error: be } = await bq;
+    if (be) throw be;
+    const ids = (bookings || []).map((b) => b.id);
+    if (!ids.length) return res.json([]);
+
+    const { data: msgs, error: me } = await supabase
+      .from('booking_messages')
+      .select('booking_id, sender_role, body, created_at, read_at')
+      .in('booking_id', ids)
+      .order('created_at', { ascending: false })
+      .limit(3000);
+    if (me) { if (me.code === '42P01') return res.json([]); throw me; }
+
+    const meuPapel = ehOperador ? 'operator' : ehTurista ? 'tourist' : 'admin';
+    const byBooking = new Map();
+    for (const m of msgs || []) {
+      let e = byBooking.get(m.booking_id);
+      if (!e) { e = { last: m, unread: 0 }; byBooking.set(m.booking_id, e); }
+      if (m.sender_role !== meuPapel && !m.read_at) e.unread += 1;
+    }
+    if (byBooking.size === 0) return res.json([]);
+
+    const outroIds = [...new Set((bookings || [])
+      .filter((b) => byBooking.has(b.id))
+      .map((b) => ehOperador ? b.user_id : b.operator_id).filter(Boolean))];
+    const { data: users } = outroIds.length
+      ? await supabase.from('users').select('id, full_name, profile_photo_url').in('id', outroIds)
+      : { data: [] };
+    const userById = new Map((users || []).map((x) => [x.id, x]));
+
+    const out = (bookings || []).filter((b) => byBooking.has(b.id)).map((b) => {
+      const e = byBooking.get(b.id);
+      const outro = userById.get(ehOperador ? b.user_id : b.operator_id);
+      return {
+        booking_id:   b.id,
+        booking_code: b.booking_code,
+        service_type: b.service_type,
+        name:         outro?.full_name || (ehOperador ? 'Cliente' : 'Operador'),
+        avatar:       outro?.profile_photo_url || null,
+        last_body:    e.last.body,
+        last_at:      e.last.created_at,
+        last_mine:    e.last.sender_role === meuPapel,
+        unread:       e.unread,
+      };
+    }).sort((a, b) => new Date(b.last_at) - new Date(a.last_at));
+
+    res.json(out);
+  } catch (err) { next(err); }
+});
+
 // ── Schema de criação de reserva ───────────────────────
 const createBookingSchema = z.object({
   region_id:         z.string().uuid(),

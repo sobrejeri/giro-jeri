@@ -202,6 +202,7 @@ export const api = {
   recipientKycLink:   () => request('/api/operator/recipient-kyc-link', { method: 'POST', body: {} }),
 
   // Notificações
+  getConversations:   ()         => request('/api/bookings/conversations'),
   getBookingMessages: (id)       => request(`/api/bookings/${id}/messages`),
   sendBookingMessage: (id, body) => request(`/api/bookings/${id}/messages`, { method: 'POST', body: { body } }),
   getNotifications:      ()    => request('/api/notifications?app=operador'),

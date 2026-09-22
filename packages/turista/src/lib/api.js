@@ -141,6 +141,7 @@ export const api = {
   me:            ()     => request('/api/auth/me'),
   updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),
   getLoyalty:    ()          => request('/api/auth/me/loyalty'),
+  getConversations:   ()          => request('/api/bookings/conversations'),
   getBookingMessages: (id)        => request(`/api/bookings/${id}/messages`),
   sendBookingMessage: (id, body)  => request(`/api/bookings/${id}/messages`, { method: 'POST', body: { body } }),
   uploadPhoto:   (photoData) => request('/api/auth/me/photo', { method: 'POST',  body: { photo_data: photoData } }),

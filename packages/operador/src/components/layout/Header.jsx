@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
+import InboxChat from '../InboxChat'
 
 const TITLES = {
   '/dashboard':  'Operações',
@@ -27,7 +28,8 @@ export default function Header({ onMenu = () => {} }) {
         <Menu size={22} />
       </button>
       <h1 className="text-lg font-semibold text-gray-900 truncate">{title}</h1>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-1">
+        <InboxChat />
         <NotificationBell bookingsPath="/reservas" />
       </div>
     </header>

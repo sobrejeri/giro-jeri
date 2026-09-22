@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useMoeda, MOEDAS } from '../lib/moeda'
 import NotificationBell from '../components/NotificationBell'
+import InboxChat from '../components/InboxChat'
 import HomeDesktop from './HomeDesktop'
 import { duracao as fmtDuracao } from '../lib/formato'
 
@@ -384,6 +385,7 @@ export default function Home() {
                   <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center">{favs.size}</span>
                 )}
               </button>
+              <InboxChat />
               <NotificationBell />
             </div>
           </div>
