@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -771,6 +771,16 @@ export default function Feed() {
   const isOperator = user?.user_type === 'operator'
   const isCreator = isAdmin || isOperator
   const [composerPost, setComposerPost] = useState(undefined)
+
+  // Abre o compositor quando chega da barra inferior (botão central Publicar).
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('novo') === '1' && isCreator) {
+      setComposerPost(null)
+      const next = new URLSearchParams(searchParams); next.delete('novo')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, isCreator]) // eslint-disable-line react-hooks/exhaustive-deps
   async function handleDeletePost(post) {
     if (!confirm(t('feedPg.confirmDelete', { title: post.title }))) return
     try { await api.deletePost(post.id) } catch (err) { alert(err?.message || t('feedPg.deleteError')); return }
@@ -1083,18 +1093,6 @@ export default function Feed() {
             )}
           </div>
           <p className="text-[12px] text-gray-400 text-center mt-2">{t('feedPg.subtitle')}</p>
-        </div>
-      )}
-
-      {/* Nova publicação (admin/operador) — sempre visível, independente da busca. */}
-      {isCreator && (
-        <div className="max-w-2xl mx-auto px-4 pt-3">
-          <button
-            onClick={() => setComposerPost(null)}
-            className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform"
-          >
-            <Plus size={18} /> {t('feedPg.newPost')}
-          </button>
         </div>
       )}
 

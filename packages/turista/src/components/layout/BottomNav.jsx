@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { Home, Compass, Car, User, Sparkles, MessageCircle } from 'lucide-react'
+import { Home, Compass, Car, User, Sparkles, MessageCircle, Store, Plus } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { api } from '../../lib/api'
 
@@ -75,7 +75,23 @@ export default function BottomNav() {
     </div>
   )
 
-  // ── Menu de admin/operador: Bate-papo · Descubra · Perfil ──────────────────
+  // Botão central destacado: NOVA PUBLICAÇÃO (admin/operador). Abre a Descubra
+  // já com o compositor aberto (via ?novo=1).
+  const FabPublicar = (
+    <div className="flex-1 min-w-0 flex flex-col items-center justify-end">
+      <button
+        onClick={() => navigate('/eventos?novo=1')}
+        aria-label={t('feedPg.newPost', 'Nova publicação')}
+        className="-mt-7 w-14 h-14 rounded-full flex items-center justify-center ring-4 ring-white shadow-lg active:scale-95 transition-all bg-brand text-white shadow-brand/40"
+      >
+        <Plus size={26} strokeWidth={2.5} />
+      </button>
+      <span className="text-[10px] leading-tight mt-1 text-gray-500 font-medium">Publicar</span>
+      <span className="h-[3px] w-5 rounded-full mt-[2px] bg-transparent" />
+    </div>
+  )
+
+  // ── Menu admin/operador: Bate-papo · Descubra · [Publicar] · Lojinha · Perfil ──
   if (isCreator) {
     return (
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100 lg:hidden">
@@ -98,7 +114,11 @@ export default function BottomNav() {
             <span className="h-[3px] w-5 rounded-full bg-transparent" />
           </button>
 
-          {FabDescubra}
+          <Aba to="/eventos" icon={Sparkles} label={t('nav.events')} />
+
+          {FabPublicar}
+
+          <Aba to="/passeios" icon={Store} label="Lojinha" />
 
           <Aba to="/perfil" icon={User} label={t('nav.profile')} />
         </div>
