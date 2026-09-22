@@ -419,7 +419,7 @@ export default function Profile() {
 
         {token && user ? (
           <>
-            <PontosCard token={token} />
+            {!isAdmin && <PontosCard token={token} />}
             {/* Identity card */}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
               {/* Capa editável — some no perfil do admin (visual limpo, estilo Instagram) */}
@@ -727,7 +727,8 @@ export default function Profile() {
           </div>
         )}
 
-        {/* Language picker */}
+        {/* Language picker — oculto no perfil do admin */}
+        {!isAdmin && (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
             <Globe size={15} className="text-brand" />
@@ -749,6 +750,7 @@ export default function Profile() {
             })}
           </div>
         </div>
+        )}
 
         {/* Menu — oculto no perfil do admin (Minhas Reservas / Afiliado) */}
         {!isAdmin && (
