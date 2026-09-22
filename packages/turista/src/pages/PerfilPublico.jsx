@@ -9,6 +9,11 @@ import LiveStoryOverlay from '../components/LiveStoryOverlay'
 import VerifiedBadge from '../components/VerifiedBadge'
 import Stories from '../components/Stories'
 
+// "10 mil", "1,5 mil", "1,2 mi" — número em formato compacto (pt-BR). Para a
+// contagem de curtidas caber sem virar "10000".
+const fmtCompacto = (n) =>
+  new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(n) || 0)
+
 // Perfil público da Turiva (aberto a partir do nome nas publicações do feed).
 export default function PerfilPublico() {
   const navigate = useNavigate()
@@ -23,6 +28,8 @@ export default function PerfilPublico() {
   const posts = (Array.isArray(feed) ? feed : (feed?.data || [])).filter((p) => p.image_url || p.video_url)
   const avatarUrl = posts.find((p) => p.author_avatar)?.author_avatar || null
   const highlightCount = Array.isArray(highlights) ? highlights.length : 0
+  // Curtidas somadas de todas as publicações (o feed já traz like_count por post).
+  const totalCurtidas = posts.reduce((s, p) => s + (Number(p.like_count) || 0), 0)
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
 
@@ -64,6 +71,10 @@ export default function PerfilPublico() {
               <div>
                 <p className="text-[20px] font-extrabold text-gray-900 leading-none">{highlightCount}</p>
                 <p className="text-[12px] text-gray-500 mt-0.5">destaques</p>
+              </div>
+              <div>
+                <p className="text-[20px] font-extrabold text-gray-900 leading-none">{fmtCompacto(totalCurtidas)}</p>
+                <p className="text-[12px] text-gray-500 mt-0.5">curtidas</p>
               </div>
             </div>
           </div>

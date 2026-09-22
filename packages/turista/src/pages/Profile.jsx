@@ -17,6 +17,10 @@ import {
   Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard, Play,
 } from 'lucide-react'
 
+// "10 mil", "1,2 mi" — número compacto (pt-BR), para a contagem de curtidas.
+const fmtCompacto = (n) =>
+  new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(n) || 0)
+
 function Field({ label, value, children }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -240,6 +244,8 @@ export default function Profile() {
     return () => { vivo = false }
   }, [isAdmin])
   const postCount = (adminPosts || []).filter((p) => p.image_url || p.video_url).length
+  // Curtidas somadas de todas as publicações (o feed já traz like_count por post).
+  const totalCurtidas = (adminPosts || []).reduce((s, p) => s + (Number(p.like_count) || 0), 0)
 
   // Contagem de destaques (highlights) para exibir ao lado de publicações.
   const [highlightCount, setHighlightCount] = useState(null)
@@ -487,6 +493,10 @@ export default function Profile() {
                       <div>
                         <p className="text-[20px] font-extrabold text-gray-900 leading-none">{highlightCount ?? '—'}</p>
                         <p className="text-[12px] text-gray-500 mt-0.5">destaques</p>
+                      </div>
+                      <div>
+                        <p className="text-[20px] font-extrabold text-gray-900 leading-none">{fmtCompacto(totalCurtidas)}</p>
+                        <p className="text-[12px] text-gray-500 mt-0.5">curtidas</p>
                       </div>
                     </div>
                   </div>
