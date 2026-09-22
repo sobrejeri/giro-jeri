@@ -281,7 +281,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
                   key={story.id}
                   src={story.media_url}
                   playsInline
-                  className="max-w-full max-h-full object-contain"
+                  className="w-full h-full object-cover"
                   onEnded={goNext}
                   onError={() => setMediaError(true)}
                   onTimeUpdate={() => {
@@ -294,7 +294,7 @@ export default function StoryViewer({ highlights = [], startGroup = 0, onClose, 
                   key={story.id}
                   src={story.media_url}
                   alt={story.display_name}
-                  className="max-w-full max-h-full object-contain"
+                  className="w-full h-full object-cover"
                   draggable={false}
                   onError={() => setMediaError(true)}
                 />
