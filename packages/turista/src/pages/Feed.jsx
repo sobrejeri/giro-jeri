@@ -807,11 +807,11 @@ export default function Feed() {
   let content
   if (filter === 'eventos') {
     content = loadingFeed ? Loader
-      : events.length ? events.map(renderPost)
+      : events.length ? <div className="space-y-1.5">{events.map(renderPost)}</div>
       : <EmptyState icon={CalendarDays} title={t('feedPg.emptyEvents.title')} sub={t('feedPg.emptyEvents.sub')} />
   } else if (filter === 'promocoes') {
     content = loadingFeed ? Loader
-      : promos.length ? promos.map(renderPost)
+      : promos.length ? <div className="space-y-1.5">{promos.map(renderPost)}</div>
       : <EmptyState icon={BadgePercent} title={t('feedPg.emptyPromos.title')} sub={t('feedPg.emptyPromos.sub')} />
   } else if (allCatIds.includes(filter)) {
     const list = places.filter((p) => p.category === filter)
@@ -832,9 +832,11 @@ export default function Feed() {
     // da sua categoria, com a tag "Patrocinado".
     if (posts.length) {
       blocks.push(
-        <section key="feed" className="space-y-4">
+        <section key="feed" className="space-y-3">
           <SectionTitle>🎉 {t('feedPg.sectionHappening')}</SectionTitle>
-          {posts.map(renderPost)}
+          <div className="space-y-1.5">
+            {posts.map(renderPost)}
+          </div>
         </section>
       )
     }
