@@ -9,6 +9,8 @@ import { duracao } from '../lib/formato'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
+import { useAuth } from '../contexts/AuthContext'
+import NotificationBell from '../components/NotificationBell'
 import { draftFromTour } from '../lib/cartDraft'
 import { highSeasonMonthSet, isHighSeasonIso } from '../lib/season'
 import OriginPicker from '../components/OriginPicker'
@@ -380,6 +382,8 @@ export default function Tours() {
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
+  const { user } = useAuth()
+  const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
 
   const { items: savedCartItems, upsertItem: saveCartItem, removeItem: dropCartItem, count: cartCount } = useCart()
 
@@ -838,7 +842,9 @@ export default function Tours() {
           >
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
-          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('toursPg.header.title')}</h1>
+          <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">
+            {isCreator ? 'TURIVA BRASIL' : t('toursPg.header.title')}
+          </h1>
           <div className="absolute right-0 flex items-center gap-2">
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
@@ -847,6 +853,8 @@ export default function Tours() {
             >
               <Search size={16} />
             </button>
+            {/* Sino de notificações ao lado do carrinho */}
+            <NotificationBell />
             {/* Carrinho no cabeçalho: o carrinho flutuante fica sobre o
                 conteúdo e some ao rolar; aqui o cliente vê o que já juntou sem
                 precisar caçar o botão. */}

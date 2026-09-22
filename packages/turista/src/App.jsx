@@ -60,6 +60,15 @@ function SpaRedirectHandler() {
   return null
 }
 
+// Tela inicial por papel: admin/operador abrem direto na Lojinha (Passeios);
+// turista continua na Home.
+function InicioPorPapel() {
+  const { user } = useAuth()
+  const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
+  if (isCreator) return <Navigate to="/passeios" replace />
+  return <Home />
+}
+
 export default function App() {
   return (
     <>
@@ -87,7 +96,7 @@ export default function App() {
 
       {/* App — layout responsivo com nav */}
       <Route path="/" element={<Layout />}>
-        <Route index                      element={<Home />} />
+        <Route index                      element={<InicioPorPapel />} />
         <Route path="eventos"             element={<Feed />} />
         <Route path="turiva"              element={<PerfilPublico />} />
         <Route path="op/:id"              element={<PerfilOperador />} />
