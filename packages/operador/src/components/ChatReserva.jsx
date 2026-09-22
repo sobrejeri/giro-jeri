@@ -65,6 +65,9 @@ export default function ChatReserva({ bookingId, open, onClose }) {
           <div ref={fimRef} />
         </div>
 
+        {send.isError && (
+          <p className="px-4 text-[12px] text-red-500 text-center pb-1">{send.error?.message || 'Não foi possível enviar.'}</p>
+        )}
         <form onSubmit={enviar} className="shrink-0 border-t border-gray-100 px-3 py-3 flex gap-2">
           <input value={text} onChange={(e) => setText(e.target.value)} maxLength={2000}
             placeholder="Escreva uma mensagem…"
