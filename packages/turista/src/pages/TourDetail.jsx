@@ -11,6 +11,8 @@ import Card from '../components/ui/Card'
 import OriginPicker from '../components/OriginPicker'
 import TourReviews from '../components/TourReviews'
 import { useMoeda } from '../lib/moeda'
+import { setSEO } from '../lib/seo'
+import { precoDeEntrada } from '../lib/precoCartao'
 import { hora } from '../lib/formato'
 import {
   Clock, Users, ChevronLeft, CheckCircle, XCircle,
@@ -138,6 +140,33 @@ export default function TourDetail() {
     queryKey: ['tour', id],
     queryFn:  () => api.getTour(id),
   })
+
+  // SEO: título/descrição/OG + JSON-LD do passeio (indexação + prévia no Google).
+  useEffect(() => {
+    if (!tour?.name) return
+    const desc = (tour.short_description || tour.full_description || '')
+      .replace(/\s+/g, ' ').trim().slice(0, 160)
+    const preco = Number(precoDeEntrada(tour)?.valor) || null
+    return setSEO({
+      title:       tour.name,
+      description: desc || `Reserve ${tour.name} em Jericoacoara com a Turiva.`,
+      image:       tour.cover_image_url || undefined,
+      url:         typeof window !== 'undefined' ? window.location.href : undefined,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: tour.name,
+        description: desc || undefined,
+        image: tour.cover_image_url ? [tour.cover_image_url] : undefined,
+        brand: { '@type': 'Brand', name: 'Turiva' },
+        ...(preco ? { offers: { '@type': 'Offer', price: preco, priceCurrency: 'BRL', availability: 'https://schema.org/InStock' } } : {}),
+        ...(tour.rating_average && tour.rating_count
+          ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: Number(tour.rating_average).toFixed(1), reviewCount: tour.rating_count } }
+          : {}),
+      },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tour?.id, tour?.name])
 
   const { data: vehiclesData, isFetched: vehiclesLoaded } = useQuery({
     queryKey: ['tour-vehicles', id, region?.id],
