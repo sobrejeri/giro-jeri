@@ -11,6 +11,7 @@ import ProfileDesktop from './ProfileDesktop'
 import VerifiedBadge from '../components/VerifiedBadge'
 import Stories from '../components/Stories'
 import LiveAvatarStories from '../components/LiveAvatarStories'
+import ProfilePostsFeed from '../components/ProfilePostsFeed'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X, Heart,
@@ -144,8 +145,7 @@ function PontosCard({ token }) {
 // Grade de publicações estilo Instagram — só no perfil do admin, que é quem
 // publica na "Descubra". Assim o cliente que visita o perfil vê tudo
 // organizado numa grade de miniaturas; tocar leva ao feed.
-function PostsGrid({ posts }) {
-  const navigate = useNavigate()
+function PostsGrid({ posts, onOpen }) {
   const lista = (posts || []).filter((p) => p.image_url || p.video_url)
 
   return (
@@ -172,7 +172,7 @@ function PostsGrid({ posts }) {
           {lista.map((p) => (
             <button
               key={p.id}
-              onClick={() => navigate('/eventos')}
+              onClick={() => onOpen?.(p.id)}
               className="relative aspect-square bg-gray-100 overflow-hidden active:opacity-80"
             >
               {p.image_url ? (
@@ -234,18 +234,25 @@ export default function Profile() {
   // Perfil do admin no estilo Instagram: busca as publicações uma vez e
   // reaproveita a contagem no cabeçalho e na grade.
   const isAdmin = user?.user_type === 'admin'
-  const [adminPosts, setAdminPosts] = useState(null)
+  const isOperator = user?.user_type === 'operator'
+  // "Criador": tem perfil social estilo Instagram (foto + publicações + grade).
+  // Admin é dona do feed (vê todas); operador vê SÓ as publicações dele.
+  const isCreator = isAdmin || isOperator
+  const [meusPosts, setMeusPosts] = useState(null)
   useEffect(() => {
-    if (!isAdmin) return
+    if (!isCreator) return
     let vivo = true
     api.getFeed()
-      .then((d) => { if (vivo) setAdminPosts(Array.isArray(d) ? d : (d?.data || [])) })
-      .catch(() => { if (vivo) setAdminPosts([]) })
+      .then((d) => {
+        const arr = Array.isArray(d) ? d : (d?.data || [])
+        if (vivo) setMeusPosts(isAdmin ? arr : arr.filter((p) => p.created_by_user_id === user.id))
+      })
+      .catch(() => { if (vivo) setMeusPosts([]) })
     return () => { vivo = false }
-  }, [isAdmin])
-  const postCount = (adminPosts || []).filter((p) => p.image_url || p.video_url).length
-  // Curtidas somadas de todas as publicações (o feed já traz like_count por post).
-  const totalCurtidas = (adminPosts || []).reduce((s, p) => s + (Number(p.like_count) || 0), 0)
+  }, [isCreator, isAdmin, user?.id])
+  const postCount = (meusPosts || []).filter((p) => p.image_url || p.video_url).length
+  // Curtidas somadas das publicações (o feed já traz like_count por post).
+  const totalCurtidas = (meusPosts || []).reduce((s, p) => s + (Number(p.like_count) || 0), 0)
 
   // Contagem de destaques (highlights) para exibir ao lado de publicações.
   const [highlightCount, setHighlightCount] = useState(null)
@@ -264,6 +271,7 @@ export default function Profile() {
   const [form,      setForm]      = useState({})
   const [emgCheck,    setEmgCheck]    = useState(null)  // WhatsApp do contato de emergência
   const [emgChecking, setEmgChecking] = useState(false)
+  const [postoAberto, setPostoAberto] = useState(null)  // id do post tocado (abre o feed no perfil)
 
   const MENU = [
     { icon: CalendarCheck, label: t('profile.menu.bookings'), to: '/minhas-reservas' },
@@ -451,11 +459,12 @@ export default function Profile() {
 
         {token && user ? (
           <>
-            {!isAdmin && <PontosCard token={token} />}
+            {!isCreator && <PontosCard token={token} />}
             {/* Identity card */}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              {/* Capa editável — some no perfil do admin (visual limpo, estilo Instagram) */}
-              {user.user_type !== 'admin' && (
+              {/* Capa editável — some nos perfis de criador (admin/operador), para
+                  o visual limpo estilo Instagram. */}
+              {!isCreator && (
               <div className="relative h-24">
                 {coverUrl
                   ? <img src={coverUrl} alt="Capa do perfil" className="absolute inset-0 w-full h-full object-cover" />
@@ -472,28 +481,48 @@ export default function Profile() {
               </div>
               )}
 
-              {isAdmin ? (
-                /* Cabeçalho estilo Instagram: avatar à esquerda + stats,
-                   nome com selo verificado abaixo. */
+              {isCreator ? (
+                /* Cabeçalho estilo Instagram: avatar à esquerda + stats, nome com
+                   selo/etiqueta abaixo. Vale para admin E operador. */
                 <div className="px-5 py-5">
                   <div className="flex items-center gap-5">
-                    <LiveAvatarStories
-                      avatarUrl={avatarUrl}
-                      initials={initials}
-                      isAdmin={isAdmin}
-                      uploadingPhoto={uploadingPhoto}
-                      onPickPhoto={() => fileRef.current?.click()}
-                    />
+                    {isAdmin ? (
+                      <LiveAvatarStories
+                        avatarUrl={avatarUrl}
+                        initials={initials}
+                        isAdmin={isAdmin}
+                        uploadingPhoto={uploadingPhoto}
+                        onPickPhoto={() => fileRef.current?.click()}
+                      />
+                    ) : (
+                      /* Operador: avatar simples (sem anel de story — o story é da Turiva). */
+                      <div className="relative shrink-0">
+                        <div className="w-[82px] h-[82px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-2 ring-gray-100">
+                          {avatarUrl
+                            ? <img src={avatarUrl} alt="Foto de perfil" className="w-full h-full object-cover" />
+                            : <span className="text-brand font-bold text-[26px] leading-none">{initials}</span>}
+                        </div>
+                        <button
+                          onClick={() => !uploadingPhoto && fileRef.current?.click()}
+                          className="absolute bottom-0 right-0 w-7 h-7 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"
+                          aria-label="Trocar foto"
+                        >
+                          {uploadingPhoto ? <Loader2 size={13} className="text-white animate-spin" /> : <Camera size={13} className="text-white" />}
+                        </button>
+                      </div>
+                    )}
                     <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
                     <div className="flex-1 flex justify-around text-center pl-4">
                       <div>
                         <p className="text-[20px] font-extrabold text-gray-900 leading-none">{postCount}</p>
                         <p className="text-[12px] text-gray-500 mt-0.5">publicações</p>
                       </div>
-                      <div>
-                        <p className="text-[20px] font-extrabold text-gray-900 leading-none">{highlightCount ?? '—'}</p>
-                        <p className="text-[12px] text-gray-500 mt-0.5">destaques</p>
-                      </div>
+                      {isAdmin && (
+                        <div>
+                          <p className="text-[20px] font-extrabold text-gray-900 leading-none">{highlightCount ?? '—'}</p>
+                          <p className="text-[12px] text-gray-500 mt-0.5">destaques</p>
+                        </div>
+                      )}
                       <div>
                         <p className="text-[20px] font-extrabold text-gray-900 leading-none">{fmtCompacto(totalCurtidas)}</p>
                         <p className="text-[12px] text-gray-500 mt-0.5">curtidas</p>
@@ -504,9 +533,11 @@ export default function Profile() {
                     <p className="text-[11px] text-red-500 bg-red-50 rounded-lg px-3 py-1.5 mt-2 text-center">{photoError}</p>
                   )}
                   <div className="mt-3">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="font-bold text-gray-900 text-[15px] leading-tight break-words">{user.full_name}</p>
-                      <VerifiedBadge size={16} />
+                      {isAdmin
+                        ? <VerifiedBadge size={16} />
+                        : <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-orange-50 text-brand">Operador</span>}
                     </div>
                     <p className="text-[12.5px] text-gray-400 break-all mt-0.5">{user.email}</p>
                   </div>
@@ -562,8 +593,8 @@ export default function Profile() {
               </div>
             )}
 
-            {/* Grade de publicações (estilo Instagram) — só admin */}
-            {isAdmin && <PostsGrid posts={adminPosts} />}
+            {/* Grade de publicações (estilo Instagram) — admin e operador */}
+            {isCreator && <PostsGrid posts={meusPosts} onOpen={setPostoAberto} />}
 
             {/* Dados pessoais — ocultos no perfil do admin (visual limpo) */}
             {user.user_type !== 'admin' && (
@@ -832,6 +863,17 @@ export default function Profile() {
         <p className="text-center text-[11px] text-gray-400 pb-2">{versionLabel()}</p>
       </main>
     </div>
+
+    {/* Feed do perfil (abre ao tocar numa publicação da grade). */}
+    {postoAberto && (
+      <ProfilePostsFeed
+        posts={(meusPosts || []).filter((p) => p.image_url || p.video_url)}
+        startId={postoAberto}
+        onClose={() => setPostoAberto(null)}
+        user={user}
+        title={isAdmin ? 'Turiva' : user.full_name}
+      />
+    )}
 
     <div className="hidden lg:block">
       <ProfileDesktop />
