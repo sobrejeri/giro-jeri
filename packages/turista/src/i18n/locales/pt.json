@@ -799,6 +799,8 @@
     "loginToComment": "Faça login para comentar",
     "commentPlaceholder": "Escreva um comentário…",
     "commentsCount": "{{count}} comentários",
+    "comments": "Comentários",
+    "viewAllComments": "Ver os {{count}} comentários",
     "timeNow": "agora",
     "timeMinutes": "{{count}}min",
     "timeHours": "{{count}}h",

@@ -142,21 +142,30 @@ function CommentsSection({ postId, commentCount, user, open, setOpen }) {
     addMut.mutate(body)
   }
 
-  return (
-    <div>
-      <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-gray-700">
-        <MessageCircle size={15} />
-        {commentCount > 0 ? t('feedPg.commentsCount', { count: commentCount }) : t('feedPg.comment')}
-      </button>
+  if (!open) return null
 
-      {open && (
-        <div className="mt-3 space-y-3">
+  // Bottom sheet estilo Instagram: abre pelo ícone de comentário do post.
+  return createPortal(
+    <>
+      <div className="fixed inset-0 bg-black/50 z-[70]" onClick={() => setOpen(false)} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[80dvh] flex flex-col">
+        <div className="flex justify-center pt-3 pb-1 shrink-0"><div className="w-10 h-1 bg-gray-200 rounded-full" /></div>
+        <div className="flex items-center justify-center relative px-5 py-2 border-b border-gray-100 shrink-0">
+          <p className="text-[15px] font-bold text-gray-900">
+            {commentCount > 0 ? t('feedPg.commentsCount', { count: commentCount }) : t('feedPg.comments', 'Comentários')}
+          </p>
+          <button onClick={() => setOpen(false)} className="absolute right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+            <X size={15} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-3">
           {isLoading ? (
-            <div className="flex justify-center py-4">
+            <div className="flex justify-center py-6">
               <div className="w-5 h-5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
-            <div className="space-y-2.5 max-h-60 overflow-y-auto">
+            <div className="space-y-3">
               {(comments || []).map((c) => (
                 <div key={c.id} className="flex gap-2.5">
                   <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0 overflow-hidden">
@@ -179,11 +188,14 @@ function CommentsSection({ postId, commentCount, user, open, setOpen }) {
                 </div>
               ))}
               {(comments || []).length === 0 && (
-                <p className="text-[12px] text-gray-400 text-center py-2">{t('feedPg.noComments')}</p>
+                <p className="text-[13px] text-gray-400 text-center py-8">{t('feedPg.noComments')}</p>
               )}
             </div>
           )}
+        </div>
 
+        {/* Barra de escrever comentário, fixa no rodapé do sheet. */}
+        <div className="shrink-0 border-t border-gray-100 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-white">
           {user ? (
             <form onSubmit={handleSubmit} className="space-y-1.5">
               <div className="flex gap-2">
@@ -192,14 +204,15 @@ function CommentsSection({ postId, commentCount, user, open, setOpen }) {
                   onChange={(e) => setText(e.target.value)}
                   placeholder={t('feedPg.commentPlaceholder')}
                   maxLength={500}
-                  className="flex-1 h-9 px-3 rounded-full bg-gray-100 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30"
+                  autoFocus
+                  className="flex-1 h-10 px-4 rounded-full bg-gray-100 text-[14px] text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-brand/30"
                 />
                 <button
                   type="submit"
                   disabled={!text.trim() || addMut.isPending}
-                  className="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center shrink-0 disabled:opacity-40 active:scale-90 transition-transform"
+                  className="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center shrink-0 disabled:opacity-40 active:scale-90 transition-transform"
                 >
-                  <Send size={14} />
+                  <Send size={15} />
                 </button>
               </div>
               {addMut.isError && (
@@ -209,11 +222,12 @@ function CommentsSection({ postId, commentCount, user, open, setOpen }) {
               )}
             </form>
           ) : (
-            <p className="text-[12px] text-gray-400 text-center">{t('feedPg.loginToComment')}</p>
+            <p className="text-[13px] text-gray-400 text-center py-1">{t('feedPg.loginToComment')}</p>
           )}
         </div>
-      )}
-    </div>
+      </div>
+    </>,
+    document.body,
   )
 }
 
@@ -468,7 +482,7 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
         <button onClick={onLike} className="active:scale-90 transition-transform" aria-label={t('feedPg.like')}>
           <Heart size={24} className={liked ? 'fill-red-500 text-red-500' : 'text-gray-800'} />
         </button>
-        <button onClick={() => setCommentsOpen((v) => !v)} className="active:scale-90 transition-transform" aria-label={t('feedPg.comment')}>
+        <button onClick={() => setCommentsOpen(true)} className="active:scale-90 transition-transform" aria-label={t('feedPg.comment')}>
           <MessageCircle size={23} className="text-gray-800" />
         </button>
         <button onClick={share} className="active:scale-90 transition-transform" aria-label={t('feedPg.share')}>
@@ -517,11 +531,17 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
           {validLabel && isPromo && <span className="flex items-center gap-1"><Calendar size={12} className="text-emerald-500" />{t('feedPg.validUntil', { date: validLabel })}</span>}
           {post.location && <span className="flex items-center gap-1"><MapPin size={12} className="text-brand" />{post.location}</span>}
         </div>
-        <div className="pt-1">
-          <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user}
-            open={commentsOpen} setOpen={setCommentsOpen} />
-        </div>
+        {/* Link "ver comentários" (estilo Instagram) — abre o sheet ao tocar. */}
+        {post.comment_count > 0 && (
+          <button onClick={() => setCommentsOpen(true)} className="text-[13px] text-gray-400 active:text-gray-600">
+            {t('feedPg.viewAllComments', { count: post.comment_count, defaultValue: 'Ver os {{count}} comentários' })}
+          </button>
+        )}
       </div>
+
+      {/* Sheet de comentários — só monta quando aberto. */}
+      <CommentsSection postId={post.id} commentCount={post.comment_count || 0} user={user}
+        open={commentsOpen} setOpen={setCommentsOpen} />
     </article>
   )
 }
