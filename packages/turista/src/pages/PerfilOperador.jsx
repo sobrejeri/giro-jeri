@@ -73,18 +73,41 @@ export default function PerfilOperador() {
                     <p className="text-[20px] font-extrabold text-gray-900 leading-none">{posts.length}</p>
                     <p className="text-[12px] text-gray-500 mt-0.5">publicações</p>
                   </div>
-                  {op.rating_count > 0 && (
-                    <div>
-                      <p className="text-[20px] font-extrabold text-gray-900 leading-none flex items-center gap-0.5 justify-center">
-                        {op.rating_average}<Star size={14} className="fill-amber-400 text-amber-400" />
-                      </p>
-                      <p className="text-[12px] text-gray-500 mt-0.5">{op.rating_count} aval.</p>
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-[20px] font-extrabold text-gray-900 leading-none">{op.rating_count || 0}</p>
+                    <p className="text-[12px] text-gray-500 mt-0.5">{op.rating_count === 1 ? 'avaliação' : 'avaliações'}</p>
+                  </div>
                 </div>
               </div>
               <p className="font-bold text-gray-900 text-[15px] mt-3">{op.full_name}</p>
               <p className="text-[12.5px] text-gray-500">Operador parceiro · Jericoacoara</p>
+
+              {/* Nota do operador (avaliações recebidas dos clientes) — visível
+                  logo abaixo do nome. Estrelas preenchidas até a média. */}
+              {op.rating_count > 0 ? (
+                <div className="flex items-center gap-1.5 mt-2">
+                  <div className="flex items-center">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star key={n} size={17}
+                        className={n <= Math.round(op.rating_average)
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'fill-gray-200 text-gray-200'} />
+                    ))}
+                  </div>
+                  <span className="text-[15px] font-bold text-gray-900">
+                    {Number(op.rating_average).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 mt-2">
+                  <div className="flex items-center">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star key={n} size={17} className="fill-gray-200 text-gray-200" />
+                    ))}
+                  </div>
+                  <span className="text-[12.5px] text-gray-400">Ainda sem avaliações</span>
+                </div>
+              )}
 
               {services.length > 0 && (
                 <button
