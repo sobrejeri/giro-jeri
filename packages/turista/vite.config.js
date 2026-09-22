@@ -12,6 +12,22 @@ const CUSTOM_DOMAIN = (process.env.CUSTOM_DOMAIN || '').trim()
 const SITE_ROOT     = CUSTOM_DOMAIN ? '' : '/giro-jeri'
 const buildId = String(Date.now())
 
+// Origem ABSOLUTA do site publicado — usada nas meta tags Open Graph (og:url,
+// og:image). O WhatsApp/Instagram/Facebook NÃO executam JS: leem o HTML estático
+// e precisam de uma URL absoluta e pública para a imagem da prévia. Com domínio
+// próprio é ele; sem ele, o caminho do github.io. Injetada no index.html no
+// lugar de %SITE_ORIGIN%.
+const SITE_ORIGIN = CUSTOM_DOMAIN ? `https://${CUSTOM_DOMAIN}` : 'https://sobrejeri.github.io/giro-jeri'
+
+function injectOgOrigin() {
+  return {
+    name: 'inject-og-origin',
+    transformIndexHtml(html) {
+      return html.replaceAll('%SITE_ORIGIN%', SITE_ORIGIN)
+    },
+  }
+}
+
 // Emite dist/version.json no build — usado pelo app para detectar nova
 // versão em produção e oferecer ao usuário recarregar.
 function emitVersionJson() {
@@ -25,7 +41,7 @@ function emitVersionJson() {
 }
 
 export default defineConfig({
-  plugins: [react(), emitVersionJson()],
+  plugins: [react(), emitVersionJson(), injectOgOrigin()],
   define:  { __BUILD_ID__: JSON.stringify(buildId) },
   base: isProd ? `${SITE_ROOT}/` : '/',
   server: {

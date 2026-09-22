@@ -27,18 +27,27 @@
     <meta name="description" content="Viagens, passeios e mobilidade para viver momentos inesquecíveis. Reserve com operadores locais." />
     <meta name="keywords" content="jericoacoara, passeios, buggy, transfer, lagoa do paraíso, lagoa azul, pôr do sol, jeri, turismo ceará" />
 
-    <!-- Open Graph (WhatsApp, Instagram, Facebook) -->
+    <!-- Open Graph (WhatsApp, Instagram, Facebook) — %SITE_ORIGIN% é trocado no
+         build pela origem real (domínio próprio ou github.io). A prévia SÓ
+         aparece com og:image em URL ABSOLUTA e pública: o crawler não roda JS. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Turiva" />
     <meta property="og:title" content="Turiva — Passeios, transfers e experiências" />
     <meta property="og:description" content="Viagens, passeios e mobilidade para viver momentos inesquecíveis. Reserve com operadores locais." />
-    <meta property="og:url" content="https://sobrejeri.github.io/giro-jeri/" />
+    <meta property="og:url" content="%SITE_ORIGIN%/" />
     <meta property="og:locale" content="pt_BR" />
+    <meta property="og:image" content="%SITE_ORIGIN%/og-cover.jpg" />
+    <meta property="og:image:secure_url" content="%SITE_ORIGIN%/og-cover.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Turiva — passeios, transfers e experiências em Jericoacoara" />
 
     <!-- Twitter -->
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Turiva — Passeios, transfers e experiências" />
     <meta name="twitter:description" content="Viagens, passeios e mobilidade para viver momentos inesquecíveis." />
+    <meta name="twitter:image" content="%SITE_ORIGIN%/og-cover.jpg" />
     <!-- Mercado Pago SDK -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
     <!-- Device ID: identifica o aparelho para o antifraude do Mercado Pago.
