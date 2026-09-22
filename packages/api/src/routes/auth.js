@@ -896,8 +896,10 @@ router.post('/me/cover', authenticate, async (req, res, next) => {
     const [, mimeType, b64] = match;
     const buffer = Buffer.from(b64, 'base64');
 
-    if (buffer.byteLength > 2 * 1024 * 1024) {
-      return res.status(413).json({ error: 'Imagem muito grande. Máximo 2 MB.' });
+    // Capa é maior que o avatar (redimensionada a 1600px no app) — 5 MB cobre
+    // com folga; antes o teto de 2 MB podia recusar uma capa válida.
+    if (buffer.byteLength > 5 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Imagem muito grande. Máximo 5 MB.' });
     }
 
     const ext  = mimeType.split('/')[1];
