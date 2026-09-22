@@ -331,6 +331,13 @@ export default function Home() {
     return <Navigate to="/eventos" replace />
   }
 
+  // O turista também não abre mais na Home: o menu não tem "Início", então no
+  // celular abrimos direto na Lojinha (igual o operador abre na Descubra). No
+  // desktop mantemos a home de marketing (HomeDesktop) logo abaixo.
+  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+    return <Navigate to="/passeios" replace />
+  }
+
   return (
     <>
       <div className="hidden lg:block"><HomeDesktop /></div>

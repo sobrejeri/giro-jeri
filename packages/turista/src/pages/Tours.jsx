@@ -9,7 +9,7 @@ import { duracao } from '../lib/formato'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
-import { useAuth } from '../contexts/AuthContext'
+import { useMoeda, MOEDAS } from '../lib/moeda'
 import NotificationBell from '../components/NotificationBell'
 import { draftFromTour } from '../lib/cartDraft'
 import { highSeasonMonthSet, isHighSeasonIso } from '../lib/season'
@@ -382,8 +382,7 @@ export default function Tours() {
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
-  const { user } = useAuth()
-  const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
+  const { moeda, setMoeda } = useMoeda()
 
   const { items: savedCartItems, upsertItem: saveCartItem, removeItem: dropCartItem, count: cartCount } = useCart()
 
@@ -833,30 +832,17 @@ export default function Tours() {
     <div className="lg:hidden min-h-screen pb-4">
 
       {/* ── Header ──────────────────────────────────────────── */}
-      <div className={`px-4 pt-5 pb-3 lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl ${isCreator ? '' : 'bg-white shadow-sm'}`}>
-        <div className={`relative flex items-center min-h-[44px] ${isCreator ? 'justify-start' : 'justify-center'}`}>
-          {!isCreator && (
-            <button
-              onClick={() => navigate(-1)}
-              className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
-              aria-label={t('toursPg.header.back')}
-            >
-              <ChevronLeft size={20} className="text-gray-700" />
-            </button>
-          )}
-          {isCreator ? (
-            <div className="flex items-center gap-2.5 min-w-0">
-              <img src={(import.meta.env.BASE_URL || '/') + 'logo-icon.jpeg'} alt="" className="w-10 h-10 rounded-2xl shrink-0" />
-              <div className="min-w-0 leading-none">
-                <p className="font-giro font-bold text-[19px] text-gray-900 tracking-[0.02em] leading-none">TURIVA</p>
-                <p className="text-[11.5px] text-gray-500 leading-none mt-1">Passeios &amp; Transfers</p>
-              </div>
+      <div className="px-4 pt-5 pb-3 lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
+        <div className="relative flex items-center min-h-[44px] justify-start">
+          {/* Cabeçalho de marca — igual para turista e operador. A Lojinha é
+              uma aba do menu, então não leva seta de voltar. */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src={(import.meta.env.BASE_URL || '/') + 'logo-icon.jpeg'} alt="" className="w-10 h-10 rounded-2xl shrink-0" />
+            <div className="min-w-0 leading-none">
+              <p className="font-giro font-bold text-[19px] text-gray-900 tracking-[0.02em] leading-none">TURIVA</p>
+              <p className="text-[11.5px] text-gray-500 leading-none mt-1">Passeios &amp; Transfers</p>
             </div>
-          ) : (
-            <h1 className="font-giro font-semibold text-gray-900 tracking-wide text-[22px]">
-              {t('toursPg.header.title')}
-            </h1>
-          )}
+          </div>
           <div className="absolute right-0 flex items-center gap-2">
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
@@ -899,6 +885,22 @@ export default function Tours() {
       </div>
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
+
+        {/* Moeda de exibição — trazida da antiga Home, já que o turista agora
+            abre direto na Lojinha. O preço oficial segue em BRL; USD/EUR são
+            aproximados (useMoeda no TourCard). */}
+        <div className="flex justify-end">
+          <div className="inline-flex items-center gap-1 bg-white rounded-full p-0.5 shadow-sm border border-gray-100">
+            {['BRL', 'USD', 'EUR'].map((c) => (
+              <button key={c} onClick={() => setMoeda(c)}
+                className={`px-2.5 py-1 rounded-full text-[12px] font-bold transition-colors ${
+                  moeda === c ? 'bg-brand text-white' : 'text-gray-500'
+                }`}>
+                {MOEDAS[c].flag} {c}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* ── Alternador Passeios | Translados (mesma lojinha) ───────── */}
         <div className="flex bg-gray-100 rounded-2xl p-1">

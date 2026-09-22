@@ -16,7 +16,7 @@ import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
 import NotificationBell from '../components/NotificationBell'
 import {
-  MapPin, Calendar, Clock, Users, ChevronDown, ChevronLeft, ChevronRight,
+  MapPin, Calendar, Clock, Users, ChevronDown, ChevronRight,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
   Plane, Compass, ShoppingCart,
 } from 'lucide-react'
@@ -384,8 +384,7 @@ export default function Transfers() {
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
   const { upsertItem: saveCartItem, items: savedCartItems, removeItem: dropCartItem, count: cartCount } = useCart()
-  const { token, user } = useAuth()
-  const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
+  const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
 
   // Marcar rotas direto da vitrine, várias de uma vez. Entra como rascunho —
@@ -740,28 +739,16 @@ export default function Transfers() {
     <div className="lg:hidden min-h-screen pb-16">
       {/* Header — para o criador, o mesmo cabeçalho de marca da Lojinha
           (não muda ao alternar Passeios/Translados). */}
-      <div className={`px-4 pt-5 pb-3 lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl ${isCreator ? '' : 'bg-white shadow-sm'}`}>
-        <div className={`relative flex items-center min-h-[44px] ${isCreator ? 'justify-start' : 'justify-center'}`}>
-          {!isCreator && (
-            <button
-              onClick={() => navigate(-1)}
-              className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
-              aria-label={t('transfersPg.back')}
-            >
-              <ChevronLeft size={20} className="text-gray-700" />
-            </button>
-          )}
-          {isCreator ? (
-            <div className="flex items-center gap-2.5 min-w-0">
-              <img src={(import.meta.env.BASE_URL || '/') + 'logo-icon.jpeg'} alt="" className="w-10 h-10 rounded-2xl shrink-0" />
-              <div className="min-w-0 leading-none">
-                <p className="font-giro font-bold text-[19px] text-gray-900 tracking-[0.02em] leading-none">TURIVA</p>
-                <p className="text-[11.5px] text-gray-500 leading-none mt-1">Passeios &amp; Transfers</p>
-              </div>
+      <div className="px-4 pt-5 pb-3 lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
+        <div className="relative flex items-center min-h-[44px] justify-start">
+          {/* Cabeçalho de marca — igual para turista e operador (mesmo da Lojinha). */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src={(import.meta.env.BASE_URL || '/') + 'logo-icon.jpeg'} alt="" className="w-10 h-10 rounded-2xl shrink-0" />
+            <div className="min-w-0 leading-none">
+              <p className="font-giro font-bold text-[19px] text-gray-900 tracking-[0.02em] leading-none">TURIVA</p>
+              <p className="text-[11.5px] text-gray-500 leading-none mt-1">Passeios &amp; Transfers</p>
             </div>
-          ) : (
-            <h1 className="font-giro font-semibold text-[22px] text-gray-900 tracking-wide">{t('transfersPg.title')}</h1>
-          )}
+          </div>
           <div className="absolute right-0 flex items-center gap-1.5">
             <button
               onClick={() => { setShowSearch((s) => !s); if (showSearch) setSearchTerm('') }}
@@ -770,7 +757,7 @@ export default function Transfers() {
             >
               <Search size={15} />
             </button>
-            {isCreator && <NotificationBell />}
+            <NotificationBell />
             <button
               onClick={() => navigate('/carrinho')}
               className="relative w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform"
@@ -785,7 +772,6 @@ export default function Transfers() {
             </button>
           </div>
         </div>
-        {!isCreator && <p className="text-[12px] text-gray-400 text-center mt-1">{t('transfersPg.subtitle')}</p>}
 
         {showSearch && (
           <form
