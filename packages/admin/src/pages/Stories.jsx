@@ -312,6 +312,16 @@ export default function Stories() {
     ? (highlights.find((h) => h.id === itemsHl.id) || itemsHl)
     : null
 
+  // Grade estilo Instagram: TODAS as publicações (itens) de todos os destaques,
+  // para o admin ter a visão de feed. Clicar abre o item para editar.
+  const gradePosts = highlights.flatMap((h) =>
+    (h.stories || []).map((s) => ({ ...s, _hl: h })))
+    .sort((a, b) => (a.sort_order - b.sort_order))
+  function abrirPost(post) {
+    setItemsHl(post._hl)
+    openEditItem(post)
+  }
+
   if (isLoading) return <PageSpinner />
 
   return (
@@ -334,6 +344,50 @@ export default function Stories() {
           </Button>
         </div>
       </div>
+
+      {/* ── Grade de publicações (feed, estilo Instagram) ─────────────── */}
+      {gradePosts.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <ImageIcon size={15} className="text-brand" />
+            <h2 className="text-sm font-bold text-gray-200">Grade de publicações</h2>
+            <span className="text-xs text-gray-500">{gradePosts.length} no feed</span>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1">
+            {gradePosts.map((post) => (
+              <button
+                key={post.id}
+                onClick={() => abrirPost(post)}
+                title={`${post._hl.title}${post.display_name ? ' · ' + post.display_name : ''}`}
+                className="group relative aspect-square overflow-hidden bg-gray-900 rounded-md"
+              >
+                {post.media_type === 'video' ? (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+                    <Film size={20} className="text-white/50" />
+                  </div>
+                ) : post.media_url ? (
+                  <img src={post.media_url} alt="" className="w-full h-full object-cover"
+                    onError={(e) => { e.target.style.visibility = 'hidden' }} />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center"><ImageIcon size={18} className="text-white/30" /></div>
+                )}
+                {/* Selo do destaque + estado */}
+                <span className="absolute top-1 left-1 text-[9px] font-semibold bg-black/55 text-white px-1.5 py-0.5 rounded max-w-[90%] truncate">
+                  {post._hl.title}
+                </span>
+                {post._hl.is_active === false && (
+                  <span className="absolute top-1 right-1 text-[9px] bg-gray-900/80 text-gray-300 px-1 py-0.5 rounded inline-flex items-center gap-0.5">
+                    <EyeOff size={9} />
+                  </span>
+                )}
+                <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                  <Pencil size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Empty state ───────────────────────────────────────────────── */}
       {highlights.length === 0 && (
