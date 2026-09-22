@@ -21,8 +21,10 @@ export default function LiveStoriesRow({ className = '' }) {
 
   if (!hasStories && !isAdmin) return null
 
-  // Miniatura da bolinha: foto do perfil do admin (se logado) ou a 1ª mídia.
-  const cover = user?.profile_photo_url
+  // Miniatura da bolinha: foto do perfil de quem publicou (vem da API),
+  // depois a do admin logado, por fim a 1ª mídia.
+  const cover = stories.find((s) => s.author_avatar)?.author_avatar
+    || user?.profile_photo_url
     || (stories.find((s) => s.media_type === 'image')?.media_url)
     || null
 

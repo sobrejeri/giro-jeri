@@ -52,10 +52,13 @@ export default function LiveStoryOverlay({ stories = [], avatarUrl, isAdmin = fa
   const qc = useQueryClient()
   const [viewersFor, setViewersFor] = useState(null)
 
+  // Foto de perfil de quem publicou (vem da API); cai no avatar passado.
+  const authorAvatar = stories.find((s) => s.author_avatar)?.author_avatar || avatarUrl || null
+  const authorName   = stories.find((s) => s.author_name)?.author_name || 'Turiva'
   const grupo = [{
     id: 'perfil',
-    title: 'Turiva',
-    cover_image_url: avatarUrl || null,
+    title: authorName,
+    cover_image_url: authorAvatar,
     stories: stories.map((s) => ({
       id: s.id,
       media_url: s.media_url,
@@ -64,7 +67,7 @@ export default function LiveStoryOverlay({ stories = [], avatarUrl, isAdmin = fa
       caption: s.caption,
       duration_sec: s.duration_sec,
       view_count: s.view_count,
-      avatar_url: avatarUrl || null,
+      avatar_url: authorAvatar,
     })),
   }]
 

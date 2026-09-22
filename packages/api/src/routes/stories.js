@@ -103,7 +103,7 @@ router.get('/live', async (_req, res, next) => {
     const nowIso = new Date().toISOString();
     const { data, error } = await supabase
       .from('avatar_stories')
-      .select('id, media_url, media_type, caption, duration_sec, created_at, expires_at')
+      .select('id, media_url, media_type, caption, duration_sec, created_at, expires_at, author:created_by_user_id ( full_name, profile_photo_url )')
       .gt('expires_at', nowIso)
       .order('created_at', { ascending: true });
     if (error) throw error;
@@ -117,7 +117,12 @@ router.get('/live', async (_req, res, next) => {
         .in('story_id', ids);
       for (const v of (views || [])) counts[v.story_id] = (counts[v.story_id] || 0) + 1;
     }
-    res.json((data || []).map((s) => ({ ...s, view_count: counts[s.id] || 0 })));
+    res.json((data || []).map(({ author, ...s }) => ({
+      ...s,
+      view_count:    counts[s.id] || 0,
+      author_name:   author?.full_name || 'Turiva',
+      author_avatar: author?.profile_photo_url || null,
+    })));
   } catch (err) { next(err); }
 });
 
