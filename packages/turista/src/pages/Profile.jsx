@@ -11,7 +11,7 @@ import ProfileDesktop from './ProfileDesktop'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X,
-  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard,
+  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard, Play,
 } from 'lucide-react'
 
 function Field({ label, value, children }) {
@@ -127,6 +127,68 @@ function PontosCard({ token }) {
               <span className="truncate pr-2">{i.description || (i.points >= 0 ? 'Pontos ganhos' : 'Resgate')}</span>
               <span className="font-bold shrink-0">{i.points >= 0 ? '+' : ''}{i.points}</span>
             </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Grade de publicações estilo Instagram — só no perfil do admin, que é quem
+// publica na "Descubra". Assim o cliente que visita o perfil vê tudo
+// organizado numa grade de miniaturas; tocar leva ao feed.
+function PostsGrid() {
+  const navigate = useNavigate()
+  const [posts, setPosts] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    api.getFeed()
+      .then((d) => { if (vivo) setPosts(Array.isArray(d) ? d : (d?.data || [])) })
+      .catch(() => { if (vivo) setPosts([]) })
+    return () => { vivo = false }
+  }, [])
+
+  const lista = (posts || []).filter((p) => p.image_url || p.video_url)
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
+        <span className="font-semibold text-gray-800 text-[14px]">Publicações</span>
+        <span className="text-[12px] font-bold text-gray-400">
+          {posts === null ? '—' : `${lista.length} ${lista.length === 1 ? 'post' : 'posts'}`}
+        </span>
+      </div>
+      {posts === null ? (
+        <div className="grid grid-cols-3 gap-0.5 p-0.5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="aspect-square bg-gray-100 animate-pulse" />
+          ))}
+        </div>
+      ) : lista.length === 0 ? (
+        <div className="text-center py-10 px-6">
+          <p className="text-[13px] text-gray-500">Nenhuma publicação ainda.</p>
+          <p className="text-[11px] text-gray-400 mt-1">O que você publicar na Descubra aparece aqui.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-0.5 p-0.5">
+          {lista.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => navigate('/eventos')}
+              className="relative aspect-square bg-gray-100 overflow-hidden active:opacity-80"
+            >
+              <img
+                src={p.image_url || p.video_url}
+                alt={p.title || ''}
+                loading="lazy"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {p.video_url && (
+                <span className="absolute top-1 right-1 text-white drop-shadow">
+                  <Play size={13} className="fill-white" />
+                </span>
+              )}
+            </button>
           ))}
         </div>
       )}
@@ -412,6 +474,9 @@ export default function Profile() {
                 </div>
               </div>
             </div>
+
+            {/* Grade de publicações (estilo Instagram) — só admin */}
+            {user.user_type === 'admin' && <PostsGrid />}
 
             {/* Personal data card */}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
