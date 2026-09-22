@@ -781,6 +781,8 @@
     "edit": "Editar",
     "delete": "Excluir",
     "likesCount": "{{count}} curtidas",
+    "showMore": "ver mais",
+    "showLess": "ver menos",
     "validUntil": "Válido até {{date}}",
     "eventLabel": "Evento",
     "promoLabel": "Promoção",

@@ -781,6 +781,8 @@
     "edit": "Edit",
     "delete": "Delete",
     "likesCount": "{{count}} likes",
+    "showMore": "see more",
+    "showLess": "see less",
     "validUntil": "Valid until {{date}}",
     "eventLabel": "Event",
     "promoLabel": "Deal",

@@ -329,6 +329,9 @@ function ReviewModal({ place, onClose, user }) {
 function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
   const { t } = useTranslation()
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const [expandido, setExpandido] = useState(false)
+  // Legenda longa fica recolhida (estilo Instagram) com "ver mais".
+  const legendaLonga = (post.body || '').length > 120 || (post.body || '').split('\n').length > 3
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
@@ -427,7 +430,21 @@ function PostCard({ post, liked, onLike, user, isAdmin, onEdit, onDelete }) {
           <span className="font-bold">Turiva</span>{' '}
           <span className="font-semibold">{post.title}</span>
         </p>
-        {post.body && <p className="text-[13px] text-gray-600 whitespace-pre-line leading-relaxed">{post.body}</p>}
+        {post.body && (
+          <div>
+            <p className={`text-[13px] text-gray-600 whitespace-pre-line leading-relaxed ${!expandido && legendaLonga ? 'line-clamp-3' : ''}`}>
+              {post.body}
+            </p>
+            {legendaLonga && (
+              <button
+                onClick={() => setExpandido((v) => !v)}
+                className="mt-0.5 text-[12px] font-semibold text-gray-400 active:text-gray-600"
+              >
+                {expandido ? t('feedPg.showLess', 'ver menos') : t('feedPg.showMore', 'ver mais')}
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3 pt-1 text-[12px] text-gray-500">
           {post.event_time && <span className="flex items-center gap-1"><Clock size={12} className="text-brand" />{post.event_time}</span>}
           {validLabel && isPromo && <span className="flex items-center gap-1"><Calendar size={12} className="text-emerald-500" />{t('feedPg.validUntil', { date: validLabel })}</span>}
