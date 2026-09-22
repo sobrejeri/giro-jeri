@@ -775,6 +775,22 @@ export default function Transfers() {
           </form>
         )}
 
+        {/* Alternador Passeios | Translados (mesma lojinha) */}
+        <div className="flex bg-gray-100 rounded-2xl p-1 mt-3">
+          <button
+            onClick={() => navigate('/passeios')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
+          >
+            <Compass size={15} /> Passeios
+          </button>
+          <button
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold bg-white text-brand shadow-sm"
+            aria-current="page"
+          >
+            <Car size={15} /> Translados
+          </button>
+        </div>
+
         {/* Mode toggle */}
         <div className="flex gap-2 mt-3">
           <button
@@ -801,21 +817,6 @@ export default function Transfers() {
       {/* ── CUSTOM RIDE FORM ─────────────────────────────────── */}
       {mode === 'custom' && (
         <div className="px-4 pt-4 space-y-3 lg:max-w-3xl lg:mx-auto">
-          {/* ── Alternador Passeios | Translados (mesma lojinha) ───────── */}
-          <div className="flex bg-gray-100 rounded-2xl p-1">
-            <button
-              onClick={() => navigate('/passeios')}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
-            >
-              <Compass size={15} /> Passeios
-            </button>
-            <button
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold bg-white text-brand shadow-sm"
-              aria-current="page"
-            >
-              <Car size={15} /> Translados
-            </button>
-          </div>
           {customSuccess ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
