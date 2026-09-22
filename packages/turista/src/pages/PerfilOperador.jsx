@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, Play, Star, Loader2, Store } from 'lucide-react'
+import { ChevronLeft, Play, Star, Loader2, Store, Grid3x3, Plus } from 'lucide-react'
 import { api } from '../lib/api'
+import { setPartner } from '../lib/partner'
 
 // Perfil público do operador (aberto pelo nome/foto nas publicações do feed).
 // Mostra as fotos/vídeos dos serviços que ele publicou. A lojinha com
@@ -10,6 +11,7 @@ import { api } from '../lib/api'
 export default function PerfilOperador() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [tab, setTab] = useState('posts') // 'posts' | 'shop'
 
   const { data: op, isLoading, isError } = useQuery({
     queryKey: ['operatorPublic', id],
@@ -23,6 +25,18 @@ export default function PerfilOperador() {
     .filter((p) => p.created_by_user_id === id && (p.image_url || p.video_url))
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
+
+  const services = op?.services || []
+
+  // Atribui a venda a este operador (prioridade no atendimento) e abre o
+  // passeio para configurar/reservar. Reaproveita o mesmo mecanismo do link
+  // "Meu link de vendas" (/c/:slug) já existente.
+  function reservarComOperador(service) {
+    if (op?.partner_slug) {
+      setPartner({ slug: op.partner_slug, name: op.full_name, photo: op.profile_photo_url })
+    }
+    navigate(`/passeios/${service.id}`)
+  }
 
   return (
     <div className="min-h-full pb-6 bg-[#f3efe9]">
@@ -72,36 +86,83 @@ export default function PerfilOperador() {
               <p className="font-bold text-gray-900 text-[15px] mt-3">{op.full_name}</p>
               <p className="text-[12.5px] text-gray-500">Operador parceiro · Jericoacoara</p>
 
-              {/* Lojinha (em breve) */}
-              <button
-                onClick={() => navigate('/passeios')}
-                className="mt-3 w-full flex items-center justify-center gap-2 bg-brand text-white font-semibold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform"
-              >
-                <Store size={15} /> Ver serviços
-              </button>
+              {services.length > 0 && (
+                <button
+                  onClick={() => setTab('shop')}
+                  className="mt-3 w-full flex items-center justify-center gap-2 bg-brand text-white font-semibold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform"
+                >
+                  <Store size={15} /> Ver a lojinha ({services.length})
+                </button>
+              )}
             </div>
 
-            {/* Grade de publicações */}
+            {/* Abas (estilo TikTok): grade de publicações | lojinha */}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
-                <span className="font-semibold text-gray-800 text-[14px]">Publicações</span>
-                <span className="text-[12px] font-bold text-gray-400">{posts.length} posts</span>
+              <div className="flex border-b border-gray-100">
+                <button
+                  onClick={() => setTab('posts')}
+                  className={`flex-1 flex items-center justify-center py-3 ${tab === 'posts' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
+                  aria-label="Publicações"
+                >
+                  <Grid3x3 size={20} />
+                </button>
+                <button
+                  onClick={() => setTab('shop')}
+                  className={`flex-1 flex items-center justify-center py-3 ${tab === 'shop' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
+                  aria-label="Lojinha"
+                >
+                  <Store size={20} />
+                </button>
               </div>
-              {posts.length === 0 ? (
-                <p className="text-center text-[13px] text-gray-500 py-10">Nenhuma publicação ainda.</p>
+
+              {tab === 'posts' ? (
+                posts.length === 0 ? (
+                  <p className="text-center text-[13px] text-gray-500 py-10">Nenhuma publicação ainda.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-0.5 p-0.5">
+                    {posts.map((p) => (
+                      <button key={p.id} onClick={() => navigate('/eventos')} className="relative aspect-square bg-gray-100 overflow-hidden active:opacity-80">
+                        {p.image_url ? (
+                          <img src={p.image_url} alt={p.title || ''} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+                        ) : (
+                          <video src={`${p.video_url}#t=0.1`} muted playsInline preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
+                        )}
+                        {p.video_url && <span className="absolute top-1 right-1 text-white drop-shadow"><Play size={13} className="fill-white" /></span>}
+                      </button>
+                    ))}
+                  </div>
+                )
               ) : (
-                <div className="grid grid-cols-3 gap-0.5 p-0.5">
-                  {posts.map((p) => (
-                    <button key={p.id} onClick={() => navigate('/eventos')} className="relative aspect-square bg-gray-100 overflow-hidden active:opacity-80">
-                      {p.image_url ? (
-                        <img src={p.image_url} alt={p.title || ''} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
-                      ) : (
-                        <video src={`${p.video_url}#t=0.1`} muted playsInline preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
-                      )}
-                      {p.video_url && <span className="absolute top-1 right-1 text-white drop-shadow"><Play size={13} className="fill-white" /></span>}
-                    </button>
-                  ))}
-                </div>
+                services.length === 0 ? (
+                  <p className="text-center text-[13px] text-gray-500 py-10">Nenhum serviço na lojinha ainda.</p>
+                ) : (
+                  <div className="p-3 space-y-2.5">
+                    <p className="text-[11.5px] text-gray-400 px-1">
+                      Reservando pela lojinha, o atendimento tem prioridade com {op.full_name?.split(' ')[0]}.
+                    </p>
+                    {services.map((s) => (
+                      <div key={s.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-2.5">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-200 shrink-0">
+                          {s.cover_image_url
+                            ? <img src={s.cover_image_url} alt={s.name} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center text-gray-300"><Store size={20} /></div>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13.5px] font-semibold text-gray-800 leading-tight line-clamp-2">{s.name}</p>
+                          {s.price_from && (
+                            <p className="text-[12px] text-gray-500 mt-0.5">a partir de R$ {Number(s.price_from).toLocaleString('pt-BR')}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => reservarComOperador(s)}
+                          className="shrink-0 flex items-center gap-1 bg-brand text-white text-[12px] font-bold rounded-lg px-3 py-2 active:scale-95 transition-transform"
+                        >
+                          <Plus size={13} /> Adicionar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           </>

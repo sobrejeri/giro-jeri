@@ -181,7 +181,7 @@ router.get('/:id/public', async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, full_name, profile_photo_url, user_type, is_active')
+      .select('id, full_name, profile_photo_url, partner_slug, user_type, is_active')
       .eq('id', req.params.id)
       .eq('user_type', 'operator')
       .maybeSingle();
@@ -198,12 +198,37 @@ router.get('/:id/public', async (req, res, next) => {
       }
     } catch { /* sem migration de reviews */ }
 
+    // Lojinha: os passeios que o operador habilitou (opt-in). Se ele não tiver
+    // preferências de passeio, mostra todos os passeios ativos (padrão do app).
+    let services = [];
+    try {
+      const { data: prefs } = await supabase
+        .from('operator_service_preferences')
+        .select('entity_id, is_active')
+        .eq('operator_id', data.id)
+        .eq('entity_type', 'tour');
+      const ativos = (prefs || []).filter((p) => p.is_active).map((p) => p.entity_id);
+      let q = supabase
+        .from('tours')
+        .select('id, name, slug, cover_image_url, shared_price_per_person, is_active')
+        .eq('is_active', true);
+      if (ativos.length) q = q.in('id', ativos);
+      const { data: tours } = await q.order('display_order', { ascending: true });
+      services = (tours || []).map((t) => ({
+        id: t.id, name: t.name, slug: t.slug,
+        cover_image_url: t.cover_image_url || null,
+        price_from: t.shared_price_per_person || null,
+      }));
+    } catch { /* catálogo indisponível — lojinha vazia */ }
+
     res.json({
       id:                data.id,
       full_name:         data.full_name,
       profile_photo_url: data.profile_photo_url || null,
+      partner_slug:      data.partner_slug || null,
       rating_average,
       rating_count,
+      services,
     });
   } catch (err) { next(err); }
 });
