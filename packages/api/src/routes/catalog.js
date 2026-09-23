@@ -222,7 +222,7 @@ router.delete('/modals/:id', requireAdmin, async (req, res, next) => {
 // ── Categorias ────────────────────────────────────────────
 
 const CATEGORY_COLS = ['name', 'slug', 'description', 'icon', 'color',
-  'category_type', 'is_active', 'sort_order', 'is_exclusive', 'modal']
+  'category_type', 'is_active', 'sort_order', 'is_exclusive', 'modal', 'region_ids']
 
 router.get('/categories', async (req, res, next) => {
   try {
@@ -268,10 +268,13 @@ router.post('/categories', requireAdmin, async (req, res, next) => {
     // insert inteiro morria em 42703 e não dava para criar categoria nenhuma —
     // melhor salvar sem a marca de carrossel do que recusar o cadastro.
     if (error?.code === '42703') {
-      console.warn('[catalog] categories.is_exclusive ausente (migration 071):', error.message);
-      const { is_exclusive: _ie, ...semMarca } = body;
+      // is_exclusive só existe da migration 071; region_ids da 103. Sem elas o
+      // insert morria em 42703 — melhor salvar sem as colunas novas do que
+      // recusar o cadastro.
+      console.warn('[catalog] coluna nova ausente em categories (migration 071/103):', error.message);
+      const { is_exclusive: _ie, region_ids: _ri, ...semNovas } = body;
       ({ data, error } = await req.supabase
-        .from('categories').insert(semMarca).select().single());
+        .from('categories').insert(semNovas).select().single());
     }
     if (error) {
       const amigavel = erroDeCategoria(error);
@@ -289,10 +292,10 @@ router.put('/categories/:id', requireAdmin, async (req, res, next) => {
     let { data, error } = await req.supabase
       .from('categories').update(body).eq('id', req.params.id).select().single();
     if (error?.code === '42703') {
-      console.warn('[catalog] categories.is_exclusive ausente (migration 071):', error.message);
-      const { is_exclusive: _ie, ...semMarca } = body;
+      console.warn('[catalog] coluna nova ausente em categories (migration 071/103):', error.message);
+      const { is_exclusive: _ie, region_ids: _ri, ...semNovas } = body;
       ({ data, error } = await req.supabase
-        .from('categories').update(semMarca).eq('id', req.params.id).select().single());
+        .from('categories').update(semNovas).eq('id', req.params.id).select().single());
     }
     const amigavel = erroDeCategoria(error);
     if (amigavel) return res.status(400).json({ error: amigavel });

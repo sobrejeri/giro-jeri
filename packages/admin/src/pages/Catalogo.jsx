@@ -103,8 +103,7 @@ const TOUR_EMPTY = {
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '',
-  region_ids: [], is_featured: false, display_order: 0,
-  is_exclusive: false,
+  display_order: 0,
 }
 const TRANSFER_EMPTY = {
   name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
@@ -119,6 +118,7 @@ const ROUTE_EMPTY   = { transfer_id: '', origin_name: '', destination_name: '', 
 const CATEGORY_EMPTY = {
   name: '', description: '', is_active: true, is_exclusive: false,
   sort_order: 0, category_type: 'tour', modal: 'terrestre',
+  region_ids: [],
 }
 const VEHICLE_EMPTY = {
   name: '', vehicle_type: 'buggy', description: '', modal: 'terrestre',
@@ -432,10 +432,15 @@ export default function Catalogo() {
   // categoria-de-translado que compartilha `modal`+`form`. São formulários
   // diferentes; misturá-los já causou confusão de campo antes.
   function openNewCategory()   { setCatForm(CATEGORY_EMPTY); setCatModal({ isNew: true }) }
-  function openEditCategory(c) { setCatForm({ ...CATEGORY_EMPTY, ...c }); setCatModal(c) }
+  function openEditCategory(c) { setCatForm({ ...CATEGORY_EMPTY, ...c, region_ids: c.region_ids || [] }); setCatModal(c) }
   function handleCategorySubmit(e) {
     e.preventDefault()
     if (!catForm.name?.trim()) { alert('Informe o nome da categoria.'); return }
+    // A categoria é quem manda na localização: sem município ela não aparece
+    // para ninguém no app, então exigimos ao menos um.
+    if (!catForm.region_ids || catForm.region_ids.length === 0) {
+      alert('Escolha ao menos um município de atuação para a categoria.'); return
+    }
     catMut.mutate({
       name:          catForm.name.trim(),
       description:   catForm.description || null,
@@ -443,6 +448,7 @@ export default function Catalogo() {
       is_exclusive:  !!catForm.is_exclusive,
       sort_order:    Number(catForm.sort_order) || 0,
       category_type: 'tour',
+      region_ids:    catForm.region_ids || [],
     })
   }
 
@@ -504,18 +510,20 @@ export default function Catalogo() {
   /* ── Submit handlers ─────────────────────────────────────── */
   async function handleTourSubmit(e) {
     e.preventDefault()
+    // Localização, destaque e exclusivo saíram do passeio: a localização agora é
+    // da CATEGORIA (region_ids na categoria) e destaque/exclusivo foram removidos.
+    // Não enviamos mais esses campos.
+    const { is_featured: _if, is_exclusive: _ie, region_ids: _ri, region_id: _rid, ...rest } = form
     let body = {
-      ...form,
+      ...rest,
       duration_hours: Number(form.duration_hours),
       max_people:     Number(form.max_people),
       display_order:  Number(form.display_order) || 0,
-      is_featured:    !!form.is_featured,
     }
     if (modal?.isNew) {
       body.slug      = slugify(form.name)
-      body.region_id = regionId
+      body.region_id = regionId   // legado NOT NULL; a localização real vem da categoria
     }
-    body.region_ids = form.region_ids || []
     if (imageFile) {
       setUploading(true)
       try { body.cover_image_url = await uploadImage(imageFile, 'tours') }
@@ -1368,10 +1376,9 @@ export default function Catalogo() {
               </p>
             </div>
 
-            <CidadesSelector
-              value={form.region_ids}
-              onChange={(next) => setForm((f) => ({ ...f, region_ids: next }))}
-            />
+            {/* Municípios de atuação saíram do passeio — a localização agora
+                vem da CATEGORIA. Destaque e "Passeio exclusivo" também foram
+                removidos. */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -1380,31 +1387,6 @@ export default function Catalogo() {
                 onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
               />
               <span className="text-sm text-gray-300">Ativo (visível para turistas)</span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                className="w-4 h-4 accent-brand"
-                checked={!!form.is_featured}
-                onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
-              />
-              <span className="text-sm text-gray-300">Destaque na home (carrossel "Passeios em destaque")</span>
-            </label>
-
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                className="w-4 h-4 accent-brand mt-0.5"
-                checked={!!form.is_exclusive}
-                onChange={(e) => setForm({ ...form, is_exclusive: e.target.checked })}
-              />
-              <span className="text-sm text-gray-300">
-                Passeio exclusivo (venda direta)
-                <span className="block text-[11px] text-gray-500">
-                  Não vai ao carrinho nem forma combo — o cliente solicita direto no "Resumo da reserva", um por vez.
-                </span>
-              </span>
             </label>
 
             <Input
@@ -1603,6 +1585,13 @@ export default function Catalogo() {
               Os passeios desta categoria só oferecem veículos deste modal.
             </p>
           </div>
+
+          {/* A categoria é quem manda na localização: os passeios dela só
+              aparecem nos municípios escolhidos aqui. Obrigatório. */}
+          <CidadesSelector
+            value={catForm.region_ids}
+            onChange={(next) => setCatForm((f) => ({ ...f, region_ids: next }))}
+          />
 
           <Input
             label="Ordem de exibição (menor aparece primeiro)"

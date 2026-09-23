@@ -15,6 +15,24 @@ router.get('/', async (req, res, next) => {
   try {
     const { region_id, category_id, mode, featured, search, lat, lon, radius } = req.query;
 
+    // A localização agora vive na CATEGORIA (migration 103): o passeio aparece
+    // nos municípios das categorias em que está. Resolvemos aqui QUAIS categorias
+    // atuam no município pedido e depois filtramos os passeios por elas. Sem a
+    // migration aplicada (coluna region_ids ausente em categories), caímos no
+    // filtro legado por tours.region_ids — o app não quebra na janela do deploy.
+    let categoriaIds = null;   // null = usar filtro legado por tours.region_ids
+    if (region_id) {
+      const { data: cats, error: catErr } = await supabase
+        .from('categories').select('id').contains('region_ids', [region_id]);
+      if (catErr?.code === '42703') {
+        console.warn('[tours] categories.region_ids ausente (migration 103); município no filtro legado tours.region_ids:', catErr.message);
+      } else if (catErr) {
+        throw catErr;
+      } else {
+        categoriaIds = (cats || []).map((c) => c.id);
+      }
+    }
+
     // Colunas de apresentação do cartão (duração/dificuldade/capacidade/selo).
     // Ficam separadas porque são OPCIONAIS: se alguma faltar no banco, a lista
     // inteira de passeios cairia — e esta é a consulta que sustenta a home e a
@@ -42,7 +60,17 @@ router.get('/', async (req, res, next) => {
         .eq('is_active', true)
         .order('display_order');
 
-      if (region_id)   q = q.or(`region_ids.cs.{${region_id}},region_id.eq.${region_id}`);
+      if (region_id) {
+        if (categoriaIds === null) {
+          // Legado (sem a migration 103): filtra pelos municípios do próprio passeio.
+          q = q.or(`region_ids.cs.{${region_id}},region_id.eq.${region_id}`);
+        } else {
+          // Novo: passeio aparece se alguma categoria dele atua no município.
+          // Inclui category_id escalar para passeios antigos sem category_ids.
+          const lista = categoriaIds.length ? categoriaIds.join(',') : '00000000-0000-0000-0000-000000000000';
+          q = q.or(`category_ids.ov.{${lista}},category_id.in.(${lista})`);
+        }
+      }
       if (category_id) q = q.eq('category_id', category_id);
       if (featured)    q = q.eq('is_featured', true);
       if (mode === 'private')  q = q.eq('is_private_enabled', true);
