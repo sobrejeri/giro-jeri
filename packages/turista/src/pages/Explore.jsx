@@ -4,6 +4,7 @@ import { ChevronLeft, Search, Navigation, Loader2, Store, Compass, Car, MapPin, 
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
+import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import ExploreMap from '../components/explore/ExploreMap'
 
 const FILTROS = [
@@ -38,6 +39,14 @@ export default function Explore() {
   const [sheetOpen, setSheetOpen] = useState(false) // false=recolhido, true=expandido
   const dragRef = useRef({ y: 0 })
 
+  // Busca por localização (lupa) — reaproveita o Google Places do geoServices.
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [termo, setTermo]           = useState('')
+  const [sugestoes, setSugestoes]   = useState([])
+  const [label, setLabel]           = useState(region?.name || 'Explorar Turiva')
+  const autoNextRef = useRef(false)  // busca automática no próximo idle (após lupa)
+  const debRef = useRef(null)
+
   // Gate: só admin. Qualquer outro (inclusive deslogado) volta pra home — o
   // cliente não acessa esta tela.
   if (!user || user.user_type !== 'admin') return <Navigate to="/" replace />
@@ -61,7 +70,35 @@ export default function Explore() {
   const onIdle = (bbox, byUser) => {
     bboxRef.current = bbox
     if (firstRef.current) { firstRef.current = false; fetchArea(bbox) }
+    else if (autoNextRef.current) { autoNextRef.current = false; fetchArea(bbox) } // veio da lupa → busca sozinho
     else if (byUser) setBuscarArea(true)
+  }
+
+  // Digita na lupa → sugestões (debounce). Toca numa → recentra o mapa e busca.
+  const onTermo = (v) => {
+    setTermo(v)
+    if (debRef.current) clearTimeout(debRef.current)
+    if (!v.trim()) { setSugestoes([]); return }
+    debRef.current = setTimeout(async () => {
+      const c = mapRef.current?.getCenter?.()
+      const center = c ? { lat: c.lat(), lng: c.lng() } : undefined
+      const s = await getPlaceSuggestions(v, center).catch(() => [])
+      setSugestoes(s)
+    }, 300)
+  }
+  const escolherLugar = async (s) => {
+    setSearchOpen(false); setSugestoes([]); setTermo('')
+    setLabel(s.main_text || s.display_name)
+    let lat = s.lat, lng = s.lon
+    if ((lat == null || lng == null) && s.place_id) {
+      const d = await getPlaceDetails(s.place_id).catch(() => null)
+      if (d) { lat = d.lat; lng = d.lon }
+    }
+    if (lat != null && lng != null && mapRef.current) {
+      autoNextRef.current = true
+      mapRef.current.panTo({ lat: Number(lat), lng: Number(lng) })
+      mapRef.current.setZoom(13)
+    }
   }
 
   const buscarAqui = () => { setBuscarArea(false); fetchArea(bboxRef.current) }
@@ -116,17 +153,52 @@ export default function Explore() {
           className="w-11 h-11 rounded-full bg-white shadow-md flex items-center justify-center active:scale-95 transition-transform shrink-0">
           <ChevronLeft size={22} className="text-gray-700" />
         </button>
-        <div className="flex-1 h-11 rounded-full bg-white shadow-md flex items-center gap-2 px-4">
-          {loading ? <Loader2 size={16} className="text-brand animate-spin" /> : <Search size={16} className="text-gray-400" />}
+        <button onClick={() => setSearchOpen(true)}
+          className="flex-1 h-11 rounded-full bg-white shadow-md flex items-center gap-2 px-4 min-w-0 active:scale-[0.99] transition-transform">
+          {loading ? <Loader2 size={16} className="text-brand animate-spin shrink-0" /> : <Search size={16} className="text-gray-400 shrink-0" />}
           <span className="text-[14px] font-semibold text-gray-800 truncate">
-            {loading ? 'Carregando…' : (region?.name || 'Explorar Turiva')}
+            {loading ? 'Carregando…' : label}
           </span>
-        </div>
+        </button>
         <button onClick={minhaLocalizacao} aria-label="Minha localização"
           className="w-11 h-11 rounded-full bg-white shadow-md flex items-center justify-center active:scale-95 transition-transform shrink-0">
           <Navigation size={19} className="text-brand" />
         </button>
       </div>
+
+      {/* ── Busca por localização (lupa) ── */}
+      {searchOpen && (
+        <div className="absolute inset-0 z-30 bg-black/25" onClick={() => setSearchOpen(false)}>
+          <div className="bg-white rounded-b-3xl px-3 pb-3 shadow-lg" style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setSearchOpen(false)} aria-label="Fechar busca" className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center active:scale-95 shrink-0">
+                <ChevronLeft size={20} className="text-gray-700" />
+              </button>
+              <div className="flex-1 h-11 rounded-full bg-gray-100 flex items-center gap-2 px-3">
+                <Search size={16} className="text-gray-400 shrink-0" />
+                <input autoFocus value={termo} onChange={(e) => onTermo(e.target.value)}
+                  placeholder="Buscar lugar (Jericoacoara, Preá, Tatajuba…)"
+                  className="flex-1 bg-transparent outline-none text-[14px] text-gray-800 placeholder-gray-400" />
+              </div>
+            </div>
+            {sugestoes.length > 0 && (
+              <ul className="mt-2 max-h-[52vh] overflow-y-auto divide-y divide-gray-100">
+                {sugestoes.map((s) => (
+                  <li key={s.place_id}>
+                    <button onClick={() => escolherLugar(s)} className="w-full text-left px-2 py-3 flex items-start gap-2.5 active:bg-gray-50 rounded-xl">
+                      <MapPin size={16} className="text-brand mt-0.5 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block text-[13.5px] font-semibold text-gray-900 truncate">{s.main_text}</span>
+                        {s.secondary_text && <span className="block text-[11.5px] text-gray-400 truncate">{s.secondary_text}</span>}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Buscar nesta área ── */}
       {buscarArea && !loading && (
@@ -150,7 +222,7 @@ export default function Explore() {
         <div className="px-4 pb-2 shrink-0">
           <div className="flex items-center gap-2">
             <MapPin size={17} className="text-brand shrink-0" />
-            <p className="text-[17px] font-extrabold text-gray-900 truncate">{region?.name || 'Área do mapa'}</p>
+            <p className="text-[17px] font-extrabold text-gray-900 truncate">{label}</p>
             <span className="ml-auto text-[12px] text-gray-400">{visiveis.length} no mapa</span>
           </div>
           <div className="flex gap-2 mt-2.5 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
