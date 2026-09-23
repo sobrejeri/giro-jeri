@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -10,7 +10,7 @@ const router = Router();
 // visível no mapa, um payload LEVE de pins: lugares (establishments) e serviços
 // (tours/transfers) que têm coordenadas. Sem PostGIS — filtro por faixa de
 // lat/lng (índices btree em (latitude, longitude), migration 104).
-router.get('/map', requireAdmin, async (req, res, next) => {
+router.get('/map', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const swLat = Number(req.query.sw_lat), swLng = Number(req.query.sw_lng);
     const neLat = Number(req.query.ne_lat), neLng = Number(req.query.ne_lng);
