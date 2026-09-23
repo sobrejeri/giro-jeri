@@ -168,7 +168,7 @@ export default function ToursDesktop() {
 
   // Categoria marcada como "carrossel próprio" (categories.is_exclusive) ganha
   // seção separada, com o nome dela de título — mesma lógica do mobile e dos
-  // translados. Independente de `tours.is_exclusive`, que define o fluxo de venda.
+  // translados.
   const secoesDeCategoria = useMemo(() => {
     const porId = new Map()
     for (const x of list) {
@@ -187,11 +187,10 @@ export default function ToursDesktop() {
     [secoesDeCategoria],
   )
 
-  // Tradicionais (carrinho/combo) × exclusivos (venda direta) — mesma divisão
-  // do mobile. Os dois abrem a página de detalhe no desktop. Quem já tem seção
-  // de categoria sai daqui para não aparecer duas vezes.
-  const tradList      = list.filter((t) => !t.is_exclusive && !idsEmCategoria.has(t.id))
-  const exclusiveList = list.filter((t) =>  t.is_exclusive && !idsEmCategoria.has(t.id))
+  // Passeios que não têm seção de categoria própria entram na lista
+  // tradicional (carrinho/combo). Abre a página de detalhe no desktop. Quem já
+  // tem seção de categoria sai daqui para não aparecer duas vezes.
+  const tradList = list.filter((t) => !idsEmCategoria.has(t.id))
 
   // R6: horário limite de solicitação (padrão 12:00, America/Fortaleza) —
   // passou do cutoff, a data mínima do filtro passa a ser amanhã. O backend
@@ -354,30 +353,6 @@ export default function ToursDesktop() {
               </div>
             </div>
           ))}
-
-          {/* Exclusivos: venda direta, carrossel próprio no mobile — aqui em
-              seção separada com selo (mesma divisão do catálogo). */}
-          {exclusiveList.length > 0 && (
-            <>
-              <div className="mt-10 mb-4">
-                <h2 className="text-[20px] font-extrabold text-gray-900">{t('toursPg.page.exclusiveSectionTitle')}</h2>
-                <p className="text-[13px] text-gray-500 mt-0.5">{t('toursPg.page.exclusiveSectionSubtitle')}</p>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {exclusiveList.map((tour, i) => (
-                  <TourCard
-                    key={tour.id}
-                    tour={tour}
-                    badge={t('toursPg.page.exclusiveBadge')}
-                    gradient={FALLBACK_GRADIENTS[(i + 2) % FALLBACK_GRADIENTS.length]}
-                    isFav={favs.has(tour.id)}
-                    onToggleFav={toggleFav}
-                    onDetails={openDetails}
-                  />
-                ))}
-              </div>
-            </>
-          )}
         </>
       )}
     </div>

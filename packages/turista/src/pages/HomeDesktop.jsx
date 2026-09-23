@@ -237,8 +237,7 @@ export default function HomeDesktop() {
   const tours = Array.isArray(toursData?.tours) ? toursData.tours
               : Array.isArray(toursData)        ? toursData
               : []
-  const featured = (tours.filter((x) => x.is_featured).length > 0
-    ? tours.filter((x) => x.is_featured) : tours).slice(0, 10)
+  const featured = tours.slice(0, 10)
 
   // Banner do admin (Configurações → Aparência).
   const { data: settings } = useQuery({

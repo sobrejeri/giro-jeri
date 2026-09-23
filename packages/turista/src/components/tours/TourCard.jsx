@@ -57,12 +57,9 @@ function precoDe(tour, mode, t) {
 }
 
 /* ── Etiqueta sobre a foto ────────────────────────────────────────────────
-   Prioriza o `highlight_badge` definido no admin; sem ele, deduz do que o
-   passeio já é (exclusivo / destaque) e, por último, usa a primeira tag. */
-function etiquetaDe(tour, t) {
+   Prioriza o `highlight_badge` definido no admin; sem ele, usa a primeira tag. */
+function etiquetaDe(tour) {
   if (tour.highlight_badge) return tour.highlight_badge
-  if (tour.is_exclusive) return t('toursPg.card.badgeExclusive')
-  if (tour.is_featured)  return t('toursPg.card.badgeBestSeller')
   const tag = Array.isArray(tour.tags) ? tour.tags[0] : null
   return tag || null
 }
@@ -75,7 +72,7 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
   const aproxTxt = aprox(precoNum)
   const dur  = fmtDuracao(tour.duration_hours)
   const dif  = dificuldade(tour.difficulty_level, t)
-  const selo = etiquetaDe(tour, t)
+  const selo = etiquetaDe(tour)
   const cap  = Number(tour.max_people) || null
 
   return (

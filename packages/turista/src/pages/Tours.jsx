@@ -173,11 +173,6 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
           >
             <X size={16} className="text-gray-700" />
           </button>
-          {tour.is_exclusive && (
-            <span className="absolute top-3 left-3 bg-brand text-white text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-full">
-              {t('toursPg.card.badgeExclusive')}
-            </span>
-          )}
         </div>
 
         <div className="overflow-y-auto px-5 pt-4 pb-4 flex-1">
@@ -426,10 +421,9 @@ export default function Tours() {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filter, setFilter] = useState('recommended')
   // Pastilha ativa da lista. Já nasce alinhada ao atalho que trouxe o cliente
-  // da home ("Mais vendidos", "Pôr do sol"), senão ele chegaria numa lista
-  // filtrada sem nenhuma pastilha marcada e sem saber como voltar a "Todos".
+  // da home ("Pôr do sol", "Lagoas"), senão ele chegaria numa lista filtrada
+  // sem nenhuma pastilha marcada e sem saber como voltar a "Todos".
   const [chip, setChip] = useState(() => {
-    if (locationState?.featured) return '__featured'
     if (locationState?.tag) return `tag:${String(locationState.tag).toLowerCase()}`
     return '__all'
   })
@@ -479,13 +473,9 @@ export default function Tours() {
   /* ── Pastilhas de filtro ───────────────────────────────────────────────
      Montadas a partir das etiquetas que os passeios REALMENTE têm, nunca de
      uma lista fixa: pastilha fixa vira botão morto assim que o admin renomeia
-     ou aposenta uma etiqueta. "Mais vendidos" e "Exclusivos" só entram se
-     houver passeio marcado como tal. */
+     ou aposenta uma etiqueta. */
   const chips = useMemo(() => {
     const out = [{ id: '__all', label: t('toursPg.chips.all') }]
-    if (allTours.some((x) => x.is_featured)) {
-      out.push({ id: '__featured', icon: Flame, label: t('toursPg.chips.bestSellers') })
-    }
     const vistas = new Map()
     for (const x of allTours) {
       for (const tg of (Array.isArray(x.tags) ? x.tags : [])) {
@@ -494,9 +484,6 @@ export default function Tours() {
       }
     }
     for (const [chave, rotulo] of vistas) out.push({ id: `tag:${chave}`, label: rotulo })
-    if (allTours.some((x) => x.is_exclusive)) {
-      out.push({ id: '__exclusive', icon: Sparkles, label: t('toursPg.chips.exclusive') })
-    }
     // A etiqueta pode chegar pela navegação (atalhos "Pôr do sol"/"Lagoas" da
     // home) e casar por NOME ou descrição, sem existir em `tags` — aí não
     // haveria pastilha para ela e o cliente veria a lista filtrada sem nenhuma
@@ -524,8 +511,6 @@ export default function Tours() {
       // (atalhos da home) e não corresponder a nada.
       return r.length > 0 ? r : allTours
     }
-    if (chip === '__featured')  return filtra((x) => x.is_featured)
-    if (chip === '__exclusive') return filtra((x) => x.is_exclusive)
     const alvo = chip.slice(4)
     return filtra((x) => casaTag(x, alvo))
   }, [allTours, chip])
@@ -575,23 +560,21 @@ export default function Tours() {
     [categoriasCarrossel],
   )
 
-  // Tradicionais entram no carrinho/combo (fluxo desta tela); exclusivos são
-  // venda direta (carrossel próprio → tela de detalhes, sem carrinho).
-  // Quem já está numa vitrine de categoria sai das duas listas — senão o mesmo
-  // passeio apareceria duas vezes na tela.
-  const tradTours      = tours.filter((t) => !t.is_exclusive && !idsEmCarrossel.has(t.id))
-  const exclusiveTours = tours.filter((t) =>  t.is_exclusive && !idsEmCarrossel.has(t.id))
+  // Passeios que não estão numa vitrine de categoria entram na lista
+  // tradicional (carrinho/combo desta tela). Quem já está numa vitrine de
+  // categoria sai daqui — senão o mesmo passeio apareceria duas vezes na tela.
+  const tradTours = tours.filter((t) => !idsEmCarrossel.has(t.id))
   // Passeio em duas vitrines aparece nas duas — mas aqui a lista serve para
   // ACHAR o passeio selecionado, então precisa ser sem repetição.
   const emCategorias   = [...new Map(
     categoriasCarrossel.flatMap((c) => c.passeios).map((p) => [p.id, p]),
   ).values()]
-  // Nada vem pré-selecionado: o cliente escolhe um passeio (tradicional OU
-  // exclusivo) e só então os veículos aparecem. Clicar no selecionado desmarca.
-  const selectedTour = [...tradTours, ...exclusiveTours, ...emCategorias]
+  // Nada vem pré-selecionado: o cliente escolhe um passeio e só então os
+  // veículos aparecem. Clicar no selecionado desmarca.
+  const selectedTour = [...tradTours, ...emCategorias]
     .find((t) => t.id === selectedId) || null
 
-  const sheetTour = [...tradTours, ...exclusiveTours, ...emCategorias]
+  const sheetTour = [...tradTours, ...emCategorias]
     .find((t) => t.id === sheetTourId) || null
 
   // Nem todo passeio aceita os dois modos — o voo panorâmico, por exemplo, só
@@ -610,8 +593,8 @@ export default function Tours() {
   const vehiclesRef = useRef(null)
 
   // Ao selecionar um passeio, rola até os veículos (eles aparecem entre os
-  // carrosseis — sem isto, um clique no carrossel exclusivo lá embaixo faz os
-  // veículos surgirem fora da tela e parece que nada aconteceu).
+  // carrosseis de categoria — sem isto, um clique num carrossel lá embaixo faz
+  // os veículos surgirem fora da tela e parece que nada aconteceu).
   useEffect(() => {
     if (selectedId && vehiclesRef.current) {
       vehiclesRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -744,10 +727,9 @@ export default function Tours() {
   const nomeRegiao = region?.name || 'Jericoacoara'
 
   // Foto do banner: a configurada no admin e, na falta dela, a capa de um
-  // passeio em destaque da própria região. Nunca uma URL fixa no código —
-  // seria a única imagem da tela que não acompanharia o catálogo.
+  // passeio real da própria região. Nunca uma URL fixa no código — seria a
+  // única imagem da tela que não acompanharia o catálogo.
   const bannerFoto = settings?.home_banner_image_url
-    || allTours.find((x) => x.is_featured && x.cover_image_url)?.cover_image_url
     || allTours.find((x) => x.cover_image_url)?.cover_image_url
     || null
 
@@ -762,37 +744,6 @@ export default function Tours() {
     { id: 'economico',   label: t('toursPg.filters.economic'),   emoji: '💰' },
     { id: 'conforto',    label: t('toursPg.filters.comfort'),     emoji: '🛡️' },
   ]
-
-  // Carrossel de exclusivos — renderizado ANTES dos veículos quando um exclusivo
-  // está selecionado (aí os veículos ficam abaixo dele) e DEPOIS dos veículos nos
-  // demais casos. Assim os veículos sempre aparecem abaixo do carrossel escolhido.
-  const exclusiveCarousel = !toursLoading && exclusiveTours.length > 0 ? (
-    <section>
-      <SectionHeader
-        icon={Sparkles}
-        cor="text-violet-500"
-        title={t('toursPg.exclusiveSection.title')}
-        subtitle={t('toursPg.exclusiveSection.subtitle')}
-        verTodosLabel={t('toursPg.seeAll')}
-        onVerTodos={chip !== '__exclusive' ? () => setChip('__exclusive') : undefined}
-      />
-      <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 scrollbar-hide snap-x">
-        {exclusiveTours.map((tour) => (
-          <TourCard
-            key={tour.id}
-            tour={tour}
-            mode={mode}
-            selected={selectedTour?.id === tour.id}
-            onSelect={() => { setSelectedId(tour.id); setSheetTourId(tour.id); setCart({}) }}
-            isFav={favs.has(tour.id)}
-            onFav={() => toggleFav(tour.id)}
-            inCart={cartIds.has(tour.id)}
-            onToggleCart={() => toggleCart(tour)}
-          />
-        ))}
-      </div>
-    </section>
-  ) : null
 
   // Uma vitrine por categoria marcada, com o NOME da categoria no título —
   // igual aos translados. Ficam logo abaixo da lista comum, antes do bloco do
@@ -940,11 +891,10 @@ export default function Tours() {
         )}
 
         {/* ── Passeios tradicionais (carrinho/combo) ─────────
-            Escondida quando não sobrou nenhum tradicional MAS há exclusivos na
-            tela: com a pastilha "Exclusivos" ligada, esta seção anunciava
-            "nenhum passeio encontrado" logo acima de uma fileira de passeios.
-            A mensagem de vazio só faz sentido quando a tela está mesmo vazia. */}
-        {(tradTours.length > 0 || (exclusiveTours.length === 0 && emCategorias.length === 0) || toursLoading) && (
+            Escondida quando não sobrou nenhum tradicional MAS há vitrines de
+            categoria na tela: a mensagem de vazio só faz sentido quando a
+            tela está mesmo vazia. */}
+        {(tradTours.length > 0 || emCategorias.length === 0 || toursLoading) && (
         <section>
           <SectionHeader
             icon={Flame}
@@ -985,9 +935,6 @@ export default function Tours() {
 
         {/* Vitrines por categoria (categories.is_exclusive) */}
         {carrosseisDeCategoria}
-
-        {/* Exclusivo selecionado → carrossel exclusivo ACIMA dos veículos */}
-        {selectedTour?.is_exclusive && exclusiveCarousel}
 
         {/* âncora p/ rolar até os veículos ao selecionar um passeio */}
         <div ref={vehiclesRef} className="scroll-mt-4" />
@@ -1115,9 +1062,6 @@ export default function Tours() {
             </>
           )
         })()}
-
-        {/* Sem exclusivo selecionado → carrossel exclusivo ABAIXO dos veículos */}
-        {!selectedTour?.is_exclusive && exclusiveCarousel}
 
         {/* ── Confiança ─────────────────────────────────────
             Fecha a página logo antes do menu: é a última coisa lida por quem

@@ -117,11 +117,6 @@ function CardDestaque({ tour, fav, onFav, onOpen }) {
         {tour.cover_image_url && (
           <img src={tour.cover_image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
         )}
-        {tour.is_featured && (
-          <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-brand text-white text-[9px] font-bold px-2 py-1 rounded-full">
-            <Flame size={10} /> MAIS VENDIDO
-          </span>
-        )}
         <span
           onClick={(e) => { e.stopPropagation(); onFav?.() }}
           className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 flex items-center justify-center"
@@ -270,8 +265,7 @@ export default function Home() {
   const tours = Array.isArray(toursData?.tours) ? toursData.tours
               : Array.isArray(toursData)        ? toursData
               : []
-  const destaques = (tours.filter((t) => t.is_featured).length > 0
-    ? tours.filter((t) => t.is_featured) : tours).slice(0, 10)
+  const destaques = tours.slice(0, 10)
 
   const { data: settings } = useQuery({
     queryKey: ['public-settings'],
