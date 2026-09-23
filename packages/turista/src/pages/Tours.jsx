@@ -11,6 +11,7 @@ import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
 import NotificationBell from '../components/NotificationBell'
 import { draftFromTour } from '../lib/cartDraft'
+import { useSheetSwipe } from '../lib/useSheetSwipe'
 import { highSeasonMonthSet, isHighSeasonIso } from '../lib/season'
 import OriginPicker from '../components/OriginPicker'
 import ToursDesktop from './ToursDesktop'
@@ -147,6 +148,7 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
    Veículos, data e horário não aparecem aqui: são definidos no carrinho. */
 function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
   const { t } = useTranslation()
+  const { dragRef, sheetStyle, backdropStyle } = useSheetSwipe(onClose)
   if (!tour) return null
 
   const durLabel = duracao(tour.duration_hours)
@@ -157,9 +159,14 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
 
   return createPortal(
     <>
-      <div className="fixed inset-0 bg-black/45 z-[70]" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[88dvh] flex flex-col shadow-2xl">
-        <div className="relative shrink-0">
+      <div className="fixed inset-0 bg-black/45 z-[70]" style={backdropStyle} onClick={onClose} />
+      <div
+        className="fixed bottom-0 left-0 right-0 mx-auto w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[88dvh] flex flex-col shadow-2xl"
+        style={sheetStyle}
+      >
+        <div ref={dragRef} className="relative shrink-0" style={{ touchAction: 'none' }}>
+          {/* Grabber: arraste a imagem para baixo para fechar. */}
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1.5 rounded-full bg-white/70 z-10" />
           <div className="h-[168px] bg-gradient-to-br from-orange-400 to-amber-300 rounded-t-3xl overflow-hidden">
             {tour.cover_image_url && (
               <img src={tour.cover_image_url} alt="" className="w-full h-full object-cover" />

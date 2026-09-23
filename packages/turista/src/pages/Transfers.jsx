@@ -8,6 +8,7 @@ import { useRegion }   from '../contexts/RegionContext'
 import { useCart }     from '../contexts/CartContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { draftFromRoute } from '../lib/cartDraft'
+import { useSheetSwipe } from '../lib/useSheetSwipe'
 import { horasDeAntecedencia, primeiroReservavel, HORAS_PADRAO_TRANSFER } from '../lib/antecedencia'
 import { highSeasonMonthSet } from '../lib/season'
 import DateSheet from '../components/DateSheet'
@@ -301,14 +302,20 @@ function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, o
  */
 function TransferSheet({ route, onClose, onAdd }) {
   const { t } = useTranslation()
+  const { dragRef, sheetStyle, backdropStyle } = useSheetSwipe(onClose)
   if (!route) return null
   const exclusivo = route.transfers?.is_exclusive
   const desc = route.transfers?.full_description || route.transfers?.short_description
   return createPortal(
     <>
-      <div className="fixed inset-0 bg-black/45 z-[70]" onClick={onClose} />
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[88dvh] flex flex-col shadow-2xl">
-        <div className="relative shrink-0">
+      <div className="fixed inset-0 bg-black/45 z-[70]" style={backdropStyle} onClick={onClose} />
+      <div
+        className="fixed bottom-0 left-0 right-0 mx-auto w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[88dvh] flex flex-col shadow-2xl"
+        style={sheetStyle}
+      >
+        <div ref={dragRef} className="relative shrink-0" style={{ touchAction: 'none' }}>
+          {/* Grabber: arraste a imagem para baixo para fechar. */}
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1.5 rounded-full bg-white/70 z-10" />
           <div className="h-[168px] bg-gradient-to-br from-sky-400 to-indigo-300 rounded-t-3xl overflow-hidden">
             {route.cover_image_url
               ? <img src={route.cover_image_url} alt="" className="w-full h-full object-cover" />
