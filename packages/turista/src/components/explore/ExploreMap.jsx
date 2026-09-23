@@ -16,6 +16,50 @@ function pin(maps, kind, selected) {
   }
 }
 
+// Thumbnail do pin de conteúdo = o item MAIS RECENTE do grupo (story/destaque).
+function pinThumb(g) {
+  const sorted = [...(g.itens || [])].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+  const it = sorted[0]
+  if (!it) return null
+  if (it.kind === 'highlight') return it.thumb || null
+  return it.media_type === 'image' ? it.media_url : (it.author_avatar || null)
+}
+
+// Pin de conteúdo como marcador HTML (OverlayView) — não precisa de Map ID:
+// foto do story mais recente dentro de um aro laranja, com o nº de itens.
+function criarPinConteudo(maps, map, g, onClick) {
+  const thumb = pinThumb(g)
+  const n = (g.itens || []).length
+  class Pin extends maps.OverlayView {
+    onAdd() {
+      const div = document.createElement('div')
+      div.style.cssText = 'position:absolute;transform:translate(-50%,-50%);cursor:pointer;will-change:left,top;z-index:500'
+      div.innerHTML =
+        '<div style="position:relative;width:46px;height:46px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#FF6A00,#FFB020);box-shadow:0 2px 7px rgba(0,0,0,.3)">'
+        + '<div style="width:100%;height:100%;border-radius:50%;border:2px solid #fff;overflow:hidden;background:#e5e7eb;display:flex;align-items:center;justify-content:center">'
+        + (thumb
+            ? '<img src="' + thumb + '" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'"/>'
+            : '<span style="color:#FF6A00;font:700 16px system-ui">★</span>')
+        + '</div>'
+        + (n > 1 ? '<span style="position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#FF6A00;color:#fff;font:700 10px/18px system-ui;text-align:center;border:2px solid #fff">' + n + '</span>' : '')
+        + '</div>'
+      div.addEventListener('click', (e) => { e.stopPropagation(); onClick(g) })
+      this._div = div
+      this.getPanes().overlayMouseTarget.appendChild(div)
+    }
+    draw() {
+      const proj = this.getProjection()
+      if (!proj || !this._div) return
+      const p = proj.fromLatLngToDivPixel(new maps.LatLng(g.lat, g.lng))
+      if (p) { this._div.style.left = p.x + 'px'; this._div.style.top = p.y + 'px' }
+    }
+    onRemove() { if (this._div) { this._div.remove(); this._div = null } }
+  }
+  const pinOverlay = new Pin()
+  pinOverlay.setMap(map)
+  return pinOverlay
+}
+
 // Mapa do Explorar: cria o Google Map, desenha os pins e avisa o pai quando a
 // área visível muda (idle). Distingue movimento DO USUÁRIO (drag/zoom) de
 // recentragem programática, para o pai mostrar "Buscar nesta área" só quando
@@ -86,17 +130,9 @@ export default function ExploreMap({
   useEffect(() => {
     if (!ready) return
     const { maps, map } = inst.current
-    contentRef.current.forEach((m) => m.setMap(null))
-    contentRef.current = (content || []).map((g) => {
-      const n = g.itens?.length || 0
-      const m = new maps.Marker({
-        position: { lat: g.lat, lng: g.lng }, map, title: 'Conteúdo', zIndex: 500,
-        icon: { path: maps.SymbolPath.CIRCLE, scale: 13, fillColor: '#FF6A00', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 },
-        label: n > 1 ? { text: String(n), color: '#fff', fontSize: '11px', fontWeight: '700' } : undefined,
-      })
-      m.addListener('click', () => cb.current.onSelectContent?.(g))
-      return m
-    })
+    contentRef.current.forEach((o) => o.setMap(null))
+    contentRef.current = (content || []).map((g) =>
+      criarPinConteudo(maps, map, g, (grp) => cb.current.onSelectContent?.(grp)))
   }, [ready, content])
 
   if (error) {
