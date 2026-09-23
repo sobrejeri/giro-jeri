@@ -294,6 +294,69 @@ function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, o
   )
 }
 
+/* ── Folha de detalhe da rota ────────────────────────────────
+ * Mesma ideia da folha do passeio: abrir ao tocar no cartão, mostrar a
+ * descrição/roteiro e o preço, e só então mandar para o carrinho — para o
+ * cliente conferir antes de reservar. Veículo, data e horário ficam no carrinho.
+ */
+function TransferSheet({ route, onClose, onAdd }) {
+  const { t } = useTranslation()
+  if (!route) return null
+  const exclusivo = route.transfers?.is_exclusive
+  const desc = route.transfers?.full_description || route.transfers?.short_description
+  return createPortal(
+    <>
+      <div className="fixed inset-0 bg-black/45 z-[70]" onClick={onClose} />
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[88dvh] flex flex-col shadow-2xl">
+        <div className="relative shrink-0">
+          <div className="h-[168px] bg-gradient-to-br from-sky-400 to-indigo-300 rounded-t-3xl overflow-hidden">
+            {route.cover_image_url
+              ? <img src={route.cover_image_url} alt="" className="w-full h-full object-cover" />
+              : <div className="w-full h-full flex items-center justify-center">{exclusivo ? <Plane size={44} className="text-white/40" /> : <Car size={44} className="text-white/40" />}</div>}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+          </div>
+          <button onClick={onClose} aria-label="Fechar" className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform">
+            <X size={16} className="text-gray-700" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 pt-4 pb-4 flex-1">
+          <p className="text-[19px] font-extrabold text-gray-900 leading-tight">
+            {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+            <span className="inline-flex items-center gap-1 text-[12.5px] text-gray-600">
+              <Users size={13} className="text-gray-400" /> {exclusivo ? 'até 3 pax' : t('transfersPg.upTo4')}
+            </span>
+            {route.transfers?.name && <span className="text-[12.5px] text-gray-600">{route.transfers.name}</span>}
+          </div>
+
+          {desc && (
+            <p className="text-[13px] text-gray-600 leading-relaxed mt-3 whitespace-pre-line">{desc}</p>
+          )}
+
+          <p className="text-[12px] text-gray-400 mt-4">
+            Veículo, data e horário você escolhe no carrinho.
+          </p>
+        </div>
+
+        <div className="shrink-0 border-t border-gray-100 px-5 pt-3 flex items-center gap-3" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+          <div className="min-w-0">
+            <p className="text-[10.5px] text-gray-400 leading-none">{exclusivo ? 'por voo' : t('transfersPg.startingFrom')}</p>
+            <p className="text-[18px] font-extrabold text-brand leading-tight mt-0.5">
+              R$ {Number(route.default_price).toLocaleString('pt-BR')}
+            </p>
+          </div>
+          <button onClick={onAdd} className="flex-1 inline-flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform">
+            <ShoppingCart size={16} /> Adicionar ao carrinho
+          </button>
+        </div>
+      </div>
+    </>,
+    document.body,
+  )
+}
+
 /* ── Route picker (bottom sheet) ────────────────────────────── */
 function RouteSheet({ title, options, selected, onSelect, onClose }) {
   return createPortal(
@@ -418,6 +481,7 @@ export default function Transfers() {
 
   // mode: 'rota' | 'custom'
   const [mode, setMode] = useState('rota')
+  const [sheetRoute, setSheetRoute] = useState(null)  // rota aberta na folha de detalhe
   const [showSearch, setShowSearch] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -1045,7 +1109,7 @@ export default function Transfers() {
                   full
                   bg={GRADIENTS[i % GRADIENTS.length]}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => abrirNoCarrinho(r)}
+                  onSelect={() => setSheetRoute(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
                   isFav={favs.has(r.id)}
@@ -1061,7 +1125,7 @@ export default function Transfers() {
                   route={r}
                   bg={GRADIENTS[i % GRADIENTS.length]}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => abrirNoCarrinho(r)}
+                  onSelect={() => setSheetRoute(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
                   isFav={favs.has(r.id)}
@@ -1091,7 +1155,7 @@ export default function Transfers() {
                   key={r.id}
                   route={r}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => abrirNoCarrinho(r)}
+                  onSelect={() => setSheetRoute(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
                   isFav={favs.has(r.id)}
@@ -1120,6 +1184,16 @@ export default function Transfers() {
             {customLoading ? t('transfersPg.requesting') : t('transfersPg.requestQuote')}
           </button>
         </div>
+      )}
+
+      {/* Folha de detalhe: abre ao tocar num cartão de rota; o "Adicionar ao
+          carrinho" é que leva ao carrinho (revisão antes de reservar). */}
+      {sheetRoute && (
+        <TransferSheet
+          route={sheetRoute}
+          onClose={() => setSheetRoute(null)}
+          onAdd={() => { const r = sheetRoute; setSheetRoute(null); abrirNoCarrinho(r) }}
+        />
       )}
     </div>
 

@@ -20,7 +20,7 @@ import {
   ChevronLeft, ChevronRight, X, Info, Bus, Search,
   Flame, Sparkles, ShoppingCart, ChevronDown,
   ShieldCheck, MessageCircle, Lock, User as UserIcon,
-  Compass, Car,
+  Compass, Car, CheckCircle2, XCircle,
 } from 'lucide-react'
 import FilterChip from '../components/tours/FilterChip'
 import SectionHeader from '../components/tours/SectionHeader'
@@ -198,6 +198,37 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
             <p className="text-[13px] text-gray-600 leading-relaxed mt-3 whitespace-pre-line">
               {tour.full_description || tour.short_description}
             </p>
+          )}
+
+          {/* Roteiro: o que está incluído e o que não está — para o cliente
+              conferir antes de mandar para o carrinho (buscado por id). */}
+          {tour.includes_text && (
+            <div className="mt-4">
+              <p className="text-[12.5px] font-bold text-gray-900 flex items-center gap-1.5">
+                <CheckCircle2 size={15} className="text-emerald-500" /> {t('tourDetailPg.included')}
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {tour.includes_text.split(',').map((it, i) => (
+                  <li key={i} className="text-[12.5px] text-gray-600 flex items-start gap-2">
+                    <CheckCircle2 size={13} className="text-emerald-400 mt-0.5 shrink-0" /> {it.trim()}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {tour.excludes_text && (
+            <div className="mt-3">
+              <p className="text-[12.5px] font-bold text-gray-900 flex items-center gap-1.5">
+                <XCircle size={15} className="text-gray-400" /> {t('tourDetailPg.notIncluded')}
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {tour.excludes_text.split(',').map((it, i) => (
+                  <li key={i} className="text-[12.5px] text-gray-500 flex items-start gap-2">
+                    <XCircle size={13} className="text-gray-300 mt-0.5 shrink-0" /> {it.trim()}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {/* Pessoas: é o único dado que muda o preço mostrado aqui. O resto
@@ -576,6 +607,17 @@ export default function Tours() {
 
   const sheetTour = [...tradTours, ...emCategorias]
     .find((t) => t.id === sheetTourId) || null
+
+  // Detalhe completo do passeio aberto na folha: a lista não traz a descrição
+  // longa nem "Incluído/Não incluído"; buscamos por id para o cliente ver o
+  // roteiro inteiro antes de mandar para o carrinho.
+  const { data: sheetTourDetail } = useQuery({
+    queryKey: ['tour', sheetTourId],
+    queryFn:  () => api.getTour(sheetTourId),
+    enabled:  !!sheetTourId,
+    staleTime: 5 * 60 * 1000,
+  })
+  const sheetTourFull = sheetTour ? { ...sheetTour, ...(sheetTourDetail || {}) } : null
 
   // Nem todo passeio aceita os dois modos — o voo panorâmico, por exemplo, só
   // existe COMPARTILHADO. A tela abria sempre em "Privativo" e o toggle não
@@ -1090,11 +1132,11 @@ export default function Tours() {
       {/* Folha do passeio: abre ao tocar num cartão. Substitui a antiga barra
           flutuante do modo privativo — a ação agora fica junto da informação. */}
       <TourSheet
-        tour={sheetTour}
+        tour={sheetTourFull}
         mode={mode}
         people={people}
         onPeople={setPeople}
-        inCart={sheetTour ? cartIds.has(sheetTour.id) : false}
+        inCart={sheetTourFull ? cartIds.has(sheetTourFull.id) : false}
         onClose={() => setSheetTourId(null)}
         onAdd={() => {
           // Todo passeio passa pelo carrinho — privativo e compartilhado. O
