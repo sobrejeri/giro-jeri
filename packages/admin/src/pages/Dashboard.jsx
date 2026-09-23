@@ -472,18 +472,18 @@ function AcompanhamentoOperacional() {
               value={tourId}
               onChange={(e) => setTourId(e.target.value)}
               disabled={serviceType === 'transfer'}
-              className={`${selectCls} ${serviceType === 'transfer' ? 'opacity-40' : ''}`}
+              className={`${selectCls} col-span-2 lg:col-span-1 ${serviceType === 'transfer' ? 'opacity-40' : ''}`}
             >
               <option value="">Todos os passeios</option>
               {tours.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-            <div className="flex items-center gap-1.5">
+            <div className="col-span-2 lg:col-span-1 flex items-center gap-1.5 min-w-0">
               <input
                 type="date"
                 value={desde}
                 max={ate || undefined}
                 onChange={(e) => { setDesde(e.target.value); setPeriodo('') }}
-                className={`${selectCls} w-full`}
+                className={`${selectCls} w-full min-w-0`}
                 title="A partir de (vazio = sem limite)"
               />
               <span className="text-gray-600 text-xs shrink-0">até</span>
@@ -492,7 +492,7 @@ function AcompanhamentoOperacional() {
                 value={ate}
                 min={desde || undefined}
                 onChange={(e) => { setAte(e.target.value); setPeriodo('') }}
-                className={`${selectCls} w-full`}
+                className={`${selectCls} w-full min-w-0`}
                 title="Até (vazio = sem limite)"
               />
             </div>

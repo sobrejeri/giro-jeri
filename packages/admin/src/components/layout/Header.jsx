@@ -29,7 +29,10 @@ export default function Header({ onMenu = () => {} }) {
   const title        = TITLES[pathname] || 'Admin'
 
   return (
-    <header className="h-16 flex items-center justify-between gap-2 px-4 sm:px-6 bg-gray-900 border-b border-gray-800 flex-shrink-0">
+    <header
+      className="min-h-16 flex items-center justify-between gap-2 px-4 sm:px-6 bg-gray-900 border-b border-gray-800 flex-shrink-0"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
       <div className="flex items-center gap-2 min-w-0">
         <button
           onClick={onMenu}

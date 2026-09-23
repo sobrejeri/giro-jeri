@@ -64,15 +64,17 @@ export default function Repasses() {
   const [aba, setAba] = useState('fila')
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
-        {[['fila', 'Fila de liberação'], ['conciliacao', 'Conciliação'], ['operadores', 'Operadores'], ['motoristas', 'Motoristas']].map(([id, label]) => (
-          <button key={id} onClick={() => setAba(id)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              aba === id ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'
-            }`}>
-            {label}
-          </button>
-        ))}
+      <div className="overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
+          {[['fila', 'Fila de liberação'], ['conciliacao', 'Conciliação'], ['operadores', 'Operadores'], ['motoristas', 'Motoristas']].map(([id, label]) => (
+            <button key={id} onClick={() => setAba(id)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                aba === id ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       {aba === 'fila' ? <FilaLiberacao />
         : aba === 'conciliacao' ? <Conciliacao />

@@ -218,12 +218,12 @@ export default function Estabelecimentos() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold text-gray-100">Estabelecimentos</h1>
           <p className="text-sm text-gray-500">Diretório exibido na aba “Descubra a Vila”. Marque “Destaque” para anunciar no topo.</p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           {fotosMsg && <span className="text-xs text-gray-400">{fotosMsg}</span>}
           <Button variant="secondary" onClick={buscarFotosFaltantes} disabled={fotosBusy}>
             <ImageIcon size={16} /> {fotosBusy ? 'Buscando…' : 'Buscar fotos faltantes'}

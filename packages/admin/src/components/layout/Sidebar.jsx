@@ -45,7 +45,10 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         }`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-4 border-b border-gray-800 gap-2.5">
+        <div
+          className="min-h-16 flex items-center px-4 border-b border-gray-800 gap-2.5"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        >
           <img src={import.meta.env.BASE_URL + 'logo-icon.jpeg'} alt="" className="w-8 h-8 rounded-lg shrink-0" />
           <div>
             <p className="font-giro font-semibold text-[14px] text-white leading-tight tracking-[0.09em]">TURIVA</p>
@@ -92,7 +95,10 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         </nav>
 
         {/* User */}
-        <div className="px-3 py-4 border-t border-gray-800">
+        <div
+          className="px-3 py-4 border-t border-gray-800"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
           <div className="flex items-center gap-3 px-3 py-2 mb-1">
             <div className="w-7 h-7 rounded-full bg-brand/20 overflow-hidden flex items-center justify-center text-brand text-xs font-bold flex-shrink-0">
               {user?.profile_photo_url
