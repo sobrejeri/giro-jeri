@@ -23,6 +23,7 @@ import settingsRoutes from './routes/settings.js';
 import feedRoutes     from './routes/feed.js';
 import storiesRoutes  from './routes/stories.js';
 import establishmentsRoutes from './routes/establishments.js';
+import exploreRoutes  from './routes/explore.js';
 import notificationsRoutes from './routes/notifications.js';
 import { regionsRouter } from './routes/regions.js';
 import { seasonsRouter } from './routes/seasons.js';
@@ -203,6 +204,7 @@ app.use('/api/settings',  settingsRoutes);
 app.use('/api/feed',      feedRoutes);
 app.use('/api/stories',   storiesRoutes);
 app.use('/api/establishments', establishmentsRoutes);
+app.use('/api/explore',   exploreRoutes);    // Explorar Turiva (mapa) — só admin por enquanto
 app.use('/api/notifications', notificationsRoutes);
 
 // ── Erros ──────────────────────────────────────────────
