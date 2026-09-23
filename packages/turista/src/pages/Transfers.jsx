@@ -6,6 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth }     from '../contexts/AuthContext'
 import { useRegion }   from '../contexts/RegionContext'
 import { useCart }     from '../contexts/CartContext'
+import { useFavorites } from '../contexts/FavoritesContext'
 import { draftFromRoute } from '../lib/cartDraft'
 import { horasDeAntecedencia, primeiroReservavel, HORAS_PADRAO_TRANSFER } from '../lib/antecedencia'
 import { highSeasonMonthSet } from '../lib/season'
@@ -18,7 +19,7 @@ import NotificationBell from '../components/NotificationBell'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown, ChevronRight,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
-  Plane, Compass, ShoppingCart,
+  Plane, Compass, ShoppingCart, Heart,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -190,9 +191,24 @@ function CartToggle({ inCart, onToggle }) {
   )
 }
 
+// Favoritar a rota (mesmo comportamento do coração dos passeios). Fica no
+// canto superior direito da capa; toca de novo para desfavoritar.
+function FavToggle({ isFav, onFav }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onFav() }}
+      aria-label={isFav ? 'Remover dos favoritos' : 'Favoritar'}
+      aria-pressed={!!isFav}
+      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/85 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+    >
+      <Heart size={15} className={`transition-colors duration-200 ${isFav ? 'fill-brand text-brand' : 'text-gray-500'}`} />
+    </button>
+  )
+}
+
 // `full` = ocupa a largura da célula (grade "todas as rotas"); sem ele mantém
 // a largura fixa do carrossel horizontal.
-function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggleCart }) {
+function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggleCart, isFav, onFav }) {
   const { t } = useTranslation()
   const img = route.cover_image_url
   return (
@@ -213,6 +229,8 @@ function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggl
         <span className="absolute top-2 left-2 text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full">
           {t('transfersPg.privateBadge')}
         </span>
+
+        {onFav && <FavToggle isFav={isFav} onFav={onFav} />}
 
         <div className="absolute bottom-2 left-2.5 right-2.5">
           <p className="text-white font-bold text-[12.5px] leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
@@ -247,7 +265,7 @@ function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggl
  * do "a partir de". Sem foto cadastrada, cai num gradiente de céu com o ícone
  * do avião, para não virar um cartão vazio no meio dos que têm imagem.
  */
-function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart }) {
+function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, onFav }) {
   const img = route.cover_image_url
   return (
     <button
@@ -267,6 +285,8 @@ function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart }) {
         <span className="absolute top-2 left-2 text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full">
           Exclusivo
         </span>
+
+        {onFav && <FavToggle isFav={isFav} onFav={onFav} />}
 
         <div className="absolute bottom-2 left-2.5 right-2.5">
           <p className="text-[9.5px] text-white/80 leading-none [text-shadow:0_1px_2px_rgba(0,0,0,.4)]">
@@ -386,6 +406,7 @@ export default function Transfers() {
   const { upsertItem: saveCartItem, items: savedCartItems, removeItem: dropCartItem, count: cartCount } = useCart()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
+  const { favs, toggleFav } = useFavorites()
 
   // Marcar rotas direto da vitrine, várias de uma vez. Entra como rascunho —
   // o carrinho é quem cobra veículos, data, horário e pessoas. Tocar de novo
@@ -1046,6 +1067,8 @@ export default function Transfers() {
                   onSelect={() => abrirNoCarrinho(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
+                  isFav={favs.has(r.id)}
+                  onFav={() => toggleFav(r.id)}
                 />
               ))}
             </div>
@@ -1060,6 +1083,8 @@ export default function Transfers() {
                   onSelect={() => abrirNoCarrinho(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
+                  isFav={favs.has(r.id)}
+                  onFav={() => toggleFav(r.id)}
                 />
               ))}
             </div>
@@ -1088,6 +1113,8 @@ export default function Transfers() {
                   onSelect={() => abrirNoCarrinho(r)}
                   inCart={cartIds.has(r.id)}
                   onToggleCart={() => toggleRouteInCart(r)}
+                  isFav={favs.has(r.id)}
+                  onFav={() => toggleFav(r.id)}
                 />
               ))}
             </div>

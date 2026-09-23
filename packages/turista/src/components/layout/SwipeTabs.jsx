@@ -79,9 +79,13 @@ export default function SwipeTabs({ children }) {
     // Ignora quando o arrasto começa dentro de um carrossel horizontal
     // (favoritos, pastilhas, stories) ou de uma camada sobreposta
     // (fixed/modais) — assim o gesto rola o carrossel / fica na camada.
+    const TAP_TAGS = /^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/
     const startedInException = (target) => {
       let n = target
       while (n && n !== el && n.nodeType === 1) {
+        // Toque em um controle (coração, +, link, campo) é toque, nunca arrasto
+        // de aba — assim um toque com leve tremida no dedo não vira swipe.
+        if (TAP_TAGS.test(n.tagName) || n.getAttribute('role') === 'button') return true
         const s = getComputedStyle(n)
         if (s.position === 'fixed') return true
         if ((s.overflowX === 'auto' || s.overflowX === 'scroll') && n.scrollWidth > n.clientWidth + 2) return true
