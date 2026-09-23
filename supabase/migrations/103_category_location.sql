@@ -24,7 +24,10 @@ FROM (
     AND cat_id IS NOT NULL
   GROUP BY cat_id
 ) sub
-WHERE c.id = sub.cat_id;
+WHERE c.id = sub.cat_id
+  -- Só semeia categoria ainda sem município: rodar de novo não sobrescreve o
+  -- que o admin já ajustou à mão.
+  AND (c.region_ids IS NULL OR c.region_ids = '{}');
 
 -- O passeio não precisa mais de município próprio: solta o NOT NULL do legado.
 -- A coluna tours.region_id continua existindo (compatibilidade), mas deixa de
