@@ -15,7 +15,7 @@ router.get('/map', requireAdmin, async (req, res, next) => {
     const swLat = Number(req.query.sw_lat), swLng = Number(req.query.sw_lng);
     const neLat = Number(req.query.ne_lat), neLng = Number(req.query.ne_lng);
     const limit = Math.min(Number(req.query.limit) || 200, 500);
-    const types = String(req.query.types || 'places,tours,transfers')
+    const types = String(req.query.types || 'places,tours,transfers,stories,highlights')
       .split(',').map((s) => s.trim()).filter(Boolean);
 
     if ([swLat, swLng, neLat, neLng].some((n) => Number.isNaN(n))) {
@@ -31,7 +31,7 @@ router.get('/map', requireAdmin, async (req, res, next) => {
       .gte('longitude', lngLo).lte('longitude', lngHi)
       .limit(limit);
 
-    const out = { places: [], tours: [], transfers: [] };
+    const out = { places: [], tours: [], transfers: [], stories: [], highlights: [] };
 
     if (types.includes('places')) {
       const { data, error } = await noBox(
@@ -69,6 +69,43 @@ router.get('/map', requireAdmin, async (req, res, next) => {
       out.transfers = (data || []).map((t) => ({
         id: t.id, kind: 'transfer', name: t.name,
         lat: Number(t.latitude), lng: Number(t.longitude),
+      }));
+    }
+
+    // Stories (avatar_stories, ativos) e destaques (story_highlights) com
+    // coordenadas → o front agrupa por localização no mesmo pin. Tolerante: se a
+    // coluna geo ainda não existe (migration 105), o erro vira lista vazia.
+    if (types.includes('stories')) {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('avatar_stories')
+        .select('id, caption, media_url, media_type, latitude, longitude, created_by_user_id, author:created_by_user_id ( full_name, profile_photo_url, user_type )')
+        .gt('expires_at', nowIso)
+        .not('latitude', 'is', null).not('longitude', 'is', null)
+        .gte('latitude', latLo).lte('latitude', latHi)
+        .gte('longitude', lngLo).lte('longitude', lngHi)
+        .limit(limit);
+      if (!error) out.stories = (data || []).map((s) => ({
+        id: s.id, kind: 'story', lat: Number(s.latitude), lng: Number(s.longitude),
+        caption: s.caption || null, media_url: s.media_url, media_type: s.media_type,
+        author_id: s.created_by_user_id || null,
+        author_name: s.author?.user_type === 'admin' ? 'Turiva' : (s.author?.full_name || 'Operador'),
+        author_avatar: s.author?.profile_photo_url || null,
+      }));
+    }
+
+    if (types.includes('highlights')) {
+      const { data, error } = await supabase
+        .from('story_highlights')
+        .select('id, title, cover_image_url, latitude, longitude')
+        .eq('is_active', true)
+        .not('latitude', 'is', null).not('longitude', 'is', null)
+        .gte('latitude', latLo).lte('latitude', latHi)
+        .gte('longitude', lngLo).lte('longitude', lngHi)
+        .limit(limit);
+      if (!error) out.highlights = (data || []).map((h) => ({
+        id: h.id, kind: 'highlight', lat: Number(h.latitude), lng: Number(h.longitude),
+        title: h.title, thumb: h.cover_image_url || null,
       }));
     }
 

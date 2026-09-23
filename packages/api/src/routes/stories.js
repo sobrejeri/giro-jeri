@@ -15,7 +15,24 @@ const highlightSchema = z.object({
   cover_image_url: z.string().url().max(3000).optional().nullable(),
   sort_order:      z.number().int().min(0).optional(),
   is_active:       z.boolean().optional(),
+  latitude:        z.number().optional().nullable(),
+  longitude:       z.number().optional().nullable(),
 });
+
+// Insere tolerando as colunas de geo ausentes (migration 105 ainda não rodada):
+// tenta com lat/lng; se o banco recusar a coluna nova, tenta sem.
+function geoAusente(error) {
+  return !!error && (error.code === '42703' || error.code === 'PGRST204'
+    || /latitude|longitude|schema cache|does not exist/i.test(error.message || ''));
+}
+async function inserirComGeo(table, row) {
+  let r = await supabase.from(table).insert(row).select().single();
+  if (geoAusente(r.error)) {
+    const { latitude: _la, longitude: _lo, ...semGeo } = row;
+    r = await supabase.from(table).insert(semGeo).select().single();
+  }
+  return r;
+}
 
 const itemSchema = z.object({
   media_url:    z.string().url().max(3000),
@@ -99,6 +116,8 @@ const liveStorySchema = z.object({
   media_type:   z.enum(['image', 'video']).optional(),
   caption:      z.string().max(200).optional().nullable(),
   duration_sec: z.number().int().min(1).max(60).optional(),
+  latitude:     z.number().optional().nullable(),
+  longitude:    z.number().optional().nullable(),
 });
 
 // GET /api/stories/live — público: stories ativos (não expirados) + nº de views
@@ -176,17 +195,15 @@ router.get('/live/:id/viewers', authenticate, requireOperator, async (req, res, 
 router.post('/live', authenticate, requireOperator, async (req, res, next) => {
   try {
     const body = liveStorySchema.parse(req.body);
-    const { data, error } = await supabase
-      .from('avatar_stories')
-      .insert({
-        media_url:    body.media_url,
-        media_type:   body.media_type || 'image',
-        caption:      body.caption || null,
-        duration_sec: body.duration_sec || (body.media_type === 'video' ? 30 : 20),
-        created_by_user_id: req.user.id,
-      })
-      .select()
-      .single();
+    const { data, error } = await inserirComGeo('avatar_stories', {
+      media_url:    body.media_url,
+      media_type:   body.media_type || 'image',
+      caption:      body.caption || null,
+      duration_sec: body.duration_sec || (body.media_type === 'video' ? 30 : 20),
+      latitude:     body.latitude ?? null,
+      longitude:    body.longitude ?? null,
+      created_by_user_id: req.user.id,
+    });
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) {
@@ -240,11 +257,7 @@ async function donoDoItem(req, res, next) {
 router.post('/highlights', async (req, res, next) => {
   try {
     const body = highlightSchema.parse(req.body);
-    const { data, error } = await supabase
-      .from('story_highlights')
-      .insert({ ...body, created_by_user_id: req.user.id })
-      .select()
-      .single();
+    const { data, error } = await inserirComGeo('story_highlights', { ...body, created_by_user_id: req.user.id });
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) {
