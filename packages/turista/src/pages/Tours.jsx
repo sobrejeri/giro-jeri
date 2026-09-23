@@ -259,7 +259,7 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
 
         <div
           className="shrink-0 border-t border-gray-100 px-5 pt-3 flex items-center gap-3"
-          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+          style={{ paddingBottom: 'calc(1.75rem + env(safe-area-inset-bottom))' }}
         >
           <div className="min-w-0">
             <p className="text-[10.5px] text-gray-400 leading-none">
