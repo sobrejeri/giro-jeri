@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { useNavigate, Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
-  Megaphone, Copy, Check, Loader2, Wallet, Clock, ChevronLeft, Sparkles, Share2, TrendingUp, KeyRound, AlertTriangle,
+  Megaphone, Copy, Check, Loader2, Wallet, Clock, Sparkles, Share2, TrendingUp, KeyRound, AlertTriangle,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -196,7 +196,6 @@ function DailyChart({ days }) {
 // PIX em até 7 dias). O próprio link/código não vale para o dono.
 export default function Affiliate() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { user, token } = useAuth()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(null) // 'link' | 'code'
@@ -267,13 +266,7 @@ export default function Affiliate() {
       {/* Header */}
       <div className="bg-white px-4 pt-5 pb-4 shadow-sm">
         <div className="relative flex items-center justify-center min-h-[32px]">
-          <button
-            onClick={() => navigate(-1)}
-            className="absolute left-0 w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center active:scale-95 transition-transform"
-            aria-label={t('affiliatePg.back')}
-          >
-            <ChevronLeft size={20} className="text-gray-700" />
-          </button>
+          {/* Afiliado é uma aba do menu — sem seta de voltar. */}
           <h1 className="font-giro font-semibold text-[20px] text-gray-900 tracking-wide">{t('affiliatePg.title')}</h1>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { X, Store } from 'lucide-react'
 import TopNav from './TopNav'
 import BottomNav from './BottomNav'
+import SwipeTabs from './SwipeTabs'
 import RegionPicker from '../RegionPicker'
 import CartFab from '../CartFab'
 import PushPrompt from '../PushPrompt'
@@ -79,9 +80,11 @@ export default function Layout() {
         <InstallBar />
         {mostraRegiao && <RegionBar />}
         <div className="pb-[68px] lg:pb-0">
-          <PullToRefresh onRefresh={handleRefresh}>
-            <Outlet />
-          </PullToRefresh>
+          <SwipeTabs>
+            <PullToRefresh onRefresh={handleRefresh}>
+              <Outlet />
+            </PullToRefresh>
+          </SwipeTabs>
         </div>
       </div>
 

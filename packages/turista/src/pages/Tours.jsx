@@ -9,7 +9,6 @@ import { duracao } from '../lib/formato'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
-import { useMoeda, MOEDAS } from '../lib/moeda'
 import NotificationBell from '../components/NotificationBell'
 import { draftFromTour } from '../lib/cartDraft'
 import { highSeasonMonthSet, isHighSeasonIso } from '../lib/season'
@@ -382,7 +381,6 @@ export default function Tours() {
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
   const { region, userCoords, getServiceQuery } = useRegion()
-  const { moeda, setMoeda } = useMoeda()
 
   const { items: savedCartItems, upsertItem: saveCartItem, removeItem: dropCartItem, count: cartCount } = useCart()
 
@@ -885,22 +883,6 @@ export default function Tours() {
       </div>
 
       <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
-
-        {/* Moeda de exibição — trazida da antiga Home, já que o turista agora
-            abre direto na Lojinha. O preço oficial segue em BRL; USD/EUR são
-            aproximados (useMoeda no TourCard). */}
-        <div className="flex justify-end">
-          <div className="inline-flex items-center gap-1 bg-white rounded-full p-0.5 shadow-sm border border-gray-100">
-            {['BRL', 'USD', 'EUR'].map((c) => (
-              <button key={c} onClick={() => setMoeda(c)}
-                className={`px-2.5 py-1 rounded-full text-[12px] font-bold transition-colors ${
-                  moeda === c ? 'bg-brand text-white' : 'text-gray-500'
-                }`}>
-                {MOEDAS[c].flag} {c}
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* ── Alternador Passeios | Translados (mesma lojinha) ───────── */}
         <div className="flex bg-gray-100 rounded-2xl p-1">

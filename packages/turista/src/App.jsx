@@ -77,7 +77,6 @@ export default function App() {
       {/* Auth — full screen, sem layout */}
       <Route path="/c/:slug"  element={<PartnerLink />} />
       <Route path="/a/:code"  element={<AffiliateLink />} />
-      <Route path="/afiliado" element={<Affiliate />} />
       <Route path="/login"    element={<Auth defaultTab="login" />} />
       <Route path="/cadastro" element={<Auth defaultTab="register" />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />
@@ -106,6 +105,7 @@ export default function App() {
         <Route path="carrinho"            element={<CartPage />} />
         <Route path="avaliacoes"          element={<Avaliacoes />} />
         <Route path="favoritos"           element={<Favoritos />} />
+        <Route path="afiliado"            element={<Affiliate />} />
         <Route path="minhas-reservas"     element={<PrivateRoute><Bookings /></PrivateRoute>} />
         <Route path="minhas-reservas/:id" element={<PrivateRoute><BookingDetail /></PrivateRoute>} />
         <Route path="perfil"              element={<Profile />} />
