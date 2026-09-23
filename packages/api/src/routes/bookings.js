@@ -388,19 +388,14 @@ router.get('/', authenticate, async (req, res, next) => {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    // Recorte por perfil. Antes SÓ o turista era recortado — operador e agência
-    // recebiam TODAS as reservas da plataforma, paginadas, incluindo as de
-    // concorrentes. A fila de aceite não passa por aqui: ela tem rota própria
-    // (GET /api/operator/bookings), com as regras dela. Aqui o operador vê
-    // apenas o que já é dele.
-    if (req.user.user_type === 'tourist') {
-      query = query.eq('user_id', req.user.id);
-    } else if (req.user.user_type === 'operator' || req.user.user_type === 'agency') {
-      query = query.eq('operator_id', req.user.id);
-    } else if (req.user.user_type !== 'admin' && req.user.user_type !== 'finance') {
-      // Perfil desconhecido não recebe lista nenhuma — negar é o padrão seguro.
-      return res.json({ data: [], total: 0, page: Number(page), limit: Number(limit) });
-    }
+    // "Minhas Reservas" = as reservas do PRÓPRIO usuário logado, seja qual for o
+    // papel. Isto aqui é a tela do turista (só o app do turista chama esta rota).
+    // O admin vê tudo no painel; o operador vê a fila/atribuídas no app do
+    // operador (GET /api/operator/bookings) — não aqui. Antes, admin/finance
+    // caíam SEM filtro e viam TODAS as reservas da plataforma (pareciam
+    // repetidas ao entrar como admin), e o operador via as atribuídas em vez das
+    // próprias. Agora todo mundo vê só as suas.
+    query = query.eq('user_id', req.user.id);
 
     if (status_commercial)  query = query.eq('status_commercial', status_commercial);
     if (status_operational) query = query.eq('status_operational', status_operational);

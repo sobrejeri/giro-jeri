@@ -100,20 +100,23 @@ test('as rotas por id de pagamento que já tinham dono continuam tendo', () => {
 
 const operador = fs.readFileSync(new URL('../src/routes/operator.js', import.meta.url), 'utf8')
 
-test('GET /bookings recorta operador e agência pelas reservas deles', () => {
+test('GET /bookings ("Minhas Reservas") mostra só as reservas do próprio usuário', () => {
   const r = rota(reservas, "router.get('/', authenticate")
-  assert.ok(/user_type === 'operator' \|\| req\.user\.user_type === 'agency'/.test(r),
-    'operador e agência precisam de recorte próprio')
-  assert.ok(/query = query\.eq\('operator_id', req\.user\.id\)/.test(r),
-    'o recorte precisa filtrar por operator_id')
+  // Esta rota é a "Minhas Reservas" do app do turista. Todo papel vê apenas as
+  // SUAS reservas (user_id). O admin vê tudo no painel; o operador vê a fila em
+  // GET /api/operator/bookings — não aqui.
+  assert.ok(/query = query\.eq\('user_id', req\.user\.id\)/.test(r),
+    'a lista tem de ser recortada pelo dono (user_id), seja qual for o papel')
+  assert.ok(!/query\.eq\('operator_id', req\.user\.id\)/.test(r),
+    'não recorta por operator_id aqui — isso é a fila do app do operador')
 })
 
-test('GET /bookings nega por padrão um perfil desconhecido', () => {
+test('GET /bookings não devolve a lista inteira pra nenhum papel (nem admin)', () => {
   const r = rota(reservas, "router.get('/', authenticate")
-  const i = r.indexOf("user_type !== 'admin'")
-  assert.notEqual(i, -1, 'precisa existir o ramo final de negação')
-  assert.ok(/data: \[\], total: 0/.test(r.slice(i, i + 400)),
-    'perfil desconhecido tem de receber lista vazia, não a lista inteira')
+  assert.ok(!/user_type !== 'admin' && req\.user\.user_type !== 'finance'/.test(r),
+    'não deve haver ramo que deixe admin/finance sem recorte de dono (antes vazava TODAS)')
+  assert.ok(/query = query\.eq\('user_id', req\.user\.id\)/.test(r),
+    'todo papel é recortado por user_id — inclusive admin/finance')
 })
 
 test('GET /bookings/:id só abre para dono, operador atribuído ou admin', () => {
