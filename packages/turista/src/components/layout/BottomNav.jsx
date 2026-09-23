@@ -1,7 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { User, Sparkles, Store, Plus, CalendarCheck, Megaphone } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { api } from '../../lib/api'
+import { resolveStatusReserva } from '../../lib/statusReserva'
 
 export default function BottomNav() {
   const navigate     = useNavigate()
@@ -12,22 +15,41 @@ export default function BottomNav() {
   // Admin/operador têm o menu enxuto: Lojinha · Descubra · Publicar · Reservas · Perfil.
   const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
 
+  // Contador vermelho na aba Reservas: quantas reservas ainda esperam pagamento
+  // do cliente. Mesma regra e mesma query da antiga Home (resolveStatusReserva
+  // === 'waiting_payment'), então o número bate com a lista de reservas e as
+  // duas telas compartilham o cache.
+  const { data: bookingsRaw } = useQuery({
+    queryKey: ['home-bookings'],
+    queryFn:  () => api.getMyBookings(),
+    enabled:  !!user,
+    staleTime: 60_000,
+  })
+  const reservas = Array.isArray(bookingsRaw) ? bookingsRaw : (bookingsRaw?.data || [])
+  const reservasAPagar = reservas.filter((b) => resolveStatusReserva(b) === 'waiting_payment').length
+
   // No carrinho o menu sai de cena: a barra de resumo/pagamento fica colada
   // embaixo e o menu só roubava espaço numa tela que já é comprida.
   if (pathname === '/carrinho') return null
 
-  const Aba = ({ to, icon: Icon, label, exact }) => {
+  const Aba = ({ to, icon: Icon, label, exact, badge = 0 }) => {
     const active = exact ? pathname === to : pathname.startsWith(to)
     return (
       <button
         onClick={() => navigate(to)}
         className="flex-1 min-w-0 flex flex-col items-center gap-[2px] py-1.5 px-0.5 active:scale-95 transition-transform"
       >
-        <div className="w-7 h-7 rounded-full flex items-center justify-center">
+        <div className="relative w-7 h-7 rounded-full flex items-center justify-center">
           <Icon size={20}
             className={active ? 'text-brand' : 'text-gray-400'}
             strokeWidth={active ? 2.5 : 1.75}
             fill={active ? 'currentColor' : 'none'} />
+          {/* Contador vermelho estilo Reels (reservas aguardando pagamento). */}
+          {badge > 0 && (
+            <span className="absolute -top-1 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none flex items-center justify-center ring-2 ring-white">
+              {badge > 9 ? '9+' : badge}
+            </span>
+          )}
         </div>
         <span className={`text-[10px] leading-tight max-w-full truncate transition-colors ${active ? 'text-brand font-semibold' : 'text-gray-400 font-medium'}`}>
           {label}
@@ -89,7 +111,7 @@ export default function BottomNav() {
 
           {FabPublicar}
 
-          <Aba to="/minhas-reservas" icon={CalendarCheck} label={t('nav.bookings', 'Reservas')} />
+          <Aba to="/minhas-reservas" icon={CalendarCheck} label={t('nav.bookings', 'Reservas')} badge={reservasAPagar} />
           <Aba to="/perfil" icon={User} label={t('nav.profile')} />
         </div>
       </nav>
@@ -104,7 +126,7 @@ export default function BottomNav() {
     { to: '/afiliado',  icon: Megaphone, label: 'Afiliado' },
   ]
   const LADO_DIR = [
-    { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings', 'Reservas') },
+    { to: '/minhas-reservas', icon: CalendarCheck, label: t('nav.bookings', 'Reservas'), badge: reservasAPagar },
     { to: '/perfil',          icon: User,          label: t('nav.profile') },
   ]
 
