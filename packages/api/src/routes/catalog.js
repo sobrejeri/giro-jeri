@@ -252,6 +252,16 @@ function erroDeCategoria(error) {
   if (error?.code === '23505') return 'Já existe uma categoria com este nome.';
   return null;
 }
+// Coluna nova ausente no corpo do insert/update: o Postgres devolve 42703 quando
+// a coluna é usada em filtro/SQL, mas o PostgREST recusa o CORPO com PGRST204
+// ("could not find the column ... in the schema cache") antes de chegar ao banco.
+// Precisamos cobrir os dois — senão o cadastro morre em 404 só porque a migration
+// (071 is_exclusive / 103 region_ids) ainda não rodou.
+function colunaNovaAusente(error) {
+  if (!error) return false;
+  return error.code === '42703' || error.code === 'PGRST204'
+    || /region_ids|is_exclusive|schema cache|does not exist/i.test(error.message || '');
+}
 router.post('/categories', requireAdmin, async (req, res, next) => {
   try {
     const body = pick(req.body, CATEGORY_COLS);
@@ -262,19 +272,19 @@ router.post('/categories', requireAdmin, async (req, res, next) => {
     if (!body.category_type) body.category_type = 'tour';
     if (body.sort_order === '' || body.sort_order === undefined) body.sort_order = 0;
 
-    let { data, error } = await req.supabase
-      .from('categories').insert(body).select().single();
-    // `is_exclusive` só existe a partir da migration 071. Sem ela aplicada, o
-    // insert inteiro morria em 42703 e não dava para criar categoria nenhuma —
-    // melhor salvar sem a marca de carrossel do que recusar o cadastro.
-    if (error?.code === '42703') {
-      // is_exclusive só existe da migration 071; region_ids da 103. Sem elas o
-      // insert morria em 42703 — melhor salvar sem as colunas novas do que
-      // recusar o cadastro.
+    const ins = (payload) => req.supabase.from('categories').insert(payload).select().single();
+    let { data, error } = await ins(body);
+    // Sem a migration 103 não existe region_ids; sem a 071, is_exclusive. Melhor
+    // salvar sem as colunas novas do que recusar o cadastro — tira region_ids
+    // primeiro (mantém is_exclusive) e, se ainda faltar coluna, tira também.
+    if (colunaNovaAusente(error)) {
       console.warn('[catalog] coluna nova ausente em categories (migration 071/103):', error.message);
-      const { is_exclusive: _ie, region_ids: _ri, ...semNovas } = body;
-      ({ data, error } = await req.supabase
-        .from('categories').insert(semNovas).select().single());
+      const { region_ids: _ri, ...semRegion } = body;
+      ({ data, error } = await ins(semRegion));
+      if (colunaNovaAusente(error)) {
+        const { is_exclusive: _ie, ...semNovas } = semRegion;
+        ({ data, error } = await ins(semNovas));
+      }
     }
     if (error) {
       const amigavel = erroDeCategoria(error);
@@ -289,13 +299,20 @@ router.put('/categories/:id', requireAdmin, async (req, res, next) => {
   try {
     const body = pick(req.body, CATEGORY_COLS);
     if (body.sort_order === '') body.sort_order = 0;
-    let { data, error } = await req.supabase
-      .from('categories').update(body).eq('id', req.params.id).select().single();
-    if (error?.code === '42703') {
+    const upd = (payload) => req.supabase
+      .from('categories').update(payload).eq('id', req.params.id).select().single();
+    let { data, error } = await upd(body);
+    // Sem a migration 103 não existe region_ids; sem a 071, is_exclusive. Salva
+    // sem as colunas novas em vez de estourar 404 — tira region_ids primeiro
+    // (mantém is_exclusive) e, se ainda faltar coluna, tira também.
+    if (colunaNovaAusente(error)) {
       console.warn('[catalog] coluna nova ausente em categories (migration 071/103):', error.message);
-      const { is_exclusive: _ie, region_ids: _ri, ...semNovas } = body;
-      ({ data, error } = await req.supabase
-        .from('categories').update(semNovas).eq('id', req.params.id).select().single());
+      const { region_ids: _ri, ...semRegion } = body;
+      ({ data, error } = await upd(semRegion));
+      if (colunaNovaAusente(error)) {
+        const { is_exclusive: _ie, ...semNovas } = semRegion;
+        ({ data, error } = await upd(semNovas));
+      }
     }
     const amigavel = erroDeCategoria(error);
     if (amigavel) return res.status(400).json({ error: amigavel });
