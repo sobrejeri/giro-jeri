@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, X, ImagePlus, Send } from 'lucide-react'
 import { api } from '../lib/api'
+import { useRegion } from '../contexts/RegionContext'
 
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
 
@@ -29,6 +30,7 @@ function fileToDataUrl(file, max = 1280, quality = 0.82) {
 
 // Composer de story efêmero (só admin). Some após 24h.
 export default function LiveStoryComposer({ onClose, onDone }) {
+  const { region } = useRegion()
   const fileRef = useRef(null)
   const [preview, setPreview]   = useState('')
   const [mediaUrl, setMediaUrl] = useState('')
@@ -81,7 +83,13 @@ export default function LiveStoryComposer({ onClose, onDone }) {
     if (!mediaUrl || saving) return
     setSaving(true); setError('')
     try {
-      await api.addLiveStory({ media_url: mediaUrl, media_type: mediaType, caption: caption.trim() || null })
+      await api.addLiveStory({
+        media_url: mediaUrl, media_type: mediaType, caption: caption.trim() || null,
+        // Localização do story = centro da região atual, para aparecer no mapa
+        // do Explorar (agrupado por localização). Backend ignora se não vier.
+        latitude:  region?.center_latitude  != null ? Number(region.center_latitude)  : undefined,
+        longitude: region?.center_longitude != null ? Number(region.center_longitude) : undefined,
+      })
       onDone?.()
       onClose()
     } catch (err) { setError(err?.message || 'Erro ao publicar.') }

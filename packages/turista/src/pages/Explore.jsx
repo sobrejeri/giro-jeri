@@ -6,6 +6,19 @@ import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import ExploreMap from '../components/explore/ExploreMap'
+import StoryViewer from '../components/StoryViewer'
+
+// Agrupa stories/destaques pela localização (mesmo ponto → mesmo pin).
+function agruparPorLocal(arr) {
+  const m = new Map()
+  for (const it of arr) {
+    if (it.lat == null || it.lng == null) continue
+    const key = `${Number(it.lat).toFixed(4)},${Number(it.lng).toFixed(4)}`
+    if (!m.has(key)) m.set(key, { key, lat: Number(it.lat), lng: Number(it.lng), itens: [] })
+    m.get(key).itens.push(it)
+  }
+  return [...m.values()]
+}
 
 const FILTROS = [
   { id: 'all',      label: 'Todos' },
@@ -47,6 +60,11 @@ export default function Explore() {
   const autoNextRef = useRef(false)  // busca automática no próximo idle (após lupa)
   const debRef = useRef(null)
 
+  // Conteúdo (stories + destaques) agrupado por localização + visualizador.
+  const [content, setContent] = useState([])
+  const [viewer, setViewer]   = useState(null)   // { groups, start }
+  const hlRef = useRef(null)                      // cache de destaques COM itens
+
   // Gate: só admin. Qualquer outro (inclusive deslogado) volta pra home — o
   // cliente não acessa esta tela.
   if (!user || user.user_type !== 'admin') return <Navigate to="/" replace />
@@ -59,6 +77,7 @@ export default function Explore() {
       const data = await api.exploreMap(bbox)
       if (id !== reqRef.current) return // ignora resposta antiga (usuário já moveu de novo)
       setItems([...(data.places || []), ...(data.tours || []), ...(data.transfers || [])])
+      setContent(agruparPorLocal([...(data.stories || []), ...(data.highlights || [])]))
     } catch {
       if (id === reqRef.current) setError(true)
     } finally {
@@ -122,6 +141,29 @@ export default function Explore() {
     else if (it.kind === 'transfer') navigate('/transfers')
   }
 
+  // Tocou num pin de conteúdo → monta os grupos do visualizador: um grupo com os
+  // stories ao vivo daqui + um grupo por destaque (com os itens buscados).
+  async function abrirConteudo(g) {
+    const groups = []
+    const live = g.itens.filter((i) => i.kind === 'story')
+    if (live.length) {
+      groups.push({
+        id: `loc-${g.key}`, title: live[0].author_name || 'Stories',
+        cover_image_url: live[0].author_avatar || null,
+        stories: live.map((s) => ({ id: s.id, media_url: s.media_url, media_type: s.media_type, duration_sec: 20 })),
+      })
+    }
+    const hls = g.itens.filter((i) => i.kind === 'highlight')
+    if (hls.length) {
+      if (!hlRef.current) hlRef.current = await api.getStories().catch(() => [])
+      for (const h of hls) {
+        const full = (hlRef.current || []).find((x) => x.id === h.id)
+        if (full?.stories?.length) groups.push({ id: full.id, title: full.title, cover_image_url: full.cover_image_url, stories: full.stories })
+      }
+    }
+    if (groups.length) setViewer({ groups, start: 0 })
+  }
+
   const visiveis = filtro === 'all' ? items : items.filter((i) => i.kind === filtro)
 
   // Arrasto simples do bottom sheet (recolhido ⇄ expandido).
@@ -139,9 +181,11 @@ export default function Explore() {
       <div className="absolute inset-0">
         <ExploreMap
           items={visiveis}
+          content={content}
           center={region?.center_latitude ? { lat: Number(region.center_latitude), lng: Number(region.center_longitude) } : undefined}
           selectedId={selectedId}
           onSelect={selecionar}
+          onSelectContent={abrirConteudo}
           onIdle={onIdle}
           onReady={(map) => { mapRef.current = map }}
         />
@@ -287,6 +331,11 @@ export default function Explore() {
           )}
         </div>
       </div>
+
+      {/* Visualizador de stories/destaques do pin de conteúdo. */}
+      {viewer && (
+        <StoryViewer highlights={viewer.groups} startGroup={viewer.start} onClose={() => setViewer(null)} isAdmin={false} />
+      )}
     </div>
   )
 }

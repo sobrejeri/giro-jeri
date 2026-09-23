@@ -21,18 +21,19 @@ function pin(maps, kind, selected) {
 // recentragem programática, para o pai mostrar "Buscar nesta área" só quando
 // fizer sentido.
 export default function ExploreMap({
-  items = [], center = JERI, zoom = 12, selectedId,
-  onSelect, onIdle, onReady,
+  items = [], content = [], center = JERI, zoom = 12, selectedId,
+  onSelect, onSelectContent, onIdle, onReady,
 }) {
   const containerRef = useRef(null)
   const inst = useRef(null)
   const markersRef = useRef([])
+  const contentRef = useRef([])
   const byUserRef = useRef(false)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(null)
   // refs para os callbacks — evita recriar o mapa quando o pai re-renderiza
   const cb = useRef({})
-  cb.current = { onSelect, onIdle, onReady }
+  cb.current = { onSelect, onSelectContent, onIdle, onReady }
 
   useEffect(() => {
     let alive = true
@@ -79,6 +80,24 @@ export default function ExploreMap({
       return m
     })
   }, [ready, items, selectedId])
+
+  // Pins de conteúdo (stories + destaques agrupados por localização): aro
+  // laranja de "conteúdo aqui", com o nº de itens quando há mais de um.
+  useEffect(() => {
+    if (!ready) return
+    const { maps, map } = inst.current
+    contentRef.current.forEach((m) => m.setMap(null))
+    contentRef.current = (content || []).map((g) => {
+      const n = g.itens?.length || 0
+      const m = new maps.Marker({
+        position: { lat: g.lat, lng: g.lng }, map, title: 'Conteúdo', zIndex: 500,
+        icon: { path: maps.SymbolPath.CIRCLE, scale: 13, fillColor: '#FF6A00', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 },
+        label: n > 1 ? { text: String(n), color: '#fff', fontSize: '11px', fontWeight: '700' } : undefined,
+      })
+      m.addListener('click', () => cb.current.onSelectContent?.(g))
+      return m
+    })
+  }, [ready, content])
 
   if (error) {
     return (

@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { X, ImagePlus, Loader2, Plus, Check, Film } from 'lucide-react'
 import { api } from '../lib/api'
+import { useRegion } from '../contexts/RegionContext'
 
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024 // 50 MB — teto do bucket
 
@@ -40,6 +41,7 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
  *   onPublished  — chamado após publicar com sucesso (para refazer o fetch)
  */
 export default function StoryPublisher({ highlights = [], onClose, onPublished }) {
+  const { region } = useRegion()
   const { t } = useTranslation()
   const fileRef = useRef(null)
 
@@ -112,6 +114,9 @@ export default function StoryPublisher({ highlights = [], onClose, onPublished }
         const hl = await api.createHighlight({
           title:           newTitle.trim(),
           cover_image_url: mediaType === 'image' ? mediaUrl : null,
+          // Localização = centro da região atual → aparece no mapa do Explorar.
+          latitude:  region?.center_latitude  != null ? Number(region.center_latitude)  : undefined,
+          longitude: region?.center_longitude != null ? Number(region.center_longitude) : undefined,
         })
         targetId = hl.id
       }
