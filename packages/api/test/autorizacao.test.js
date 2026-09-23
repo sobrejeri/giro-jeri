@@ -130,6 +130,23 @@ test('GET /bookings/:id só abre para dono, operador atribuído ou admin', () =>
     'negativa precisa ser 404 para não confirmar a existência')
 })
 
+test('GET /conversations não entrega TODAS as conversas ao admin — só as que o Turiva participou', () => {
+  const r = rota(reservas, "router.get('/conversations', authenticate")
+  // Antes o admin caía sem filtro e recebia todas as reservas com mensagem —
+  // então qualquer admin via as MESMAS conversas de todo mundo. Agora o admin é
+  // recortado pelas reservas em que já houve mensagem de papel 'admin'.
+  assert.ok(/sender_role', 'admin'/.test(r),
+    'admin precisa ser recortado pelas conversas em que o Turiva mandou mensagem')
+  assert.ok(/bq\.in\('id', adminBookingIds\)/.test(r),
+    'a query de reservas do admin precisa filtrar por esses booking ids')
+  // Nenhum papel pode cair sem recorte: operador→operator_id, turista→user_id,
+  // admin→adminBookingIds. Não pode existir bq sem eq/in de recorte.
+  assert.ok(/if \(ehOperador\)\s+bq = bq\.eq\('operator_id'/.test(r),
+    'operador recortado por operator_id')
+  assert.ok(/else if \(ehTurista\) bq = bq\.eq\('user_id'/.test(r),
+    'turista recortado por user_id')
+})
+
 test('a fila de aceite não entrega dado pessoal do cliente', () => {
   const i = operador.indexOf("router.get('/bookings'")
   assert.notEqual(i, -1)

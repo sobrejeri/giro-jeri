@@ -51,11 +51,24 @@ router.get('/conversations', authenticate, async (req, res, next) => {
     const ehAdmin    = u.user_type === 'admin' || u.user_type === 'finance';
     if (!ehOperador && !ehTurista && !ehAdmin) return res.json([]);
 
+    // Admin/Turiva NÃO vê todas as conversas da plataforma — só aquelas em que o
+    // próprio Turiva já participou (mandou mensagem como 'admin'). Antes caía sem
+    // filtro e via TODAS (as mesmas mensagens apareciam pra qualquer admin).
+    let adminBookingIds = null;
+    if (ehAdmin) {
+      const { data: am, error: ame } = await supabase
+        .from('booking_messages').select('booking_id').eq('sender_role', 'admin').limit(3000);
+      if (ame) return res.json([]);
+      adminBookingIds = [...new Set((am || []).map((m) => m.booking_id))];
+      if (!adminBookingIds.length) return res.json([]);
+    }
+
     let bq = supabase.from('bookings')
       .select('id, booking_code, service_type, user_id, operator_id')
       .order('created_at', { ascending: false }).limit(400);
-    if (ehOperador) bq = bq.eq('operator_id', u.id);
+    if (ehOperador)     bq = bq.eq('operator_id', u.id);
     else if (ehTurista) bq = bq.eq('user_id', u.id);
+    else if (ehAdmin)   bq = bq.in('id', adminBookingIds);
     const { data: bookings, error: be } = await bq;
     if (be) throw be;
     const ids = (bookings || []).map((b) => b.id);
@@ -80,7 +93,7 @@ router.get('/conversations', authenticate, async (req, res, next) => {
 
     const outroIds = [...new Set((bookings || [])
       .filter((b) => byBooking.has(b.id))
-      .map((b) => ehOperador ? b.user_id : b.operator_id).filter(Boolean))];
+      .map((b) => (ehOperador || ehAdmin) ? b.user_id : b.operator_id).filter(Boolean))];
     const { data: users } = outroIds.length
       ? await supabase.from('users').select('id, full_name, profile_photo_url').in('id', outroIds)
       : { data: [] };
@@ -88,12 +101,12 @@ router.get('/conversations', authenticate, async (req, res, next) => {
 
     const out = (bookings || []).filter((b) => byBooking.has(b.id)).map((b) => {
       const e = byBooking.get(b.id);
-      const outro = userById.get(ehOperador ? b.user_id : b.operator_id);
+      const outro = userById.get((ehOperador || ehAdmin) ? b.user_id : b.operator_id);
       return {
         booking_id:   b.id,
         booking_code: b.booking_code,
         service_type: b.service_type,
-        name:         outro?.full_name || (ehOperador ? 'Cliente' : 'Operador'),
+        name:         outro?.full_name || ((ehOperador || ehAdmin) ? 'Cliente' : 'Operador'),
         avatar:       outro?.profile_photo_url || null,
         last_body:    e.last.body,
         last_at:      e.last.created_at,
