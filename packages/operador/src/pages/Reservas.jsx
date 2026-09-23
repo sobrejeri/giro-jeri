@@ -373,6 +373,18 @@ function MyCard({ booking, onConfirm, onRequestInfo, onStart, onComplete, onDisp
               </span>
             </div>
           )}
+          {/* Quando a solicitação foi feita (created_at) — não confundir com a
+              data do passeio acima. Ajuda a coop a saber há quanto tempo o
+              pedido está na mão dela. */}
+          {booking.created_at && (
+            <div className="flex items-center gap-2 text-[12px] text-gray-400">
+              <Clock size={12} className="text-gray-400 shrink-0" />
+              <span>
+                Solicitado em {new Date(booking.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                {` às ${new Date(booking.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-[13px]">
