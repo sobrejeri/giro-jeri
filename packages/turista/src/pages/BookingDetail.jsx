@@ -370,8 +370,10 @@ export default function BookingDetail() {
           </div>
         )}
 
-        {/* Falar com o operador (chat da reserva) — quando já há operador. */}
-        {booking.operator_id && !['cancelled'].includes(booking.status_commercial) && (
+        {/* Falar com o operador (chat da reserva) — só depois do pagamento.
+            Antes de pagar, o atendimento fica bloqueado e a identidade do
+            operador segue oculta; o chat abre quando a reserva está paga. */}
+        {booking.status_commercial === 'paid' && (
           <button
             onClick={() => setChatOpen(true)}
             className="w-full flex items-center justify-center gap-2 bg-white border border-brand/30 text-brand font-bold rounded-2xl py-3 text-[14px] active:scale-[0.99] transition-transform shadow-sm"

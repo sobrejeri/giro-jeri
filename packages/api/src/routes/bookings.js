@@ -744,24 +744,36 @@ async function getServiceSnapshot(serviceType, serviceId) {
 // CHAT POR RESERVA (item 7) — cliente ↔ operador (admin vê tudo)
 // =============================================================================
 
+// Estados ANTES do pagamento: cliente e operador ainda não conversam entre si.
+// O atendimento só é liberado quando a reserva está paga (evita combinarem por
+// fora sem pagar, e mantém a identidade das partes oculta até lá). O admin/Turiva
+// não tem esse limite — precisa dar suporte a qualquer momento.
+const CHAT_PRE_PAGAMENTO = ['draft', 'awaiting_acceptance', 'awaiting_payment', 'payment_failed'];
+
 // Quem pode ver/enviar mensagens desta reserva, e com qual papel.
 async function acessoChat(req, bookingId) {
   const { data: b } = await supabase
-    .from('bookings').select('id, user_id, operator_id').eq('id', bookingId).maybeSingle();
+    .from('bookings').select('id, user_id, operator_id, status_commercial').eq('id', bookingId).maybeSingle();
   if (!b) return { ok: false, code: 404 };
   const u = req.user;
   if (u.user_type === 'admin' || u.user_type === 'finance') return { ok: true, role: 'admin', booking: b };
-  if (u.user_type === 'tourist' && b.user_id === u.id)      return { ok: true, role: 'tourist', booking: b };
-  if ((u.user_type === 'operator' || u.user_type === 'agency') && b.operator_id === u.id)
-    return { ok: true, role: 'operator', booking: b };
-  return { ok: false, code: 404 };
+
+  const souDono     = u.user_type === 'tourist' && b.user_id === u.id;
+  const souOperador = (u.user_type === 'operator' || u.user_type === 'agency') && b.operator_id === u.id;
+  if (!souDono && !souOperador) return { ok: false, code: 404 };
+
+  // Parte da reserva, mas ainda sem pagamento → chat bloqueado (403 com aviso).
+  if (CHAT_PRE_PAGAMENTO.includes(b.status_commercial)) {
+    return { ok: false, code: 403, error: 'O chat fica disponível após o pagamento.' };
+  }
+  return { ok: true, role: souDono ? 'tourist' : 'operator', booking: b };
 }
 
 // ── GET /api/bookings/:id/messages ─────────────────────
 router.get('/:id/messages', authenticate, async (req, res, next) => {
   try {
     const acc = await acessoChat(req, req.params.id);
-    if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
+    if (!acc.ok) return res.status(acc.code).json({ error: acc.error || 'Reserva não encontrada' });
     const { data, error } = await supabase
       .from('booking_messages')
       .select('id, sender_user_id, sender_role, body, created_at, read_at')
@@ -782,7 +794,7 @@ router.get('/:id/messages', authenticate, async (req, res, next) => {
 router.post('/:id/messages', authenticate, async (req, res, next) => {
   try {
     const acc = await acessoChat(req, req.params.id);
-    if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
+    if (!acc.ok) return res.status(acc.code).json({ error: acc.error || 'Reserva não encontrada' });
     const body = String(req.body?.body || '').trim().slice(0, 2000);
     if (!body) return res.status(400).json({ error: 'Mensagem vazia' });
 
@@ -817,7 +829,7 @@ router.post('/:id/messages', authenticate, async (req, res, next) => {
 router.delete('/:id/messages/:msgId', authenticate, async (req, res, next) => {
   try {
     const acc = await acessoChat(req, req.params.id);
-    if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
+    if (!acc.ok) return res.status(acc.code).json({ error: acc.error || 'Reserva não encontrada' });
     const { data: msg } = await supabase
       .from('booking_messages').select('id, sender_user_id')
       .eq('id', req.params.msgId).eq('booking_id', req.params.id).maybeSingle();
@@ -835,7 +847,7 @@ router.delete('/:id/messages/:msgId', authenticate, async (req, res, next) => {
 router.delete('/:id/conversation', authenticate, async (req, res, next) => {
   try {
     const acc = await acessoChat(req, req.params.id);
-    if (!acc.ok) return res.status(acc.code).json({ error: 'Reserva não encontrada' });
+    if (!acc.ok) return res.status(acc.code).json({ error: acc.error || 'Reserva não encontrada' });
     await supabase.from('booking_messages').delete().eq('booking_id', req.params.id);
     res.json({ ok: true });
   } catch (err) { next(err); }

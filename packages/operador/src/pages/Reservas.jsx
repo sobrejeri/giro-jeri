@@ -422,13 +422,17 @@ function MyCard({ booking, onConfirm, onRequestInfo, onStart, onComplete, onDisp
               </button>
             </>
           )}
-          {/* Chat da reserva (in-app, com o cliente) */}
-          <button
-            onClick={() => setChatOpen(true)}
-            className="w-full flex items-center justify-center gap-2 border border-brand/30 text-brand font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-all"
-          >
-            <MessageCircle size={15} /> Chat com o cliente
-          </button>
+          {/* Chat da reserva (in-app, com o cliente) — só depois do pagamento.
+              Antes disso o atendimento fica bloqueado e os dados do cliente
+              seguem ocultos, então não há com quem/por que conversar. */}
+          {isPaid && (
+            <button
+              onClick={() => setChatOpen(true)}
+              className="w-full flex items-center justify-center gap-2 border border-brand/30 text-brand font-bold py-2.5 rounded-xl text-[13px] active:scale-95 transition-all"
+            >
+              <MessageCircle size={15} /> Chat com o cliente
+            </button>
+          )}
         </div>
         <ChatReserva bookingId={booking.id} open={chatOpen} onClose={() => setChatOpen(false)} />
       </div>

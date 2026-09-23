@@ -147,6 +147,28 @@ test('GET /conversations não entrega TODAS as conversas ao admin — só as que
     'turista recortado por user_id')
 })
 
+test('o chat cliente↔operador só abre depois do pagamento (admin sempre)', () => {
+  const i = reservas.indexOf('async function acessoChat')
+  assert.notEqual(i, -1)
+  const fn = reservas.slice(i, i + 1200)
+  // Precisa ler o status comercial da reserva pra decidir.
+  assert.ok(/select\('id, user_id, operator_id, status_commercial'/.test(fn),
+    'acessoChat precisa carregar status_commercial')
+  // Admin/finance retorna ANTES da trava de pagamento.
+  const iAdmin = fn.indexOf("user_type === 'admin'")
+  const iTrava = fn.indexOf('CHAT_PRE_PAGAMENTO')
+  assert.ok(iAdmin !== -1 && iTrava !== -1 && iAdmin < iTrava,
+    'admin tem de passar antes da trava de pagamento')
+  // Estados de pré-pagamento bloqueiam (403), e cobrem o "aguardando pagamento".
+  assert.ok(/CHAT_PRE_PAGAMENTO\.includes\(b\.status_commercial\)/.test(fn),
+    'a trava precisa comparar com o conjunto de estados pré-pagamento')
+  assert.ok(/code: 403/.test(fn), 'chat bloqueado responde 403, não libera')
+  const conj = reservas.slice(reservas.indexOf('const CHAT_PRE_PAGAMENTO'), reservas.indexOf('const CHAT_PRE_PAGAMENTO') + 160)
+  for (const s of ['awaiting_acceptance', 'awaiting_payment']) {
+    assert.ok(conj.includes(s), `o estado ${s} tem de bloquear o chat`)
+  }
+})
+
 test('a fila de aceite não entrega dado pessoal do cliente', () => {
   const i = operador.indexOf("router.get('/bookings'")
   assert.notEqual(i, -1)
