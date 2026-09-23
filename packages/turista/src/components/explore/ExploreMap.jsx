@@ -5,6 +5,15 @@ const JERI = { lat: -2.7976, lng: -40.5147 }
 // Cor do pin por tipo (identidade Turiva: laranja pros lugares).
 const COLORS = { place: '#FF6A00', tour: '#0EA5E9', transfer: '#7C3AED' }
 
+// Esconde os POIs/ícones padrão do Google (hotel, restaurante, câmera…) e o
+// transporte público, para o mapa ficar limpo e só os NOSSOS pins aparecerem.
+// Mantém as áreas (parques/água) e os nomes de cidades para orientação.
+const MAP_STYLE = [
+  { featureType: 'poi',      elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit',  elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road',     elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+]
+
 function pin(maps, kind, selected) {
   return {
     path: maps.SymbolPath.CIRCLE,
@@ -88,6 +97,7 @@ export default function ExploreMap({
           center, zoom,
           mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
           clickableIcons: false, gestureHandling: 'greedy', maxZoom: 18,
+          styles: MAP_STYLE,
         })
         inst.current = { maps, map }
         // gesto do usuário → marca para o próximo idle
