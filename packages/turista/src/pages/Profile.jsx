@@ -322,8 +322,6 @@ export default function Profile() {
     { icon: CalendarCheck, label: t('profile.menu.bookings'), to: '/minhas-reservas' },
     { icon: Heart,         label: t('profile.menu.favorites'), to: '/favoritos' },
     { icon: Megaphone,     label: 'Divulgou, Ganhou · Afiliado', to: '/afiliado' },
-    // Explorar Turiva (mapa) — só admin por enquanto; o cliente não vê.
-    ...(user?.user_type === 'admin' ? [{ icon: Map, label: 'Explorar o mapa (beta)', to: '/explorar' }] : []),
   ]
 
   const DOC_TYPES = [
@@ -874,6 +872,21 @@ export default function Profile() {
             </button>
           ))}
         </div>
+        )}
+
+        {/* Explorar Turiva (mapa) — atalho SÓ do admin (o menu comum fica oculto
+            pro admin, então entra aqui como item próprio). */}
+        {isAdmin && (
+          <button
+            onClick={() => navigate('/explorar')}
+            className="w-full bg-white rounded-2xl shadow-sm overflow-hidden flex items-center gap-3 px-5 py-3.5 active:bg-gray-50 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
+              <Map size={15} className="text-brand" />
+            </div>
+            <span className="flex-1 text-[14px] font-medium text-gray-800 text-left">Explorar o mapa (beta)</span>
+            <ChevronRight size={15} className="text-gray-300" />
+          </button>
         )}
 
         {/* Logout */}
