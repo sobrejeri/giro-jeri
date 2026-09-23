@@ -263,15 +263,8 @@ export default function Affiliate() {
 
   return (
     <div className="min-h-screen pb-4">
-      {/* Header */}
-      <div className="bg-white px-4 pt-5 pb-4 shadow-sm">
-        <div className="relative flex items-center justify-center min-h-[32px]">
-          {/* Afiliado é uma aba do menu — sem seta de voltar. */}
-          <h1 className="font-giro font-semibold text-[20px] text-gray-900 tracking-wide">{t('affiliatePg.title')}</h1>
-        </div>
-      </div>
-
-      <div className="px-4 pt-4 space-y-4 max-w-[430px] mx-auto lg:max-w-5xl lg:space-y-6">
+      {/* Sem cabeçalho: Afiliado é uma aba do menu e a tela já começa no painel. */}
+      <div className="px-4 pt-5 space-y-4 max-w-[430px] mx-auto lg:max-w-5xl lg:space-y-6">
         {/* Hero (marketing — some quando o painel assume) */}
         {(!code || isLoading) && (
         <div className="bg-gradient-to-br from-brand to-amber-400 rounded-3xl p-5 text-white relative overflow-hidden lg:max-w-lg lg:mx-auto">
