@@ -50,7 +50,19 @@ export async function enablePush() {
       keys:     { p256dh: json.keys.p256dh, auth: json.keys.auth },
       app:      'operador',
     })
-    return { ok: true }
+
+    // Dispara um push de teste e confere se o SERVIDOR consegue enviar (VAPID
+    // configurado). Assim o operador tem retorno na hora — e a gente distingue
+    // "ativou no aparelho" de "o servidor ainda não manda". Nunca lança.
+    let configured = null
+    try {
+      const t = await api.pushTest()
+      configured = t?.configured ?? null
+    } catch { /* diagnóstico é best-effort */ }
+
+    // Ativou no aparelho, mas o servidor não está configurado pra disparar.
+    if (configured === false) return { ok: false, reason: 'server_not_configured' }
+    return { ok: true, configured }
   } catch (err) {
     console.error('[push] enable falhou:', err?.message)
     return { ok: false, reason: 'error' }

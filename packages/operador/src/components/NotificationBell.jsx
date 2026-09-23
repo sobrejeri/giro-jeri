@@ -45,8 +45,18 @@ export default function NotificationBell({ bookingsPath = '/reservas', dark = fa
     const r = await enablePush()
     setBusy(false)
     setPerm(pushPermission())
-    if (!r.ok && r.reason === 'unsupported') {
-      alert('Seu navegador não suporta notificações push. No iPhone, adicione o app à tela de início e tente de novo.')
+    // Feedback claro por caso — antes só o "unsupported" avisava; os outros
+    // (permissão negada, servidor sem VAPID) fechavam no silêncio.
+    if (r?.ok) {
+      alert('Notificações ativadas! Enviamos um teste — você deve recebê-lo agora. Se não chegar, confira as notificações do app nos Ajustes do celular.')
+    } else if (r?.reason === 'unsupported') {
+      alert('Seu navegador não suporta notificações push. No iPhone, adicione o app à Tela de Início e abra por lá.')
+    } else if (r?.reason === 'denied') {
+      alert('Permissão negada. Ative em Ajustes › Notificações › Turiva (ou no cadeado ao lado do endereço, no navegador).')
+    } else if (r?.reason === 'server_not_configured' || r?.reason === 'server') {
+      alert('Ativado neste aparelho, mas o servidor ainda não está configurado para enviar notificações. Avise o suporte.')
+    } else {
+      alert('Não foi possível ativar agora. Tente de novo em instantes.')
     }
   }
 

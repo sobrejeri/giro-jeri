@@ -25,6 +25,13 @@ function ensureConfigured() {
   }
 }
 
+// O servidor consegue ENVIAR push? (VAPID público + privado presentes e
+// válidos). O frontend usa isto para avisar quando "ativar" funciona no
+// aparelho mas o servidor ainda não está configurado para disparar.
+export function isConfigured() {
+  return ensureConfigured();
+}
+
 // Envia um push para TODOS os dispositivos inscritos de um usuário.
 // Remove inscrições expiradas (404/410). Nunca lança — é fire-and-forget.
 export async function sendPushToUser(userId, { title, body, bookingId = null, templateKey = null, onlyApps = null, image = null, url = null }) {

@@ -212,6 +212,7 @@ export const api = {
   deleteNotification:    (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
+  pushTest:              ()    => request('/api/notifications/push-test', { method: 'POST' }),
 
   // Feed — publicação do operador (atribuída a ele; some ao ser excluída)
   getFeed:             ()      => request('/api/feed'),

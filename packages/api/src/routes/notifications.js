@@ -2,7 +2,7 @@ import { Router }       from 'express'
 import { supabase }     from '../supabase.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { isWhatsappEnabled, sendTestMessage } from '../services/whatsapp.js'
-import { sendPushToUser } from '../services/webpush.js'
+import { sendPushToUser, isConfigured as pushConfigured } from '../services/webpush.js'
 import { notifyUser, getTemplate, DEFAULT_TEMPLATES } from '../services/notify.js'
 
 const router = Router()
@@ -161,16 +161,20 @@ router.post('/push-subscribe', authenticate, async (req, res) => {
 // ── POST /api/notifications/push-test — envia um push de teste para si mesmo ──
 router.post('/push-test', authenticate, async (req, res) => {
   try {
+    const configured = pushConfigured()
     const { count } = await supabase
       .from('push_subscriptions')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', req.user.id)
-    if (!count) return res.json({ ok: false, reason: 'no_subscription' })
+    if (!count) return res.json({ ok: false, reason: 'no_subscription', configured })
+    // Servidor sem VAPID → o aparelho até se inscreve, mas nada é enviado.
+    // Devolve isso explícito pro app avisar em vez de fingir que deu certo.
+    if (!configured) return res.json({ ok: false, reason: 'server_not_configured', configured: false, devices: count })
     await sendPushToUser(req.user.id, {
       title: 'Turiva 🔔',
       body:  'Notificações ativadas! É assim que você vai receber avisos.',
     })
-    res.json({ ok: true, devices: count })
+    res.json({ ok: true, devices: count, configured: true })
   } catch (err) {
     console.error('[notifications] push-test falhou:', err.message)
     res.status(500).json({ error: 'Falha ao enviar teste' })
