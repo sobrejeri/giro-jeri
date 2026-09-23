@@ -1236,6 +1236,33 @@ export default function CartPage() {
         removeItem(it.id)
       }
       setResults({ ...res })
+
+      // Não fica no carrinho: vai direto pra tela de "aguardando um operador
+      // aceitar" (mesma do fluxo de item único). Mostra a 1ª reserva + a lista
+      // do lote quando há mais de uma.
+      const bookings = created?.bookings || []
+      if (bookings.length) {
+        const primeiro = bookings[0]
+        const itemPrim = snapshot.find((it) => it.id === primeiro.service_id) || snapshot[0]
+        const batchResults = bookings.map((b) => {
+          const it = snapshot.find((x) => x.id === b.service_id)
+          return { booking_code: b.booking_code, name: it?.name || 'Reserva' }
+        })
+        navigate('/checkout/solicitado', {
+          state: {
+            service_name:    itemPrim?.name,
+            service_date:    itemPrim?.dateIso ? dayLabel(itemPrim.dateIso) : undefined,
+            service_time:    itemPrim?.time || undefined,
+            people_count:    itemPrim?.people,
+            cover_image_url: itemPrim?.cover_image_url || undefined,
+            booking_code:    primeiro.booking_code,
+            booking_id:      primeiro.id || primeiro.booking_id,
+            display_total:   Number(itemPrim?.total) || undefined,
+            batchResults,
+          },
+        })
+        return
+      }
       setDone(true)
     } catch (err) {
       // Atômico: nada foi criado. Mantém os itens no carrinho para reenvio.
