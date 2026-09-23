@@ -29,6 +29,7 @@ import Avaliacoes      from './pages/Avaliacoes'
 import PartnerLink     from './pages/PartnerLink'
 import AffiliateLink   from './pages/AffiliateLink'
 import Affiliate       from './pages/Affiliate'
+import Explore         from './pages/Explore'
 import { destinoSeguro } from './lib/destinoSeguro'
 
 function PrivateRoute({ children }) {
@@ -77,6 +78,7 @@ export default function App() {
       {/* Auth — full screen, sem layout */}
       <Route path="/c/:slug"  element={<PartnerLink />} />
       <Route path="/a/:code"  element={<AffiliateLink />} />
+      <Route path="/explorar" element={<Explore />} />{/* Explorar Turiva (mapa) — gate de admin dentro do componente */}
       <Route path="/login"    element={<Auth defaultTab="login" />} />
       <Route path="/cadastro" element={<Auth defaultTab="register" />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />

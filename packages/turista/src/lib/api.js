@@ -206,6 +206,9 @@ export const api = {
   // Transfers
   getTransfers:       (params = {}) => request(`/api/transfers?${new URLSearchParams(params)}`),
   getTransferRoutes:  (params = {}) => request(`/api/transfers/routes?${new URLSearchParams(params)}`),
+
+  // Explorar Turiva (mapa) — só admin. Recebe o bounding-box visível.
+  exploreMap:         (bbox = {}, types) => request(`/api/explore/map?${new URLSearchParams({ ...bbox, ...(types ? { types } : {}) })}`),
   // Veículos que atendem UMA rota (matriz veículo × rota). Sem isso o app
   // listava todos os de transfer — dava para pedir buggy num trecho aéreo.
   getRouteVehicles:   (routeId, params = {}) =>

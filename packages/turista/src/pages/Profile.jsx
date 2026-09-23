@@ -15,7 +15,7 @@ import ProfilePostsFeed from '../components/ProfilePostsFeed'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X, Heart,
-  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard, Play,
+  Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard, Play, Map,
 } from 'lucide-react'
 
 // "10 mil", "1,2 mi" — número compacto (pt-BR), para a contagem de curtidas.
@@ -322,6 +322,8 @@ export default function Profile() {
     { icon: CalendarCheck, label: t('profile.menu.bookings'), to: '/minhas-reservas' },
     { icon: Heart,         label: t('profile.menu.favorites'), to: '/favoritos' },
     { icon: Megaphone,     label: 'Divulgou, Ganhou · Afiliado', to: '/afiliado' },
+    // Explorar Turiva (mapa) — só admin por enquanto; o cliente não vê.
+    ...(user?.user_type === 'admin' ? [{ icon: Map, label: 'Explorar o mapa (beta)', to: '/explorar' }] : []),
   ]
 
   const DOC_TYPES = [
