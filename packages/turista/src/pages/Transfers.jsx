@@ -17,7 +17,7 @@ import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import TransfersDesktop from './TransfersDesktop'
 import NotificationBell from '../components/NotificationBell'
 import {
-  MapPin, Calendar, Clock, Users, ChevronDown, ChevronRight,
+  MapPin, Calendar, Clock, Users, ChevronDown,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
   Plane, Compass, ShoppingCart, Heart,
 } from 'lucide-react'
@@ -211,50 +211,39 @@ function FavToggle({ isFav, onFav }) {
 function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggleCart, isFav, onFav }) {
   const { t } = useTranslation()
   const img = route.cover_image_url
+  // Mesmo visual dos cartões de passeio: capa 4:3, coração e + sobre a foto, e
+  // título/preço embaixo (em vez do texto sobre a imagem).
   return (
-    <button
+    <div
       onClick={onSelect}
-      className={`${full ? 'w-full' : 'flex-none w-[168px]'} rounded-2xl overflow-hidden bg-white shadow-sm border active:scale-[0.97] transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
+      className={`snap-start ${full ? 'w-full' : 'flex-none w-[44%] min-w-[166px] max-w-[230px]'} flex flex-col text-left cursor-pointer rounded-[22px] overflow-hidden bg-white transition-all duration-200 active:scale-[0.98] ${
+        active ? 'ring-2 ring-brand shadow-[0_6px_24px_rgba(255,101,0,0.18)]' : 'shadow-[0_4px_20px_rgba(0,0,0,0.06)]'
+      }`}
     >
-      {/* Capa: foto da rota quando houver; senão o gradiente de sempre. */}
-      <div className="relative h-[104px] overflow-hidden">
-        {img ? (
-          <img src={img} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
-        ) : (
-          <div className={`absolute inset-0 bg-gradient-to-br ${bg}`} />
-        )}
-        {/* Escurece a base para o texto ficar legível sobre qualquer foto. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
-
-        <span className="absolute top-2 left-2 text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full">
+      <div className={`relative aspect-[4/3] bg-gradient-to-br ${bg}`}>
+        {img && <img src={img} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />}
+        <span className="absolute top-2.5 left-2.5 bg-brand text-white text-[9.5px] font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-full shadow-sm">
           {t('transfersPg.privateBadge')}
         </span>
-
         {onFav && <FavToggle isFav={isFav} onFav={onFav} />}
-
-        <div className="absolute bottom-2 left-2.5 right-2.5">
-          <p className="text-white font-bold text-[12.5px] leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
-            {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
-          </p>
-          <div className="flex items-center gap-1 mt-0.5">
-            <Users size={9} className="text-white/80" />
-            <span className="text-[10px] text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,.4)]">{t('transfersPg.upTo4')}</span>
-          </div>
-        </div>
-
         {onToggleCart && <CartToggle inCart={inCart} onToggle={onToggleCart} />}
       </div>
 
-      <div className="px-3 py-2 flex items-end justify-between gap-1">
-        <div className="min-w-0">
-          <p className="text-[9px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
-          <p className="text-[14px] font-extrabold text-gray-900 leading-tight mt-0.5">
+      <div className="p-3 flex-1 flex flex-col">
+        <span className="block text-[14px] font-extrabold text-gray-900 leading-snug line-clamp-2 min-h-[2.4em]">
+          {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
+        </span>
+        <div className="flex items-center gap-1 mt-1.5 text-[11.5px] text-gray-600">
+          <Users size={11} className="text-brand" /> {t('transfersPg.upTo4')}
+        </div>
+        <div className="mt-auto pt-2.5 border-t border-gray-100">
+          <p className="h-[12px] text-[10px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
+          <p className="whitespace-nowrap text-[16px] font-extrabold text-brand leading-none mt-1">
             R$ {Number(route.default_price).toLocaleString('pt-BR')}
           </p>
         </div>
-        <ChevronRight size={14} className="text-brand shrink-0 mb-0.5" />
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -268,48 +257,40 @@ function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggl
 function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, onFav }) {
   const img = route.cover_image_url
   return (
-    <button
+    <div
       onClick={onSelect}
-      className={`flex-none w-[190px] rounded-2xl overflow-hidden bg-white shadow-sm border active:scale-[0.97] transition-transform text-left ${active ? 'border-brand ring-2 ring-brand/20' : 'border-black/5'}`}
+      className={`snap-start flex-none w-[44%] min-w-[166px] max-w-[230px] flex flex-col text-left cursor-pointer rounded-[22px] overflow-hidden bg-white transition-all duration-200 active:scale-[0.98] ${
+        active ? 'ring-2 ring-brand shadow-[0_6px_24px_rgba(255,101,0,0.18)]' : 'shadow-[0_4px_20px_rgba(0,0,0,0.06)]'
+      }`}
     >
-      <div className="relative h-[104px] overflow-hidden">
+      <div className="relative aspect-[4/3] bg-gradient-to-br from-sky-400 to-indigo-300">
         {img ? (
-          <img src={img} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+          <img src={img} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-sky-400 to-indigo-300 flex items-center justify-center">
-            <Plane size={34} className="text-white/30" />
-          </div>
+          <div className="absolute inset-0 flex items-center justify-center"><Plane size={34} className="text-white/40" /></div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
-
-        <span className="absolute top-2 left-2 text-[9px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full">
+        <span className="absolute top-2.5 left-2.5 bg-brand text-white text-[9.5px] font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-full shadow-sm">
           Exclusivo
         </span>
-
         {onFav && <FavToggle isFav={isFav} onFav={onFav} />}
-
-        <div className="absolute bottom-2 left-2.5 right-2.5">
-          <p className="text-[9.5px] text-white/80 leading-none [text-shadow:0_1px_2px_rgba(0,0,0,.4)]">
-            {shortPlace(route.origin_name)}
-          </p>
-          <p className="text-white font-bold text-[12.5px] leading-tight mt-0.5 [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
-            {shortPlace(route.destination_name)}
-          </p>
-        </div>
-
         {onToggleCart && <CartToggle inCart={inCart} onToggle={onToggleCart} />}
       </div>
 
-      <div className="px-3 py-2 flex items-end justify-between gap-1">
-        <div className="min-w-0">
-          <p className="text-[14px] font-extrabold text-brand leading-tight">
+      <div className="p-3 flex-1 flex flex-col">
+        <span className="block text-[14px] font-extrabold text-gray-900 leading-snug line-clamp-2 min-h-[2.4em]">
+          {shortPlace(route.origin_name)} → {shortPlace(route.destination_name)}
+        </span>
+        <div className="flex items-center gap-1 mt-1.5 text-[11.5px] text-gray-600">
+          <Plane size={11} className="text-brand" /> até 3 pax
+        </div>
+        <div className="mt-auto pt-2.5 border-t border-gray-100">
+          <p className="h-[12px] text-[10px] text-gray-400 leading-none">por voo</p>
+          <p className="whitespace-nowrap text-[16px] font-extrabold text-brand leading-none mt-1">
             R$ {Number(route.default_price).toLocaleString('pt-BR')}
           </p>
-          <p className="text-[9px] text-gray-400 leading-none mt-0.5">por voo · até 3 pax</p>
         </div>
-        <ChevronRight size={14} className="text-brand shrink-0 mb-0.5" />
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -1073,7 +1054,7 @@ export default function Transfers() {
               ))}
             </div>
           ) : (
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
               {routesShown.map((r, i) => (
                 <PresetCard
                   key={r.id}
@@ -1104,7 +1085,7 @@ export default function Transfers() {
                 Exclusivo
               </span>
             </div>
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
               {cat.rotas.map((r) => (
                 <ExclusiveCard
                   key={r.id}
