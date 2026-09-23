@@ -31,6 +31,25 @@ router.get('/map', authenticate, requireAdmin, async (req, res, next) => {
       .gte('longitude', lngLo).lte('longitude', lngHi)
       .limit(limit);
 
+    // Regiões visíveis (centro dentro do bbox). Passeio/transfer SEM coordenada
+    // própria herda o centro da região (migration 008: "quando NULL, herdam da
+    // região") — assim eles aparecem no mapa mesmo sem lat/lng por serviço.
+    const { data: regs } = await supabase
+      .from('regions')
+      .select('id, center_latitude, center_longitude')
+      .eq('is_active', true)
+      .not('center_latitude', 'is', null).not('center_longitude', 'is', null)
+      .gte('center_latitude', latLo).lte('center_latitude', latHi)
+      .gte('center_longitude', lngLo).lte('center_longitude', lngHi);
+    const regById = new Map((regs || []).map((r) => [r.id, r]));
+    const regIds  = [...regById.keys()];
+    const coordDe = (row) => {
+      if (row.latitude != null && row.longitude != null) return { lat: Number(row.latitude), lng: Number(row.longitude) };
+      let r = regById.get(row.region_id);
+      if (!r && Array.isArray(row.region_ids)) { const hit = row.region_ids.find((id) => regById.has(id)); if (hit) r = regById.get(hit); }
+      return r ? { lat: Number(r.center_latitude), lng: Number(r.center_longitude) } : null;
+    };
+
     const out = { places: [], tours: [], transfers: [], stories: [], highlights: [] };
 
     if (types.includes('places')) {
@@ -46,30 +65,34 @@ router.get('/map', authenticate, requireAdmin, async (req, res, next) => {
       }));
     }
 
-    if (types.includes('tours')) {
-      const { data, error } = await noBox(
-        supabase.from('tours')
-          .select('id, name, slug, cover_image_url, latitude, longitude')
-          .eq('is_active', true),
-      );
+    // Passeios/transfers das regiões visíveis (posicionados na coord própria ou,
+    // faltando, no centro da região).
+    if (types.includes('tours') && regIds.length) {
+      const { data, error } = await supabase
+        .from('tours')
+        .select('id, name, slug, cover_image_url, latitude, longitude, region_id, region_ids')
+        .eq('is_active', true)
+        .or(`region_id.in.(${regIds.join(',')}),region_ids.ov.{${regIds.join(',')}}`)
+        .limit(limit);
       if (error) throw error;
-      out.tours = (data || []).map((t) => ({
-        id: t.id, kind: 'tour', name: t.name, slug: t.slug || null,
-        thumb: t.cover_image_url || null, lat: Number(t.latitude), lng: Number(t.longitude),
-      }));
+      out.tours = (data || []).map((t) => {
+        const c = coordDe(t); if (!c) return null;
+        return { id: t.id, kind: 'tour', name: t.name, slug: t.slug || null, thumb: t.cover_image_url || null, ...c };
+      }).filter(Boolean);
     }
 
-    if (types.includes('transfers')) {
-      const { data, error } = await noBox(
-        supabase.from('transfers')
-          .select('id, name, latitude, longitude')
-          .eq('is_active', true),
-      );
+    if (types.includes('transfers') && regIds.length) {
+      const { data, error } = await supabase
+        .from('transfers')
+        .select('id, name, latitude, longitude, region_id, region_ids')
+        .eq('is_active', true)
+        .or(`region_id.in.(${regIds.join(',')}),region_ids.ov.{${regIds.join(',')}}`)
+        .limit(limit);
       if (error) throw error;
-      out.transfers = (data || []).map((t) => ({
-        id: t.id, kind: 'transfer', name: t.name,
-        lat: Number(t.latitude), lng: Number(t.longitude),
-      }));
+      out.transfers = (data || []).map((t) => {
+        const c = coordDe(t); if (!c) return null;
+        return { id: t.id, kind: 'transfer', name: t.name, ...c };
+      }).filter(Boolean);
     }
 
     // Stories (avatar_stories, ativos) e destaques (story_highlights) com
