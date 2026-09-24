@@ -641,15 +641,19 @@ export default function Reservas() {
     return abaValida.includes(t) ? t : 'pending'
   })
 
-  // Depois de honrar o ?tab= inicial, limpa da URL para não "grudar" a aba num
-  // reload ou ao voltar pelo histórico.
+  // Honra o ?tab= a CADA mudança — não só na montagem. Isso é o que faz o
+  // pop-up de nova solicitação levar para "Minhas" mesmo quando o operador JÁ
+  // está nesta tela (navegar para /reservas?tab=mine não remonta o componente,
+  // então o useState inicial sozinho não trocaria a aba). Depois de aplicar,
+  // limpa o ?tab da URL para não "grudar" num reload ou ao voltar no histórico.
   useEffect(() => {
-    if (searchParams.get('tab')) {
-      const p = new URLSearchParams(searchParams)
-      p.delete('tab')
-      setSearchParams(p, { replace: true })
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    const t = searchParams.get('tab')
+    if (!t) return
+    if (abaValida.includes(t)) setTab(t)
+    const p = new URLSearchParams(searchParams)
+    p.delete('tab')
+    setSearchParams(p, { replace: true })
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
   const [toast,      setToast]     = useState(null)
   const [accepting,  setAccepting] = useState(null)
   const [acceptingCombo, setAcceptingCombo] = useState(null)
