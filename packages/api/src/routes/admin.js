@@ -291,7 +291,9 @@ const createUserSchema = z.object({
   full_name: z.string().min(2).max(200),
   email:     z.string().email().optional(),
   phone:     z.string().min(10).max(30).optional(),
-  cnpj:      z.string().min(14).max(18).optional(),
+  // Aceita CPF (11 díg.) ou CNPJ (14) — cru ou formatado (até 18 com máscara).
+  // O tipo real é validado no handler (validateBrDoc). min(14) barrava o CPF cru.
+  cnpj:      z.string().min(11).max(18).optional(),
   password:  z.string().min(6),
   user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
   // Municípios que o operador atende (migration 106). Filtra as solicitações
