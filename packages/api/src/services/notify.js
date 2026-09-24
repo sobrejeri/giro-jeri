@@ -177,8 +177,16 @@ export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = 
     try {
       const alvo = fleetBookingId || bookingId
       if (alvo) {
-        const { data: bk } = await supabase.from('bookings').select('region_id').eq('id', alvo).maybeSingle()
-        const regionId = bk?.region_id || null
+        const { data: bk } = await supabase
+          .from('bookings').select('id, region_id, service_type, service_id').eq('id', alvo).maybeSingle()
+        // Municípios-alvo da reserva: normalmente só o region_id dela; se faltar
+        // (legado/bug), cai nos municípios do SERVIÇO.
+        let alvoMunic = bk?.region_id ? new Set([bk.region_id]) : new Set()
+        if (bk && !bk.region_id) {
+          const { serviceRegionIdsBatch } = await import('./fleet.js')
+          const fb = await serviceRegionIdsBatch(supabase, [bk])
+          alvoMunic = fb.get(bk.id) || new Set()
+        }
         const { data: us, error: usErr } = await supabase
           .from('users').select('id, user_type, region_ids').in('id', recipients.map((r) => r.id))
         if (!usErr) {
@@ -188,7 +196,9 @@ export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = 
             if (!u) return false
             if (u.user_type === 'admin' || u.user_type === 'finance') return true
             const set = new Set(u.region_ids || [])
-            return set.size > 0 && !!regionId && set.has(regionId)
+            if (set.size === 0 || alvoMunic.size === 0) return false
+            for (const m of alvoMunic) if (set.has(m)) return true
+            return false
           })
         }
       }

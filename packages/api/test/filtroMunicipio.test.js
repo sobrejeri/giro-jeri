@@ -42,12 +42,12 @@ test('a fila do operador recorta por município (estrito) e não filtra o admin'
   const i = operador.indexOf("router.get('/bookings'")
   assert.notEqual(i, -1)
   const r = operador.slice(i, i + 6000)
-  assert.ok(/operatorRegionSets/.test(r) && /operatorServesRegion/.test(r),
+  assert.ok(/operatorRegionSets/.test(r) && /serveMunicipio/.test(r),
     'a fila precisa aplicar o filtro de município')
   assert.ok(/BOOKING_COLUMNS[\s\S]*region_id/.test(operador) || /region_id/.test(r),
     'as reservas precisam trazer region_id para o corte')
   // Admin não é filtrado (o corte vive sob !isAdmin).
-  assert.ok(/if \(!isAdmin\)[\s\S]{0,400}operatorRegionSets/.test(r),
+  assert.ok(/if \(!isAdmin\)[\s\S]{0,600}operatorRegionSets/.test(r),
     'o filtro de município só se aplica a não-admin')
 })
 
@@ -58,6 +58,17 @@ test('a notificação de solicitação recorta operador por município e mantém
   assert.ok(/region_ids/.test(fn), 'a notificação precisa olhar region_ids do operador')
   assert.ok(/user_type === 'admin'|user_type === "admin"/.test(fn),
     'admin/finance sempre recebe (não é cortado por município)')
-  assert.ok(/set\.size > 0 && !!regionId && set\.has\(regionId\)/.test(fn),
-    'operador só recebe se o município da reserva estiver na lista (opt-in estrito)')
+  assert.ok(/for \(const m of alvoMunic\) if \(set\.has\(m\)\)/.test(fn),
+    'operador só recebe se houver interseção entre seus municípios e o(s) da reserva')
+})
+
+test('há fallback pelos municípios do SERVIÇO quando a reserva não tem region_id', () => {
+  const i = fleet.indexOf('export async function serviceRegionIdsBatch')
+  assert.notEqual(i, -1, 'o helper de fallback precisa existir')
+  const fn = fleet.slice(i, i + 1600)
+  assert.ok(/from\('transfers'\)[\s\S]*region_ids/.test(fn), 'transfer resolve por transfers.region_ids')
+  assert.ok(/from\('tours'\)/.test(fn) && /from\('categories'\)[\s\S]*region_ids/.test(fn),
+    'tour resolve pelas region_ids das suas categorias')
+  assert.ok(/serviceRegionIdsBatch/.test(operador), 'a fila usa o fallback')
+  assert.ok(/serviceRegionIdsBatch/.test(notify),   'a notificação usa o fallback')
 })

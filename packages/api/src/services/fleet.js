@@ -39,6 +39,51 @@ export function operatorServesRegion(regionSet, bookingRegionId) {
   return !!bookingRegionId && regionSet.has(bookingRegionId);
 }
 
+// Fallback de roteamento: municípios do SERVIÇO das reservas que estão SEM
+// region_id próprio (legado/bug). Normalmente toda reserva tem region_id — este
+// caminho só cobre a anomalia, para o pedido não sumir de vez. transfer →
+// transfers.region_ids; tour → união das region_ids das categorias do passeio.
+// Retorna Map<bookingId, Set<regionId>>. Tolerante: erro → Set vazio (estrito).
+export async function serviceRegionIdsBatch(supabase, bookings) {
+  const out = new Map();
+  const list = (bookings || []).filter((b) => b?.id && b?.service_id);
+  if (!list.length) return out;
+  try {
+    const transferBk = list.filter((b) => b.service_type === 'transfer');
+    const tourBk     = list.filter((b) => b.service_type === 'tour');
+
+    if (transferBk.length) {
+      const ids = [...new Set(transferBk.map((b) => b.service_id))];
+      const { data } = await supabase.from('transfers').select('id, region_ids').in('id', ids);
+      const byService = new Map((data || []).map((t) => [t.id, new Set(t.region_ids || [])]));
+      for (const b of transferBk) out.set(b.id, byService.get(b.service_id) || new Set());
+    }
+
+    if (tourBk.length) {
+      const ids = [...new Set(tourBk.map((b) => b.service_id))];
+      const { data: tours } = await supabase.from('tours').select('id, category_id, category_ids').in('id', ids);
+      const tourCats = new Map();
+      const catIds = new Set();
+      for (const t of tours || []) {
+        const cs = [...new Set([t.category_id, ...(t.category_ids || [])].filter(Boolean))];
+        tourCats.set(t.id, cs);
+        cs.forEach((c) => catIds.add(c));
+      }
+      let catRegions = new Map();
+      if (catIds.size) {
+        const { data: cats } = await supabase.from('categories').select('id, region_ids').in('id', [...catIds]);
+        catRegions = new Map((cats || []).map((c) => [c.id, c.region_ids || []]));
+      }
+      for (const b of tourBk) {
+        const s = new Set();
+        for (const c of (tourCats.get(b.service_id) || [])) for (const r of (catRegions.get(c) || [])) s.add(r);
+        out.set(b.id, s);
+      }
+    }
+  } catch { /* erro → mantém o que deu; faltantes viram Set vazio (estrito) */ }
+  return out;
+}
+
 // Veículos EXIGIDOS por cada reserva.
 // Ordem de resolução:
 //   1. booking_vehicles (reserva privativa: o cliente escolheu os veículos);

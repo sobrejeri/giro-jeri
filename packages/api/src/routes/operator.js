@@ -931,13 +931,22 @@ router.get('/bookings', async (req, res, next) => {
     // sem a coluna (migração pendente) → mapa null → não filtra. Admin vê tudo.
     // Guardo o meu conjunto para reusar no filtro do dispRes mais abaixo.
     let meusMunicipios; // undefined = ainda não buscado; null = coluna ausente
+    // Fallback (reservas sem region_id): municípios do serviço. Reusado no dispRes.
+    const serveMunicipio = (b, fb) => {
+      if (b.region_id) return meusMunicipios.has(b.region_id);
+      const set = fb?.get(b.id);
+      return !!set && [...set].some((r) => meusMunicipios.has(r));
+    };
     if (!isAdmin) {
       try {
-        const { operatorRegionSets, operatorServesRegion } = await import('../services/fleet.js');
+        const { operatorRegionSets, serviceRegionIdsBatch } = await import('../services/fleet.js');
         const mapa = await operatorRegionSets(supabase, [req.user.id]);
         meusMunicipios = mapa ? (mapa.get(req.user.id) || new Set()) : null;
         if (meusMunicipios) {
-          acceptanceRows = acceptanceRows.filter((b) => operatorServesRegion(meusMunicipios, b.region_id));
+          // Só reservas SEM region_id caem no fallback pelos municípios do serviço.
+          const semRegiao = acceptanceRows.filter((b) => !b.region_id);
+          const fb = semRegiao.length ? await serviceRegionIdsBatch(supabase, semRegiao) : new Map();
+          acceptanceRows = acceptanceRows.filter((b) => serveMunicipio(b, fb));
         }
       } catch (err) {
         console.error('[operator/bookings] filtro por município falhou op=%s err=%s — sem filtrar',
@@ -1010,10 +1019,15 @@ router.get('/bookings', async (req, res, next) => {
       .eq('status_operational', 'awaiting_dispatch');
     if (dispRes.error) throw dispRes.error
 
-    // Mesmo corte por município no fluxo antigo (paid+awaiting_dispatch).
-    const dispFiltrado = (!isAdmin && meusMunicipios)
-      ? (dispRes.data || []).filter((b) => !!b.region_id && meusMunicipios.has(b.region_id))
-      : (dispRes.data || []);
+    // Mesmo corte por município no fluxo antigo (paid+awaiting_dispatch), com o
+    // mesmo fallback pelos municípios do serviço para reservas sem region_id.
+    let dispFiltrado = dispRes.data || [];
+    if (!isAdmin && meusMunicipios) {
+      const { serviceRegionIdsBatch } = await import('../services/fleet.js');
+      const semRegiao = dispFiltrado.filter((b) => !b.region_id);
+      const fb = semRegiao.length ? await serviceRegionIdsBatch(supabase, semRegiao) : new Map();
+      dispFiltrado = dispFiltrado.filter((b) => serveMunicipio(b, fb));
+    }
     const pendingRaw = [...acceptanceRows, ...dispFiltrado]
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
