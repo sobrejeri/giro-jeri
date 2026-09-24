@@ -95,7 +95,7 @@ UNION ALL SELECT '— passeios',        count(*) FROM tours
 UNION ALL SELECT '— rotas',           count(*) FROM transfer_routes
 UNION ALL SELECT '— veículos',        count(*) FROM vehicles
 UNION ALL SELECT '— feriados',        count(*) FROM holidays
-UNION ALL SELECT '— preços',          count(*) FROM pricing_rules;
+UNION ALL SELECT '— preços',          count(*) FROM vehicle_pricing_rules;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
