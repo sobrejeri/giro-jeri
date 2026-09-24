@@ -1363,7 +1363,8 @@ router.get('/driver-payouts', requireAdmin, async (req, res, next) => {
                driver_payout_amount, driver_payout_status, driver_paid_at,
                driver_payout_notes, assignment_status, created_at,
                bookings ( booking_code, service_type, service_date, service_time,
-                          total_amount, status_commercial, origin_text, destination_text )`)
+                          total_amount, status_commercial, status_operational, completed_at,
+                          origin_text, destination_text )`)
       .not('driver_name', 'is', null)
       .order('created_at', { ascending: false })
       .limit(300);
@@ -1417,6 +1418,20 @@ router.patch('/driver-payouts/:id', requireAdmin, async (req, res, next) => {
     if (status !== undefined) {
       if (!['pending', 'paid', 'cancelled'].includes(status)) {
         return res.status(400).json({ error: 'Status inválido.' });
+      }
+      // Repasse ao motorista SÓ depois da reserva concluída (regra de negócio:
+      // paga-se depois que o atendimento terminou). Confere no servidor — não
+      // basta a tela esconder.
+      if (status === 'paid') {
+        const { data: asg } = await supabase
+          .from('operational_assignments').select('booking_id').eq('id', req.params.id).maybeSingle();
+        if (asg?.booking_id) {
+          const { data: bk } = await supabase
+            .from('bookings').select('status_operational').eq('id', asg.booking_id).maybeSingle();
+          if (bk && bk.status_operational !== 'completed') {
+            return res.status(409).json({ error: 'Só é possível dar baixa no repasse do motorista depois que a reserva estiver concluída.' });
+          }
+        }
       }
       patch.driver_payout_status = status;
       // Marca/limpa a data conforme o estado, para o histórico não mentir.
@@ -2476,6 +2491,19 @@ const payoutSchema = z.object({
 router.put('/payouts/:id', requireAdmin, async (req, res, next) => {
   try {
     const body = payoutSchema.parse(req.body);
+    // Repasse SÓ depois da reserva concluída (mesma regra da Fila de liberação).
+    // Confere no servidor para não depender da tela.
+    if (body.status === 'paid') {
+      const { data: po } = await supabase
+        .from('booking_payouts').select('booking_id').eq('id', req.params.id).maybeSingle();
+      if (po?.booking_id) {
+        const { data: bk } = await supabase
+          .from('bookings').select('status_operational').eq('id', po.booking_id).maybeSingle();
+        if (bk && bk.status_operational !== 'completed') {
+          return res.status(409).json({ error: 'Só é possível liberar o repasse depois que a reserva estiver concluída.' });
+        }
+      }
+    }
     const patch = {
       status:     body.status,
       // Carimba quando vira pago e LIMPA ao voltar para pendente: sem isso um
@@ -2528,27 +2556,42 @@ router.post('/payouts/pay-all', requireAdmin, async (req, res, next) => {
       return res.status(400).json({ error: 'Informe o operador ou o nome de quem recebe.' });
     }
 
-    let q = supabase
+    // 1) Seleciona os PENDENTES do destinatário JÁ com o status da reserva —
+    // para pagar só os de reservas CONCLUÍDAS (regra: repasse depois do
+    // atendimento). Confere no servidor; não confia na tela.
+    let sel = supabase
       .from('booking_payouts')
-      .update({ status: 'paid', paid_at: new Date().toISOString(),
-                notes: notes || null, updated_at: new Date().toISOString() })
-      .eq('status', 'pending');    // só os pendentes: não reescreve histórico
-
+      .select('id, amount, bookings ( status_operational )')
+      .eq('status', 'pending');
     if (payee_user_id) {
-      q = q.eq('payee_user_id', payee_user_id);
+      sel = sel.eq('payee_user_id', payee_user_id);
     } else {
       // `is('payee_user_id', null)` é essencial: sem ele, um cadastrado cujo
       // nome coincidisse com o do motorista teria os repasses dele baixados
-      // junto. `ilike` sem curinga casa o nome inteiro, ignorando maiúsculas —
-      // o mesmo critério do agrupamento da tela.
-      q = q.is('payee_user_id', null).ilike('payee_name', nome);
+      // junto. `ilike` sem curinga casa o nome inteiro, ignorando maiúsculas.
+      sel = sel.is('payee_user_id', null).ilike('payee_name', nome);
+    }
+    const { data: pend, error: selErr } = await sel;
+    if (selErr) throw selErr;
+
+    const elegiveis = (pend || []).filter((p) => p.bookings?.status_operational === 'completed');
+    const ignorados = (pend || []).length - elegiveis.length;
+    if (!elegiveis.length) {
+      return res.json({ marcados: 0, total: 0, ignorados_nao_concluidas: ignorados });
     }
 
-    const { data, error } = await q.select('id, amount');
+    // 2) Baixa só os elegíveis, idempotente (só quem ainda está 'pending').
+    const { data, error } = await supabase
+      .from('booking_payouts')
+      .update({ status: 'paid', paid_at: new Date().toISOString(),
+                notes: notes || null, updated_at: new Date().toISOString() })
+      .in('id', elegiveis.map((p) => p.id))
+      .eq('status', 'pending')
+      .select('id, amount');
     if (error) throw error;
 
     const total = (data || []).reduce((s, r) => s + Number(r.amount), 0);
-    res.json({ marcados: data?.length || 0, total: Math.round(total * 100) / 100 });
+    res.json({ marcados: data?.length || 0, total: Math.round(total * 100) / 100, ignorados_nao_concluidas: ignorados });
   } catch (err) { next(err); }
 });
 

@@ -963,6 +963,8 @@ function RepassesMotorista() {
             const b = r.bookings || {}
             const emEdicao = editando === r.id
             const pago = r.driver_payout_status === 'paid'
+            // Repasse só depois da reserva concluída (mesma regra do servidor).
+            const concluida = b.status_operational === 'completed'
             return (
               <Card key={r.id}>
                 <CardBody>
@@ -1066,14 +1068,22 @@ function RepassesMotorista() {
                             ) : (
                               <Button
                                 onClick={() => salvar.mutate({ id: r.id, body: { status: 'paid' } })}
-                                // Sem valor definido não faz sentido dar baixa.
-                                disabled={salvar.isPending || r.driver_payout_amount == null}
-                                title={r.driver_payout_amount == null ? 'Defina o valor antes de dar baixa' : ''}
+                                // Só dá baixa com valor definido E reserva concluída.
+                                disabled={salvar.isPending || r.driver_payout_amount == null || !concluida}
+                                title={
+                                  !concluida ? 'A reserva ainda não foi concluída — o repasse libera após a conclusão'
+                                  : r.driver_payout_amount == null ? 'Defina o valor antes de dar baixa' : ''
+                                }
                               >
                                 <Check size={14} /> Marcar pago
                               </Button>
                             )}
                           </div>
+                          {!pago && !concluida && (
+                            <p className="text-[11px] text-amber-400/90 mt-1.5 max-w-[220px]">
+                              Aguardando a reserva ser concluída para liberar o repasse.
+                            </p>
+                          )}
                         </>
                       )}
                     </div>
