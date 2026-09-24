@@ -64,6 +64,7 @@ export default function PublicarFeed({ meId }) {
           const xhr = new XMLHttpRequest()
           xhr.open('PUT', signed_url)
           xhr.setRequestHeader('Content-Type', ct)
+          xhr.setRequestHeader('Cache-Control', 'max-age=31536000') // caminho único → cache longo, menos egress
           xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setPct(Math.round((ev.loaded / ev.total) * 100)) }
           xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('Falha no envio (' + xhr.status + ').')))
           xhr.onerror = () => reject(new Error('Erro de rede no envio.'))

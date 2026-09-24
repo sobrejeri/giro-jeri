@@ -827,14 +827,18 @@ router.get('/me/whatsapp-status', authenticate, async (req, res, next) => {
 // comum de "não consigo atualizar a foto"), cria como público e tenta de novo.
 async function uploadAvatar(path, buffer, mimeType) {
   const bucket = () => supabase.storage.from('avatars');
-  let { error } = await bucket().upload(path, buffer, { contentType: mimeType, upsert: true });
+  // cacheControl longo: a URL salva já leva ?v=timestamp, então trocar a foto
+  // muda a URL — cachear por 1 ano corta o re-download (egress) sem servir foto
+  // velha. Vale para todos os uploads deste arquivo.
+  const UP = { contentType: mimeType, upsert: true, cacheControl: '31536000' };
+  let { error } = await bucket().upload(path, buffer, UP);
   if (error && /bucket.*not.*found|not.*found.*bucket|does not exist/i.test(error.message || '')) {
     const { error: createErr } = await supabase.storage.createBucket('avatars', {
       public: true, fileSizeLimit: '10MB',
     });
     // "already exists" não é erro real (corrida entre requests).
     if (createErr && !/already exists/i.test(createErr.message || '')) return createErr;
-    ({ error } = await bucket().upload(path, buffer, { contentType: mimeType, upsert: true }));
+    ({ error } = await bucket().upload(path, buffer, UP));
   }
   return error;
 }

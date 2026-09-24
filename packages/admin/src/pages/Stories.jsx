@@ -153,6 +153,9 @@ function VideoUploadBtn({ onUrl }) {
         const xhr = new XMLHttpRequest()
         xhr.open('PUT', signed_url)
         xhr.setRequestHeader('Content-Type', ct)
+        // Caminho é único (timestamp) → pode cachear por 1 ano e evitar
+        // re-download do vídeo/imagem a cada visualização (egress).
+        xhr.setRequestHeader('Cache-Control', 'max-age=31536000')
         xhr.upload.onprogress = (ev) => {
           if (ev.lengthComputable) setPct(Math.round((ev.loaded / ev.total) * 100))
         }

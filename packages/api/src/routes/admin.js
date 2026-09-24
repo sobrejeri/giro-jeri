@@ -1274,7 +1274,7 @@ router.post('/site-image', requireOperator, async (req, res, next) => {
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(path, buffer, { contentType: mimeType, upsert: true });
+      .upload(path, buffer, { contentType: mimeType, upsert: true, cacheControl: '31536000' });
 
     if (uploadError) return res.status(500).json({ error: uploadError.message });
 

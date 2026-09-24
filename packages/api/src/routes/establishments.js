@@ -26,7 +26,7 @@ async function preencherFotoSeFaltar(rec) {
     const path = `establishments/${rec.id}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from('avatars')
-      .upload(path, foto.buffer, { contentType: foto.contentType, upsert: true });
+      .upload(path, foto.buffer, { contentType: foto.contentType, upsert: true, cacheControl: '31536000' });
     if (upErr) { console.warn('[establishments] upload foto falhou:', upErr.message); return rec; }
     // Cache-buster: o upsert reusa o caminho; sem query o CDN serviria a antiga.
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);

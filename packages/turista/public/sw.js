@@ -14,10 +14,18 @@
 // v6: diretório de estabelecimentos 100% Google. Junto veio a auto-atualização
 // no main.jsx (recarrega ao trocar de controller), então a partir daqui novos
 // deploys aplicam sozinhos, sem o usuário precisar fechar e reabrir o app.
-const VERSION      = 'v7'
+// v8: passa a cachear no aparelho as imagens do Supabase Storage (fotos de
+// passeios, stories, estabelecimentos, avatares). Antes toda revisita baixava
+// tudo de novo do Supabase — o "cached egress" que estourou a cota. Agora a
+// revisita serve do cache do aparelho, sem tocar no Supabase.
+const VERSION      = 'v8'
 const SHELL_CACHE  = `turiva-shell-${VERSION}`
 const ASSET_CACHE  = `turiva-assets-${VERSION}`
-const KEEP         = [SHELL_CACHE, ASSET_CACHE]
+// Cache de imagens SEM versão: sobrevive aos deploys (não readianta baixar
+// tudo a cada atualização do app). As URLs são únicas ou levam ?v=timestamp,
+// então trocar uma imagem troca a URL — não há risco de servir a antiga.
+const IMG_CACHE    = 'turiva-img'
+const KEEP         = [SHELL_CACHE, ASSET_CACHE, IMG_CACHE]
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -46,6 +54,27 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return
 
   const url = new URL(req.url)
+
+  // ── Imagens do Supabase Storage (outra origem): cache-first e longo ──
+  // As URLs são imutáveis na prática (únicas ou com ?v=timestamp), então servir
+  // do cache do aparelho sem revalidar é seguro e corta o egress do Supabase
+  // (a cota de "cached egress") em toda revisita. Só imagens — vídeo não, para
+  // não encher o armazenamento do aparelho.
+  if (req.destination === 'image' && /\/storage\/v1\/object\/public\//.test(url.pathname)) {
+    event.respondWith((async () => {
+      const cache  = await caches.open(IMG_CACHE)
+      const cached = await cache.match(req)
+      if (cached) return cached
+      try {
+        const res = await fetch(req)
+        if (res && res.ok) cache.put(req, res.clone()).catch(() => {})
+        return res
+      } catch (_) {
+        return cached || Response.error()
+      }
+    })())
+    return
+  }
 
   // ── HTML (navegação): rede primeiro, cache como rede de segurança ──
   // Online sempre pega a versão nova; offline abre a última que funcionou.
