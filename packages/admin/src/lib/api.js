@@ -36,7 +36,25 @@ async function tryRefresh() {
   }
 }
 
-function clearSession() {
+// Melhor-esforço: remove a inscrição de push DESTE aparelho quando a sessão cai
+// (expiração). sendBeacon sobrevive ao redirect e a rota é pública (o token já
+// expirou aqui). Sem isso, o servidor seguiria mandando push com a sessão morta.
+async function beaconUnsubscribePush() {
+  try {
+    if (!('serviceWorker' in navigator) || !navigator.sendBeacon) return
+    const reg = await navigator.serviceWorker.getRegistration()
+    const sub = reg && (await reg.pushManager.getSubscription())
+    if (sub?.endpoint) {
+      navigator.sendBeacon(
+        `${BASE}/api/notifications/push-unsubscribe`,
+        new Blob([JSON.stringify({ endpoint: sub.endpoint })], { type: 'application/json' }),
+      )
+    }
+  } catch { /* ignore */ }
+}
+
+async function clearSession() {
+  await beaconUnsubscribePush()
   Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
   // Preserva o destino em ?next= para voltar após o login (sessão expirada).
   const base = import.meta.env.BASE_URL || '/'

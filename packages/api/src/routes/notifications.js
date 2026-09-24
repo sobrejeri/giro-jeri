@@ -163,14 +163,21 @@ router.post('/push-subscribe', authenticate, async (req, res) => {
 })
 
 // ── POST /api/notifications/push-unsubscribe — remove a inscrição do aparelho ──
-// Chamado no LOGOUT: sem isso, o servidor continuava mandando push para o
-// aparelho mesmo com o app deslogado (a entrega é no nível do SO/navegador,
-// independente do login). Remove por endpoint — o aparelho para de receber
-// para qualquer conta até alguém logar e se inscrever de novo.
-router.post('/push-unsubscribe', authenticate, async (req, res) => {
+// Chamado no LOGOUT e na EXPIRAÇÃO de sessão: sem isso, o servidor continuava
+// mandando push para o aparelho mesmo com o app deslogado (a entrega é no nível
+// do SO/navegador, independente do login). Remove por endpoint — o aparelho
+// para de receber para qualquer conta até alguém logar e se inscrever de novo.
+//
+// SEM `authenticate` de propósito: na expiração o access token JÁ está morto
+// (é o motivo de estarmos deslogando), então não dá para autenticar; e o
+// front usa navigator.sendBeacon, que não manda header de auth. O `endpoint`
+// é um segredo do próprio aparelho (URL longa e não enumerável do serviço de
+// push) — quem não o conhece não remove nada, e o pior caso é o dono parar de
+// receber os próprios avisos. Sem exposição de dados.
+router.post('/push-unsubscribe', async (req, res) => {
   try {
     const { endpoint } = req.body || {}
-    if (!endpoint) return res.status(400).json({ error: 'endpoint é obrigatório' })
+    if (!endpoint || typeof endpoint !== 'string') return res.status(400).json({ error: 'endpoint é obrigatório' })
     await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
     res.json({ ok: true })
   } catch (err) {
