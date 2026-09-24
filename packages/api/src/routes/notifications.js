@@ -143,6 +143,10 @@ router.post('/push-subscribe', authenticate, async (req, res) => {
       user_agent: req.headers['user-agent'] || null,
     }
     if (appTag) row.app = appTag
+    // Um endpoint (este aparelho+app) pertence a UM usuário: se outra conta já
+    // se inscreveu com ele (ex.: alguém logou antes sem sair), remove a inscrição
+    // antiga — senão o aparelho receberia push de mais de uma conta.
+    await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint).neq('user_id', req.user.id)
     const { error: upErr } = await supabase
       .from('push_subscriptions')
       .upsert(row, { onConflict: 'user_id,endpoint' })
@@ -155,6 +159,23 @@ router.post('/push-subscribe', authenticate, async (req, res) => {
   } catch (err) {
     console.error('[notifications] push-subscribe falhou:', err.message)
     res.status(500).json({ error: 'Falha ao salvar inscrição de push' })
+  }
+})
+
+// ── POST /api/notifications/push-unsubscribe — remove a inscrição do aparelho ──
+// Chamado no LOGOUT: sem isso, o servidor continuava mandando push para o
+// aparelho mesmo com o app deslogado (a entrega é no nível do SO/navegador,
+// independente do login). Remove por endpoint — o aparelho para de receber
+// para qualquer conta até alguém logar e se inscrever de novo.
+router.post('/push-unsubscribe', authenticate, async (req, res) => {
+  try {
+    const { endpoint } = req.body || {}
+    if (!endpoint) return res.status(400).json({ error: 'endpoint é obrigatório' })
+    await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] push-unsubscribe falhou:', err.message)
+    res.status(500).json({ error: 'Falha ao remover inscrição de push' })
   }
 })
 

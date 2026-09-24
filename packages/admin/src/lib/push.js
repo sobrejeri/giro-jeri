@@ -56,3 +56,35 @@ export async function enablePush() {
     return { ok: false, reason: 'error' }
   }
 }
+
+// Remove a inscrição DESTE aparelho no servidor (chamado no logout). Sem isso, o
+// servidor continua mandando push mesmo com o app deslogado (a entrega é no
+// nível do SO). Mantém a inscrição do navegador viva para re-login silencioso
+// via syncPush(). Nunca lança.
+export async function disablePush() {
+  try {
+    if (!pushSupported()) return
+    const reg = await navigator.serviceWorker.getRegistration()
+    const sub = reg && (await reg.pushManager.getSubscription())
+    if (sub?.endpoint) await api.pushUnsubscribe({ endpoint: sub.endpoint })
+  } catch (err) { console.error('[push] disable falhou:', err?.message) }
+}
+
+// Re-registra a inscrição no servidor após login — SEM prompt e SEM teste, só se
+// a permissão já foi concedida. Quem já ativou volta a receber ao logar de novo,
+// sem tocar em "Ativar". Nunca lança.
+export async function syncPush() {
+  try {
+    if (!pushSupported() || Notification.permission !== 'granted') return
+    const reg = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
+    await navigator.serviceWorker.ready
+    let sub = await reg.pushManager.getSubscription()
+    if (!sub) {
+      const { key } = await api.getVapidKey()
+      if (!key) return
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) })
+    }
+    const j = sub.toJSON()
+    await api.pushSubscribe({ endpoint: j.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, app: 'admin' })
+  } catch (err) { console.error('[push] sync falhou:', err?.message) }
+}

@@ -22,6 +22,9 @@ export function AuthProvider({ children }) {
     localStorage.setItem(STORAGE.user,    JSON.stringify(userData))
     localStorage.setItem(STORAGE.token,   accessToken)
     localStorage.setItem(STORAGE.refresh, refreshToken)
+    // Re-sincroniza o push (se já autorizado) para voltar a receber ao logar de
+    // novo, sem tocar em "Ativar". Best-effort; import dinâmico evita ciclo.
+    import('../lib/push').then((m) => m.syncPush?.()).catch(() => {})
   }, [])
 
   const updateTokens = useCallback((accessToken, refreshToken, userData) => {
@@ -35,7 +38,14 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Remove a inscrição de push DESTE aparelho ANTES de limpar o token (a
+    // chamada precisa estar autenticada) — senão o servidor segue mandando push
+    // com o app deslogado. Import dinâmico evita ciclo; timeout evita travar.
+    try {
+      const m = await import('../lib/push')
+      await Promise.race([m.disablePush(), new Promise((r) => setTimeout(r, 2500))])
+    } catch { /* ignore */ }
     setUser(null)
     setToken(null)
     setRefresh(null)
