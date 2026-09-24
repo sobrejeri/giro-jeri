@@ -337,39 +337,6 @@ const PER_PAGE = 8
 // Sem Mercado Pago conectado o operador não consegue aceitar corridas — é por
 // ele que o split manda a parte dele de cada reserva. O aviso explica o
 // bloqueio antes da tentativa, em vez de deixar o erro aparecer só no clique.
-function AvisoMercadoPago() {
-  const { data: status } = useQuery({
-    queryKey: ['mp-status'],
-    queryFn:  () => api.getMpStatus(),
-    staleTime: 60_000,
-    retry: false,
-  })
-  // configured=false → a plataforma ainda não habilitou o marketplace; não há
-  // o que conectar, então não faz sentido cobrar.
-  if (!status || !status.configured || status.connected) return null
-
-  return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
-      <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-amber-900">
-          Conecte sua conta Mercado Pago para aceitar corridas
-        </p>
-        <p className="text-[12.5px] text-amber-800 mt-0.5">
-          É por ela que você recebe a sua parte de cada reserva. Enquanto não conectar,
-          as corridas disponíveis não podem ser aceitas.
-        </p>
-        <Link
-          to="/perfil"
-          className="inline-block mt-2 text-[12.5px] font-bold text-amber-900 underline"
-        >
-          Conectar agora
-        </Link>
-      </div>
-    </div>
-  )
-}
-
 export default function Dashboard() {
   const [date, setDate]        = useState('all')
   const [serviceType, setType] = useState('')
@@ -495,8 +462,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
-
-      <AvisoMercadoPago />
 
       {/* ── Toolbar de data ─────────────────────────────── */}
       <div className="flex items-center flex-wrap gap-2">

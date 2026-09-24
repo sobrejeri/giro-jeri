@@ -20,49 +20,13 @@ import { isMarketplaceConfigured } from '../services/mercadoPago.js';
 import { validateUsername } from '../lib/username.js';
 import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
 
-// Porteiro do Mercado Pago: devolve a MENSAGEM de bloqueio, ou null se pode
-// seguir. Só exige a conexão quando ela é possível e devida:
-//   • marketplace não configurado na plataforma → não há o que conectar;
-//   • operador marcado como isento (operação própria, repasse manual);
-//   • coluna ainda sem a migration 070 → não trava ninguém.
-async function mpGate(operatorId) {
-  if (!isMarketplaceConfigured()) return null;
-
-  // Plataforma recebendo 100% (migration 079): não há split, logo não há para
-  // onde mandar a parte do operador — e exigir conta conectada só impediria
-  // operador novo de trabalhar sem nenhum ganho. A comissão dela vira repasse
-  // manual, que não depende de Mercado Pago.
-  try {
-    const { data } = await supabase
-      .from('system_settings').select('setting_value')
-      .eq('setting_key', 'payment_platform_receives_all').maybeSingle();
-    // Mesma leitura tolerante do payments.js: ausente = plataforma recebe tudo.
-    if (String(data?.setting_value ?? 'true') !== 'false') return null;
-  } catch (e) {
-    console.error('[mpGate] leitura de payment_platform_receives_all falhou:', e.message);
-    return null;   // na dúvida, não bloqueia a coop de trabalhar
-  }
-
-  // Checa mp_access_token — é ele que o split usa de fato (getOperatorMp).
-  // Usar mp_user_id aqui bloquearia quem tem token válido mas ficou sem
-  // user_id (o MP nem sempre devolve), impedindo de trabalhar alguém que
-  // receberia normalmente.
-  let { data, error } = await supabase
-    .from('users')
-    .select('mp_access_token, mp_payout_exempt')
-    .eq('id', operatorId)
-    .maybeSingle();
-
-  if (error?.code === '42703') {
-    // Migration 070 pendente: segue sem a isenção, checando só a conexão.
-    const retry = await supabase.from('users').select('mp_access_token').eq('id', operatorId).maybeSingle();
-    data = retry.data; error = retry.error;
-  }
-  if (error) return null;               // instabilidade não pode barrar trabalho
-  if (data?.mp_payout_exempt) return null;
-  if (data?.mp_access_token) return null;
-
-  return 'Conecte sua conta Mercado Pago no Perfil para aceitar corridas — é por ela que você recebe a sua parte de cada reserva.';
+// Porteiro do Mercado Pago (desativado): os repasses a operadores e motoristas
+// são MANUAIS (decisão de produto). Não há split automático, então o operador
+// não precisa conectar nada para aceitar corridas — este porteiro nunca bloqueia.
+// Mantido como função para não mexer nos pontos de chamada; se um dia o split
+// automático voltar, a lógica antiga está no histórico do git.
+async function mpGate(_operatorId) {
+  return null;
 }
 
 // Bloqueia aceitar uma NOVA solicitação enquanto o operador tiver uma reserva
