@@ -168,6 +168,35 @@ export async function notifyOperatorsAndAdmin({ bookingId = null, templateKey = 
 
     if (!recipients?.length) return
 
+    // Corte por MUNICÍPIO (migration 106): o operador só é avisado de
+    // solicitação do(s) município(s) que atende — mesma regra da fila em
+    // GET /operator/bookings (divergir faria a coop receber push de um pedido
+    // que não aparece na tela dela). OPT-IN ESTRITO: sem município, não recebe.
+    // Admin/finance sempre recebem. Tolerante: sem a coluna region_ids (migração
+    // pendente), o select falha e o corte é pulado — ninguém deixa de ser avisado.
+    try {
+      const alvo = fleetBookingId || bookingId
+      if (alvo) {
+        const { data: bk } = await supabase.from('bookings').select('region_id').eq('id', alvo).maybeSingle()
+        const regionId = bk?.region_id || null
+        const { data: us, error: usErr } = await supabase
+          .from('users').select('id, user_type, region_ids').in('id', recipients.map((r) => r.id))
+        if (!usErr) {
+          const byId = new Map((us || []).map((u) => [u.id, u]))
+          recipients = recipients.filter((r) => {
+            const u = byId.get(r.id)
+            if (!u) return false
+            if (u.user_type === 'admin' || u.user_type === 'finance') return true
+            const set = new Set(u.region_ids || [])
+            return set.size > 0 && !!regionId && set.has(regionId)
+          })
+        }
+      }
+    } catch (err) {
+      console.error('[notify] filtro por município falhou (ignorado):', err.message)
+    }
+    if (!recipients.length) return
+
     const now = new Date().toISOString()
     const rows = recipients.map((r) => ({
       user_id:      r.id,

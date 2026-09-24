@@ -13,6 +13,7 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Select } from '../components/ui/Input'
 import Card from '../components/ui/Card'
+import MunicipiosSelector from '../components/MunicipiosSelector'
 import { fleetCopy } from '../copy/fleet'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -48,7 +49,7 @@ const USER_TYPE_LABELS = {
   affiliate: 'Afiliado',
 }
 
-const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist' }
+const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist', region_ids: [] }
 const IMPORT_EMPTY = { full_name: '', user_type: 'tourist', cnpj: '' }
 
 function genPassword(len = 10) {
@@ -216,7 +217,7 @@ export default function Usuarios() {
 
   function openEdit(u) {
     setModal({ mode: 'edit', user: u })
-    setForm({ user_type: u.user_type, is_active: u.is_active })
+    setForm({ user_type: u.user_type, is_active: u.is_active, region_ids: u.region_ids || [] })
   }
 
   function openFleet(u) {
@@ -255,6 +256,7 @@ export default function Usuarios() {
   function handleCreate(e) {
     e.preventDefault()
     const isOp = createForm.user_type === 'operator'
+    const ehOperador = createForm.user_type === 'operator' || createForm.user_type === 'agency'
     const body = {
       full_name: createForm.full_name,
       password:  createForm.password,
@@ -265,6 +267,8 @@ export default function Usuarios() {
             ...(createForm.email ? { email: createForm.email } : {}),
             ...(createForm.phone ? { phone: createForm.phone } : {}),
           }),
+      // Municípios de atuação (só operador/agência) — define o filtro de solicitações.
+      ...(ehOperador ? { region_ids: createForm.region_ids || [] } : {}),
     }
     createMut.mutate(body)
   }
@@ -627,6 +631,12 @@ export default function Usuarios() {
             minLength={6}
             placeholder="Mínimo 6 caracteres"
           />
+          {(createForm.user_type === 'operator' || createForm.user_type === 'agency') && (
+            <MunicipiosSelector
+              value={createForm.region_ids}
+              onChange={(next) => setCreateForm({ ...createForm, region_ids: next })}
+            />
+          )}
           {createMut.isError && (
             <p className="text-sm text-red-400">{createMut.error?.message || 'Erro ao criar usuário'}</p>
           )}
@@ -666,6 +676,13 @@ export default function Usuarios() {
               <option value="true">Ativo</option>
               <option value="false">Inativo</option>
             </Select>
+            {/* Municípios de atuação — filtro de solicitações (operador/agência) */}
+            {(form.user_type === 'operator' || form.user_type === 'agency') && (
+              <MunicipiosSelector
+                value={form.region_ids}
+                onChange={(next) => setForm({ ...form, region_ids: next })}
+              />
+            )}
             {/* Recebimento — só para operadores */}
             {modal?.mode === 'edit' && modal.user.user_type === 'operator' && (
               <div className="border border-gray-700 rounded-xl p-3 space-y-2">

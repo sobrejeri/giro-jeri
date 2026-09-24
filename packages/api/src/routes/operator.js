@@ -615,7 +615,7 @@ router.put('/preferences/:type/:entityId', async (req, res, next) => {
 const BOOKING_COLUMNS = `
   id, booking_code, service_type, service_id, booking_mode, user_id,
   service_date, service_time, people_count, total_amount, created_at,
-  origin_text, destination_text, status_commercial, status_operational, order_group_id
+  origin_text, destination_text, status_commercial, status_operational, order_group_id, region_id
 `
 
 // Contato do cliente só DEPOIS do pagamento confirmado.
@@ -925,6 +925,27 @@ router.get('/bookings', async (req, res, next) => {
     console.log('[operator/bookings] role=%s aguardando=%d dentro_prazo=%d fora_prazo=%d mostra=%d',
       req.user?.user_type, all.length, within.length, expired.length, acceptanceRows.length);
 
+    // Filtro por MUNICÍPIO de atuação (migration 106): escala multi-estado — a
+    // coop só vê solicitação cujo booking.region_id está entre os municípios que
+    // ela atende. OPT-IN ESTRITO: sem município marcado, não vê nada. Tolerante:
+    // sem a coluna (migração pendente) → mapa null → não filtra. Admin vê tudo.
+    // Guardo o meu conjunto para reusar no filtro do dispRes mais abaixo.
+    let meusMunicipios; // undefined = ainda não buscado; null = coluna ausente
+    if (!isAdmin) {
+      try {
+        const { operatorRegionSets, operatorServesRegion } = await import('../services/fleet.js');
+        const mapa = await operatorRegionSets(supabase, [req.user.id]);
+        meusMunicipios = mapa ? (mapa.get(req.user.id) || new Set()) : null;
+        if (meusMunicipios) {
+          acceptanceRows = acceptanceRows.filter((b) => operatorServesRegion(meusMunicipios, b.region_id));
+        }
+      } catch (err) {
+        console.error('[operator/bookings] filtro por município falhou op=%s err=%s — sem filtrar',
+          req.user.id, err?.message);
+        meusMunicipios = null; // fail-open: erro transitório não esconde pedido
+      }
+    }
+
     // Roteamento por veículo operado (Etapa 1 — Model B, opt-out): a coop só
     // deixa de ver um pedido se ele exige ao menos um veículo que ela
     // desativou explicitamente em operator_service_preferences. Sem linha
@@ -989,7 +1010,11 @@ router.get('/bookings', async (req, res, next) => {
       .eq('status_operational', 'awaiting_dispatch');
     if (dispRes.error) throw dispRes.error
 
-    const pendingRaw = [...acceptanceRows, ...(dispRes.data || [])]
+    // Mesmo corte por município no fluxo antigo (paid+awaiting_dispatch).
+    const dispFiltrado = (!isAdmin && meusMunicipios)
+      ? (dispRes.data || []).filter((b) => !!b.region_id && meusMunicipios.has(b.region_id))
+      : (dispRes.data || []);
+    const pendingRaw = [...acceptanceRows, ...dispFiltrado]
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
     // Minhas corridas: aceitas, confirmadas/despachadas ou em andamento.

@@ -294,6 +294,9 @@ const createUserSchema = z.object({
   cnpj:      z.string().min(14).max(18).optional(),
   password:  z.string().min(6),
   user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
+  // Municípios que o operador atende (migration 106). Filtra as solicitações
+  // que ele recebe — opt-in estrito: sem município, não recebe nada.
+  region_ids: z.array(z.string().uuid()).optional(),
 }).refine((d) => {
   if (d.user_type === 'operator') return !!d.cnpj;
   return d.email || d.phone;
@@ -346,19 +349,29 @@ router.post('/users', requireAdmin, async (req, res, next) => {
     });
     if (authError) return res.status(400).json({ error: authError.message });
 
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .insert({
-        auth_id:         authData.user.id,
-        full_name:       body.full_name,
-        email:           authEmail,
-        phone:           authPhone,
-        user_type:       body.user_type,
-        document_number: docNumber,
-        document_type:   docType,
-      })
-      .select('id, full_name, email, phone, user_type, is_active, created_at, document_number')
-      .single();
+    const baseRow = {
+      auth_id:         authData.user.id,
+      full_name:       body.full_name,
+      email:           authEmail,
+      phone:           authPhone,
+      user_type:       body.user_type,
+      document_number: docNumber,
+      document_type:   docType,
+    };
+    // Municípios de atuação só valem para operador/agência (migration 106).
+    const ehOperador = body.user_type === 'operator' || body.user_type === 'agency';
+    const rowComMunic = ehOperador && Array.isArray(body.region_ids)
+      ? { ...baseRow, region_ids: body.region_ids }
+      : baseRow;
+    const SEL = 'id, full_name, email, phone, user_type, is_active, created_at, document_number';
+
+    let ins = await supabase.from('users').insert(rowComMunic).select(SEL).single();
+    // Coluna region_ids ausente (migração 106 pendente) → refaz sem ela.
+    if (ins.error && rowComMunic !== baseRow &&
+        (ins.error.code === 'PGRST204' || ins.error.code === '42703' || /region_ids/.test(ins.error.message || ''))) {
+      ins = await supabase.from('users').insert(baseRow).select(SEL).single();
+    }
+    const { data: profile, error: profileError } = ins;
 
     if (profileError) {
       await supabase.auth.admin.deleteUser(authData.user.id);
@@ -505,13 +518,22 @@ router.delete('/users/:id', requireAdmin, async (req, res, next) => {
 // ── PATCH /api/admin/users/:id ─────────────────────────
 router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   try {
-    const allowed = ['user_type', 'is_active', 'phone', 'email', 'platform_split_pct', 'mp_payout_exempt'];
+    const allowed = ['user_type', 'is_active', 'phone', 'email', 'platform_split_pct', 'mp_payout_exempt', 'region_ids'];
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))
     );
 
-    const { data, error } = await supabase
-      .from('users').update(updates).eq('id', req.params.id).select().single();
+    let upd = await supabase.from('users').update(updates).eq('id', req.params.id).select().single();
+    // Coluna region_ids ausente (migração 106 pendente) → refaz sem ela para não
+    // travar as demais edições (tipo/ativo/etc.).
+    if (upd.error && 'region_ids' in updates &&
+        (upd.error.code === 'PGRST204' || upd.error.code === '42703' || /region_ids/.test(upd.error.message || ''))) {
+      const { region_ids, ...rest } = updates; // eslint-disable-line no-unused-vars
+      upd = Object.keys(rest).length
+        ? await supabase.from('users').update(rest).eq('id', req.params.id).select().single()
+        : await supabase.from('users').select().eq('id', req.params.id).single();
+    }
+    const { data, error } = upd;
 
     if (error || !data) return res.status(404).json({ error: 'Usuário não encontrado' });
 

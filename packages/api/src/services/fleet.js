@@ -13,6 +13,32 @@
 // notificar por engano). O opt-in NÃO é fail-open: sem opt-in explícito, não
 // recebe — é justamente o ponto do recurso.
 
+// ── Municípios de atuação do operador (migration 106) ────────────────────────
+// Escala multi-estado: o operador só recebe solicitação cujo booking.region_id
+// está entre os municípios que ele atende. OPT-IN ESTRITO: sem município
+// marcado, não recebe nada.
+//
+// Tolerante à migração: enquanto a coluna users.region_ids não existir, devolve
+// null — e o chamador NÃO filtra por município (fail-open só nesse intervalo).
+// Retorna Map<operatorId, Set<regionId>> ou null (coluna ausente).
+export async function operatorRegionSets(supabase, operatorIds) {
+  const ids = [...new Set((operatorIds || []).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const { data, error } = await supabase.from('users').select('id, region_ids').in('id', ids);
+  if (error) {
+    if (error.code === '42703' || /region_ids/.test(error.message || '')) return null;
+    throw error;
+  }
+  return new Map((data || []).map((u) => [u.id, new Set(u.region_ids || [])]));
+}
+
+// O operador atende o município da reserva? Estrito: sem município (Set vazio ou
+// ausente) → NÃO atende. `regionSet` vem de operatorRegionSets().get(opId).
+export function operatorServesRegion(regionSet, bookingRegionId) {
+  if (!regionSet || regionSet.size === 0) return false;
+  return !!bookingRegionId && regionSet.has(bookingRegionId);
+}
+
 // Veículos EXIGIDOS por cada reserva.
 // Ordem de resolução:
 //   1. booking_vehicles (reserva privativa: o cliente escolheu os veículos);
