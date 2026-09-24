@@ -341,6 +341,7 @@ const DOC_TYPES = [
 
 const EMPTY = {
   full_name:           '',
+  email:               '',
   username:            '',
   phone:               '',
   document_type:       'cpf',
@@ -374,6 +375,7 @@ export default function Perfil() {
     if (!profile) return
     setForm({
       full_name:           profile.full_name           || '',
+      email:               profile.email               || '',
       username:            profile.username            || '',
       phone:               profile.phone               || '',
       document_type:       profile.document_type       || 'cpf',
@@ -438,6 +440,7 @@ export default function Perfil() {
     e.preventDefault()
     const payload = {
       full_name:           form.full_name           || undefined,
+      email:               form.email?.trim()       || undefined,
       phone:               form.phone               || undefined,
       document_type:       form.document_number ? form.document_type : null,
       document_number:     form.document_number     || null,
@@ -528,9 +531,13 @@ export default function Perfil() {
               />
               <Input
                 label="E-mail"
-                value={profile?.email || ''}
-                readOnly
-                className="bg-gray-50 cursor-not-allowed"
+                type="email"
+                value={form.email}
+                onChange={(e) => set('email', e.target.value)}
+                placeholder="seu@email.com"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </div>
 
@@ -575,6 +582,49 @@ export default function Perfil() {
               />
             </div>
 
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Chave PIX para receber o repasse (pagamento manual) */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Wallet size={16} className="text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-700">Chave PIX para repasse</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Os repasses são feitos manualmente por PIX. Cadastre sua chave aqui —
+              ela é enviada junto com o valor da sua comissão na hora do repasse.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Select
+                label="Tipo de chave"
+                value={form.pix_key_type}
+                onChange={(e) => set('pix_key_type', e.target.value)}
+              >
+                <option value="">Selecione</option>
+                {PIX_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </Select>
+              <div className="sm:col-span-2">
+                <Input
+                  label="Chave PIX"
+                  placeholder={
+                    form.pix_key_type === 'cpf'        ? '000.000.000-00'       :
+                    form.pix_key_type === 'cnpj'       ? '00.000.000/0001-00'   :
+                    form.pix_key_type === 'email'      ? 'seu@email.com'        :
+                    form.pix_key_type === 'phone'      ? '+55 88 99999-9999'    :
+                    form.pix_key_type === 'random_key' ? 'Cole a chave aleatória' :
+                    'Sua chave PIX'
+                  }
+                  value={form.pix_key}
+                  onChange={(e) => set('pix_key', e.target.value)}
+                />
+              </div>
+            </div>
           </div>
         </CardBody>
       </Card>

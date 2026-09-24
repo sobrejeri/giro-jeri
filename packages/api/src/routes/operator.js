@@ -82,6 +82,9 @@ const PROFILE_FIELDS = `
 
 const profileSchema = z.object({
   full_name:           z.string().min(2).max(200).optional(),
+  // E-mail é a credencial de login (ver PATCH /profile): sincronizado com o
+  // Supabase Auth ao mudar. Sem .nullable() de propósito — não pode ficar vazio.
+  email:               z.string().email().max(200).optional(),
   username:            z.string().max(30).optional().nullable(),
   phone:               z.string().min(10).max(30).optional().nullable(),
   document_type:       z.enum(['cpf', 'cnpj', 'passport', 'rg', 'cnh', 'other']).optional().nullable(),
@@ -328,6 +331,33 @@ router.patch('/profile', async (req, res, next) => {
       const docErr = validateBrDoc(body.document_type, body.document_number);
       if (docErr) return res.status(400).json({ error: docErr });
     }
+
+    // E-mail é a CREDENCIAL de login: o operador entra por documento/usuário, mas
+    // o servidor resolve para users.email e autentica nele no Supabase. Trocar só
+    // o users.email quebraria o próximo login — por isso sincroniza também o
+    // Supabase Auth. E-mail vazio é ignorado (não dá para ficar sem credencial).
+    if (body.email !== undefined) {
+      const novo = String(body.email).trim().toLowerCase();
+      if (!novo) {
+        delete body.email;
+      } else {
+        const { data: atual } = await supabase
+          .from('users').select('auth_id, email').eq('id', req.user.id).maybeSingle();
+        if (atual?.auth_id && novo !== String(atual.email || '').toLowerCase()) {
+          const { error: authErr } = await supabase.auth.admin
+            .updateUserById(atual.auth_id, { email: novo, email_confirm: true });
+          if (authErr) {
+            const dup = /already|exist|registered|duplicate/i.test(authErr.message || '');
+            return res.status(dup ? 409 : 400).json({
+              error: dup ? 'Este e-mail já está em uso por outra conta.'
+                         : `Não foi possível atualizar o e-mail: ${authErr.message}`,
+            });
+          }
+        }
+        body.email = novo;
+      }
+    }
+
     const { data, error } = await supabase
       .from('users')
       .update({ ...body, updated_at: new Date().toISOString() })
