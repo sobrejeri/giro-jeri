@@ -655,8 +655,19 @@ export default function Transfers() {
       .map(([name, count]) => ({ name, count }))
   }, [todasRotas])
 
+  // Busca por texto: casa origem, destino, nome do serviço e tags.
+  const busca = searchTerm.trim().toLowerCase()
+  const rotaMatch = (r) => {
+    if (!busca) return true
+    const hay = `${r.origin_name || ''} ${r.destination_name || ''} ${r.transfers?.name || ''} ${(r.tags || []).join(' ')}`.toLowerCase()
+    return hay.includes(busca)
+  }
+
   // Filtrar por saída já é um pedido explícito: mostra todas daquela origem.
   const routesShown = useMemo(() => {
+    if (busca) {
+      return routes.filter(rotaMatch).sort((a, b) => Number(a.default_price) - Number(b.default_price))
+    }
     if (routeOrigin) {
       return routes
         .filter(r => r.origin_name === routeOrigin)
@@ -667,7 +678,7 @@ export default function Transfers() {
         a.origin_name.localeCompare(b.origin_name) || Number(a.default_price) - Number(b.default_price))
     }
     return popularRoutes
-  }, [routes, routeOrigin, showAllRoutes, popularRoutes])
+  }, [routes, routeOrigin, showAllRoutes, popularRoutes, busca]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const routesExpanded = !!routeOrigin || showAllRoutes
 
@@ -675,11 +686,16 @@ export default function Transfers() {
   // turista filtrava "Jeri" e continuava vendo voos partindo de outro lugar.
   // Categoria que fica sem nenhuma rota naquela saída some junto com o título.
   const categoriasExclusivasShown = useMemo(() => {
+    if (busca) {
+      return categoriasExclusivas
+        .map(cat => ({ ...cat, rotas: cat.rotas.filter(rotaMatch) }))
+        .filter(cat => cat.rotas.length > 0)
+    }
     if (!routeOrigin) return categoriasExclusivas
     return categoriasExclusivas
       .map(cat => ({ ...cat, rotas: cat.rotas.filter(r => r.origin_name === routeOrigin) }))
       .filter(cat => cat.rotas.length > 0)
-  }, [categoriasExclusivas, routeOrigin])
+  }, [categoriasExclusivas, routeOrigin, busca]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const exclusivasShown = categoriasExclusivasShown.flatMap(c => c.rotas)
 
@@ -848,7 +864,7 @@ export default function Transfers() {
 
         {showSearch && (
           <form
-            onSubmit={(e) => { e.preventDefault(); const q = searchTerm.trim(); if (q) navigate('/minhas-reservas', { state: { q } }) }}
+            onSubmit={(e) => { e.preventDefault(); e.currentTarget.querySelector('input')?.blur() }}
             className="mt-2 relative"
           >
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -856,9 +872,15 @@ export default function Transfers() {
               autoFocus
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={t('transfersPg.searchPlaceholder')}
-              className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
+              placeholder="Buscar translado (rota, cidade…)"
+              className="w-full pl-8 pr-8 py-2 bg-gray-100 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none"
             />
+            {searchTerm && (
+              <button type="button" onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
+                <X size={12} className="text-gray-500" />
+              </button>
+            )}
           </form>
         )}
 
@@ -1061,9 +1083,9 @@ export default function Transfers() {
         <div>
           <div className="flex items-baseline justify-between mb-2">
             <p className="text-[13px] font-bold text-gray-700">
-              {routeOrigin ? `Saindo de ${shortPlace(routeOrigin)}` : t('transfersPg.popularRoutes')}
+              {busca ? 'Resultados' : routeOrigin ? `Saindo de ${shortPlace(routeOrigin)}` : t('transfersPg.popularRoutes')}
             </p>
-            {routes.length > popularRoutes.length && !routeOrigin && (
+            {!busca && routes.length > popularRoutes.length && !routeOrigin && (
               <button
                 onClick={() => setShowAllRoutes((v) => !v)}
                 className="text-[11px] font-bold text-brand active:scale-95 transition-transform"
@@ -1073,8 +1095,9 @@ export default function Transfers() {
             )}
           </div>
 
-          {/* Filtro por local de saída — só faz sentido com mais de uma saída */}
-          {originOptions.length > 1 && (
+          {/* Filtro por local de saída — só faz sentido com mais de uma saída
+              e fora da busca por texto (que já recorta tudo). */}
+          {!busca && originOptions.length > 1 && (
             <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2.5" style={{ scrollbarWidth: 'none' }}>
               <button
                 onClick={() => setRouteOrigin('')}

@@ -554,7 +554,14 @@ export default function Tours() {
   }, [allTours, chip])
 
   const tours = searchTerm.trim()
-    ? base.filter((x) => x.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    ? base.filter((x) => {
+        const q = searchTerm.toLowerCase()
+        const hay = [
+          x.name, x.short_description, x.categories?.name,
+          ...(Array.isArray(x.tags) ? x.tags : []),
+        ].filter(Boolean).join(' ').toLowerCase()
+        return hay.includes(q)
+      })
     : base
   // CATEGORIA com carrossel próprio (categories.is_exclusive, migration 071) —
   // mesma lógica já usada nos translados. A categoria tira o passeio da lista
