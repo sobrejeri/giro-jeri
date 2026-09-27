@@ -28,6 +28,9 @@ const PUBLIC_KEYS = [
   'payment_method_credit',
   'payment_method_debit',
   'payment_max_installments',
+  // Tabela de acréscimo do parcelamento (JSON { "2": 3.06, ... } em %). O
+  // checkout usa para mostrar o valor já com juros; vazio = tabela padrão.
+  'payment_installment_fees',
   // 'bricks' (cartão digitado no site) ou 'checkout_pro' (cliente vai para a
   // página do Mercado Pago). O app precisa saber para decidir se mostra o
   // formulário de cartão ou um botão que redireciona.

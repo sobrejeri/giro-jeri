@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ShieldCheck, AlertCircle } from 'lucide-react'
 import { api } from '../../lib/api'
 import { paymentMethodsDoBrick, formasAtivas } from '../../lib/formasPagamento'
+import { totalComJuros, tabelaDeParcelas } from '../../lib/parcelamento'
 import { useAuth } from '../../contexts/AuthContext'
 
 // ─── helpers ────────────────────────────────────────────────
@@ -422,7 +423,7 @@ const soDigitos = (s) => String(s || '').replace(/\D/g, '')
 // o checkout hospedado. Tokeniza no navegador e chama o MESMO handler de cartão
 // (onPagar = handleCardPayment), que já roteia por status (aprovado → sucesso,
 // recusado → mensagem). Não redireciona: a cobrança é síncrona.
-function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar }) {
+function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar, installmentFees }) {
   const { t } = useTranslation()
   const [cpf,    setCpf]    = useState('')
   const [number, setNumber] = useState('')
@@ -590,9 +591,15 @@ function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar 
       <div>
         <label className="block text-[12px] font-semibold text-gray-700 mb-1">Parcelas</label>
         <select value={inst} onChange={(e) => setInst(Number(e.target.value))} className={`${campo} bg-white`}>
-          {parcelas.map((n) => (
-            <option key={n} value={n}>{n}x de R$ {fmt(amount / n)}{n === 1 ? ' à vista' : ''}</option>
-          ))}
+          {parcelas.map((n) => {
+            const { total, parcela, pct } = totalComJuros(amount, n, installmentFees)
+            return (
+              <option key={n} value={n}>
+                {n}x de R$ {fmt(parcela)}
+                {n === 1 ? ' à vista (sem juros)' : pct > 0 ? ` — total R$ ${fmt(total)} (c/ juros)` : ' sem juros'}
+              </option>
+            )
+          })}
         </select>
       </div>
 
@@ -1162,6 +1169,7 @@ export default function CheckoutPayment() {
                                 amount={total_price}
                                 publicKey={settings.payment_pagarme_public_key}
                                 maxParcelas={Number(settings?.payment_max_installments) || 12}
+                                installmentFees={tabelaDeParcelas(settings?.payment_installment_fees)}
                                 onPagar={handleCardPayment}
                               />
                             )}

@@ -1410,6 +1410,18 @@ router.post('/intent', authenticate, async (req, res, next) => {
     let cardStatusDetail   = null
     let cardInstallments   = Number(installments) || 1
     let cardInstFeeAmount  = null
+
+    // Juros do parcelamento repassado ao cliente — só cartão de CRÉDITO em 2x+.
+    // 1x, PIX e débito ficam sem acréscimo. O total cobrado passa a incluir o
+    // juros (WYSIWYG: bate com o que o cliente viu no checkout). Split está
+    // desligado, então o acréscimo entra no total normalmente — reavaliar a
+    // divisão quando o split for ligado.
+    if (payment_method === 'credit_card' && cardInstallments >= 2) {
+      const { totalComJuros, tabelaDeParcelas } = await import('../services/parcelas.js')
+      const r = totalComJuros(chargedTotal, cardInstallments, tabelaDeParcelas(cfg?.payment_installment_fees))
+      cardInstFeeAmount = r.acrescimo
+      chargedTotal      = r.total
+    }
     let cardLastFour       = null
     let cardBrand          = null
     let cardHolderName     = null
