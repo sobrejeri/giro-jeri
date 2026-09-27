@@ -121,6 +121,7 @@ export default function Auth({ defaultTab = 'login' }) {
 
   /* ── Register form ───────────────────────────────────── */
   const [regForm, setRegForm] = useState({ full_name: '', username: '', email: '', phone: '+55 ', password: '', confirm: '' })
+  const [aceito, setAceito] = useState(false)
 
   function setReg(field) {
     return (e) => {
@@ -138,6 +139,7 @@ export default function Auth({ defaultTab = 'login' }) {
       setError('Informe seu WhatsApp com DDD — enviamos um código para ativar a conta.')
       return
     }
+    if (!aceito) { setError('É preciso ler e aceitar os termos, a privacidade e a política de cancelamento.'); return }
     setLoading(true)
     try {
       const data = await api.register({
@@ -380,19 +382,32 @@ export default function Auth({ defaultTab = 'login' }) {
               placeholder={t('auth.confirmPasswordPlaceholder')}
               required
             />
+            {/* Consentimento obrigatório: ler e aceitar termos, privacidade e
+                política de cancelamento (com as taxas de cancelamento). */}
+            <label className="flex items-start gap-2.5 bg-gray-50 rounded-xl px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={aceito}
+                onChange={(e) => { setAceito(e.target.checked); setError('') }}
+                className="mt-0.5 w-4 h-4 accent-brand shrink-0"
+              />
+              <span className="text-[11.5px] text-gray-500 leading-relaxed">
+                Li e aceito os{' '}
+                <a href={`${import.meta.env.BASE_URL || '/'}termos`} target="_blank" rel="noreferrer" className="text-brand font-semibold underline">Termos de Uso</a>,
+                a{' '}
+                <a href={`${import.meta.env.BASE_URL || '/'}privacidade`} target="_blank" rel="noreferrer" className="text-brand font-semibold underline">Política de Privacidade</a>
+                {' '}e a{' '}
+                <a href={`${import.meta.env.BASE_URL || '/'}cancelamento`} target="_blank" rel="noreferrer" className="text-brand font-semibold underline">Política de Cancelamento</a>
+                {' '}(inclui as taxas de cancelamento).
+              </span>
+            </label>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !aceito}
               className="w-full h-12 bg-brand text-white rounded-xl font-bold text-[15px] active:scale-[0.98] transition-transform disabled:opacity-60 shadow-sm shadow-brand/30 mt-2"
             >
               {loading ? t('auth.registerLoading') : t('auth.registerBtn')}
             </button>
-            <p className="text-center text-[11px] text-gray-400 leading-relaxed">
-              Ao criar sua conta, você concorda com os{' '}
-              <a href={`${import.meta.env.BASE_URL || '/'}termos`} target="_blank" rel="noreferrer" className="text-brand font-semibold underline">Termos de Uso</a>
-              {' '}e a{' '}
-              <a href={`${import.meta.env.BASE_URL || '/'}privacidade`} target="_blank" rel="noreferrer" className="text-brand font-semibold underline">Política de Privacidade</a>.
-            </p>
             <p className="text-center text-[12px] text-gray-400 pt-1">
               {t('auth.hasAccount')}{' '}
               <button type="button" onClick={() => { setTab('login'); setError('') }} className="text-brand font-semibold">

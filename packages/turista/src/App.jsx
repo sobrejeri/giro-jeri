@@ -113,6 +113,7 @@ export default function App() {
         <Route path="perfil"              element={<Profile />} />
         <Route path="termos"              element={<Legal />} />
         <Route path="privacidade"         element={<Legal />} />
+        <Route path="cancelamento"        element={<Legal />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
