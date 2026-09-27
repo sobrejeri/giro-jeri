@@ -3,7 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
-import { taxaCancelamento } from '../lib/cancelamento'
 import { resolveStatusReserva } from '../lib/statusReserva'
 import { PageSpinner } from '../components/ui/Spinner'
 import ReviewSheet from '../components/ReviewSheet'
@@ -45,13 +44,8 @@ function fmt(v) {
 }
 
 // ── Cancel Dialog ────────────────────────────────────────────────
-function CancelDialog({ bookingCode, onConfirm, onClose, loading, error, serviceType, serviceDate, serviceTime, total, paga }) {
+function CancelDialog({ bookingCode, onConfirm, onClose, loading, error, paga }) {
   const { t } = useTranslation()
-  // Só mostra taxa para reserva PAGA — em aceite/aguardando pagamento é grátis.
-  const { pct, label } = paga
-    ? taxaCancelamento({ serviceType, serviceDate, serviceTime })
-    : { pct: 0, label: 'Reserva ainda não paga — cancelamento sem custo.' }
-  const valorTaxa = pct && total ? (Number(total) * pct) / 100 : 0
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -67,14 +61,11 @@ function CancelDialog({ bookingCode, onConfirm, onClose, loading, error, service
           {t('bookingDetailPg.cancelDialog.warning')}
         </p>
 
-        {/* Taxa de cancelamento aplicável (só exibição) */}
-        <div className={`rounded-xl px-3 py-2.5 mb-4 text-center ${pct ? 'bg-red-50' : 'bg-emerald-50'}`}>
-          <p className={`text-[12.5px] font-semibold ${pct ? 'text-red-600' : 'text-emerald-700'}`}>{label}</p>
-          {valorTaxa > 0 && (
-            <p className="text-[11px] text-gray-500 mt-0.5">
-              ≈ R$ {valorTaxa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de taxa
-            </p>
-          )}
+        {/* Aviso brando — sem cobrança automática por enquanto. */}
+        <div className="rounded-xl px-3 py-2.5 mb-4 text-center bg-gray-50">
+          <p className="text-[12.5px] text-gray-600">
+            {paga ? 'Sujeito à política de cancelamento.' : 'Reserva ainda não paga — cancelamento sem custo.'}
+          </p>
           <Link to="/cancelamento" className="text-[11px] font-bold text-brand underline mt-1 inline-block">
             Ver política de cancelamento
           </Link>
@@ -776,10 +767,6 @@ export default function BookingDetail() {
       {showCancel && (
         <CancelDialog
           bookingCode={booking.booking_code}
-          serviceType={booking.service_type}
-          serviceDate={booking.service_date}
-          serviceTime={booking.service_time}
-          total={booking.total_amount}
           paga={booking.status_commercial === 'paid'}
           onConfirm={handleConfirmCancel}
           onClose={() => { setShowCancel(false); setCancelError(null) }}
