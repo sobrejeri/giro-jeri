@@ -227,7 +227,8 @@ export default function ToursDesktop() {
   const [category, setCategory] = useState('')
   const [people, setPeople]     = useState(() => Number(navState?.people) >= 1 ? Number(navState.people) : 2)
   const [date, setDate]         = useState(() => /^\d{4}-\d{2}-\d{2}$/.test(navState?.date || '') ? navState.date : '')
-  const [searchTerm, setSearchTerm] = useState('')
+  // A home pode chegar com um termo já digitado no cartão "Para onde vamos?".
+  const [searchTerm, setSearchTerm] = useState(() => (typeof navState?.search === 'string' ? navState.search : ''))
 
   // Passeio escolhido → configurador aparece à direita (não abre mais a página
   // de detalhe: serviço de um lado, detalhes do outro, antes do carrinho).

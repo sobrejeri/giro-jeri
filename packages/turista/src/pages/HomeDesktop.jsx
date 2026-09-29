@@ -12,6 +12,7 @@ import {
   Star, Clock, Heart, ArrowRight, Compass, Car, Calendar, Users,
   ShieldCheck, MapPin, CalendarCheck, Headphones, Lock, RefreshCcw,
   ChevronRight, ChevronDown, Instagram, Send, Sparkles, HeartHandshake, Plane,
+  Sun, Search, Smartphone, Waves, Mountain,
 } from 'lucide-react'
 
 const fmtPrice   = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -205,6 +206,70 @@ function RouteMiniCard({ route, gradient, onClick }) {
   )
 }
 
+/* ── Card do "Seu próximo passeio" — imagem em cima, texto e CTA embaixo ── */
+function FeaturedCard({ tour, tag, gradient, isFav, onToggleFav, onClick }) {
+  const { t } = useTranslation()
+  const precoEntrada = precoDeEntrada(tour)
+  return (
+    <div
+      onClick={onClick}
+      className="group cursor-pointer bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col"
+    >
+      <div className="relative h-52 overflow-hidden">
+        {tour?.cover_image_url ? (
+          <img src={tour.cover_image_url} alt={tour.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        ) : (
+          <div className={`w-full h-full bg-gradient-to-br ${gradient}`} />
+        )}
+        {tag && (
+          <span className="absolute top-3 left-3 bg-white/95 text-gray-800 text-[11px] font-bold px-3 py-1 rounded-full shadow-sm">
+            {tag}
+          </span>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFav?.(tour.id) }}
+          aria-label={t('homePg.viewDetails')}
+          className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/95 hover:bg-white shadow-sm flex items-center justify-center transition-colors"
+        >
+          <Heart size={15} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-500'} />
+        </button>
+      </div>
+      <div className="p-5 flex flex-col flex-1">
+        <h3 className="font-extrabold text-gray-900 text-[17px] leading-snug line-clamp-1">{tour?.name}</h3>
+        <p className="text-[13px] text-gray-500 mt-1 line-clamp-1">{tour?.short_description || ''}</p>
+        <div className="mt-auto pt-4 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            {precoEntrada ? (
+              <>
+                <p className="text-[11px] text-gray-400 leading-none">{t('homePg.fromLabel')}</p>
+                <p className="text-gray-900 font-extrabold text-[20px] leading-tight mt-0.5">
+                  {fmtPrice(precoEntrada.valor)}
+                  {precoEntrada.porPessoa && <span className="text-[11px] text-gray-400 font-medium"> {t('homePg.perPerson')}</span>}
+                </p>
+              </>
+            ) : (
+              <p className="text-brand font-bold text-[14px]">{t('homePg.checkPrices')}</p>
+            )}
+          </div>
+          <span className="inline-flex items-center gap-1 text-brand font-bold text-[13px] border border-brand/30 bg-brand/5 group-hover:bg-brand/10 rounded-xl px-4 py-2 transition-colors shrink-0">
+            {t('homePg.viewDetails')} <ArrowRight size={14} />
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Ícone da pastilha de categoria por palavra-chave (os nomes vêm do admin).
+function chipIcon(name = '') {
+  const s = name.toLowerCase()
+  if (/lago|lagoa/.test(s)) return Waves
+  if (/aventura|adventure|trilha/.test(s)) return Mountain
+  if (/buggy|4x4|quadri/.test(s)) return Car
+  if (/sol|sunset|pôr|por do/.test(s)) return Sun
+  return Compass
+}
+
 // Esta tela busca os PRÓPRIOS dados. Já recebeu tudo por propriedade — nove
 // delas — e quando a home de celular foi redesenhada o `<HomeDesktop />` passou
 // a ser montado sem NENHUMA: o PC ficou meses mostrando "Nenhum passeio
@@ -279,11 +344,25 @@ export default function HomeDesktop() {
   const [tDest,     setTDest]     = useState('')          // transfer: para onde
   const [date,      setDate]      = useState(todayIso())
   const [people,    setPeople]    = useState(2)
+  const [search,    setSearch]    = useState('')          // busca livre (hero)
+  const [chip,      setChip]      = useState('')          // categoria da seção "próximo passeio"
 
   const list = useMemo(() => {
     const src = featured?.length ? featured : tours
     return (Array.isArray(src) ? src : []).filter((t) => t)
   }, [tours, featured])
+
+  // Pastilhas de categoria da seção "Seu próximo passeio" — do catálogo real
+  // da região (nunca uma lista fixa). "Todos" volta a mostrar o topo.
+  const homeCats = useMemo(() => {
+    const m = new Map()
+    for (const tr of list) { if (tr?.categories?.id) m.set(tr.categories.id, tr.categories.name) }
+    return [...m.entries()].map(([id, name]) => ({ id, name })).filter((c) => c.name)
+  }, [list])
+  const featuredList = useMemo(() => {
+    const base = chip ? list.filter((tr) => tr?.categories?.id === chip) : list
+    return base.slice(0, 3)
+  }, [list, chip])
 
   // Opções do dropdown de passeios — catálogo real da região
   const tourOptions = useMemo(() => {
@@ -353,211 +432,249 @@ export default function HomeDesktop() {
     if (tab === 'transfers') {
       navigate('/transfers', { state: { origin: tOrigin, dest: tDest, date, people } })
     } else {
-      navigate('/passeios', { state: { selectedId: tourId || undefined, date, people } })
+      navigate('/passeios', { state: { selectedId: tourId || undefined, date, people, search: search.trim() || undefined } })
     }
   }
 
   return (
     <div className="w-full">
-      {/* ── HERO ─────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden">
+      {/* ── HERO (2 colunas: convite à esquerda, busca à direita) ── */}
+      <section className="relative overflow-hidden bg-fundo">
         {heroImg ? (
           <img src={heroImg} alt={placeName} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-500 via-amber-400 to-cyan-500" />
+          <div className="absolute inset-0 bg-gradient-to-br from-sky-300 via-cyan-200 to-amber-100" />
         )}
-        {/* Overlay para dar leitura */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/10" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+        {/* Clareia a esquerda (texto escuro legível) e funde a base no fundo areia */}
+        <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/55 to-white/10" />
+        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-fundo to-transparent" />
 
-        <div className="relative z-10 max-w-[1520px] mx-auto px-10 xl:px-16 pt-14 pb-44">
-          {/* Sem banner do admin: "Viva o melhor de" + NOME DO DESTINO. Com
-              banner: o texto dele é o título inteiro e o prefixo some — senão
-              vira "Viva o melhor de <frase promocional>". */}
-          {!bannerTitle && (
-            <p className="text-orange-300 text-[19px] italic font-semibold tracking-wide drop-shadow-md">
-              {t('homePg.heroPrefix')}
+        <div className="relative z-10 max-w-[1520px] mx-auto px-10 xl:px-16 py-14 xl:py-16 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[minmax(0,1fr)_520px] gap-10 items-center">
+          {/* ESQUERDA — convite */}
+          <div>
+            <p className="text-brand font-bold text-[13px] tracking-[0.22em] uppercase">
+              {t('homePg.heroEyebrow', { place: placeName })}
             </p>
-          )}
-          <h1 className="mt-1 text-white font-extrabold uppercase leading-[0.95] tracking-tight text-[54px] xl:text-[64px] drop-shadow-2xl break-words">
-            {bannerTitle || placeName}
-          </h1>
-          <p className="mt-4 text-white/90 text-[16px] leading-relaxed max-w-[440px] drop-shadow">
-            {bannerSubtitle || t('homePg.heroDesc')}
-          </p>
-
-          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2.5">
-            {HERO_BADGES.map(({ icon: Icon, key }) => (
-              <div key={key} className="inline-flex items-center gap-2 text-white/90 text-[13px] font-medium">
-                <span className="w-6 h-6 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center">
-                  <Icon size={12} className="text-white" />
+            <div className="relative inline-block mt-1">
+              <h1 className="font-script text-[#0d3b46] font-bold leading-[0.9] text-[64px] xl:text-[82px] drop-shadow-sm max-w-[620px]">
+                {bannerTitle || t('homePg.heroHeadline', { place: placeName })}
+              </h1>
+              <Sun size={44} className="absolute -top-1 -right-7 text-brand" strokeWidth={2.2} />
+            </div>
+            <div className="mt-3 max-w-[440px]">
+              <p className="text-[#134e5e] text-[18px] font-semibold leading-relaxed">
+                {bannerSubtitle || t('homePg.heroTagline')}
+              </p>
+              {/* rabisco à mão sob o texto */}
+              <svg viewBox="0 0 240 12" className="mt-1 w-52 h-3 text-brand" fill="none" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M2 8 Q 40 1 80 6 T 160 6 T 238 5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3">
+              <div className="inline-flex items-center gap-2 text-[#134e5e] text-[14px] font-semibold">
+                <span className="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center">
+                  <Users size={16} className="text-brand" />
                 </span>
-                {t(`homePg.${key}`)}
+                {t('homePg.heroBadgeLocalOperators')}
               </div>
-            ))}
+              <div className="inline-flex items-center gap-2 text-[#134e5e] text-[14px] font-semibold">
+                <span className="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center">
+                  <Smartphone size={16} className="text-brand" />
+                </span>
+                {t('homePg.heroBadgeAppBooking')}
+              </div>
+            </div>
           </div>
+
+          {/* DIREITA — cartão de busca */}
+          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-6">
+            <h2 className="text-[24px] font-extrabold text-gray-900 leading-tight">{t('homePg.searchCardTitle')}</h2>
+            <p className="text-[13px] text-gray-500 mt-1">{t('homePg.searchCardSubtitle', { place: placeShort })}</p>
+
+            {/* Busca livre */}
+            <div className="relative mt-4">
+              <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
+                placeholder={t('homePg.searchPlaceholder')}
+                className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 placeholder-gray-400 outline-none focus:border-brand focus:bg-white transition-colors"
+              />
+            </div>
+
+            {/* Dois modos (Passeios / Transfers) */}
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <button
+                onClick={() => setTab('passeios')}
+                className={`flex items-center gap-2.5 rounded-xl px-3.5 py-3 text-left transition-all ${
+                  tab === 'passeios' ? 'bg-brand text-white shadow-md shadow-brand/25 ring-2 ring-brand/30' : 'bg-brand/90 text-white/95 hover:bg-brand'
+                }`}
+              >
+                <Compass size={20} className="shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-[14px] font-bold leading-tight">{t('homePg.toursCardTitle')}</span>
+                  <span className="block text-[11px] text-white/85 leading-tight truncate">{t('homePg.toursCardTagline')}</span>
+                </span>
+              </button>
+              <button
+                onClick={() => setTab('transfers')}
+                className={`flex items-center gap-2.5 rounded-xl px-3.5 py-3 text-left transition-all ${
+                  tab === 'transfers' ? 'bg-[#155e75] text-white shadow-md shadow-[#155e75]/25 ring-2 ring-[#155e75]/30' : 'bg-[#155e75]/90 text-white/95 hover:bg-[#155e75]'
+                }`}
+              >
+                <Car size={20} className="shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-[14px] font-bold leading-tight">{t('homePg.transfersCardTitle')}</span>
+                  <span className="block text-[11px] text-white/85 leading-tight truncate">{t('homePg.transfersCardTagline')}</span>
+                </span>
+              </button>
+            </div>
+
+            {/* Campos */}
+            <div className="grid grid-cols-3 gap-2.5 mt-3">
+              {/* 1ª coluna: Saindo de (região no passeio, origem no transfer) */}
+              {tab === 'transfers' ? (
+                <div className="min-w-0 flex flex-col gap-0.5 px-3 py-2.5 rounded-xl border border-gray-200 focus-within:border-brand transition-colors">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.leavingFrom')}</label>
+                  <div className="relative w-full min-w-0">
+                    <select value={tOrigin} onChange={(e) => setTOrigin(e.target.value)} className="text-[13px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-5 cursor-pointer">
+                      {routeOrigins.length === 0 && <option value="">{t('homePg.loadingRoutes')}</option>}
+                      {routeOrigins.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+              ) : (
+                <button type="button" onClick={openPicker} className="min-w-0 flex flex-col gap-0.5 px-3 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors text-left">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.leavingFrom')}</span>
+                  <span className="flex items-center gap-1 min-w-0">
+                    <MapPin size={12} className="text-brand shrink-0" />
+                    <span className="text-[13px] font-semibold text-gray-800 truncate">{region?.name || t('homePg.selectRegion')}</span>
+                  </span>
+                </button>
+              )}
+              {/* 2ª coluna: destino (transfers) OU data (passeios) */}
+              {tab === 'transfers' ? (
+                <div className="min-w-0 flex flex-col gap-0.5 px-3 py-2.5 rounded-xl border border-gray-200 focus-within:border-brand transition-colors">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.whereTo')}</label>
+                  <div className="relative w-full min-w-0">
+                    <select value={tDest} onChange={(e) => setTDest(e.target.value)} className="text-[13px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-5 cursor-pointer">
+                      <option value="">{routeDests.length ? t('homePg.selectDestination') : t('homePg.chooseOriginFirst')}</option>
+                      {routeDests.map((d) => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+              ) : (
+                <div className="min-w-0 flex flex-col gap-0.5 px-3 py-2.5 rounded-xl border border-gray-200 focus-within:border-brand transition-colors">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.dateLabel')}</label>
+                  <DesktopDatePicker valueIso={date} onChange={setDate} minIso={todayIso()} seasons={seasons} />
+                </div>
+              )}
+              {/* 3ª coluna: pessoas (passeios) OU data (transfers) */}
+              {tab === 'transfers' ? (
+                <div className="min-w-0 flex flex-col gap-0.5 px-3 py-2.5 rounded-xl border border-gray-200 focus-within:border-brand transition-colors">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.dateLabel')}</label>
+                  <DesktopDatePicker valueIso={date} onChange={setDate} minIso={todayIso()} seasons={seasons} />
+                </div>
+              ) : (
+                <div className="min-w-0 flex flex-col gap-0.5 px-3 py-2.5 rounded-xl border border-gray-200 focus-within:border-brand transition-colors">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.peopleLabel')}</label>
+                  <div className="relative w-full min-w-0">
+                    <select value={people} onChange={(e) => setPeople(Number(e.target.value))} className="text-[13px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-5 cursor-pointer">
+                      {[1,2,3,4,5,6,7,8,9,10,12,15,20].map((n) => (
+                        <option key={n} value={n}>{n} {t(n !== 1 ? 'homePg.personPlural' : 'homePg.personSingular')}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Buscar */}
+            <button
+              onClick={handleSearch}
+              className="mt-3 w-full inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold text-[15px] rounded-xl px-4 py-3.5 transition-colors shadow-md shadow-brand/30"
+            >
+              {tab === 'transfers' ? t('homePg.searchTransfersCta') : t('homePg.searchToursCta')} <ArrowRight size={17} />
+            </button>
+
+            <p className="mt-3 flex items-center justify-center gap-1.5 text-[12px] text-gray-500">
+              <ShieldCheck size={14} className="text-emerald-500 shrink-0" /> {t('homePg.payAfterAccept')}
+            </p>
+          </div>
+        </div>
+
+        {/* Legenda do lugar */}
+        <div className="absolute bottom-4 right-6 z-10 hidden lg:flex items-center gap-1.5 text-white text-[12px] font-medium bg-black/25 backdrop-blur-sm rounded-full px-3 py-1.5">
+          <MapPin size={13} /> {placeName}
         </div>
       </section>
 
-      {/* ── BOX DE BUSCA (sobreposto) ────────────────────────── */}
-      <div className="relative z-20 -mt-28 max-w-[1280px] mx-auto px-10">
-        <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
-          {/* Abas */}
-          <div className="flex items-center gap-1 px-3 pt-3">
-            {[
-              { id: 'passeios',  icon: Compass, labelKey: 'toursCardTitle' },
-              { id: 'transfers', icon: Car,     labelKey: 'transfersCardTitle' },
-            ].map(({ id, icon: Icon, labelKey }) => {
-              const active = tab === id
+      {/* ── SEU PRÓXIMO PASSEIO COMEÇA AQUI ─────────────────── */}
+      <section className="mt-12 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
+        <div className="flex items-end justify-between gap-6 mb-5">
+          <div>
+            <h2 className="flex items-center gap-2.5 text-[28px] font-extrabold text-gray-900 leading-tight">
+              {t('homePg.nextTourHeading')} <Sun size={26} className="text-brand shrink-0" strokeWidth={2.2} />
+            </h2>
+            <p className="text-[13px] text-gray-500 mt-1">{t('homePg.nextTourSubtitle')}</p>
+          </div>
+          <Link to="/passeios" className="hidden lg:inline-flex items-center gap-1 text-[14px] font-semibold text-brand hover:gap-1.5 transition-all shrink-0">
+            {t('homePg.viewAllToursLink')} <ArrowRight size={16} />
+          </Link>
+        </div>
+
+        {/* Pastilhas de categoria */}
+        {homeCats.length > 0 && (
+          <div className="flex items-center gap-2.5 overflow-x-auto scrollbar-hide pb-1 mb-5">
+            <button
+              onClick={() => setChip('')}
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[13px] font-semibold transition-all ${
+                !chip ? 'bg-brand text-white shadow-sm shadow-brand/25' : 'bg-white text-gray-700 border border-gray-100 shadow-sm hover:border-gray-200'
+              }`}
+            >
+              {t('homePg.chipAll')}
+            </button>
+            {homeCats.map((c) => {
+              const Icon = chipIcon(c.name)
+              const ativo = chip === c.id
               return (
                 <button
-                  key={id}
-                  onClick={() => setTab(id)}
-                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-[14px] font-semibold transition-colors ${
-                    active ? 'bg-white text-brand shadow-inner border-x border-t border-gray-100' : 'text-gray-500 hover:text-gray-800'
+                  key={c.id}
+                  onClick={() => setChip(ativo ? '' : c.id)}
+                  className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[13px] font-semibold transition-all ${
+                    ativo ? 'bg-brand text-white shadow-sm shadow-brand/25' : 'bg-white text-gray-700 border border-gray-100 shadow-sm hover:border-gray-200'
                   }`}
                 >
-                  <Icon size={16} className={active ? 'text-brand' : 'text-gray-400'} />
-                  {t(`homePg.${labelKey}`)}
+                  <Icon size={14} className={ativo ? 'text-white' : 'text-gray-400'} strokeWidth={2.2} />
+                  {c.name}
                 </button>
               )
             })}
           </div>
+        )}
 
-          {/* Campos — min-w-0 + truncate mantêm o conteúdo dentro do box */}
-          <div className="grid grid-cols-12 gap-3 p-4 pt-3 border-t border-gray-100">
-            {tab === 'transfers' ? (
-              <div className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.leavingFrom')}</label>
-                <div className="relative w-full min-w-0">
-                  <select
-                    value={tOrigin}
-                    onChange={(e) => setTOrigin(e.target.value)}
-                    className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
-                  >
-                    {routeOrigins.length === 0 && <option value="">{t('homePg.loadingRoutes')}</option>}
-                    {routeOrigins.map((o) => (
-                      <option key={o} value={o}>{o}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={openPicker}
-                className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors text-left"
-              >
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.leavingFrom')}</span>
-                <span className="flex items-center gap-1.5 min-w-0">
-                  <MapPin size={13} className="text-brand shrink-0" />
-                  <span className="text-[14px] font-semibold text-gray-800 truncate">{region?.name || t('homePg.selectRegion')}</span>
-                  <ChevronDown size={14} className="text-gray-400 shrink-0 ml-auto" />
-                </span>
-              </button>
-            )}
-            <div className="col-span-3 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
-                {tab === 'transfers' ? t('homePg.whereTo') : t('homePg.chooseTour')}
-              </label>
-              <div className="relative w-full min-w-0">
-                {tab === 'transfers' ? (
-                  <select
-                    value={tDest}
-                    onChange={(e) => setTDest(e.target.value)}
-                    className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
-                  >
-                    <option value="">{routeDests.length ? t('homePg.selectDestination') : t('homePg.chooseOriginFirst')}</option>
-                    {routeDests.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <select
-                    value={tourId}
-                    onChange={(e) => setTourId(e.target.value)}
-                    className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
-                  >
-                    <option value="">{t('homePg.allTours')}</option>
-                    {tourOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>{opt.name}</option>
-                    ))}
-                  </select>
-                )}
-                <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-            <div className="col-span-2 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.dateLabel')}</label>
-              <DesktopDatePicker
-                valueIso={date}
-                onChange={setDate}
-                minIso={todayIso()}
-                seasons={seasons}
-              />
-            </div>
-            <div className="col-span-2 min-w-0 flex flex-col gap-0.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 focus-within:border-brand transition-colors">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('homePg.peopleLabel')}</label>
-              <div className="relative w-full min-w-0">
-                <select
-                  value={people}
-                  onChange={(e) => setPeople(Number(e.target.value))}
-                  className="text-[14px] font-semibold text-gray-800 bg-transparent outline-none appearance-none w-full min-w-0 truncate pr-6 cursor-pointer"
-                >
-                  {[1,2,3,4,5,6,7,8,9,10,12,15,20].map((n) => (
-                    <option key={n} value={n}>{n} {t(n !== 1 ? 'homePg.personPlural' : 'homePg.personSingular')}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-            <div className="col-span-2 min-w-0 flex">
-              <button
-                onClick={handleSearch}
-                className="w-full h-full inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-600 text-white font-bold text-[14px] rounded-xl px-4 py-3 transition-colors shadow-md shadow-brand/30"
-              >
-                <span className="truncate">{t('homePg.searchNow')}</span> <ArrowRight size={16} className="shrink-0" />
-              </button>
-            </div>
-          </div>
-
-          {/* Selinhos abaixo do box */}
-          <div className="flex items-center justify-center gap-8 text-[12px] text-gray-500 px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-            <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} className="text-brand" /> {t('homePg.bestPriceGuaranteed')}</span>
-            <span className="inline-flex items-center gap-1.5"><Lock size={13} className="text-brand" /> {t('homePg.securePayment')}</span>
-            <span className="inline-flex items-center gap-1.5"><CalendarCheck size={13} className="text-brand" /> {t('homePg.onlineBooking')}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── MAIS PROCURADOS EM JERI ──────────────────────────── */}
-      <section className="mt-14 w-full max-w-[1520px] mx-auto px-10 xl:px-16">
-        <div className="flex items-end justify-between mb-5">
-          <div>
-            <h2 className="text-[28px] font-extrabold text-gray-900 leading-tight">{t('homePg.mostSoughtTitle', { place: placeShort })}</h2>
-            <p className="text-[13px] text-gray-500 mt-1">{t('homePg.mostSoughtSubtitle')}</p>
-          </div>
-          <Link to="/passeios" className="hidden lg:inline-flex items-center gap-1 text-[14px] font-semibold text-brand hover:gap-1.5 transition-all">
-            {t('homePg.viewAllExperiences')} <ArrowRight size={16} />
-          </Link>
-        </div>
         {isLoading ? (
           <div className="h-56 flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : topThree.length === 0 ? (
+        ) : featuredList.length === 0 ? (
           <div className="text-center text-gray-400 py-12 border border-dashed border-gray-200 rounded-2xl">
             {t('homePg.noToursInRegion')}
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-5">
-            {topThree.map((tour, i) => (
-              <HeroTourCard
+            {featuredList.map((tour, i) => (
+              <FeaturedCard
                 key={tour.id}
                 tour={tour}
                 tag={tagFor(tour, [t('homePg.tagBestSeller'), t('homePg.tagAdventure'), t('homePg.tagSunset')][i])}
                 gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
+                isFav={favs?.has?.(tour.id)}
+                onToggleFav={toggleFav}
                 onClick={() => navigate(`/passeios/${tour.id}`)}
               />
             ))}

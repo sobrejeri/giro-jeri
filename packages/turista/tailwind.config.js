@@ -42,6 +42,7 @@ export default {
         sans:    ['Plus Jakarta Sans', 'ui-sans-serif', 'system-ui'],
         display: ['Syne', 'ui-sans-serif', 'system-ui'],
         giro:    ['Fredoka', 'ui-sans-serif', 'system-ui'],
+        script:  ['Caveat', 'ui-serif', 'cursive'],
       },
     },
   },
