@@ -9,22 +9,14 @@ import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
 import {
-  Star, Clock, Heart, ArrowRight, Compass, Car, Calendar, Users,
+  Star, Clock, Heart, ArrowRight, Compass, Car, Users,
   ShieldCheck, MapPin, CalendarCheck, Headphones, Lock, RefreshCcw,
-  ChevronRight, ChevronDown, Instagram, Send, Sparkles, HeartHandshake, Plane,
+  ChevronDown, Instagram, Send, Sparkles, HeartHandshake, Plane,
   Sun, Search, Smartphone, Waves, Mountain,
 } from 'lucide-react'
 
 const fmtPrice   = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 const todayIso   = () => new Date().toISOString().slice(0, 10)
-
-// Selos do hero — atendimento é 100% pela plataforma (sem WhatsApp)
-const HERO_BADGES = [
-  { icon: CalendarCheck, key: 'dailyDepartures' },
-  { icon: RefreshCcw,    key: 'freeCancellation' },
-  { icon: Headphones,    key: 'platformSupport' },
-  { icon: Lock,          key: 'secureBooking' },
-]
 
 // Benefícios — bloco de confiança
 const BENEFITS = [
@@ -58,62 +50,6 @@ function tagFor(tour, fallback) {
   return fallback
 }
 
-/* ── Card grande "Mais procurados" ─────────────────────────── */
-function HeroTourCard({ tour, tag, gradient, onClick }) {
-  const precoEntrada = precoDeEntrada(tour)
-  const { t } = useTranslation()
-  return (
-    <button
-      onClick={onClick}
-      className="group text-left bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all"
-    >
-      <div className="relative h-[210px] overflow-hidden">
-        {tour?.cover_image_url ? (
-          <img src={tour.cover_image_url} alt={tour.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-        ) : (
-          <div className={`w-full h-full bg-gradient-to-br ${gradient}`} />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-        {tag && (
-          <span className="absolute top-3 left-3 bg-brand text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-md">
-            {tag}
-          </span>
-        )}
-        <div className="absolute bottom-3 left-4 right-4 text-white">
-          <p className="font-extrabold text-[17px] leading-tight drop-shadow-md line-clamp-1">{tour?.name || t('homePg.defaultTourName')}</p>
-          <p className="text-[12px] text-white/85 line-clamp-1 mt-0.5 drop-shadow">
-            {tour?.short_description || t('homePg.defaultTourDesc')}
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center justify-between px-4 py-3.5">
-        <div>
-          {/* Passeio só privativo tem preço de entrada — o menor da frota.
-              Antes esta tela exigia compartilhado e caía em "Consultar
-              preços", enquanto o celular mostrava o valor. Mesmo passeio,
-              respostas diferentes. */}
-          {precoEntrada ? (
-            <>
-              <p className="text-[11px] text-gray-400 leading-none">{t('homePg.fromLabel')}</p>
-              <p className="text-brand font-extrabold text-[17px] leading-tight mt-0.5">
-                {fmtPrice(precoEntrada.valor)}
-                {precoEntrada.porPessoa && (
-                  <span className="text-[11px] text-gray-400 font-medium"> {t('homePg.perPerson')}</span>
-                )}
-              </p>
-            </>
-          ) : (
-            <p className="text-brand font-bold text-[14px]">{t('homePg.checkPrices')}</p>
-          )}
-        </div>
-        <span className="inline-flex items-center gap-1 text-brand font-semibold text-[13px] border border-brand/20 bg-brand/5 hover:bg-brand/10 rounded-lg px-3 py-1.5 transition-colors">
-          {t('homePg.viewDetails')} <ArrowRight size={13} />
-        </span>
-      </div>
-    </button>
-  )
-}
-
 /* ── Card menor "Experiências em destaque" ─────────────────── */
 function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
   const precoEntrada = precoDeEntrada(tour)
@@ -131,6 +67,7 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
         )}
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFav?.(tour.id) }}
+          aria-label={t('homePg.favoriteAria')}
           className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/95 hover:bg-white shadow-sm flex items-center justify-center transition-colors"
         >
           <Heart size={14} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-500'} />
@@ -213,7 +150,10 @@ function FeaturedCard({ tour, tag, gradient, isFav, onToggleFav, onClick }) {
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() } }}
+      className="group cursor-pointer bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
     >
       <div className="relative h-52 overflow-hidden">
         {tour?.cover_image_url ? (
@@ -228,7 +168,7 @@ function FeaturedCard({ tour, tag, gradient, isFav, onToggleFav, onClick }) {
         )}
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFav?.(tour.id) }}
-          aria-label={t('homePg.viewDetails')}
+          aria-label={t('homePg.favoriteAria')}
           className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/95 hover:bg-white shadow-sm flex items-center justify-center transition-colors"
         >
           <Heart size={15} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-500'} />
@@ -339,7 +279,6 @@ export default function HomeDesktop() {
 
   // Estado do box de busca
   const [tab,       setTab]       = useState('passeios') // 'passeios' | 'transfers'
-  const [tourId,    setTourId]    = useState('')          // passeio escolhido (dropdown)
   const [tOrigin,   setTOrigin]   = useState('')          // transfer: saindo de
   const [tDest,     setTDest]     = useState('')          // transfer: para onde
   const [date,      setDate]      = useState(todayIso())
@@ -363,12 +302,6 @@ export default function HomeDesktop() {
     const base = chip ? list.filter((tr) => tr?.categories?.id === chip) : list
     return base.slice(0, 3)
   }, [list, chip])
-
-  // Opções do dropdown de passeios — catálogo real da região
-  const tourOptions = useMemo(() => {
-    const src = (Array.isArray(tours) && tours.length ? tours : list).filter((t) => t?.id && t?.name)
-    return [...src].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-  }, [tours, list])
 
   // Alta temporada: datas exatas em laranja no calendário da busca.
   const { data: seasonsData } = useQuery({
@@ -432,22 +365,27 @@ export default function HomeDesktop() {
     if (tab === 'transfers') {
       navigate('/transfers', { state: { origin: tOrigin, dest: tDest, date, people } })
     } else {
-      navigate('/passeios', { state: { selectedId: tourId || undefined, date, people, search: search.trim() || undefined } })
+      navigate('/passeios', { state: { date, people, search: search.trim() || undefined } })
     }
   }
 
   return (
     <div className="w-full">
       {/* ── HERO (2 colunas: convite à esquerda, busca à direita) ── */}
-      <section className="relative overflow-hidden bg-fundo">
-        {heroImg ? (
-          <img src={heroImg} alt={placeName} className="absolute inset-0 w-full h-full object-cover" />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-sky-300 via-cyan-200 to-amber-100" />
-        )}
-        {/* Clareia a esquerda (texto escuro legível) e funde a base no fundo areia */}
-        <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/55 to-white/10" />
-        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-fundo to-transparent" />
+      {/* z-30 (não overflow-hidden na section): o popover do calendário abre
+          para baixo e precisa transbordar o hero sem ser cortado nem ficar
+          atrás da seção seguinte. Só a CAMADA DE FUNDO recorta a imagem. */}
+      <section className="relative z-30 bg-fundo">
+        <div className="absolute inset-0 overflow-hidden">
+          {heroImg ? (
+            <img src={heroImg} alt={placeName} className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-sky-300 via-cyan-200 to-amber-100" />
+          )}
+          {/* Clareia a esquerda (texto escuro legível) e funde a base no fundo areia */}
+          <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/55 to-white/10" />
+          <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-fundo to-transparent" />
+        </div>
 
         <div className="relative z-10 max-w-[1520px] mx-auto px-10 xl:px-16 py-14 xl:py-16 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[minmax(0,1fr)_520px] gap-10 items-center">
           {/* ESQUERDA — convite */}
