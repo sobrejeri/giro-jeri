@@ -8,6 +8,7 @@ import { api } from '../lib/api'
 import {
   Route, Zap, Clock, Users, Car, ShieldCheck, Timer, Headphones,
   Calendar, Plus, Minus, Send, CheckCircle2, Info, ChevronRight, Check,
+  Search, MapPin, ArrowUpDown,
 } from 'lucide-react'
 import { PlaceInput, suggestVehicles, VehicleRow, shortPlace } from './Transfers'
 import { isHighSeasonIso } from '../lib/season'
@@ -39,17 +40,18 @@ function dayLabel(iso, t) {
   return format(d, 'd MMM', { locale: ptBR })
 }
 
+// Cartão de rota (vitrine): capa com selo "Privativo" e check quando escolhido;
+// título, subtítulo e preço no corpo branco embaixo (não sobre a foto).
 function RouteCard({ route, bg, active, onSelect }) {
   const { t } = useTranslation()
   return (
     <button
       onClick={onSelect}
-      className={`bg-white rounded-2xl overflow-hidden border shadow-sm hover:shadow-md transition-all text-left flex flex-col ${
-        active ? 'border-brand ring-2 ring-brand/20' : 'border-gray-100'
+      className={`group relative bg-white rounded-2xl overflow-hidden border text-left flex flex-col transition-all ${
+        active ? 'border-brand ring-2 ring-brand/30 shadow-md' : 'border-gray-100 hover:shadow-md hover:border-gray-200'
       }`}
     >
-      {/* Capa: foto da rota quando houver; senão o gradiente de sempre. */}
-      <div className="relative h-[150px] overflow-hidden group">
+      <div className="relative h-[130px] overflow-hidden">
         {route.cover_image_url ? (
           <img
             src={route.cover_image_url} alt="" loading="lazy"
@@ -58,30 +60,35 @@ function RouteCard({ route, bg, active, onSelect }) {
         ) : (
           <div className={`absolute inset-0 bg-gradient-to-br ${bg}`} />
         )}
-        {/* Escurece a base para o texto ficar legível sobre qualquer foto. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-
-        <span className="absolute top-3 left-3 text-[10px] font-bold text-white bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full">
+        <span className="absolute top-3 left-3 text-[11px] font-bold text-white bg-black/45 backdrop-blur-sm px-2.5 py-1 rounded-full">
           {t('transfersPg.privateBadge')}
         </span>
-
-        <div className="absolute bottom-3 left-4 right-4">
-          <p className="text-white font-bold text-[15px] leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
-            {route.origin_name} → {route.destination_name}
-          </p>
-          <div className="flex items-center gap-1 mt-1 text-white/90 text-[11px] [text-shadow:0_1px_2px_rgba(0,0,0,.4)]">
-            <Users size={11} /> {t('transfersPg.upTo4Passengers')}
-          </div>
-        </div>
+        {active && (
+          <span className="absolute top-3 right-3 w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center shadow">
+            <Check size={14} />
+          </span>
+        )}
       </div>
-      <div className="p-4 flex items-end justify-between gap-2 flex-1">
-        <div className="min-w-0">
-          <p className="text-[11px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
-          <p className="text-[20px] font-extrabold text-gray-900 leading-tight mt-1">
-            R$ {Number(route.default_price).toLocaleString('pt-BR')}
-          </p>
+      <div className="p-3.5 flex flex-col flex-1">
+        <p className="font-bold text-[14px] text-gray-900 leading-snug">
+          {route.origin_name} → {route.destination_name}
+        </p>
+        <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
+          <Car size={11} /> {t('transfersPg.privateTransfer', 'Transfer privativo')}
+        </p>
+        <div className="flex items-end justify-between mt-3 pt-3 border-t border-gray-50">
+          <div>
+            <p className="text-[10px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
+            <p className="text-[17px] font-extrabold text-gray-900 leading-tight mt-1">
+              R$ {Number(route.default_price).toLocaleString('pt-BR')}
+            </p>
+          </div>
+          <span className="text-[12px] font-bold text-brand shrink-0 flex items-center gap-1">
+            {active
+              ? <><Check size={13} /> {t('transfersPg.selected')}</>
+              : <>{t('transfersPg.select')} →</>}
+          </span>
         </div>
-        <span className="text-[12px] font-semibold text-brand shrink-0">{t('transfersPg.select')} →</span>
       </div>
     </button>
   )
@@ -108,6 +115,8 @@ export default function TransfersDesktop() {
   const [time,   setTime]   = useState('08:00')
   const [people, setPeople] = useState(Number(navState?.people) || 2)
   const [cart,   setCart]   = useState({})
+  const [search, setSearch] = useState('')   // busca por origem/destino na vitrine
+  const [pickup, setPickup] = useState('')   // local de embarque (pousada/endereço)
 
   /* ── Corrida personalizada ── */
   const [customOrigin,  setCustomOrigin]  = useState('')
@@ -167,6 +176,15 @@ export default function TransfersDesktop() {
     setRouteId(r.id)
     setOrigin(r.origin_name)
     setDest(r.destination_name)
+    setCart({})
+  }
+
+  // Inverte origem↔destino: limpa o id para o rotaEscolhida re-resolver pela
+  // combinação de nomes (a volta costuma ser outra rota cadastrada).
+  const inverterRota = () => {
+    setRouteId('')
+    setOrigin(dest)
+    setDest(origin)
     setCart({})
   }
 
@@ -275,6 +293,15 @@ export default function TransfersDesktop() {
     }
     return popularRoutes
   }, [routes, routeOrigin, showAllRoutes, popularRoutes])
+
+  // Busca por texto (origem/destino) por cima do recorte de saída/populares.
+  const bateBusca = (r) => {
+    const q = search.trim().toLowerCase()
+    return !q || `${r.origin_name} ${r.destination_name}`.toLowerCase().includes(q)
+  }
+  const routesToShow = useMemo(() => routesShown.filter(bateBusca),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [routesShown, search])
 
   // O mesmo filtro recorta as vitrines exclusivas — sem isso o turista filtra
   // "Jeri" e continua vendo voo saindo de outro lugar. Categoria que fica sem
@@ -390,6 +417,7 @@ export default function TransfersDesktop() {
       origin, dest,
       dateIso: date,
       time, people,
+      origin_text: pickup.trim() || undefined,   // local de embarque (o carrinho finaliza)
       region_id: region?.id || null,
       booking_cutoff_time: matched?.transfers?.booking_cutoff_time || null,
       min_advance_hours:   matched?.transfers?.min_advance_hours ?? null,
@@ -443,7 +471,12 @@ export default function TransfersDesktop() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
-      <h1 className="text-3xl font-extrabold text-gray-900">{t('transfersPg.title')}</h1>
+      <nav className="flex items-center gap-1.5 text-[13px] text-gray-400 mb-1.5">
+        <span>{t('transfersPg.breadcrumbHome', 'Início')}</span>
+        <ChevronRight size={13} className="text-gray-300" />
+        <span className="text-gray-500 font-medium">{t('transfersPg.breadcrumbTransfers', 'Transfers')}</span>
+      </nav>
+      <h1 className="text-[30px] font-extrabold text-gray-900 leading-tight">{t('transfersPg.title')}</h1>
       <p className="text-gray-500 mt-1">{t('transfersPg.subtitleDesktop')}</p>
 
       {/* Toggle */}
@@ -464,115 +497,107 @@ export default function TransfersDesktop() {
 
       {/* ── ROTA DEFINIDA ─────────────────────────────────────── */}
       {mode === 'rota' && (
-        <>
-          {routes.length > 0 && (
-            <>
-              <div className="flex items-baseline justify-between mt-8 mb-4 gap-4">
-                <h2 className="text-lg font-bold text-gray-900">
-                  {routeOrigin
-                    ? t('transfersPg.departingFrom', { place: shortPlace(routeOrigin) })
-                    : t('transfersPg.popularRoutes')}
-                </h2>
-                {routes.length > popularRoutes.length && !routeOrigin && (
-                  <button
-                    onClick={() => setShowAllRoutes(v => !v)}
-                    className="text-[13px] font-bold text-brand hover:text-brand-600 transition-colors shrink-0"
-                  >
-                    {showAllRoutes ? t('transfersPg.seeLess') : t('transfersPg.seeAllRoutes', { total: routes.length })}
-                  </button>
-                )}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_400px] gap-6 mt-6 items-start">
+          {/* ── ESQUERDA: escolha sua rota ── */}
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-baseline justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">{t('transfersPg.chooseRoute', 'Escolha sua rota')}</h2>
+                <p className="text-[13px] text-gray-500 mt-0.5">{t('transfersPg.chooseRouteSub', 'Transfers privativos com operadores locais')}</p>
               </div>
+              {routes.length > 0 && (
+                <button
+                  onClick={() => { setShowAllRoutes(v => !v); setRouteOrigin('') }}
+                  className="text-[13px] font-bold text-brand hover:text-brand-600 shrink-0 flex items-center gap-1"
+                >
+                  {showAllRoutes ? t('transfersPg.seeLess') : t('transfersPg.seeAllRoutes', { total: routes.length })}
+                  {!showAllRoutes && <span aria-hidden>→</span>}
+                </button>
+              )}
+            </div>
 
-              {/* Filtro por local de saída — só faz sentido com mais de uma. */}
-              {originOptions.length > 1 && (
-                <div className="flex flex-wrap gap-2 mb-4">
+            {/* Busca */}
+            <div className="relative mt-4">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={t('transfersPg.searchOriginDest', 'Buscar origem ou destino')}
+                className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 placeholder-gray-400 outline-none focus:border-brand focus:bg-white transition-colors"
+              />
+            </div>
+
+            {/* Filtros por local de saída */}
+            {originOptions.length > 1 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button
+                  onClick={() => { setRouteOrigin(''); setShowAllRoutes(false) }}
+                  className={`px-3.5 py-1.5 rounded-full text-[12px] font-bold border transition-colors ${routeOrigin === '' ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}
+                >
+                  {t('transfersPg.originFilterAll')}
+                </button>
+                {originOptions.map(({ name, count }) => (
                   <button
-                    onClick={() => { setRouteOrigin(''); setShowAllRoutes(false) }}
-                    className={`px-3.5 py-1.5 rounded-full text-[12px] font-bold border transition-colors ${
-                      routeOrigin === '' ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                    }`}
+                    key={name}
+                    onClick={() => { setRouteOrigin(v => (v === name ? '' : name)); setShowAllRoutes(false) }}
+                    className={`px-3.5 py-1.5 rounded-full text-[12px] font-bold border transition-colors ${routeOrigin === name ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}
                   >
-                    {t('transfersPg.originFilterAll')}
+                    {shortPlace(name)}{' '}
+                    <span className={routeOrigin === name ? 'text-white/70' : 'text-gray-400'}>{count}</span>
                   </button>
-                  {originOptions.map(({ name, count }) => (
-                    <button
-                      key={name}
-                      onClick={() => { setRouteOrigin(v => (v === name ? '' : name)); setShowAllRoutes(false) }}
-                      className={`px-3.5 py-1.5 rounded-full text-[12px] font-bold border transition-colors ${
-                        routeOrigin === name ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      {shortPlace(name)}{' '}
-                      <span className={routeOrigin === name ? 'text-white/70' : 'text-gray-400'}>{count}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {routesShown.length === 0 ? (
-                // Cala o aviso quando a saída só tem rota exclusiva — ela
-                // aparece logo abaixo, e dizer "nenhuma rota" seria mentira.
-                categoriasExclusivasShown.length === 0 && (
-                  <p className="text-[13px] text-gray-400 bg-white rounded-2xl border border-gray-100 px-4 py-4">
-                    {t('transfersPg.noRoutesFromHere')}
-                  </p>
-                )
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-                  {routesShown.map((r, i) => (
-                    <RouteCard
-                      key={r.id}
-                      route={r}
-                      bg={GRADIENTS[i % GRADIENTS.length]}
-                      active={rotaEscolhida?.id === r.id}
-                      onSelect={() => escolherRota(r)}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* TRANSLADOS EXCLUSIVOS (helicóptero) — vitrine separada, para não
-              misturar com as comuns nem no preço nem na operação. */}
-          {categoriasExclusivasShown.map((cat) => (
-            <div key={cat.id}>
-              <div className="flex items-baseline gap-3 mt-8 mb-4">
-                <h2 className="text-lg font-bold text-gray-900">{cat.nome}</h2>
-                <span className="text-[11px] font-bold text-brand bg-brand/10 px-2.5 py-0.5 rounded-full">
-                  {t('transfersPg.exclusiveBadge')}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-                {cat.rotas.map((r, i) => (
-                  <RouteCard
-                    key={r.id}
-                    route={r}
-                    bg={GRADIENTS[i % GRADIENTS.length]}
-                    active={rotaEscolhida?.id === r.id}
-                    onSelect={() => escolherRota(r)}
-                  />
                 ))}
               </div>
-            </div>
-          ))}
+            )}
 
-          <div className="grid lg:grid-cols-3 gap-6 mt-8 items-start">
-            {/* Form */}
-            <div className="lg:col-span-2 space-y-5">
-              {/* Rota */}
-              <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide mb-3">{t('transfersPg.routeSection')}</p>
-                <div className="grid sm:grid-cols-2 gap-4">
+            {/* Grade de rotas */}
+            <div className="mt-4">
+              {routesToShow.length === 0 && categoriasExclusivasShown.length === 0 ? (
+                <p className="text-[13px] text-gray-400 text-center py-10">
+                  {search.trim() ? t('transfersPg.noRoutesSearch', 'Nenhuma rota encontrada para essa busca.') : t('transfersPg.noRoutesFromHere')}
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {routesToShow.map((r, i) => (
+                    <RouteCard key={r.id} route={r} bg={GRADIENTS[i % GRADIENTS.length]} active={rotaEscolhida?.id === r.id} onSelect={() => escolherRota(r)} />
+                  ))}
+                </div>
+              )}
+
+              {categoriasExclusivasShown.map((cat) => {
+                const rotasCat = cat.rotas.filter(bateBusca)
+                if (!rotasCat.length) return null
+                return (
+                  <div key={cat.id} className="mt-6">
+                    <div className="flex items-baseline gap-2 mb-3">
+                      <h3 className="text-[15px] font-bold text-gray-900">{cat.nome}</h3>
+                      <span className="text-[10px] font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-full">{t('transfersPg.exclusiveBadge')}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {rotasCat.map((r, i) => (
+                        <RouteCard key={r.id} route={r} bg={GRADIENTS[i % GRADIENTS.length]} active={rotaEscolhida?.id === r.id} onSelect={() => escolherRota(r)} />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* ── DIREITA: detalhes da viagem (sticky) ── */}
+          <aside className="lg:sticky lg:top-20">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <p className="text-[18px] font-bold text-gray-900">{t('transfersPg.tripDetails', 'Detalhes da viagem')}</p>
+              <p className="text-[13px] text-gray-500 mb-4">{t('transfersPg.tripDetailsSub', 'Personalize seu transfer')}</p>
+
+              {/* Rota selecionada + inverter */}
+              <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide mb-2">{t('transfersPg.selectedRoute', 'Rota selecionada')}</p>
+              <div className="flex items-stretch gap-2">
+                <div className="flex-1 space-y-2 min-w-0">
                   <div>
                     <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.origin')}</label>
                     <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
                       <div className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
-                      <select
-                        value={origin}
-                        onChange={e => { setRouteId(''); setOrigin(e.target.value); setDest(''); setCart({}) }}
-                        className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none cursor-pointer"
-                      >
+                      <select value={origin} onChange={e => { setRouteId(''); setOrigin(e.target.value); setDest(''); setCart({}) }} className="flex-1 min-w-0 bg-transparent text-[14px] font-semibold text-gray-800 outline-none cursor-pointer">
                         {!origin && <option value="">{t('transfersPg.selectOriginOption')}</option>}
                         {origins.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
@@ -581,112 +606,73 @@ export default function TransfersDesktop() {
                   <div>
                     <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.destination')}</label>
                     <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
-                      <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-400 shrink-0" />
-                      <select
-                        value={dest}
-                        // Limpa o id: mexer nos seletores é escolher pelo nome,
-                        // e um id antigo apontaria para outra rota.
-                        onChange={e => { setRouteId(''); setDest(e.target.value); setCart({}) }}
-                        className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none cursor-pointer disabled:text-gray-400"
-                        disabled={!dests.length}
-                      >
+                      <MapPin size={13} className="text-gray-400 shrink-0" />
+                      <select value={dest} onChange={e => { setRouteId(''); setDest(e.target.value); setCart({}) }} disabled={!dests.length} className="flex-1 min-w-0 bg-transparent text-[14px] font-semibold text-gray-800 outline-none cursor-pointer disabled:text-gray-400">
                         <option value="">{dests.length ? t('transfersPg.selectDestination') : t('transfersPg.chooseOriginFirst')}</option>
                         {dests.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
                   </div>
                 </div>
-              </section>
+                <button onClick={inverterRota} title={t('transfersPg.swap', 'Inverter origem e destino')} className="self-center w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 hover:border-brand hover:text-brand shrink-0 transition-colors">
+                  <ArrowUpDown size={15} />
+                </button>
+              </div>
 
-              {/* Data, Horário, Passageiros */}
-              <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.dateLabel')}</label>
-                    <div className="mt-1 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
-                      <DesktopDatePicker valueIso={date} onChange={setDate} minIso={minDateIso} seasons={seasons} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.timeLabel')}</label>
-                    <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
-                      <Clock size={15} className="text-brand shrink-0" />
-                      <input
-                        type="time"
-                        value={time}
-                        min={minTime}
-                        onChange={e => setTime(e.target.value)}
-                        className="flex-1 bg-transparent text-[14px] font-semibold text-gray-800 outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.passengersSection')}</label>
-                    <div className="mt-1 flex items-center justify-between border border-gray-200 rounded-xl px-3 py-2">
-                      <span className="text-[14px] font-semibold text-gray-800">{people}</span>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => setPeople(p => Math.max(1, p - 1))} className="w-7 h-7 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50"><Minus size={12} className="text-gray-600" /></button>
-                        <button onClick={() => setPeople(p => Math.min(20, p + 1))} className="w-7 h-7 rounded-full bg-brand flex items-center justify-center"><Plus size={12} className="text-white" /></button>
-                      </div>
-                    </div>
+              {/* Data | Horário */}
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.dateLabel')}</label>
+                  <div className="mt-1 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
+                    <DesktopDatePicker valueIso={date} onChange={setDate} minIso={minDateIso} seasons={seasons} />
                   </div>
                 </div>
+                <div>
+                  <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.timeLabel')}</label>
+                  <div className="mt-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2.5 focus-within:border-brand">
+                    <Clock size={15} className="text-brand shrink-0" />
+                    <input type="time" value={time} min={minTime} onChange={e => setTime(e.target.value)} className="flex-1 min-w-0 bg-transparent text-[14px] font-semibold text-gray-800 outline-none" />
+                  </div>
+                </div>
+              </div>
 
-                {!advanceOk && (
-                  <p className="mt-3 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                    {t('transfersPg.minAdvanceNotice', { hours: MIN_ADVANCE_HOURS, datetime: format(minBookable, "d/MM 'às' HH:mm") })}
-                  </p>
-                )}
-                {advanceOk && isHighSeasonIso(date, seasons) && (
-                  <p className="mt-3 flex items-center gap-2 text-[12px] text-amber-600">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                    {t('transfersPg.highSeasonNotice')}
-                  </p>
-                )}
-              </section>
+              {/* Passageiros */}
+              <div className="mt-3">
+                <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.passengersSection')}</label>
+                <div className="mt-1 flex items-center justify-between border border-gray-200 rounded-xl px-3 py-2">
+                  <span className="flex items-center gap-2 text-[14px] font-semibold text-gray-800"><Users size={15} className="text-gray-400" /> {t('transfersPg.peopleCount', { count: people })}</span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setPeople(p => Math.max(1, p - 1))} className="w-7 h-7 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50"><Minus size={12} className="text-gray-600" /></button>
+                    <button onClick={() => setPeople(p => Math.min(20, p + 1))} className="w-7 h-7 rounded-full bg-brand flex items-center justify-center"><Plus size={12} className="text-white" /></button>
+                  </div>
+                </div>
+              </div>
 
-              {/* Veículo */}
+              {/* Local de embarque */}
+              <div className="mt-3">
+                <label className="text-[11px] text-gray-400 font-semibold">{t('transfersPg.pickupLabel', 'Local de embarque')}</label>
+                <div className="mt-1">
+                  <PlaceInput value={pickup} onChange={setPickup} placeholder={t('transfersPg.pickupPlaceholder', 'Nome da pousada ou endereço')} dotClass="bg-transparent" />
+                </div>
+              </div>
+
+              {/* Avisos de antecedência / temporada */}
+              {matched && !advanceOk && (
+                <p className="mt-3 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  {t('transfersPg.minAdvanceNotice', { hours: MIN_ADVANCE_HOURS, datetime: format(minBookable, "d/MM 'às' HH:mm") })}
+                </p>
+              )}
+              {matched && advanceOk && isHighSeasonIso(date, seasons) && (
+                <p className="mt-3 flex items-center gap-2 text-[12px] text-amber-600">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" /> {t('transfersPg.highSeasonNotice')}
+                </p>
+              )}
+
+              {/* Escolha o veículo */}
               {vehicles.length > 0 && (
-                <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide px-5 pt-5 pb-3">{t('transfersPg.vehicleSection')}</p>
-
-                  {suggestion && (
-                    <div className="mx-5 mb-3 bg-orange-50 rounded-2xl p-3 border border-orange-100 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center shrink-0">
-                        <Car size={18} className="text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold text-gray-900">
-                          {suggestion.qty > 1 ? `${suggestion.qty}x ` : ''}{suggestion.vehicle.name}
-                        </p>
-                        <p className="text-[11px] text-gray-400">{t('transfersPg.upToPeopleCapacity', { count: suggestion.vehicle.seat_capacity * suggestion.qty })}</p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        {unitPrice && (
-                          <span className="text-[13px] font-bold text-brand">
-                            R$ {(unitPrice * suggestion.qty).toLocaleString('pt-BR')}
-                          </span>
-                        )}
-                        {suggestionIsApplied ? (
-                          <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
-                            <Check size={11} /> {t('transfersPg.selected')}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setCart({ [suggestion.vehicle.id]: suggestion.qty })
-                              autoAppliedRef.current = `${suggestion.vehicle.id}:${suggestion.qty}`
-                            }}
-                            className="bg-brand text-white text-[11px] font-bold px-3 py-1.5 rounded-full hover:bg-brand-600 transition-colors"
-                          >
-                            {t('transfersPg.apply')}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="divide-y divide-gray-50">
+                <div className="mt-4">
+                  <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide mb-2">{t('transfersPg.chooseVehicle', 'Escolha o veículo')}</p>
+                  <div className="border border-gray-100 rounded-xl divide-y divide-gray-50 overflow-hidden">
                     {vehicles.map(v => (
                       <VehicleRow
                         key={v.id}
@@ -698,77 +684,65 @@ export default function TransfersDesktop() {
                       />
                     ))}
                   </div>
-                </section>
+                </div>
               )}
 
-              <div className="flex items-start gap-2 px-1">
-                <Info size={14} className="text-blue-400 shrink-0 mt-0.5" />
-                <p className="text-[12px] text-gray-400 leading-relaxed">
-                  {t('transfersPg.driverInfoDesktop')}
-                </p>
-              </div>
-            </div>
-
-            {/* Resumo (sticky) */}
-            <aside className="lg:sticky lg:top-20">
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[15px] font-bold text-gray-900 mb-3">{t('transfersPg.summaryTitle')}</p>
-                <div className="space-y-2.5">
-                  {[
-                    { dot: 'bg-brand',    label: t('transfersPg.origin'),      val: origin || '—' },
-                    { dot: 'bg-gray-400', label: t('transfersPg.destination'), val: dest || '—' },
-                    { icon: Calendar,     label: t('transfersPg.dateTimeRow'), val: t('transfersPg.dateTimeValue', { date: dayLabel(date, t), time: time || '—' }) },
-                    { icon: Users,        label: t('transfersPg.passengersSection'), val: t('transfersPg.peopleCount', { count: people }) },
-                    ...(cartItems.length ? [{ icon: Car, label: t('transfersPg.vehicleSection'), val: cartItems.map(({ vehicle, qty }) => `${qty}x ${vehicle.name}`).join(' + ') }] : []),
-                  ].map((row, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      {row.dot
-                        ? <div className={`w-2.5 h-2.5 rounded-full ${row.dot} shrink-0`} />
-                        : <row.icon size={14} className="text-brand shrink-0" />}
-                      <div className="flex-1 flex items-center justify-between gap-3">
-                        <p className="text-[12px] text-gray-400">{row.label}</p>
-                        <p className="text-[12px] font-semibold text-gray-800 text-right">{row.val}</p>
-                      </div>
-                    </div>
-                  ))}
+              {/* Preço */}
+              <div className="border-t border-gray-100 mt-4 pt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] text-gray-500">{t('transfersPg.privateTransfer', 'Transfer privativo')}</p>
+                  <p className="text-[13px] font-semibold text-gray-800">{cartTotal ? `R$ ${cartTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</p>
                 </div>
-
                 {seasonAddition > 0 && (
-                  <div className="border-t border-gray-100 mt-4 pt-3 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[12px] text-gray-400">{t('transfersPg.subtotal')}</p>
-                      <p className="text-[13px] font-semibold text-gray-800">R$ {cartTotal.toLocaleString('pt-BR')}</p>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-[12px] text-amber-600">{t('transfersPg.highSeasonFee')}</p>
-                      <p className="text-[13px] font-semibold text-amber-600">+ R$ {seasonAddition.toLocaleString('pt-BR')}</p>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[12px] text-amber-600">{t('transfersPg.highSeasonFee')}</p>
+                    <p className="text-[12px] font-semibold text-amber-600">+ R$ {seasonAddition.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
                 )}
-                <div className={`flex items-center justify-between ${seasonAddition > 0 ? 'mt-2' : 'border-t border-gray-100 mt-4 pt-3'}`}>
-                  <p className="text-[13px] font-bold text-gray-900">{t('transfersPg.total')}</p>
-                  <p className={`text-[20px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
-                    {grandTotal ? `R$ ${grandTotal.toLocaleString('pt-BR')}` : '—'}
+                <div className="flex items-end justify-between pt-1">
+                  <div>
+                    <p className="text-[14px] font-bold text-gray-900">{t('transfersPg.estimatedTotal', 'Total estimado')}</p>
+                    {cartItems.length > 0 && (
+                      <p className="text-[11px] text-gray-400">
+                        {(() => {
+                          const nv = cartItems.reduce((s, { qty }) => s + qty, 0)
+                          const vw = nv === 1 ? t('transfersPg.vehicleWord', 'veículo') : t('transfersPg.vehiclesWord', 'veículos')
+                          const pw = people === 1 ? t('transfersPg.passengerWord', 'passageiro') : t('transfersPg.passengersWord', 'passageiros')
+                          return `${nv} ${vw} · ${people} ${pw}`
+                        })()}
+                      </p>
+                    )}
+                  </div>
+                  <p className={`text-[24px] font-extrabold ${canBook ? 'text-brand' : 'text-gray-400'}`}>
+                    R$ {(grandTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
-
-                <button
-                  onClick={handleConfirm}
-                  disabled={!canBook}
-                  className={`mt-4 w-full py-3.5 rounded-xl font-bold text-[14px] transition-all ${
-                    canBook ? 'bg-brand text-white hover:bg-brand-600 active:scale-[0.98]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {!matched ? t('transfersPg.selectRoute')
-                    : !cartItems.length ? t('transfersPg.selectVehicleOption')
-                    : cartCapacity < people ? t('transfersPg.insufficientCapacity')
-                    : !advanceOk ? t('transfersPg.minAdvanceShort', { hours: MIN_ADVANCE_HOURS })
-                    : t('transfersPg.continueCta')}
-                </button>
               </div>
-            </aside>
-          </div>
-        </>
+
+              {/* Solicitar transfer */}
+              <button
+                onClick={handleConfirm}
+                disabled={!canBook}
+                className={`mt-4 w-full py-3.5 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all ${canBook ? 'bg-brand text-white hover:bg-brand-600 active:scale-[0.98] shadow-md shadow-brand/20' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+              >
+                {!matched ? t('transfersPg.selectRoute')
+                  : !cartItems.length ? t('transfersPg.selectVehicleOption')
+                  : cartCapacity < people ? t('transfersPg.insufficientCapacity')
+                  : !advanceOk ? t('transfersPg.minAdvanceShort', { hours: MIN_ADVANCE_HOURS })
+                  : <>{t('transfersPg.requestTransfer', 'Solicitar transfer')} →</>}
+              </button>
+
+              <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[12px] text-gray-400">
+                <ShieldCheck size={14} className="text-emerald-500 shrink-0" /> {t('transfersPg.payAfterAccept', 'Você só paga após o aceite do operador.')}
+              </p>
+
+              <div className="border-t border-gray-50 mt-3 pt-3 flex items-center justify-center gap-5 text-[11px] text-gray-400">
+                <span className="flex items-center gap-1"><Users size={12} /> {t('transfersPg.localOperators', 'Operadores locais')}</span>
+                <span className="flex items-center gap-1"><Headphones size={12} /> {t('transfersPg.appSupport', 'Atendimento pelo app')}</span>
+              </div>
+            </div>
+          </aside>
+        </div>
       )}
 
       {/* ── CORRIDA PERSONALIZADA ─────────────────────────────── */}
