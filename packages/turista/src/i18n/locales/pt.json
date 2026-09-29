@@ -377,6 +377,19 @@
     }
   },
   "toursPg": {
+    "breadcrumbHome": "Início",
+    "breadcrumbTours": "Passeios",
+    "chooseTour": "Escolha seu passeio",
+    "chooseTourSub": "Passeios com operadores locais",
+    "tourDetails": "Detalhes do passeio",
+    "tourDetailsSub": "Personalize seu passeio",
+    "selectTourPrompt": "Selecione um passeio ao lado para ver os detalhes e adicionar ao carrinho.",
+    "dateLabel": "Data",
+    "chooseVehicle": "Escolha o veículo",
+    "estimatedTotal": "Total estimado",
+    "payAfterAccept": "Você só paga após o aceite do operador.",
+    "localOperators": "Operadores locais",
+    "appSupport": "Atendimento pelo app",
     "header": {
       "back": "Voltar",
       "title": "Passeios",

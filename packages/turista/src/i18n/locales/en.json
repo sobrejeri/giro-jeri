@@ -377,6 +377,19 @@
     }
   },
   "toursPg": {
+    "breadcrumbHome": "Home",
+    "breadcrumbTours": "Tours",
+    "chooseTour": "Choose your tour",
+    "chooseTourSub": "Tours with local operators",
+    "tourDetails": "Tour details",
+    "tourDetailsSub": "Customize your tour",
+    "selectTourPrompt": "Select a tour on the left to see details and add it to your cart.",
+    "dateLabel": "Date",
+    "chooseVehicle": "Choose the vehicle",
+    "estimatedTotal": "Estimated total",
+    "payAfterAccept": "You only pay after the operator accepts.",
+    "localOperators": "Local operators",
+    "appSupport": "In-app support",
     "header": {
       "back": "Back",
       "title": "Tours",
