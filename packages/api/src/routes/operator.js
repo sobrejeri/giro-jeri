@@ -29,25 +29,19 @@ async function mpGate(_operatorId) {
   return null;
 }
 
-// Bloqueia aceitar uma NOVA solicitação enquanto o operador tiver uma reserva
-// já aceita e ainda AGUARDANDO O PAGAMENTO do cliente. Assim ele foca em uma de
-// cada vez e não segura várias vagas paradas. Admin não é barrado. Retorna a
-// mensagem de bloqueio, ou null quando pode aceitar. Nunca lança.
-async function pagamentoPendenteGate(operatorId) {
-  try {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('booking_code')
-      .eq('operator_id', operatorId)
-      .in('status_commercial', ['awaiting_payment', 'payment_failed'])
-      .limit(1);
-    if (error) return null;              // instabilidade não pode barrar trabalho
-    const pend = data?.[0];
-    if (!pend) return null;
-    return `Você tem a reserva ${pend.booking_code} aguardando o pagamento do cliente. Conclua ou aguarde o pagamento antes de aceitar uma nova solicitação.`;
-  } catch {
-    return null;
-  }
+// DESATIVADO (a pedido): o operador pode aceitar novas solicitações mesmo com
+// uma reserva "aguardando pagamento". O cliente às vezes demora a pagar e isso
+// travava o operador de pegar outros serviços. Mantido como no-op para poder
+// reativar depois (basta restaurar a checagem comentada abaixo).
+async function pagamentoPendenteGate(_operatorId) {
+  return null;
+  /* Reativar assim:
+  const { data } = await supabase
+    .from('bookings').select('booking_code').eq('operator_id', _operatorId)
+    .in('status_commercial', ['awaiting_payment', 'payment_failed']).limit(1);
+  const pend = data?.[0];
+  return pend ? `Você tem a reserva ${pend.booking_code} aguardando o pagamento do cliente. Conclua ou aguarde o pagamento antes de aceitar uma nova solicitação.` : null;
+  */
 }
 
 // Rótulo amigável do serviço para o texto da notificação
