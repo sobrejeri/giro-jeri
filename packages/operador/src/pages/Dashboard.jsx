@@ -14,6 +14,7 @@ import { downloadOrderPDF } from '../lib/orderPDF'
 import SendOsButton from '../components/SendOsButton'
 import DespacharModal from '../components/DespacharModal'
 import ConfirmarExecutor from '../components/ConfirmarExecutor'
+import TempoServico from '../components/TempoServico'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -211,6 +212,12 @@ function BookingRow({ b, onAssign, onStart, onComplete, starting = false, operad
             <Users size={11} />{b.people_count} pax
           </div>
         )}
+        {pago && (
+          <div className="mt-1">
+            <TempoServico date={b.service_date} time={b.service_time}
+              oculto={b.status_operational === 'completed' || cancelInfo(b).cancelada} />
+          </div>
+        )}
       </td>
 
       {/* Serviço */}
@@ -340,6 +347,12 @@ function BookingCardMobile({ b, onAssign, onStart, onComplete, starting = false,
           <span className="flex items-center gap-1 max-w-full"><MapPin size={10} className="shrink-0" /><span className="truncate">{local}</span></span>
         )}
       </div>
+
+      {/* Quanto falta até a execução (Hoje / Em breve / Atrasado) */}
+      {pago && (
+        <TempoServico date={b.service_date} time={b.service_time}
+          oculto={b.status_operational === 'completed' || cancelInfo(b).cancelada} />
+      )}
 
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <span className="text-[13px] font-extrabold text-gray-800">{fmt(b.total_amount)}</span>

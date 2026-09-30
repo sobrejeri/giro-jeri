@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarCheck, Users, MapPin, Check, X, BellRing } from 'lucide-react'
 import { api } from '../lib/api'
+import TempoServico from './TempoServico'
 
 // ── Pop-up flutuante de NOVA SOLICITAÇÃO ────────────────────────────────────
 //
@@ -263,9 +264,12 @@ export default function NovaSolicitacaoPopup() {
                     <p className="text-[14px] font-bold text-gray-900 truncate">
                       {it.service_name || (it.service_type === 'tour' ? 'Passeio' : 'Transfer')}
                     </p>
-                    <p className="text-[11px] text-gray-500">
-                      {it.service_date ? new Date(it.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
-                      {it.service_time ? ` • ${String(it.service_time).slice(0, 5)}` : ''} · {it.people_count ?? '—'} pax
+                    <p className="text-[11px] text-gray-500 flex items-center gap-1.5 flex-wrap">
+                      <span>
+                        {it.service_date ? new Date(it.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                        {it.service_time ? ` • ${String(it.service_time).slice(0, 5)}` : ''} · {it.people_count ?? '—'} pax
+                      </span>
+                      <TempoServico date={it.service_date} time={it.service_time} />
                     </p>
                   </div>
                   <span className="text-[13px] font-bold text-gray-700 shrink-0">{fmtBRL(it.total_amount)}</span>
@@ -361,6 +365,7 @@ export default function NovaSolicitacaoPopup() {
                   : '—'}
                 {item.service_time ? ` • ${String(item.service_time).slice(0, 5)}` : ''}
               </span>
+              <TempoServico date={item.service_date} time={item.service_time} />
             </div>
             <div className="flex items-center gap-2.5 text-[15px] text-gray-800">
               <Users size={18} className="text-brand shrink-0" />

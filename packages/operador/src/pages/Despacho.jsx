@@ -18,6 +18,7 @@ import { downloadOrderPDF, orderPDFBase64 } from '../lib/orderPDF'
 import SendOsButton from '../components/SendOsButton'
 import ConfirmarExecutor from '../components/ConfirmarExecutor'
 import DespacharModal from '../components/DespacharModal'
+import TempoServico from '../components/TempoServico'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -86,6 +87,8 @@ function BookingRow({ b, onDispatch, onStart, onComplete, operador }) {
               )}
               {b.people_count && <span className="flex items-center gap-1"><Users size={10} />{b.people_count} pax</span>}
               <span className="font-semibold text-gray-700">{fmt(b.total_amount)}</span>
+              <TempoServico date={b.service_date} time={b.service_time}
+                oculto={b.status_operational === 'completed'} />
             </div>
             {local && (
               <p className="text-xs text-gray-400 truncate flex items-center gap-1">
