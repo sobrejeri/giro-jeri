@@ -441,6 +441,7 @@ export default function Dashboard() {
   } : null
 
   const [toast, setToast] = useState(null)
+  const [confirmStart, setConfirmStart] = useState(null) // reserva aguardando confirmação de início
 
   const assignMut = useMutation({
     mutationFn: ({ id, ...body }) => api.assignBooking(id, body),
@@ -458,10 +459,12 @@ export default function Dashboard() {
     mutationFn: (id) => api.startBooking(id),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['operational'] })
+      setConfirmStart(null)
       setToast({ type: 'ok', text: 'Corrida iniciada!' })
       setTimeout(() => setToast(null), 3000)
     },
     onError: (err) => {
+      setConfirmStart(null)
       setToast({ type: 'err', text: err?.message || 'Não foi possível iniciar a corrida.' })
       setTimeout(() => setToast(null), 4000)
     },
@@ -691,7 +694,7 @@ export default function Dashboard() {
         {/* Cards (mobile) */}
         <div className="md:hidden divide-y divide-gray-100">
           {pageItems.map((b) => (
-            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => startMut.mutate(bk.id)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />
+            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />
           ))}
           {pageItems.length === 0 && (
             <div className="py-16 text-center">
@@ -715,7 +718,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => startMut.mutate(bk.id)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />)}
+              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />)}
             </tbody>
           </table>
 
@@ -806,6 +809,41 @@ export default function Dashboard() {
         onClose={() => setAssign(null)}
         onDone={() => qc.invalidateQueries({ queryKey: ['operational'] })}
       />
+
+      {/* Confirmação antes de iniciar a corrida (evita toque acidental) */}
+      {confirmStart && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmStart(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 text-center">
+            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+              <Play size={22} className="text-green-600" />
+            </div>
+            <h3 className="text-[16px] font-bold text-gray-900">Iniciar corrida?</h3>
+            <p className="text-[13px] text-gray-500 mt-1.5 leading-snug">
+              {confirmStart.users?.full_name || 'Cliente'} · {confirmStart.booking_code}
+              <br />O serviço passará para "Em andamento".
+            </p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                onClick={() => startMut.mutate(confirmStart.id)}
+                disabled={startMut.isPending}
+                className="w-full bg-green-600 text-white font-bold rounded-xl py-3 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-60"
+              >
+                {startMut.isPending ? 'Iniciando…' : 'Iniciar corrida'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmStart(null)}
+                disabled={startMut.isPending}
+                className="w-full text-gray-500 font-semibold rounded-xl py-2.5 text-[14px] active:scale-95 transition-transform disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast de feedback (iniciar corrida) */}
       {toast && (
