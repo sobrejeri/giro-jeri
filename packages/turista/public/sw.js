@@ -18,7 +18,9 @@
 // passeios, stories, estabelecimentos, avatares). Antes toda revisita baixava
 // tudo de novo do Supabase — o "cached egress" que estourou a cota. Agora a
 // revisita serve do cache do aparelho, sem tocar no Supabase.
-const VERSION      = 'v8'
+// v9: clique na notificação passa a navegar o app por postMessage (no PWA/iOS
+// standalone o client.navigate não trocava a tela — abria sempre na Lojinha).
+const VERSION      = 'v9'
 const SHELL_CACHE  = `turiva-shell-${VERSION}`
 const ASSET_CACHE  = `turiva-assets-${VERSION}`
 // Cache de imagens SEM versão: sobrevive aos deploys (não readianta baixar
@@ -146,11 +148,21 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const url = (event.notification.data && event.notification.data.url) || self.registration.scope
+  // Caminho relativo para o router do app (SPA). No PWA, sobretudo iOS
+  // standalone, `client.navigate()` não muda a janela já aberta — ela só
+  // ganha foco e fica na tela atual (Lojinha). Então, além de tentar navegar,
+  // mandamos o caminho por postMessage e o app navega pelo próprio router.
+  let path = '/'
+  try {
+    const u = new URL(url)
+    path = u.pathname + u.search + u.hash
+  } catch (_) {}
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
         if (c.url.startsWith(self.registration.scope)) {
           if ('navigate' in c) { try { c.navigate(url) } catch (_) {} }
+          try { c.postMessage({ type: 'navigate', path }) } catch (_) {}
           if ('focus' in c) return c.focus()
         }
       }

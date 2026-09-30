@@ -58,6 +58,24 @@ function SpaRedirectHandler() {
     const rel   = destinoSeguro(bruto)
     if (rel !== '/') navigate(rel, { replace: true })
   }, [navigate])
+
+  // Clique em notificação (push): no PWA (sobretudo iOS standalone) o
+  // service worker não consegue navegar a janela já aberta — ela só recebe
+  // foco e continua na tela atual (Lojinha). Então o SW nos envia o caminho
+  // por postMessage e navegamos aqui, pelo router.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMsg = (event) => {
+      const d = event.data
+      if (!d || d.type !== 'navigate' || !d.path) return
+      const base = import.meta.env.BASE_URL || '/'
+      const bruto = d.path.startsWith(base) && base !== '/' ? '/' + d.path.slice(base.length) : d.path
+      const rel = destinoSeguro(bruto)
+      navigate(rel)
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [navigate])
   return null
 }
 
