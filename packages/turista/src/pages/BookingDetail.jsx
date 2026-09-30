@@ -353,6 +353,26 @@ export default function BookingDetail() {
               {status === 'waiting_payment' && (
                 <p className="text-xs text-amber-600 mt-0.5">{t('bookingDetailPg.statusBanner.waitingPayment')}</p>
               )}
+              {/* Prazo de pagamento (checkout parcial): conta regressiva até o
+                  cliente perder a vaga. Só aparece quando há prazo gravado. */}
+              {status === 'waiting_payment' && booking.payment_deadline_at && (() => {
+                const fim  = new Date(booking.payment_deadline_at).getTime()
+                if (isNaN(fim)) return null
+                const diff = fim - nowTs
+                if (diff <= 0) {
+                  return <p className="text-xs text-red-500 mt-0.5 font-semibold">Prazo de pagamento vencido</p>
+                }
+                const min  = Math.round(diff / 60000)
+                const h    = Math.floor(min / 60)
+                const m    = min % 60
+                const rest = h > 0 ? `${h}h ${m}min` : `${m} min`
+                const hhmm = new Date(fim).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                return (
+                  <p className={`text-xs mt-0.5 font-semibold ${diff <= 30 * 60000 ? 'text-red-500' : 'text-amber-600'}`}>
+                    Pague até {hhmm} · faltam {rest} para garantir a vaga
+                  </p>
+                )
+              })()}
               {status === 'cancelled' && (
                 <p className="text-xs text-red-500 mt-0.5">{t('bookingDetailPg.statusBanner.cancelled')}</p>
               )}
