@@ -19,7 +19,7 @@ test('só reserva paga é despachável', () => {
 
 test('sem pagamento, a linha mostra o botão de despacho substituído por aviso', () => {
   // Nas duas visões (tabela e card mobile) o botão Despachar fica atrás de `pago`.
-  const ocorrencias = fonte.match(/\{!pago \? \(/g) || []
+  const ocorrencias = fonte.match(/!pago \? \(/g) || []
   assert.ok(ocorrencias.length >= 2, 'a trava do botão precisa valer na tabela e no card mobile')
   assert.match(fonte, /Aguardando pagamento/, 'o aviso substitui o botão')
 })

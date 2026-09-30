@@ -18,8 +18,10 @@ test('reusa a MESMA query do feed — sem polling em dobro', () => {
 })
 
 test('Aceitar chama o aceite certo por tipo de item', () => {
-  assert.match(fonte, /api\.acceptLeg\(id\)/,  'perna aceita por leg_id')
-  assert.match(fonte, /api\.acceptBooking\(id\)/, 'reserva aceita por id')
+  assert.match(fonte, /api\.acceptLeg\(idDoItem\(item\)\)/,  'perna aceita por leg_id')
+  assert.match(fonte, /api\.acceptBooking\(idDoItem\(item\)\)/, 'reserva aceita por id')
+  // Combo do carrinho (order_group_id) é aceito de uma vez, atômico.
+  assert.match(fonte, /api\.acceptGroup\(u\.gid\)/, 'pedido em grupo aceito pelo group id')
   assert.match(fonte, /invalidateQueries\(\{ queryKey: \['operator-bookings'\] \}\)/)
 })
 
@@ -82,7 +84,9 @@ test('venda direta e pagamento aparecem como aviso flutuante (não só no sino)'
 test('o card informativo tem "Ver reserva" e não tem aceitar/recusar', () => {
   const i = fonte.indexOf('Card INFORMATIVO')
   assert.notEqual(i, -1, 'o ramo do card informativo precisa existir')
-  const bloco = fonte.slice(i, fonte.indexOf('const tipo', i))
+  // Isola só o ramo do card informativo (até o toast pós-ação) — depois dele
+  // vêm o combo e a solicitação a aceitar, que naturalmente têm aceitar().
+  const bloco = fonte.slice(i, fonte.indexOf('Toast curto', i))
   assert.match(bloco, /Ver reserva/)
   assert.match(bloco, /dispensarAviso/)
   assert.ok(!/aceitar\(/.test(bloco), 'venda direta já é do operador — nada de aceitar')

@@ -1106,32 +1106,39 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       if (v !== undefined) payload[campo] = (typeof v === 'string' ? v.trim() : v) || null;
     }
 
-    // Verifica se já existe um assignment para essa reserva
-    const { data: existing } = await supabase
+    // Verifica se já existe um assignment para essa reserva. `.limit(1)` em vez
+    // de `.maybeSingle()`: não há UNIQUE em booking_id, e duas linhas fariam o
+    // maybeSingle estourar (500) em vez de escolher a mais recente.
+    const { data: existentes } = await supabase
       .from('operational_assignments')
       .select('id')
       .eq('booking_id', bookingId)
-      .maybeSingle();
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    const existing = existentes?.[0];
 
-    let result;
-    if (existing) {
-      const { data, error } = await supabase
-        .from('operational_assignments')
-        .update(payload)
-        .eq('id', existing.id)
-        .select()
-        .single();
-      if (error) throw error;
-      result = data;
-    } else {
-      const { data, error } = await supabase
-        .from('operational_assignments')
-        .insert(payload)
-        .select()
-        .single();
-      if (error) throw error;
-      result = data;
+    // Colunas dos executores (migrations 081/082). Se ainda não existirem no
+    // banco (migração pendente), o insert/update devolve 42703 — aí refazemos
+    // sem esses campos, para o despacho não quebrar por causa do repasse.
+    const COLS_EXTRAS = ['driver_document', 'driver_pix_key', 'driver_pix_key_type', 'driver_payout_amount'];
+    const semExtras = (obj) => {
+      const o = { ...obj };
+      for (const c of COLS_EXTRAS) delete o[c];
+      return o;
+    };
+
+    async function gravar(dados) {
+      if (existing) {
+        return supabase.from('operational_assignments').update(dados).eq('id', existing.id).select().single();
+      }
+      return supabase.from('operational_assignments').insert(dados).select().single();
     }
+
+    let { data: result, error: gravaErr } = await gravar(payload);
+    if (gravaErr?.code === '42703') {
+      ({ data: result, error: gravaErr } = await gravar(semExtras(payload)));
+    }
+    if (gravaErr) throw gravaErr;
 
     // Atualiza status operacional da reserva
     await supabase
