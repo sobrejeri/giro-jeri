@@ -1282,6 +1282,7 @@
       "selectTime": "Selecciona un horario",
       "requestBooking": "Solicitar reserva",
       "note": "Solo pagas después de que un operador acepte. Sigue el progreso en Mis Reservas.",
+      "acceptedNote": "¡Buenas noticias! Un operador aceptó tu pedido. Paga para confirmar la reserva.",
       "adjustTime": "Ajusta la fecha o el horario"
     },
     "error": {
@@ -1293,15 +1294,25 @@
     },
     "solicitado": {
       "title": "¡Solicitud enviada!",
-      "subtitle": "Enviamos tu pedido a los operadores. En cuanto una lo acepte, recibirás un aviso para pagar y confirmar la reserva."
+      "subtitle": "Enviamos tu pedido a los operadores. En cuanto una lo acepte, recibirás un aviso para pagar y confirmar la reserva.",
+      "acceptedTitle": "¡Un operador aceptó! 🎉",
+      "acceptedSubtitle": "Paga ahora para confirmar y liberar el servicio.",
+      "confirmedTitle": "¡Reserva confirmada!",
+      "confirmedSubtitle": "¡Todo listo! Sigue los detalles en Mis Reservas.",
+      "serviceTour": "Paseo",
+      "serviceTransfer": "Transfer"
     },
     "step": {
       "sent": "Pedido enviado",
       "waiting": "Esperando que un operador acepte",
+      "accepted": "Un operador aceptó",
       "pay": "Pagar para confirmar"
     },
     "badge": {
-      "waitingAcceptance": "Esperando aceptación"
+      "waitingAcceptance": "Esperando aceptación",
+      "accepted": "Paga para confirmar",
+      "confirmed": "Confirmada",
+      "cancelled": "Cancelada"
     },
     "booking": {
       "code": "Código: {{code}}",
@@ -1311,11 +1322,13 @@
       "sentCount": "{{count}} solicitudes enviadas desde tu carrito ✓"
     },
     "value": {
-      "estimated": "Monto estimado"
+      "estimated": "Monto estimado",
+      "toPay": "Monto a pagar"
     },
     "button": {
       "track": "Seguir reserva",
-      "backHome": "Volver al inicio"
+      "backHome": "Volver al inicio",
+      "payNow": "Pagar ahora · R$ {{amount}}"
     },
     "peopleCount": "{{count}} personas",
     "capacityInsufficient": "Capacidad insuficiente para {{count}} personas",

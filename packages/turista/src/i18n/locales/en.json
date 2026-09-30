@@ -1282,6 +1282,7 @@
       "selectTime": "Select a time",
       "requestBooking": "Request booking",
       "note": "You only pay after a operator accepts. Track the progress in My Bookings.",
+      "acceptedNote": "Good news! An operator accepted your request. Pay to confirm the booking.",
       "adjustTime": "Adjust the date or time"
     },
     "error": {
@@ -1293,15 +1294,25 @@
     },
     "solicitado": {
       "title": "Request sent!",
-      "subtitle": "We've sent your request to the operators. As soon as one accepts, you'll get a notice to pay and confirm the booking."
+      "subtitle": "We've sent your request to the operators. As soon as one accepts, you'll get a notice to pay and confirm the booking.",
+      "acceptedTitle": "An operator accepted! 🎉",
+      "acceptedSubtitle": "Pay now to confirm and unlock the service.",
+      "confirmedTitle": "Booking confirmed!",
+      "confirmedSubtitle": "All set! Track the details in My Bookings.",
+      "serviceTour": "Tour",
+      "serviceTransfer": "Transfer"
     },
     "step": {
       "sent": "Request sent",
       "waiting": "Waiting for a operator to accept",
+      "accepted": "An operator accepted",
       "pay": "Pay to confirm"
     },
     "badge": {
-      "waitingAcceptance": "Awaiting acceptance"
+      "waitingAcceptance": "Awaiting acceptance",
+      "accepted": "Pay to confirm",
+      "confirmed": "Confirmed",
+      "cancelled": "Cancelled"
     },
     "booking": {
       "code": "Code: {{code}}",
@@ -1311,11 +1322,13 @@
       "sentCount": "{{count}} requests sent from your cart ✓"
     },
     "value": {
-      "estimated": "Estimated amount"
+      "estimated": "Estimated amount",
+      "toPay": "Amount to pay"
     },
     "button": {
       "track": "Track booking",
-      "backHome": "Back to home"
+      "backHome": "Back to home",
+      "payNow": "Pay now · R$ {{amount}}"
     },
     "peopleCount": "{{count}} people",
     "capacityInsufficient": "Insufficient capacity for {{count}} people",

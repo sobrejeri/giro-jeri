@@ -1283,6 +1283,7 @@
       "selectTime": "Selecione o horário",
       "requestBooking": "Solicitar reserva",
       "note": "Você só paga depois que um operador aceitar. Acompanhe o andamento em Minhas Reservas.",
+      "acceptedNote": "Boa notícia! Um operador aceitou seu pedido. Pague para confirmar a reserva.",
       "adjustTime": "Ajuste a data ou o horário"
     },
     "error": {
@@ -1294,15 +1295,25 @@
     },
     "solicitado": {
       "title": "Solicitação enviada!",
-      "subtitle": "Enviamos seu pedido para os operadores. Assim que uma aceitar, você recebe um aviso para pagar e confirmar a reserva."
+      "subtitle": "Enviamos seu pedido para os operadores. Assim que uma aceitar, você recebe um aviso para pagar e confirmar a reserva.",
+      "acceptedTitle": "Operador aceitou! 🎉",
+      "acceptedSubtitle": "Pague agora para confirmar e liberar o atendimento.",
+      "confirmedTitle": "Reserva confirmada!",
+      "confirmedSubtitle": "Tudo certo! Acompanhe os detalhes em Minhas Reservas.",
+      "serviceTour": "Passeio",
+      "serviceTransfer": "Transfer"
     },
     "step": {
       "sent": "Pedido enviado",
       "waiting": "Aguardando um operador aceitar",
+      "accepted": "Operador aceitou",
       "pay": "Pagar para confirmar"
     },
     "badge": {
-      "waitingAcceptance": "Aguardando aceite"
+      "waitingAcceptance": "Aguardando aceite",
+      "accepted": "Pague para confirmar",
+      "confirmed": "Confirmada",
+      "cancelled": "Cancelada"
     },
     "booking": {
       "code": "Código: {{code}}",
@@ -1312,11 +1323,13 @@
       "sentCount": "{{count}} solicitações enviadas do seu carrinho ✓"
     },
     "value": {
-      "estimated": "Valor estimado"
+      "estimated": "Valor estimado",
+      "toPay": "Valor a pagar"
     },
     "button": {
       "track": "Acompanhar reserva",
-      "backHome": "Voltar ao início"
+      "backHome": "Voltar ao início",
+      "payNow": "Pagar agora · R$ {{amount}}"
     },
     "peopleCount": "{{count}} pessoas",
     "capacityInsufficient": "Capacidade insuficiente para {{count}} pessoas",
