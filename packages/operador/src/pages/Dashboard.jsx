@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, Search, SlidersHorizontal,
   Clock, Users, MapPin, Car, Phone, UserCheck, Pencil, FileText,
   MessageCircle, Send, Download, ShoppingBag, Hourglass, Loader2,
-  CheckCircle2, TrendingUp, TrendingDown, Star, AlertCircle, XCircle, Package,
+  CheckCircle2, TrendingUp, TrendingDown, Star, AlertCircle, XCircle, Package, Play,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { downloadOrderPDF } from '../lib/orderPDF'
@@ -147,7 +147,7 @@ function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
 }
 
 // ── Linha da tabela ────────────────────────────────────
-function BookingRow({ b, onAssign, operador, comboSize = 0 }) {
+function BookingRow({ b, onAssign, onStart, starting = false, operador, comboSize = 0 }) {
   const pago     = estaPago(b)
   const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
@@ -268,6 +268,18 @@ function BookingRow({ b, onAssign, operador, comboSize = 0 }) {
                 {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
                 {dispatched ? 'Editar' : 'Despachar'}
               </button>
+              {/* Já despachada e ainda não iniciada: inicia o serviço aqui mesmo,
+                  sem precisar abrir a tela de Despacho. */}
+              {dispatched && b.status_operational !== 'in_progress' && b.status_operational !== 'completed' && (
+                <button
+                  onClick={() => onStart?.(b)}
+                  disabled={starting}
+                  className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-60"
+                  title="Iniciar serviço"
+                >
+                  <Play size={12} /> Iniciar
+                </button>
+              )}
             </>
           )}
         </div>
@@ -277,7 +289,7 @@ function BookingRow({ b, onAssign, operador, comboSize = 0 }) {
 }
 
 // ── Card mobile (mesma info da linha da tabela) ────────
-function BookingCardMobile({ b, onAssign, operador, comboSize = 0 }) {
+function BookingCardMobile({ b, onAssign, onStart, starting = false, operador, comboSize = 0 }) {
   const pago     = estaPago(b)
   const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
@@ -358,6 +370,16 @@ function BookingCardMobile({ b, onAssign, operador, comboSize = 0 }) {
                 {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
                 {dispatched ? 'Editar' : 'Despachar'}
               </button>
+              {/* Iniciar direto do painel (já despachada e não iniciada). */}
+              {dispatched && b.status_operational !== 'in_progress' && b.status_operational !== 'completed' && (
+                <button
+                  onClick={() => onStart?.(b)}
+                  disabled={starting}
+                  className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-60"
+                >
+                  <Play size={12} /> Iniciar
+                </button>
+              )}
             </>
           )}
         </div>
@@ -418,6 +440,8 @@ export default function Dashboard() {
     profile_photo_url: profile.profile_photo_url,
   } : null
 
+  const [toast, setToast] = useState(null)
+
   const assignMut = useMutation({
     mutationFn: ({ id, ...body }) => api.assignBooking(id, body),
     onSuccess:  () => {
@@ -426,6 +450,20 @@ export default function Dashboard() {
       setDispatched(assignModal)
       setAssign(null)
       setForm({ real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '', driver_payout_amount: '' })
+    },
+  })
+
+  // Iniciar o serviço direto do painel (sem abrir a tela de Despacho).
+  const startMut = useMutation({
+    mutationFn: (id) => api.startBooking(id),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['operational'] })
+      setToast({ type: 'ok', text: 'Corrida iniciada!' })
+      setTimeout(() => setToast(null), 3000)
+    },
+    onError: (err) => {
+      setToast({ type: 'err', text: err?.message || 'Não foi possível iniciar a corrida.' })
+      setTimeout(() => setToast(null), 4000)
     },
   })
 
@@ -653,7 +691,7 @@ export default function Dashboard() {
         {/* Cards (mobile) */}
         <div className="md:hidden divide-y divide-gray-100">
           {pageItems.map((b) => (
-            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />
+            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => startMut.mutate(bk.id)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />
           ))}
           {pageItems.length === 0 && (
             <div className="py-16 text-center">
@@ -677,7 +715,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />)}
+              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => startMut.mutate(bk.id)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />)}
             </tbody>
           </table>
 
@@ -768,6 +806,17 @@ export default function Dashboard() {
         onClose={() => setAssign(null)}
         onDone={() => qc.invalidateQueries({ queryKey: ['operational'] })}
       />
+
+      {/* Toast de feedback (iniciar corrida) */}
+      {toast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] px-4">
+          <div className={`rounded-xl px-4 py-3 text-[13px] font-semibold shadow-lg ${
+            toast.type === 'ok' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+          }`}>
+            {toast.text}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
