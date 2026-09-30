@@ -38,6 +38,10 @@ function veiculoDaReserva(b) {
 export default function DespacharModal({ booking, operador, onClose, onDone }) {
   const [form, setForm]     = useState(FORM_VAZIO)
   const [errMsg, setErrMsg] = useState('')
+  // Confirmação ao tentar fechar (X, backdrop ou Esc): abrir o despacho já
+  // manda a solicitação para a tela de Despacho, então sair sem querer faz
+  // perder o preenchimento. Pergunta antes de descartar.
+  const [confirmandoSaida, setConfirmandoSaida] = useState(false)
 
   const { data: executoresData } = useQuery({
     queryKey: ['executores'], queryFn: () => api.getExecutores(),
@@ -107,8 +111,11 @@ export default function DespacharModal({ booking, operador, onClose, onDone }) {
 
   const canDispatch = podeDespachar(form)
 
+  // Reset do reidratar entre reservas: se trocar de booking, some com o aviso.
+  useEffect(() => { setConfirmandoSaida(false) }, [booking?.id])
+
   return (
-    <Modal open={!!booking} onClose={onClose}
+    <Modal open={!!booking} onClose={() => setConfirmandoSaida(true)}
       title={`Despachar — ${booking?.booking_code || ''}`} size="sm">
       <form onSubmit={handleSubmit} className="space-y-4">
         {booking && (
@@ -252,6 +259,36 @@ export default function DespacharModal({ booking, operador, onClose, onDone }) {
           {assignMut.isPending ? 'Salvando…' : 'Confirmar Despacho'}
         </Button>
       </form>
+
+      {/* Confirmação de saída — sobre o próprio modal de despacho. */}
+      {confirmandoSaida && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmandoSaida(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 text-center">
+            <h3 className="text-[16px] font-bold text-gray-900">Sair do despacho?</h3>
+            <p className="text-[13px] text-gray-500 mt-1.5 leading-snug">
+              Esta solicitação já está na tela de Despacho. Se sair agora, o que
+              você preencheu aqui não será salvo.
+            </p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                onClick={() => setConfirmandoSaida(false)}
+                className="w-full bg-brand text-white font-bold rounded-xl py-3 text-[14px] active:scale-[0.98] transition-transform"
+              >
+                Continuar preenchendo
+              </button>
+              <button
+                type="button"
+                onClick={() => { setConfirmandoSaida(false); onClose?.() }}
+                className="w-full text-gray-500 font-semibold rounded-xl py-2.5 text-[14px] active:scale-95 transition-transform"
+              >
+                Sair mesmo assim
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   )
 }
