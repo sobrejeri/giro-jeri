@@ -119,30 +119,31 @@ function Ring({ pct, color }) {
   )
 }
 
-// ── Card de estatística ────────────────────────────────
+// ── Card de estatística (compacto: 2×2 no celular) ─────
+// Antes cada card ocupava a largura toda e empilhava — 4 cards comiam a tela
+// inteira antes de aparecer a lista. Agora é um bloco enxuto (ícone + número +
+// rótulo); o anel de progresso só aparece no desktop largo, onde há espaço.
 function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2.5">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
-            <Icon size={17} className="text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[22px] font-black text-gray-900 leading-none">{value}</span>
-              {trend != null && (
-                <span className={`flex items-center gap-0.5 text-[10px] font-bold ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {trend >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                  {Math.abs(trend)}%
-                </span>
-              )}
-            </div>
-            <p className="text-[12px] text-gray-400 font-medium mt-1 truncate">{label}</p>
-          </div>
-        </div>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
+        <Icon size={18} className="text-white" />
       </div>
-      <Ring pct={pct} color={ringColor} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[20px] font-black text-gray-900 leading-none">{value}</span>
+          {trend != null && (
+            <span className={`flex items-center gap-0.5 text-[10px] font-bold ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+              {trend >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+              {Math.abs(trend)}%
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-gray-400 font-medium mt-1 truncate">{label}</p>
+      </div>
+      <div className="ml-auto hidden xl:block">
+        <Ring pct={pct} color={ringColor} />
+      </div>
     </div>
   )
 }
@@ -652,7 +653,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Cards de estatística ────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
         {stats.map((s) => <StatCard key={s.label} {...s} />)}
       </div>
 
