@@ -274,22 +274,30 @@ function serviceStatusOf(b) {
 
 /* ── Resumo de um pedido (grupo de reservas do carrinho) ───────── */
 function groupSummary(bookings) {
-  const statuses = bookings.map(resolveStatus)
-  const total = bookings.reduce((s, b) => s + Number(b.total_amount || 0), 0)
+  // Itens cancelados NÃO contam no total nem no status do pedido — senão o
+  // valor fica "preso" no antigo e o status vira "Em andamento" por engano.
+  const cancelado = (b) => resolveStatus(b) === 'cancelled'
+  const ativos = bookings.filter((b) => !cancelado(b))
+  const base   = ativos.length ? ativos : bookings   // tudo cancelado → mostra estado cancelado
+  const statuses = base.map(resolveStatus)
+  const total = base.reduce((s, b) => s + Number(b.total_amount || 0), 0)
+  const allCancelled = ativos.length === 0
   const allPay       = statuses.length > 0 && statuses.every((s) => s === 'waiting_payment')
   const allDone      = statuses.length > 0 && statuses.every((s) => ['confirmed', 'completed'].includes(s))
   const anyWaitAcc   = statuses.some((s) => s === 'waiting_acceptance')
   const payableCount = statuses.filter((s) => s === 'waiting_payment').length
   let label = 'Em andamento', bg = 'bg-blue-500'
-  if (allPay)          { label = 'Pronto para pagar';   bg = 'bg-amber-500'  }
+  if (allCancelled)    { label = 'Cancelado';           bg = 'bg-red-500'    }
+  else if (allPay)     { label = 'Pronto para pagar';   bg = 'bg-amber-500'  }
   else if (allDone)    { label = 'Confirmado';          bg = 'bg-green-500'  }
   else if (anyWaitAcc) { label = 'Aguard. confirmação'; bg = 'bg-orange-400' }
+  else if (payableCount > 0) { label = 'Aguard. pagamento'; bg = 'bg-amber-500' }
   return { total, label, bg, count: bookings.length, allPay, payableCount }
 }
 
 /* ── Card-resumo do pedido (grupo) — abre o detalhe ao tocar ───── */
-function GroupCard({ bookings, onOpen }) {
-  const { total, label, bg, count } = groupSummary(bookings)
+function GroupCard({ bookings, onOpen, onPayGroup }) {
+  const { total, label, bg, count, payableCount } = groupSummary(bookings)
   return (
     <div onClick={onOpen} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-brand/20 active:scale-[0.99] transition-transform cursor-pointer">
       <div className="bg-brand/5 px-4 py-2.5 flex items-center justify-between border-b border-brand/10">
@@ -322,6 +330,16 @@ function GroupCard({ bookings, onOpen }) {
           </div>
           <span className="flex items-center gap-1 text-[12px] font-bold text-brand">Ver detalhes <ChevronRight size={16} /></span>
         </div>
+
+        {/* Pagar o pedido inteiro de uma vez (2+ serviços aguardando pagamento) */}
+        {payableCount >= 2 && onPayGroup && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPayGroup() }}
+            className="mt-1 w-full bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform"
+          >
+            Pagar tudo · {fmt(total)}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -360,7 +378,7 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
               onReview={onReview} reviewed={reviewedIds?.has(b.id)} noStretch />
           ))}
         </div>
-        {allPay && payableCount >= 2 && (
+        {payableCount >= 2 && (
           <div
             className="px-4 pt-4 bg-white border-t border-gray-100 shrink-0"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
@@ -369,7 +387,7 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
               onClick={onPayGroup}
               className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
             >
-              Pagar tudo · {fmt(total)}
+              Pagar {allPay ? 'tudo' : 'os pendentes'} · {fmt(total)}
             </button>
           </div>
         )}
@@ -926,6 +944,7 @@ export default function Bookings() {
                 key={it.id}
                 bookings={it.data}
                 onOpen={() => setGroupOpen({ gid: it.gid, bookings: it.data })}
+                onPayGroup={() => handlePayGroup({ gid: it.gid, bookings: it.data })}
               />
             ) : (
               <BookingCard
