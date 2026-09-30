@@ -113,7 +113,7 @@ function CancelDialog({ booking, onConfirm, onClose, loading, error }) {
 }
 
 /* ── Booking Card ───────────────────────────────────────────── */
-function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = false, groupSize = 0 }) {
+function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = false, groupSize = 0, noStretch = false }) {
   const { t } = useTranslation()
   const STATUS_CFG = getStatusCfg(t)
   const status  = resolveStatus(booking)
@@ -137,7 +137,7 @@ function BookingCard({ booking, onCancel, onDetail, onPay, onReview, reviewed = 
   const serviceName = booking.service_name || (isTour ? 'Passeio' : 'Transfer')
 
   return (
-    <div onClick={() => onDetail?.(booking.id)} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer flex flex-col h-full">
+    <div onClick={() => onDetail?.(booking.id)} className={`bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer flex flex-col ${noStretch ? '' : 'h-full'}`}>
       {/* ── Hero ── */}
       <div className="relative h-[120px]">
         {booking.cover_image_url ? (
@@ -357,7 +357,7 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
         >
           {bookings.map((b) => (
             <BookingCard key={b.id} booking={b} onCancel={onCancel} onDetail={onDetail} onPay={onPay}
-              onReview={onReview} reviewed={reviewedIds?.has(b.id)} />
+              onReview={onReview} reviewed={reviewedIds?.has(b.id)} noStretch />
           ))}
         </div>
         {allPay && payableCount >= 2 && (
