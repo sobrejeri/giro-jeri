@@ -97,7 +97,64 @@ async function runCartPending() {
   }
 }
 
+// Data (YYYY-MM-DD) de hoje e amanhã em Fortaleza — para buscar as reservas
+// cujo serviço acontece nas próximas horas sem varrer o histórico todo.
+function datasProximas() {
+  const { yyyy, mm, dd } = fortaleza()
+  const hoje = `${yyyy}-${mm}-${dd}`
+  const d = new Date(`${hoje}T12:00:00-03:00`)
+  d.setDate(d.getDate() + 1)
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+  return [hoje, p]
+}
+
+// Lembrete "o serviço está próximo": avisa o CLIENTE e o OPERADOR quando faltam
+// até ~2h para a execução. Roda de hora em hora; a janela de 2h + o dedupe por
+// reserva garantem 1 aviso por reserva, sem depender de service_datetime (que
+// tem fuso ambíguo) — o horário é montado de service_date+service_time em
+// America/Fortaleza (UTC−3, sem horário de verão).
+const JANELA_AVISO = 2 * HORA
+async function runServiceReminders() {
+  const tpl = await getTemplate('service_soon')
+  if (!tpl?.enabled) return
+  const agora = Date.now()
+  const { data: bookings } = await supabase
+    .from('bookings')
+    .select('id, user_id, operator_id, booking_code, service_type, service_date, service_time, status_operational')
+    .eq('status_commercial', 'paid')
+    .in('service_date', datasProximas())
+  for (const b of bookings || []) {
+    if (!b.service_time) continue
+    if (['completed', 'cancelled'].includes(b.status_operational)) continue
+    const alvo = new Date(`${b.service_date}T${String(b.service_time).slice(0, 5)}:00-03:00`).getTime()
+    if (isNaN(alvo)) continue
+    const diff = alvo - agora
+    if (diff <= 0 || diff > JANELA_AVISO) continue
+
+    const hhmm  = String(b.service_time).slice(0, 5)
+    const label = b.service_type === 'tour' ? 'passeio' : 'transfer'
+
+    // Cliente
+    if (b.user_id && await claim(b.user_id, 'service_soon', b.id)) {
+      await notifyUser({
+        userId: b.user_id, bookingId: b.id, templateKey: 'service_soon',
+        title: 'Seu serviço começa em breve ⏰',
+        body: `Seu ${label} (${b.booking_code}) começa às ${hhmm}. Prepare-se!`,
+      })
+    }
+    // Operador atribuído (kind separado para não colidir com o dedupe do cliente)
+    if (b.operator_id && await claim(b.operator_id, 'service_soon_op', b.id)) {
+      await notifyUser({
+        userId: b.operator_id, bookingId: b.id, templateKey: 'service_soon',
+        title: 'Serviço em breve ⏰',
+        body: `${label === 'passeio' ? 'Passeio' : 'Transfer'} ${b.booking_code} às ${hhmm}. Prepare o embarque.`,
+      })
+    }
+  }
+}
+
 async function tick() {
+  try { await runServiceReminders() } catch (e) { console.error('[scheduler] service-soon:', e.message) }
   try { await runCartReminders() } catch (e) { console.error('[scheduler] cart:', e.message) }
   try { await runCartPending() } catch (e) { console.error('[scheduler] cart-pending:', e.message) }
   try {

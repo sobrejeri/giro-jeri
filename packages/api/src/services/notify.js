@@ -16,6 +16,9 @@ export const DEFAULT_TEMPLATES = {
   birthday:      { enabled: true, title: 'Feliz aniversário! 🎉',      body: 'A Turiva deseja um dia incrível! Que tal comemorar com um passeio em Jeri?' },
   cart_reminder: { enabled: true, title: 'Sua reserva está esperando 🛒', body: 'Você tem uma reserva aguardando pagamento. Conclua antes que a vaga seja liberada!' },
   cart_pending:  { enabled: true, title: 'Você deixou itens no carrinho 🛒', body: 'Volte e finalize sua solicitação em Jericoacoara — é rápido e sua reserva fica garantida!' },
+  // Lembrete "o serviço está próximo" (cliente e operador). O texto real é
+  // montado no código com o horário e o código da reserva.
+  service_soon:  { enabled: true, title: 'Seu serviço começa em breve ⏰', body: 'Seu passeio/transfer começa em breve. Prepare-se!' },
   // Avisos internos do admin (estilo Hotmart) — os textos abaixo são só o
   // fallback; a mensagem real é montada com os dados do evento no código.
   admin_new_user:          { enabled: true, title: 'Novo cadastro 👤',        body: 'Um novo usuário acabou de criar conta na Turiva.' },
