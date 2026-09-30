@@ -48,10 +48,14 @@ export default function CheckoutSolicitado() {
     enabled:  !!order_group_id && isBatch,
     select:   (r) => (r?.data || []).filter((b) => b.order_group_id === order_group_id),
     refetchInterval: (q) => {
-      const arr = q.state.data || []
-      const anyWaiting = arr.some((b) => resolveStatusReserva(b) === 'waiting_acceptance')
+      // `q.state.data` é o dado CRU (o select não altera o state.data no v5):
+      // pode ser { data: [...] } ou já um array. Normaliza antes de usar.
+      const raw = q.state?.data
+      const lista = Array.isArray(raw) ? raw : (raw?.data || [])
+      const mine = lista.filter((b) => b.order_group_id === order_group_id)
+      const anyWaiting = mine.some((b) => resolveStatusReserva(b) === 'waiting_acceptance')
       // Ainda montando (lista vazia) ou algum item sem aceite → continua pollando.
-      return (arr.length === 0 || anyWaiting) ? 6000 : false
+      return (mine.length === 0 || anyWaiting) ? 6000 : false
     },
     refetchOnWindowFocus: true,
   })
