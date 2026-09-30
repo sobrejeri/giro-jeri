@@ -883,7 +883,14 @@ export default function Reservas() {
   // corrida continuava nas duas listas.
   async function handleDispatch(booking) {
     try {
-      if ((booking?.status_operational || 'new') === 'new') {
+      // Marca como despachada sempre que ainda NÃO estiver num estado de despacho.
+      // Ao aceitar+pagar a reserva fica 'assigned' (não 'new'), então o guard
+      // antigo (=== 'new') nunca disparava e a corrida continuava aqui mesmo
+      // depois de ir ao Despacho. `confirmBooking` leva qualquer reserva paga
+      // para 'awaiting_dispatch', que é o que a remove desta lista.
+      const jaDespachada = ['awaiting_dispatch', 'confirmed', 'en_route', 'in_progress', 'completed']
+        .includes(booking?.status_operational)
+      if (!jaDespachada) {
         await api.confirmBooking(booking.id)
         queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
       }
