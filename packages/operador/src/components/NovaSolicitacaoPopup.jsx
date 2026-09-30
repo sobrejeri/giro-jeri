@@ -78,10 +78,29 @@ export default function NovaSolicitacaoPopup() {
     staleTime:       6000,
   })
 
-  const pendentes = useMemo(() => {
+  // Unidades a exibir: itens do MESMO pedido (order_group_id) viram UM combo,
+  // mostrado como uma solicitação só. Legs e itens sem grupo ficam avulsos.
+  // Antes o combo pingava um card por serviço ("+1 na fila") — o operador via
+  // dois avisos soltos em vez de um pedido.
+  const unidades = useMemo(() => {
     const lista = data?.pending || []
     const vistas = new Set(dispensadas)
-    return lista.filter((it) => !vistas.has(idDoItem(it)))
+    const visiveis = lista.filter((it) => !vistas.has(idDoItem(it)))
+    const groups = new Map()
+    const singles = []
+    for (const it of visiveis) {
+      if (it.order_group_id && it.kind !== 'leg') {
+        if (!groups.has(it.order_group_id)) groups.set(it.order_group_id, [])
+        groups.get(it.order_group_id).push(it)
+      } else singles.push(it)
+    }
+    const out = []
+    for (const [gid, items] of groups.entries()) {
+      if (items.length >= 2) out.push({ type: 'combo', id: `g-${gid}`, gid, items })
+      else out.push({ type: 'single', id: idDoItem(items[0]), item: items[0] })
+    }
+    for (const it of singles) out.push({ type: 'single', id: idDoItem(it), item: it })
+    return out
   }, [data, dispensadas])
 
   const avisosInfo = useMemo(() => {
@@ -96,8 +115,8 @@ export default function NovaSolicitacaoPopup() {
     )
   }, [notifData, avisosVistos])
 
-  const atual = pendentes[0]
-  const restantes = pendentes.length - 1
+  const atual = unidades[0]
+  const restantes = unidades.length - 1
   // Aceitar/recusar tem prioridade; o aviso informativo só aparece sem pendências.
   const avisoAtual = !atual ? avisosInfo[0] : null
 
@@ -107,29 +126,38 @@ export default function NovaSolicitacaoPopup() {
     gravarLista(CHAVE_AVISOS, nova)
   }
 
-  function dispensar(item) {
-    const nova = [...dispensadas, idDoItem(item)]
+  // Dispensa uma unidade (combo = todos os seus itens de uma vez).
+  function dispensarUnidade(u) {
+    const ids = u?.type === 'combo' ? u.items.map(idDoItem) : [idDoItem(u.item)]
+    const nova = [...dispensadas, ...ids]
     setDispensadas(nova)
     gravarDispensadas(nova)
   }
 
-  async function aceitar(item) {
+  async function aceitar(u) {
     if (acao) return
-    const isLeg = item.kind === 'leg'
-    const id = idDoItem(item)
-    setAcao({ id, tipo: 'aceitar' })
+    const ehCombo = u.type === 'combo'
+    setAcao({ id: u.id, tipo: 'aceitar' })
     setAviso(null)
     try {
-      if (isLeg) await api.acceptLeg(id)
-      else       await api.acceptBooking(id)
-      qc.invalidateQueries({ queryKey: ['operator-bookings'] })
-      setAviso({ tipo: 'ok', texto: 'Solicitação aceita! Aguardando o cliente pagar.' })
+      if (ehCombo) {
+        // Pedido inteiro do carrinho, aceite atômico (tudo-ou-nada).
+        const r = await api.acceptGroup(u.gid)
+        qc.invalidateQueries({ queryKey: ['operator-bookings'] })
+        setAviso({ tipo: 'ok', texto: `Pedido aceito (${r?.accepted_count ?? u.items.length} serviços)! Aguardando o cliente pagar tudo.` })
+      } else {
+        const item = u.item
+        if (item.kind === 'leg') await api.acceptLeg(idDoItem(item))
+        else                     await api.acceptBooking(idDoItem(item))
+        qc.invalidateQueries({ queryKey: ['operator-bookings'] })
+        setAviso({ tipo: 'ok', texto: 'Solicitação aceita! Aguardando o cliente pagar.' })
+      }
       setTimeout(() => setAviso(null), 3500)
-      // Não precisa dispensar: aceita, ela sai de `pending` no próximo feed.
+      // Não precisa dispensar: aceita, sai de `pending` no próximo feed.
       // Leva direto às Solicitações, já na aba "Minhas corridas".
       navigate('/reservas?tab=mine')
     } catch (err) {
-      const jaAceita = err?.message?.includes('já foi aceita') || err?.status === 409
+      const jaAceita = err?.message?.includes('já foi aceita') || err?.message?.includes('já foi aceito') || err?.status === 409
       qc.invalidateQueries({ queryKey: ['operator-bookings'] })
       setAviso({
         tipo: 'erro',
@@ -137,7 +165,7 @@ export default function NovaSolicitacaoPopup() {
       })
       setTimeout(() => setAviso(null), 4000)
       // Some com o card: já aceita por outro, ou erro — não adianta insistir aqui.
-      dispensar(item)
+      dispensarUnidade(u)
     } finally {
       setAcao(null)
     }
@@ -197,15 +225,96 @@ export default function NovaSolicitacaoPopup() {
     )
   }
 
-  const tipo   = atual?.service_type === 'tour' ? 'Novo passeio' : 'Novo transfer'
-  const isLeg  = atual?.kind === 'leg'
-  const modo   = isLeg ? (atual?.vehicle_name || 'Privativo')
-                       : (atual?.booking_mode === 'private' ? 'Privativo' : 'Compartilhado')
-  const pessoas = isLeg ? atual?.pax_count : atual?.people_count
-  const valor   = isLeg ? atual?.leg_price : atual?.total_amount
-  const foto    = atual?.service_image_url || null
-  const local   = atual?.origin_text || atual?.pickup_place_name || null
-  const processando = acao?.id === (atual && idDoItem(atual))
+  const processando = acao?.id === atual?.id
+
+  // ── Pedido em COMBO (carrinho) — uma solicitação só, lista os serviços ─────
+  if (atual?.type === 'combo') {
+    const items = atual.items
+    const totalCombo = items.reduce((s, it) => s + (Number(it.total_amount) || 0), 0)
+    const foto = items.find((it) => it.service_image_url)?.service_image_url || null
+    const totPax = items.reduce((s, it) => s + (Number(it.people_count) || 0), 0)
+    const dataStr = items[0]?.service_date
+      ? new Date(items[0].service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : null
+    return (
+      <div role="alert" aria-live="assertive" className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="w-full max-w-[430px] max-h-[92vh] overflow-y-auto bg-white rounded-3xl shadow-2xl overflow-hidden animate-[slideUp_.25s_ease-out]">
+          <div className="relative h-40 bg-gradient-to-br from-brand to-orange-400">
+            {foto && <img src={foto} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+            {restantes > 0 && (
+              <span className="absolute top-3 right-3 text-[11px] font-bold text-white bg-black/40 px-2.5 py-1 rounded-full">+{restantes} na fila</span>
+            )}
+            <div className="absolute bottom-3 left-4 right-4">
+              <span className="inline-flex items-center gap-1.5 bg-white/95 text-brand text-[12px] font-extrabold uppercase tracking-wide px-3 py-1 rounded-full shadow">
+                <BellRing size={13} className="animate-pulse" /> Novo pedido · {items.length} serviços
+              </span>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div className="space-y-2">
+              {items.map((it) => (
+                <div key={idDoItem(it)} className="flex items-center gap-2.5 bg-gray-50 rounded-xl px-3 py-2.5">
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${it.service_type === 'tour' ? 'bg-brand/10 text-brand' : 'bg-sky-100 text-sky-700'}`}>
+                    {it.service_type === 'tour' ? 'Passeio' : 'Transfer'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-bold text-gray-900 truncate">
+                      {it.service_name || (it.service_type === 'tour' ? 'Passeio' : 'Transfer')}
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      {it.service_date ? new Date(it.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                      {it.service_time ? ` • ${String(it.service_time).slice(0, 5)}` : ''} · {it.people_count ?? '—'} pax
+                    </p>
+                  </div>
+                  <span className="text-[13px] font-bold text-gray-700 shrink-0">{fmtBRL(it.total_amount)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between text-[13px] text-gray-600">
+              <span className="inline-flex items-center gap-1.5"><Users size={15} className="text-brand" /> {totPax} passageiros</span>
+              {dataStr && <span className="inline-flex items-center gap-1.5"><CalendarCheck size={15} className="text-brand" /> {dataStr}</span>}
+            </div>
+
+            <div className="border-t border-gray-100 pt-4 text-center">
+              <p className="text-[13px] text-gray-500 font-medium">Valor do pedido</p>
+              <p className="text-[36px] leading-none font-extrabold text-brand mt-1">{fmtBRL(totalCombo)}</p>
+            </div>
+
+            {aviso && (
+              <p className={`text-center text-[12px] font-semibold ${aviso.tipo === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{aviso.texto}</p>
+            )}
+
+            <button type="button" onClick={() => aceitar(atual)} disabled={processando}
+              className="w-full flex items-center justify-center gap-2 bg-brand text-white text-[17px] font-extrabold py-4 rounded-2xl active:scale-[0.98] transition-transform disabled:opacity-60 shadow-lg shadow-brand/30">
+              <Check size={20} /> {processando ? 'Aceitando…' : 'Aceitar pedido'}
+            </button>
+            <button type="button" onClick={() => dispensarUnidade(atual)} disabled={processando}
+              className="w-full text-center text-[15px] font-semibold text-gray-500 py-1.5 active:scale-95 transition-transform disabled:opacity-60">
+              Recusar
+            </button>
+            <p className="text-[11px] text-gray-400 text-center leading-snug">
+              O pedido é aceito por inteiro (tudo-ou-nada). Recusar só esconde este
+              aviso para você — continua disponível na aba Solicitações.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Solicitação ÚNICA a aceitar ────────────────────────────────────────────
+  const item   = atual.item
+  const tipo   = item?.service_type === 'tour' ? 'Novo passeio' : 'Novo transfer'
+  const isLeg  = item?.kind === 'leg'
+  const modo   = isLeg ? (item?.vehicle_name || 'Privativo')
+                       : (item?.booking_mode === 'private' ? 'Privativo' : 'Compartilhado')
+  const pessoas = isLeg ? item?.pax_count : item?.people_count
+  const valor   = isLeg ? item?.leg_price : item?.total_amount
+  const foto    = item?.service_image_url || null
+  const local   = item?.origin_text || item?.pickup_place_name || null
 
   // ── Solicitação a ACEITAR — tela cheia, imersiva, sobre qualquer tela ──────
   return (
@@ -236,10 +345,10 @@ export default function NovaSolicitacaoPopup() {
         <div className="p-5 space-y-4">
           <div className="flex items-start justify-between gap-2">
             <h2 className="text-[22px] font-extrabold text-gray-900 leading-tight">
-              {atual.service_name || atual.vehicle_name || (atual.service_type === 'tour' ? 'Passeio' : 'Transfer')}
+              {item.service_name || item.vehicle_name || (item.service_type === 'tour' ? 'Passeio' : 'Transfer')}
             </h2>
-            {atual.booking_code && (
-              <span className="font-mono text-[11px] font-bold text-gray-400 shrink-0 mt-1">{atual.booking_code}</span>
+            {item.booking_code && (
+              <span className="font-mono text-[11px] font-bold text-gray-400 shrink-0 mt-1">{item.booking_code}</span>
             )}
           </div>
 
@@ -247,10 +356,10 @@ export default function NovaSolicitacaoPopup() {
             <div className="flex items-center gap-2.5 text-[15px] text-gray-800">
               <CalendarCheck size={18} className="text-brand shrink-0" />
               <span className="font-semibold">
-                {atual.service_date
-                  ? new Date(atual.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                {item.service_date
+                  ? new Date(item.service_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                   : '—'}
-                {atual.service_time ? ` • ${String(atual.service_time).slice(0, 5)}` : ''}
+                {item.service_time ? ` • ${String(item.service_time).slice(0, 5)}` : ''}
               </span>
             </div>
             <div className="flex items-center gap-2.5 text-[15px] text-gray-800">
@@ -262,7 +371,7 @@ export default function NovaSolicitacaoPopup() {
                 <MapPin size={18} className="text-brand shrink-0 mt-0.5" />
                 <span className="min-w-0">
                   <span className="block text-[12px] text-gray-400 font-medium">Buscar em:</span>
-                  {local}{atual.destination_text ? ` → ${atual.destination_text}` : ''}
+                  {local}{item.destination_text ? ` → ${item.destination_text}` : ''}
                 </span>
               </div>
             )}
@@ -289,7 +398,7 @@ export default function NovaSolicitacaoPopup() {
           </button>
           <button
             type="button"
-            onClick={() => dispensar(atual)}
+            onClick={() => dispensarUnidade(atual)}
             disabled={processando}
             className="w-full text-center text-[15px] font-semibold text-gray-500 py-1.5 active:scale-95 transition-transform disabled:opacity-60"
           >
