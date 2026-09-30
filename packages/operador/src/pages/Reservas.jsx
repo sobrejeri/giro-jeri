@@ -243,7 +243,10 @@ function ComboCard({ items, onAccept, onAcceptAll, accepting, acceptingCombo }) 
               {isTour ? <Compass size={15} className="text-gray-400 shrink-0" /> : <Car size={15} className="text-gray-400 shrink-0" />}
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold text-gray-800 truncate">
-                  {isTour ? 'Passeio' : 'Transfer'}{it.vehicle_name ? ` · ${it.vehicle_name}` : ''}
+                  {it.service_name || it.vehicle_name || (isTour ? 'Passeio' : 'Transfer')}
+                </p>
+                <p className="text-[10.5px] text-gray-400 leading-tight">
+                  {isTour ? 'Passeio' : 'Transfer'}{it.vehicle_name && it.service_name ? ` · ${it.vehicle_name}` : ''}
                 </p>
                 <p className="text-[11px] text-gray-400">
                   {dateStr}{it.service_time ? ` ${it.service_time.slice(0, 5)}` : ''} · {fmt(comboItemPrice(it))}
