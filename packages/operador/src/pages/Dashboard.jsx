@@ -234,20 +234,12 @@ function BookingRow({ b, onAssign, onStart, onComplete, starting = false, operad
         <span className="text-[13px] font-extrabold text-gray-800">{fmt(b.total_amount)}</span>
       </td>
 
-      {/* Ações */}
+      {/* Ações — o status já aparece na coluna Status; aqui só as AÇÕES quando
+          a reserva está paga e não cancelada (não repetimos "Aguardando
+          pagamento"/"Cancelada"). */}
       <td className="py-3 pl-3 pr-5">
         <div className="flex items-center justify-end gap-1">
-          {/* Cancelada: o operador apenas acompanha (sem despacho). Sem
-              pagamento: rótulo, não botão. Paga: despacha/edita. */}
-          {cancelInfo(b).cancelada ? (
-            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-gray-500 bg-gray-100 rounded-lg px-2.5 py-1.5">
-              <XCircle size={13} /> Cancelada{cancelInfo(b).quando ? ` · ${cancelInfo(b).quando}` : ''}
-            </span>
-          ) : !pago ? (
-            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-600 bg-amber-50 rounded-lg px-2.5 py-1.5">
-              <Clock size={13} /> Aguardando pagamento
-            </span>
-          ) : (
+          {pago && !cancelInfo(b).cancelada && (
             <>
               {dispatched && (
                 <button
@@ -351,58 +343,50 @@ function BookingCardMobile({ b, onAssign, onStart, onComplete, starting = false,
 
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <span className="text-[13px] font-extrabold text-gray-800">{fmt(b.total_amount)}</span>
-        <div className="flex items-center gap-1.5">
-          {cancelInfo(b).cancelada ? (
-            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-gray-500 bg-gray-100 rounded-lg px-2.5 py-1.5">
-              <XCircle size={13} /> Cancelada{cancelInfo(b).quando ? ` · ${cancelInfo(b).quando}` : ''}
-            </span>
-          ) : !pago ? (
-            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-600 bg-amber-50 rounded-lg px-2.5 py-1.5">
-              <Clock size={13} /> Aguardando pagamento
-            </span>
-          ) : (
-            <>
-              {dispatched && (
-                <button
-                  onClick={() => downloadOrderPDF(b, formForOS, operador)}
-                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Baixar OS em PDF"
-                >
-                  <FileText size={15} />
-                </button>
-              )}
+        {/* Sem pagamento/cancelada NÃO repete o status aqui — o selo no topo do
+            card já informa. Só mostramos AÇÕES quando há o que fazer. */}
+        {pago && !cancelInfo(b).cancelada && (
+          <div className="flex items-center gap-1.5">
+            {dispatched && (
               <button
-                onClick={() => onAssign(b)}
-                className={`flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors ${
-                  dispatched
-                    ? 'text-gray-500 hover:bg-gray-100 border border-gray-200'
-                    : 'text-white bg-brand hover:bg-brand/90'
-                }`}
+                onClick={() => downloadOrderPDF(b, formForOS, operador)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Baixar OS em PDF"
               >
-                {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
-                {dispatched ? 'Editar' : 'Despachar'}
+                <FileText size={15} />
               </button>
-              {/* Iniciar direto do painel (já despachada e não iniciada). */}
-              {dispatched && b.status_operational !== 'in_progress' && b.status_operational !== 'completed' && (
-                <button
-                  onClick={() => onStart?.(b)}
-                  disabled={starting}
-                  className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-60"
-                >
-                  <Play size={12} /> Iniciar
-                </button>
-              )}
-              {b.status_operational === 'in_progress' && (
-                <button
-                  onClick={() => onComplete?.(b)}
-                  className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors"
-                >
-                  <CheckCircle2 size={13} /> Concluir
-                </button>
-              )}
-            </>
-          )}
-        </div>
+            )}
+            <button
+              onClick={() => onAssign(b)}
+              className={`flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors ${
+                dispatched
+                  ? 'text-gray-500 hover:bg-gray-100 border border-gray-200'
+                  : 'text-white bg-brand hover:bg-brand/90'
+              }`}
+            >
+              {dispatched ? <Pencil size={12} /> : <UserCheck size={13} />}
+              {dispatched ? 'Editar' : 'Despachar'}
+            </button>
+            {/* Iniciar direto do painel (já despachada e não iniciada). */}
+            {dispatched && b.status_operational !== 'in_progress' && b.status_operational !== 'completed' && (
+              <button
+                onClick={() => onStart?.(b)}
+                disabled={starting}
+                className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-60"
+              >
+                <Play size={12} /> Iniciar
+              </button>
+            )}
+            {b.status_operational === 'in_progress' && (
+              <button
+                onClick={() => onComplete?.(b)}
+                className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors"
+              >
+                <CheckCircle2 size={13} /> Concluir
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

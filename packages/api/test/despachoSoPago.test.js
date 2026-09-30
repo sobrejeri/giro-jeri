@@ -17,11 +17,13 @@ test('só reserva paga é despachável', () => {
     'a regra do que pode despachar é o pagamento, não o estado operacional')
 })
 
-test('sem pagamento, a linha mostra o botão de despacho substituído por aviso', () => {
-  // Nas duas visões (tabela e card mobile) o botão Despachar fica atrás de `pago`.
-  const ocorrencias = fonte.match(/!pago \? \(/g) || []
-  assert.ok(ocorrencias.length >= 2, 'a trava do botão precisa valer na tabela e no card mobile')
-  assert.match(fonte, /Aguardando pagamento/, 'o aviso substitui o botão')
+test('sem pagamento, o botão de despacho não aparece (fica atrás de `pago`)', () => {
+  // Nas duas visões (tabela e card mobile) as AÇÕES só existem quando a reserva
+  // está paga e não cancelada — o status em si aparece no selo, não repetido.
+  const ocorrencias = fonte.match(/pago && !cancelInfo\(b\)\.cancelada &&/g) || []
+  assert.ok(ocorrencias.length >= 2, 'a trava das ações precisa valer na tabela e no card mobile')
+  // O selo (seloDe) ainda rotula "Aguardando pagamento" no topo do card.
+  assert.match(fonte, /Aguardando pagamento/, 'o selo do topo informa o status')
 })
 
 test('o selo não diz "Atribuído" antes do pagamento', () => {
