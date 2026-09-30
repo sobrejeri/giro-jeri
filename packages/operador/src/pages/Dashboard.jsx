@@ -147,7 +147,7 @@ function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
 }
 
 // ── Linha da tabela ────────────────────────────────────
-function BookingRow({ b, onAssign, onStart, starting = false, operador, comboSize = 0 }) {
+function BookingRow({ b, onAssign, onStart, onComplete, starting = false, operador, comboSize = 0 }) {
   const pago     = estaPago(b)
   const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
@@ -280,6 +280,16 @@ function BookingRow({ b, onAssign, onStart, starting = false, operador, comboSiz
                   <Play size={12} /> Iniciar
                 </button>
               )}
+              {/* Em andamento: concluir o serviço aqui mesmo. */}
+              {b.status_operational === 'in_progress' && (
+                <button
+                  onClick={() => onComplete?.(b)}
+                  className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors"
+                  title="Concluir serviço"
+                >
+                  <CheckCircle2 size={13} /> Concluir
+                </button>
+              )}
             </>
           )}
         </div>
@@ -289,7 +299,7 @@ function BookingRow({ b, onAssign, onStart, starting = false, operador, comboSiz
 }
 
 // ── Card mobile (mesma info da linha da tabela) ────────
-function BookingCardMobile({ b, onAssign, onStart, starting = false, operador, comboSize = 0 }) {
+function BookingCardMobile({ b, onAssign, onStart, onComplete, starting = false, operador, comboSize = 0 }) {
   const pago     = estaPago(b)
   const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
@@ -380,6 +390,14 @@ function BookingCardMobile({ b, onAssign, onStart, starting = false, operador, c
                   <Play size={12} /> Iniciar
                 </button>
               )}
+              {b.status_operational === 'in_progress' && (
+                <button
+                  onClick={() => onComplete?.(b)}
+                  className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors"
+                >
+                  <CheckCircle2 size={13} /> Concluir
+                </button>
+              )}
             </>
           )}
         </div>
@@ -441,7 +459,8 @@ export default function Dashboard() {
   } : null
 
   const [toast, setToast] = useState(null)
-  const [confirmStart, setConfirmStart] = useState(null) // reserva aguardando confirmação de início
+  const [confirmStart, setConfirmStart]       = useState(null) // reserva aguardando confirmação de início
+  const [confirmComplete, setConfirmComplete] = useState(null) // reserva aguardando confirmação de conclusão
 
   const assignMut = useMutation({
     mutationFn: ({ id, ...body }) => api.assignBooking(id, body),
@@ -466,6 +485,22 @@ export default function Dashboard() {
     onError: (err) => {
       setConfirmStart(null)
       setToast({ type: 'err', text: err?.message || 'Não foi possível iniciar a corrida.' })
+      setTimeout(() => setToast(null), 4000)
+    },
+  })
+
+  // Concluir o serviço direto do painel.
+  const completeMut = useMutation({
+    mutationFn: (id) => api.completeBooking(id),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['operational'] })
+      setConfirmComplete(null)
+      setToast({ type: 'ok', text: 'Corrida concluída! 🎉' })
+      setTimeout(() => setToast(null), 3000)
+    },
+    onError: (err) => {
+      setConfirmComplete(null)
+      setToast({ type: 'err', text: err?.message || 'Não foi possível concluir a corrida.' })
       setTimeout(() => setToast(null), 4000)
     },
   })
@@ -512,7 +547,8 @@ export default function Dashboard() {
   const filtered = useMemo(() => {
     let list = allBooks
     if (tab === 'pending')    list = paidBooks.filter((b) => !hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
-    if (tab === 'dispatched') list = paidBooks.filter((b) => (hasOS(b) || b.status_operational === 'in_progress') && b.status_operational !== 'completed')
+    if (tab === 'dispatched') list = paidBooks.filter((b) => hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
+    if (tab === 'started')    list = paidBooks.filter((b) => b.status_operational === 'in_progress')
     if (tab === 'done')       list = paidBooks.filter((b) => b.status_operational === 'completed')
     if (tab === 'cancelled')  list = cancelledBooks
     if (search.trim()) {
@@ -538,10 +574,15 @@ export default function Dashboard() {
   const safePage   = Math.min(page, pageCount)
   const pageItems  = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE)
 
+  // Despachadas (aba) = com OS e ainda NÃO iniciadas; as em andamento têm aba
+  // própria ("Iniciadas").
+  const dispatchedOnly = paidBooks.filter((b) => hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
+
   const TABS = [
     { key: 'all',        label: 'Todas',       count: allBooks.length },
     { key: 'pending',    label: 'Aguardando',  count: awaitingDispatch.length },
-    { key: 'dispatched', label: 'Despachadas', count: dispatchedActive.length },
+    { key: 'dispatched', label: 'Despachadas', count: dispatchedOnly.length },
+    { key: 'started',    label: 'Iniciadas',   count: inProgress.length },
     { key: 'done',       label: 'Concluídas',  count: done.length },
     { key: 'cancelled',  label: 'Canceladas',  count: cancelledBooks.length },
   ]
@@ -694,7 +735,7 @@ export default function Dashboard() {
         {/* Cards (mobile) */}
         <div className="md:hidden divide-y divide-gray-100">
           {pageItems.map((b) => (
-            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />
+            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />
           ))}
           {pageItems.length === 0 && (
             <div className="py-16 text-center">
@@ -718,7 +759,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />)}
+              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />)}
             </tbody>
           </table>
 
@@ -836,6 +877,41 @@ export default function Dashboard() {
                 type="button"
                 onClick={() => setConfirmStart(null)}
                 disabled={startMut.isPending}
+                className="w-full text-gray-500 font-semibold rounded-xl py-2.5 text-[14px] active:scale-95 transition-transform disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação antes de concluir a corrida */}
+      {confirmComplete && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmComplete(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 text-center">
+            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 size={22} className="text-green-600" />
+            </div>
+            <h3 className="text-[16px] font-bold text-gray-900">Concluir corrida?</h3>
+            <p className="text-[13px] text-gray-500 mt-1.5 leading-snug">
+              {confirmComplete.users?.full_name || 'Cliente'} · {confirmComplete.booking_code}
+              <br />O serviço será marcado como concluído.
+            </p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                onClick={() => completeMut.mutate(confirmComplete.id)}
+                disabled={completeMut.isPending}
+                className="w-full bg-green-600 text-white font-bold rounded-xl py-3 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-60"
+              >
+                {completeMut.isPending ? 'Concluindo…' : 'Concluir corrida'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmComplete(null)}
+                disabled={completeMut.isPending}
                 className="w-full text-gray-500 font-semibold rounded-xl py-2.5 text-[14px] active:scale-95 transition-transform disabled:opacity-60"
               >
                 Cancelar
