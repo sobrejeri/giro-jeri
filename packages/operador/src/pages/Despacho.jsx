@@ -143,6 +143,12 @@ function BookingRow({ b, onDispatch, onStart, onComplete, operador }) {
   )
 }
 
+// Código curto e legível do pedido (combo), igual às telas de Operações/Reservas.
+function comboShort(id) {
+  const s = String(id || '').replace(/[^a-zA-Z0-9]/g, '')
+  return s ? s.slice(-4).toUpperCase() : ''
+}
+
 // Agrupa uma lista de reservas por pedido (order_group_id), preservando a
 // ordem de aparição. Pedido com 2+ serviços vira um bloco; o resto fica avulso.
 function groupByOrder(list) {
@@ -170,11 +176,11 @@ function GroupedList({ list, onDispatch, onStart, onComplete, operador }) {
   return (
     <div className="space-y-3">
       {groupByOrder(list).map((it) => it.type === 'group' ? (
-        <div key={it.gid} className="rounded-2xl border border-brand/20 overflow-hidden">
-          <div className="bg-brand/5 px-4 py-2 flex items-center justify-between border-b border-brand/10">
+        <div key={it.gid} className="rounded-2xl border border-violet-200 overflow-hidden">
+          <div className="bg-violet-50 px-4 py-2 flex items-center justify-between border-b border-violet-100">
             <div className="flex items-center gap-2">
-              <Package size={14} className="text-brand shrink-0" />
-              <span className="text-[12px] font-bold text-gray-800">Pedido · {it.items.length} serviços</span>
+              <Package size={14} className="text-violet-600 shrink-0" />
+              <span className="text-[12px] font-bold text-violet-700">Combo #{comboShort(it.gid)} · {it.items.length} serviços</span>
             </div>
             <span className="text-[11px] text-gray-500 truncate max-w-[45%]">
               {it.items.find((b) => b.users?.full_name)?.users?.full_name || ''}
