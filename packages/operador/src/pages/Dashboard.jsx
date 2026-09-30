@@ -585,6 +585,25 @@ export default function Dashboard() {
   const safePage   = Math.min(page, pageCount)
   const pageItems  = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE)
 
+  // Unidades da lista (mobile): itens do mesmo pedido (order_group_id) com 2+
+  // serviços viram um bloco "Combo"; o resto fica avulso. Assim o combo não
+  // aparece espalhado em cards soltos.
+  const mobileUnits = (() => {
+    const grupos = new Map()
+    const ordem  = []
+    for (const b of pageItems) {
+      const gid = b.order_group_id
+      const ehCombo = gid && (comboSizes.get(gid) || 0) >= 2
+      if (ehCombo) {
+        if (!grupos.has(gid)) { grupos.set(gid, []); ordem.push({ type: 'combo', gid }) }
+        grupos.get(gid).push(b)
+      } else {
+        ordem.push({ type: 'single', b })
+      }
+    }
+    return ordem.map((u) => u.type === 'combo' ? { ...u, items: grupos.get(u.gid) } : u)
+  })()
+
   // Despachadas (aba) = com OS e ainda NÃO iniciadas; as em andamento têm aba
   // própria ("Iniciadas").
   const dispatchedOnly = paidBooks.filter((b) => hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
@@ -735,13 +754,13 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Abas primárias + "Mais filtros" */}
-        <div className="px-5 pb-3 flex items-center gap-2 flex-wrap">
+        {/* Abas primárias + "Mais filtros" — uma linha só, rolável na horizontal */}
+        <div className="px-5 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
           {primaryTabs.map((t) => (
             <button
               key={t.key}
               onClick={() => { setTab(t.key); setPage(1) }}
-              className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border transition-colors flex items-center gap-1.5 ${
+              className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-[13px] font-semibold border transition-colors flex items-center gap-1.5 ${
                 tab === t.key ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:bg-gray-50 bg-white'
               }`}
             >
@@ -754,7 +773,7 @@ export default function Dashboard() {
           ))}
           <button
             onClick={() => setShowMore((v) => !v)}
-            className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border transition-colors flex items-center gap-1.5 ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-[13px] font-semibold border transition-colors flex items-center gap-1.5 ${
               moreActive ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:bg-gray-50 bg-white'
             }`}
           >
@@ -783,10 +802,26 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Cards (mobile) */}
-        <div className="md:hidden divide-y divide-gray-100">
-          {pageItems.map((b) => (
-            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />
+        {/* Cards (mobile) — cada reserva é um bloco separado; combos vêm juntos */}
+        <div className="md:hidden p-3 space-y-3 bg-gray-50/60">
+          {mobileUnits.map((u) => u.type === 'combo' ? (
+            <div key={`g-${u.gid}`} className="rounded-2xl border border-violet-200 bg-white overflow-hidden shadow-sm">
+              <div className="bg-violet-50 px-4 py-2 flex items-center gap-1.5 border-b border-violet-100">
+                <Package size={13} className="text-violet-600" />
+                <span className="text-[11px] font-bold text-violet-700">
+                  Combo #{comboShort(u.gid)} · {comboSizes.get(u.gid) || u.items.length} serviços
+                </span>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {u.items.map((b) => (
+                  <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={0} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div key={u.b.id} className="rounded-2xl border border-gray-100 bg-white overflow-hidden shadow-sm">
+              <BookingCardMobile b={u.b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={0} />
+            </div>
           ))}
           {pageItems.length === 0 && (
             <div className="py-16 text-center">
