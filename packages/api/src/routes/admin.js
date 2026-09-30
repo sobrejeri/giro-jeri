@@ -2943,9 +2943,9 @@ router.get('/bookings', requireAdmin, async (req, res, next) => {
       // PostgREST, não SQL. `payments` é embed — uma reserva pode ter várias
       // tentativas, e o método que interessa é o da que foi APROVADA.
       .select(`
-        id, booking_code, service_type, booking_mode, service_date, service_time,
+        id, booking_code, service_type, service_id, booking_mode, service_date, service_time,
         people_count, total_amount, status_commercial, status_operational, created_at,
-        user_id, operator_id, region_id,
+        user_id, operator_id, region_id, order_group_id,
         payments ( payment_method, status, paid_at, created_at )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
