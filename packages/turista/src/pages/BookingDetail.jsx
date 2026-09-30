@@ -270,6 +270,7 @@ export default function BookingDetail() {
   const meta        = STATUS_META[status] || STATUS_META.waiting_payment
   const StatusIcon  = meta.icon
   const currentIdx  = TIMELINE.findIndex((s) => s.key === status)
+  const concluida   = status === 'completed'   // serviço finalizado pelo operador
   const isCancelled = status === 'cancelled'
   const isCancellable = ['waiting_payment', 'waiting_acceptance', 'confirmed'].includes(status)
 
@@ -601,9 +602,11 @@ export default function BookingDetail() {
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <h2 className="text-sm font-bold text-gray-900 mb-4">{t('bookingDetailPg.timelineSection.title')}</h2>
             <div className="space-y-0">
+              {/* Quando a reserva é finalizada, o último passo ("Finalizada")
+                  também fica verde/concluído — antes ficava laranja (atual). */}
               {TIMELINE.map((step, i) => {
-                const isPast    = i < currentIdx
-                const isCurrent = i === currentIdx
+                const isPast    = i < currentIdx || (i === currentIdx && concluida)
+                const isCurrent = i === currentIdx && !concluida
                 const isFuture  = i > currentIdx
                 const isLast    = i === TIMELINE.length - 1
 
