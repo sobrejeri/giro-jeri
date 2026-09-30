@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, Search, SlidersHorizontal,
   Clock, Users, MapPin, Car, Phone, UserCheck, Pencil, FileText,
   MessageCircle, Send, Download, ShoppingBag, Hourglass, Loader2,
-  CheckCircle2, TrendingUp, TrendingDown, Star, AlertCircle,
+  CheckCircle2, TrendingUp, TrendingDown, Star, AlertCircle, XCircle,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { downloadOrderPDF } from '../lib/orderPDF'
@@ -69,6 +69,15 @@ const estaPago = (b) => b?.status_commercial === 'paid'
 function seloDe(b) {
   if (!estaPago(b) && b?.status_operational !== 'cancelled') return STATUS.awaiting_payment
   return STATUS[andamentoDe(b)] || STATUS.new
+}
+
+// Reserva cancelada (pelo cliente ou pela operação) + quando. Usado para o
+// operador identificar cancelamentos no painel — antes some da lista.
+function cancelInfo(b) {
+  const cancelada = b?.status_operational === 'cancelled' || b?.status_commercial === 'cancelled'
+  let quando = null
+  if (b?.cancelled_at) { try { quando = format(new Date(b.cancelled_at), 'dd MMM', { locale: ptBR }) } catch {} }
+  return { cancelada, quando }
 }
 
 const AVATAR_COLORS = [
@@ -213,9 +222,13 @@ function BookingRow({ b, onAssign, operador }) {
       {/* Ações */}
       <td className="py-3 pl-3 pr-5">
         <div className="flex items-center justify-end gap-1">
-          {/* Sem pagamento não há despacho. Em vez do botão, um rótulo — a
-              corrida aparece na lista, mas não dá para despachá-la ainda. */}
-          {!pago ? (
+          {/* Cancelada: o operador apenas acompanha (sem despacho). Sem
+              pagamento: rótulo, não botão. Paga: despacha/edita. */}
+          {cancelInfo(b).cancelada ? (
+            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-gray-500 bg-gray-100 rounded-lg px-2.5 py-1.5">
+              <XCircle size={13} /> Cancelada{cancelInfo(b).quando ? ` · ${cancelInfo(b).quando}` : ''}
+            </span>
+          ) : !pago ? (
             <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-600 bg-amber-50 rounded-lg px-2.5 py-1.5">
               <Clock size={13} /> Aguardando pagamento
             </span>
@@ -297,7 +310,11 @@ function BookingCardMobile({ b, onAssign, operador }) {
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <span className="text-[13px] font-extrabold text-gray-800">{fmt(b.total_amount)}</span>
         <div className="flex items-center gap-1.5">
-          {!pago ? (
+          {cancelInfo(b).cancelada ? (
+            <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-gray-500 bg-gray-100 rounded-lg px-2.5 py-1.5">
+              <XCircle size={13} /> Cancelada{cancelInfo(b).quando ? ` · ${cancelInfo(b).quando}` : ''}
+            </span>
+          ) : !pago ? (
             <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-600 bg-amber-50 rounded-lg px-2.5 py-1.5">
               <Clock size={13} /> Aguardando pagamento
             </span>
@@ -401,6 +418,9 @@ export default function Dashboard() {
 
   const columns  = data?.columns || {}
   const allBooks = useMemo(() => Object.values(columns).flat(), [columns])
+  // Reservas canceladas vêm à parte (fora das colunas ativas) — o operador
+  // acompanha aqui quando o cliente desiste, em vez de a reserva sumir.
+  const cancelledBooks = useMemo(() => (Array.isArray(data?.cancelled) ? data.cancelled : []), [data])
 
   // Stats por estado REAL (paga + OS): sem contar solicitações não aceitas nem
   // reservas de outras coops (item 14). Aguardando despacho = paga sem OS;
@@ -426,6 +446,7 @@ export default function Dashboard() {
     if (tab === 'pending')    list = paidBooks.filter((b) => !hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
     if (tab === 'dispatched') list = paidBooks.filter((b) => (hasOS(b) || b.status_operational === 'in_progress') && b.status_operational !== 'completed')
     if (tab === 'done')       list = paidBooks.filter((b) => b.status_operational === 'completed')
+    if (tab === 'cancelled')  list = cancelledBooks
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter((b) =>
@@ -433,12 +454,17 @@ export default function Dashboard() {
         (b.booking_code || '').toLowerCase().includes(q),
       )
     }
+    // Canceladas: mais recentes primeiro (pela data do cancelamento). As demais
+    // seguem pela data/horário do serviço.
+    if (tab === 'cancelled') {
+      return [...list].sort((a, b) => String(b.cancelled_at || '').localeCompare(String(a.cancelled_at || '')))
+    }
     return [...list].sort((a, b) => {
       const da = `${a.service_date || '9999'} ${a.service_time || '99'}`
       const db = `${b.service_date || '9999'} ${b.service_time || '99'}`
       return da.localeCompare(db)
     })
-  }, [allBooks, tab, search])
+  }, [allBooks, cancelledBooks, tab, search])
 
   const pageCount  = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
   const safePage   = Math.min(page, pageCount)
@@ -449,6 +475,7 @@ export default function Dashboard() {
     { key: 'pending',    label: 'Aguardando',  count: awaitingDispatch.length },
     { key: 'dispatched', label: 'Despachadas', count: dispatchedActive.length },
     { key: 'done',       label: 'Concluídas',  count: done.length },
+    { key: 'cancelled',  label: 'Canceladas',  count: cancelledBooks.length },
   ]
 
   function changeDate(days) {

@@ -971,14 +971,16 @@ router.get('/operational', requireOperator, async (req, res, next) => {
         id, booking_code, service_type, service_id, booking_mode, user_id, operator_id,
         order_group_id, created_at,
         service_date, service_time, people_count, total_amount,
-        status_commercial, status_operational,
+        status_commercial, status_operational, cancelled_at, cancel_reason,
         pickup_place_name, destination_place_name, special_notes,
         origin_text, destination_text,
         booking_vehicles ( vehicle_name_snapshot, quantity ),
         operational_assignments ( real_vehicle_text, dispatch_notes, driver_name, driver_phone, assigned_driver_user_id, assigned_guide_user_id )
       `)
+      // Canceladas NÃO são excluídas aqui: o operador precisa acompanhar quando
+      // o cliente cancela uma reserva sua. Elas são separadas depois (num array
+      // `cancelled`), fora das colunas ativas, para não poluir kanban/estatísticas.
       .neq('status_commercial', 'draft')
-      .neq('status_commercial', 'cancelled')
       .order('service_date', { ascending: true });
 
     if (targetDate)    query = query.eq('service_date', targetDate);
@@ -1020,11 +1022,20 @@ router.get('/operational', requireOperator, async (req, res, next) => {
     const { attachServiceDetails } = await import('../services/serviceDetails.js');
     enriched = await attachServiceDetails(supabase, enriched);
 
-    // Agrupa por status operacional
+    // Cancelamentos saem das colunas ativas e viajam à parte: o operador
+    // precisa VER a reserva que o cliente cancelou, mas ela não entra no kanban,
+    // nas estatísticas, nem nos demais consumidores de `columns` (despacho,
+    // painel do admin). Ordenadas do cancelamento mais recente para o mais antigo.
+    const ehCancelada = (b) => b.status_commercial === 'cancelled' || b.status_operational === 'cancelled';
+    const ativos    = enriched.filter((b) => !ehCancelada(b));
+    const cancelled = enriched.filter(ehCancelada)
+      .sort((a, b) => String(b.cancelled_at || '').localeCompare(String(a.cancelled_at || '')));
+
+    // Agrupa por status operacional (somente reservas ativas)
     const grouped = {};
     const statuses = ['new','awaiting_dispatch','confirmed','assigned','en_route','in_progress','completed','occurrence'];
     for (const s of statuses) grouped[s] = [];
-    for (const b of enriched) {
+    for (const b of ativos) {
       const key = b.status_operational || 'new';
       if (grouped[key]) grouped[key].push(b);
     }
@@ -1033,8 +1044,9 @@ router.get('/operational', requireOperator, async (req, res, next) => {
       date: targetDate || 'all',
       from: desde || null,
       to:   ate   || null,
-      total: data?.length || 0,
+      total: ativos.length,
       columns: grouped,
+      cancelled,
     });
   } catch (err) { next(err); }
 });
