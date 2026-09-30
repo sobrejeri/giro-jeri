@@ -417,7 +417,7 @@ const PER_PAGE = 8
 export default function Dashboard() {
   const [date, setDate]        = useState('all')
   const [serviceType, setType] = useState('')
-  const [tab, setTab]          = useState('all')
+  const [tab, setTab]          = useState('active')
   const [search, setSearch]    = useState('')
   const [page, setPage]        = useState(1)
   const [showMore, setShowMore] = useState(false) // painel "Mais filtros"
@@ -554,6 +554,9 @@ export default function Dashboard() {
   // Filtro de aba + busca
   const filtered = useMemo(() => {
     let list = allBooks
+    // "Ativas" (padrão) = tudo em aberto — exclui só concluídas (e canceladas,
+    // que já vêm à parte). Concluídas/Canceladas ficam atrás de "Mais filtros".
+    if (tab === 'active')     list = allBooks.filter((b) => b.status_operational !== 'completed')
     if (tab === 'pending')    list = paidBooks.filter((b) => !hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
     if (tab === 'dispatched') list = paidBooks.filter((b) => hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
     if (tab === 'started')    list = paidBooks.filter((b) => b.status_operational === 'in_progress')
@@ -586,16 +589,18 @@ export default function Dashboard() {
   // própria ("Iniciadas").
   const dispatchedOnly = paidBooks.filter((b) => hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
 
+  const activeBooks = allBooks.filter((b) => b.status_operational !== 'completed')
   const TABS = [
-    { key: 'all',        label: 'Todas',        count: allBooks.length,        dot: '' },
+    { key: 'active',     label: 'Ativas',       count: activeBooks.length,     dot: '' },
     { key: 'pending',    label: 'Aguardando',   count: awaitingDispatch.length, dot: 'bg-amber-500' },
     { key: 'started',    label: 'Em andamento', count: inProgress.length,      dot: 'bg-orange-500' },
     { key: 'dispatched', label: 'Despachadas',  count: dispatchedOnly.length,  dot: 'bg-blue-500' },
     { key: 'done',       label: 'Concluídas',   count: done.length,            dot: 'bg-green-500' },
     { key: 'cancelled',  label: 'Canceladas',   count: cancelledBooks.length,  dot: 'bg-gray-400' },
+    { key: 'all',        label: 'Todas',        count: allBooks.length,        dot: '' },
   ]
   // Abas primárias (visíveis) + as extras, atrás de "Mais filtros".
-  const PRIMARY_KEYS = ['all', 'pending', 'started']
+  const PRIMARY_KEYS = ['active', 'pending', 'started']
   const primaryTabs  = TABS.filter((t) => PRIMARY_KEYS.includes(t.key))
   const moreTabs     = TABS.filter((t) => !PRIMARY_KEYS.includes(t.key))
   const moreActive   = moreTabs.some((t) => t.key === tab)
@@ -740,7 +745,7 @@ export default function Dashboard() {
                 tab === t.key ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:bg-gray-50 bg-white'
               }`}
             >
-              {t.key !== 'all' && <span className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />}
+              {t.dot && <span className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />}
               {t.label}
               {t.count > 0 && (
                 <span className={`text-[10px] px-1.5 rounded-full ${tab === t.key ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-500'}`}>{t.count}</span>
