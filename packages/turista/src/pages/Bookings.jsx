@@ -286,18 +286,23 @@ function groupSummary(bookings) {
   const allDone      = statuses.length > 0 && statuses.every((s) => ['confirmed', 'completed'].includes(s))
   const anyWaitAcc   = statuses.some((s) => s === 'waiting_acceptance')
   const payableCount = statuses.filter((s) => s === 'waiting_payment').length
+  // Total que será realmente cobrado: só os itens aguardando pagamento
+  // (o servidor cobra exatamente esses). Se nada estiver pagável, cai no total.
+  const payableTotal = base
+    .filter((b) => resolveStatus(b) === 'waiting_payment')
+    .reduce((s, b) => s + Number(b.total_amount || 0), 0)
   let label = 'Em andamento', bg = 'bg-blue-500'
   if (allCancelled)    { label = 'Cancelado';           bg = 'bg-red-500'    }
   else if (allPay)     { label = 'Pronto para pagar';   bg = 'bg-amber-500'  }
   else if (allDone)    { label = 'Confirmado';          bg = 'bg-green-500'  }
   else if (anyWaitAcc) { label = 'Aguard. confirmação'; bg = 'bg-orange-400' }
   else if (payableCount > 0) { label = 'Aguard. pagamento'; bg = 'bg-amber-500' }
-  return { total, label, bg, count: bookings.length, allPay, payableCount }
+  return { total, label, bg, count: bookings.length, allPay, payableCount, payableTotal }
 }
 
 /* ── Card-resumo do pedido (grupo) — abre o detalhe ao tocar ───── */
 function GroupCard({ bookings, onOpen, onPayGroup }) {
-  const { total, label, bg, count, payableCount } = groupSummary(bookings)
+  const { total, label, bg, count, payableCount, payableTotal, allPay } = groupSummary(bookings)
   return (
     <div onClick={onOpen} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-brand/20 active:scale-[0.99] transition-transform cursor-pointer">
       <div className="bg-brand/5 px-4 py-2.5 flex items-center justify-between border-b border-brand/10">
@@ -331,13 +336,14 @@ function GroupCard({ bookings, onOpen, onPayGroup }) {
           <span className="flex items-center gap-1 text-[12px] font-bold text-brand">Ver detalhes <ChevronRight size={16} /></span>
         </div>
 
-        {/* Pagar o pedido inteiro de uma vez (2+ serviços aguardando pagamento) */}
-        {payableCount >= 2 && onPayGroup && (
+        {/* Pagar o pedido de uma vez — cobra só os itens aguardando pagamento.
+            Aparece mesmo com 1 pendente (ex.: outro item do combo foi cancelado). */}
+        {payableCount >= 1 && onPayGroup && (
           <button
             onClick={(e) => { e.stopPropagation(); onPayGroup() }}
             className="mt-1 w-full bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform"
           >
-            Pagar tudo · {fmt(total)}
+            {allPay && payableCount >= 2 ? 'Pagar tudo' : payableCount >= 2 ? 'Pagar os pendentes' : 'Pagar agora'} · {fmt(payableTotal)}
           </button>
         )}
       </div>
@@ -347,7 +353,7 @@ function GroupCard({ bookings, onOpen, onPayGroup }) {
 
 /* ── Painel com as reservas que compõem o pedido ───────────────── */
 function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDetail, onReview, reviewedIds }) {
-  const { total, allPay, count, payableCount } = groupSummary(bookings)
+  const { total, allPay, count, payableCount, payableTotal } = groupSummary(bookings)
   return (
     <Overlay>
     {/* Painel de tela cheia no celular: abre já no topo da viewport, com o
@@ -378,7 +384,7 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
               onReview={onReview} reviewed={reviewedIds?.has(b.id)} noStretch />
           ))}
         </div>
-        {payableCount >= 2 && (
+        {payableCount >= 1 && (
           <div
             className="px-4 pt-4 bg-white border-t border-gray-100 shrink-0"
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
@@ -387,7 +393,7 @@ function GroupDetailSheet({ bookings, onClose, onPay, onPayGroup, onCancel, onDe
               onClick={onPayGroup}
               className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
             >
-              Pagar {allPay ? 'tudo' : 'os pendentes'} · {fmt(total)}
+              {payableCount >= 2 ? `Pagar ${allPay ? 'tudo' : 'os pendentes'}` : 'Pagar agora'} · {fmt(payableTotal)}
             </button>
           </div>
         )}
