@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, Search, SlidersHorizontal,
   Clock, Users, MapPin, Car, Phone, UserCheck, Pencil, FileText,
   MessageCircle, Send, Download, ShoppingBag, Hourglass, Loader2,
-  CheckCircle2, TrendingUp, TrendingDown, Star, AlertCircle, XCircle,
+  CheckCircle2, TrendingUp, TrendingDown, Star, AlertCircle, XCircle, Package,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { downloadOrderPDF } from '../lib/orderPDF'
@@ -69,6 +69,14 @@ const estaPago = (b) => b?.status_commercial === 'paid'
 function seloDe(b) {
   if (!estaPago(b) && b?.status_operational !== 'cancelled') return STATUS.awaiting_payment
   return STATUS[andamentoDe(b)] || STATUS.new
+}
+
+// Identificador curto e legível do combo (pedido do carrinho). Reservas com o
+// MESMO código pertencem ao MESMO pedido do cliente — é o que deixa o operador
+// reconhecer um combo mesmo com os serviços em linhas separadas.
+function comboShort(id) {
+  const s = String(id || '').replace(/[^a-zA-Z0-9]/g, '')
+  return s ? s.slice(-4).toUpperCase() : ''
 }
 
 // Reserva cancelada (pelo cliente ou pela operação) + quando. Usado para o
@@ -139,7 +147,7 @@ function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
 }
 
 // ── Linha da tabela ────────────────────────────────────
-function BookingRow({ b, onAssign, operador }) {
+function BookingRow({ b, onAssign, operador, comboSize = 0 }) {
   const pago     = estaPago(b)
   const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
@@ -168,6 +176,11 @@ function BookingRow({ b, onAssign, operador }) {
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-gray-900 truncate">{name}</p>
             <p className="text-[11px] text-gray-400 font-mono">{b.booking_code}</p>
+            {comboSize >= 2 && (
+              <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold text-violet-600 bg-violet-50 w-fit">
+                <Package size={10} /> Combo #{comboShort(b.order_group_id)} · {comboSize}
+              </span>
+            )}
           </div>
         </div>
       </td>
@@ -264,7 +277,7 @@ function BookingRow({ b, onAssign, operador }) {
 }
 
 // ── Card mobile (mesma info da linha da tabela) ────────
-function BookingCardMobile({ b, onAssign, operador }) {
+function BookingCardMobile({ b, onAssign, operador, comboSize = 0 }) {
   const pago     = estaPago(b)
   const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
@@ -287,6 +300,11 @@ function BookingCardMobile({ b, onAssign, operador }) {
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-gray-900 truncate">{name}</p>
           <p className="text-[11px] text-gray-400 font-mono">{b.booking_code}</p>
+          {comboSize >= 2 && (
+            <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold text-violet-600 bg-violet-50 w-fit">
+              <Package size={10} /> Combo #{comboShort(b.order_group_id)} · {comboSize}
+            </span>
+          )}
         </div>
         <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${st.chip}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
@@ -421,6 +439,15 @@ export default function Dashboard() {
   // Reservas canceladas vêm à parte (fora das colunas ativas) — o operador
   // acompanha aqui quando o cliente desiste, em vez de a reserva sumir.
   const cancelledBooks = useMemo(() => (Array.isArray(data?.cancelled) ? data.cancelled : []), [data])
+  // Quantos serviços cada pedido (order_group_id) tem — conta ativas + canceladas
+  // para o selo "Combo" refletir o pedido inteiro do cliente.
+  const comboSizes = useMemo(() => {
+    const m = new Map()
+    for (const b of [...allBooks, ...cancelledBooks]) {
+      if (b.order_group_id) m.set(b.order_group_id, (m.get(b.order_group_id) || 0) + 1)
+    }
+    return m
+  }, [allBooks, cancelledBooks])
 
   // Stats por estado REAL (paga + OS): sem contar solicitações não aceitas nem
   // reservas de outras coops (item 14). Aguardando despacho = paga sem OS;
@@ -626,7 +653,7 @@ export default function Dashboard() {
         {/* Cards (mobile) */}
         <div className="md:hidden divide-y divide-gray-100">
           {pageItems.map((b) => (
-            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} operador={operador} />
+            <BookingCardMobile key={b.id} b={b} onAssign={setAssign} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />
           ))}
           {pageItems.length === 0 && (
             <div className="py-16 text-center">
@@ -650,7 +677,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} operador={operador} />)}
+              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />)}
             </tbody>
           </table>
 
