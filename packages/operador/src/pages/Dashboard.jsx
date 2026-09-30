@@ -420,6 +420,7 @@ export default function Dashboard() {
   const [tab, setTab]          = useState('all')
   const [search, setSearch]    = useState('')
   const [page, setPage]        = useState(1)
+  const [showMore, setShowMore] = useState(false) // painel "Mais filtros"
 
   const [assignModal, setAssign]           = useState(null)
   const [dispatchedBooking, setDispatched] = useState(null)
@@ -586,13 +587,18 @@ export default function Dashboard() {
   const dispatchedOnly = paidBooks.filter((b) => hasOS(b) && b.status_operational !== 'in_progress' && b.status_operational !== 'completed')
 
   const TABS = [
-    { key: 'all',        label: 'Todas',       count: allBooks.length },
-    { key: 'pending',    label: 'Aguardando',  count: awaitingDispatch.length },
-    { key: 'dispatched', label: 'Despachadas', count: dispatchedOnly.length },
-    { key: 'started',    label: 'Iniciadas',   count: inProgress.length },
-    { key: 'done',       label: 'Concluídas',  count: done.length },
-    { key: 'cancelled',  label: 'Canceladas',  count: cancelledBooks.length },
+    { key: 'all',        label: 'Todas',        count: allBooks.length,        dot: '' },
+    { key: 'pending',    label: 'Aguardando',   count: awaitingDispatch.length, dot: 'bg-amber-500' },
+    { key: 'started',    label: 'Em andamento', count: inProgress.length,      dot: 'bg-orange-500' },
+    { key: 'dispatched', label: 'Despachadas',  count: dispatchedOnly.length,  dot: 'bg-blue-500' },
+    { key: 'done',       label: 'Concluídas',   count: done.length,            dot: 'bg-green-500' },
+    { key: 'cancelled',  label: 'Canceladas',   count: cancelledBooks.length,  dot: 'bg-gray-400' },
   ]
+  // Abas primárias (visíveis) + as extras, atrás de "Mais filtros".
+  const PRIMARY_KEYS = ['all', 'pending', 'started']
+  const primaryTabs  = TABS.filter((t) => PRIMARY_KEYS.includes(t.key))
+  const moreTabs     = TABS.filter((t) => !PRIMARY_KEYS.includes(t.key))
+  const moreActive   = moreTabs.some((t) => t.key === tab)
 
   function changeDate(days) {
     const base = date === 'all' ? TODAY : date
@@ -687,22 +693,13 @@ export default function Dashboard() {
       {/* ── Tabela de reservas ──────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {/* Header da tabela */}
-        <div className="px-5 py-4 flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              Movimentação de reservas
-              <span className="text-[11px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                {allBooks.length} reservas
-              </span>
-            </h2>
-            <p className="text-[13px] text-gray-400 mt-0.5">
-              {/* Era "em receita", e é o valor CHEIO pago pelo cliente — não o
-                  que o operador recebe, que sai depois da comissão. Prometer
-                  receita maior que a real na tela dele é o pior tipo de erro
-                  de rótulo. O valor a receber fica no Financeiro. */}
-              Acompanhe e despache os serviços · {fmt(revenue)} em serviços
-            </p>
-          </div>
+        <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
+            Reservas
+            <span className="text-[11px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              {allBooks.length} reservas
+            </span>
+          </h2>
           {isFetching && !isLoading && (
             <span className="text-xs text-gray-400 flex items-center gap-1">
               <Loader2 size={12} className="animate-spin" /> Atualizando…
@@ -710,26 +707,10 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Abas + busca */}
-        <div className="px-5 pb-3 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center bg-gray-100 rounded-lg p-0.5 max-w-full overflow-x-auto scrollbar-hide">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => { setTab(t.key); setPage(1) }}
-                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-semibold transition-colors flex items-center gap-1.5 ${
-                  tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {t.label}
-                <span className={`text-[10px] px-1.5 rounded-full ${tab === t.key ? 'bg-brand/10 text-brand' : 'bg-gray-200 text-gray-500'}`}>
-                  {t.count}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="w-full sm:w-auto sm:ml-auto flex items-center gap-2 border border-gray-200 rounded-lg px-3 h-9 bg-white focus-within:border-brand sm:min-w-[200px]">
-            <Search size={15} className="text-gray-400 shrink-0" />
+        {/* Busca + botão de filtros */}
+        <div className="px-5 pb-3 flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 h-11 bg-white focus-within:border-brand">
+            <Search size={16} className="text-gray-400 shrink-0" />
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
@@ -737,7 +718,65 @@ export default function Dashboard() {
               className="flex-1 text-sm text-gray-700 bg-transparent outline-none placeholder-gray-400"
             />
           </div>
+          <button
+            onClick={() => setShowMore((v) => !v)}
+            className={`h-11 w-11 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+              showMore || moreActive ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:bg-gray-50 bg-white'
+            }`}
+            title="Mais filtros"
+            aria-label="Mais filtros"
+          >
+            <SlidersHorizontal size={18} />
+          </button>
         </div>
+
+        {/* Abas primárias + "Mais filtros" */}
+        <div className="px-5 pb-3 flex items-center gap-2 flex-wrap">
+          {primaryTabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => { setTab(t.key); setPage(1) }}
+              className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border transition-colors flex items-center gap-1.5 ${
+                tab === t.key ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:bg-gray-50 bg-white'
+              }`}
+            >
+              {t.key !== 'all' && <span className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />}
+              {t.label}
+              {t.count > 0 && (
+                <span className={`text-[10px] px-1.5 rounded-full ${tab === t.key ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-500'}`}>{t.count}</span>
+              )}
+            </button>
+          ))}
+          <button
+            onClick={() => setShowMore((v) => !v)}
+            className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border transition-colors flex items-center gap-1.5 ${
+              moreActive ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:bg-gray-50 bg-white'
+            }`}
+          >
+            <SlidersHorizontal size={13} /> Mais filtros
+            <ChevronRight size={14} className={`transition-transform ${showMore ? 'rotate-90' : ''}`} />
+          </button>
+        </div>
+
+        {/* Painel de filtros extras */}
+        {showMore && (
+          <div className="px-5 pb-3 flex items-center gap-2 flex-wrap">
+            {moreTabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => { setTab(t.key); setPage(1) }}
+                className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border transition-colors flex items-center gap-1.5 ${
+                  tab === t.key ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:bg-gray-50 bg-white'
+                }`}
+              >
+                {t.label}
+                {t.count > 0 && (
+                  <span className={`text-[10px] px-1.5 rounded-full ${tab === t.key ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-500'}`}>{t.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Cards (mobile) */}
         <div className="md:hidden divide-y divide-gray-100">
