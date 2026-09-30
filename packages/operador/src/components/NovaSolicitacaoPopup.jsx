@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarCheck, Users, MapPin, Check, X, BellRing } from 'lucide-react'
 import { api } from '../lib/api'
-import TempoServico from './TempoServico'
+import TempoServico, { PrazoAceite } from './TempoServico'
 
 // ── Pop-up flutuante de NOVA SOLICITAÇÃO ────────────────────────────────────
 //
@@ -281,6 +281,10 @@ export default function NovaSolicitacaoPopup() {
               <span className="inline-flex items-center gap-1.5"><Users size={15} className="text-brand" /> {totPax} passageiros</span>
               {dataStr && <span className="inline-flex items-center gap-1.5"><CalendarCheck size={15} className="text-brand" /> {dataStr}</span>}
             </div>
+            {/* Prazo de aceite do pedido (o menor entre os itens). */}
+            <div className="flex justify-center">
+              <PrazoAceite expiresAt={items.map((i) => i.acceptance_expires_at).filter(Boolean).sort()[0]} />
+            </div>
 
             <div className="border-t border-gray-100 pt-4 text-center">
               <p className="text-[13px] text-gray-500 font-medium">Valor do pedido</p>
@@ -366,6 +370,9 @@ export default function NovaSolicitacaoPopup() {
                 {item.service_time ? ` • ${String(item.service_time).slice(0, 5)}` : ''}
               </span>
               <TempoServico date={item.service_date} time={item.service_time} />
+              {(item.status_commercial === 'awaiting_acceptance' || item.kind === 'leg') && (
+                <PrazoAceite expiresAt={item.acceptance_expires_at} />
+              )}
             </div>
             <div className="flex items-center gap-2.5 text-[15px] text-gray-800">
               <Users size={18} className="text-brand shrink-0" />

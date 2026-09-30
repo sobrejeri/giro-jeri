@@ -14,6 +14,7 @@ import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 import { elevatedModeCopy } from '../copy/fleet'
 import ConfirmarExecutor from '../components/ConfirmarExecutor'
+import TempoServico, { PrazoAceite } from '../components/TempoServico'
 
 function fmt(v) { return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }
 
@@ -160,6 +161,12 @@ function PendingCard({ booking, onAccept, accepting }) {
                 : '—'}
               {booking.service_time ? ` às ${booking.service_time.slice(0, 5)}` : ''}
             </span>
+          </div>
+          {/* Quanto falta até o serviço + prazo para aceitar (só enquanto a
+              solicitação ainda aguarda aceite — item já pago não tem prazo). */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <TempoServico date={booking.service_date} time={booking.service_time} />
+            {!alreadyPaid && <PrazoAceite expiresAt={booking.acceptance_expires_at} />}
           </div>
           <div className="flex items-center gap-2 text-[13px] text-gray-700">
             <Users size={13} className="text-gray-400 shrink-0" />
@@ -361,6 +368,10 @@ function MyCard({ booking, onConfirm, onRequestInfo, onStart, onComplete, onDisp
                 : '—'}
               {booking.service_time ? ` às ${booking.service_time.slice(0, 5)}` : ''}
             </span>
+          </div>
+          <div>
+            <TempoServico date={booking.service_date} time={booking.service_time}
+              oculto={booking.status_operational === 'completed' || booking.status_commercial === 'cancelled'} />
           </div>
           <div className="flex items-center gap-2 text-[13px] text-gray-700">
             <Users size={13} className="text-gray-400 shrink-0" />

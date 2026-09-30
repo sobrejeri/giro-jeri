@@ -68,6 +68,39 @@ const ESTILO = {
   neutro:   'bg-gray-100 text-gray-500',
 }
 
+// Prazo de ACEITE da solicitação (acceptance_expires_at, 24h): quanto tempo o
+// operador ainda tem para pegar antes de a corrida sair da fila. Vermelho e
+// pulsante quando falta pouco.
+export function calcularPrazoAceite(expiresAt, agora = Date.now()) {
+  if (!expiresAt) return null
+  const fim = new Date(expiresAt).getTime()
+  if (isNaN(fim)) return null
+  const diff = fim - agora
+  if (diff <= 0) return { label: 'Prazo esgotado', urgente: true }
+  const min = Math.round(diff / 60000)
+  const h   = Math.floor(min / 60)
+  const m   = min % 60
+  const txt = h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ''}` : `${m} min`
+  return { label: `Expira em ${txt}`, urgente: diff <= 60 * 60 * 1000 }
+}
+
+export function PrazoAceite({ expiresAt, className = '' }) {
+  const [agora, setAgora] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+  const info = calcularPrazoAceite(expiresAt, agora)
+  if (!info) return null
+  const cls = info.urgente ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cls} ${className}`}>
+      <Clock size={11} className={`shrink-0 ${info.urgente ? 'animate-pulse' : ''}`} />
+      {info.label}
+    </span>
+  )
+}
+
 // `oculto`: quando a reserva não está mais na janela relevante (concluída), o
 // chamador passa oculto para não mostrar "Atrasado" numa corrida já encerrada.
 export default function TempoServico({ date, time, oculto = false, className = '' }) {
