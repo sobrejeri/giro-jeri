@@ -13,6 +13,7 @@ import RegionBar from '../RegionBar'
 import OfflineBanner from '../OfflineBanner'
 import PullToRefresh from '../PullToRefresh'
 import InboxChat from '../InboxChat'
+import AvisoCodigoConclusao from '../AvisoCodigoConclusao'
 import { useAuth } from '../../contexts/AuthContext'
 import { getPartner, clearPartner } from '../../lib/partner'
 
@@ -94,6 +95,8 @@ export default function Layout() {
       {isCreator && <InboxChat variant="listener" />}
       <PushPrompt />
       <RegionPicker />
+      {/* Código de conclusão (PIN) flutuante enquanto há serviço em andamento. */}
+      <AvisoCodigoConclusao />
     </div>
   )
 }
