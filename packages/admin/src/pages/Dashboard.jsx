@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -10,6 +11,7 @@ import {
   CalendarCheck, Clock, XCircle, TrendingUp, DollarSign,
   Plus, User, Phone, Mail, Calendar, Users, Banknote, Check,
   Filter, Car, MapPin, Briefcase, Trophy, ArrowDown, Hourglass,
+  Wallet, ChevronRight,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -734,6 +736,7 @@ function RankingOperadores() {
 
 export default function Dashboard() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [showModal, setShowModal] = useState(false)
 
   const { data: stats, isLoading: l1 } = useQuery({
@@ -769,24 +772,50 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* KPIs */}
-      {/* "Ag. operador" é a fila que faltava: pedido esperando alguém
-          aceitar. É a PRIMEIRA parada do fluxo (cliente pede → coop aceita →
-          cliente paga) e não aparecia em lugar nenhum do painel. */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <KpiCard icon={CalendarCheck} label="Reservas hoje"       value={stats?.reservas_hoje ?? '—'}  color="text-blue-400" />
-        <KpiCard icon={Hourglass}     label="Ag. operador"     value={stats?.aguardando_aceite ?? '—'} color="text-purple-400" />
-        <KpiCard icon={Clock}         label="Ag. pagamento"       value={stats?.pendencias ?? '—'}      color="text-amber-400" />
-        <KpiCard icon={XCircle}       label="Cancelamentos hoje"  value={stats?.cancelamentos ?? '—'}   color="text-red-400" />
-        {/* O líquido agora vem do razão. Quando não há lançamento líquido do
-            dia, mostra "—" em vez do antigo bruto × 0,93, que era um número
-            inventado no código. */}
-        <KpiCard icon={DollarSign}    label="Receita hoje"        value={fmt(stats?.valor_bruto_hoje)}
-          sub={stats?.valor_liquido_hoje != null
-                 ? `Líquido: ${fmt(stats.valor_liquido_hoje)} · Mês: ${fmt(stats?.valor_bruto_mes)}`
-                 : `Mês: ${fmt(stats?.valor_bruto_mes)}`}
-          color="text-brand" />
+      {/* Receita de hoje em destaque + atalho para o financeiro */}
+      <Card className="p-4 sm:p-5">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gray-900 flex items-center justify-center text-brand shrink-0">
+            <Wallet size={22} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-gray-500 font-medium">Receita hoje</p>
+            <p className="text-2xl font-extrabold text-brand leading-tight">{fmt(stats?.valor_bruto_hoje)}</p>
+            {stats?.valor_liquido_hoje != null && (
+              <p className="text-[11px] text-gray-500 mt-0.5">Líquido {fmt(stats.valor_liquido_hoje)} · Mês {fmt(stats?.valor_bruto_mes)}</p>
+            )}
+          </div>
+          <button
+            onClick={() => navigate('/financeiro')}
+            className="shrink-0 flex items-center gap-1 text-sm font-semibold text-gray-300 hover:text-brand transition-colors"
+          >
+            Ver financeiro <ChevronRight size={16} />
+          </button>
+        </div>
+      </Card>
+
+      {/* KPIs — grade 2×2 compacta.
+          "Ag. operador" é a fila que faltava: pedido esperando alguém aceitar. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard icon={CalendarCheck} label="Reservas hoje"       value={stats?.reservas_hoje ?? '—'}      color="text-blue-400" />
+        <KpiCard icon={Hourglass}     label="Aguardando operador" value={stats?.aguardando_aceite ?? '—'}  color="text-purple-400" />
+        <KpiCard icon={Clock}         label="Aguardando pagamento" value={stats?.pendencias ?? '—'}        color="text-amber-400" />
+        <KpiCard icon={XCircle}       label="Cancelamentos hoje"  value={stats?.cancelamentos ?? '—'}      color="text-red-400" />
       </div>
+
+      {/* Atalho: pendências de pagamento (some quando não há) */}
+      {(stats?.pendencias ?? 0) > 0 && (
+        <button
+          onClick={() => navigate('/reservas?status=awaiting_payment')}
+          className="w-full flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-900/15 px-4 py-3 text-left active:scale-[0.99] transition-transform"
+        >
+          <Clock size={18} className="text-amber-400 shrink-0" />
+          <span className="text-sm font-semibold text-amber-300 flex-1">
+            {stats.pendencias} reserva{stats.pendencias > 1 ? 's' : ''} aguardando pagamento
+          </span>
+          <ChevronRight size={16} className="text-amber-400/70" />
+        </button>
+      )}
 
       {/* Acompanhamento operacional — filtro por operador / passeio / transfer */}
       <AcompanhamentoOperacional />
