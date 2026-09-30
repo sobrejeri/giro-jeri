@@ -13,6 +13,7 @@ import { api } from '../lib/api'
 import { downloadOrderPDF } from '../lib/orderPDF'
 import SendOsButton from '../components/SendOsButton'
 import DespacharModal from '../components/DespacharModal'
+import ConfirmarExecutor from '../components/ConfirmarExecutor'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -448,6 +449,13 @@ export default function Dashboard() {
   })
   const repSummary = reputation?.summary
 
+  // Executores reaproveitáveis — pré-preenchem a confirmação de conclusão.
+  const { data: executoresData } = useQuery({
+    queryKey: ['executores'], queryFn: () => api.getExecutores(),
+    staleTime: 5 * 60_000, retry: false,
+  })
+  const executores = Array.isArray(executoresData) ? executoresData : []
+
   const operador = profile ? {
     full_name:         profile.full_name,
     document_type:     profile.document_type,
@@ -489,19 +497,17 @@ export default function Dashboard() {
     },
   })
 
-  // Concluir o serviço direto do painel.
+  // Concluir o serviço direto do painel — passa pela confirmação de quem
+  // executou + PIN do cliente (mesmo fluxo da tela de Despacho). PIN errado
+  // (422) mantém o modal aberto com a mensagem, para o operador tentar de novo.
   const completeMut = useMutation({
-    mutationFn: (id) => api.completeBooking(id),
+    mutationFn: ({ id, executor, pin }) => api.completeBooking(id, executor, pin),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['operational'] })
+      qc.invalidateQueries({ queryKey: ['executores'] })
       setConfirmComplete(null)
       setToast({ type: 'ok', text: 'Corrida concluída! 🎉' })
       setTimeout(() => setToast(null), 3000)
-    },
-    onError: (err) => {
-      setConfirmComplete(null)
-      setToast({ type: 'err', text: err?.message || 'Não foi possível concluir a corrida.' })
-      setTimeout(() => setToast(null), 4000)
     },
   })
 
@@ -886,40 +892,16 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Confirmação antes de concluir a corrida */}
-      {confirmComplete && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmComplete(null)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 text-center">
-            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
-              <CheckCircle2 size={22} className="text-green-600" />
-            </div>
-            <h3 className="text-[16px] font-bold text-gray-900">Concluir corrida?</h3>
-            <p className="text-[13px] text-gray-500 mt-1.5 leading-snug">
-              {confirmComplete.users?.full_name || 'Cliente'} · {confirmComplete.booking_code}
-              <br />O serviço será marcado como concluído.
-            </p>
-            <div className="mt-4 space-y-2">
-              <button
-                type="button"
-                onClick={() => completeMut.mutate(confirmComplete.id)}
-                disabled={completeMut.isPending}
-                className="w-full bg-green-600 text-white font-bold rounded-xl py-3 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-60"
-              >
-                {completeMut.isPending ? 'Concluindo…' : 'Concluir corrida'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmComplete(null)}
-                disabled={completeMut.isPending}
-                className="w-full text-gray-500 font-semibold rounded-xl py-2.5 text-[14px] active:scale-95 transition-transform disabled:opacity-60"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Conclusão da corrida — PIN do cliente + confirmação de quem executou
+          (mesmo modal da tela de Despacho). */}
+      <ConfirmarExecutor
+        booking={confirmComplete}
+        executores={executores}
+        isSending={completeMut.isPending}
+        errorMsg={completeMut.isError ? (completeMut.error?.message || 'Não foi possível concluir.') : ''}
+        onCancel={() => { setConfirmComplete(null); completeMut.reset() }}
+        onConfirm={(executor, pin) => completeMut.mutate({ id: confirmComplete.id, executor, pin })}
+      />
 
       {/* Toast de feedback (iniciar corrida) */}
       {toast && (
