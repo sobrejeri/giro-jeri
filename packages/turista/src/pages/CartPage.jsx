@@ -1246,7 +1246,13 @@ export default function CartPage() {
         const itemPrim = snapshot.find((it) => it.id === primeiro.service_id) || snapshot[0]
         const batchResults = bookings.map((b) => {
           const it = snapshot.find((x) => x.id === b.service_id)
-          return { booking_code: b.booking_code, name: it?.name || 'Reserva' }
+          return {
+            booking_code: b.booking_code,
+            booking_id:   b.booking_id || b.id,
+            name:         it?.name || 'Reserva',
+            service_type: it?.kind === 'transfer' ? 'transfer' : 'tour',
+            amount:       Number(b.amount) || Number(it?.total) || 0,
+          }
         })
         navigate('/checkout/solicitado', {
           state: {
@@ -1257,6 +1263,9 @@ export default function CartPage() {
             cover_image_url: itemPrim?.cover_image_url || undefined,
             booking_code:    primeiro.booking_code,
             booking_id:      primeiro.id || primeiro.booking_id,
+            // ID do grupo — a tela de "aguardando aceite" acompanha o pedido
+            // inteiro e libera o pagamento total assim que os operadores aceitam.
+            order_group_id:  created?.order_group_id || undefined,
             display_total:   Number(itemPrim?.total) || undefined,
             batchResults,
           },

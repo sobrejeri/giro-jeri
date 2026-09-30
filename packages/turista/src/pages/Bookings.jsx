@@ -782,6 +782,13 @@ export default function Bookings() {
         people_count:   list.reduce((s, b) => s + Number(b.people_count || 0), 0),
         total_price:    list.reduce((s, b) => s + Number(b.total_amount || 0), 0),
         order_group_id: group.gid,
+        // Nomes/tags de cada serviço do pedido — o checkout lista item a item
+        // em vez de mostrar só "N serviços".
+        group_items:    list.map((b) => ({
+          name: b.service_name || (b.service_type === 'tour' ? 'Passeio' : 'Transfer'),
+          type: b.service_type,
+          amount: Number(b.total_amount || 0),
+        })),
       },
     })
   }

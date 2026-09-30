@@ -914,8 +914,9 @@ export default function CheckoutPayment() {
     service_date, service_date_iso, service_time,
     people_count, total_price: rawPrice, region_id, service_id,
     vehicles = [], origin_text, destination_text, cover_image_url,
-    existing_booking_id, order_group_id,
+    existing_booking_id, order_group_id, group_items,
   } = state
+  const groupItems = Array.isArray(group_items) ? group_items : []
 
   const total_price = isNaN(Number(rawPrice)) ? 0 : Number(rawPrice)
   const isPrivate   = booking_mode === 'private'
@@ -1123,11 +1124,30 @@ export default function CheckoutPayment() {
         <div className="bg-white rounded-2xl p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)] flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-[11px] text-gray-400 mb-0.5">
-              {service_type === 'tour' ? t('payment.summary.tour') : t('payment.summary.transfer')}
-              {isPrivate ? ` · ${t('payment.summary.private')}` : ` · ${t('payment.summary.shared')}`}
+              {groupItems.length > 0
+                ? `Pedido · ${groupItems.length} serviços`
+                : `${service_type === 'tour' ? t('payment.summary.tour') : t('payment.summary.transfer')}${isPrivate ? ` · ${t('payment.summary.private')}` : ` · ${t('payment.summary.shared')}`}`}
             </p>
-            <p className="text-[15px] font-bold text-gray-900 truncate">{service_name}</p>
-            <p className="text-[12px] text-gray-400 mt-0.5">{subtitleParts.join(' · ')}</p>
+            {groupItems.length === 0 && (
+              <p className="text-[15px] font-bold text-gray-900 truncate">{service_name}</p>
+            )}
+            {/* Pedido em grupo: lista cada serviço (nome + tag) em vez de só
+                "N serviços", como aparece no card solo. */}
+            {groupItems.length > 0 && (
+              <div className="mt-1.5 space-y-1">
+                {groupItems.map((gi, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${gi.type === 'tour' ? 'bg-brand/10 text-brand' : 'bg-sky-100 text-sky-700'}`}>
+                      {gi.type === 'tour' ? t('payment.summary.tour') : t('payment.summary.transfer')}
+                    </span>
+                    <span className="text-[12px] text-gray-700 truncate">{gi.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {subtitleParts.length > 0 && (
+              <p className="text-[12px] text-gray-400 mt-0.5">{subtitleParts.join(' · ')}</p>
+            )}
           </div>
           <div className="text-right shrink-0">
             <p className="text-[10px] text-gray-400">{t('payment.summary.total')}</p>

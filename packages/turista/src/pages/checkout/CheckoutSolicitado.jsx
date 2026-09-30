@@ -24,9 +24,10 @@ export default function CheckoutSolicitado() {
   const navigate  = useNavigate()
   const { state } = useLocation()
 
-  const booking_id   = state?.booking_id
-  const batchResults = state?.batchResults
-  const isBatch      = Array.isArray(batchResults) && batchResults.length > 1
+  const booking_id     = state?.booking_id
+  const batchResults   = state?.batchResults
+  const order_group_id = state?.order_group_id
+  const isBatch        = Array.isArray(batchResults) && batchResults.length > 1
 
   // Acompanha o status real da reserva. Enquanto ninguém aceitou, relê a cada
   // 6s; ao aceitar (waiting_payment) ou em qualquer estado final, para de pollar.
@@ -38,24 +39,80 @@ export default function CheckoutSolicitado() {
     refetchOnWindowFocus: true,
   })
 
+  // Pedido em grupo (carrinho): acompanha TODAS as reservas do order_group_id.
+  // Assim a tela reage quando os operadores aceitam e libera o "Pagar tudo" —
+  // antes o combo ficava travado em "aguardando aceite" para sempre.
+  const { data: groupList } = useQuery({
+    queryKey: ['group-bookings', order_group_id],
+    queryFn:  () => api.getMyBookings(),
+    enabled:  !!order_group_id && isBatch,
+    select:   (r) => (r?.data || []).filter((b) => b.order_group_id === order_group_id),
+    refetchInterval: (q) => {
+      const arr = q.state.data || []
+      const anyWaiting = arr.some((b) => resolveStatusReserva(b) === 'waiting_acceptance')
+      // Ainda montando (lista vazia) ou algum item sem aceite → continua pollando.
+      return (arr.length === 0 || anyWaiting) ? 6000 : false
+    },
+    refetchOnWindowFocus: true,
+  })
+
   if (!state) { navigate('/'); return null }
+
+  // Estado agregado do pedido em grupo.
+  const groupBookings = Array.isArray(groupList) ? groupList : []
+  const groupActive   = groupBookings.filter((b) => !['cancelled', 'expired'].includes(resolveStatusReserva(b)))
+  const groupPayable  = groupActive.filter((b) => resolveStatusReserva(b) === 'waiting_payment')
+  const groupAllDone  = groupActive.length > 0 && groupActive.every((b) => ['confirmed', 'in_progress', 'completed'].includes(resolveStatusReserva(b)))
+  const groupPayTotal = groupPayable.reduce((s, b) => s + Number(b.total_amount || 0), 0)
+  const groupItems    = groupPayable.map((b) => ({
+    name: b.service_name || (b.service_type === 'tour' ? t('checkoutPg.solicitado.serviceTour') : t('checkoutPg.solicitado.serviceTransfer')),
+    type: b.service_type,
+    amount: Number(b.total_amount || 0),
+  }))
 
   const {
     service_name, service_date, service_time, people_count,
     total_price, display_total, amount, booking_code, booking_id: _bid, cover_image_url,
   } = state
 
-  const status    = (booking_id && !isBatch) ? resolveStatusReserva(live) : 'waiting_acceptance'
+  // Status agregado: no pedido em grupo, "aceito" = há pelo menos 1 item pronto
+  // para pagar; "concluído" = todos os ativos já confirmados.
+  const status    = isBatch
+    ? (groupAllDone ? 'confirmed' : groupPayable.length > 0 ? 'waiting_payment' : 'waiting_acceptance')
+    : (booking_id ? resolveStatusReserva(live) : 'waiting_acceptance')
   const accepted  = status === 'waiting_payment'                          // operador aceitou; falta pagar
   const done      = ['confirmed', 'in_progress', 'completed'].includes(status)
   const cancelled = status === 'cancelled' || status === 'expired'
+  // Pode pagar agora nesta tela? (grupo com itens pagáveis OU reserva única aceita)
+  const canPay    = isBatch ? groupPayable.length > 0 : accepted
 
-  const value     = live?.total_amount ?? amount ?? display_total ?? total_price
-  const payAmount = Number(live?.total_amount ?? value) || 0
+  // Estimativa inicial (antes do grupo carregar) = soma dos itens do lote.
+  const batchEstimate = Array.isArray(batchResults)
+    ? batchResults.reduce((s, r) => s + Number(r.amount || 0), 0) : 0
+  const value     = isBatch
+    ? (groupPayTotal || groupActive.reduce((s, b) => s + Number(b.total_amount || 0), 0) || batchEstimate)
+    : (live?.total_amount ?? amount ?? display_total ?? total_price)
+  const payAmount = isBatch ? groupPayTotal : (Number(live?.total_amount ?? value) || 0)
 
   // Mesmo fluxo de pagamento do detalhe da reserva (BookingDetail.handlePay):
   // leva à tela de pagamento reaproveitando a reserva já criada.
   function handlePay() {
+    // Pedido em grupo: paga TODOS os itens pagáveis de uma vez (order_group_id).
+    if (isBatch) {
+      if (groupPayable.length === 0) return
+      navigate('/checkout/pagamento', {
+        state: {
+          service_name:   `${groupPayable.length} serviços`,
+          service_type:   'tour',
+          booking_mode:   'private',
+          people_count:   groupPayable.reduce((s, b) => s + Number(b.people_count || 0), 0),
+          total_price:    groupPayTotal,
+          order_group_id,
+          group_items:    groupItems,
+        },
+      })
+      return
+    }
     const b = live
     if (!b) return
     let dStr = service_date || '—'
@@ -226,11 +283,11 @@ export default function CheckoutSolicitado() {
         </p>
 
         <div className="w-full space-y-2.5">
-          {accepted && !isBatch ? (
+          {canPay ? (
             <>
               <button
                 onClick={handlePay}
-                disabled={!live}
+                disabled={!isBatch && !live}
                 className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform disabled:opacity-60"
               >
                 <CreditCard size={17} />
