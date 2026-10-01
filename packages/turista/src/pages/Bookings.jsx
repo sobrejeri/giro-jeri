@@ -11,7 +11,7 @@ import {
   Calendar, Clock, Users, Car, Search, Compass, MapPin,
   Star, RefreshCw, AlertTriangle, Loader2, Zap, Sun, Waves, Anchor,
   ChevronLeft, ChevronRight, CalendarCheck, Check, X, MessageSquare, Package,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, ParkingSquare,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -597,6 +597,57 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
 }
 
 /* ── Main Page ──────────────────────────────────────────────── */
+// ── Reservas de estacionamento (vertical própria) ────────────────────────────
+const PARK_STATUS = {
+  awaiting_partner:          { label: 'Aguardando o estacionamento', cls: 'bg-amber-100 text-amber-700' },
+  accepted_awaiting_payment: { label: 'Aceita · pague para confirmar', cls: 'bg-brand/10 text-brand' },
+  confirmed:                 { label: 'Confirmada', cls: 'bg-emerald-100 text-emerald-700' },
+  in_lot:                    { label: 'No pátio', cls: 'bg-blue-100 text-blue-700' },
+  withdrawal_requested:      { label: 'Retirada solicitada', cls: 'bg-blue-100 text-blue-700' },
+  withdrawal_authorized:     { label: 'Retirada autorizada', cls: 'bg-blue-100 text-blue-700' },
+  completed:                 { label: 'Concluída', cls: 'bg-gray-100 text-gray-600' },
+  rejected:                  { label: 'Recusada', cls: 'bg-red-100 text-red-600' },
+  expired_no_answer:         { label: 'Expirada', cls: 'bg-gray-100 text-gray-500' },
+  expired_no_payment:        { label: 'Expirou sem pagamento', cls: 'bg-gray-100 text-gray-500' },
+  cancelled:                 { label: 'Cancelada', cls: 'bg-red-100 text-red-600' },
+}
+function ParkingReservas() {
+  const navigate = useNavigate()
+  const { data } = useQuery({ queryKey: ['parking-my'], queryFn: () => api.parkingMyReservations(), refetchInterval: 15000 })
+  const ativas = (data?.data || []).filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
+  if (ativas.length === 0) return null
+  const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
+  const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+  return (
+    <div className="space-y-2">
+      <p className="text-[12px] font-bold text-gray-500 flex items-center gap-1.5"><ParkingSquare size={14} className="text-brand" /> Estacionamento</p>
+      {ativas.map((r) => {
+        const st = PARK_STATUS[r.status] || { label: r.status, cls: 'bg-gray-100 text-gray-600' }
+        return (
+          <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-[11px] font-bold text-brand">{r.code}</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2 mt-1.5">
+              <p className="text-[12px] text-gray-500 flex items-center gap-1"><Clock size={12} className="text-brand" /> {dt(r.start_at)} → {dt(r.end_at)}</p>
+              <p className="text-[14px] font-extrabold text-gray-900">{money(r.total_amount)}</p>
+            </div>
+            {r.status === 'accepted_awaiting_payment' && (
+              <button
+                onClick={() => navigate(`/estacionamento/${r.id}/pagar`)}
+                className="mt-2 w-full bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform"
+              >
+                Pagar agora · {money(r.total_amount)}
+              </button>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Bookings() {
   const queryClient = useQueryClient()
   const navigate    = useNavigate()
@@ -925,6 +976,7 @@ export default function Bookings() {
 
       {/* List */}
       <main className="px-4 pt-4 space-y-3 lg:max-w-5xl lg:mx-auto">
+        <ParkingReservas />
         {(isLoading || quotesLoading) ? (
           <div className="py-16"><PageSpinner /></div>
         ) : listItems.length === 0 ? (
