@@ -6,6 +6,7 @@ import InboxChat from '../InboxChat'
 const TITLES = {
   '/dashboard':  'Operações',
   '/despacho':   'Despacho',
+  '/estacionamento': 'Estacionamento',
   '/veiculos':   'Gestão de Veículos',
   '/financeiro': 'Relatório Financeiro',
   '/passeios':   'Passeios que Executo',

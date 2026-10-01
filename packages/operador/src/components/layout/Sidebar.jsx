@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X } from 'lucide-react'
+import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const NAV = [
   { to: '/dashboard',  icon: LayoutDashboard, label: 'Operações'  },
   { to: '/reservas',   icon: CalendarCheck,   label: 'Solicitações'   },
   { to: '/despacho',   icon: Truck,           label: 'Despacho'   },
+  { to: '/estacionamento', icon: ParkingSquare, label: 'Estacionamento' },
   { to: '/veiculos',   icon: Car,             label: 'Veículos'   },
   { to: '/passeios',   icon: Compass,         label: 'Passeios'   },
   { to: '/rotas',      icon: MapPin,          label: 'Rotas'      },

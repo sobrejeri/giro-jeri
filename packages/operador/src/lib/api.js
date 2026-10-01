@@ -195,6 +195,12 @@ export const api = {
     }),
 
   // Corridas (modelo Uber — primeiro a aceitar)
+  // ── Estacionamento (parceiro) ──────────────────────────
+  parkingPartnerReservations: (status) => request(`/api/parking/partner/reservations${status ? `?status=${status}` : ''}`),
+  parkingReservation:  (id) => request(`/api/parking/reservations/${id}`),
+  parkingAccept:       (id) => request(`/api/parking/reservations/${id}/accept`, { method: 'POST', body: {} }),
+  parkingReject:       (id) => request(`/api/parking/reservations/${id}/reject`, { method: 'POST', body: {} }),
+
   getOperatorBookings: ()   => request('/api/operator/bookings'),
   acceptBooking:       (id) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body: {} }),
   // Carrinho universal: aceita o PEDIDO inteiro de uma vez (atômico, tudo-ou-nada).

@@ -5,6 +5,7 @@ import Layout from './components/layout/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Despacho from './pages/Despacho'
+import EstacionamentoPainel from './pages/Estacionamento'
 import Veiculos from './pages/Veiculos'
 import Financeiro from './pages/Financeiro'
 import Passeios from './pages/Passeios'
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="reservas"   element={<Reservas />} />
         <Route path="cotacoes"   element={<Navigate to="/reservas" replace />} />
         <Route path="despacho"   element={<Despacho />} />
+        <Route path="estacionamento" element={<EstacionamentoPainel />} />
         <Route path="veiculos"   element={<Veiculos />} />
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="passeios"   element={<Passeios />} />
