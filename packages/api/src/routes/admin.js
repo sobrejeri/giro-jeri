@@ -520,20 +520,24 @@ router.delete('/users/:id', requireAdmin, async (req, res, next) => {
 // ── PATCH /api/admin/users/:id ─────────────────────────
 router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   try {
-    const allowed = ['user_type', 'is_active', 'phone', 'email', 'platform_split_pct', 'mp_payout_exempt', 'region_ids'];
+    const allowed = ['user_type', 'is_active', 'phone', 'email', 'platform_split_pct', 'mp_payout_exempt', 'region_ids', 'operator_segment'];
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))
     );
 
     let upd = await supabase.from('users').update(updates).eq('id', req.params.id).select().single();
-    // Coluna region_ids ausente (migração 106 pendente) → refaz sem ela para não
-    // travar as demais edições (tipo/ativo/etc.).
-    if (upd.error && 'region_ids' in updates &&
-        (upd.error.code === 'PGRST204' || upd.error.code === '42703' || /region_ids/.test(upd.error.message || ''))) {
-      const { region_ids, ...rest } = updates; // eslint-disable-line no-unused-vars
-      upd = Object.keys(rest).length
-        ? await supabase.from('users').update(rest).eq('id', req.params.id).select().single()
-        : await supabase.from('users').select().eq('id', req.params.id).single();
+    // Colunas de migrations recentes ausentes (region_ids/106, operator_segment/114)
+    // → refaz sem a coluna reclamada para não travar as demais edições.
+    if (upd.error && (upd.error.code === 'PGRST204' || upd.error.code === '42703')) {
+      // Remove as colunas opcionais recentes e tenta de novo (não trava o resto).
+      const rest = { ...updates };
+      delete rest.region_ids;
+      delete rest.operator_segment;
+      if (Object.keys(rest).length < Object.keys(updates).length) {
+        upd = Object.keys(rest).length
+          ? await supabase.from('users').update(rest).eq('id', req.params.id).select().single()
+          : await supabase.from('users').select().eq('id', req.params.id).single();
+      }
     }
     const { data, error } = upd;
 

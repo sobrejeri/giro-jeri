@@ -217,7 +217,7 @@ export default function Usuarios() {
 
   function openEdit(u) {
     setModal({ mode: 'edit', user: u })
-    setForm({ user_type: u.user_type, is_active: u.is_active, region_ids: u.region_ids || [] })
+    setForm({ user_type: u.user_type, is_active: u.is_active, region_ids: u.region_ids || [], operator_segment: u.operator_segment || 'tours_transfers' })
   }
 
   function openFleet(u) {
@@ -676,6 +676,17 @@ export default function Usuarios() {
               <option value="true">Ativo</option>
               <option value="false">Inativo</option>
             </Select>
+            {/* Segmento do operador — define o menu do painel (exclusivo) */}
+            {form.user_type === 'operator' && (
+              <Select
+                label="Segmento do operador"
+                value={form.operator_segment || 'tours_transfers'}
+                onChange={(e) => setForm({ ...form, operator_segment: e.target.value })}
+              >
+                <option value="tours_transfers">Passeios &amp; Translados</option>
+                <option value="parking">Estacionamento</option>
+              </Select>
+            )}
             {/* Municípios de atuação — filtro de solicitações (operador/agência) */}
             {(form.user_type === 'operator' || form.user_type === 'agency') && (
               <MunicipiosSelector

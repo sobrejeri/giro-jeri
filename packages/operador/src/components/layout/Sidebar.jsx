@@ -2,21 +2,26 @@ import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
+// seg: em qual segmento o item aparece — 'tours' (passeios/transfers), 'parking'
+// (estacionamento) ou 'both'. O admin vê tudo.
 const NAV = [
-  { to: '/dashboard',  icon: LayoutDashboard, label: 'Operações'  },
-  { to: '/reservas',   icon: CalendarCheck,   label: 'Solicitações'   },
-  { to: '/despacho',   icon: Truck,           label: 'Despacho'   },
-  { to: '/estacionamento', icon: ParkingSquare, label: 'Estacionamento' },
-  { to: '/veiculos',   icon: Car,             label: 'Veículos'   },
-  { to: '/passeios',   icon: Compass,         label: 'Passeios'   },
-  { to: '/rotas',      icon: MapPin,          label: 'Rotas'      },
-  { to: '/financeiro', icon: BarChart3,       label: 'Financeiro' },
-  { to: '/reputacao',  icon: Star,            label: 'Reputação'  },
-  { to: '/perfil',     icon: UserCircle,      label: 'Meu Perfil' },
+  { to: '/dashboard',  icon: LayoutDashboard, label: 'Operações',    seg: 'tours'   },
+  { to: '/reservas',   icon: CalendarCheck,   label: 'Solicitações', seg: 'tours'   },
+  { to: '/despacho',   icon: Truck,           label: 'Despacho',     seg: 'tours'   },
+  { to: '/estacionamento', icon: ParkingSquare, label: 'Estacionamento', seg: 'parking' },
+  { to: '/veiculos',   icon: Car,             label: 'Veículos',     seg: 'tours'   },
+  { to: '/passeios',   icon: Compass,         label: 'Passeios',     seg: 'tours'   },
+  { to: '/rotas',      icon: MapPin,          label: 'Rotas',        seg: 'tours'   },
+  { to: '/financeiro', icon: BarChart3,       label: 'Financeiro',   seg: 'tours'   },
+  { to: '/reputacao',  icon: Star,            label: 'Reputação',    seg: 'tours'   },
+  { to: '/perfil',     icon: UserCircle,      label: 'Meu Perfil',   seg: 'both'    },
 ]
 
 export default function Sidebar({ open = false, onClose = () => {} }) {
   const { user, logout } = useAuth()
+  const isAdmin = user?.user_type === 'admin'
+  const segmento = user?.operator_segment === 'parking' ? 'parking' : 'tours'
+  const nav = NAV.filter((i) => isAdmin || i.seg === 'both' || i.seg === segmento)
 
   return (
     <>
@@ -46,7 +51,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
-          {NAV.map(({ to, icon: Icon, label }) => (
+          {nav.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 
 const AuthContext = createContext(null)
 
@@ -17,6 +17,24 @@ export function AuthProvider({ children }) {
   })
   const [token, setToken]     = useState(() => localStorage.getItem(STORAGE.token)   || null)
   const [refresh, setRefresh] = useState(() => localStorage.getItem(STORAGE.refresh) || null)
+
+  // Ao abrir com sessão ativa, re-hidrata o perfil (/me) para pegar campos que o
+  // login pode não ter trazido — ex.: operator_segment, que define o menu.
+  useEffect(() => {
+    if (!token) return
+    let vivo = true
+    import('../lib/api')
+      .then(({ api }) => api.me())
+      .then((res) => {
+        const u = res?.user || res
+        if (vivo && u?.id) {
+          setUser(u)
+          try { localStorage.setItem(STORAGE.user, JSON.stringify(u)) } catch { /* ignore */ }
+        }
+      })
+      .catch(() => { /* best-effort; mantém o user do localStorage */ })
+    return () => { vivo = false }
+  }, [token])
 
   const login = useCallback((userData, accessToken, refreshToken) => {
     setUser(userData)

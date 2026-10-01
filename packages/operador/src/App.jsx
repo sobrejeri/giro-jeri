@@ -27,6 +27,15 @@ function PrivateRoute({ children }) {
   return children
 }
 
+// Tela inicial conforme o segmento do operador: estacionamento abre direto no
+// seu painel; os demais (e admin) continuam nas Operações.
+function HomeRedirect() {
+  const { user } = useAuth()
+  const destino = user?.user_type !== 'admin' && user?.operator_segment === 'parking'
+    ? '/estacionamento' : '/dashboard'
+  return <Navigate to={destino} replace />
+}
+
 // Deep link direto (WhatsApp): 404.html salva o caminho em sessionStorage e
 // redireciona pra raiz do app; aqui recuperamos e navegamos pra ele.
 function SpaRedirectHandler() {
@@ -53,7 +62,7 @@ export default function App() {
           eles não têm conta, então fica FORA do PrivateRoute. */}
       <Route path="/os/:token" element={<OsPublica />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<HomeRedirect />} />
         <Route path="dashboard"  element={<Dashboard />} />
         <Route path="reservas"   element={<Reservas />} />
         <Route path="cotacoes"   element={<Navigate to="/reservas" replace />} />
@@ -66,7 +75,7 @@ export default function App() {
         <Route path="reputacao"  element={<Reputacao />} />
         <Route path="perfil"     element={<Perfil />} />
       </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<HomeRedirect />} />
     </Routes>
     </>
   )

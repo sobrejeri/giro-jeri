@@ -505,7 +505,7 @@ router.get('/me', authenticate, async (req, res, next) => {
     // Colunas de migrations recentes (057/058/061) — tolera banco desatualizado.
     let { data: profile, error } = await supabase
       .from('users')
-      .select(`${ME_BASE}, emergency_contact_email, whatsapp_valid, username`)
+      .select(`${ME_BASE}, emergency_contact_email, whatsapp_valid, username, operator_segment`)
       .eq('id', req.user.id)
       .single();
     if (error?.code === '42703') {
