@@ -1227,11 +1227,19 @@ export default function CartPage() {
       const parkingItems = snapshot.filter((i) => i.kind === 'parking')
       const outros       = snapshot.filter((i) => i.kind !== 'parking')
 
+      // Normaliza as datas para RFC3339 (o servidor exige datetime com fuso).
+      // Conserta itens antigos do carrinho salvos em formato não-padrão.
+      const isoFuso = (v) => { const d = new Date(v); return isNaN(d) ? null : d.toISOString() }
       for (const it of parkingItems) {
         try {
+          const start = isoFuso(it.start_at), end = isoFuso(it.end_at)
+          if (!it.lot_id || !it.vehicle_type || !start || !end) {
+            res[it.id] = { status: 'error', message: 'Item antigo incompleto — remova e adicione de novo pela aba Vagas.' }
+            continue
+          }
           await api.parkingReserve({
             lot_id: it.lot_id, vehicle_type: it.vehicle_type,
-            start_at: it.start_at, end_at: it.end_at,
+            start_at: start, end_at: end,
             plate: it.plate || undefined,
             batch_ref: it.id, // só rastreio — não cria conjunto
           })
