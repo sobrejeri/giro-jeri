@@ -639,6 +639,7 @@ function ParkingReservas() {
         const st = PARK_STATUS[r.status] || { label: r.status, cls: 'bg-gray-100 text-gray-600' }
         const mostraEntrada = r.entry_code && ['confirmed', 'in_lot', 'withdrawal_requested'].includes(r.status)
         const podeRetirar = ['in_lot', 'withdrawal_requested'].includes(r.status)
+        const podeEstender = ['confirmed', 'in_lot'].includes(r.status) && r.payment_status === 'paid'
         return (
           <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="flex items-center justify-between gap-2">
@@ -674,6 +675,15 @@ function ParkingReservas() {
               >
                 {pedirRetirada.isPending ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
                 {r.status === 'withdrawal_requested' ? 'Ver PIN de retirada' : 'Pedir retirada'}
+              </button>
+            )}
+
+            {podeEstender && (
+              <button
+                onClick={() => navigate(`/estacionamento/${r.id}/estender`)}
+                className="mt-2 w-full flex items-center justify-center gap-2 border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform"
+              >
+                <Clock size={14} className="text-brand" /> Estender estadia
               </button>
             )}
           </div>

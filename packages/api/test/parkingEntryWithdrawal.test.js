@@ -48,6 +48,21 @@ test('função SQL de consumo é atômica, com rate-limit e uso único', () => {
   assert.match(mig, /pin_hash = ANY\(p_candidate_hashes\)/, 'compara por hash, não recebe PIN em claro')
 })
 
+test('estender: recalcula no servidor, cobra só a diferença, aplica atômico', () => {
+  const r = rota("router.post('/reservations/:id/extend'")
+  assert.match(r, /cotarComTarifa/, 'novo preço vem do servidor')
+  assert.match(r, /delta > 0 && !parsed\.data\.card_token/, 'exige cartão só quando há diferença')
+  assert.match(r, /cobrarExtensaoEAplicar/, 'cobra a diferença e aplica')
+  assert.match(r, /refund_pending/, 'sem vaga após cobrar → encaminha estorno')
+})
+
+test('aplicar extensão revalida capacidade e cresce o bloqueio (atômico)', () => {
+  const ext = fs.readFileSync(new URL('../../../supabase/migrations/112_parking_extension.sql', import.meta.url), 'utf8')
+  assert.match(ext, /pg_advisory_xact_lock/, 'serializa por lot')
+  assert.match(ext, /v_pico \+ 1 > v_lot\.capacity[\s\S]*no_capacity/, 'não estende sem vaga')
+  assert.match(ext, /SET end_at = p_new_end_at[\s\S]*kind = 'confirmed'/, 'cresce o bloqueio confirmado')
+})
+
 test('avaliar: só o dono, só concluída, uma única vez', () => {
   const r = rota("router.post('/reservations/:id/review'")
   assert.match(r, /r\.user_id !== req\.user\.id/, 'só o dono avalia')

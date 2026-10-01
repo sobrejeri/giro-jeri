@@ -15,7 +15,7 @@ import { supabase } from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
 import { cotarComTarifa } from '../services/parking/pricing.js'
 import { temVaga, blocoDe } from '../services/parking/capacity.js'
-import { cobrarCartaoEConfirmar } from '../services/parking/payments.js'
+import { cobrarCartaoEConfirmar, cobrarExtensaoEAplicar } from '../services/parking/payments.js'
 import { registrarEntrada, abrirRetirada, consumirRetirada } from '../services/parking/entry.js'
 
 const router = Router()
@@ -411,6 +411,80 @@ router.post('/reservations/:id/cancel', authenticate, async (req, res, next) => 
     if (error) throw error
     res.json({ ok: true })
   } catch (err) { next(err) }
+})
+
+// ── Extensão de estadia (fase 8) ─────────────────────────────────────────────
+// Prévia da diferença de preço para prorrogar até new_end_at. O preço é sempre
+// recalculado no servidor para a janela [start_at, new_end_at).
+const extendQuoteSchema = z.object({ new_end_at: z.string().datetime({ offset: true }) })
+router.post('/reservations/:id/extend/quote', authenticate, async (req, res, next) => {
+  try {
+    const parsed = extendQuoteSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Informe o novo horário de saída.' })
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, user_id, lot_id, vehicle_type, start_at, end_at, total_amount, status, payment_status').eq('id', req.params.id).maybeSingle()
+    if (!r || r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (!['confirmed', 'in_lot'].includes(r.status) || r.payment_status !== 'paid') {
+      return res.status(409).json({ error: 'Só dá para estender uma reserva confirmada.' })
+    }
+    if (Date.parse(parsed.data.new_end_at) <= Date.parse(r.end_at)) {
+      return res.status(400).json({ error: 'O novo horário precisa ser depois do atual.' })
+    }
+    const cot = await cotarComTarifa({ lotId: r.lot_id, vehicleType: r.vehicle_type, startMs: Date.parse(r.start_at), endMs: Date.parse(parsed.data.new_end_at) })
+    const delta = Math.max(0, Math.round((cot.total - Number(r.total_amount)) * 100) / 100)
+    res.json({ new_total: cot.total, units: cot.diarias, delta, atual: Number(r.total_amount) })
+  } catch (err) {
+    if (err?.status === 422) return res.status(422).json({ error: err.message })
+    next(err)
+  }
+})
+
+// Estende de fato: recalcula, cobra a diferença (se houver) e aplica atômico.
+const extendSchema = z.object({
+  new_end_at:      z.string().datetime({ offset: true }),
+  card_token:      z.string().min(1).optional(),
+  parcelas:        z.number().int().min(1).max(12).optional(),
+  idempotency_key: z.string().min(8).max(100),
+})
+router.post('/reservations/:id/extend', authenticate, async (req, res, next) => {
+  try {
+    const parsed = extendSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos para a extensão.' })
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, code, user_id, lot_id, vehicle_type, start_at, end_at, total_amount, status, payment_status').eq('id', req.params.id).maybeSingle()
+    if (!r || r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (!['confirmed', 'in_lot'].includes(r.status) || r.payment_status !== 'paid') {
+      return res.status(409).json({ error: 'Só dá para estender uma reserva confirmada.' })
+    }
+    if (Date.parse(parsed.data.new_end_at) <= Date.parse(r.end_at)) {
+      return res.status(400).json({ error: 'O novo horário precisa ser depois do atual.' })
+    }
+
+    const cot = await cotarComTarifa({ lotId: r.lot_id, vehicleType: r.vehicle_type, startMs: Date.parse(r.start_at), endMs: Date.parse(parsed.data.new_end_at) })
+    const delta = Math.round((cot.total - Number(r.total_amount)) * 100) / 100
+    if (delta > 0 && !parsed.data.card_token) {
+      return res.status(400).json({ error: 'Pagamento necessário para estender.', delta })
+    }
+
+    const { data: cliente } = await supabase.from('users')
+      .select('full_name, email, document_number, phone').eq('id', req.user.id).maybeSingle()
+
+    const resultado = await cobrarExtensaoEAplicar({
+      reserva: r, cliente,
+      novo: { end_at: parsed.data.new_end_at, units: cot.diarias, total: cot.total },
+      cardToken: parsed.data.card_token, parcelas: parsed.data.parcelas || 1, idempotencyKey: parsed.data.idempotency_key,
+    })
+    if (resultado.estado !== 'approved') {
+      return res.status(402).json({ error: resultado.motivo || 'Pagamento não aprovado.', estado: resultado.estado })
+    }
+    if (!resultado.ok && resultado.no_capacity) {
+      return res.status(409).json({ error: 'Sem vaga para o período estendido. Se foi cobrado, processaremos o estorno.', refund_pending: delta > 0 })
+    }
+    res.json({ ok: true, new_end_at: parsed.data.new_end_at, new_total: cot.total, delta: Math.max(0, delta) })
+  } catch (err) {
+    if (err?.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
 })
 
 // ── Avaliação (fase 8) ───────────────────────────────────────────────────────

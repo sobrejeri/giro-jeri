@@ -91,6 +91,11 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
     return { estado: cobranca.estado, motivo: cobranca.motivo }
   }
 
+  return finalizarAprovado(reserva, cobranca)
+}
+
+// Extrai a confirmação pós-aprovação (reusada pela extensão quando delta>0).
+async function finalizarAprovado(reserva, cobranca) {
   // Aprovado no gateway → confirma a reserva atomicamente.
   const conf = await confirmarReserva(reserva.id)
   // Gera o código de entrada (não-secreto) para o cliente dar entrada no pátio.
@@ -101,4 +106,52 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
     } catch { /* código de entrada é melhor-esforço; não derruba o pagamento */ }
   }
   return { estado: 'approved', ...conf, external_ref: cobranca.pedido_id }
+}
+
+// Aplica a extensão atomicamente (cresce bloqueio + janela + total). Retorna
+// { ok, already?, no_capacity? }.
+export async function aplicarExtensao({ reservationId, newEndAt, newUnits, newTotal }) {
+  const { data, error } = await supabase.rpc('parking_apply_extension', {
+    p_reservation_id: reservationId, p_new_end_at: newEndAt, p_new_units: newUnits, p_new_total: newTotal,
+  })
+  if (error) throw error
+  if (data?.ok) return { ok: true, already: !!data.already }
+  return { ok: false, no_capacity: data?.error === 'no_capacity', error: data?.error }
+}
+
+// Cobra a DIFERENÇA da extensão no cartão e, se aprovado, aplica a extensão.
+// Quando o delta é zero (mesma faixa de diária), aplica sem cobrar.
+export async function cobrarExtensaoEAplicar({ reserva, cliente, novo, cardToken, parcelas = 1, idempotencyKey }) {
+  const delta = Math.round((Number(novo.total) - Number(reserva.total_amount)) * 100) / 100
+  if (delta <= 0) {
+    const ap = await aplicarExtensao({ reservationId: reserva.id, newEndAt: novo.end_at, newUnits: novo.units, newTotal: novo.total })
+    return { estado: 'approved', ...ap, delta: 0 }
+  }
+
+  const cfg = await getPaymentSettings()
+  const { chaveDoPagarme } = await import('../../routes/payments.js')
+  const apiKey = chaveDoPagarme(cfg)
+  if (!apiKey) { const e = new Error('Pagamento por cartão indisponível no momento.'); e.status = 503; throw e }
+
+  const tentativa = await registrarTentativa({ reservationId: reserva.id, gateway: 'pagarme', amount: delta, idempotencyKey })
+  if (tentativa.status === 'approved') {
+    const ap = await aplicarExtensao({ reservationId: reserva.id, newEndAt: novo.end_at, newUnits: novo.units, newTotal: novo.total })
+    return { estado: 'approved', ...ap, reused: true, delta }
+  }
+
+  const { criarCobrancaCartao } = await import('../../payments/pagarmeCheckout.js')
+  const cobranca = await criarCobrancaCartao({
+    apiKey, amount: delta, description: `Extensão estacionamento ${reserva.code}`, bookingId: reserva.code,
+    clienteNome: cliente?.full_name, clienteEmail: cliente?.email, clienteDoc: cliente?.document_number,
+    clienteTelefone: cliente?.phone, cardToken, parcelas,
+    item: { id: reserva.id, title: `Extensão ${reserva.code}` },
+  })
+  await marcarTentativa(tentativa.id, {
+    status: cobranca.estado === 'approved' ? 'approved' : (cobranca.estado === 'failed' ? 'failed' : 'pending'),
+    external_ref: cobranca.pedido_id, raw_response: cobranca.raw,
+  })
+  if (cobranca.estado !== 'approved') return { estado: cobranca.estado, motivo: cobranca.motivo }
+
+  const ap = await aplicarExtensao({ reservationId: reserva.id, newEndAt: novo.end_at, newUnits: novo.units, newTotal: novo.total })
+  return { estado: 'approved', ...ap, delta, external_ref: cobranca.pedido_id }
 }
