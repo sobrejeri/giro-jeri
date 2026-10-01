@@ -70,6 +70,14 @@ test('admin do catálogo: rotas protegidas por soAdmin', () => {
   }
 })
 
+test('admin: reservas e repasses protegidos e agregados no servidor', () => {
+  assert.match(rota("router.get('/admin/reservations'"), /soAdmin/, 'reservas só admin')
+  const fin = rota("router.get('/admin/financial'")
+  assert.match(fin, /soAdmin/, 'repasses só admin')
+  assert.match(fin, /payment_status', 'paid'/, 'só conta pago')
+  assert.match(fin, /owner_user_id/, 'agrupa por dono do lot')
+})
+
 test('avaliar: só o dono, só concluída, uma única vez', () => {
   const r = rota("router.post('/reservations/:id/review'")
   assert.match(r, /r\.user_id !== req\.user\.id/, 'só o dono avalia')

@@ -13,6 +13,7 @@ const LOT_VAZIO = {
 
 export default function Estacionamentos() {
   const qc = useQueryClient()
+  const [aba, setAba] = useState('catalogo') // 'catalogo' | 'reservas' | 'repasses'
   const [edit, setEdit] = useState(null) // lot sendo editado, ou LOT_VAZIO para novo
   const { data, isLoading } = useQuery({ queryKey: ['admin-parking-lots'], queryFn: () => api.getParkingLots() })
   const lots = data?.data || []
@@ -21,11 +22,27 @@ export default function Estacionamentos() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2"><ParkingSquare size={22} className="text-brand" /> Estacionamentos</h1>
-        <button onClick={() => setEdit({ ...LOT_VAZIO })}
-          className="flex items-center gap-2 bg-brand text-white font-semibold rounded-xl px-4 py-2.5 text-sm active:scale-95">
-          <Plus size={16} /> Novo
-        </button>
+        {aba === 'catalogo' && (
+          <button onClick={() => setEdit({ ...LOT_VAZIO })}
+            className="flex items-center gap-2 bg-brand text-white font-semibold rounded-xl px-4 py-2.5 text-sm active:scale-95">
+            <Plus size={16} /> Novo
+          </button>
+        )}
       </div>
+
+      <div className="flex gap-2">
+        {[['catalogo', 'Catálogo'], ['reservas', 'Reservas'], ['repasses', 'Repasses']].map(([id, label]) => (
+          <button key={id} onClick={() => setAba(id)}
+            className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border ${aba === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'reservas' && <ReservasAdmin />}
+      {aba === 'repasses' && <RepassesAdmin />}
+      {aba !== 'catalogo' ? null : (
+      <>
 
       {isLoading ? (
         <p className="text-gray-400 text-sm">Carregando…</p>
@@ -65,7 +82,97 @@ export default function Estacionamentos() {
         </div>
       )}
 
+      </>
+      )}
+
       {edit && <LotModal lot={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); qc.invalidateQueries({ queryKey: ['admin-parking-lots'] }) }} />}
+    </div>
+  )
+}
+
+// ── Reservas de estacionamento (admin) ────────────────────────────────────────
+const RES_STATUS = {
+  awaiting_partner: 'Aguardando parceiro', accepted_awaiting_payment: 'Aguardando pagamento',
+  confirmed: 'Confirmada', in_lot: 'No pátio', withdrawal_requested: 'Retirada solicitada',
+  completed: 'Concluída', rejected: 'Recusada', cancelled: 'Cancelada',
+  expired_no_answer: 'Expirada', expired_no_payment: 'Expirou s/ pgto',
+}
+function ReservasAdmin() {
+  const [status, setStatus] = useState('')
+  const { data, isLoading } = useQuery({ queryKey: ['admin-parking-res', status], queryFn: () => api.getParkingReservations(status) })
+  const lista = data?.data || []
+  const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
+  return (
+    <div className="space-y-3">
+      <select value={status} onChange={(e) => setStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand">
+        <option value="">Todos os status</option>
+        {Object.entries(RES_STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+      </select>
+      {isLoading ? <p className="text-gray-400 text-sm">Carregando…</p> : lista.length === 0 ? (
+        <p className="text-gray-400 text-sm py-10 text-center">Nenhuma reserva.</p>
+      ) : (
+        <div className="overflow-x-auto bg-white rounded-2xl border border-gray-100">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-[11px] text-gray-400 border-b border-gray-100">
+              <th className="px-3 py-2">Código</th><th className="px-3 py-2">Estacionamento</th><th className="px-3 py-2">Cliente</th>
+              <th className="px-3 py-2">Período</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Total</th>
+            </tr></thead>
+            <tbody>
+              {lista.map((r) => (
+                <tr key={r.id} className="border-b border-gray-50">
+                  <td className="px-3 py-2 font-mono text-[11px] text-brand">{r.code}</td>
+                  <td className="px-3 py-2">{r.lot_name}</td>
+                  <td className="px-3 py-2 text-gray-600">{r.user_name}</td>
+                  <td className="px-3 py-2 text-[12px] text-gray-500">{dt(r.start_at)} → {dt(r.end_at)}</td>
+                  <td className="px-3 py-2 text-[12px]">{RES_STATUS[r.status] || r.status}{r.refund_status === 'eligible' ? ' · reemb.' : ''}</td>
+                  <td className="px-3 py-2 text-right font-semibold">{money(r.total_amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Repasses por parceiro (admin) ─────────────────────────────────────────────
+function RepassesAdmin() {
+  const [periodo, setPeriodo] = useState('mes')
+  const q = periodo === 'mes'
+    ? `?from=${new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()}`
+    : periodo === '30d' ? `?from=${new Date(Date.now() - 30 * 864e5).toISOString()}` : ''
+  const { data, isLoading } = useQuery({ queryKey: ['admin-parking-payouts', periodo], queryFn: () => api.getParkingPayouts(q) })
+  const parceiros = data?.parceiros || []
+  const totalLiquido = parceiros.reduce((a, p) => a + Number(p.liquido || 0), 0)
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {[['mes', 'Este mês'], ['30d', 'Últimos 30d'], ['tudo', 'Tudo']].map(([id, label]) => (
+          <button key={id} onClick={() => setPeriodo(id)}
+            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${periodo === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>{label}</button>
+        ))}
+      </div>
+      {isLoading ? <p className="text-gray-400 text-sm">Carregando…</p> : parceiros.length === 0 ? (
+        <p className="text-gray-400 text-sm py-10 text-center">Sem repasses no período.</p>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
+          {parceiros.map((p) => (
+            <div key={p.owner_user_id} className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="font-semibold text-gray-900 text-sm">{p.nome}</p>
+                <p className="text-[11px] text-gray-400">{p.qtd} reserva(s) · bruto {money(p.bruto)} · comissão {money(p.comissao)}</p>
+              </div>
+              <span className="font-extrabold text-emerald-600">{money(p.liquido)}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
+            <span className="font-semibold text-gray-700 text-sm">Total a repassar</span>
+            <span className="font-extrabold text-gray-900">{money(totalLiquido)}</span>
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-gray-400 text-center">Apuração informativa. Repasses processados conforme o combinado da plataforma.</p>
     </div>
   )
 }

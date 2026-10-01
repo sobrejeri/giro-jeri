@@ -658,6 +658,65 @@ router.get('/admin/lots', authenticate, soAdmin, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// Todas as reservas (admin) — com nome do lot e do cliente; filtro por status.
+router.get('/admin/reservations', authenticate, soAdmin, async (req, res, next) => {
+  try {
+    let q = supabase.from('parking_reservations')
+      .select('id, code, lot_id, user_id, vehicle_type, plate, start_at, end_at, units, total_amount, status, payment_status, refund_status, refund_amount, created_at, parking_lots(name), users(full_name)')
+      .order('created_at', { ascending: false }).limit(200)
+    if (req.query.status) q = q.eq('status', req.query.status)
+    let { data, error } = await q
+    // Tolera ausência das colunas de reembolso (migration 113).
+    if (error && (error.code === '42703' || error.code === 'PGRST200' || error.code === 'PGRST204')) {
+      ;({ data, error } = await supabase.from('parking_reservations')
+        .select('id, code, lot_id, user_id, vehicle_type, plate, start_at, end_at, units, total_amount, status, payment_status, created_at, parking_lots(name), users(full_name)')
+        .order('created_at', { ascending: false }).limit(200))
+    }
+    if (error) throw error
+    const out = (data || []).map(({ parking_lots, users, ...r }) => ({
+      ...r, lot_name: parking_lots?.name || '—', user_name: users?.full_name || '—',
+    }))
+    res.json({ data: out })
+  } catch (err) { next(err) }
+})
+
+// Repasses por parceiro (admin): agrupa o pago por dono do lot.
+router.get('/admin/financial', authenticate, soAdmin, async (req, res, next) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from).toISOString() : null
+    let q = supabase.from('parking_reservations')
+      .select('lot_id, total_amount, commission_pct, parking_lots(name, owner_user_id)')
+      .eq('payment_status', 'paid')
+    if (from) q = q.gte('created_at', from)
+    const { data, error } = await q
+    if (error) throw error
+
+    const emCent = (v) => Math.round(Number(v || 0) * 100)
+    const porDono = new Map()
+    for (const r of data || []) {
+      const dono = r.parking_lots?.owner_user_id || 'desconhecido'
+      const b = emCent(r.total_amount)
+      const c = Math.round(b * Number(r.commission_pct || 0) / 100)
+      const acc = porDono.get(dono) || { owner_user_id: dono, brutoC: 0, comissaoC: 0, qtd: 0 }
+      acc.brutoC += b; acc.comissaoC += c; acc.qtd += 1
+      porDono.set(dono, acc)
+    }
+    const ids = [...porDono.keys()].filter((x) => x !== 'desconhecido')
+    let nomes = {}
+    if (ids.length) {
+      const { data: us } = await supabase.from('users').select('id, full_name').in('id', ids)
+      nomes = Object.fromEntries((us || []).map((u) => [u.id, u.full_name]))
+    }
+    const reais = (c) => Math.round(c) / 100
+    res.json({
+      parceiros: [...porDono.values()].map((a) => ({
+        owner_user_id: a.owner_user_id, nome: nomes[a.owner_user_id] || '—', qtd: a.qtd,
+        bruto: reais(a.brutoC), comissao: reais(a.comissaoC), liquido: reais(a.brutoC - a.comissaoC),
+      })),
+    })
+  } catch (err) { next(err) }
+})
+
 const lotSchema = z.object({
   name:          z.string().min(2).max(120),
   owner_user_id: z.string().uuid(),

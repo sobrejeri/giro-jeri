@@ -330,4 +330,6 @@ export const api = {
   updateParkingLot:   (id, body) => request('/api/parking/admin/lots/' + id, { method: 'PATCH', body }),
   addParkingTariff:   (id, body) => request('/api/parking/admin/lots/' + id + '/tariffs', { method: 'POST', body }),
   updateParkingTariff:(id, body) => request('/api/parking/admin/tariffs/' + id, { method: 'PATCH', body }),
+  getParkingReservations: (status = '') => request('/api/parking/admin/reservations' + (status ? '?status=' + status : '')),
+  getParkingPayouts:  (q = '') => request('/api/parking/admin/financial' + q),
 }
