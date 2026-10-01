@@ -68,8 +68,6 @@ export default function Estacionamento() {
 
   if (isLoading) return <PageSpinner />
 
-  const lista = aba === 'fila' ? fila : ativas
-
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -113,45 +111,10 @@ export default function Estacionamento() {
         <FinanceiroParking />
       ) : aba === 'meulocal' ? (
         <MeuEstacionamento notify={notify} />
-      ) : lista.length === 0 ? (
-        <div className="py-16 text-center text-gray-400">
-          <ParkingSquare size={36} className="mx-auto mb-2 text-gray-200" />
-          <p className="text-sm">{aba === 'fila' ? 'Nenhuma solicitação no momento.' : 'Nenhuma reserva ativa.'}</p>
-        </div>
+      ) : aba === 'fila' ? (
+        <SolicitacoesView reservas={reservas} aceitar={aceitar} recusar={recusar} />
       ) : (
-        <div className="space-y-3">
-          {lista.map((r) => {
-            const st = STATUS[r.status]
-            const proc = aceitar.isPending || recusar.isPending
-            return (
-              <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] font-bold text-gray-400">{r.code}</span>
-                  {st && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>}
-                </div>
-                <div className="mt-1.5 space-y-1 text-[13px] text-gray-700">
-                  <p className="flex items-center gap-1.5"><Clock size={13} className="text-brand" /> {dt(r.start_at)} → {dt(r.end_at)}</p>
-                  <p className="flex items-center gap-1.5 capitalize"><Car size={13} className="text-brand" /> {r.vehicle_type}{r.plate ? ` · ${r.plate}` : ''} · {r.units} diária(s)</p>
-                </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                  <span className="text-[15px] font-extrabold text-gray-900">{fmt(r.total_amount)}</span>
-                  {r.status === 'awaiting_partner' && (
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => recusar.mutate(r.id)} disabled={proc}
-                        className="flex items-center gap-1 text-[12px] font-semibold text-gray-500 border border-gray-200 rounded-lg px-3 py-2 active:scale-95 disabled:opacity-60">
-                        <X size={13} /> Recusar
-                      </button>
-                      <button onClick={() => aceitar.mutate(r.id)} disabled={proc}
-                        className="flex items-center gap-1 text-[12px] font-bold text-white bg-brand rounded-lg px-4 py-2 active:scale-95 disabled:opacity-60">
-                        {proc ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Aceitar
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <ReservasView reservas={reservas} />
       )}
 
       {toast && (
@@ -371,6 +334,194 @@ function TarifasDoParceiro({ lot, notify, onChange }) {
         className="mt-2 w-full flex items-center justify-center gap-2 border border-brand text-brand font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
         {add.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Adicionar tarifa
       </button>
+    </div>
+  )
+}
+
+// Helpers de dinheiro/data/financeiro compartilhados pelas views.
+const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+const dtBR = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
+function financeiro(r) {
+  const bruto = Number(r.total_amount || 0)
+  const comissao = Math.round(bruto * Number(r.commission_pct || 0)) / 100
+  return { bruto, comissao, liquido: Math.round((bruto - comissao) * 100) / 100 }
+}
+
+// ── Solicitações: Novas / Aceitas / Recusadas + análise ───────────────────────
+function SolicitacoesView({ reservas, aceitar, recusar }) {
+  const [sub, setSub] = useState('novas')
+  const [analise, setAnalise] = useState(null)
+  const grupos = {
+    novas: reservas.filter((r) => r.status === 'awaiting_partner'),
+    aceitas: reservas.filter((r) => ['accepted_awaiting_payment', 'confirmed', 'in_lot'].includes(r.status)),
+    recusadas: reservas.filter((r) => ['rejected', 'expired_no_answer', 'expired_no_payment', 'cancelled'].includes(r.status)),
+  }
+  const lista = grupos[sub]
+  const TABS = [['novas', 'Novas'], ['aceitas', 'Aceitas'], ['recusadas', 'Recusadas']]
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {TABS.map(([id, label]) => (
+          <button key={id} onClick={() => setSub(id)}
+            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${sub === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+            {label} <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{grupos[id].length}</span>
+          </button>
+        ))}
+      </div>
+      {lista.length === 0 ? <p className="text-[13px] text-gray-400 py-10 text-center">Nada aqui.</p> : (
+        <div className="space-y-2">
+          {lista.map((r) => {
+            const st = STATUS[r.status] || { label: r.status, cls: 'bg-gray-100 text-gray-600' }
+            return (
+              <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[11px] font-bold text-gray-400">{r.code}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                </div>
+                <p className="text-[13px] text-gray-800 font-semibold mt-1">{r.user_name || 'Cliente'}</p>
+                <div className="mt-1 space-y-1 text-[13px] text-gray-600">
+                  <p className="flex items-center gap-1.5"><Clock size={13} className="text-brand" /> {dtBR(r.start_at)} → {dtBR(r.end_at)}</p>
+                  <p className="flex items-center gap-1.5 capitalize"><Car size={13} className="text-brand" /> {r.vehicle_type}{r.plate ? ` · ${r.plate}` : ''} · {r.units} diária(s)</p>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                  <span className="text-[15px] font-extrabold text-gray-900">{money(r.total_amount)}</span>
+                  {r.status === 'awaiting_partner' && (
+                    <button onClick={() => setAnalise(r)} className="text-[12px] font-bold text-white bg-brand rounded-lg px-4 py-2 active:scale-95">Analisar</button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {analise && <AnaliseModal reserva={analise} aceitar={aceitar} recusar={recusar} onClose={() => setAnalise(null)} />}
+    </div>
+  )
+}
+
+function AnaliseModal({ reserva: r, aceitar, recusar, onClose }) {
+  const f = financeiro(r)
+  const proc = aceitar.isPending || recusar.isPending
+  const fechar = () => onClose()
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={fechar}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900">Analisar solicitação</h2>
+          <button onClick={fechar} className="p-2 text-gray-400"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="space-y-1 text-[13px] text-gray-700">
+            <p className="text-[15px] font-bold text-gray-900">{r.user_name || 'Cliente'}</p>
+            <p className="flex items-center gap-1.5"><Clock size={13} className="text-brand" /> {dtBR(r.start_at)} → {dtBR(r.end_at)} · {r.units} diária(s)</p>
+            <p className="flex items-center gap-1.5 capitalize"><Car size={13} className="text-brand" /> {r.vehicle_type}{r.plate ? ` · ${r.plate}` : ''}</p>
+          </div>
+          <div className="rounded-2xl bg-gray-50 p-3 text-[13px] space-y-1">
+            <div className="flex justify-between"><span className="text-gray-500">Valor da reserva</span><span className="font-semibold text-gray-800">{money(f.bruto)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Comissão da plataforma ({r.commission_pct || 0}%)</span><span className="text-gray-600">− {money(f.comissao)}</span></div>
+            <div className="flex justify-between pt-1 border-t border-gray-200"><span className="font-semibold text-gray-700">Valor líquido pra você</span><span className="font-extrabold text-emerald-600">{money(f.liquido)}</span></div>
+          </div>
+          <p className="text-[11px] text-gray-400">Ao aceitar, a vaga fica bloqueada para o cliente pagar dentro do prazo.</p>
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
+          <button onClick={() => { recusar.mutate(r.id); fechar() }} disabled={proc}
+            className="flex-1 flex items-center justify-center gap-1 border border-gray-200 text-gray-600 font-semibold rounded-xl py-2.5 text-sm"><X size={15} /> Recusar</button>
+          <button onClick={() => { aceitar.mutate(r.id); fechar() }} disabled={proc}
+            className="flex-1 flex items-center justify-center gap-1 bg-brand text-white font-bold rounded-xl py-2.5 text-sm">{proc ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Aceitar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Reservas: Todas / A pagar / Confirmadas / Concluídas + detalhe ────────────
+function ReservasView({ reservas }) {
+  const [filtro, setFiltro] = useState('todas')
+  const [detalhe, setDetalhe] = useState(null)
+  const grupos = {
+    todas: reservas.filter((r) => r.status !== 'awaiting_partner'),
+    apagar: reservas.filter((r) => r.status === 'accepted_awaiting_payment'),
+    confirmadas: reservas.filter((r) => ['confirmed', 'in_lot'].includes(r.status)),
+    concluidas: reservas.filter((r) => r.status === 'completed'),
+  }
+  const lista = grupos[filtro]
+  const TABS = [['todas', 'Todas'], ['apagar', 'A pagar'], ['confirmadas', 'Confirmadas'], ['concluidas', 'Concluídas']]
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2 flex-wrap">
+        {TABS.map(([id, label]) => (
+          <button key={id} onClick={() => setFiltro(id)}
+            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${filtro === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+            {label} <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{grupos[id].length}</span>
+          </button>
+        ))}
+      </div>
+      {lista.length === 0 ? <p className="text-[13px] text-gray-400 py-10 text-center">Nenhuma reserva.</p> : (
+        <div className="space-y-2">
+          {lista.map((r) => {
+            const st = STATUS[r.status] || { label: r.status, cls: 'bg-gray-100 text-gray-600' }
+            return (
+              <button key={r.id} onClick={() => setDetalhe(r)} className="w-full text-left bg-white rounded-2xl border border-gray-100 shadow-sm p-4 active:scale-[0.99]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[11px] font-bold text-brand">{r.code}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                </div>
+                <p className="text-[13px] font-semibold text-gray-800 mt-1">{r.user_name || 'Cliente'}</p>
+                <div className="flex items-center justify-between mt-1 text-[12px] text-gray-500">
+                  <span>{dtBR(r.start_at)} → {dtBR(r.end_at)}</span>
+                  <span className="font-bold text-gray-900">{money(r.total_amount)}</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {detalhe && <ReservaDetalhe reserva={detalhe} onClose={() => setDetalhe(null)} />}
+    </div>
+  )
+}
+
+function ReservaDetalhe({ reserva: r, onClose }) {
+  const f = financeiro(r)
+  const passos = [
+    { label: 'Solicitação', at: r.created_at, done: true },
+    { label: 'Aceite', at: r.accepted_at, done: !!r.accepted_at || ['accepted_awaiting_payment', 'confirmed', 'in_lot', 'completed'].includes(r.status) },
+    { label: 'Pagamento', at: null, done: r.payment_status === 'paid' },
+    { label: 'Entrada', at: r.entered_at, done: !!r.entered_at || ['in_lot', 'completed'].includes(r.status) },
+    { label: 'Concluída', at: r.completed_at, done: r.status === 'completed' },
+  ]
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100 sticky top-0 bg-white">
+          <h2 className="font-bold text-gray-900">Reserva {r.code}</h2>
+          <button onClick={onClose} className="p-2 text-gray-400"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="space-y-1 text-[13px] text-gray-700">
+            <p className="text-[15px] font-bold text-gray-900">{r.user_name || 'Cliente'}</p>
+            <p className="flex items-center gap-1.5"><Clock size={13} className="text-brand" /> {dtBR(r.start_at)} → {dtBR(r.end_at)} · {r.units} diária(s)</p>
+            <p className="flex items-center gap-1.5 capitalize"><Car size={13} className="text-brand" /> {r.vehicle_type}{r.plate ? ` · ${r.plate}` : ''}</p>
+          </div>
+          <div className="rounded-2xl bg-gray-50 p-3 text-[13px] space-y-1">
+            <div className="flex justify-between"><span className="text-gray-500">Valor</span><span className="font-semibold">{money(f.bruto)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Comissão ({r.commission_pct || 0}%)</span><span>− {money(f.comissao)}</span></div>
+            <div className="flex justify-between pt-1 border-t border-gray-200"><span className="font-semibold text-gray-700">Líquido</span><span className="font-extrabold text-emerald-600">{money(f.liquido)}</span></div>
+          </div>
+          <div>
+            <p className="text-[12px] font-semibold text-gray-500 mb-2">Linha do tempo</p>
+            <div className="space-y-2">
+              {passos.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 text-[13px]">
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${p.done ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'}`}>{p.done ? '✓' : i + 1}</span>
+                  <span className={p.done ? 'text-gray-800 font-medium' : 'text-gray-400'}>{p.label}</span>
+                  {p.at && <span className="ml-auto text-[11px] text-gray-400">{dtBR(p.at)}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

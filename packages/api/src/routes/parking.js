@@ -447,14 +447,22 @@ router.get('/partner/reservations', authenticate, async (req, res, next) => {
       lotIds = (lots || []).map((l) => l.id)
       if (lotIds.length === 0) return res.json({ data: [] })
     }
-    let q = supabase.from('parking_reservations')
-      .select('id, code, lot_id, user_id, vehicle_type, plate, start_at, end_at, units, total_amount, status, payment_status, acceptance_expires_at, payment_deadline_at, created_at')
-      .order('created_at', { ascending: false })
-    if (req.query.status) q = q.eq('status', req.query.status)
-    if (lotIds) q = q.in('lot_id', lotIds)
-    const { data, error } = await q
+    const COLS = 'id, code, lot_id, user_id, vehicle_type, plate, start_at, end_at, units, total_amount, commission_pct, status, payment_status, accepted_at, entered_at, completed_at, acceptance_expires_at, payment_deadline_at, created_at'
+    const mk = (withJoin) => {
+      let q = supabase.from('parking_reservations')
+        .select(withJoin ? `${COLS}, users(full_name)` : COLS)
+        .order('created_at', { ascending: false })
+      if (req.query.status) q = q.eq('status', req.query.status)
+      if (lotIds) q = q.in('lot_id', lotIds)
+      return q
+    }
+    let { data, error } = await mk(true)
+    if (error && (error.code === '42703' || error.code === 'PGRST200' || error.code === 'PGRST204')) {
+      ;({ data, error } = await mk(false))
+    }
     if (error) throw error
-    res.json({ data: data || [] })
+    const out = (data || []).map(({ users, ...r }) => ({ ...r, user_name: users?.full_name || null }))
+    res.json({ data: out })
   } catch (err) { next(err) }
 })
 
