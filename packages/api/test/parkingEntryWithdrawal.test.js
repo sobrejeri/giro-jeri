@@ -47,3 +47,12 @@ test('função SQL de consumo é atômica, com rate-limit e uso único', () => {
   assert.match(mig, /status = 'consumed'/, 'consome uma vez')
   assert.match(mig, /pin_hash = ANY\(p_candidate_hashes\)/, 'compara por hash, não recebe PIN em claro')
 })
+
+test('financeiro do parceiro: só reservas pagas, comissão no servidor, sem banco', () => {
+  const r = rota("router.get('/partner/financial'")
+  assert.match(r, /payment_status', 'paid'/, 'só conta o que foi pago')
+  assert.match(r, /owner_user_id', req\.user\.id/, 'recorta pelos lots do parceiro')
+  assert.match(r, /commission_pct/, 'comissão calculada no servidor')
+  assert.match(r, /emCent/, 'soma em centavos (sem erro de float)')
+  assert.doesNotMatch(r, /bank|iban|account_number|agencia/i, 'não expõe dados bancários')
+})

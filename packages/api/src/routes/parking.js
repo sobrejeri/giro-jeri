@@ -180,6 +180,63 @@ router.get('/partner/lots', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// Financeiro do PARCEIRO: apuração das reservas PAGAS por período.
+// Bruto = total cobrado; comissão da plataforma = commission_pct (fotografado na
+// reserva); líquido = bruto − comissão. Cálculo sempre no servidor (centavos),
+// nunca no navegador. NÃO transfere dinheiro — é só apuração/relatório.
+router.get('/partner/financial', authenticate, async (req, res, next) => {
+  try {
+    let lotIds = null
+    if (!ehAdmin(req.user)) {
+      const { data: lots } = await supabase.from('parking_lots').select('id').eq('owner_user_id', req.user.id)
+      lotIds = (lots || []).map((l) => l.id)
+      if (lotIds.length === 0) return res.json({ resumo: { bruto: 0, comissao: 0, liquido: 0, qtd: 0 }, por_lot: [], periodo: {} })
+    }
+    const from = req.query.from ? new Date(req.query.from).toISOString() : null
+    const to   = req.query.to   ? new Date(req.query.to).toISOString()   : null
+
+    let q = supabase.from('parking_reservations')
+      .select('lot_id, total_amount, commission_pct, status, created_at')
+      .eq('payment_status', 'paid')
+    if (lotIds) q = q.in('lot_id', lotIds)
+    if (from) q = q.gte('created_at', from)
+    if (to)   q = q.lte('created_at', to)
+    const { data, error } = await q
+    if (error) throw error
+
+    // Tudo em centavos para evitar erro de ponto flutuante; devolve em reais.
+    const emCent = (v) => Math.round(Number(v || 0) * 100)
+    const porLot = new Map()
+    let brutoC = 0, comissaoC = 0
+    for (const r of data || []) {
+      const b = emCent(r.total_amount)
+      const c = Math.round(b * Number(r.commission_pct || 0) / 100)
+      brutoC += b; comissaoC += c
+      const acc = porLot.get(r.lot_id) || { lot_id: r.lot_id, brutoC: 0, comissaoC: 0, qtd: 0 }
+      acc.brutoC += b; acc.comissaoC += c; acc.qtd += 1
+      porLot.set(r.lot_id, acc)
+    }
+    const reais = (c) => Math.round(c) / 100
+
+    // Nome do lot para o relatório (sem dados bancários — mascarados por padrão).
+    const ids = [...porLot.keys()]
+    let nomes = {}
+    if (ids.length) {
+      const { data: lots } = await supabase.from('parking_lots').select('id, name').in('id', ids)
+      nomes = Object.fromEntries((lots || []).map((l) => [l.id, l.name]))
+    }
+
+    res.json({
+      resumo: { bruto: reais(brutoC), comissao: reais(comissaoC), liquido: reais(brutoC - comissaoC), qtd: (data || []).length },
+      por_lot: [...porLot.values()].map((a) => ({
+        lot_id: a.lot_id, name: nomes[a.lot_id] || '—', qtd: a.qtd,
+        bruto: reais(a.brutoC), comissao: reais(a.comissaoC), liquido: reais(a.brutoC - a.comissaoC),
+      })),
+      periodo: { from, to },
+    })
+  } catch (err) { next(err) }
+})
+
 // Fila do PARCEIRO: solicitações dos lots que ele é dono (admin vê todos).
 router.get('/partner/reservations', authenticate, async (req, res, next) => {
   try {

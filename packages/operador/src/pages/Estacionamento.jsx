@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound } from 'lucide-react'
+import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 
@@ -69,10 +69,16 @@ export default function Estacionamento() {
           className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'patio' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
           Pátio
         </button>
+        <button onClick={() => setAba('financeiro')}
+          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'financeiro' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+          Financeiro
+        </button>
       </div>
 
       {aba === 'patio' ? (
         <PatioBalcao notify={notify} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
+      ) : aba === 'financeiro' ? (
+        <FinanceiroParking />
       ) : lista.length === 0 ? (
         <div className="py-16 text-center text-gray-400">
           <ParkingSquare size={36} className="mx-auto mb-2 text-gray-200" />
@@ -119,6 +125,74 @@ export default function Estacionamento() {
           <div className={`rounded-xl px-4 py-3 text-[13px] font-semibold shadow-lg ${toast.t === 'ok' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{toast.m}</div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Financeiro do estacionamento (apuração; não transfere dinheiro) ───────────
+function FinanceiroParking() {
+  const [periodo, setPeriodo] = useState('mes') // 'mes' | '30d' | 'tudo'
+  const range = () => {
+    const now = new Date()
+    if (periodo === 'mes') {
+      const ini = new Date(now.getFullYear(), now.getMonth(), 1)
+      return `?from=${ini.toISOString()}`
+    }
+    if (periodo === '30d') {
+      const ini = new Date(Date.now() - 30 * 864e5)
+      return `?from=${ini.toISOString()}`
+    }
+    return ''
+  }
+  const { data, isLoading } = useQuery({
+    queryKey: ['parking-financial', periodo],
+    queryFn:  () => api.parkingFinancial(range()),
+  })
+  const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+  if (isLoading) return <PageSpinner />
+  const r = data?.resumo || { bruto: 0, comissao: 0, liquido: 0, qtd: 0 }
+
+  const TABS = [['mes', 'Este mês'], ['30d', 'Últimos 30d'], ['tudo', 'Tudo']]
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        {TABS.map(([id, label]) => (
+          <button key={id} onClick={() => setPeriodo(id)}
+            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${periodo === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <p className="text-[11px] font-semibold text-gray-400 flex items-center gap-1.5"><Wallet size={13} className="text-brand" /> Seu líquido</p>
+          <p className="text-[22px] font-extrabold text-gray-900 mt-1">{money(r.liquido)}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <p className="text-[11px] font-semibold text-gray-400">Reservas pagas</p>
+          <p className="text-[22px] font-extrabold text-gray-900 mt-1">{r.qtd}</p>
+        </div>
+      </div>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-1.5 text-[13px]">
+        <div className="flex items-center justify-between"><span className="text-gray-500">Bruto cobrado</span><span className="font-semibold text-gray-900">{money(r.bruto)}</span></div>
+        <div className="flex items-center justify-between"><span className="text-gray-500">Comissão da plataforma</span><span className="font-semibold text-gray-600">− {money(r.comissao)}</span></div>
+        <div className="flex items-center justify-between pt-1.5 border-t border-gray-100"><span className="font-semibold text-gray-700">Repasse líquido</span><span className="font-extrabold text-emerald-600">{money(r.liquido)}</span></div>
+      </div>
+
+      {(data?.por_lot || []).length > 1 && (
+        <div className="space-y-2">
+          <p className="text-[12px] font-bold text-gray-500">Por estacionamento</p>
+          {data.por_lot.map((l) => (
+            <div key={l.lot_id} className="bg-white rounded-xl border border-gray-100 p-3 flex items-center justify-between">
+              <div><p className="text-[13px] font-semibold text-gray-900">{l.name}</p><p className="text-[11px] text-gray-400">{l.qtd} reserva(s)</p></div>
+              <span className="text-[14px] font-extrabold text-emerald-600">{money(l.liquido)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-[11px] text-gray-400 text-center">Apuração informativa. Os repasses são processados conforme o combinado da plataforma.</p>
     </div>
   )
 }

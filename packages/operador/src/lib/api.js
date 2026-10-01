@@ -203,6 +203,7 @@ export const api = {
   parkingPartnerLots:  () => request('/api/parking/partner/lots'),
   parkingRegisterEntry: (body) => request('/api/parking/partner/entry', { method: 'POST', body }),
   parkingValidateWithdrawal: (body) => request('/api/parking/partner/withdrawal', { method: 'POST', body }),
+  parkingFinancial:    (q = '') => request(`/api/parking/partner/financial${q}`),
 
   getOperatorBookings: ()   => request('/api/operator/bookings'),
   acceptBooking:       (id) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body: {} }),
