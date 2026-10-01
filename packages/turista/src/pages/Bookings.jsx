@@ -616,6 +616,7 @@ function ParkingReservas() {
   const [pinModal, setPinModal] = useState(null) // { code, pin, expires_at }
   const queryClient = useQueryClient()
   const [cancelTarget, setCancelTarget] = useState(null)
+  const [qrModal, setQrModal] = useState(null)
   const { data } = useQuery({ queryKey: ['parking-my'], queryFn: () => api.parkingMyReservations(), refetchInterval: 15000 })
   const todas = data?.data || []
   const ativas = todas.filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
@@ -654,10 +655,11 @@ function ParkingReservas() {
             </div>
 
             {mostraEntrada && (
-              <div className="mt-2 flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
-                <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1.5"><LogIn size={13} /> Código de entrada</span>
+              <button onClick={() => setQrModal({ code: r.entry_code, reserva: r.code })}
+                className="mt-2 w-full flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 active:scale-[0.99]">
+                <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1.5"><LogIn size={13} /> Código de entrada · toque p/ QR</span>
                 <span className="font-mono text-[16px] font-extrabold tracking-[0.25em] text-emerald-800">{r.entry_code}</span>
-              </div>
+              </button>
             )}
 
             {/* Translado sugerido (spec 3.4): leva ao fluxo de transfer existente. */}
@@ -712,6 +714,7 @@ function ParkingReservas() {
           onDone={() => queryClient.invalidateQueries({ queryKey: ['parking-my'] })} />
       ))}
 
+      {qrModal && <EntryQrModal data={qrModal} onClose={() => setQrModal(null)} />}
       {pinModal && <WithdrawalPinModal data={pinModal} onClose={() => setPinModal(null)} />}
       {cancelTarget && (
         <ParkingCancelModal reserva={cancelTarget} onClose={() => setCancelTarget(null)}
@@ -792,6 +795,31 @@ function ParkingReviewCard({ reserva, onDone }) {
         {enviar.isPending ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />} Enviar avaliação
       </button>
     </div>
+  )
+}
+
+// ── QR do código de entrada — o parceiro escaneia para dar entrada ────────────
+function EntryQrModal({ data, onClose }) {
+  const [img, setImg] = useState('')
+  useEffect(() => {
+    let vivo = true
+    import('qrcode').then((m) => (m.default || m).toDataURL(String(data.code), { width: 320, margin: 1 }))
+      .then((url) => { if (vivo) setImg(url) }).catch(() => {})
+    return () => { vivo = false }
+  }, [data.code])
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+        <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto mb-3"><LogIn size={22} /></div>
+        <h3 className="text-[16px] font-extrabold text-gray-900">Código de entrada</h3>
+        <p className="text-[12px] text-gray-500 mt-1">Apresente este QR (ou o código) ao atendente para dar entrada no pátio.</p>
+        {img ? <img src={img} alt="QR do código de entrada" className="mx-auto my-4 w-52 h-52" /> : <div className="my-4 h-52 flex items-center justify-center text-gray-300"><Loader2 size={28} className="animate-spin" /></div>}
+        <div className="font-mono text-[28px] font-black tracking-[0.3em] text-emerald-700">{data.code}</div>
+        {data.reserva && <p className="font-mono text-[11px] text-gray-400 mt-1 mb-3">Reserva {data.reserva}</p>}
+        <button onClick={onClose} className="mt-2 w-full bg-gray-900 text-white font-bold rounded-xl py-3 text-[14px]">Fechar</button>
+      </div>
+    </div>,
+    document.body,
   )
 }
 

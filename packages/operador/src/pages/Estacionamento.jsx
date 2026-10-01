@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus } from 'lucide-react'
+import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 
@@ -713,6 +713,62 @@ function WalkinModal({ notify, onClose, onDone }) {
   )
 }
 
+// Botão de leitura de QR (usa BarcodeDetector nativo; some onde não há suporte,
+// ex.: iOS Safari — aí o código é digitado à mão, que sempre funciona).
+function ScanQRButton({ onDetected }) {
+  const [aberto, setAberto] = useState(false)
+  const suporta = typeof window !== 'undefined' && 'BarcodeDetector' in window
+  if (!suporta) return null
+  return (
+    <>
+      <button type="button" onClick={() => setAberto(true)}
+        className="shrink-0 w-11 rounded-xl border border-gray-200 flex items-center justify-center text-gray-600 active:scale-95" aria-label="Escanear QR">
+        <QrCode size={18} />
+      </button>
+      {aberto && <QRScannerModal onClose={() => setAberto(false)} onDetected={(v) => { setAberto(false); onDetected?.(v) }} />}
+    </>
+  )
+}
+
+function QRScannerModal({ onClose, onDetected }) {
+  const videoRef = useRef(null)
+  const [erro, setErro] = useState('')
+  useEffect(() => {
+    let stream, raf, parado = false, detector
+    async function start() {
+      try {
+        detector = new window.BarcodeDetector({ formats: ['qr_code'] })
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        if (parado) return
+        const v = videoRef.current
+        if (v) { v.srcObject = stream; await v.play() }
+        const tick = async () => {
+          if (parado || !videoRef.current) return
+          try {
+            const codes = await detector.detect(videoRef.current)
+            if (codes && codes[0]?.rawValue) { onDetected(codes[0].rawValue); return }
+          } catch { /* frame sem leitura */ }
+          raf = requestAnimationFrame(tick)
+        }
+        raf = requestAnimationFrame(tick)
+      } catch (e) { setErro('Não foi possível abrir a câmera.') }
+    }
+    start()
+    return () => { parado = true; if (raf) cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach((t) => t.stop()) }
+  }, [onDetected])
+  return (
+    <div className="fixed inset-0 z-[95] bg-black/80 flex flex-col items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-sm p-4 text-center" onClick={(e) => e.stopPropagation()}>
+        <p className="font-bold text-gray-900 mb-2">Escanear QR da reserva</p>
+        {erro ? <p className="text-[13px] text-red-500 py-8">{erro}</p> : (
+          <video ref={videoRef} className="w-full rounded-xl bg-black aspect-square object-cover" muted playsInline />
+        )}
+        <button onClick={onClose} className="mt-3 w-full border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
 // ── Balcão do pátio: registrar entrada (código) e validar retirada (PIN) ──────
 // O PIN é um segredo do cliente — o parceiro só digita o que o cliente mostra;
 // nada do PIN é exibido ou guardado aqui.
@@ -768,9 +824,12 @@ function PatioBalcao({ notify, onDone }) {
         <div className="flex items-center gap-2 text-gray-900 font-semibold text-[14px]">
           <LogIn size={16} className="text-brand" /> Registrar entrada
         </div>
-        <p className="text-[12px] text-gray-500 -mt-1">O cliente informa o código de entrada da reserva.</p>
-        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Código de entrada (ex.: ABC234)"
-          className={`${field} font-mono tracking-widest uppercase`} maxLength={12} />
+        <p className="text-[12px] text-gray-500 -mt-1">O cliente informa o código de entrada (ou mostra o QR).</p>
+        <div className="flex gap-2">
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Código de entrada (ex.: ABC234)"
+            className={`${field} font-mono tracking-widest uppercase flex-1`} maxLength={12} />
+          <ScanQRButton onDetected={(v) => setCode(String(v).toUpperCase())} />
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <input value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="Placa (opcional)" className={`${field} uppercase`} maxLength={12} />
           <input value={spot} onChange={(e) => setSpot(e.target.value)} placeholder="Vaga (opcional)" className={field} maxLength={20} />
