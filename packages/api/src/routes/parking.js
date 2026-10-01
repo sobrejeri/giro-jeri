@@ -247,6 +247,75 @@ router.get('/partner/financial', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── Autoatendimento do parceiro (completa o próprio cadastro no painel) ───────
+// O admin provisiona (login + lot casca); o parceiro preenche o resto aqui.
+// Campos de PLATAFORMA (comissão, prazos, reembolso) não são editáveis pelo
+// parceiro — ficam só no admin.
+router.get('/partner/my-lots', authenticate, async (req, res, next) => {
+  try {
+    let q = supabase.from('parking_lots')
+      .select('*, parking_tariffs(id, vehicle_type, price_per_unit, hours_per_unit, min_units, is_active)')
+      .order('created_at', { ascending: false })
+    if (!ehAdmin(req.user)) q = q.eq('owner_user_id', req.user.id)
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ data: data || [] })
+  } catch (err) { next(err) }
+})
+
+const partnerLotSchema = z.object({
+  name:          z.string().min(2).max(120).optional(),
+  description:   z.string().max(1000).optional().nullable(),
+  lat:           z.number().optional().nullable(),
+  lng:           z.number().optional().nullable(),
+  capacity:      z.number().int().min(0).optional(),
+  opening_hours: z.record(z.any()).optional(),
+  photos:        z.array(z.string().max(2048)).max(10).optional(),
+  is_active:     z.boolean().optional(),
+})
+router.patch('/partner/lots/:id', authenticate, async (req, res, next) => {
+  try {
+    if (!(await podeOperarLot(req.user, req.params.id))) return res.status(403).json({ error: 'Este estacionamento não é seu.' })
+    const parsed = partnerLotSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
+    const { error } = await supabase.from('parking_lots')
+      .update({ ...parsed.data, updated_at: new Date().toISOString() }).eq('id', req.params.id)
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+const partnerTariffSchema = z.object({
+  vehicle_type:   z.string().min(1).max(40),
+  price_per_unit: z.number().min(0),
+  hours_per_unit: z.number().int().min(1).optional(),
+  min_units:      z.number().int().min(1).optional(),
+})
+router.post('/partner/lots/:id/tariffs', authenticate, async (req, res, next) => {
+  try {
+    if (!(await podeOperarLot(req.user, req.params.id))) return res.status(403).json({ error: 'Este estacionamento não é seu.' })
+    const parsed = partnerTariffSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados da tarifa inválidos.' })
+    const { data, error } = await supabase.from('parking_tariffs')
+      .insert({ lot_id: req.params.id, ...parsed.data }).select('id').single()
+    if (error) throw error
+    res.status(201).json(data)
+  } catch (err) { next(err) }
+})
+router.patch('/partner/tariffs/:id', authenticate, async (req, res, next) => {
+  try {
+    // Confere que a tarifa pertence a um lot do parceiro (ou admin).
+    const { data: t } = await supabase.from('parking_tariffs').select('lot_id').eq('id', req.params.id).maybeSingle()
+    if (!t) return res.status(404).json({ error: 'Tarifa não encontrada.' })
+    if (!(await podeOperarLot(req.user, t.lot_id))) return res.status(403).json({ error: 'Esta tarifa não é sua.' })
+    const parsed = partnerTariffSchema.partial().extend({ is_active: z.boolean().optional() }).safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
+    const { error } = await supabase.from('parking_tariffs').update(parsed.data).eq('id', req.params.id)
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
 // Fila do PARCEIRO: solicitações dos lots que ele é dono (admin vê todos).
 router.get('/partner/reservations', authenticate, async (req, res, next) => {
   try {

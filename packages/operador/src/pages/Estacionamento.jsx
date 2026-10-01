@@ -1,8 +1,30 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet } from 'lucide-react'
+import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
+
+// Redimensiona a imagem no cliente antes de enviar (padrão das outras telas).
+function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        const scale = Math.min(1, max / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
@@ -73,12 +95,18 @@ export default function Estacionamento() {
           className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'financeiro' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
           Financeiro
         </button>
+        <button onClick={() => setAba('meulocal')}
+          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'meulocal' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+          <Settings size={13} /> Meu local
+        </button>
       </div>
 
       {aba === 'patio' ? (
         <PatioBalcao notify={notify} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
       ) : aba === 'financeiro' ? (
         <FinanceiroParking />
+      ) : aba === 'meulocal' ? (
+        <MeuEstacionamento notify={notify} />
       ) : lista.length === 0 ? (
         <div className="py-16 text-center text-gray-400">
           <ParkingSquare size={36} className="mx-auto mb-2 text-gray-200" />
@@ -193,6 +221,150 @@ function FinanceiroParking() {
       )}
 
       <p className="text-[11px] text-gray-400 text-center">Apuração informativa. Os repasses são processados conforme o combinado da plataforma.</p>
+    </div>
+  )
+}
+
+// ── Meu local: o parceiro completa/edita o próprio cadastro ───────────────────
+// Admin provisiona a casca; aqui o dono preenche fotos, descrição, capacidade e
+// tarifas. Comissão/prazos/reembolso são da plataforma (só leitura).
+function MeuEstacionamento({ notify }) {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({ queryKey: ['parking-my-lots'], queryFn: () => api.parkingMyLots() })
+  const lots = data?.data || []
+  if (isLoading) return <PageSpinner />
+  if (lots.length === 0) return (
+    <div className="py-16 text-center text-gray-400">
+      <ParkingSquare size={36} className="mx-auto mb-2 text-gray-200" />
+      <p className="text-sm">Nenhum estacionamento vinculado à sua conta.</p>
+      <p className="text-[12px] mt-1">Peça ao administrador para criar/vincular seu estabelecimento.</p>
+    </div>
+  )
+  return (
+    <div className="space-y-5">
+      {lots.map((lot) => <LotEditor key={lot.id} lot={lot} notify={notify}
+        onSaved={() => qc.invalidateQueries({ queryKey: ['parking-my-lots'] })} />)}
+    </div>
+  )
+}
+
+function LotEditor({ lot, notify, onSaved }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({
+    name: lot.name || '', description: lot.description || '', capacity: lot.capacity ?? 0,
+    photos: lot.photos || [], is_active: lot.is_active !== false,
+  })
+  const [enviandoFoto, setEnviandoFoto] = useState(false)
+  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  const salvar = useMutation({
+    mutationFn: () => api.parkingUpdateMyLot(lot.id, {
+      name: form.name.trim(), description: form.description.trim() || null,
+      capacity: Number(form.capacity), photos: form.photos, is_active: !!form.is_active,
+    }),
+    onSuccess: () => { notify?.('ok', 'Cadastro atualizado!'); onSaved?.() },
+    onError: (e) => notify?.('err', e?.message || 'Não foi possível salvar.'),
+  })
+
+  async function onPickPhoto(e) {
+    const file = e.target.files?.[0]; if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { notify?.('err', 'Use JPEG, PNG ou WebP.'); e.target.value = ''; return }
+    setEnviandoFoto(true)
+    try {
+      const dataUrl = await fileToResizedDataUrl(file)
+      const { url } = await api.uploadSiteImage(dataUrl, 'estacionamento')
+      setForm((f) => ({ ...f, photos: [...(f.photos || []), url].slice(0, 10) }))
+    } catch (err) { notify?.('err', err?.message || 'Falha ao enviar a imagem.') }
+    finally { setEnviandoFoto(false); e.target.value = '' }
+  }
+
+  const campo = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand'
+  const label = 'block text-[12px] font-semibold text-gray-500 mb-1'
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+      <div>
+        <label className={label}>Nome</label>
+        <input value={form.name} onChange={(e) => setF('name', e.target.value)} className={campo} />
+      </div>
+      <div>
+        <label className={label}>Descrição</label>
+        <textarea value={form.description} onChange={(e) => setF('description', e.target.value)} rows={2}
+          className={`${campo} resize-none`} placeholder="Conte como é o seu estacionamento, segurança, cobertura…" />
+      </div>
+      <div>
+        <label className={label}>Fotos</label>
+        <div className="flex flex-wrap gap-2">
+          {(form.photos || []).map((url, i) => (
+            <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-100">
+              <img src={url} alt="" className="w-full h-full object-cover" />
+              <button onClick={() => setForm((f) => ({ ...f, photos: f.photos.filter((_, j) => j !== i) }))}
+                className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"><Trash2 size={12} /></button>
+            </div>
+          ))}
+          {(form.photos || []).length < 10 && (
+            <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand hover:text-brand">
+              {enviandoFoto ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onPickPhoto} />
+            </label>
+          )}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className={label}>Capacidade (vagas)</label><input type="number" min="0" value={form.capacity} onChange={(e) => setF('capacity', e.target.value)} className={campo} /></div>
+        <label className="flex items-end gap-2 text-sm text-gray-700 pb-2.5">
+          <input type="checkbox" checked={!!form.is_active} onChange={(e) => setF('is_active', e.target.checked)} /> Ativo (aparece pros clientes)
+        </label>
+      </div>
+
+      {/* Campos da plataforma — só leitura */}
+      <div className="text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+        Definidos pela plataforma: comissão {lot.commission_pct}% · prazo de aceite {lot.accept_deadline_min}min · pagamento {lot.payment_deadline_min}min
+      </div>
+
+      <button onClick={() => salvar.mutate()} disabled={salvar.isPending || !form.name.trim()}
+        className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50">
+        {salvar.isPending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Salvar cadastro
+      </button>
+
+      <TarifasDoParceiro lot={lot} notify={notify} onChange={() => qc.invalidateQueries({ queryKey: ['parking-my-lots'] })} />
+    </div>
+  )
+}
+
+function TarifasDoParceiro({ lot, notify, onChange }) {
+  const [nova, setNova] = useState({ vehicle_type: '', price_per_unit: '' })
+  const tarifas = (lot.parking_tariffs || []).filter((t) => t.is_active !== false)
+  const add = useMutation({
+    mutationFn: () => api.parkingAddMyTariff(lot.id, { vehicle_type: nova.vehicle_type.trim(), price_per_unit: Number(nova.price_per_unit), hours_per_unit: 24, min_units: 1 }),
+    onSuccess: () => { setNova({ vehicle_type: '', price_per_unit: '' }); onChange?.() },
+    onError: (e) => notify?.('err', e?.message || 'Não foi possível adicionar.'),
+  })
+  const remover = useMutation({
+    mutationFn: (id) => api.parkingUpdateMyTariff(id, { is_active: false }),
+    onSuccess: () => onChange?.(),
+  })
+  const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+  return (
+    <div className="border-t border-gray-100 pt-3">
+      <p className="text-[12px] font-semibold text-gray-500 mb-2">Tarifas por veículo</p>
+      <div className="space-y-1.5 mb-2">
+        {tarifas.length === 0 && <p className="text-[12px] text-amber-600">Adicione ao menos uma tarifa para começar a receber reservas.</p>}
+        {tarifas.map((t) => (
+          <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+            <span className="capitalize text-gray-700">{t.vehicle_type} · {money(t.price_per_unit)} / diária</span>
+            <button onClick={() => remover.mutate(t.id)} className="text-red-400 hover:text-red-600"><X size={15} /></button>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <input value={nova.vehicle_type} onChange={(e) => setNova((n) => ({ ...n, vehicle_type: e.target.value }))} placeholder="Veículo (ex.: carro)" className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand" />
+        <input value={nova.price_per_unit} onChange={(e) => setNova((n) => ({ ...n, price_per_unit: e.target.value }))} inputMode="decimal" placeholder="Preço/diária" className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand" />
+      </div>
+      <button onClick={() => add.mutate()} disabled={!nova.vehicle_type.trim() || !nova.price_per_unit || add.isPending}
+        className="mt-2 w-full flex items-center justify-center gap-2 border border-brand text-brand font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
+        {add.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Adicionar tarifa
+      </button>
     </div>
   )
 }

@@ -204,6 +204,10 @@ export const api = {
   parkingRegisterEntry: (body) => request('/api/parking/partner/entry', { method: 'POST', body }),
   parkingValidateWithdrawal: (body) => request('/api/parking/partner/withdrawal', { method: 'POST', body }),
   parkingFinancial:    (q = '') => request(`/api/parking/partner/financial${q}`),
+  parkingMyLots:       () => request('/api/parking/partner/my-lots'),
+  parkingUpdateMyLot:  (id, body) => request('/api/parking/partner/lots/' + id, { method: 'PATCH', body }),
+  parkingAddMyTariff:  (id, body) => request('/api/parking/partner/lots/' + id + '/tariffs', { method: 'POST', body }),
+  parkingUpdateMyTariff: (id, body) => request('/api/parking/partner/tariffs/' + id, { method: 'PATCH', body }),
 
   getOperatorBookings: ()   => request('/api/operator/bookings'),
   acceptBooking:       (id) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body: {} }),
