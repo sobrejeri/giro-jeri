@@ -1228,21 +1228,25 @@ export default function CartPage() {
       const parkingItems = snapshot.filter((i) => i.kind === 'parking')
       const outros       = snapshot.filter((i) => i.kind !== 'parking')
 
-      // Normaliza as datas para RFC3339 (o servidor exige datetime com fuso).
-      // Conserta itens antigos do carrinho salvos em formato não-padrão.
+      // Normaliza as datas para RFC3339 (o servidor exige datetime com fuso) e
+      // recupera o lot_id (uuid) do próprio id quando o campo estiver ausente/
+      // malformado em itens antigos (id = park-<lot_id>-<start>-<end>-<veículo>).
       const isoFuso = (v) => { const d = new Date(v); return isNaN(d) ? null : d.toISOString() }
+      const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v || '')
       for (const it of parkingItems) {
         try {
           const start = isoFuso(it.start_at), end = isoFuso(it.end_at)
-          if (!it.lot_id || !it.vehicle_type || !start || !end) {
-            res[it.id] = { status: 'error', message: 'Item antigo incompleto — remova e adicione de novo pela aba Vagas.' }
+          const lotId = ehUuid(it.lot_id) ? it.lot_id : (String(it.id || '').match(/park-([0-9a-f-]{36})/i)?.[1] || null)
+          const veic = it.vehicle_type || 'carro'
+          if (!ehUuid(lotId) || !start || !end) {
+            res[it.id] = { status: 'error', message: 'Item antigo incompleto — remova (X) e adicione de novo pela aba Vagas.' }
             continue
           }
           await api.parkingReserve({
-            lot_id: it.lot_id, vehicle_type: it.vehicle_type,
+            lot_id: lotId, vehicle_type: veic,
             start_at: start, end_at: end,
             plate: it.plate || undefined,
-            batch_ref: it.id, // só rastreio — não cria conjunto
+            batch_ref: String(it.id).slice(0, 64), // só rastreio — não cria conjunto
           })
           res[it.id] = { status: 'ok' }
           removeItem(it.id)
