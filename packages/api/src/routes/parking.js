@@ -731,6 +731,7 @@ const lotSchema = z.object({
   pin_ttl_min:          z.number().int().min(1).optional(),
   refund_cutoff_min:    z.number().int().min(0).optional(),
   opening_hours: z.record(z.any()).optional(),
+  photos:        z.array(z.string().max(2048)).max(10).optional(),
   is_active:     z.boolean().optional(),
 })
 

@@ -1,9 +1,31 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ParkingSquare, Plus, Pencil, Loader2, X, Check } from 'lucide-react'
+import { ParkingSquare, Plus, Pencil, Loader2, X, Check, ImagePlus, Trash2 } from 'lucide-react'
 import { api } from '../lib/api'
 
 const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+
+// Reduz a imagem no cliente antes de enviar (mesmo padrão das outras telas).
+function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        const scale = Math.min(1, max / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
 
 const LOT_VAZIO = {
   name: '', owner_user_id: '', description: '', capacity: 10, commission_pct: 10,
@@ -179,10 +201,24 @@ function RepassesAdmin() {
 
 function LotModal({ lot, onClose, onSaved }) {
   const novo = !lot.id
-  const [form, setForm] = useState({ ...LOT_VAZIO, ...lot })
+  const [form, setForm] = useState({ ...LOT_VAZIO, photos: [], ...lot, photos: lot.photos || [] })
   const [erro, setErro] = useState('')
   const [buscaDono, setBuscaDono] = useState('')
+  const [enviandoFoto, setEnviandoFoto] = useState(false)
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  async function onPickPhoto(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setErro('Use JPEG, PNG ou WebP.'); e.target.value = ''; return }
+    setErro(''); setEnviandoFoto(true)
+    try {
+      const dataUrl = await fileToResizedDataUrl(file)
+      const { url } = await api.uploadSiteImage(dataUrl, 'estacionamento')
+      setForm((f) => ({ ...f, photos: [...(f.photos || []), url].slice(0, 10) }))
+    } catch (err) { setErro(err?.message || 'Falha ao enviar a imagem.') }
+    finally { setEnviandoFoto(false); e.target.value = '' }
+  }
 
   const { data: donos } = useQuery({
     queryKey: ['admin-users-op', buscaDono],
@@ -199,6 +235,7 @@ function LotModal({ lot, onClose, onSaved }) {
         accept_deadline_min: Number(form.accept_deadline_min), payment_deadline_min: Number(form.payment_deadline_min),
         pin_ttl_min: Number(form.pin_ttl_min), refund_cutoff_min: Number(form.refund_cutoff_min),
         lat: num(form.lat), lng: num(form.lng), is_active: !!form.is_active,
+        photos: form.photos || [],
       }
       if (novo) { payload.owner_user_id = form.owner_user_id; return api.createParkingLot(payload) }
       return api.updateParkingLot(lot.id, payload)
@@ -248,6 +285,25 @@ function LotModal({ lot, onClose, onSaved }) {
             <label className={label}>Descrição</label>
             <textarea value={form.description || ''} onChange={(e) => setF('description', e.target.value)} rows={2}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand resize-none" />
+          </div>
+
+          <div>
+            <label className={label}>Fotos</label>
+            <div className="flex flex-wrap gap-2">
+              {(form.photos || []).map((url, i) => (
+                <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-100">
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  <button onClick={() => setForm((f) => ({ ...f, photos: f.photos.filter((_, j) => j !== i) }))}
+                    className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"><Trash2 size={12} /></button>
+                </div>
+              ))}
+              {(form.photos || []).length < 10 && (
+                <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand hover:text-brand">
+                  {enviandoFoto ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onPickPhoto} />
+                </label>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
