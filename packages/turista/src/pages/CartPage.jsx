@@ -1104,6 +1104,7 @@ export default function CartPage() {
   const [batch, setBatch] = useState(null)         // snapshot durante envio
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  const [parkEdit, setParkEdit] = useState(null)   // item de estacionamento em edição
   const [done, setDone] = useState(false)
 
   // Altura REAL do rodapé fixo, para o conteúdo terminar acima dele.
@@ -1446,7 +1447,7 @@ export default function CartPage() {
                     </span>
                     {!batch && (
                       <button
-                        onClick={() => item.kind === 'parking' ? navigate(`/estacionamento/${item.lot_id}`) : abrirEditor(item, null)}
+                        onClick={() => item.kind === 'parking' ? setParkEdit(item) : abrirEditor(item, null)}
                         className="inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border border-brand/30 text-brand active:scale-95 transition-transform"
                       >
                         <Pencil size={12} /> {t('cartPg.card.edit')}
@@ -1690,6 +1691,122 @@ export default function CartPage() {
           onSave={(updated) => { upsertItem(updated); setEditing(null); setEditFocus(null) }}
         />
       )}
+
+      {parkEdit && (
+        <ParkingEditSheet
+          item={parkEdit}
+          onClose={() => setParkEdit(null)}
+          onSave={(updated) => {
+            if (updated.id !== parkEdit.id) removeItem(parkEdit.id) // id muda com o período
+            upsertItem(updated); setParkEdit(null)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Editor de item de estacionamento (período, veículo, placa) ────────────────
+function ParkingEditSheet({ item, onClose, onSave }) {
+  const fmtMoney = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+  // Instante ISO (-03:00) → partes de data/hora no fuso de Jeri para os inputs.
+  const partes = (iso) => {
+    const d = new Date(iso)
+    if (isNaN(d)) return { date: '', time: '10:00' }
+    const z = new Date(d.getTime() - 3 * 3600_000)
+    return { date: z.toISOString().slice(0, 10), time: z.toISOString().slice(11, 16) }
+  }
+  const ini = partes(item.start_at), fim = partes(item.end_at)
+  const [entradaD, setEntradaD] = useState(ini.date)
+  const [entradaH, setEntradaH] = useState(ini.time || '10:00')
+  const [saidaD, setSaidaD]     = useState(fim.date)
+  const [saidaH, setSaidaH]     = useState(fim.time || '10:00')
+  const [veiculo, setVeiculo]   = useState(item.vehicle_type || 'carro')
+  const [placa, setPlaca]       = useState(item.plate || '')
+  const [erro, setErro]         = useState('')
+
+  const isoFuso = (d, t) => (d && t ? `${d}T${t}:00-03:00` : null)
+  const startAt = isoFuso(entradaD, entradaH)
+  const endAt = isoFuso(saidaD, saidaH)
+  const periodoOk = startAt && endAt && Date.parse(endAt) > Date.parse(startAt)
+
+  const { data: lot } = useQuery({ queryKey: ['parking-lot', item.lot_id], queryFn: () => api.parkingLot(item.lot_id) })
+  const tarifas = lot?.tariffs || []
+
+  const { data: cot, isFetching } = useQuery({
+    queryKey: ['parking-quote', item.lot_id, veiculo, startAt, endAt],
+    queryFn: () => api.parkingQuote({ lot_id: item.lot_id, vehicle_type: veiculo, start_at: startAt, end_at: endAt }),
+    enabled: !!(periodoOk && item.lot_id),
+    retry: false,
+  })
+
+  function salvar() {
+    setErro('')
+    if (!periodoOk) { setErro('Escolha entrada e saída (a saída deve ser depois da entrada).'); return }
+    if (!cot) { setErro('Aguarde a cotação ou revise o período.'); return }
+    onSave({
+      ...item,
+      id: `park-${item.lot_id}-${startAt}-${endAt}-${veiculo}`,
+      vehicle_type: veiculo,
+      plate: placa.trim() || null,
+      start_at: startAt, end_at: endAt,
+      diarias: cot.diarias, total: cot.total,
+    })
+  }
+
+  const campo = 'w-full border border-gray-200 rounded-lg px-3 h-11 text-sm outline-none focus:border-brand'
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100 sticky top-0 bg-white">
+          <h2 className="font-bold text-gray-900">Editar estacionamento</h2>
+          <button onClick={onClose} className="p-2 text-gray-400"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-[13px] font-semibold text-gray-700">{item.lot_name || item.name}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[11px] font-semibold text-gray-500">Entrada
+              <input type="date" value={entradaD} onChange={(e) => setEntradaD(e.target.value)} className={`${campo} mt-1`} />
+            </label>
+            <label className="text-[11px] font-semibold text-gray-500">Horário
+              <input type="time" value={entradaH} onChange={(e) => setEntradaH(e.target.value)} className={`${campo} mt-1`} />
+            </label>
+            <label className="text-[11px] font-semibold text-gray-500">Saída
+              <input type="date" value={saidaD} onChange={(e) => setSaidaD(e.target.value)} className={`${campo} mt-1`} />
+            </label>
+            <label className="text-[11px] font-semibold text-gray-500">Horário
+              <input type="time" value={saidaH} onChange={(e) => setSaidaH(e.target.value)} className={`${campo} mt-1`} />
+            </label>
+          </div>
+          {tarifas.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 mb-1">Veículo</p>
+              <div className="flex flex-wrap gap-2">
+                {tarifas.map((tf) => (
+                  <button key={tf.vehicle_type} onClick={() => setVeiculo(tf.vehicle_type)}
+                    className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border capitalize ${veiculo === tf.vehicle_type ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-600'}`}>
+                    {tf.vehicle_type} · {fmtMoney(tf.price_per_unit)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <input value={placa} onChange={(e) => setPlaca(e.target.value)} placeholder="Placa (opcional)" className={`${campo} uppercase`} maxLength={12} />
+          <div className="rounded-xl bg-gray-50 p-3 text-[13px] flex items-center justify-between">
+            <span className="text-gray-500">{isFetching ? 'Calculando…' : cot ? `${cot.diarias} diária(s)` : 'Período'}</span>
+            <span className="font-extrabold text-brand">{cot ? fmtMoney(cot.total) : '—'}</span>
+          </div>
+          {erro && <p className="text-[12px] text-red-500">{erro}</p>}
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white flex gap-2">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
+          <button onClick={salvar} disabled={!periodoOk || isFetching || !cot}
+            className="flex-1 flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50">
+            <CheckCircle2 size={15} /> Salvar
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
