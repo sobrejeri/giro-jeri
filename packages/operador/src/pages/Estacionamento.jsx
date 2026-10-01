@@ -41,7 +41,7 @@ const STATUS = {
 // QR e retirada com PIN vêm nas próximas fases.
 export default function Estacionamento() {
   const qc = useQueryClient()
-  const [aba, setAba] = useState('fila')     // 'fila' | 'reservas' | 'patio'
+  const [aba, setAba] = useState('inicio')   // 'inicio' | 'fila' | 'reservas' | 'patio' | 'financeiro' | 'meulocal'
   const [toast, setToast] = useState(null)
   const notify = (t, m, ms = 3500) => { setToast({ t, m }); setTimeout(() => setToast(null), ms) }
 
@@ -78,7 +78,11 @@ export default function Estacionamento() {
       </div>
 
       {/* Abas */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => setAba('inicio')}
+          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'inicio' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+          Início
+        </button>
         <button onClick={() => setAba('fila')}
           className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'fila' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
           Solicitações <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{fila.length}</span>
@@ -101,8 +105,10 @@ export default function Estacionamento() {
         </button>
       </div>
 
-      {aba === 'patio' ? (
-        <PatioBalcao notify={notify} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
+      {aba === 'inicio' ? (
+        <InicioDashboard onGo={setAba} filaCount={fila.length} />
+      ) : aba === 'patio' ? (
+        <PatioView notify={notify} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
       ) : aba === 'financeiro' ? (
         <FinanceiroParking />
       ) : aba === 'meulocal' ? (
@@ -365,6 +371,193 @@ function TarifasDoParceiro({ lot, notify, onChange }) {
         className="mt-2 w-full flex items-center justify-center gap-2 border border-brand text-brand font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
         {add.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Adicionar tarifa
       </button>
+    </div>
+  )
+}
+
+// ── Início: visão geral do estacionamento (dashboard) ─────────────────────────
+function InicioDashboard({ onGo, filaCount }) {
+  const { data: ov } = useQuery({ queryKey: ['parking-overview'], queryFn: () => api.parkingOverview(), refetchInterval: 20000 })
+  const { data: pt } = useQuery({ queryKey: ['parking-patio'], queryFn: () => api.parkingPatio(), refetchInterval: 20000 })
+  const s = ov?.stats || { no_patio: 0, capacity: 0, livres: 0, entradas_hoje: 0, saidas_hoje: 0 }
+  const patio = pt?.no_patio || []
+  const dt = (x) => { try { return new Date(x).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return x } }
+
+  const Card = ({ icon: Icon, tint, big, label }) => (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tint}`}><Icon size={20} /></div>
+      <div><p className="text-[20px] font-extrabold text-gray-900 leading-none">{big}</p><p className="text-[11px] text-gray-400 mt-1">{label}</p></div>
+    </div>
+  )
+  return (
+    <div className="space-y-4">
+      {ov?.lot && <p className="text-[13px] text-gray-500">{ov.lot.name}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        <Card icon={Car} tint="bg-blue-50 text-blue-600" big={`${s.no_patio}`} label="No pátio" />
+        <Card icon={ParkingSquare} tint="bg-emerald-50 text-emerald-600" big={`${s.livres} de ${s.capacity}`} label="Vagas livres agora" />
+        <Card icon={LogIn} tint="bg-indigo-50 text-indigo-600" big={`${s.entradas_hoje}`} label="Entradas previstas hoje" />
+        <Card icon={Clock} tint="bg-orange-50 text-orange-600" big={`${s.saidas_hoje}`} label="Saídas previstas hoje" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <button onClick={() => onGo('patio')} className="bg-brand text-white rounded-2xl p-4 text-left active:scale-[0.99]">
+          <LogIn size={20} /><p className="font-bold text-[14px] mt-2">Registrar entrada</p><p className="text-[11px] text-white/80">Código ou balcão</p>
+        </button>
+        <button onClick={() => onGo('patio')} className="bg-white border border-brand text-brand rounded-2xl p-4 text-left active:scale-[0.99]">
+          <KeyRound size={20} /><p className="font-bold text-[14px] mt-2">Liberar retirada</p><p className="text-[11px] text-brand/70">Validar PIN do cliente</p>
+        </button>
+      </div>
+
+      <button onClick={() => onGo('fila')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-gray-100 shadow-sm p-4 active:scale-[0.99]">
+        <span className="font-semibold text-gray-800 text-[14px]">Solicitações pendentes</span>
+        <span className="text-[12px] font-bold text-white bg-brand rounded-full px-2.5 py-0.5">{filaCount}</span>
+      </button>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <p className="font-bold text-gray-900 text-[14px] mb-2 flex items-center gap-2"><Car size={16} className="text-brand" /> Veículos no pátio ({patio.length})</p>
+        {patio.length === 0 ? <p className="text-[13px] text-gray-400 py-4 text-center">Nenhum veículo no pátio.</p> : (
+          <div className="space-y-1.5">
+            {patio.slice(0, 6).map((v) => (
+              <div key={v.id} className="flex items-center justify-between text-[13px] border-b border-gray-50 pb-1.5">
+                <div><span className="font-mono font-semibold text-gray-800">{v.plate || '—'}</span> <span className="text-gray-500">{v.client_name || ''}</span></div>
+                <span className="text-[11px] text-gray-400">{v.spot ? `Vaga ${v.spot} · ` : ''}{dt(v.entered_at)}</span>
+              </div>
+            ))}
+            {patio.length > 6 && <button onClick={() => onGo('patio')} className="text-[12px] text-brand font-semibold pt-1">Ver todos →</button>}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Pátio: lista de veículos + entrada presencial + balcão (código/PIN) ───────
+function PatioView({ notify, onDone }) {
+  const qc = useQueryClient()
+  const [walkin, setWalkin] = useState(false)
+  const { data: pt } = useQuery({ queryKey: ['parking-patio'], queryFn: () => api.parkingPatio(), refetchInterval: 15000 })
+  const noPatio = pt?.no_patio || []
+  const saidas = pt?.saidas_hoje || []
+  const [verSaidas, setVerSaidas] = useState(false)
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['parking-patio'] }); qc.invalidateQueries({ queryKey: ['parking-overview'] }); onDone?.() }
+  const dt = (x) => { try { return new Date(x).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return x } }
+  const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+
+  const sair = useMutation({ mutationFn: (id) => api.parkingStayExit(id), onSuccess: () => { notify?.('ok', 'Saída registrada.'); refresh() }, onError: (e) => notify?.('err', e?.message || 'Erro ao registrar saída.') })
+  const pagar = useMutation({ mutationFn: (id) => api.parkingStayMarkPaid(id), onSuccess: () => { notify?.('ok', 'Marcado como pago.'); refresh() }, onError: (e) => notify?.('err', e?.message) })
+
+  const lista = verSaidas ? saidas : noPatio
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <button onClick={() => setVerSaidas(false)} className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${!verSaidas ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>No pátio ({noPatio.length})</button>
+        <button onClick={() => setVerSaidas(true)} className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${verSaidas ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>Saídas hoje ({saidas.length})</button>
+        <button onClick={() => setWalkin(true)} className="ml-auto flex items-center gap-1.5 bg-brand text-white font-semibold rounded-full px-3 py-1.5 text-[12px] active:scale-95"><Plus size={13} /> Entrada presencial</button>
+      </div>
+
+      {lista.length === 0 ? (
+        <p className="text-[13px] text-gray-400 py-8 text-center">{verSaidas ? 'Nenhuma saída hoje.' : 'Nenhum veículo no pátio.'}</p>
+      ) : (
+        <div className="space-y-2">
+          {lista.map((v) => (
+            <div key={v.id} className="bg-white rounded-xl border border-gray-100 p-3">
+              <div className="flex items-center justify-between">
+                <div><span className="font-mono font-bold text-gray-900">{v.plate || '—'}</span> <span className="text-[13px] text-gray-500">{v.client_name || ''}</span></div>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">{v.origin === 'walkin' ? 'Balcão' : 'Turiva'}</span>
+              </div>
+              <div className="flex items-center justify-between mt-1 text-[12px] text-gray-500">
+                <span>{v.spot ? `Vaga ${v.spot} · ` : ''}Entrada {dt(v.entered_at)}</span>
+                {v.amount != null && <span className={v.payment_status === 'paid' ? 'text-emerald-600 font-semibold' : 'text-amber-600 font-semibold'}>{money(v.amount)} · {v.payment_status === 'paid' ? 'pago' : 'pendente'}</span>}
+              </div>
+              {!verSaidas && (
+                <div className="flex gap-2 mt-2">
+                  {v.origin === 'walkin' && v.payment_status !== 'paid' && (
+                    <button onClick={() => pagar.mutate(v.id)} disabled={pagar.isPending} className="flex-1 text-[12px] font-semibold text-brand border border-brand rounded-lg py-1.5">Marcar pago</button>
+                  )}
+                  {v.origin === 'walkin' && (
+                    <button onClick={() => sair.mutate(v.id)} disabled={sair.isPending} className="flex-1 text-[12px] font-semibold text-white bg-gray-900 rounded-lg py-1.5">Registrar saída</button>
+                  )}
+                  {v.origin !== 'walkin' && <span className="text-[11px] text-gray-400 py-1.5">Saída pelo PIN do cliente (abaixo)</span>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Balcão: entrada por código + retirada por PIN */}
+      <PatioBalcao notify={notify} onDone={refresh} />
+
+      {walkin && <WalkinModal notify={notify} onClose={() => setWalkin(false)} onDone={() => { setWalkin(false); refresh() }} />}
+    </div>
+  )
+}
+
+// Modal de entrada presencial (walk-in) — cobrança pela plataforma (liquidação
+// presencial: dinheiro/pix no balcão, entra no repasse).
+function WalkinModal({ notify, onClose, onDone }) {
+  const { data: lotsData } = useQuery({ queryKey: ['parking-partner-lots'], queryFn: () => api.parkingPartnerLots() })
+  const lots = lotsData?.data || []
+  const [f, setF] = useState({ lot_id: '', client_name: '', client_phone: '', vehicle_type: 'carro', plate: '', spot: '', dias: 1, amount: '', payment_status: 'paid' })
+  const lot = f.lot_id || (lots.length === 1 ? lots[0].id : '')
+  const set = (k, v) => setF((o) => ({ ...o, [k]: v }))
+
+  const salvar = useMutation({
+    mutationFn: () => {
+      const start = new Date()
+      const end = new Date(start.getTime() + Number(f.dias || 1) * 24 * 3600_000)
+      const iso = (d) => `${new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19)}-03:00`
+      return api.parkingWalkin({
+        lot_id: lot, client_name: f.client_name.trim(), client_phone: f.client_phone.trim() || null,
+        vehicle_type: f.vehicle_type.trim(), plate: f.plate.trim() || null, spot: f.spot.trim() || null,
+        start_at: iso(start), end_at: iso(end), amount: Number(f.amount), payment_status: f.payment_status,
+      })
+    },
+    onSuccess: () => { notify?.('ok', 'Entrada presencial registrada.'); onDone?.() },
+    onError: (e) => notify?.('err', e?.message || 'Não foi possível registrar.'),
+  })
+
+  const campo = 'w-full border border-gray-200 rounded-xl px-3 h-10 text-sm outline-none focus:border-brand'
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100 sticky top-0 bg-white">
+          <h2 className="font-bold text-gray-900">Entrada presencial</h2>
+          <button onClick={onClose} className="p-2 text-gray-400"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {lots.length > 1 && (
+            <select value={lot} onChange={(e) => set('lot_id', e.target.value)} className={campo}>
+              <option value="">Selecione o estacionamento…</option>
+              {lots.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          )}
+          <input value={f.client_name} onChange={(e) => set('client_name', e.target.value)} placeholder="Nome do cliente" className={campo} />
+          <div className="grid grid-cols-2 gap-2">
+            <input value={f.client_phone} onChange={(e) => set('client_phone', e.target.value)} placeholder="Telefone" className={campo} />
+            <input value={f.plate} onChange={(e) => set('plate', e.target.value)} placeholder="Placa" className={`${campo} uppercase`} />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <input value={f.vehicle_type} onChange={(e) => set('vehicle_type', e.target.value)} placeholder="Veículo" className={campo} />
+            <input value={f.spot} onChange={(e) => set('spot', e.target.value)} placeholder="Vaga" className={campo} />
+            <input value={f.dias} onChange={(e) => set('dias', e.target.value)} inputMode="numeric" placeholder="Diárias" className={campo} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input value={f.amount} onChange={(e) => set('amount', e.target.value)} inputMode="decimal" placeholder="Valor combinado (R$)" className={campo} />
+            <select value={f.payment_status} onChange={(e) => set('payment_status', e.target.value)} className={campo}>
+              <option value="paid">Pago (balcão)</option>
+              <option value="pending">Pendente</option>
+            </select>
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white flex gap-2">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
+          <button onClick={() => salvar.mutate()} disabled={salvar.isPending || !lot || !f.client_name.trim() || !f.amount}
+            className="flex-1 flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50">
+            {salvar.isPending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

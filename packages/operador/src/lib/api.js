@@ -208,6 +208,11 @@ export const api = {
   parkingUpdateMyLot:  (id, body) => request('/api/parking/partner/lots/' + id, { method: 'PATCH', body }),
   parkingAddMyTariff:  (id, body) => request('/api/parking/partner/lots/' + id + '/tariffs', { method: 'POST', body }),
   parkingUpdateMyTariff: (id, body) => request('/api/parking/partner/tariffs/' + id, { method: 'PATCH', body }),
+  parkingOverview:     () => request('/api/parking/partner/overview'),
+  parkingPatio:        () => request('/api/parking/partner/patio'),
+  parkingWalkin:       (body) => request('/api/parking/partner/walkin', { method: 'POST', body }),
+  parkingStayExit:     (id) => request('/api/parking/partner/stays/' + id + '/exit', { method: 'POST', body: {} }),
+  parkingStayMarkPaid: (id) => request('/api/parking/partner/stays/' + id + '/mark-paid', { method: 'POST', body: {} }),
 
   getOperatorBookings: ()   => request('/api/operator/bookings'),
   acceptBooking:       (id) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body: {} }),

@@ -247,6 +247,128 @@ router.get('/partner/financial', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// Resolve os lots do parceiro (ou todos, se admin).
+async function lotsDoParceiro(user) {
+  if (ehAdmin(user)) {
+    const { data } = await supabase.from('parking_lots').select('id, name, capacity')
+    return data || []
+  }
+  const { data } = await supabase.from('parking_lots').select('id, name, capacity').eq('owner_user_id', user.id)
+  return data || []
+}
+
+// ── Início: visão geral do parceiro (dashboard) ───────────────────────────────
+router.get('/partner/overview', authenticate, async (req, res, next) => {
+  try {
+    const lots = await lotsDoParceiro(req.user)
+    if (lots.length === 0) return res.json({ lot: null, stats: { no_patio: 0, capacity: 0, livres: 0, entradas_hoje: 0, saidas_hoje: 0 } })
+    const lotIds = lots.map((l) => l.id)
+    const capacity = lots.reduce((a, l) => a + Number(l.capacity || 0), 0)
+
+    // Janela de "hoje" em Fortaleza (−03:00).
+    const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Fortaleza' })
+    const diaIni = `${hoje}T00:00:00-03:00`, diaFim = `${hoje}T23:59:59-03:00`
+
+    const [patio, entradas, saidasRes, saidasStay] = await Promise.all([
+      supabase.from('parking_stays').select('id', { count: 'exact', head: true }).in('lot_id', lotIds).is('exited_at', null),
+      supabase.from('parking_reservations').select('id', { count: 'exact', head: true }).in('lot_id', lotIds).eq('status', 'confirmed').gte('start_at', diaIni).lte('start_at', diaFim),
+      supabase.from('parking_reservations').select('id', { count: 'exact', head: true }).in('lot_id', lotIds).eq('status', 'in_lot').gte('end_at', diaIni).lte('end_at', diaFim),
+      supabase.from('parking_stays').select('id', { count: 'exact', head: true }).in('lot_id', lotIds).is('exited_at', null).gte('expected_exit_at', diaIni).lte('expected_exit_at', diaFim),
+    ])
+    const noPatio = patio.count || 0
+    res.json({
+      lot: lots[0],
+      stats: {
+        no_patio: noPatio, capacity, livres: Math.max(0, capacity - noPatio),
+        entradas_hoje: entradas.count || 0,
+        saidas_hoje: (saidasRes.count || 0) + (saidasStay.count || 0),
+      },
+    })
+  } catch (err) { next(err) }
+})
+
+// ── Pátio: veículos presentes + saídas de hoje ────────────────────────────────
+router.get('/partner/patio', authenticate, async (req, res, next) => {
+  try {
+    const lots = await lotsDoParceiro(req.user)
+    if (lots.length === 0) return res.json({ no_patio: [], saidas_hoje: [] })
+    const lotIds = lots.map((l) => l.id)
+    const COLS = 'id, lot_id, reservation_id, origin, plate, spot, vehicle_type, client_name, entered_at, exited_at, expected_exit_at, amount, payment_status'
+    const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Fortaleza' })
+    const diaIni = `${hoje}T00:00:00-03:00`, diaFim = `${hoje}T23:59:59-03:00`
+
+    let abertos = await supabase.from('parking_stays').select(COLS).in('lot_id', lotIds).is('exited_at', null).order('entered_at', { ascending: false })
+    if (abertos.error && (abertos.error.code === '42703')) {
+      abertos = await supabase.from('parking_stays').select('id, lot_id, reservation_id, origin, plate, spot, entered_at, exited_at').in('lot_id', lotIds).is('exited_at', null)
+    }
+    const { data: saidas } = await supabase.from('parking_stays').select(COLS).in('lot_id', lotIds).gte('exited_at', diaIni).lte('exited_at', diaFim).order('exited_at', { ascending: false })
+    res.json({ no_patio: abertos.data || [], saidas_hoje: saidas || [] })
+  } catch (err) { next(err) }
+})
+
+// ── Entrada presencial (walk-in) cobrada pela plataforma ──────────────────────
+const walkinSchema = z.object({
+  lot_id:       z.string().uuid(),
+  client_name:  z.string().min(2).max(120),
+  client_phone: z.string().max(30).optional().nullable(),
+  vehicle_type: z.string().min(1).max(40),
+  plate:        z.string().max(12).optional().nullable(),
+  spot:         z.string().max(20).optional().nullable(),
+  start_at:     z.string().datetime({ offset: true }),
+  end_at:       z.string().datetime({ offset: true }),
+  amount:       z.number().min(0),
+  payment_status: z.enum(['paid', 'pending']).optional(),
+})
+router.post('/partner/walkin', authenticate, async (req, res, next) => {
+  try {
+    const parsed = walkinSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados da entrada inválidos.' })
+    const b = parsed.data
+    if (!(await podeOperarLot(req.user, b.lot_id))) return res.status(403).json({ error: 'Este estacionamento não é seu.' })
+    const { data: lot } = await supabase.from('parking_lots').select('commission_pct').eq('id', b.lot_id).maybeSingle()
+    const { data, error } = await supabase.rpc('parking_create_walkin', {
+      p_lot_id: b.lot_id, p_actor: req.user.id, p_client_name: b.client_name, p_client_phone: b.client_phone || null,
+      p_vehicle_type: b.vehicle_type, p_plate: b.plate || null, p_spot: b.spot || null,
+      p_start: b.start_at, p_end: b.end_at, p_amount: b.amount, p_commission_pct: lot?.commission_pct || 0,
+      p_payment_status: b.payment_status || 'pending',
+    })
+    if (error) throw error
+    if (!data?.ok) {
+      const msg = { lot_not_found: 'Estacionamento não encontrado.', bad_window: 'Período inválido.', no_capacity: 'Sem vaga para o período.' }[data?.error] || 'Não foi possível registrar.'
+      return res.status(data?.error === 'no_capacity' ? 409 : 400).json({ error: msg })
+    }
+    res.status(201).json({ ok: true, stay_id: data.stay_id })
+  } catch (err) { next(err) }
+})
+
+// Marcar walk-in como pago (liquidação presencial — entra no repasse).
+router.post('/partner/stays/:id/mark-paid', authenticate, async (req, res, next) => {
+  try {
+    const { data: s } = await supabase.from('parking_stays').select('id, lot_id').eq('id', req.params.id).maybeSingle()
+    if (!s) return res.status(404).json({ error: 'Estadia não encontrada.' })
+    if (!(await podeOperarLot(req.user, s.lot_id))) return res.status(403).json({ error: 'Não é seu estacionamento.' })
+    const { error } = await supabase.from('parking_stays').update({ payment_status: 'paid' }).eq('id', s.id)
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+// Registrar saída de um walk-in (sem PIN — é presencial). Libera a vaga.
+router.post('/partner/stays/:id/exit', authenticate, async (req, res, next) => {
+  try {
+    const { data: s } = await supabase.from('parking_stays').select('id, lot_id, origin, capacity_block_id, exited_at').eq('id', req.params.id).maybeSingle()
+    if (!s) return res.status(404).json({ error: 'Estadia não encontrada.' })
+    if (!(await podeOperarLot(req.user, s.lot_id))) return res.status(403).json({ error: 'Não é seu estacionamento.' })
+    if (s.exited_at) return res.json({ ok: true, already: true })
+    if (s.capacity_block_id) {
+      await supabase.from('parking_capacity_blocks').update({ status: 'released' }).eq('id', s.capacity_block_id)
+    }
+    const { error } = await supabase.from('parking_stays').update({ exited_at: new Date().toISOString(), exited_by: req.user.id }).eq('id', s.id)
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
 // ── Autoatendimento do parceiro (completa o próprio cadastro no painel) ───────
 // O admin provisiona (login + lot casca); o parceiro preenche o resto aqui.
 // Campos de PLATAFORMA (comissão, prazos, reembolso) não são editáveis pelo
