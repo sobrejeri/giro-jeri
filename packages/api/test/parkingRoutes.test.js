@@ -10,7 +10,7 @@ const src = fs.readFileSync(new URL('../src/routes/parking.js', import.meta.url)
 const rota = (assinatura) => {
   const i = src.indexOf(assinatura)
   assert.notEqual(i, -1, `rota não encontrada: ${assinatura}`)
-  return src.slice(i, i + 1600)
+  return src.slice(i, i + 2800)
 }
 
 test('criar reserva recalcula o preço no servidor (ignora o do cliente)', () => {
@@ -54,4 +54,20 @@ test('recusar encerra só a solicitação e exige estado aguardando aceite', () 
   const r = rota("router.post('/reservations/:id/reject'")
   assert.match(r, /status !== 'awaiting_partner'/, 'só recusa enquanto aguarda aceite')
   assert.match(r, /status: 'rejected'/)
+})
+
+test('pagar: só o dono, só após aceite, dentro do prazo, valor da reserva', () => {
+  const r = rota("router.post('/reservations/:id/pay'")
+  assert.match(r, /r\.user_id !== req\.user\.id/, 'só o dono paga')
+  assert.match(r, /status !== 'accepted_awaiting_payment'/, 'só paga depois do aceite')
+  assert.match(r, /payment_deadline_at[\s\S]*expirou/, 'respeita o prazo de pagamento')
+  assert.match(r, /already: true/, 'idempotente: já paga não cobra de novo')
+  assert.match(r, /refund_pending/, 'pagou sem vaga → encaminha estorno, não descarta')
+})
+
+test('confirmação de pagamento é atômica e idempotente (RPC)', () => {
+  const src2 = fs.readFileSync(new URL('../src/services/parking/payments.js', import.meta.url), 'utf8')
+  assert.match(src2, /rpc\('parking_confirm_payment'/, 'confirma via função SQL atômica')
+  assert.match(src2, /status === 'approved'[\s\S]*reused: true/, 'reenvio aprovado não cobra de novo')
+  assert.match(src2, /onConflict: 'idempotency_key'/, 'tentativa idempotente pela chave')
 })

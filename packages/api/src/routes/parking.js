@@ -15,6 +15,7 @@ import { supabase } from '../supabase.js'
 import { authenticate } from '../middleware/auth.js'
 import { cotarComTarifa } from '../services/parking/pricing.js'
 import { temVaga, blocoDe } from '../services/parking/capacity.js'
+import { cobrarCartaoEConfirmar } from '../services/parking/payments.js'
 
 const router = Router()
 
@@ -237,6 +238,59 @@ router.post('/reservations/:id/reject', authenticate, async (req, res, next) => 
     if (error) throw error
     res.json({ ok: true })
   } catch (err) { next(err) }
+})
+
+// Pagar — dono da reserva. Só depois do aceite e dentro do prazo. Cobra no
+// cartão (Pagar.me) e confirma atomicamente. O valor é SEMPRE o da reserva
+// (fotografado no aceite) — o cliente não decide o valor.
+const paySchema = z.object({
+  card_token:      z.string().min(1),
+  parcelas:        z.number().int().min(1).max(12).optional(),
+  idempotency_key: z.string().min(8).max(100),
+})
+router.post('/reservations/:id/pay', authenticate, async (req, res, next) => {
+  try {
+    const parsed = paySchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados de pagamento inválidos.' })
+
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, code, user_id, status, payment_status, total_amount, payment_deadline_at')
+      .eq('id', req.params.id).maybeSingle()
+    if (!r) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (r.payment_status === 'paid' || ['confirmed', 'in_lot', 'completed'].includes(r.status)) {
+      return res.json({ ok: true, already: true })
+    }
+    if (r.status !== 'accepted_awaiting_payment') {
+      return res.status(409).json({ error: 'Esta reserva ainda não está liberada para pagamento.' })
+    }
+    if (r.payment_deadline_at && new Date(r.payment_deadline_at).getTime() <= Date.now()) {
+      return res.status(409).json({ error: 'O prazo de pagamento expirou. Solicite novamente.' })
+    }
+
+    const { data: cliente } = await supabase.from('users')
+      .select('full_name, email, document_number, phone').eq('id', req.user.id).maybeSingle()
+
+    const resultado = await cobrarCartaoEConfirmar({
+      reserva: r, cliente, cardToken: parsed.data.card_token,
+      parcelas: parsed.data.parcelas || 1, idempotencyKey: parsed.data.idempotency_key,
+    })
+
+    if (resultado.estado !== 'approved') {
+      return res.status(402).json({ error: resultado.motivo || 'Pagamento não aprovado.', estado: resultado.estado })
+    }
+    if (!resultado.ok && resultado.no_capacity) {
+      // Pagou, mas a vaga foi comprometida: pagamento registrado, encaminhar estorno.
+      return res.status(409).json({
+        error: 'O pagamento foi recebido, mas a vaga não está mais disponível. Vamos processar o estorno.',
+        refund_pending: true,
+      })
+    }
+    res.json({ ok: true, confirmed: true })
+  } catch (err) {
+    if (err?.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
 })
 
 // Cancelar — dono (ou admin). Libera bloqueios de capacidade de forma idempotente.
