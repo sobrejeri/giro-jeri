@@ -93,5 +93,12 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
 
   // Aprovado no gateway → confirma a reserva atomicamente.
   const conf = await confirmarReserva(reserva.id)
+  // Gera o código de entrada (não-secreto) para o cliente dar entrada no pátio.
+  if (conf.ok) {
+    try {
+      const { garantirCodigoEntrada } = await import('./entry.js')
+      await garantirCodigoEntrada(reserva.id)
+    } catch { /* código de entrada é melhor-esforço; não derruba o pagamento */ }
+  }
   return { estado: 'approved', ...conf, external_ref: cobranca.pedido_id }
 }

@@ -11,7 +11,7 @@ import {
   Calendar, Clock, Users, Car, Search, Compass, MapPin,
   Star, RefreshCw, AlertTriangle, Loader2, Zap, Sun, Waves, Anchor,
   ChevronLeft, ChevronRight, CalendarCheck, Check, X, MessageSquare, Package,
-  CheckCircle2, XCircle, ParkingSquare,
+  CheckCircle2, XCircle, ParkingSquare, KeyRound, LogIn,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -613,8 +613,18 @@ const PARK_STATUS = {
 }
 function ParkingReservas() {
   const navigate = useNavigate()
+  const [pinModal, setPinModal] = useState(null) // { code, pin, expires_at }
   const { data } = useQuery({ queryKey: ['parking-my'], queryFn: () => api.parkingMyReservations(), refetchInterval: 15000 })
   const ativas = (data?.data || []).filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
+
+  const pedirRetirada = useMutation({
+    mutationFn: (id) => api.parkingWithdrawal(id),
+    onSuccess: (res, id) => {
+      const r = ativas.find((x) => x.id === id)
+      setPinModal({ code: r?.code, pin: res.pin, expires_at: res.expires_at })
+    },
+  })
+
   if (ativas.length === 0) return null
   const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
   const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -623,6 +633,8 @@ function ParkingReservas() {
       <p className="text-[12px] font-bold text-gray-500 flex items-center gap-1.5"><ParkingSquare size={14} className="text-brand" /> Estacionamento</p>
       {ativas.map((r) => {
         const st = PARK_STATUS[r.status] || { label: r.status, cls: 'bg-gray-100 text-gray-600' }
+        const mostraEntrada = r.entry_code && ['confirmed', 'in_lot', 'withdrawal_requested'].includes(r.status)
+        const podeRetirar = ['in_lot', 'withdrawal_requested'].includes(r.status)
         return (
           <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="flex items-center justify-between gap-2">
@@ -633,6 +645,14 @@ function ParkingReservas() {
               <p className="text-[12px] text-gray-500 flex items-center gap-1"><Clock size={12} className="text-brand" /> {dt(r.start_at)} → {dt(r.end_at)}</p>
               <p className="text-[14px] font-extrabold text-gray-900">{money(r.total_amount)}</p>
             </div>
+
+            {mostraEntrada && (
+              <div className="mt-2 flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1.5"><LogIn size={13} /> Código de entrada</span>
+                <span className="font-mono text-[16px] font-extrabold tracking-[0.25em] text-emerald-800">{r.entry_code}</span>
+              </div>
+            )}
+
             {r.status === 'accepted_awaiting_payment' && (
               <button
                 onClick={() => navigate(`/estacionamento/${r.id}/pagar`)}
@@ -641,10 +661,57 @@ function ParkingReservas() {
                 Pagar agora · {money(r.total_amount)}
               </button>
             )}
+
+            {podeRetirar && (
+              <button
+                onClick={() => pedirRetirada.mutate(r.id)}
+                disabled={pedirRetirada.isPending}
+                className="mt-2 w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform disabled:opacity-60"
+              >
+                {pedirRetirada.isPending ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                {r.status === 'withdrawal_requested' ? 'Ver PIN de retirada' : 'Pedir retirada'}
+              </button>
+            )}
           </div>
         )
       })}
+
+      {pinModal && <WithdrawalPinModal data={pinModal} onClose={() => setPinModal(null)} />}
     </div>
+  )
+}
+
+// ── Flutuante do PIN de retirada — segredo mostrado só ao cliente, uma vez ─────
+function WithdrawalPinModal({ data, onClose }) {
+  const [restante, setRestante] = useState('')
+  useEffect(() => {
+    const alvo = data.expires_at ? new Date(data.expires_at).getTime() : 0
+    const tick = () => {
+      if (!alvo) return setRestante('')
+      const s = Math.max(0, Math.round((alvo - Date.now()) / 1000))
+      const mm = String(Math.floor(s / 60)).padStart(2, '0')
+      const ss = String(s % 60).padStart(2, '0')
+      setRestante(`${mm}:${ss}`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [data.expires_at])
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+        <div className="w-12 h-12 rounded-full bg-gray-900 text-white flex items-center justify-center mx-auto mb-3">
+          <KeyRound size={22} />
+        </div>
+        <h3 className="text-[16px] font-extrabold text-gray-900">PIN de retirada</h3>
+        <p className="text-[12px] text-gray-500 mt-1">Mostre este PIN ao atendente do estacionamento. Ele é de uso único{restante ? ` e expira em ${restante}` : ''}.</p>
+        <div className="my-5 font-mono text-[40px] font-black tracking-[0.3em] text-gray-900">{data.pin}</div>
+        {data.code && <p className="font-mono text-[11px] text-gray-400 -mt-3 mb-3">Reserva {data.code}</p>}
+        <button onClick={onClose} className="w-full bg-gray-900 text-white font-bold rounded-xl py-3 text-[14px] active:scale-[0.99]">Fechar</button>
+      </div>
+    </div>,
+    document.body,
   )
 }
 

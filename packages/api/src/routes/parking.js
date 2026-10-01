@@ -16,11 +16,19 @@ import { authenticate } from '../middleware/auth.js'
 import { cotarComTarifa } from '../services/parking/pricing.js'
 import { temVaga, blocoDe } from '../services/parking/capacity.js'
 import { cobrarCartaoEConfirmar } from '../services/parking/payments.js'
+import { registrarEntrada, abrirRetirada, consumirRetirada } from '../services/parking/entry.js'
 
 const router = Router()
 
 const novoCodigo = () => `PK${Date.now().toString(36).toUpperCase().slice(-6)}`
 const ehAdmin = (u) => u?.user_type === 'admin'
+
+// true se o usuário é dono do lot (ou admin). Usado nas ações do parceiro.
+async function podeOperarLot(user, lotId) {
+  if (ehAdmin(user)) return true
+  const { data: lot } = await supabase.from('parking_lots').select('owner_user_id').eq('id', lotId).maybeSingle()
+  return lot?.owner_user_id === user.id
+}
 
 // Campos públicos do catálogo (sem dados de cliente/placa/equipe).
 const LOT_PUBLIC = 'id, name, description, photos, region_id, lat, lng, timezone, opening_hours, capacity, is_active, created_at'
@@ -153,9 +161,20 @@ router.get('/reservations', authenticate, async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('parking_reservations')
-      .select('id, code, lot_id, vehicle_type, plate, start_at, end_at, units, total_amount, status, payment_status, acceptance_expires_at, payment_deadline_at, created_at')
+      .select('id, code, lot_id, vehicle_type, plate, start_at, end_at, units, total_amount, status, payment_status, entry_code, entered_at, acceptance_expires_at, payment_deadline_at, created_at')
       .eq('user_id', req.user.id)
       .order('created_at', { ascending: false })
+    if (error) throw error
+    res.json({ data: data || [] })
+  } catch (err) { next(err) }
+})
+
+// Lots do PARCEIRO (para selecionar no balcão de entrada/retirada).
+router.get('/partner/lots', authenticate, async (req, res, next) => {
+  try {
+    let q = supabase.from('parking_lots').select('id, name, capacity, is_active').order('name')
+    if (!ehAdmin(req.user)) q = q.eq('owner_user_id', req.user.id)
+    const { data, error } = await q
     if (error) throw error
     res.json({ data: data || [] })
   } catch (err) { next(err) }
@@ -309,6 +328,85 @@ router.post('/reservations/:id/cancel', authenticate, async (req, res, next) => 
       .eq('id', r.id)
     if (error) throw error
     res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+// ── Pátio: entrada e retirada (fase 7) ───────────────────────────────────────
+// Entrada por CÓDIGO (não-secreto) — parceiro/admin do lot. Atômico na função.
+const entrySchema = z.object({
+  lot_id: z.string().uuid(),
+  code:   z.string().min(4).max(12),
+  spot:   z.string().max(20).optional().nullable(),
+  plate:  z.string().max(12).optional().nullable(),
+})
+router.post('/partner/entry', authenticate, async (req, res, next) => {
+  try {
+    const parsed = entrySchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos para registrar entrada.' })
+    if (!(await podeOperarLot(req.user, parsed.data.lot_id))) {
+      return res.status(403).json({ error: 'Este estacionamento não é seu.' })
+    }
+    const data = await registrarEntrada({
+      lotId: parsed.data.lot_id, code: parsed.data.code, actorId: req.user.id,
+      spot: parsed.data.spot, plate: parsed.data.plate,
+    })
+    if (!data?.ok) {
+      const map = { not_found: 404, bad_state: 409 }
+      const msg = {
+        not_found: 'Código não encontrado neste estacionamento.',
+        bad_state: 'Esta reserva não está confirmada/paga para dar entrada.',
+      }[data?.error] || 'Não foi possível registrar a entrada.'
+      return res.status(map[data?.error] || 400).json({ error: msg })
+    }
+    res.json({ ok: true, already: !!data.already, code: data.code })
+  } catch (err) { next(err) }
+})
+
+// Pedir retirada — DONO da reserva. Gera o PIN de uso único e o devolve UMA vez
+// (só aqui; nunca relido do banco, nunca enviado ao parceiro/log/push/URL).
+router.post('/reservations/:id/withdrawal', authenticate, async (req, res, next) => {
+  try {
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, user_id, lot_id, status').eq('id', req.params.id).maybeSingle()
+    if (!r) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (!['in_lot', 'withdrawal_requested'].includes(r.status)) {
+      return res.status(409).json({ error: 'A retirada só está disponível com o veículo no pátio.' })
+    }
+    const { data: lot } = await supabase.from('parking_lots').select('pin_ttl_min').eq('id', r.lot_id).maybeSingle()
+    const { pin, expires_at } = await abrirRetirada({ reservationId: r.id, ttlMin: lot?.pin_ttl_min || 5 })
+    if (r.status !== 'withdrawal_requested') {
+      await supabase.from('parking_reservations')
+        .update({ status: 'withdrawal_requested', updated_at: new Date().toISOString() }).eq('id', r.id)
+    }
+    // O PIN sai só nesta resposta ao dono. Não logar.
+    res.json({ ok: true, pin, expires_at })
+  } catch (err) { next(err) }
+})
+
+// Validar retirada pelo PIN — parceiro/admin do lot. Consome atômico + conclui.
+const withdrawSchema = z.object({
+  lot_id: z.string().uuid(),
+  pin:    z.string().min(4).max(10),
+})
+router.post('/partner/withdrawal', authenticate, async (req, res, next) => {
+  try {
+    const parsed = withdrawSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Informe o PIN de retirada.' })
+    if (!(await podeOperarLot(req.user, parsed.data.lot_id))) {
+      return res.status(403).json({ error: 'Este estacionamento não é seu.' })
+    }
+    const data = await consumirRetirada({ lotId: parsed.data.lot_id, pin: parsed.data.pin, actorId: req.user.id })
+    if (!data?.ok) {
+      const map = { invalid_pin: 422, expired: 410, bad_state: 409 }
+      const msg = {
+        invalid_pin: 'PIN inválido. Confira com o cliente.',
+        expired: 'Este PIN expirou. Peça ao cliente para gerar um novo.',
+        bad_state: 'Esta reserva não está no pátio para retirada.',
+      }[data?.error] || 'Não foi possível validar a retirada.'
+      return res.status(map[data?.error] || 400).json({ error: msg })
+    }
+    res.json({ ok: true, code: data.code })
   } catch (err) { next(err) }
 })
 
