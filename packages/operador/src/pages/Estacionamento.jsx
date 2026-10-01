@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode } from 'lucide-react'
+import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode, MapPin } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -294,14 +294,28 @@ function LotEditor({ lot, notify, onSaved }) {
   const [form, setForm] = useState({
     name: lot.name || '', description: lot.description || '', capacity: lot.capacity ?? 0,
     photos: lot.photos || [], is_active: lot.is_active !== false,
+    address: lot.address || '', lat: lot.lat ?? '', lng: lot.lng ?? '',
   })
   const [enviandoFoto, setEnviandoFoto] = useState(false)
+  const [geoLoading, setGeoLoading] = useState(false)
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  function usarLocalizacao() {
+    if (!navigator.geolocation) { notify?.('err', 'Geolocalização indisponível neste aparelho.'); return }
+    setGeoLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setForm((f) => ({ ...f, lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6) })); setGeoLoading(false); notify?.('ok', 'Localização capturada.') },
+      () => { setGeoLoading(false); notify?.('err', 'Não foi possível obter a localização.') },
+      { enableHighAccuracy: true, timeout: 10000 },
+    )
+  }
 
   const salvar = useMutation({
     mutationFn: () => api.parkingUpdateMyLot(lot.id, {
       name: form.name.trim(), description: form.description.trim() || null,
       capacity: Number(form.capacity), photos: form.photos, is_active: !!form.is_active,
+      address: form.address.trim() || null,
+      lat: form.lat === '' ? null : Number(form.lat), lng: form.lng === '' ? null : Number(form.lng),
     }),
     onSuccess: () => { notify?.('ok', 'Cadastro atualizado!'); onSaved?.() },
     onError: (e) => notify?.('err', e?.message || 'Não foi possível salvar.'),
@@ -332,6 +346,25 @@ function LotEditor({ lot, notify, onSaved }) {
         <label className={label}>Descrição</label>
         <textarea value={form.description} onChange={(e) => setF('description', e.target.value)} rows={2}
           className={`${campo} resize-none`} placeholder="Conte como é o seu estacionamento, segurança, cobertura…" />
+      </div>
+      <div>
+        <label className={label}>Endereço</label>
+        <input value={form.address} onChange={(e) => setF('address', e.target.value)} className={campo}
+          placeholder="Rua, nº, bairro — Jijoca de Jericoacoara" />
+      </div>
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-[12px] font-semibold text-gray-500">Localização no mapa</label>
+          <button type="button" onClick={usarLocalizacao} disabled={geoLoading}
+            className="text-[11px] font-semibold text-brand flex items-center gap-1">
+            {geoLoading ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} Usar localização atual
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <input value={form.lat} onChange={(e) => setF('lat', e.target.value)} inputMode="decimal" placeholder="Latitude" className={campo} />
+          <input value={form.lng} onChange={(e) => setF('lng', e.target.value)} inputMode="decimal" placeholder="Longitude" className={campo} />
+        </div>
+        <p className="text-[11px] text-gray-400 mt-1">Com as coordenadas, o cliente abre a rota no Google Maps/Waze.</p>
       </div>
       <div>
         <label className={label}>Fotos</label>

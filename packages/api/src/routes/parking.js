@@ -46,7 +46,10 @@ router.get('/lots', authenticate, async (req, res, next) => {
 
 router.get('/lots/:id', authenticate, async (req, res, next) => {
   try {
-    const { data: lot, error } = await supabase.from('parking_lots').select(LOT_PUBLIC).eq('id', req.params.id).maybeSingle()
+    // Inclui address (migration 117) de forma tolerante — se a coluna não existe,
+    // cai no conjunto público sem address.
+    let { data: lot, error } = await supabase.from('parking_lots').select(`${LOT_PUBLIC}, address`).eq('id', req.params.id).maybeSingle()
+    if (error && error.code === '42703') ({ data: lot, error } = await supabase.from('parking_lots').select(LOT_PUBLIC).eq('id', req.params.id).maybeSingle())
     if (error) throw error
     if (!lot || !lot.is_active) return res.status(404).json({ error: 'Estacionamento não encontrado.' })
     const { data: tarifas } = await supabase
@@ -402,6 +405,7 @@ router.get('/partner/my-lots', authenticate, async (req, res, next) => {
 const partnerLotSchema = z.object({
   name:          z.string().min(2).max(120).optional(),
   description:   z.string().max(1000).optional().nullable(),
+  address:       z.string().max(300).optional().nullable(),
   lat:           z.number().optional().nullable(),
   lng:           z.number().optional().nullable(),
   capacity:      z.number().int().min(0).optional(),
@@ -414,8 +418,13 @@ router.patch('/partner/lots/:id', authenticate, async (req, res, next) => {
     if (!(await podeOperarLot(req.user, req.params.id))) return res.status(403).json({ error: 'Este estacionamento não é seu.' })
     const parsed = partnerLotSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
-    const { error } = await supabase.from('parking_lots')
-      .update({ ...parsed.data, updated_at: new Date().toISOString() }).eq('id', req.params.id)
+    const patch = { ...parsed.data, updated_at: new Date().toISOString() }
+    let { error } = await supabase.from('parking_lots').update(patch).eq('id', req.params.id)
+    // Tolera coluna address ausente (migration 117 pendente).
+    if (error && error.code === '42703' && 'address' in patch) {
+      const { address, ...rest } = patch // eslint-disable-line no-unused-vars
+      ;({ error } = await supabase.from('parking_lots').update(rest).eq('id', req.params.id))
+    }
     if (error) throw error
     res.json({ ok: true })
   } catch (err) { next(err) }

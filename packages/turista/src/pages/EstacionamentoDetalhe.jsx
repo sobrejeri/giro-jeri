@@ -99,6 +99,26 @@ export default function EstacionamentoDetalhe() {
             {coberto ? <Umbrella size={11} /> : <Sun size={11} />} {coberto ? 'Coberto' : 'Descoberto'}
           </span>
           {lot.description && <p className="text-[13px] text-gray-600 mt-3 leading-relaxed">{lot.description}</p>}
+          {lot.address && <p className="text-[12px] text-gray-500 mt-2 flex items-start gap-1.5"><MapPin size={13} className="text-brand shrink-0 mt-0.5" /> {lot.address}</p>}
+          {(() => {
+            const temGeo = lot.lat != null && lot.lng != null
+            const q = temGeo ? `${lot.lat},${lot.lng}` : encodeURIComponent(lot.address || lot.name || 'Jericoacoara')
+            const gmaps = `https://www.google.com/maps/search/?api=1&query=${q}`
+            const waze = temGeo ? `https://waze.com/ul?ll=${lot.lat},${lot.lng}&navigate=yes` : `https://waze.com/ul?q=${q}&navigate=yes`
+            if (!temGeo && !lot.address) return null
+            return (
+              <div className="flex gap-2 mt-3">
+                <a href={gmaps} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 border border-gray-200 rounded-xl py-2 text-[12px] font-semibold text-gray-700 active:scale-[0.98]">
+                  <MapPin size={14} className="text-brand" /> Google Maps
+                </a>
+                <a href={waze} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 border border-gray-200 rounded-xl py-2 text-[12px] font-semibold text-gray-700 active:scale-[0.98]">
+                  <Car size={14} className="text-brand" /> Waze
+                </a>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Período */}
