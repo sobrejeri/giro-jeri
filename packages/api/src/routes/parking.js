@@ -205,13 +205,16 @@ router.get('/partner/financial', authenticate, async (req, res, next) => {
     const from = req.query.from ? new Date(req.query.from).toISOString() : null
     const to   = req.query.to   ? new Date(req.query.to).toISOString()   : null
 
-    let q = supabase.from('parking_reservations')
-      .select('lot_id, total_amount, commission_pct, status, created_at')
-      .eq('payment_status', 'paid')
-    if (lotIds) q = q.in('lot_id', lotIds)
-    if (from) q = q.gte('created_at', from)
-    if (to)   q = q.lte('created_at', to)
-    const { data, error } = await q
+    const SEL = 'id, code, lot_id, user_id, total_amount, commission_pct, status, completed_at, created_at'
+    const mk = (withJoin) => {
+      let q = supabase.from('parking_reservations').select(withJoin ? `${SEL}, users(full_name)` : SEL).eq('payment_status', 'paid')
+      if (lotIds) q = q.in('lot_id', lotIds)
+      if (from) q = q.gte('created_at', from)
+      if (to) q = q.lte('created_at', to)
+      return q.order('created_at', { ascending: false }).limit(200)
+    }
+    let { data, error } = await mk(true)
+    if (error && (error.code === '42703' || error.code === 'PGRST200' || error.code === 'PGRST204')) ({ data, error } = await mk(false))
     if (error) throw error
 
     // Tudo em centavos para evitar erro de ponto flutuante; devolve em reais.
@@ -236,13 +239,24 @@ router.get('/partner/financial', authenticate, async (req, res, next) => {
       nomes = Object.fromEntries((lots || []).map((l) => [l.id, l.name]))
     }
 
+    // Itens por reserva + status de repasse derivado do ciclo (sem pagar de fato):
+    // 'a_liberar' = estadia concluída; 'em_curso' = paga mas ainda não concluída.
+    const itens = (data || []).map(({ users, ...r }) => {
+      const b = emCent(r.total_amount), c = Math.round(b * Number(r.commission_pct || 0) / 100)
+      return {
+        id: r.id, code: r.code, user_name: users?.full_name || null, status: r.status,
+        bruto: reais(b), comissao: reais(c), liquido: reais(b - c),
+        repasse: r.status === 'completed' ? 'a_liberar' : 'em_curso', completed_at: r.completed_at,
+      }
+    })
+
     res.json({
       resumo: { bruto: reais(brutoC), comissao: reais(comissaoC), liquido: reais(brutoC - comissaoC), qtd: (data || []).length },
       por_lot: [...porLot.values()].map((a) => ({
         lot_id: a.lot_id, name: nomes[a.lot_id] || '—', qtd: a.qtd,
         bruto: reais(a.brutoC), comissao: reais(a.comissaoC), liquido: reais(a.brutoC - a.comissaoC),
       })),
-      periodo: { from, to },
+      itens, periodo: { from, to },
     })
   } catch (err) { next(err) }
 })

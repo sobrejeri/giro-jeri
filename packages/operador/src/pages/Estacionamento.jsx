@@ -189,7 +189,76 @@ function FinanceiroParking() {
         </div>
       )}
 
+      <RepasseLista itens={data?.itens || []} />
+
       <p className="text-[11px] text-gray-400 text-center">Apuração informativa. Os repasses são processados conforme o combinado da plataforma.</p>
+    </div>
+  )
+}
+
+// Lista de repasses por reserva (A liberar / Em curso) + detalhe com linha do tempo.
+function RepasseLista({ itens }) {
+  const [sub, setSub] = useState('a_liberar')
+  const [det, setDet] = useState(null)
+  const grupos = {
+    a_liberar: itens.filter((i) => i.repasse === 'a_liberar'),
+    em_curso: itens.filter((i) => i.repasse === 'em_curso'),
+  }
+  const lista = grupos[sub]
+  const TABS = [['a_liberar', 'A liberar'], ['em_curso', 'Em curso']]
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        {TABS.map(([id, label]) => (
+          <button key={id} onClick={() => setSub(id)}
+            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${sub === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+            {label} <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{grupos[id].length}</span>
+          </button>
+        ))}
+      </div>
+      {lista.length === 0 ? <p className="text-[12px] text-gray-400 py-6 text-center">Nada aqui.</p> : lista.map((i) => (
+        <button key={i.id} onClick={() => setDet(i)} className="w-full text-left bg-white rounded-xl border border-gray-100 p-3 flex items-center justify-between active:scale-[0.99]">
+          <div><p className="font-mono text-[11px] font-bold text-brand">{i.code}</p><p className="text-[12px] text-gray-500">{i.user_name || 'Cliente'}</p></div>
+          <div className="text-right"><p className="text-[14px] font-extrabold text-emerald-600">{money(i.liquido)}</p><p className="text-[10px] text-gray-400">{i.repasse === 'a_liberar' ? 'a liberar' : 'em curso'}</p></div>
+        </button>
+      ))}
+      {det && <RepasseDetalhe item={det} onClose={() => setDet(null)} />}
+    </div>
+  )
+}
+
+function RepasseDetalhe({ item: i, onClose }) {
+  const liberavel = i.repasse === 'a_liberar'
+  const passos = [
+    { label: 'Pagamento recebido', done: true },
+    { label: 'Estadia realizada', done: liberavel },
+    { label: 'Liberação pendente', done: false, atual: liberavel },
+    { label: 'Repasse a efetuar', done: false },
+  ]
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900">Repasse · {i.code}</h2>
+          <button onClick={onClose} className="p-2 text-gray-400"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="rounded-2xl bg-gray-50 p-3 text-[13px] space-y-1">
+            <div className="flex justify-between"><span className="text-gray-500">Valor da reserva</span><span className="font-semibold">{money(i.bruto)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Comissão</span><span>− {money(i.comissao)}</span></div>
+            <div className="flex justify-between pt-1 border-t border-gray-200"><span className="font-semibold text-gray-700">Líquido a receber</span><span className="font-extrabold text-emerald-600">{money(i.liquido)}</span></div>
+          </div>
+          <div className="space-y-2">
+            {passos.map((p, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-[13px]">
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${p.done ? 'bg-emerald-500 text-white' : p.atual ? 'bg-brand text-white' : 'bg-gray-200 text-gray-400'}`}>{p.done ? '✓' : idx + 1}</span>
+                <span className={p.done ? 'text-gray-800 font-medium' : p.atual ? 'text-brand font-medium' : 'text-gray-400'}>{p.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400">O repasse é liberado após a saída do veículo e a validação da estadia pela plataforma.</p>
+        </div>
+      </div>
     </div>
   )
 }
