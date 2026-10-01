@@ -21,6 +21,7 @@ const TITLES = {
   '/feed':             'Feed & Eventos',
   '/stories':          'Stories & Destaques',
   '/estabelecimentos': 'Estabelecimentos',
+  '/estacionamentos':  'Estacionamentos',
 }
 
 export default function Header({ onMenu = () => {} }) {

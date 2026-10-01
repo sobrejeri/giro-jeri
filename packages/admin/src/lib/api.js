@@ -323,4 +323,11 @@ export const api = {
   addStoryItem:    (hid, body) => request('/api/stories/highlights/' + hid + '/items', { method: 'POST',   body }),
   updateStoryItem: (id, body)  => request('/api/stories/items/' + id,                  { method: 'PUT',    body }),
   deleteStoryItem: (id)        => request('/api/stories/items/' + id,                  { method: 'DELETE' }),
+
+  // ── Estacionamento (catálogo) ──────────────────────────────────────────────
+  getParkingLots:     ()         => request('/api/parking/admin/lots'),
+  createParkingLot:   (body)     => request('/api/parking/admin/lots', { method: 'POST', body }),
+  updateParkingLot:   (id, body) => request('/api/parking/admin/lots/' + id, { method: 'PATCH', body }),
+  addParkingTariff:   (id, body) => request('/api/parking/admin/lots/' + id + '/tariffs', { method: 'POST', body }),
+  updateParkingTariff:(id, body) => request('/api/parking/admin/tariffs/' + id, { method: 'PATCH', body }),
 }

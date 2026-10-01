@@ -639,4 +639,99 @@ router.post('/partner/withdrawal', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── Administração do catálogo (admin) ────────────────────────────────────────
+// Cadastro/gestão de estacionamentos e tarifas. Só admin — é o que permite criar
+// lots sem SQL manual. Regras de negócio (preço, comissão, prazos) ficam aqui,
+// configuráveis, nunca fixas em código.
+function soAdmin(req, res, next) {
+  if (!ehAdmin(req.user)) return res.status(403).json({ error: 'Acesso restrito.' })
+  next()
+}
+
+router.get('/admin/lots', authenticate, soAdmin, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase.from('parking_lots')
+      .select('*, parking_tariffs(id, vehicle_type, price_per_unit, hours_per_unit, min_units, is_active)')
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    res.json({ data: data || [] })
+  } catch (err) { next(err) }
+})
+
+const lotSchema = z.object({
+  name:          z.string().min(2).max(120),
+  owner_user_id: z.string().uuid(),
+  description:   z.string().max(1000).optional().nullable(),
+  region_id:     z.string().uuid().optional().nullable(),
+  lat:           z.number().optional().nullable(),
+  lng:           z.number().optional().nullable(),
+  capacity:      z.number().int().min(0),
+  commission_pct: z.number().min(0).max(100).optional(),
+  accept_deadline_min:  z.number().int().min(1).optional(),
+  payment_deadline_min: z.number().int().min(1).optional(),
+  pin_ttl_min:          z.number().int().min(1).optional(),
+  refund_cutoff_min:    z.number().int().min(0).optional(),
+  opening_hours: z.record(z.any()).optional(),
+  is_active:     z.boolean().optional(),
+})
+
+router.post('/admin/lots', authenticate, soAdmin, async (req, res, next) => {
+  try {
+    const parsed = lotSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados do estacionamento inválidos.' })
+    // Confere que o dono existe (FK já garante, mas damos erro claro).
+    const { data: dono } = await supabase.from('users').select('id').eq('id', parsed.data.owner_user_id).maybeSingle()
+    if (!dono) return res.status(400).json({ error: 'Usuário dono não encontrado.' })
+    let { data, error } = await supabase.from('parking_lots').insert(parsed.data).select('id').single()
+    // Tolera ausência da coluna refund_cutoff_min (migration 113).
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const { refund_cutoff_min, ...sem } = parsed.data
+      ;({ data, error } = await supabase.from('parking_lots').insert(sem).select('id').single())
+    }
+    if (error) throw error
+    res.status(201).json(data)
+  } catch (err) { next(err) }
+})
+
+router.patch('/admin/lots/:id', authenticate, soAdmin, async (req, res, next) => {
+  try {
+    const parsed = lotSchema.partial().safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
+    const patch = { ...parsed.data, updated_at: new Date().toISOString() }
+    let { error } = await supabase.from('parking_lots').update(patch).eq('id', req.params.id)
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const { refund_cutoff_min, ...sem } = patch
+      ;({ error } = await supabase.from('parking_lots').update(sem).eq('id', req.params.id))
+    }
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+const tariffSchema = z.object({
+  vehicle_type:   z.string().min(1).max(40),
+  price_per_unit: z.number().min(0),
+  hours_per_unit: z.number().int().min(1).optional(),
+  min_units:      z.number().int().min(1).optional(),
+})
+router.post('/admin/lots/:id/tariffs', authenticate, soAdmin, async (req, res, next) => {
+  try {
+    const parsed = tariffSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados da tarifa inválidos.' })
+    const { data, error } = await supabase.from('parking_tariffs')
+      .insert({ lot_id: req.params.id, ...parsed.data }).select('id').single()
+    if (error) throw error
+    res.status(201).json(data)
+  } catch (err) { next(err) }
+})
+router.patch('/admin/tariffs/:id', authenticate, soAdmin, async (req, res, next) => {
+  try {
+    const parsed = tariffSchema.partial().extend({ is_active: z.boolean().optional() }).safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
+    const { error } = await supabase.from('parking_tariffs').update(parsed.data).eq('id', req.params.id)
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
 export default router

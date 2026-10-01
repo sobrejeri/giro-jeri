@@ -63,6 +63,13 @@ test('aplicar extensão revalida capacidade e cresce o bloqueio (atômico)', () 
   assert.match(ext, /SET end_at = p_new_end_at[\s\S]*kind = 'confirmed'/, 'cresce o bloqueio confirmado')
 })
 
+test('admin do catálogo: rotas protegidas por soAdmin', () => {
+  assert.match(rotas, /function soAdmin/, 'guard de admin existe')
+  for (const sig of ["router.get('/admin/lots'", "router.post('/admin/lots'", "router.patch('/admin/lots/:id'", "router.post('/admin/lots/:id/tariffs'"]) {
+    assert.match(rota(sig), /soAdmin/, `${sig} exige admin`)
+  }
+})
+
 test('avaliar: só o dono, só concluída, uma única vez', () => {
   const r = rota("router.post('/reservations/:id/review'")
   assert.match(r, /r\.user_id !== req\.user\.id/, 'só o dono avalia')

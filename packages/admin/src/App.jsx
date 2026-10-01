@@ -17,6 +17,7 @@ import Configuracoes from './pages/Configuracoes'
 import Reservas from './pages/Reservas'
 import Feed from './pages/Feed'
 import Estabelecimentos from './pages/Estabelecimentos'
+import Estacionamentos from './pages/Estacionamentos'
 import Stories from './pages/Stories'
 import Notificacoes from './pages/Notificacoes'
 import Perfil from './pages/Perfil'
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="feed"         element={<Feed />} />
         <Route path="stories"      element={<Stories />} />
         <Route path="estabelecimentos" element={<Estabelecimentos />} />
+        <Route path="estacionamentos" element={<Estacionamentos />} />
         <Route path="financeiro"   element={<Financeiro />} />
         <Route path="repasses"     element={<Repasses />} />
         <Route path="auditoria"    element={<Auditoria />} />

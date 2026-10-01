@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, BookOpen, Tag, Globe, Ticket, Megaphone,
   Sun, BarChart3, ScrollText, Settings, LogOut, CalendarCheck, UserCircle, X,
-  Newspaper, Store, PlayCircle, Wallet, Bell,
+  Newspaper, Store, PlayCircle, Wallet, Bell, ParkingSquare,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -18,6 +18,7 @@ const NAV = [
   { to: '/feed',            icon: Newspaper,    label: 'Eventos & Promoções' },
   { to: '/stories',         icon: PlayCircle,   label: 'Stories'              },
   { to: '/estabelecimentos', icon: Store,       label: 'Estabelecimentos' },
+  { to: '/estacionamentos', icon: ParkingSquare, label: 'Estacionamentos' },
   { separator: true, label: 'Promoções' },
   { to: '/cupons',       icon: Ticket,          label: 'Cupons'        },
   { to: '/afiliados',    icon: Megaphone,       label: 'Afiliados'     },
