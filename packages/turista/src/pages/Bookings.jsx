@@ -645,24 +645,26 @@ function ParkingReservas() {
         const podeCancelar = ['awaiting_partner', 'accepted_awaiting_payment', 'confirmed'].includes(r.status)
         return (
           <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
-                {r.lot_photo
-                  ? <img src={r.lot_photo} alt="" className="w-full h-full object-cover" />
-                  : <ParkingSquare size={22} className="text-gray-300" />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[14px] font-bold text-gray-900 truncate">{r.lot_name || 'Estacionamento'}</p>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${st.cls}`}>{st.label}</span>
+            <button onClick={() => navigate(`/estacionamento/reserva/${r.id}`)} className="w-full text-left active:scale-[0.99] transition-transform">
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+                  {r.lot_photo
+                    ? <img src={r.lot_photo} alt="" className="w-full h-full object-cover" />
+                    : <ParkingSquare size={22} className="text-gray-300" />}
                 </div>
-                <p className="font-mono text-[10px] font-bold text-brand mt-0.5">{r.code}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[14px] font-bold text-gray-900 truncate">{r.lot_name || 'Estacionamento'}</p>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${st.cls}`}>{st.label}</span>
+                  </div>
+                  <p className="font-mono text-[10px] font-bold text-brand mt-0.5">{r.code}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between gap-2 mt-2">
-              <p className="text-[12px] text-gray-500 flex items-center gap-1"><Clock size={12} className="text-brand" /> {dt(r.start_at)} → {dt(r.end_at)}</p>
-              <p className="text-[14px] font-extrabold text-gray-900">{money(r.total_amount)}</p>
-            </div>
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <p className="text-[12px] text-gray-500 flex items-center gap-1"><Clock size={12} className="text-brand" /> {dt(r.start_at)} → {dt(r.end_at)}</p>
+                <p className="text-[14px] font-extrabold text-gray-900">{money(r.total_amount)}</p>
+              </div>
+            </button>
 
             {mostraEntrada && (
               <button onClick={() => setQrModal({ code: r.entry_code, reserva: r.code })}

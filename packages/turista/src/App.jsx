@@ -19,6 +19,7 @@ import Estacionamento        from './pages/Estacionamento'
 import EstacionamentoDetalhe from './pages/EstacionamentoDetalhe'
 import EstacionamentoPagamento from './pages/EstacionamentoPagamento'
 import EstacionamentoEstender from './pages/EstacionamentoEstender'
+import EstacionamentoReserva from './pages/EstacionamentoReserva'
 import Bookings        from './pages/Bookings'
 import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
@@ -130,6 +131,7 @@ export default function App() {
         <Route path="estacionamento/:id"  element={<EstacionamentoDetalhe />} />
         <Route path="estacionamento/:id/pagar" element={<PrivateRoute><EstacionamentoPagamento /></PrivateRoute>} />
         <Route path="estacionamento/:id/estender" element={<PrivateRoute><EstacionamentoEstender /></PrivateRoute>} />
+        <Route path="estacionamento/reserva/:id" element={<PrivateRoute><EstacionamentoReserva /></PrivateRoute>} />
         <Route path="carrinho"            element={<CartPage />} />
         <Route path="avaliacoes"          element={<Avaliacoes />} />
         <Route path="favoritos"           element={<Favoritos />} />
