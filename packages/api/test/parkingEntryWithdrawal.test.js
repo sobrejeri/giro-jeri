@@ -70,6 +70,14 @@ test('avaliar: só o dono, só concluída, uma única vez', () => {
   assert.match(r, /23505[\s\S]*já foi avaliada/, 'UNIQUE impede avaliar duas vezes')
 })
 
+test('cancelar: reembolso por antecedência configurável, sem mover dinheiro', () => {
+  assert.match(rotas, /refund_cutoff_min/, 'cutoff vem do lot (configurável)')
+  assert.match(rotas, /r\.status === 'confirmed' && Date\.now\(\) <= limite/, 'só antes do pátio e dentro do prazo')
+  assert.match(rotas, /refund_status = reembolso\.elegivel \? 'eligible' : 'denied'/, 'registra elegibilidade')
+  const mig113 = fs.readFileSync(new URL('../../../supabase/migrations/113_parking_refund.sql', import.meta.url), 'utf8')
+  assert.match(mig113, /refund_cutoff_min INTEGER NOT NULL DEFAULT 1440/, 'default 24h, sem número mágico no código')
+})
+
 test('financeiro do parceiro: só reservas pagas, comissão no servidor, sem banco', () => {
   const r = rota("router.get('/partner/financial'")
   assert.match(r, /payment_status', 'paid'/, 'só conta o que foi pago')

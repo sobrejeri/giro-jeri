@@ -277,6 +277,7 @@ export const api = {
   parkingReview:      (id, body) => request(`/api/parking/reservations/${id}/review`, { method: 'POST', body }),
   parkingExtendQuote: (id, body) => request(`/api/parking/reservations/${id}/extend/quote`, { method: 'POST', body }),
   parkingExtend:      (id, body) => request(`/api/parking/reservations/${id}/extend`, { method: 'POST', body }),
+  parkingRefundPreview: (id) => request(`/api/parking/reservations/${id}/refund-preview`),
   getBooking:    (id)   => request(`/api/bookings/${id}`),
   cancelBooking: (id, body) => request(`/api/bookings/${id}/cancel`, { method: 'POST', body }),
 

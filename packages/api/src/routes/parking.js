@@ -394,22 +394,55 @@ router.post('/reservations/:id/pay', authenticate, async (req, res, next) => {
   }
 })
 
-// Cancelar — dono (ou admin). Libera bloqueios de capacidade de forma idempotente.
+// Prévia da política de reembolso (antes de confirmar o cancelamento).
+router.get('/reservations/:id/refund-preview', authenticate, async (req, res, next) => {
+  try {
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, user_id, lot_id, status, payment_status, total_amount, start_at').eq('id', req.params.id).maybeSingle()
+    if (!r || (r.user_id !== req.user.id && !ehAdmin(req.user))) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    res.json(await avaliarReembolso(r))
+  } catch (err) { next(err) }
+})
+
+// Avalia a elegibilidade de reembolso por ANTECEDÊNCIA (cutoff configurável por
+// lot; sem número mágico). Não move dinheiro — só calcula.
+async function avaliarReembolso(r) {
+  if (r.payment_status !== 'paid') return { pago: false, elegivel: false, valor: 0 }
+  const { data: lot } = await supabase.from('parking_lots').select('refund_cutoff_min').eq('id', r.lot_id).maybeSingle()
+  const cutoffMin = Number(lot?.refund_cutoff_min ?? 1440)
+  const limite = new Date(r.start_at).getTime() - cutoffMin * 60_000
+  // Só reembolsa antes de entrar no pátio e dentro da janela de antecedência.
+  const elegivel = r.status === 'confirmed' && Date.now() <= limite
+  return { pago: true, elegivel, valor: elegivel ? Number(r.total_amount) : 0, cutoff_min: cutoffMin }
+}
+
+// Cancelar — dono (ou admin). Libera capacidade e aplica a política de reembolso
+// por antecedência (registra elegibilidade/valor; o estorno é processado à parte).
 router.post('/reservations/:id/cancel', authenticate, async (req, res, next) => {
   try {
-    const { data: r } = await supabase.from('parking_reservations').select('id, user_id, status').eq('id', req.params.id).maybeSingle()
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, user_id, lot_id, code, status, payment_status, total_amount, start_at').eq('id', req.params.id).maybeSingle()
     if (!r) return res.status(404).json({ error: 'Reserva não encontrada.' })
     if (r.user_id !== req.user.id && !ehAdmin(req.user)) return res.status(404).json({ error: 'Reserva não encontrada.' })
     const CANCELAVEL = ['awaiting_partner', 'accepted_awaiting_payment', 'confirmed']
     if (!CANCELAVEL.includes(r.status)) return res.status(409).json({ error: 'Esta reserva não pode ser cancelada agora.' })
+
+    const reembolso = await avaliarReembolso(r)
+
     // Libera holds/bloqueios da reserva (idempotente).
     await supabase.from('parking_capacity_blocks')
       .update({ status: 'released' }).eq('reservation_id', r.id).eq('status', 'active')
-    const { error } = await supabase.from('parking_reservations')
-      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', r.id)
+
+    const patch = { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    if (reembolso.pago) { patch.refund_status = reembolso.elegivel ? 'eligible' : 'denied'; patch.refund_amount = reembolso.valor }
+    let { error } = await supabase.from('parking_reservations').update(patch).eq('id', r.id)
+    // Tolera ausência da migration 113 (colunas de reembolso).
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      ;({ error } = await supabase.from('parking_reservations')
+        .update({ status: 'cancelled', cancelled_at: patch.cancelled_at, updated_at: patch.updated_at }).eq('id', r.id))
+    }
     if (error) throw error
-    res.json({ ok: true })
+    res.json({ ok: true, refund: reembolso })
   } catch (err) { next(err) }
 })
 

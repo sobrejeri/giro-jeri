@@ -615,6 +615,7 @@ function ParkingReservas() {
   const navigate = useNavigate()
   const [pinModal, setPinModal] = useState(null) // { code, pin, expires_at }
   const queryClient = useQueryClient()
+  const [cancelTarget, setCancelTarget] = useState(null)
   const { data } = useQuery({ queryKey: ['parking-my'], queryFn: () => api.parkingMyReservations(), refetchInterval: 15000 })
   const todas = data?.data || []
   const ativas = todas.filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
@@ -640,6 +641,7 @@ function ParkingReservas() {
         const mostraEntrada = r.entry_code && ['confirmed', 'in_lot', 'withdrawal_requested'].includes(r.status)
         const podeRetirar = ['in_lot', 'withdrawal_requested'].includes(r.status)
         const podeEstender = ['confirmed', 'in_lot'].includes(r.status) && r.payment_status === 'paid'
+        const podeCancelar = ['awaiting_partner', 'accepted_awaiting_payment', 'confirmed'].includes(r.status)
         return (
           <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="flex items-center justify-between gap-2">
@@ -686,6 +688,13 @@ function ParkingReservas() {
                 <Clock size={14} className="text-brand" /> Estender estadia
               </button>
             )}
+
+            {podeCancelar && (
+              <button onClick={() => setCancelTarget(r)}
+                className="mt-2 w-full text-center text-[12px] font-semibold text-red-500 py-1.5 active:scale-[0.98]">
+                Cancelar reserva
+              </button>
+            )}
           </div>
         )
       })}
@@ -696,7 +705,53 @@ function ParkingReservas() {
       ))}
 
       {pinModal && <WithdrawalPinModal data={pinModal} onClose={() => setPinModal(null)} />}
+      {cancelTarget && (
+        <ParkingCancelModal reserva={cancelTarget} onClose={() => setCancelTarget(null)}
+          onDone={() => { setCancelTarget(null); queryClient.invalidateQueries({ queryKey: ['parking-my'] }) }} />
+      )}
     </div>
+  )
+}
+
+// ── Cancelamento com prévia da política de reembolso ──────────────────────────
+function ParkingCancelModal({ reserva, onClose, onDone }) {
+  const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+  const { data: prev, isLoading } = useQuery({
+    queryKey: ['parking-refund', reserva.id],
+    queryFn: () => api.parkingRefundPreview(reserva.id),
+  })
+  const cancelar = useMutation({
+    mutationFn: () => api.parkingCancel(reserva.id),
+    onSuccess: () => onDone?.(),
+  })
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-[16px] font-extrabold text-gray-900">Cancelar reserva?</h3>
+        <p className="text-[12px] text-gray-500 font-mono mt-0.5">{reserva.code}</p>
+
+        <div className="my-4 rounded-2xl bg-gray-50 p-3 text-[13px]">
+          {isLoading ? (
+            <p className="text-gray-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Calculando reembolso…</p>
+          ) : !prev?.pago ? (
+            <p className="text-gray-600">Esta reserva ainda não foi paga — o cancelamento é gratuito.</p>
+          ) : prev.elegivel ? (
+            <p className="text-emerald-700">Você está dentro do prazo: reembolso de <strong>{money(prev.valor)}</strong> será processado.</p>
+          ) : (
+            <p className="text-amber-700">Fora do prazo de reembolso. O cancelamento libera a vaga, mas <strong>sem devolução</strong> do valor pago.</p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 font-semibold rounded-xl py-3 text-[14px]">Voltar</button>
+          <button onClick={() => cancelar.mutate()} disabled={cancelar.isPending}
+            className="flex-1 flex items-center justify-center gap-2 bg-red-500 text-white font-bold rounded-xl py-3 text-[14px] disabled:opacity-60">
+            {cancelar.isPending ? <Loader2 size={15} className="animate-spin" /> : null} Cancelar
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
