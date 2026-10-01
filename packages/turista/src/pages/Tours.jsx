@@ -21,7 +21,7 @@ import {
   ChevronLeft, ChevronRight, X, Info, Bus, Search,
   Flame, Sparkles, ShoppingCart, ChevronDown,
   ShieldCheck, MessageCircle, Lock, User as UserIcon,
-  Compass, Car, CheckCircle2, XCircle,
+  Compass, Car, CheckCircle2, XCircle, ParkingSquare,
 } from 'lucide-react'
 import FilterChip from '../components/tours/FilterChip'
 import SectionHeader from '../components/tours/SectionHeader'
@@ -904,6 +904,12 @@ export default function Tours() {
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
           >
             <Car size={15} /> Translados
+          </button>
+          <button
+            onClick={() => navigate('/estacionamento')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
+          >
+            <ParkingSquare size={15} /> Vagas
           </button>
         </div>
 

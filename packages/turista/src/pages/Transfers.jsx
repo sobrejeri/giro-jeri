@@ -20,7 +20,7 @@ import NotificationBell from '../components/NotificationBell'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
-  Plane, Compass, ShoppingCart, Heart,
+  Plane, Compass, ShoppingCart, Heart, ParkingSquare,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -897,6 +897,12 @@ export default function Transfers() {
             aria-current="page"
           >
             <Car size={15} /> Translados
+          </button>
+          <button
+            onClick={() => navigate('/estacionamento')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
+          >
+            <ParkingSquare size={15} /> Vagas
           </button>
         </div>
 

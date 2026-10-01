@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search } from 'lucide-react'
+import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search, Compass, Car } from 'lucide-react'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 
@@ -22,6 +22,21 @@ export default function Estacionamento() {
 
   return (
     <div className="px-4 pb-10 pt-3 space-y-4">
+      {/* Alternador Passeios | Translados | Vagas (mesma lojinha) */}
+      <div className="flex bg-gray-100 rounded-2xl p-1">
+        <button onClick={() => navigate('/passeios')}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform">
+          <Compass size={15} /> Passeios
+        </button>
+        <button onClick={() => navigate('/transfers')}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform">
+          <Car size={15} /> Translados
+        </button>
+        <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold bg-white text-brand shadow-sm" aria-current="page">
+          <ParkingSquare size={15} /> Vagas
+        </button>
+      </div>
+
       {/* Banner */}
       <div className="rounded-2xl bg-gradient-to-br from-brand to-orange-400 text-white p-5 shadow-sm">
         <h1 className="text-[22px] font-extrabold leading-tight">Seu carro seguro.<br />Você em Jeri.</h1>
