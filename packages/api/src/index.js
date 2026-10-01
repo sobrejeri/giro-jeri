@@ -25,6 +25,7 @@ import storiesRoutes  from './routes/stories.js';
 import establishmentsRoutes from './routes/establishments.js';
 import exploreRoutes  from './routes/explore.js';
 import notificationsRoutes from './routes/notifications.js';
+import parkingRoutes   from './routes/parking.js';
 import { regionsRouter } from './routes/regions.js';
 import { seasonsRouter } from './routes/seasons.js';
 import { partnerRouter } from './routes/partner.js';
@@ -206,6 +207,7 @@ app.use('/api/stories',   storiesRoutes);
 app.use('/api/establishments', establishmentsRoutes);
 app.use('/api/explore',   exploreRoutes);    // Explorar Turiva (mapa) — só admin por enquanto
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/parking',   parkingRoutes);     // estacionamento (vertical própria)
 
 // ── Erros ──────────────────────────────────────────────
 app.use(notFound);
