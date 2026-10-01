@@ -193,15 +193,30 @@ export default function EstacionamentoDetalhe() {
         {erro && <p className="text-[12px] text-red-500">{erro}</p>}
       </div>
 
-      {/* Ação fixa */}
-      <div className="fixed inset-x-0 bottom-[68px] px-4 pointer-events-none">
-        <div className="max-w-[430px] mx-auto pointer-events-auto">
-          <button onClick={adicionar}
-            className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform shadow-lg shadow-brand/30">
-            <ShoppingCart size={18} /> Adicionar ao carrinho
-          </button>
-        </div>
-      </div>
+      {/* Ação fixa — só libera com período válido, veículo e cotação pronta */}
+      {(() => {
+        const pronto = periodoOk && !!cot && !!vehicleType &&
+          !(cot?.disponibilidade && cot.disponibilidade.tem_vaga === false)
+        const faltam = []
+        if (!entradaD || !saidaD) faltam.push('período')
+        else if (!periodoOk) faltam.push('saída depois da entrada')
+        if (!vehicleType) faltam.push('veículo')
+        return (
+          <div className="fixed inset-x-0 bottom-[68px] px-4 pointer-events-none">
+            <div className="max-w-[430px] mx-auto pointer-events-auto">
+              {!pronto && faltam.length > 0 && (
+                <p className="text-[11px] text-amber-600 font-semibold text-center mb-1.5 bg-white/90 rounded-lg py-1">
+                  Falta: {faltam.join(' · ')}
+                </p>
+              )}
+              <button onClick={adicionar} disabled={!pronto}
+                className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform shadow-lg shadow-brand/30 disabled:opacity-50 disabled:active:scale-100">
+                <ShoppingCart size={18} /> {pronto ? `Adicionar ao carrinho · ${fmt(cot.total)}` : 'Adicionar ao carrinho'}
+              </button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
