@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode } from 'lucide-react'
 import { api } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import { PageSpinner } from '../components/ui/Spinner'
+
+// Caminho de cada seção no menu lateral (operador de estacionamento).
+const SECTION_PATH = {
+  inicio: '/estacionamento', fila: '/estacionamento/solicitacoes', reservas: '/estacionamento/reservas',
+  patio: '/estacionamento/patio', financeiro: '/estacionamento/financeiro', meulocal: '/estacionamento/meu-local',
+}
 
 // Redimensiona a imagem no cliente antes de enviar (padrão das outras telas).
 function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
@@ -39,9 +47,16 @@ const STATUS = {
 // ── Painel do estacionamento (parceiro) — núcleo operacional ──────────────────
 // Fila de solicitações (aceitar/recusar) e reservas em andamento. Entrada por
 // QR e retirada com PIN vêm nas próximas fases.
-export default function Estacionamento() {
+export default function Estacionamento({ section }) {
   const qc = useQueryClient()
-  const [aba, setAba] = useState('inicio')   // 'inicio' | 'fila' | 'reservas' | 'patio' | 'financeiro' | 'meulocal'
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  // Operador de estacionamento navega pelo MENU lateral (uma seção por rota);
+  // admin/tours (entrada única) continua com abas dentro da página.
+  const menuMode = !!section || (user?.user_type !== 'admin' && user?.operator_segment === 'parking')
+  const [aba, setAba] = useState('inicio')
+  const active = section || (menuMode ? (section || 'inicio') : aba)
+  const irPara = (sec) => { if (menuMode) navigate(SECTION_PATH[sec] || '/estacionamento'); else setAba(sec) }
   const [toast, setToast] = useState(null)
   const notify = (t, m, ms = 3500) => { setToast({ t, m }); setTimeout(() => setToast(null), ms) }
 
@@ -68,50 +83,38 @@ export default function Estacionamento() {
 
   if (isLoading) return <PageSpinner />
 
+  const TITULO = { inicio: 'Início', fila: 'Solicitações', reservas: 'Reservas', patio: 'Pátio', financeiro: 'Financeiro', meulocal: 'Meu local' }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <ParkingSquare size={20} className="text-brand" />
-        <h1 className="text-lg font-bold text-gray-900">Estacionamento</h1>
+        <h1 className="text-lg font-bold text-gray-900">{menuMode ? (TITULO[active] || 'Estacionamento') : 'Estacionamento'}</h1>
       </div>
 
-      {/* Abas */}
-      <div className="flex gap-2 flex-wrap">
-        <button onClick={() => setAba('inicio')}
-          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'inicio' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
-          Início
-        </button>
-        <button onClick={() => setAba('fila')}
-          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'fila' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
-          Solicitações <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{fila.length}</span>
-        </button>
-        <button onClick={() => setAba('reservas')}
-          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'reservas' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
-          Reservas <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{ativas.length}</span>
-        </button>
-        <button onClick={() => setAba('patio')}
-          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'patio' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
-          Pátio
-        </button>
-        <button onClick={() => setAba('financeiro')}
-          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'financeiro' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
-          Financeiro
-        </button>
-        <button onClick={() => setAba('meulocal')}
-          className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${aba === 'meulocal' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
-          <Settings size={13} /> Meu local
-        </button>
-      </div>
+      {/* Abas (só no modo página única — admin/tours). No menu lateral some. */}
+      {!menuMode && (
+        <div className="flex gap-2 flex-wrap">
+          {[['inicio', 'Início'], ['fila', `Solicitações`], ['reservas', 'Reservas'], ['patio', 'Pátio'], ['financeiro', 'Financeiro'], ['meulocal', 'Meu local']].map(([id, label]) => (
+            <button key={id} onClick={() => setAba(id)}
+              className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${active === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+              {id === 'meulocal' && <Settings size={13} />}{label}
+              {id === 'fila' && <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{fila.length}</span>}
+              {id === 'reservas' && <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{ativas.length}</span>}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {aba === 'inicio' ? (
-        <InicioDashboard onGo={setAba} filaCount={fila.length} />
-      ) : aba === 'patio' ? (
+      {active === 'inicio' ? (
+        <InicioDashboard onGo={irPara} filaCount={fila.length} />
+      ) : active === 'patio' ? (
         <PatioView notify={notify} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
-      ) : aba === 'financeiro' ? (
+      ) : active === 'financeiro' ? (
         <FinanceiroParking />
-      ) : aba === 'meulocal' ? (
+      ) : active === 'meulocal' ? (
         <MeuEstacionamento notify={notify} />
-      ) : aba === 'fila' ? (
+      ) : active === 'fila' ? (
         <SolicitacoesView reservas={reservas} aceitar={aceitar} recusar={recusar} />
       ) : (
         <ReservasView reservas={reservas} />

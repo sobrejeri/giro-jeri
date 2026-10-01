@@ -68,6 +68,11 @@ export default function App() {
         <Route path="cotacoes"   element={<Navigate to="/reservas" replace />} />
         <Route path="despacho"   element={<Despacho />} />
         <Route path="estacionamento" element={<EstacionamentoPainel />} />
+        <Route path="estacionamento/solicitacoes" element={<EstacionamentoPainel section="fila" />} />
+        <Route path="estacionamento/reservas"     element={<EstacionamentoPainel section="reservas" />} />
+        <Route path="estacionamento/patio"        element={<EstacionamentoPainel section="patio" />} />
+        <Route path="estacionamento/financeiro"   element={<EstacionamentoPainel section="financeiro" />} />
+        <Route path="estacionamento/meu-local"    element={<EstacionamentoPainel section="meulocal" />} />
         <Route path="veiculos"   element={<Veiculos />} />
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="passeios"   element={<Passeios />} />

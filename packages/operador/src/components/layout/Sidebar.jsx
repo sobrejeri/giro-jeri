@@ -1,6 +1,17 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare } from 'lucide-react'
+import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare, Home, Wallet, Settings } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+
+// Menu do operador de ESTACIONAMENTO (segmento parking) — espelha o mockup.
+const NAV_PARKING = [
+  { to: '/estacionamento',               icon: Home,          label: 'Início',       end: true },
+  { to: '/estacionamento/solicitacoes',  icon: CalendarCheck, label: 'Solicitações' },
+  { to: '/estacionamento/reservas',      icon: ParkingSquare, label: 'Reservas'     },
+  { to: '/estacionamento/patio',         icon: Car,           label: 'Pátio'        },
+  { to: '/estacionamento/financeiro',    icon: Wallet,        label: 'Financeiro'   },
+  { to: '/estacionamento/meu-local',     icon: Settings,      label: 'Meu local'    },
+  { to: '/perfil',                       icon: UserCircle,    label: 'Meu Perfil'   },
+]
 
 // seg: em qual segmento o item aparece — 'tours' (passeios/transfers), 'parking'
 // (estacionamento) ou 'both'. O admin vê tudo.
@@ -20,8 +31,10 @@ const NAV = [
 export default function Sidebar({ open = false, onClose = () => {} }) {
   const { user, logout } = useAuth()
   const isAdmin = user?.user_type === 'admin'
-  const segmento = user?.operator_segment === 'parking' ? 'parking' : 'tours'
-  const nav = NAV.filter((i) => isAdmin || i.seg === 'both' || i.seg === segmento)
+  const ehParking = !isAdmin && user?.operator_segment === 'parking'
+  const segmento = ehParking ? 'parking' : 'tours'
+  // Operador de estacionamento: menu dedicado (seções como itens). Demais: menu padrão.
+  const nav = ehParking ? NAV_PARKING : NAV.filter((i) => isAdmin || i.seg === 'both' || i.seg === segmento)
 
   return (
     <>
@@ -51,10 +64,11 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
-          {nav.map(({ to, icon: Icon, label }) => (
+          {nav.map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}
+              end={end}
               onClick={onClose}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
