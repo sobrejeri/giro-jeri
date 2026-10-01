@@ -159,13 +159,23 @@ router.post('/reservations', authenticate, async (req, res, next) => {
 // Reservas do CLIENTE (as próprias).
 router.get('/reservations', authenticate, async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    const COLS = 'id, code, lot_id, vehicle_type, plate, start_at, end_at, units, total_amount, status, payment_status, entry_code, entered_at, completed_at, acceptance_expires_at, payment_deadline_at, created_at'
+    // Tenta embutir se a reserva já foi avaliada (migration 111); tolera ausência.
+    let { data, error } = await supabase
       .from('parking_reservations')
-      .select('id, code, lot_id, vehicle_type, plate, start_at, end_at, units, total_amount, status, payment_status, entry_code, entered_at, acceptance_expires_at, payment_deadline_at, created_at')
+      .select(`${COLS}, parking_reviews(rating)`)
       .eq('user_id', req.user.id)
       .order('created_at', { ascending: false })
+    if (error && (error.code === '42P01' || error.code === '42703' || error.code === 'PGRST200')) {
+      ;({ data, error } = await supabase.from('parking_reservations').select(COLS)
+        .eq('user_id', req.user.id).order('created_at', { ascending: false }))
+    }
     if (error) throw error
-    res.json({ data: data || [] })
+    const out = (data || []).map(({ parking_reviews, completed_at, ...r }) => ({
+      ...r, completed_at,
+      reviewed: Array.isArray(parking_reviews) ? parking_reviews.length > 0 : undefined,
+    }))
+    res.json({ data: out })
   } catch (err) { next(err) }
 })
 
@@ -385,6 +395,46 @@ router.post('/reservations/:id/cancel', authenticate, async (req, res, next) => 
       .eq('id', r.id)
     if (error) throw error
     res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+// ── Avaliação (fase 8) ───────────────────────────────────────────────────────
+// Resumo público do lot (média + total). Sem dados de quem avaliou.
+router.get('/lots/:id/reviews', authenticate, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase.from('parking_reviews')
+      .select('rating, comment, created_at').eq('lot_id', req.params.id)
+      .order('created_at', { ascending: false }).limit(20)
+    if (error) throw error
+    const notas = (data || []).map((r) => r.rating)
+    const media = notas.length ? Math.round((notas.reduce((a, b) => a + b, 0) / notas.length) * 10) / 10 : null
+    res.json({ media, total: notas.length, ultimas: data || [] })
+  } catch (err) { next(err) }
+})
+
+// Avaliar — DONO da reserva, só concluída, uma única vez (UNIQUE na reserva).
+const reviewSchema = z.object({
+  rating:  z.number().int().min(1).max(5),
+  comment: z.string().max(500).optional().nullable(),
+})
+router.post('/reservations/:id/review', authenticate, async (req, res, next) => {
+  try {
+    const parsed = reviewSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Informe uma nota de 1 a 5.' })
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, user_id, lot_id, status').eq('id', req.params.id).maybeSingle()
+    if (!r) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (r.status !== 'completed') return res.status(409).json({ error: 'Você só avalia depois de concluir a estadia.' })
+    const { error } = await supabase.from('parking_reviews').insert({
+      reservation_id: r.id, lot_id: r.lot_id, user_id: req.user.id,
+      rating: parsed.data.rating, comment: parsed.data.comment || null,
+    })
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Esta reserva já foi avaliada.' })
+      throw error
+    }
+    res.status(201).json({ ok: true })
   } catch (err) { next(err) }
 })
 

@@ -614,8 +614,12 @@ const PARK_STATUS = {
 function ParkingReservas() {
   const navigate = useNavigate()
   const [pinModal, setPinModal] = useState(null) // { code, pin, expires_at }
+  const queryClient = useQueryClient()
   const { data } = useQuery({ queryKey: ['parking-my'], queryFn: () => api.parkingMyReservations(), refetchInterval: 15000 })
-  const ativas = (data?.data || []).filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
+  const todas = data?.data || []
+  const ativas = todas.filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
+  // Concluídas e ainda sem avaliação (fecha o ciclo de reputação).
+  const aAvaliar = todas.filter((r) => r.status === 'completed' && r.reviewed === false)
 
   const pedirRetirada = useMutation({
     mutationFn: (id) => api.parkingWithdrawal(id),
@@ -625,7 +629,7 @@ function ParkingReservas() {
     },
   })
 
-  if (ativas.length === 0) return null
+  if (ativas.length === 0 && aAvaliar.length === 0) return null
   const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
   const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
   return (
@@ -676,7 +680,44 @@ function ParkingReservas() {
         )
       })}
 
+      {aAvaliar.map((r) => (
+        <ParkingReviewCard key={`rev-${r.id}`} reserva={r}
+          onDone={() => queryClient.invalidateQueries({ queryKey: ['parking-my'] })} />
+      ))}
+
       {pinModal && <WithdrawalPinModal data={pinModal} onClose={() => setPinModal(null)} />}
+    </div>
+  )
+}
+
+// ── Cartão de avaliação do estacionamento (pós-conclusão) ─────────────────────
+function ParkingReviewCard({ reserva, onDone }) {
+  const [nota, setNota] = useState(0)
+  const [comentario, setComentario] = useState('')
+  const enviar = useMutation({
+    mutationFn: () => api.parkingReview(reserva.id, { rating: nota, comment: comentario.trim() || null }),
+    onSuccess: () => onDone?.(),
+  })
+  return (
+    <div className="bg-white rounded-2xl border border-brand/20 shadow-sm p-4">
+      <p className="text-[13px] font-semibold text-gray-900 flex items-center gap-1.5">
+        <ParkingSquare size={14} className="text-brand" /> Como foi o estacionamento?
+      </p>
+      <p className="text-[11px] text-gray-400 font-mono mt-0.5">{reserva.code}</p>
+      <div className="flex items-center gap-1.5 my-3">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} onClick={() => setNota(n)} aria-label={`${n} estrela(s)`}>
+            <Star size={28} className={n <= nota ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
+          </button>
+        ))}
+      </div>
+      <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows={2} maxLength={500}
+        placeholder="Deixe um comentário (opcional)"
+        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-[13px] focus:border-brand focus:ring-1 focus:ring-brand outline-none resize-none" />
+      <button onClick={() => enviar.mutate()} disabled={nota === 0 || enviar.isPending}
+        className="mt-2 w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] disabled:opacity-50">
+        {enviar.isPending ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />} Enviar avaliação
+      </button>
     </div>
   )
 }

@@ -48,6 +48,13 @@ test('função SQL de consumo é atômica, com rate-limit e uso único', () => {
   assert.match(mig, /pin_hash = ANY\(p_candidate_hashes\)/, 'compara por hash, não recebe PIN em claro')
 })
 
+test('avaliar: só o dono, só concluída, uma única vez', () => {
+  const r = rota("router.post('/reservations/:id/review'")
+  assert.match(r, /r\.user_id !== req\.user\.id/, 'só o dono avalia')
+  assert.match(r, /status !== 'completed'/, 'só depois de concluir')
+  assert.match(r, /23505[\s\S]*já foi avaliada/, 'UNIQUE impede avaliar duas vezes')
+})
+
 test('financeiro do parceiro: só reservas pagas, comissão no servidor, sem banco', () => {
   const r = rota("router.get('/partner/financial'")
   assert.match(r, /payment_status', 'paid'/, 'só conta o que foi pago')
