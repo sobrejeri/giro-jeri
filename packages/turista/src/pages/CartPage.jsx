@@ -1246,7 +1246,11 @@ export default function CartPage() {
       // Só estacionamento no carrinho: encerra aqui (cada um já virou solicitação).
       if (outros.length === 0) {
         const falhou = parkingItems.some((it) => res[it.id]?.status === 'error')
-        if (falhou) { setSubmitError('Alguns itens não foram enviados. Tente de novo.'); return }
+        if (falhou) {
+          const msg = parkingItems.map((it) => res[it.id]?.message).find(Boolean)
+          setSubmitError(msg ? `Não foi possível enviar: ${msg}` : 'Alguns itens não foram enviados. Tente de novo.')
+          return
+        }
         navigate('/minhas-reservas')
         return
       }
