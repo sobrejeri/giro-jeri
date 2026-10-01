@@ -163,19 +163,18 @@ router.post('/reservations', authenticate, async (req, res, next) => {
 router.get('/reservations', authenticate, async (req, res, next) => {
   try {
     const COLS = 'id, code, lot_id, vehicle_type, plate, start_at, end_at, units, total_amount, status, payment_status, entry_code, entered_at, completed_at, acceptance_expires_at, payment_deadline_at, created_at'
-    // Tenta embutir se a reserva já foi avaliada (migration 111); tolera ausência.
-    let { data, error } = await supabase
-      .from('parking_reservations')
-      .select(`${COLS}, parking_reviews(rating)`)
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false })
+    // Embute nome/foto do estacionamento e flag de avaliação; tolera ausência.
+    const mk = (sel) => supabase.from('parking_reservations').select(sel).eq('user_id', req.user.id).order('created_at', { ascending: false })
+    let { data, error } = await mk(`${COLS}, parking_lots(name, photos), parking_reviews(rating)`)
     if (error && (error.code === '42P01' || error.code === '42703' || error.code === 'PGRST200')) {
-      ;({ data, error } = await supabase.from('parking_reservations').select(COLS)
-        .eq('user_id', req.user.id).order('created_at', { ascending: false }))
+      ;({ data, error } = await mk(`${COLS}, parking_lots(name, photos)`))
+      if (error && (error.code === '42P01' || error.code === '42703' || error.code === 'PGRST200')) ({ data, error } = await mk(COLS))
     }
     if (error) throw error
-    const out = (data || []).map(({ parking_reviews, completed_at, ...r }) => ({
+    const out = (data || []).map(({ parking_reviews, parking_lots, completed_at, ...r }) => ({
       ...r, completed_at,
+      lot_name: parking_lots?.name || null,
+      lot_photo: Array.isArray(parking_lots?.photos) ? parking_lots.photos[0] : null,
       reviewed: Array.isArray(parking_reviews) ? parking_reviews.length > 0 : undefined,
     }))
     res.json({ data: out })

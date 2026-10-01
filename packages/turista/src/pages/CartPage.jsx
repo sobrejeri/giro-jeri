@@ -1759,6 +1759,9 @@ function ParkingEditSheet({ item, onClose, onSave }) {
   }
 
   const campo = 'w-full border border-gray-200 rounded-lg px-3 h-11 text-sm outline-none focus:border-brand'
+  // Estacionamento é 24h → lista de meias horas (sem roda nativa type=time).
+  const horas = []
+  for (let m = 0; m < 24 * 60; m += 30) horas.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`)
   return createPortal(
     <div className="fixed inset-0 z-[100] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -1773,13 +1776,17 @@ function ParkingEditSheet({ item, onClose, onSave }) {
               <input type="date" value={entradaD} onChange={(e) => setEntradaD(e.target.value)} className={`${campo} mt-1`} />
             </label>
             <label className="text-[11px] font-semibold text-gray-500">Horário
-              <input type="time" value={entradaH} onChange={(e) => setEntradaH(e.target.value)} className={`${campo} mt-1`} />
+              <select value={entradaH} onChange={(e) => setEntradaH(e.target.value)} className={`${campo} mt-1`}>
+                {horas.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
             </label>
             <label className="text-[11px] font-semibold text-gray-500">Saída
               <input type="date" value={saidaD} onChange={(e) => setSaidaD(e.target.value)} className={`${campo} mt-1`} />
             </label>
             <label className="text-[11px] font-semibold text-gray-500">Horário
-              <input type="time" value={saidaH} onChange={(e) => setSaidaH(e.target.value)} className={`${campo} mt-1`} />
+              <select value={saidaH} onChange={(e) => setSaidaH(e.target.value)} className={`${campo} mt-1`}>
+                {horas.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
             </label>
           </div>
           {tarifas.length > 0 && (
