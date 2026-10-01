@@ -6,7 +6,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   Star, Heart, ChevronDown, ChevronRight, ArrowRight, MapPin,
   Car, Bus, Flame, Sun, Sunset, Waves, Percent, CalendarCheck,
-  Clock, Megaphone, Search,
+  Clock, Megaphone, Search, ParkingSquare,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { precoDeEntrada } from '../lib/precoCartao'
@@ -443,6 +443,26 @@ export default function Home() {
               </span>
             </button>
           </div>
+
+          {/* Estacionamento — terceira categoria */}
+          <button
+            onClick={() => navigate('/estacionamento')}
+            className="relative w-full h-[96px] rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-700 to-teal-500 p-3.5 text-left active:scale-[0.98] transition-transform mt-3"
+          >
+            <Dunas className="absolute bottom-0 right-0 w-[70%] h-[60%] text-white/15" preserveAspectRatio="none" />
+            <div className="relative flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <ParkingSquare size={21} className="text-white" />
+              </div>
+              <div>
+                <p className="text-white text-[18px] font-extrabold leading-none">Estacionamento</p>
+                <p className="text-white/85 text-[11px] mt-1.5 leading-snug">Seu carro seguro enquanto você aproveita Jeri</p>
+              </div>
+            </div>
+            <span className="absolute bottom-3.5 right-3.5 w-7 h-7 rounded-full bg-white flex items-center justify-center">
+              <ChevronRight size={15} className="text-teal-700" strokeWidth={2.5} />
+            </span>
+          </button>
 
           {/* ── Mais procurados ──────────────── */}
           <div>

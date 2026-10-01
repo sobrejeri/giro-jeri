@@ -263,6 +263,16 @@ export const api = {
   // Reservas
   createBooking: (body) => request('/api/bookings',     { method: 'POST', body }),
   getMyBookings: ()     => request('/api/bookings'),
+
+  // ── Estacionamento (vertical própria) ──────────────────────────
+  parkingLots:        (regionId) => request(`/api/parking/lots${regionId ? `?region_id=${regionId}` : ''}`),
+  parkingLot:         (id)   => request(`/api/parking/lots/${id}`),
+  parkingQuote:       (body) => request('/api/parking/quote', { method: 'POST', body }),
+  parkingReserve:     (body) => request('/api/parking/reservations', { method: 'POST', body }),
+  parkingMyReservations: () => request('/api/parking/reservations'),
+  parkingReservation: (id)   => request(`/api/parking/reservations/${id}`),
+  parkingPay:         (id, body) => request(`/api/parking/reservations/${id}/pay`, { method: 'POST', body }),
+  parkingCancel:      (id)   => request(`/api/parking/reservations/${id}/cancel`, { method: 'POST', body: {} }),
   getBooking:    (id)   => request(`/api/bookings/${id}`),
   cancelBooking: (id, body) => request(`/api/bookings/${id}/cancel`, { method: 'POST', body }),
 

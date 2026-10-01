@@ -31,6 +31,14 @@ export function checkoutStateFor(item) {
 // Livre: a prévia fica no carrinho, mas só dá pra solicitar quando todos os
 // dados de todos os itens estão completos).
 export function itemMissing(item) {
+  // Estacionamento tem regra própria: precisa de período (entrada/saída) e
+  // veículo. Não cai nas regras de passeio/translado.
+  if (item.kind === 'parking') {
+    const miss = []
+    if (!item.start_at || !item.end_at) miss.push('período')
+    if (!item.vehicle_type) miss.push('veículo')
+    return miss
+  }
   const miss = []
   if (!item.dateIso) miss.push('data')
   if (!item.time) miss.push('horário')

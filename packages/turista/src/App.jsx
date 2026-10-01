@@ -15,6 +15,8 @@ import PerfilOperador  from './pages/PerfilOperador'
 import Tours           from './pages/Tours'
 import TourDetail      from './pages/TourDetail'
 import Transfers       from './pages/Transfers'
+import Estacionamento        from './pages/Estacionamento'
+import EstacionamentoDetalhe from './pages/EstacionamentoDetalhe'
 import Bookings        from './pages/Bookings'
 import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
@@ -122,6 +124,8 @@ export default function App() {
         <Route path="passeios"            element={<Tours />} />
         <Route path="passeios/:id"        element={<TourDetail />} />
         <Route path="transfers"           element={<Transfers />} />
+        <Route path="estacionamento"      element={<Estacionamento />} />
+        <Route path="estacionamento/:id"  element={<EstacionamentoDetalhe />} />
         <Route path="carrinho"            element={<CartPage />} />
         <Route path="avaliacoes"          element={<Avaliacoes />} />
         <Route path="favoritos"           element={<Favoritos />} />

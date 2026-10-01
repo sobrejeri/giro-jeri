@@ -998,6 +998,21 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
 function CartItemDetails({ item }) {
   const { t } = useTranslation()
   const isTransfer = item.kind === 'transfer'
+
+  // Estacionamento tem detalhe próprio (período + veículo + diárias).
+  if (item.kind === 'parking') {
+    const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
+    return (
+      <div className="px-3 pb-3 border-t border-gray-50">
+        <div className="pt-3 space-y-1.5 text-[12.5px] text-gray-600">
+          <p className="inline-flex items-center gap-1.5"><MapPin size={12} className="text-brand shrink-0" /> {item.region_name || 'Jericoacoara'}</p>
+          <p className="inline-flex items-center gap-1.5"><Clock size={12} className="text-brand shrink-0" /> {dt(item.start_at)} → {dt(item.end_at)}</p>
+          <p className="capitalize">{item.vehicle_type} · {item.diarias} diária(s){item.plate ? ` · ${item.plate}` : ''}</p>
+        </div>
+      </div>
+    )
+  }
+
   const { data: tour, isLoading } = useQuery({
     queryKey: ['cart-item-detail', item.id],
     queryFn:  () => api.getTour(item.id),
@@ -1206,13 +1221,43 @@ export default function CartPage() {
     snapshot.forEach((it) => { res[it.id] = { status: 'sending' } })
     setResults({ ...res })
     try {
+      // Estacionamento é vertical própria: cada item vira uma SOLICITAÇÃO
+      // INDEPENDENTE pelo endpoint do estacionamento (sem combo/grupo). Os
+      // demais (passeio/translado) seguem pelo carrinho universal.
+      const parkingItems = snapshot.filter((i) => i.kind === 'parking')
+      const outros       = snapshot.filter((i) => i.kind !== 'parking')
+
+      for (const it of parkingItems) {
+        try {
+          await api.parkingReserve({
+            lot_id: it.lot_id, vehicle_type: it.vehicle_type,
+            start_at: it.start_at, end_at: it.end_at,
+            plate: it.plate || undefined,
+            batch_ref: it.id, // só rastreio — não cria conjunto
+          })
+          res[it.id] = { status: 'ok' }
+          removeItem(it.id)
+        } catch (e) {
+          res[it.id] = { status: 'error', message: e?.message }
+        }
+      }
+      setResults({ ...res })
+
+      // Só estacionamento no carrinho: encerra aqui (cada um já virou solicitação).
+      if (outros.length === 0) {
+        const falhou = parkingItems.some((it) => res[it.id]?.status === 'error')
+        if (falhou) { setSubmitError('Alguns itens não foram enviados. Tente de novo.'); return }
+        navigate('/minhas-reservas')
+        return
+      }
+
       // Carrinho universal: 1 chamada → N reservas no MESMO grupo (atômico).
       // Com link de operador ativo, o grupo inteiro nasce atribuído a ela.
       const partner = getPartnerAttribution()
       const affiliate = getAffiliateAttribution()
       const preferredOp = getPreferredOp()
       const created = await api.cartRequest(
-        snapshot.map((it) => ({
+        outros.map((it) => ({
           ...requestPayloadFor(it),
           ...(appliedCoupon && couponEligible(it) ? { coupon_code: appliedCoupon.code } : {}),
           // Prioridade da lojinha (janela de 45s) — só quando não é venda direta.
@@ -1230,7 +1275,7 @@ export default function CartPage() {
         if (!byService.has(b.service_id)) byService.set(b.service_id, [])
         byService.get(b.service_id).push(b)
       }
-      for (const it of snapshot) {
+      for (const it of outros) {
         const b = byService.get(it.id)?.shift()
         res[it.id] = { status: 'ok', code: b?.booking_code }
         removeItem(it.id)
@@ -1243,9 +1288,9 @@ export default function CartPage() {
       const bookings = created?.bookings || []
       if (bookings.length) {
         const primeiro = bookings[0]
-        const itemPrim = snapshot.find((it) => it.id === primeiro.service_id) || snapshot[0]
+        const itemPrim = outros.find((it) => it.id === primeiro.service_id) || outros[0]
         const batchResults = bookings.map((b) => {
-          const it = snapshot.find((x) => x.id === b.service_id)
+          const it = outros.find((x) => x.id === b.service_id)
           return {
             booking_code: b.booking_code,
             booking_id:   b.booking_id || b.id,
@@ -1339,11 +1384,19 @@ export default function CartPage() {
                       {st?.status === 'error' && <AlertTriangle size={16} className="text-red-500 shrink-0" />}
                     </div>
 
-                    <div className="flex items-center gap-2.5 mt-1 text-[11px] text-gray-500 flex-wrap">
-                      <span className="inline-flex items-center gap-1"><Calendar size={10} className="text-brand" />{dayLabel(item.dateIso)}</span>
-                      <span className="inline-flex items-center gap-1"><Clock size={10} className="text-brand" />{item.time || '—'}</span>
-                      <span className="inline-flex items-center gap-1"><Users size={10} className="text-brand" />{item.people}</span>
-                    </div>
+                    {item.kind === 'parking' ? (
+                      <div className="flex items-center gap-2.5 mt-1 text-[11px] text-gray-500 flex-wrap">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">Estacionamento</span>
+                        <span className="inline-flex items-center gap-1 capitalize"><Car size={10} className="text-brand" />{item.vehicle_type}</span>
+                        <span className="inline-flex items-center gap-1">{item.diarias} diária(s)</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2.5 mt-1 text-[11px] text-gray-500 flex-wrap">
+                        <span className="inline-flex items-center gap-1"><Calendar size={10} className="text-brand" />{dayLabel(item.dateIso)}</span>
+                        <span className="inline-flex items-center gap-1"><Clock size={10} className="text-brand" />{item.time || '—'}</span>
+                        <span className="inline-flex items-center gap-1"><Users size={10} className="text-brand" />{item.people}</span>
+                      </div>
+                    )}
                     {item.vehicles?.length > 0 && (
                       <p className="text-[11.5px] text-gray-600 mt-1 truncate">
                         {item.vehicles.filter((v) => v.qty > 0).map((v) => `${v.qty}x ${v.name}`).join(' + ')}
@@ -1381,7 +1434,7 @@ export default function CartPage() {
                     </span>
                     {!batch && (
                       <button
-                        onClick={() => abrirEditor(item, null)}
+                        onClick={() => item.kind === 'parking' ? navigate(`/estacionamento/${item.lot_id}`) : abrirEditor(item, null)}
                         className="inline-flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border border-brand/30 text-brand active:scale-95 transition-transform"
                       >
                         <Pencil size={12} /> {t('cartPg.card.edit')}
