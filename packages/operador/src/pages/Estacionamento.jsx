@@ -852,12 +852,10 @@ function WalkinModal({ notify, onClose, onDone }) {
   )
 }
 
-// Botão de leitura de QR (usa BarcodeDetector nativo; some onde não há suporte,
-// ex.: iOS Safari — aí o código é digitado à mão, que sempre funciona).
+// Botão de leitura de QR — funciona em qualquer aparelho: usa BarcodeDetector
+// nativo quando há (Android/Chrome) e cai no jsQR (JS puro) no iOS/Safari.
 function ScanQRButton({ onDetected }) {
   const [aberto, setAberto] = useState(false)
-  const suporta = typeof window !== 'undefined' && 'BarcodeDetector' in window
-  if (!suporta) return null
   return (
     <>
       <button type="button" onClick={() => setAberto(true)}
@@ -871,26 +869,39 @@ function ScanQRButton({ onDetected }) {
 
 function QRScannerModal({ onClose, onDetected }) {
   const videoRef = useRef(null)
+  const canvasRef = useRef(null)
   const [erro, setErro] = useState('')
   useEffect(() => {
-    let stream, raf, parado = false, detector
+    let stream, raf, parado = false, detector, jsQR
+    const emitir = (v) => { if (!parado && v) { parado = true; onDetected(String(v)) } }
     async function start() {
       try {
-        detector = new window.BarcodeDetector({ formats: ['qr_code'] })
+        if ('BarcodeDetector' in window) { try { detector = new window.BarcodeDetector({ formats: ['qr_code'] }) } catch { detector = null } }
+        if (!detector) { jsQR = (await import('jsqr')).default }
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        if (parado) return
+        if (parado) { stream.getTracks().forEach((t) => t.stop()); return }
         const v = videoRef.current
-        if (v) { v.srcObject = stream; await v.play() }
+        if (v) { v.srcObject = stream; v.setAttribute('playsinline', 'true'); await v.play() }
         const tick = async () => {
           if (parado || !videoRef.current) return
           try {
-            const codes = await detector.detect(videoRef.current)
-            if (codes && codes[0]?.rawValue) { onDetected(codes[0].rawValue); return }
+            if (detector) {
+              const codes = await detector.detect(videoRef.current)
+              if (codes && codes[0]?.rawValue) return emitir(codes[0].rawValue)
+            } else if (jsQR && videoRef.current.videoWidth) {
+              const c = canvasRef.current, vid = videoRef.current
+              c.width = vid.videoWidth; c.height = vid.videoHeight
+              const ctx = c.getContext('2d', { willReadFrequently: true })
+              ctx.drawImage(vid, 0, 0, c.width, c.height)
+              const img = ctx.getImageData(0, 0, c.width, c.height)
+              const r = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+              if (r?.data) return emitir(r.data)
+            }
           } catch { /* frame sem leitura */ }
           raf = requestAnimationFrame(tick)
         }
         raf = requestAnimationFrame(tick)
-      } catch (e) { setErro('Não foi possível abrir a câmera.') }
+      } catch { setErro('Não foi possível abrir a câmera. Use o código manualmente.') }
     }
     start()
     return () => { parado = true; if (raf) cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach((t) => t.stop()) }
@@ -900,8 +911,13 @@ function QRScannerModal({ onClose, onDetected }) {
       <div className="bg-white rounded-3xl w-full max-w-sm p-4 text-center" onClick={(e) => e.stopPropagation()}>
         <p className="font-bold text-gray-900 mb-2">Escanear QR da reserva</p>
         {erro ? <p className="text-[13px] text-red-500 py-8">{erro}</p> : (
-          <video ref={videoRef} className="w-full rounded-xl bg-black aspect-square object-cover" muted playsInline />
+          <div className="relative">
+            <video ref={videoRef} className="w-full rounded-xl bg-black aspect-square object-cover" muted playsInline />
+            <div className="absolute inset-6 border-2 border-white/70 rounded-xl pointer-events-none" />
+          </div>
         )}
+        <canvas ref={canvasRef} className="hidden" />
+        <p className="text-[12px] text-gray-400 mt-2">Aponte para o QR do cliente.</p>
         <button onClick={onClose} className="mt-3 w-full border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
       </div>
     </div>
