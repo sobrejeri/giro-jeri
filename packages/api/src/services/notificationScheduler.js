@@ -153,7 +153,53 @@ async function runServiceReminders() {
   }
 }
 
+// Prazos do ESTACIONAMENTO: expira solicitações sem aceite e reservas aceitas
+// sem pagamento, liberando a capacidade. O próprio UPDATE condicional (eq status
+// + lte prazo) é a trava: só uma passada transiciona cada reserva, sem duplicar.
+async function runParkingDeadlines() {
+  const agora = new Date().toISOString()
+
+  // 1) Aguardando aceite com prazo vencido → expired_no_answer (avisa o cliente).
+  const { data: semAceite } = await supabase
+    .from('parking_reservations')
+    .update({ status: 'expired_no_answer', updated_at: agora })
+    .eq('status', 'awaiting_partner')
+    .lte('acceptance_expires_at', agora)
+    .not('acceptance_expires_at', 'is', null)
+    .select('id, user_id, code')
+  for (const r of semAceite || []) {
+    if (r.user_id && await claim(r.user_id, 'parking_expired_answer', r.id)) {
+      await notifyUser({
+        userId: r.user_id, templateKey: 'parking_expired',
+        title: 'Reserva de vaga expirada',
+        body: `O estacionamento não respondeu a tempo (${r.code}). Tente outro ou um novo horário.`,
+      })
+    }
+  }
+
+  // 2) Aceita sem pagamento no prazo → expired_no_payment + libera capacidade.
+  const { data: semPgto } = await supabase
+    .from('parking_reservations')
+    .update({ status: 'expired_no_payment', updated_at: agora })
+    .eq('status', 'accepted_awaiting_payment')
+    .lte('payment_deadline_at', agora)
+    .not('payment_deadline_at', 'is', null)
+    .select('id, user_id, code')
+  for (const r of semPgto || []) {
+    await supabase.from('parking_capacity_blocks')
+      .update({ status: 'released' }).eq('reservation_id', r.id).eq('status', 'active')
+    if (r.user_id && await claim(r.user_id, 'parking_expired_payment', r.id)) {
+      await notifyUser({
+        userId: r.user_id, templateKey: 'parking_expired',
+        title: 'Prazo de pagamento esgotado',
+        body: `O prazo para pagar a vaga (${r.code}) terminou e a reserva foi liberada.`,
+      })
+    }
+  }
+}
+
 async function tick() {
+  try { await runParkingDeadlines() } catch (e) { console.error('[scheduler] parking-deadlines:', e.message) }
   try { await runServiceReminders() } catch (e) { console.error('[scheduler] service-soon:', e.message) }
   try { await runCartReminders() } catch (e) { console.error('[scheduler] cart:', e.message) }
   try { await runCartPending() } catch (e) { console.error('[scheduler] cart-pending:', e.message) }

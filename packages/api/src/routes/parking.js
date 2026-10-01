@@ -294,6 +294,21 @@ router.post('/reservations/:id/accept', authenticate, async (req, res, next) => 
       p_is_admin: ehAdmin(req.user),
     })
     if (error) throw error
+    if (data?.ok) {
+      // Avisa o cliente que pode pagar (melhor-esforço; não derruba o aceite).
+      try {
+        const { notifyUser } = await import('../services/notify.js')
+        const { data: r } = await supabase.from('parking_reservations')
+          .select('user_id, code').eq('id', req.params.id).maybeSingle()
+        if (r?.user_id) {
+          await notifyUser({
+            userId: r.user_id, templateKey: 'parking_accepted',
+            title: 'Vaga aceita! Pague para confirmar ✅',
+            body: `O estacionamento aceitou sua reserva (${r.code}). Pague agora para garantir a vaga.`,
+          })
+        }
+      } catch { /* notificação é opcional */ }
+    }
     if (!data?.ok) {
       const map = { not_found: 404, lot_not_found: 404, forbidden: 403, bad_state: 409, no_capacity: 409 }
       const code = map[data?.error] || 400

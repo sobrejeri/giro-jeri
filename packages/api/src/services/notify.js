@@ -19,6 +19,10 @@ export const DEFAULT_TEMPLATES = {
   // Lembrete "o serviço está próximo" (cliente e operador). O texto real é
   // montado no código com o horário e o código da reserva.
   service_soon:  { enabled: true, title: 'Seu serviço começa em breve ⏰', body: 'Seu passeio/transfer começa em breve. Prepare-se!' },
+  // Estacionamento: reserva expirada (sem aceite ou sem pagamento no prazo). O
+  // texto real é montado no scheduler com o código da reserva.
+  parking_expired: { enabled: true, title: 'Reserva de vaga expirada', body: 'Sua reserva de estacionamento expirou e a vaga foi liberada.' },
+  parking_accepted: { enabled: true, title: 'Vaga aceita! Pague para confirmar ✅', body: 'O estacionamento aceitou sua reserva. Pague agora para garantir a vaga.' },
   // Avisos internos do admin (estilo Hotmart) — os textos abaixo são só o
   // fallback; a mensagem real é montada com os dados do evento no código.
   admin_new_user:          { enabled: true, title: 'Novo cadastro 👤',        body: 'Um novo usuário acabou de criar conta na Turiva.' },
