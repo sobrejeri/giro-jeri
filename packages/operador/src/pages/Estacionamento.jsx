@@ -349,25 +349,58 @@ function financeiro(r) {
 
 // ── Solicitações: Novas / Aceitas / Recusadas + análise ───────────────────────
 function SolicitacoesView({ reservas, aceitar, recusar }) {
+  const qc = useQueryClient()
   const [sub, setSub] = useState('novas')
   const [analise, setAnalise] = useState(null)
+  const { data: chData } = useQuery({ queryKey: ['parking-changes'], queryFn: () => api.parkingChangeRequests(), refetchInterval: 15000 })
+  const changes = (chData?.data || []).filter((c) => c.status === 'pending')
   const grupos = {
     novas: reservas.filter((r) => r.status === 'awaiting_partner'),
     aceitas: reservas.filter((r) => ['accepted_awaiting_payment', 'confirmed', 'in_lot'].includes(r.status)),
     recusadas: reservas.filter((r) => ['rejected', 'expired_no_answer', 'expired_no_payment', 'cancelled'].includes(r.status)),
   }
-  const lista = grupos[sub]
-  const TABS = [['novas', 'Novas'], ['aceitas', 'Aceitas'], ['recusadas', 'Recusadas']]
+  const lista = grupos[sub] || []
+  const TABS = [['novas', 'Novas'], ['aceitas', 'Aceitas'], ['recusadas', 'Recusadas'], ['alteracoes', 'Alterações']]
+
+  const aprovarCh = useMutation({ mutationFn: (id) => api.parkingApproveChange(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['parking-changes'] }) })
+  const recusarCh = useMutation({ mutationFn: (id) => api.parkingRejectChange(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['parking-changes'] }) })
+
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         {TABS.map(([id, label]) => (
           <button key={id} onClick={() => setSub(id)}
             className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${sub === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
-            {label} <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{grupos[id].length}</span>
+            {label} <span className="text-[10px] px-1.5 rounded-full bg-gray-100">{id === 'alteracoes' ? changes.length : grupos[id].length}</span>
           </button>
         ))}
       </div>
+
+      {sub === 'alteracoes' ? (
+        changes.length === 0 ? <p className="text-[13px] text-gray-400 py-10 text-center">Nenhum pedido de alteração.</p> : (
+          <div className="space-y-2">
+            {changes.map((c) => {
+              const rr = c.parking_reservations || {}
+              const proc = aprovarCh.isPending || recusarCh.isPending
+              return (
+                <div key={c.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                  <div className="flex items-center justify-between"><span className="font-mono text-[11px] font-bold text-brand">{rr.code}</span><span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Alteração</span></div>
+                  <p className="text-[13px] text-gray-700 mt-1">Nova saída: <strong>{dtBR(c.new_end_at)}</strong> · {c.new_units} diária(s)</p>
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                    <span className="text-[14px] font-extrabold text-gray-900">+ {money(c.delta)}</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => recusarCh.mutate(c.id)} disabled={proc} className="text-[12px] font-semibold text-gray-500 border border-gray-200 rounded-lg px-3 py-2">Recusar</button>
+                      <button onClick={() => aprovarCh.mutate(c.id)} disabled={proc} className="text-[12px] font-bold text-white bg-brand rounded-lg px-4 py-2">{proc ? <Loader2 size={13} className="animate-spin" /> : 'Aprovar'}</button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      ) : null}
+      {sub !== 'alteracoes' && (<>
+
       {lista.length === 0 ? <p className="text-[13px] text-gray-400 py-10 text-center">Nada aqui.</p> : (
         <div className="space-y-2">
           {lista.map((r) => {
@@ -394,6 +427,7 @@ function SolicitacoesView({ reservas, aceitar, recusar }) {
           })}
         </div>
       )}
+      </>)}
       {analise && <AnaliseModal reserva={analise} aceitar={aceitar} recusar={recusar} onClose={() => setAnalise(null)} />}
     </div>
   )

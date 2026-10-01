@@ -278,6 +278,9 @@ export const api = {
   parkingExtendQuote: (id, body) => request(`/api/parking/reservations/${id}/extend/quote`, { method: 'POST', body }),
   parkingExtend:      (id, body) => request(`/api/parking/reservations/${id}/extend`, { method: 'POST', body }),
   parkingRefundPreview: (id) => request(`/api/parking/reservations/${id}/refund-preview`),
+  parkingChangeRequest: (id, body) => request(`/api/parking/reservations/${id}/change-request`, { method: 'POST', body }),
+  parkingChange:        (id) => request(`/api/parking/reservations/${id}/change`),
+  parkingChangePay:     (id, body) => request(`/api/parking/reservations/${id}/change-pay`, { method: 'POST', body }),
   getBooking:    (id)   => request(`/api/bookings/${id}`),
   cancelBooking: (id, body) => request(`/api/bookings/${id}/cancel`, { method: 'POST', body }),
 

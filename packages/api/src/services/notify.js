@@ -23,6 +23,7 @@ export const DEFAULT_TEMPLATES = {
   // texto real é montado no scheduler com o código da reserva.
   parking_expired: { enabled: true, title: 'Reserva de vaga expirada', body: 'Sua reserva de estacionamento expirou e a vaga foi liberada.' },
   parking_accepted: { enabled: true, title: 'Vaga aceita! Pague para confirmar ✅', body: 'O estacionamento aceitou sua reserva. Pague agora para garantir a vaga.' },
+  parking_change: { enabled: true, title: 'Alteração de período', body: 'Há uma atualização no pedido de alteração do período da reserva.' },
   // Avisos internos do admin (estilo Hotmart) — os textos abaixo são só o
   // fallback; a mensagem real é montada com os dados do evento no código.
   admin_new_user:          { enabled: true, title: 'Novo cadastro 👤',        body: 'Um novo usuário acabou de criar conta na Turiva.' },

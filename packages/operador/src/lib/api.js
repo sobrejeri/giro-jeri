@@ -213,6 +213,9 @@ export const api = {
   parkingWalkin:       (body) => request('/api/parking/partner/walkin', { method: 'POST', body }),
   parkingStayExit:     (id) => request('/api/parking/partner/stays/' + id + '/exit', { method: 'POST', body: {} }),
   parkingStayMarkPaid: (id) => request('/api/parking/partner/stays/' + id + '/mark-paid', { method: 'POST', body: {} }),
+  parkingChangeRequests: () => request('/api/parking/partner/change-requests'),
+  parkingApproveChange:  (id) => request('/api/parking/partner/change-requests/' + id + '/approve', { method: 'POST', body: {} }),
+  parkingRejectChange:   (id) => request('/api/parking/partner/change-requests/' + id + '/reject', { method: 'POST', body: {} }),
 
   getOperatorBookings: ()   => request('/api/operator/bookings'),
   acceptBooking:       (id) => request(`/api/operator/bookings/${id}/accept`,   { method: 'POST', body: {} }),

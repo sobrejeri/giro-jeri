@@ -719,6 +719,129 @@ router.post('/reservations/:id/extend', authenticate, async (req, res, next) => 
   }
 })
 
+// ── Alteração de período com aprovação do operador (fase D) ───────────────────
+// Cliente PEDE (sem pagar) → operador APROVA → cliente PAGA a diferença.
+router.post('/reservations/:id/change-request', authenticate, async (req, res, next) => {
+  try {
+    const parsed = extendQuoteSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Informe o novo horário de saída.' })
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, user_id, lot_id, code, vehicle_type, start_at, end_at, total_amount, status, payment_status').eq('id', req.params.id).maybeSingle()
+    if (!r || r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (!['confirmed', 'in_lot'].includes(r.status) || r.payment_status !== 'paid') {
+      return res.status(409).json({ error: 'Só dá para alterar uma reserva confirmada.' })
+    }
+    if (Date.parse(parsed.data.new_end_at) <= Date.parse(r.end_at)) {
+      return res.status(400).json({ error: 'O novo horário precisa ser depois do atual.' })
+    }
+    const cot = await cotarComTarifa({ lotId: r.lot_id, vehicleType: r.vehicle_type, startMs: Date.parse(r.start_at), endMs: Date.parse(parsed.data.new_end_at) })
+    const delta = Math.max(0, Math.round((cot.total - Number(r.total_amount)) * 100) / 100)
+    const { data, error } = await supabase.from('parking_change_requests').insert({
+      reservation_id: r.id, new_end_at: parsed.data.new_end_at, new_units: cot.diarias, new_total: cot.total, delta,
+    }).select('id').single()
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'Já existe um pedido de alteração em andamento.' })
+      throw error
+    }
+    try {
+      const { data: lot } = await supabase.from('parking_lots').select('owner_user_id').eq('id', r.lot_id).maybeSingle()
+      const { notifyUser } = await import('../services/notify.js')
+      if (lot?.owner_user_id) await notifyUser({ userId: lot.owner_user_id, templateKey: 'parking_change', title: 'Pedido de alteração de período', body: `Cliente pediu para estender a reserva ${r.code}. Analise no painel.` })
+    } catch { /* opcional */ }
+    res.status(201).json({ ok: true, id: data.id, delta, new_total: cot.total })
+  } catch (err) {
+    if (err?.status === 422) return res.status(422).json({ error: err.message })
+    next(err)
+  }
+})
+
+// Alteração ativa de uma reserva (para o cliente acompanhar/pagar).
+router.get('/reservations/:id/change', authenticate, async (req, res, next) => {
+  try {
+    const { data: r } = await supabase.from('parking_reservations').select('id, user_id, lot_id').eq('id', req.params.id).maybeSingle()
+    if (!r) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    const dono = r.user_id === req.user.id
+    const parceiro = dono ? false : await podeOperarLot(req.user, r.lot_id)
+    if (!dono && !parceiro) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    const { data } = await supabase.from('parking_change_requests')
+      .select('id, new_end_at, new_units, new_total, delta, status, created_at')
+      .eq('reservation_id', r.id).in('status', ['pending', 'approved'])
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    res.json({ change: data || null })
+  } catch (err) { next(err) }
+})
+
+// Pedidos de alteração pendentes/aprovados dos lots do parceiro.
+router.get('/partner/change-requests', authenticate, async (req, res, next) => {
+  try {
+    const lots = await lotsDoParceiro(req.user)
+    if (lots.length === 0) return res.json({ data: [] })
+    const lotIds = lots.map((l) => l.id)
+    const { data, error } = await supabase.from('parking_change_requests')
+      .select('*, parking_reservations!inner(code, lot_id, user_id, start_at, end_at, plate, vehicle_type)')
+      .in('status', ['pending', 'approved'])
+      .in('parking_reservations.lot_id', lotIds)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    res.json({ data: data || [] })
+  } catch (err) { next(err) }
+})
+
+async function decidirAlteracao(req, res, next, novoStatus) {
+  try {
+    const { data: cr } = await supabase.from('parking_change_requests')
+      .select('id, status, reservation_id, parking_reservations(lot_id, user_id, code)').eq('id', req.params.id).maybeSingle()
+    if (!cr) return res.status(404).json({ error: 'Pedido não encontrado.' })
+    if (!(await podeOperarLot(req.user, cr.parking_reservations?.lot_id))) return res.status(403).json({ error: 'Não é seu estacionamento.' })
+    if (cr.status !== 'pending') return res.status(409).json({ error: 'Este pedido já foi decidido.' })
+    const { error } = await supabase.from('parking_change_requests')
+      .update({ status: novoStatus, decided_by: req.user.id, decided_at: new Date().toISOString() })
+      .eq('id', cr.id).eq('status', 'pending')
+    if (error) throw error
+    try {
+      const { notifyUser } = await import('../services/notify.js')
+      const uid = cr.parking_reservations?.user_id
+      if (uid) await notifyUser({
+        userId: uid, templateKey: 'parking_change',
+        title: novoStatus === 'approved' ? 'Alteração aprovada — pague a diferença' : 'Alteração recusada',
+        body: novoStatus === 'approved' ? `Sua extensão da reserva ${cr.parking_reservations?.code} foi aprovada. Pague para confirmar.` : `A alteração da reserva ${cr.parking_reservations?.code} foi recusada.`,
+      })
+    } catch { /* opcional */ }
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+router.post('/partner/change-requests/:id/approve', authenticate, (req, res, next) => decidirAlteracao(req, res, next, 'approved'))
+router.post('/partner/change-requests/:id/reject', authenticate, (req, res, next) => decidirAlteracao(req, res, next, 'rejected'))
+
+// Cliente paga a diferença de uma alteração APROVADA → aplica a extensão.
+router.post('/reservations/:id/change-pay', authenticate, async (req, res, next) => {
+  try {
+    const parsed = extendSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, code, user_id, lot_id, vehicle_type, start_at, end_at, total_amount, status, payment_status').eq('id', req.params.id).maybeSingle()
+    if (!r || r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    const { data: cr } = await supabase.from('parking_change_requests')
+      .select('id, new_end_at, new_units, new_total, delta, status').eq('reservation_id', r.id).eq('status', 'approved').maybeSingle()
+    if (!cr) return res.status(409).json({ error: 'Não há alteração aprovada para pagar.' })
+    const delta = Number(cr.delta)
+    if (delta > 0 && !parsed.data.card_token) return res.status(400).json({ error: 'Pagamento necessário.', delta })
+
+    const { data: cliente } = await supabase.from('users').select('full_name, email, document_number, phone').eq('id', req.user.id).maybeSingle()
+    const resultado = await cobrarExtensaoEAplicar({
+      reserva: r, cliente, novo: { end_at: cr.new_end_at, units: cr.new_units, total: cr.new_total },
+      cardToken: parsed.data.card_token, parcelas: parsed.data.parcelas || 1, idempotencyKey: parsed.data.idempotency_key,
+    })
+    if (resultado.estado !== 'approved') return res.status(402).json({ error: resultado.motivo || 'Pagamento não aprovado.' })
+    if (!resultado.ok && resultado.no_capacity) return res.status(409).json({ error: 'Sem vaga para o período estendido. Se foi cobrado, processaremos o estorno.', refund_pending: delta > 0 })
+    await supabase.from('parking_change_requests').update({ status: 'paid' }).eq('id', cr.id)
+    res.json({ ok: true, new_end_at: cr.new_end_at, delta })
+  } catch (err) {
+    if (err?.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
+})
+
 // ── Avaliação (fase 8) ───────────────────────────────────────────────────────
 // Resumo público do lot (média + total). Sem dados de quem avaliou.
 router.get('/lots/:id/reviews', authenticate, async (req, res, next) => {
