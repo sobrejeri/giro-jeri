@@ -660,6 +660,14 @@ function ParkingReservas() {
               </div>
             )}
 
+            {/* Translado sugerido (spec 3.4): leva ao fluxo de transfer existente. */}
+            {['confirmed', 'in_lot'].includes(r.status) && (
+              <button onClick={() => navigate('/transfers')}
+                className="mt-2 w-full flex items-center justify-center gap-1.5 text-[12px] font-semibold text-brand bg-brand/5 border border-brand/15 rounded-xl py-2 active:scale-[0.98]">
+                <Car size={13} /> Precisa de translado até o pátio?
+              </button>
+            )}
+
             {r.status === 'accepted_awaiting_payment' && (
               <button
                 onClick={() => navigate(`/estacionamento/${r.id}/pagar`)}
