@@ -53,6 +53,28 @@ export async function garantirCodigoEntrada(reservationId) {
   return null
 }
 
+// ── Walk-in (parking_stays): PIN de retirada guardado na própria estadia ──────
+// Sem conta de cliente, o PIN vive na stay (só o hash salgado). Gerado no
+// registro e mostrado UMA vez ao operador para repassar ao cliente.
+export async function definirPinStay(stayId) {
+  const salt = crypto.randomBytes(16).toString('hex')
+  const pin = pinNumerico(6)
+  const { error } = await supabase.from('parking_stays')
+    .update({ withdrawal_pin_hash: hashPin(pin, salt), withdrawal_pin_salt: salt })
+    .eq('id', stayId)
+  // Coluna ausente (migration 119 pendente) → segue sem PIN, não quebra o walk-in.
+  if (error && (error.code === '42703' || error.code === 'PGRST204')) return null
+  if (error) throw error
+  return pin // em claro só sai daqui
+}
+
+// Verifica o PIN apresentado na saída contra o hash salvo na estadia.
+export function verificarPinStay(stay, pin) {
+  if (!stay?.withdrawal_pin_hash || !stay?.withdrawal_pin_salt) return true // sem PIN exigido
+  if (!pin) return false
+  return hashPin(String(pin), stay.withdrawal_pin_salt) === stay.withdrawal_pin_hash
+}
+
 // Registra a entrada no pátio pelo código apresentado (parceiro). Atômico.
 export async function registrarEntrada({ lotId, code, actorId, spot, plate }) {
   const { data, error } = await supabase.rpc('parking_register_entry', {

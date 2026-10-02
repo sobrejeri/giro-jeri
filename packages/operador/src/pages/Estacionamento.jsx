@@ -796,7 +796,12 @@ function PatioView({ notify, onDone }) {
   const dt = (x) => { try { return new Date(x).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return x } }
   const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 
-  const sair = useMutation({ mutationFn: (id) => api.parkingStayExit(id), onSuccess: () => { notify?.('ok', 'Saída registrada.'); refresh() }, onError: (e) => notify?.('err', e?.message || 'Erro ao registrar saída.') })
+  const [saidaStay, setSaidaStay] = useState(null) // estadia aguardando PIN de retirada
+  const sair = useMutation({
+    mutationFn: ({ id, pin }) => api.parkingStayExit(id, pin),
+    onSuccess: () => { notify?.('ok', 'Saída registrada.'); setSaidaStay(null); refresh() },
+    onError: (e) => notify?.('err', e?.message || 'Erro ao registrar saída.'),
+  })
   const pagar = useMutation({ mutationFn: (id) => api.parkingStayMarkPaid(id), onSuccess: () => { notify?.('ok', 'Marcado como pago.'); refresh() }, onError: (e) => notify?.('err', e?.message) })
 
   const lista = verSaidas ? saidas : noPatio
@@ -828,7 +833,7 @@ function PatioView({ notify, onDone }) {
                     <button onClick={() => pagar.mutate(v.id)} disabled={pagar.isPending} className="flex-1 text-[12px] font-semibold text-brand border border-brand rounded-lg py-1.5">Marcar pago</button>
                   )}
                   {v.origin === 'walkin' && (
-                    <button onClick={() => sair.mutate(v.id)} disabled={sair.isPending} className="flex-1 text-[12px] font-semibold text-white bg-gray-900 rounded-lg py-1.5">Registrar saída</button>
+                    <button onClick={() => setSaidaStay(v)} disabled={sair.isPending} className="flex-1 text-[12px] font-semibold text-white bg-gray-900 rounded-lg py-1.5">Registrar saída</button>
                   )}
                   {v.origin !== 'walkin' && <span className="text-[11px] text-gray-400 py-1.5">Saída pelo PIN do cliente (abaixo)</span>}
                 </div>
@@ -842,6 +847,38 @@ function PatioView({ notify, onDone }) {
       <PatioBalcao notify={notify} onDone={refresh} />
 
       {walkin && <WalkinModal notify={notify} onClose={() => setWalkin(false)} onDone={() => { setWalkin(false); refresh() }} />}
+      {saidaStay && <SaidaPinModal stay={saidaStay} pending={sair.isPending} onClose={() => setSaidaStay(null)} onConfirm={(pin) => sair.mutate({ id: saidaStay.id, pin })} />}
+    </div>
+  )
+}
+
+// Pede o PIN de retirada (repassado ao cliente) para liberar a saída do walk-in.
+function SaidaPinModal({ stay, pending, onClose, onConfirm }) {
+  const [pin, setPin] = useState('')
+  return (
+    <div className="fixed inset-0 z-[95] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900">Retirada do veículo</h2>
+          <button onClick={onClose} className="p-2 text-gray-400"><X size={20} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-[13px] text-gray-600">Peça ao cliente o <b>PIN de retirada</b> do veículo <span className="font-mono font-bold">{stay.plate || '—'}</span>.</p>
+          <input
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            inputMode="numeric" placeholder="PIN (6 dígitos)" autoFocus
+            className="w-full border border-gray-200 rounded-xl px-3 h-12 text-center font-mono text-[22px] tracking-[0.3em] outline-none focus:border-brand"
+          />
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
+          <button onClick={() => onConfirm(pin)} disabled={pending || pin.length < 6}
+            className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50">
+            {pending ? <Loader2 size={15} className="animate-spin" /> : <KeyRound size={15} />} Confirmar saída
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -882,25 +919,66 @@ function WalkinModal({ notify, onClose, onDone }) {
   const periodoOk = startAt && endAt && Date.parse(endAt) > Date.parse(startAt)
   const placasOk = veiculos.every((v) => (v.plate || '').trim().length >= 6)
 
+  const [pins, setPins] = useState(null) // [{ plate, pin }] — mostrados ao final
+
   const salvar = useMutation({
     mutationFn: async () => {
       // Um veículo = uma entrada (1 vaga), no mesmo período. Valor é por veículo.
+      const res = []
       for (const v of veiculos) {
-        await api.parkingWalkin({
+        const r = await api.parkingWalkin({
           lot_id: lot, client_name: f.client_name.trim(), client_phone: f.client_phone.trim() || null,
           vehicle_type: (v.vehicle_type || 'carro').trim(), plate: v.plate.trim().toUpperCase() || null,
           spot: v.spot.trim() || null,
           start_at: startAt, end_at: endAt, amount: Number(f.amount), payment_status: f.payment_status,
         })
+        res.push({ plate: v.plate.trim().toUpperCase() || '—', pin: r?.withdrawal_pin || null })
       }
+      return res
     },
-    onSuccess: () => { notify?.('ok', veiculos.length > 1 ? `${veiculos.length} entradas registradas.` : 'Entrada presencial registrada.'); onDone?.() },
+    onSuccess: (res) => {
+      notify?.('ok', veiculos.length > 1 ? `${veiculos.length} entradas registradas.` : 'Entrada presencial registrada.')
+      setPins(res)
+    },
     onError: (e) => notify?.('err', e?.message || 'Não foi possível registrar.'),
   })
 
   const total = (Number(f.amount || 0) * veiculos.length)
   const campo = 'w-full border border-gray-200 rounded-xl px-3 h-10 text-sm outline-none focus:border-brand'
   const label = 'block text-[11px] font-semibold text-gray-500 mb-1'
+  // Tela de PIN(s) gerado(s) — mostrada após registrar, para repassar ao cliente.
+  if (pins) {
+    return (
+      <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => onDone?.()}>
+        <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100 sticky top-0 bg-white z-10">
+            <h2 className="font-bold text-gray-900">PIN de retirada</h2>
+            <button onClick={() => onDone?.()} className="p-2 text-gray-400"><X size={20} /></button>
+          </div>
+          <div className="p-5 space-y-3">
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+              <KeyRound size={16} className="text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-[12px] text-amber-800">Repasse o PIN ao cliente. Ele vai precisar informá-lo na <b>retirada do veículo</b>. Anote agora — por segurança, não é possível vê-lo de novo.</p>
+            </div>
+            {pins.map((p, i) => (
+              <div key={i} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
+                <span className="font-mono font-bold text-gray-700">{p.plate}</span>
+                {p.pin ? (
+                  <span className="font-mono text-[26px] font-black tracking-[0.3em] text-gray-900">{p.pin}</span>
+                ) : (
+                  <span className="text-[12px] text-gray-400">sem PIN (aplique a migration 119)</span>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <button onClick={() => onDone?.()} className="w-full bg-brand text-white font-bold rounded-xl py-2.5 text-sm">Concluir</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>

@@ -16,7 +16,7 @@ import { authenticate } from '../middleware/auth.js'
 import { cotarComTarifa } from '../services/parking/pricing.js'
 import { temVaga, blocoDe } from '../services/parking/capacity.js'
 import { cobrarCartaoEConfirmar, cobrarExtensaoEAplicar } from '../services/parking/payments.js'
-import { registrarEntrada, abrirRetirada, consumirRetirada } from '../services/parking/entry.js'
+import { registrarEntrada, abrirRetirada, consumirRetirada, definirPinStay, verificarPinStay } from '../services/parking/entry.js'
 
 const router = Router()
 
@@ -355,7 +355,10 @@ router.post('/partner/walkin', authenticate, async (req, res, next) => {
       const msg = { lot_not_found: 'Estacionamento não encontrado.', bad_window: 'Período inválido.', no_capacity: 'Sem vaga para o período.' }[data?.error] || 'Não foi possível registrar.'
       return res.status(data?.error === 'no_capacity' ? 409 : 400).json({ error: msg })
     }
-    res.status(201).json({ ok: true, stay_id: data.stay_id })
+    // Gera o PIN de retirada da estadia — devolvido UMA vez para o operador
+    // repassar ao cliente (nunca relido depois; só o hash fica no banco).
+    const withdrawal_pin = await definirPinStay(data.stay_id)
+    res.status(201).json({ ok: true, stay_id: data.stay_id, withdrawal_pin })
   } catch (err) { next(err) }
 })
 
@@ -371,13 +374,22 @@ router.post('/partner/stays/:id/mark-paid', authenticate, async (req, res, next)
   } catch (err) { next(err) }
 })
 
-// Registrar saída de um walk-in (sem PIN — é presencial). Libera a vaga.
+// Registrar saída de um walk-in. Exige o PIN de retirada (repassado ao cliente)
+// quando a estadia tem um; estadias antigas sem PIN continuam saindo direto.
 router.post('/partner/stays/:id/exit', authenticate, async (req, res, next) => {
   try {
-    const { data: s } = await supabase.from('parking_stays').select('id, lot_id, origin, capacity_block_id, exited_at').eq('id', req.params.id).maybeSingle()
+    // Seleciona o PIN de forma tolerante (migration 119 pode estar pendente).
+    let { data: s, error: selErr } = await supabase.from('parking_stays')
+      .select('id, lot_id, origin, capacity_block_id, exited_at, withdrawal_pin_hash, withdrawal_pin_salt').eq('id', req.params.id).maybeSingle()
+    if (selErr && selErr.code === '42703') {
+      ({ data: s } = await supabase.from('parking_stays').select('id, lot_id, origin, capacity_block_id, exited_at').eq('id', req.params.id).maybeSingle())
+    }
     if (!s) return res.status(404).json({ error: 'Estadia não encontrada.' })
     if (!(await podeOperarLot(req.user, s.lot_id))) return res.status(403).json({ error: 'Não é seu estacionamento.' })
     if (s.exited_at) return res.json({ ok: true, already: true })
+    if (!verificarPinStay(s, req.body?.pin)) {
+      return res.status(400).json({ error: 'PIN de retirada incorreto. Peça o PIN ao cliente.' })
+    }
     if (s.capacity_block_id) {
       await supabase.from('parking_capacity_blocks').update({ status: 'released' }).eq('id', s.capacity_block_id)
     }
