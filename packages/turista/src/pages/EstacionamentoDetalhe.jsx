@@ -185,14 +185,28 @@ export default function EstacionamentoDetalhe() {
           </div>
         )}
 
+        {/* Disponibilidade do período escolhido */}
+        {periodoOk && cot && (
+          cot.disponibilidade?.tem_vaga === false ? (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-[13px] text-red-700 font-semibold flex items-center gap-2">
+              <Sun size={15} className="shrink-0" /> Esgotado para esse período — escolha outras datas.
+            </div>
+          ) : (
+            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 text-[12px] text-emerald-700 font-semibold flex items-center gap-2">
+              <ParkingSquare size={14} className="shrink-0" />
+              {Number(cot.disponibilidade?.disponivel) > 0
+                ? `${cot.disponibilidade.disponivel} vaga(s) disponível(is) nesse período`
+                : 'Vaga disponível nesse período'}
+            </div>
+          )
+        )}
+
         {/* Resumo da cotação */}
         {periodoOk && cot && (
           <div className="bg-brand/5 border border-brand/20 rounded-2xl p-4 flex items-center justify-between">
             <div>
               <p className="text-[13px] font-bold text-gray-900">{cot.diarias} diária(s) × {fmt(cot.unit_price ?? precoBase)}</p>
-              {cot.disponibilidade?.tem_vaga === false
-                ? <p className="text-[11px] text-red-500 font-semibold mt-0.5">Sem vaga para este período</p>
-                : <p className="text-[11px] text-gray-500 mt-0.5">Você só paga após o estacionamento aceitar.</p>}
+              <p className="text-[11px] text-gray-500 mt-0.5">Você só paga após o estacionamento aceitar.</p>
             </div>
             <div className="text-right">
               <p className="text-[10px] text-gray-400">Total</p>
