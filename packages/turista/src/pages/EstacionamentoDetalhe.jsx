@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, Calendar, Clock, Car, Umbrella, Sun, MapPin, Info, ShoppingCart } from 'lucide-react'
@@ -47,6 +47,28 @@ export default function EstacionamentoDetalhe() {
   }, [tarifas, vehicleType])
 
   const coberto = lot?.opening_hours?.coberto
+
+  // Horários permitidos conforme o funcionamento. 24h → meia em meia hora o dia
+  // todo; senão, só dentro de [abre, fecha]. Impede o cliente de escolher um
+  // horário que o estacionamento não atende.
+  const horarios = useMemo(() => {
+    const oh = lot?.opening_hours || {}
+    const todas = []
+    for (let m = 0; m < 24 * 60; m += 30) todas.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`)
+    if (oh.is_24h === false && oh.open && oh.close) {
+      const toMin = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5))
+      const ini = toMin(oh.open), fim = toMin(oh.close)
+      return todas.filter((h) => { const x = toMin(h); return x >= ini && x <= fim })
+    }
+    return todas
+  }, [lot])
+  const h24 = (lot?.opening_hours?.is_24h ?? true) !== false
+  // Mantém os horários escolhidos dentro da janela quando o lote carrega/muda.
+  useEffect(() => {
+    if (!horarios.length) return
+    if (!horarios.includes(entradaH)) setEntradaH(horarios[0])
+    if (!horarios.includes(saidaH)) setSaidaH(horarios[0])
+  }, [horarios]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function adicionar() {
     setErro('')
@@ -145,7 +167,9 @@ export default function EstacionamentoDetalhe() {
             <label className="text-[11px] font-semibold text-gray-500">Horário
               <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1">
                 <Clock size={14} className="text-brand shrink-0" />
-                <input type="time" value={entradaH} onChange={(e) => setEntradaH(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
+                <select value={entradaH} onChange={(e) => setEntradaH(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none">
+                  {horarios.map((h) => <option key={h} value={h}>{h}</option>)}
+                </select>
               </div>
             </label>
             <label className="text-[11px] font-semibold text-gray-500">Saída
@@ -157,10 +181,17 @@ export default function EstacionamentoDetalhe() {
             <label className="text-[11px] font-semibold text-gray-500">Horário
               <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1">
                 <Clock size={14} className="text-brand shrink-0" />
-                <input type="time" value={saidaH} onChange={(e) => setSaidaH(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
+                <select value={saidaH} onChange={(e) => setSaidaH(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none">
+                  {horarios.map((h) => <option key={h} value={h}>{h}</option>)}
+                </select>
               </div>
             </label>
           </div>
+          {!h24 && lot?.opening_hours?.open && (
+            <p className="text-[11px] text-amber-600 flex items-center gap-1.5">
+              <Clock size={12} /> Atende das {lot.opening_hours.open} às {lot.opening_hours.close} — só esses horários ficam disponíveis.
+            </p>
+          )}
         </div>
 
         {/* Veículo */}
