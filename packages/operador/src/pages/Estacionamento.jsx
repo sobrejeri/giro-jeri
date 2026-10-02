@@ -100,7 +100,7 @@ export default function Estacionamento({ section }) {
 
       {/* Abas (só no modo página única — admin/tours). No menu lateral some. */}
       {!menuMode && (
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-1 [&>button]:shrink-0">
           {[['inicio', 'Início'], ['fila', `Solicitações`], ['reservas', 'Reservas'], ['patio', 'Pátio'], ['financeiro', 'Financeiro'], ['meulocal', 'Meu local']].map(([id, label]) => (
             <button key={id} onClick={() => setAba(id)}
               className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border flex items-center gap-1.5 ${active === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
@@ -501,7 +501,7 @@ function SolicitacoesView({ reservas, aceitar, recusar }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-1 [&>button]:shrink-0">
         {TABS.map(([id, label]) => (
           <button key={id} onClick={() => setSub(id)}
             className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${sub === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
@@ -616,7 +616,7 @@ function ReservasView({ reservas }) {
   const TABS = [['todas', 'Todas'], ['apagar', 'A pagar'], ['confirmadas', 'Confirmadas'], ['concluidas', 'Concluídas']]
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-1 [&>button]:shrink-0">
         {TABS.map(([id, label]) => (
           <button key={id} onClick={() => setFiltro(id)}
             className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${filtro === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
