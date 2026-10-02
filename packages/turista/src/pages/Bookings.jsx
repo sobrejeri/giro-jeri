@@ -611,7 +611,7 @@ const PARK_STATUS = {
   expired_no_payment:        { label: 'Expirou sem pagamento', cls: 'bg-gray-100 text-gray-500' },
   cancelled:                 { label: 'Cancelada', cls: 'bg-red-100 text-red-600' },
 }
-function ParkingReservas() {
+function ParkingReservas({ tab = 'todos' }) {
   const navigate = useNavigate()
   const [pinModal, setPinModal] = useState(null) // { code, pin, expires_at }
   const queryClient = useQueryClient()
@@ -619,14 +619,18 @@ function ParkingReservas() {
   const [qrModal, setQrModal] = useState(null)
   const { data } = useQuery({ queryKey: ['parking-my'], queryFn: () => api.parkingMyReservations(), refetchInterval: 15000 })
   const todas = data?.data || []
-  const ativas = todas.filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
+  // Cada seção respeita a aba selecionada (antes aparecia em todas).
+  const ativas = (tab === 'todos' || tab === 'ativos')
+    ? todas.filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
+    : []
   // Concluídas e ainda sem avaliação (fecha o ciclo de reputação).
-  const aAvaliar = todas.filter((r) => r.status === 'completed' && r.reviewed === false)
-  // Recentemente encerradas sem sucesso (expirou/recusada) — últimos 7 dias, para
-  // o cliente entender o que houve e poder solicitar de novo.
-  const encerradas = todas.filter((r) =>
-    ['expired_no_payment', 'expired_no_answer', 'rejected'].includes(r.status) &&
-    (Date.now() - new Date(r.created_at || 0).getTime()) < 7 * 864e5).slice(0, 3)
+  const aAvaliar = (tab === 'todos' || tab === 'concluidos')
+    ? todas.filter((r) => r.status === 'completed' && r.reviewed === false)
+    : []
+  // Encerradas sem sucesso (expirou/recusada/cancelada) — só na aba Canceladas.
+  const encerradas = (tab === 'cancelados')
+    ? todas.filter((r) => ['expired_no_payment', 'expired_no_answer', 'rejected', 'cancelled'].includes(r.status)).slice(0, 10)
+    : []
 
   const pedirRetirada = useMutation({
     mutationFn: (id) => api.parkingWithdrawal(id),
@@ -1248,7 +1252,7 @@ export default function Bookings() {
 
       {/* List */}
       <main className="px-4 pt-4 space-y-3 lg:max-w-5xl lg:mx-auto">
-        <ParkingReservas />
+        <ParkingReservas tab={tab} />
         {(isLoading || quotesLoading) ? (
           <div className="py-16"><PageSpinner /></div>
         ) : listItems.length === 0 ? (
