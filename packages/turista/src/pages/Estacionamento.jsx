@@ -1,9 +1,15 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search, Compass, Car } from 'lucide-react'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+
+// Primeiro nome da cidade/região (sem sufixos) para o banner.
+function nomeCidade(region) {
+  const n = (region?.name || '').trim()
+  return n || 'Jeri'
+}
 
 // ── Estacionamento — catálogo ────────────────────────────────────────────────
 // Terceira vertical. Lista os estacionamentos da região; o período/veículo é
@@ -19,6 +25,15 @@ export default function Estacionamento() {
   })
   const lots = (data?.data || []).filter((l) =>
     !busca.trim() || (l.name || '').toLowerCase().includes(busca.trim().toLowerCase()))
+
+  const cidade = nomeCidade(region)
+  // Fundo do banner: alterna entre as fotos dos estacionamentos da região; sorteia
+  // uma a cada carregamento da página.
+  const fotos = useMemo(
+    () => (data?.data || []).flatMap((l) => (Array.isArray(l.photos) ? l.photos : [])).filter(Boolean),
+    [data],
+  )
+  const bgFoto = useMemo(() => (fotos.length ? fotos[Math.floor(Math.random() * fotos.length)] : null), [fotos.length])
 
   return (
     <div className="px-4 pb-10 pt-3 space-y-4">
@@ -37,10 +52,14 @@ export default function Estacionamento() {
         </button>
       </div>
 
-      {/* Banner */}
-      <div className="rounded-2xl bg-gradient-to-br from-brand to-orange-400 text-white p-5 shadow-sm">
-        <h1 className="text-[22px] font-extrabold leading-tight">Seu carro seguro.<br />Você em Jeri.</h1>
-        <p className="text-[13px] text-white/90 mt-1">Encontre onde estacionar e aproveite a viagem.</p>
+      {/* Banner — foto de fundo (alterna) + degradê; cidade conforme a região */}
+      <div className="relative rounded-2xl overflow-hidden text-white p-5 shadow-sm min-h-[128px] flex flex-col justify-center">
+        {bgFoto && <img src={bgFoto} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover" />}
+        <div className={`absolute inset-0 ${bgFoto ? 'bg-gradient-to-br from-black/70 via-black/45 to-brand/60' : 'bg-gradient-to-br from-brand to-orange-400'}`} />
+        <div className="relative">
+          <h1 className="text-[22px] font-extrabold leading-tight drop-shadow-sm">Seu carro seguro.<br />Você em {cidade}.</h1>
+          <p className="text-[13px] text-white/90 mt-1 drop-shadow-sm">Encontre onde estacionar e aproveite a viagem.</p>
+        </div>
       </div>
 
       {/* Busca */}
