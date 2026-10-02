@@ -851,30 +851,60 @@ function PatioView({ notify, onDone }) {
 function WalkinModal({ notify, onClose, onDone }) {
   const { data: lotsData } = useQuery({ queryKey: ['parking-partner-lots'], queryFn: () => api.parkingPartnerLots() })
   const lots = lotsData?.data || []
-  const [f, setF] = useState({ lot_id: '', client_name: '', client_phone: '', vehicle_type: 'carro', plate: '', spot: '', dias: 1, amount: '', payment_status: 'paid' })
+
+  // Defaults: entrada = agora (meia hora mais próxima), saída = +1 dia.
+  const agora = new Date()
+  const d2 = (n) => String(n).padStart(2, '0')
+  const dataStr = (dt) => `${dt.getFullYear()}-${d2(dt.getMonth() + 1)}-${d2(dt.getDate())}`
+  const horaStr = (dt) => `${d2(dt.getHours())}:${dt.getMinutes() < 30 ? '00' : '30'}`
+  const amanha = new Date(agora.getTime() + 24 * 3600_000)
+
+  const [f, setF] = useState({
+    lot_id: '', client_name: '', client_phone: '',
+    entradaD: dataStr(agora), entradaH: horaStr(agora),
+    saidaD: dataStr(amanha), saidaH: horaStr(amanha),
+    amount: '', payment_status: 'paid',
+  })
+  // Lista de veículos (1 vaga cada): tipo + placa + vaga.
+  const [veiculos, setVeiculos] = useState([{ vehicle_type: 'carro', plate: '', spot: '' }])
   const lot = f.lot_id || (lots.length === 1 ? lots[0].id : '')
   const set = (k, v) => setF((o) => ({ ...o, [k]: v }))
+  const setV = (i, k, v) => setVeiculos((arr) => arr.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
+  const addV = () => setVeiculos((arr) => (arr.length >= 20 ? arr : [...arr, { vehicle_type: 'carro', plate: '', spot: '' }]))
+  const delV = (i) => setVeiculos((arr) => (arr.length <= 1 ? arr : arr.filter((_, j) => j !== i)))
+
+  const horas = []
+  for (let m = 0; m < 24 * 60; m += 30) horas.push(`${d2(Math.floor(m / 60))}:${d2(m % 60)}`)
+
+  const isoFuso = (d, t) => (d && t ? `${d}T${t}:00-03:00` : null)
+  const startAt = isoFuso(f.entradaD, f.entradaH)
+  const endAt = isoFuso(f.saidaD, f.saidaH)
+  const periodoOk = startAt && endAt && Date.parse(endAt) > Date.parse(startAt)
+  const placasOk = veiculos.every((v) => (v.plate || '').trim().length >= 6)
 
   const salvar = useMutation({
-    mutationFn: () => {
-      const start = new Date()
-      const end = new Date(start.getTime() + Number(f.dias || 1) * 24 * 3600_000)
-      const iso = (d) => `${new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19)}-03:00`
-      return api.parkingWalkin({
-        lot_id: lot, client_name: f.client_name.trim(), client_phone: f.client_phone.trim() || null,
-        vehicle_type: f.vehicle_type.trim(), plate: f.plate.trim() || null, spot: f.spot.trim() || null,
-        start_at: iso(start), end_at: iso(end), amount: Number(f.amount), payment_status: f.payment_status,
-      })
+    mutationFn: async () => {
+      // Um veículo = uma entrada (1 vaga), no mesmo período. Valor é por veículo.
+      for (const v of veiculos) {
+        await api.parkingWalkin({
+          lot_id: lot, client_name: f.client_name.trim(), client_phone: f.client_phone.trim() || null,
+          vehicle_type: (v.vehicle_type || 'carro').trim(), plate: v.plate.trim().toUpperCase() || null,
+          spot: v.spot.trim() || null,
+          start_at: startAt, end_at: endAt, amount: Number(f.amount), payment_status: f.payment_status,
+        })
+      }
     },
-    onSuccess: () => { notify?.('ok', 'Entrada presencial registrada.'); onDone?.() },
+    onSuccess: () => { notify?.('ok', veiculos.length > 1 ? `${veiculos.length} entradas registradas.` : 'Entrada presencial registrada.'); onDone?.() },
     onError: (e) => notify?.('err', e?.message || 'Não foi possível registrar.'),
   })
 
+  const total = (Number(f.amount || 0) * veiculos.length)
   const campo = 'w-full border border-gray-200 rounded-xl px-3 h-10 text-sm outline-none focus:border-brand'
+  const label = 'block text-[11px] font-semibold text-gray-500 mb-1'
   return (
     <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100 sticky top-0 bg-white">
+        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100 sticky top-0 bg-white z-10">
           <h2 className="font-bold text-gray-900">Entrada presencial</h2>
           <button onClick={onClose} className="p-2 text-gray-400"><X size={20} /></button>
         </div>
@@ -886,26 +916,76 @@ function WalkinModal({ notify, onClose, onDone }) {
             </select>
           )}
           <input value={f.client_name} onChange={(e) => set('client_name', e.target.value)} placeholder="Nome do cliente" className={campo} />
-          <div className="grid grid-cols-2 gap-2">
-            <input value={f.client_phone} onChange={(e) => set('client_phone', e.target.value)} placeholder="Telefone" className={campo} />
-            <input value={f.plate} onChange={(e) => set('plate', e.target.value)} placeholder="Placa" className={`${campo} uppercase`} />
+          <input value={f.client_phone} onChange={(e) => set('client_phone', e.target.value)} placeholder="Telefone (opcional)" className={campo} />
+
+          {/* Período: entrada e saída (data + hora) */}
+          <div className="border-t border-gray-100 pt-3 grid grid-cols-2 gap-2">
+            <div>
+              <label className={label}>Entrada</label>
+              <input type="date" value={f.entradaD} onChange={(e) => set('entradaD', e.target.value)} className={campo} />
+            </div>
+            <div>
+              <label className={label}>Horário</label>
+              <select value={f.entradaH} onChange={(e) => set('entradaH', e.target.value)} className={campo}>
+                {horas.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={label}>Saída</label>
+              <input type="date" value={f.saidaD} onChange={(e) => set('saidaD', e.target.value)} className={campo} />
+            </div>
+            <div>
+              <label className={label}>Horário</label>
+              <select value={f.saidaH} onChange={(e) => set('saidaH', e.target.value)} className={campo}>
+                {horas.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <input value={f.vehicle_type} onChange={(e) => set('vehicle_type', e.target.value)} placeholder="Veículo" className={campo} />
-            <input value={f.spot} onChange={(e) => set('spot', e.target.value)} placeholder="Vaga" className={campo} />
-            <input value={f.dias} onChange={(e) => set('dias', e.target.value)} inputMode="numeric" placeholder="Diárias" className={campo} />
+          {!periodoOk && <p className="text-[11px] text-red-500">A saída deve ser depois da entrada.</p>}
+
+          {/* Veículos: um por linha, cada um com placa */}
+          <div className="border-t border-gray-100 pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[12px] font-semibold text-gray-600">Veículos ({veiculos.length})</label>
+              <button type="button" onClick={addV} className="text-[12px] font-semibold text-brand flex items-center gap-1"><Plus size={13} /> Adicionar</button>
+            </div>
+            {veiculos.map((v, i) => (
+              <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                <input value={v.plate} onChange={(e) => setV(i, 'plate', e.target.value.toUpperCase())} placeholder={`Placa ${i + 1}`} className={`${campo} uppercase`} />
+                <div className="grid grid-cols-2 gap-1">
+                  <input value={v.vehicle_type} onChange={(e) => setV(i, 'vehicle_type', e.target.value)} placeholder="Tipo" className={campo} />
+                  <input value={v.spot} onChange={(e) => setV(i, 'spot', e.target.value)} placeholder="Vaga" className={campo} />
+                </div>
+                <button type="button" onClick={() => delV(i)} disabled={veiculos.length <= 1}
+                  className="w-8 h-8 rounded-lg border border-gray-200 text-gray-400 flex items-center justify-center disabled:opacity-30"><Trash2 size={14} /></button>
+              </div>
+            ))}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <input value={f.amount} onChange={(e) => set('amount', e.target.value)} inputMode="decimal" placeholder="Valor combinado (R$)" className={campo} />
-            <select value={f.payment_status} onChange={(e) => set('payment_status', e.target.value)} className={campo}>
-              <option value="paid">Pago (balcão)</option>
-              <option value="pending">Pendente</option>
-            </select>
+
+          {/* Valor e pagamento */}
+          <div className="border-t border-gray-100 pt-3 grid grid-cols-2 gap-2">
+            <div>
+              <label className={label}>Valor por veículo (R$)</label>
+              <input value={f.amount} onChange={(e) => set('amount', e.target.value)} inputMode="decimal" placeholder="0,00" className={campo} />
+            </div>
+            <div>
+              <label className={label}>Pagamento</label>
+              <select value={f.payment_status} onChange={(e) => set('payment_status', e.target.value)} className={campo}>
+                <option value="paid">Pago (balcão)</option>
+                <option value="pending">Pendente</option>
+              </select>
+            </div>
           </div>
+          {veiculos.length > 1 && Number(f.amount) > 0 && (
+            <p className="text-[12px] text-gray-500">Total: <span className="font-bold text-gray-800">R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span> ({veiculos.length} × R$ {Number(f.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</p>
+          )}
+
+          {/* Espaço extra no fim para não colar no rodapé/indicador da tela */}
+          <div className="h-6" />
         </div>
-        <div className="px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white flex gap-2">
+        <div className="px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white flex gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
-          <button onClick={() => salvar.mutate()} disabled={salvar.isPending || !lot || !f.client_name.trim() || !f.amount}
+          <button onClick={() => salvar.mutate()} disabled={salvar.isPending || !lot || !f.client_name.trim() || !f.amount || !periodoOk || !placasOk}
             className="flex-1 flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50">
             {salvar.isPending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar
           </button>
