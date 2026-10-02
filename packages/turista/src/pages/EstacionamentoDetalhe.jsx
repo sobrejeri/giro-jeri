@@ -121,32 +121,30 @@ export default function EstacionamentoDetalhe() {
 
   return (
     <div className="pb-44">
-      {/* Voltar — o nome fica só no título grande abaixo, sem repetir */}
-      <div className="px-4 pt-3 pb-2">
-        <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center active:scale-95">
-          <ChevronLeft size={20} className="text-gray-700" />
+      {/* Hero full-bleed (carrossel) com o botão de voltar sobreposto — sem espaço em branco */}
+      <div className="relative h-56 overflow-hidden bg-gray-200">
+        {fotos.map((f, i) => (
+          <img
+            key={f + i}
+            src={f}
+            alt=""
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`}
+          />
+        ))}
+        {/* Degradê no topo para dar contraste ao botão */}
+        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/35 to-transparent pointer-events-none" />
+        <button onClick={() => navigate(-1)}
+          className="absolute top-3 left-4 w-9 h-9 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-sm active:scale-95">
+          <ChevronLeft size={20} className="text-gray-800" />
         </button>
+        {fotos.length > 1 && (
+          <div className="absolute bottom-2.5 right-3 flex gap-1.5">
+            {fotos.map((_, i) => (
+              <span key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === slide ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`} />
+            ))}
+          </div>
+        )}
       </div>
-
-      {fotos.length > 0 && (
-        <div className="relative h-44 overflow-hidden">
-          {fotos.map((f, i) => (
-            <img
-              key={f + i}
-              src={f}
-              alt=""
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`}
-            />
-          ))}
-          {fotos.length > 1 && (
-            <div className="absolute bottom-2.5 right-3 flex gap-1.5">
-              {fotos.map((_, i) => (
-                <span key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === slide ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="px-4 py-4 space-y-4">
         <div>
