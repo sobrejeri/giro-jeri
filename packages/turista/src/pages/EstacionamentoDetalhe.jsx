@@ -110,13 +110,12 @@ export default function EstacionamentoDetalhe() {
   if (!lot) return <p className="p-6 text-center text-gray-400 text-sm">Estacionamento não encontrado.</p>
 
   return (
-    <div className="pb-28">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+    <div className="pb-44">
+      {/* Voltar — o nome fica só no título grande abaixo, sem repetir */}
+      <div className="px-4 pt-3 pb-2">
         <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center active:scale-95">
           <ChevronLeft size={20} className="text-gray-700" />
         </button>
-        <h1 className="text-[16px] font-bold text-gray-900 truncate">{lot.name}</h1>
       </div>
 
       {fotos.length > 0 && (
