@@ -95,9 +95,20 @@ export default function EstacionamentoDetalhe() {
         <div>
           <h2 className="text-[20px] font-extrabold text-gray-900">{lot.name}</h2>
           <p className="text-[13px] text-gray-500 flex items-center gap-1 mt-0.5"><MapPin size={13} className="text-brand" /> {lot.region_name || 'Jericoacoara'}</p>
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 mt-2">
-            {coberto ? <Umbrella size={11} /> : <Sun size={11} />} {coberto ? 'Coberto' : 'Descoberto'}
-          </span>
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+              {coberto ? <Umbrella size={11} /> : <Sun size={11} />} {coberto ? 'Coberto' : 'Descoberto'}
+            </span>
+            {(() => {
+              const oh = lot.opening_hours || {}
+              const texto = oh.is_24h === false && oh.open && oh.close ? `${oh.open}–${oh.close}` : '24 horas'
+              return (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                  <Clock size={11} /> {texto}
+                </span>
+              )
+            })()}
+          </div>
           {lot.description && <p className="text-[13px] text-gray-600 mt-3 leading-relaxed">{lot.description}</p>}
           {lot.address && <p className="text-[12px] text-gray-500 mt-2 flex items-start gap-1.5"><MapPin size={13} className="text-brand shrink-0 mt-0.5" /> {lot.address}</p>}
           {(() => {

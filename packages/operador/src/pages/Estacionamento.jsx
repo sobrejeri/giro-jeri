@@ -297,10 +297,13 @@ function MeuEstacionamento({ notify }) {
 
 function LotEditor({ lot, notify, onSaved }) {
   const qc = useQueryClient()
+  const oh = lot.opening_hours || {}
   const [form, setForm] = useState({
     name: lot.name || '', description: lot.description || '', capacity: lot.capacity ?? 0,
     photos: lot.photos || [], is_active: lot.is_active !== false,
     address: lot.address || '', lat: lot.lat ?? '', lng: lot.lng ?? '',
+    is_24h: oh.is_24h !== false, abre: oh.open || '08:00', fecha: oh.close || '18:00',
+    coberto: !!oh.coberto,
   })
   const [enviandoFoto, setEnviandoFoto] = useState(false)
   const [geoLoading, setGeoLoading] = useState(false)
@@ -322,6 +325,10 @@ function LotEditor({ lot, notify, onSaved }) {
       capacity: Number(form.capacity), photos: form.photos, is_active: !!form.is_active,
       address: form.address.trim() || null,
       lat: form.lat === '' ? null : Number(form.lat), lng: form.lng === '' ? null : Number(form.lng),
+      opening_hours: {
+        ...(lot.opening_hours || {}),
+        is_24h: !!form.is_24h, open: form.abre, close: form.fecha, coberto: !!form.coberto,
+      },
     }),
     onSuccess: () => { notify?.('ok', 'Cadastro atualizado!'); onSaved?.() },
     onError: (e) => notify?.('err', e?.message || 'Não foi possível salvar.'),
@@ -394,6 +401,22 @@ function LotEditor({ lot, notify, onSaved }) {
         <div><label className={label}>Capacidade (vagas)</label><input type="number" min="0" value={form.capacity} onChange={(e) => setF('capacity', e.target.value)} className={campo} /></div>
         <label className="flex items-end gap-2 text-sm text-gray-700 pb-2.5">
           <input type="checkbox" checked={!!form.is_active} onChange={(e) => setF('is_active', e.target.checked)} /> Ativo (aparece pros clientes)
+        </label>
+      </div>
+
+      {/* Funcionamento */}
+      <div className="border-t border-gray-100 pt-3 space-y-2">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={!!form.is_24h} onChange={(e) => setF('is_24h', e.target.checked)} /> Funciona 24 horas
+        </label>
+        {!form.is_24h && (
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={label}>Abre</label><input type="time" value={form.abre} onChange={(e) => setF('abre', e.target.value)} className={campo} /></div>
+            <div><label className={label}>Fecha</label><input type="time" value={form.fecha} onChange={(e) => setF('fecha', e.target.value)} className={campo} /></div>
+          </div>
+        )}
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={!!form.coberto} onChange={(e) => setF('coberto', e.target.checked)} /> Vagas cobertas
         </label>
       </div>
 
