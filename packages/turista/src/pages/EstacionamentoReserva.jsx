@@ -73,9 +73,13 @@ export default function EstacionamentoReserva() {
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <p className="font-bold text-gray-900 flex items-center gap-2"><CheckCircle2 size={18} className="text-brand" /> Operador aceitou! 🎉</p>
             <p className="text-[13px] text-gray-500 mt-0.5">Pague para confirmar sua reserva.</p>
+            <Contagem until={r.payment_deadline_at} prefixo="Pague em" expirado="Prazo de pagamento expirado" />
             <button onClick={() => navigate(`/estacionamento/${id}/pagar`)}
-              className="mt-3 w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98]">Pagar agora · {money(r.total_amount)}</button>
+              className="mt-2 w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[15px] active:scale-[0.98]">Pagar agora · {money(r.total_amount)}</button>
           </div>
+        )}
+        {r.status === 'awaiting_partner' && (
+          <Contagem until={r.acceptance_expires_at} prefixo="Aguardando aceite · expira em" expirado="Sem resposta no prazo" />
         )}
 
         {mostraEntrada && (
@@ -133,6 +137,23 @@ export default function EstacionamentoReserva() {
       </main>
 
       {pin && <PinModal data={pin} onClose={() => setPin(null)} />}
+    </div>
+  )
+}
+
+function Contagem({ until, prefixo, expirado }) {
+  const [, tick] = useState(0)
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(id) }, [])
+  if (!until) return null
+  const ms = new Date(until).getTime() - Date.now()
+  if (isNaN(ms)) return null
+  if (ms <= 0) return <p className="mt-2 text-[12px] font-semibold text-red-500 text-center">{expirado}</p>
+  const tS = Math.floor(ms / 1000), h = Math.floor(tS / 3600), m = Math.floor((tS % 3600) / 60), s = tS % 60
+  const txt = h > 0 ? `${h}h ${String(m).padStart(2, '0')}min` : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  const urgente = ms < 5 * 60_000
+  return (
+    <div className={`mt-2 flex items-center justify-center gap-1.5 text-[12px] font-bold rounded-lg py-2 ${urgente ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+      <Clock size={13} /> {prefixo} <span className="font-mono tabular-nums">{txt}</span>
     </div>
   )
 }

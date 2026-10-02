@@ -688,12 +688,18 @@ function ParkingReservas() {
             )}
 
             {r.status === 'accepted_awaiting_payment' && (
-              <button
-                onClick={() => navigate(`/estacionamento/${r.id}/pagar`)}
-                className="mt-2 w-full bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform"
-              >
-                Pagar agora · {money(r.total_amount)}
-              </button>
+              <>
+                <Contagem until={r.payment_deadline_at} prefixo="Pague em" expirado="Prazo de pagamento expirado" />
+                <button
+                  onClick={() => navigate(`/estacionamento/${r.id}/pagar`)}
+                  className="mt-1.5 w-full bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform"
+                >
+                  Pagar agora · {money(r.total_amount)}
+                </button>
+              </>
+            )}
+            {r.status === 'awaiting_partner' && r.acceptance_expires_at && (
+              <Contagem until={r.acceptance_expires_at} prefixo="Aguardando aceite · expira em" expirado="Sem resposta no prazo" />
             )}
 
             {podeRetirar && (
@@ -830,6 +836,27 @@ function ParkingReviewCard({ reserva, onDone }) {
         className="mt-2 w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] disabled:opacity-50">
         {enviar.isPending ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />} Enviar avaliação
       </button>
+    </div>
+  )
+}
+
+// ── Cronômetro de prazo (pagamento/aceite) ────────────────────────────────────
+function Contagem({ until, prefixo, expirado }) {
+  const [, tick] = useState(0)
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(id) }, [])
+  if (!until) return null
+  const ms = new Date(until).getTime() - Date.now()
+  if (isNaN(ms)) return null
+  if (ms <= 0) return (
+    <p className="mt-2 text-[11px] font-semibold text-red-500 text-center">{expirado}</p>
+  )
+  const totalS = Math.floor(ms / 1000)
+  const h = Math.floor(totalS / 3600), m = Math.floor((totalS % 3600) / 60), s = totalS % 60
+  const txt = h > 0 ? `${h}h ${String(m).padStart(2, '0')}min` : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  const urgente = ms < 5 * 60_000
+  return (
+    <div className={`mt-2 flex items-center justify-center gap-1.5 text-[11px] font-bold rounded-lg py-1.5 ${urgente ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+      <Clock size={12} /> {prefixo} <span className="font-mono tabular-nums">{txt}</span>
     </div>
   )
 }
