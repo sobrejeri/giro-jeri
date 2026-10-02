@@ -1007,7 +1007,18 @@ function CartItemDetails({ item }) {
         <div className="pt-3 space-y-1.5 text-[12.5px] text-gray-600">
           <p className="inline-flex items-center gap-1.5"><MapPin size={12} className="text-brand shrink-0" /> {item.region_name || 'Jericoacoara'}</p>
           <p className="inline-flex items-center gap-1.5"><Clock size={12} className="text-brand shrink-0" /> {dt(item.start_at)} → {dt(item.end_at)}</p>
-          <p className="capitalize">{item.vehicle_type} · {item.diarias} diária(s){item.plate ? ` · ${item.plate}` : ''}</p>
+          {Array.isArray(item.parking_vehicles) && item.parking_vehicles.length > 0 ? (
+            <>
+              {item.vehicles_summary && <p className="font-semibold text-gray-700">{item.vehicles_summary} · {item.diarias} diária(s)</p>}
+              <ul className="space-y-0.5">
+                {item.parking_vehicles.map((v, i) => (
+                  <li key={i} className="capitalize text-gray-500">{v.vehicle_type} · {v.plate || 'placa a informar'}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="capitalize">{item.vehicle_type} · {item.diarias} diária(s){item.plate ? ` · ${item.plate}` : ''}</p>
+          )}
         </div>
       </div>
     )
@@ -1237,17 +1248,25 @@ export default function CartPage() {
         try {
           const start = isoFuso(it.start_at), end = isoFuso(it.end_at)
           const lotId = ehUuid(it.lot_id) ? it.lot_id : (String(it.id || '').match(/park-([0-9a-f-]{36})/i)?.[1] || null)
-          const veic = it.vehicle_type || 'carro'
           if (!ehUuid(lotId) || !start || !end) {
             res[it.id] = { status: 'error', message: 'Item antigo incompleto — remova (X) e adicione de novo pela aba Vagas.' }
             continue
           }
-          await api.parkingReserve({
-            lot_id: lotId, vehicle_type: veic,
-            start_at: start, end_at: end,
-            plate: it.plate || undefined,
-            batch_ref: String(it.id).slice(0, 64), // só rastreio — não cria conjunto
-          })
+          // Um veículo = uma reserva (1 vaga). Vários veículos do mesmo item
+          // nascem no MESMO grupo (batch_ref) para ficarem vinculados.
+          const grupo = String(it.id).slice(0, 56)
+          const veiculos = Array.isArray(it.parking_vehicles) && it.parking_vehicles.length
+            ? it.parking_vehicles
+            : [{ vehicle_type: it.vehicle_type || 'carro', plate: it.plate || undefined }]
+          for (let i = 0; i < veiculos.length; i++) {
+            const v = veiculos[i]
+            await api.parkingReserve({
+              lot_id: lotId, vehicle_type: v.vehicle_type || 'carro',
+              start_at: start, end_at: end,
+              plate: v.plate || undefined,
+              batch_ref: `${grupo}#${i + 1}`.slice(0, 64),
+            })
+          }
           res[it.id] = { status: 'ok' }
           removeItem(it.id)
         } catch (e) {
@@ -1404,7 +1423,7 @@ export default function CartPage() {
                     {item.kind === 'parking' ? (
                       <div className="flex items-center gap-2.5 mt-1 text-[11px] text-gray-500 flex-wrap">
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">Estacionamento</span>
-                        <span className="inline-flex items-center gap-1 capitalize"><Car size={10} className="text-brand" />{item.vehicle_type}</span>
+                        <span className="inline-flex items-center gap-1 capitalize"><Car size={10} className="text-brand" />{item.vehicles_summary || item.vehicle_type}</span>
                         <span className="inline-flex items-center gap-1">{item.diarias} diária(s)</span>
                       </div>
                     ) : (
@@ -1729,6 +1748,14 @@ function ParkingEditSheet({ item, onClose, onSave }) {
   const [placa, setPlaca]       = useState(item.plate || '')
   const [erro, setErro]         = useState('')
 
+  // Item com vários veículos → edita só o período; a lista de veículos é preservada.
+  const multi = Array.isArray(item.parking_vehicles) && item.parking_vehicles.length > 0
+  const contagem = useMemo(() => {
+    const m = {}
+    for (const v of (item.parking_vehicles || [])) m[v.vehicle_type] = (m[v.vehicle_type] || 0) + 1
+    return m
+  }, [item.parking_vehicles])
+
   const isoFuso = (d, t) => (d && t ? `${d}T${t}:00-03:00` : null)
   const startAt = isoFuso(entradaD, entradaH)
   const endAt = isoFuso(saidaD, saidaH)
@@ -1737,17 +1764,47 @@ function ParkingEditSheet({ item, onClose, onSave }) {
   const { data: lot } = useQuery({ queryKey: ['parking-lot', item.lot_id], queryFn: () => api.parkingLot(item.lot_id) })
   const tarifas = lot?.tariffs || []
 
+  // Single: cotação do veículo escolhido. Multi: cotação por tipo (mapa) para somar.
   const { data: cot, isFetching } = useQuery({
     queryKey: ['parking-quote', item.lot_id, veiculo, startAt, endAt],
     queryFn: () => api.parkingQuote({ lot_id: item.lot_id, vehicle_type: veiculo, start_at: startAt, end_at: endAt }),
-    enabled: !!(periodoOk && item.lot_id),
+    enabled: !!(periodoOk && item.lot_id && !multi),
     retry: false,
   })
+  const tiposMulti = Object.keys(contagem).join(',')
+  const { data: quotesMulti, isFetching: fetchingMulti } = useQuery({
+    queryKey: ['parking-quotes-edit', item.lot_id, tiposMulti, startAt, endAt],
+    enabled: !!(periodoOk && item.lot_id && multi),
+    retry: false,
+    queryFn: async () => {
+      const entradas = await Promise.all(Object.keys(contagem).map(async (tp) => {
+        const q = await api.parkingQuote({ lot_id: item.lot_id, vehicle_type: tp, start_at: startAt, end_at: endAt })
+        return [tp, q]
+      }))
+      return Object.fromEntries(entradas)
+    },
+  })
+  const multiDiarias = quotesMulti ? Object.values(quotesMulti)[0]?.diarias : null
+  const multiTotal = useMemo(() => {
+    if (!quotesMulti) return 0
+    return Object.entries(contagem).reduce((s, [tp, n]) => s + (Number(quotesMulti[tp]?.total) || 0) * n, 0)
+  }, [quotesMulti, contagem])
+  const calculando = multi ? fetchingMulti : isFetching
+  const prontoCot = multi ? !!quotesMulti : !!cot
 
   function salvar() {
     setErro('')
     if (!periodoOk) { setErro('Escolha entrada e saída (a saída deve ser depois da entrada).'); return }
-    if (!cot) { setErro('Aguarde a cotação ou revise o período.'); return }
+    if (!prontoCot) { setErro('Aguarde a cotação ou revise o período.'); return }
+    if (multi) {
+      onSave({
+        ...item,
+        id: `park-${item.lot_id}-${startAt}-${endAt}`,
+        start_at: startAt, end_at: endAt,
+        diarias: multiDiarias, total: multiTotal,
+      })
+      return
+    }
     onSave({
       ...item,
       id: `park-${item.lot_id}-${startAt}-${endAt}-${veiculo}`,
@@ -1789,29 +1846,43 @@ function ParkingEditSheet({ item, onClose, onSave }) {
               </select>
             </label>
           </div>
-          {tarifas.length > 0 && (
+          {multi ? (
             <div>
-              <p className="text-[11px] font-semibold text-gray-500 mb-1">Veículo</p>
-              <div className="flex flex-wrap gap-2">
-                {tarifas.map((tf) => (
-                  <button key={tf.vehicle_type} onClick={() => setVeiculo(tf.vehicle_type)}
-                    className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border capitalize ${veiculo === tf.vehicle_type ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-600'}`}>
-                    {tf.vehicle_type} · {fmtMoney(tf.price_per_unit)}
-                  </button>
+              <p className="text-[11px] font-semibold text-gray-500 mb-1">Veículos</p>
+              <ul className="space-y-0.5 text-[12.5px] text-gray-600">
+                {item.parking_vehicles.map((v, i) => (
+                  <li key={i} className="capitalize">{v.vehicle_type} · {v.plate || 'placa a informar'}</li>
                 ))}
-              </div>
+              </ul>
+              <p className="text-[11px] text-gray-400 mt-1">Para mudar os veículos, remova (X) e adicione de novo pela aba Vagas.</p>
             </div>
+          ) : (
+            <>
+              {tarifas.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-500 mb-1">Veículo</p>
+                  <div className="flex flex-wrap gap-2">
+                    {tarifas.map((tf) => (
+                      <button key={tf.vehicle_type} onClick={() => setVeiculo(tf.vehicle_type)}
+                        className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border capitalize ${veiculo === tf.vehicle_type ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-600'}`}>
+                        {tf.vehicle_type} · {fmtMoney(tf.price_per_unit)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <input value={placa} onChange={(e) => setPlaca(e.target.value)} placeholder="Placa (opcional)" className={`${campo} uppercase`} maxLength={12} />
+            </>
           )}
-          <input value={placa} onChange={(e) => setPlaca(e.target.value)} placeholder="Placa (opcional)" className={`${campo} uppercase`} maxLength={12} />
           <div className="rounded-xl bg-gray-50 p-3 text-[13px] flex items-center justify-between">
-            <span className="text-gray-500">{isFetching ? 'Calculando…' : cot ? `${cot.diarias} diária(s)` : 'Período'}</span>
-            <span className="font-extrabold text-brand">{cot ? fmtMoney(cot.total) : '—'}</span>
+            <span className="text-gray-500">{calculando ? 'Calculando…' : prontoCot ? `${multi ? multiDiarias : cot.diarias} diária(s)` : 'Período'}</span>
+            <span className="font-extrabold text-brand">{prontoCot ? fmtMoney(multi ? multiTotal : cot.total) : '—'}</span>
           </div>
           {erro && <p className="text-[12px] text-red-500">{erro}</p>}
         </div>
         <div className="px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white flex gap-2">
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
-          <button onClick={salvar} disabled={!periodoOk || isFetching || !cot}
+          <button onClick={salvar} disabled={!periodoOk || calculando || !prontoCot}
             className="flex-1 flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50">
             <CheckCircle2 size={15} /> Salvar
           </button>

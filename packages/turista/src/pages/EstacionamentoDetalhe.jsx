@@ -28,8 +28,8 @@ export default function EstacionamentoDetalhe() {
   const [entradaH, setEntradaH] = useState('10:00')
   const [saidaD,   setSaidaD]   = useState('')
   const [saidaH,   setSaidaH]   = useState('10:00')
-  const [veiculo,  setVeiculo]  = useState('')
-  const [placa,    setPlaca]    = useState('')
+  const [qtys,     setQtys]     = useState({}) // { carro: 2, moto: 1 }
+  const [plates,   setPlates]   = useState({}) // { carro: ['ABC1D23', ...] }
   const [erro,     setErro]     = useState('')
   const hoje = hojeJeri() // data mínima (bloqueia passado no seletor)
   // Se a saída ficar antes da entrada (ou no passado), zera para forçar nova escolha.
@@ -38,23 +38,60 @@ export default function EstacionamentoDetalhe() {
   }, [entradaD, saidaD, hoje])
 
   const tarifas = lot?.tariffs || []
-  const vehicleType = veiculo || tarifas[0]?.vehicle_type || 'carro'
   const startAt = iso(entradaD, entradaH)
   const endAt   = iso(saidaD, saidaH)
   const periodoOk = startAt && endAt && Date.parse(endAt) > Date.parse(startAt)
 
-  // Cotação no servidor (só quando o período é válido).
-  const { data: cot } = useQuery({
-    queryKey: ['parking-quote', id, vehicleType, startAt, endAt],
-    queryFn:  () => api.parkingQuote({ lot_id: id, vehicle_type: vehicleType, start_at: startAt, end_at: endAt }),
-    enabled:  !!(periodoOk && id),
+  // Cotação no servidor por TIPO de veículo (o cliente pode escolher vários).
+  // Retorna um mapa { vehicle_type: { diarias, unit_price, total, disponibilidade } }.
+  const tiposKey = tarifas.map((t) => t.vehicle_type).join(',')
+  const { data: quotes } = useQuery({
+    queryKey: ['parking-quotes', id, startAt, endAt, tiposKey],
+    enabled:  !!(periodoOk && id && tarifas.length),
     retry: false,
+    queryFn: async () => {
+      const entradas = await Promise.all(tarifas.map(async (t) => {
+        const q = await api.parkingQuote({ lot_id: id, vehicle_type: t.vehicle_type, start_at: startAt, end_at: endAt })
+        return [t.vehicle_type, q]
+      }))
+      return Object.fromEntries(entradas)
+    },
   })
 
-  const precoBase = useMemo(() => {
-    const t = tarifas.find((x) => x.vehicle_type === vehicleType) || tarifas[0]
-    return t?.price_per_unit
-  }, [tarifas, vehicleType])
+  // Ajusta a quantidade de um tipo e redimensiona a lista de placas.
+  function mudarQtd(type, n) {
+    const q = Math.max(0, Math.min(Number(n) || 0, 20))
+    setQtys((prev) => ({ ...prev, [type]: q }))
+    setPlates((prev) => {
+      const arr = (prev[type] || []).slice(0, q)
+      while (arr.length < q) arr.push('')
+      return { ...prev, [type]: arr }
+    })
+  }
+  function mudarPlaca(type, i, val) {
+    setPlates((prev) => {
+      const arr = (prev[type] || []).slice()
+      arr[i] = val.toUpperCase()
+      return { ...prev, [type]: arr }
+    })
+  }
+
+  // Derivados da seleção de veículos.
+  const selecionados = tarifas.filter((t) => (qtys[t.vehicle_type] || 0) > 0)
+  const totalVagas = tarifas.reduce((s, t) => s + (qtys[t.vehicle_type] || 0), 0)
+  const anyQuote = quotes ? Object.values(quotes)[0] : null
+  const diarias = anyQuote?.diarias
+  const disponivel = anyQuote?.disponibilidade?.disponivel
+  const totalGeral = useMemo(() => {
+    if (!quotes) return 0
+    return selecionados.reduce((s, t) => s + (Number(quotes[t.vehicle_type]?.total) || 0) * (qtys[t.vehicle_type] || 0), 0)
+  }, [quotes, selecionados, qtys])
+  const PLACA_MIN = 6
+  const placasOk = selecionados.length > 0 && selecionados.every((t) => {
+    const arr = plates[t.vehicle_type] || []
+    return arr.length === (qtys[t.vehicle_type] || 0) && arr.every((p) => (p || '').trim().length >= PLACA_MIN)
+  })
+  const vagasOk = disponivel == null ? true : totalVagas <= disponivel
 
   const coberto = lot?.opening_hours?.coberto
 
@@ -93,25 +130,41 @@ export default function EstacionamentoDetalhe() {
   function adicionar() {
     setErro('')
     if (!periodoOk) { setErro('Escolha entrada e saída (a saída deve ser depois da entrada).'); return }
-    if (!cot) { setErro('Aguarde a cotação ou revise o período.'); return }
-    if (cot?.disponibilidade && cot.disponibilidade.tem_vaga === false) {
-      setErro('Sem vaga para este período. Tente outras datas.'); return
+    if (!quotes) { setErro('Aguarde a cotação ou revise o período.'); return }
+    if (totalVagas < 1) { setErro('Escolha ao menos um veículo.'); return }
+    if (!placasOk) { setErro('Informe a placa de cada veículo.'); return }
+    if (!vagasOk) { setErro(`Sem vagas suficientes para este período (disponível: ${disponivel}).`); return }
+
+    // Expande a seleção em uma lista de veículos (1 vaga por veículo).
+    const vehiclesList = []
+    for (const t of selecionados) {
+      const arr = plates[t.vehicle_type] || []
+      for (let i = 0; i < (qtys[t.vehicle_type] || 0); i++) {
+        vehiclesList.push({ vehicle_type: t.vehicle_type, plate: arr[i].trim().toUpperCase() })
+      }
     }
+    const resumo = selecionados
+      .map((t) => `${qtys[t.vehicle_type]} ${t.vehicle_type}${qtys[t.vehicle_type] > 1 ? 's' : ''}`)
+      .join(' · ')
+
     const foto = Array.isArray(lot.photos) ? lot.photos[0] : null
     upsertItem({
-      id: `park-${id}-${startAt}-${endAt}-${vehicleType}`,
+      id: `park-${id}-${startAt}-${endAt}`,
       kind: 'parking',
       name: lot.name,
       lot_id: id,
       lot_name: lot.name,
       cover_image_url: foto,
       region_name: lot.region_name || 'Jericoacoara',
-      vehicle_type: vehicleType,
-      plate: placa.trim() || null,
+      // Compatibilidade de exibição (primeiro veículo) + lista completa.
+      vehicle_type: vehiclesList[0]?.vehicle_type,
+      plate: vehiclesList[0]?.plate || null,
+      parking_vehicles: vehiclesList,
+      vehicles_summary: resumo,
       start_at: startAt,
       end_at: endAt,
-      diarias: cot.diarias,
-      total: cot.total,
+      diarias: diarias,
+      total: totalGeral,
     })
     navigate('/carrinho')
   }
@@ -227,54 +280,85 @@ export default function EstacionamentoDetalhe() {
           )}
         </div>
 
-        {/* Veículo */}
+        {/* Veículos — escolha quantos de cada tipo e informe a placa de cada um */}
         {tarifas.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-            <p className="text-[13px] font-bold text-gray-900">Tipo de veículo</p>
-            <div className="flex flex-wrap gap-2">
-              {tarifas.map((t) => (
-                <button key={t.vehicle_type} onClick={() => setVeiculo(t.vehicle_type)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-[13px] font-semibold capitalize ${
-                    vehicleType === t.vehicle_type ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-600'
-                  }`}>
-                  <Car size={14} /> {t.vehicle_type} · {fmt(t.price_per_unit)}
-                </button>
-              ))}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-bold text-gray-900">Veículos</p>
+              {totalVagas > 0 && <span className="text-[11px] font-semibold text-brand">{totalVagas} vaga(s)</span>}
             </div>
-            <label className="block text-[11px] font-semibold text-gray-500">Placa (opcional)
-              <input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} placeholder="Informar depois"
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 h-10 text-[13px] outline-none focus:border-brand" />
-            </label>
-            <p className="text-[11px] text-gray-400 flex items-center gap-1"><Info size={11} /> Cada diária corresponde a 24 horas.</p>
+
+            {tarifas.map((t) => {
+              const q = qtys[t.vehicle_type] || 0
+              return (
+                <div key={t.vehicle_type} className="space-y-2">
+                  {/* Linha do tipo: nome/preço + stepper de quantidade */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[13px] font-semibold text-gray-800 capitalize">
+                      <Car size={15} className="text-brand" /> {t.vehicle_type}
+                      <span className="text-[12px] font-normal text-gray-500">· {fmt(t.price_per_unit)}/diária</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => mudarQtd(t.vehicle_type, q - 1)} disabled={q <= 0}
+                        className="w-8 h-8 rounded-full border border-gray-200 text-gray-700 font-bold text-lg leading-none flex items-center justify-center disabled:opacity-40 active:scale-95">−</button>
+                      <span className="w-5 text-center text-[14px] font-bold text-gray-900">{q}</span>
+                      <button type="button" onClick={() => mudarQtd(t.vehicle_type, q + 1)}
+                        className="w-8 h-8 rounded-full border border-brand text-brand font-bold text-lg leading-none flex items-center justify-center active:scale-95">+</button>
+                    </div>
+                  </div>
+                  {/* Placas (uma por veículo) */}
+                  {q > 0 && (
+                    <div className="space-y-2 pl-1">
+                      {Array.from({ length: q }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-[11px] text-gray-400 w-16 shrink-0 capitalize">{t.vehicle_type} {i + 1}</span>
+                          <input
+                            value={(plates[t.vehicle_type] || [])[i] || ''}
+                            onChange={(e) => mudarPlaca(t.vehicle_type, i, e.target.value)}
+                            placeholder="Placa (ex.: ABC1D23)"
+                            maxLength={12}
+                            className="flex-1 border border-gray-200 rounded-lg px-3 h-10 text-[13px] uppercase tracking-wide outline-none focus:border-brand"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+            <p className="text-[11px] text-gray-400 flex items-center gap-1"><Info size={11} /> Cada diária corresponde a 24 horas · a placa de cada veículo é obrigatória.</p>
           </div>
         )}
 
         {/* Disponibilidade do período escolhido */}
-        {periodoOk && cot && (
-          cot.disponibilidade?.tem_vaga === false ? (
+        {periodoOk && quotes && (
+          disponivel != null && disponivel <= 0 ? (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-[13px] text-red-700 font-semibold flex items-center gap-2">
               <Sun size={15} className="shrink-0" /> Esgotado para esse período — escolha outras datas.
+            </div>
+          ) : disponivel != null && totalVagas > disponivel ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[13px] text-amber-700 font-semibold flex items-center gap-2">
+              <Info size={15} className="shrink-0" /> Só há {disponivel} vaga(s) nesse período — reduza a quantidade.
             </div>
           ) : (
             <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 text-[12px] text-emerald-700 font-semibold flex items-center gap-2">
               <ParkingSquare size={14} className="shrink-0" />
-              {Number(cot.disponibilidade?.disponivel) > 0
-                ? `${cot.disponibilidade.disponivel} vaga(s) disponível(is) nesse período`
-                : 'Vaga disponível nesse período'}
+              {Number(disponivel) > 0 ? `${disponivel} vaga(s) disponível(is) nesse período` : 'Vagas disponíveis nesse período'}
             </div>
           )
         )}
 
         {/* Resumo da cotação */}
-        {periodoOk && cot && (
+        {periodoOk && quotes && totalVagas > 0 && (
           <div className="bg-brand/5 border border-brand/20 rounded-2xl p-4 flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-bold text-gray-900">{cot.diarias} diária(s) × {fmt(cot.unit_price ?? precoBase)}</p>
+              <p className="text-[13px] font-bold text-gray-900">{totalVagas} veículo(s) × {diarias} diária(s)</p>
               <p className="text-[11px] text-gray-500 mt-0.5">Você só paga após o estacionamento aceitar.</p>
             </div>
             <div className="text-right">
               <p className="text-[10px] text-gray-400">Total</p>
-              <p className="text-[18px] font-extrabold text-brand">{fmt(cot.total)}</p>
+              <p className="text-[18px] font-extrabold text-brand">{fmt(totalGeral)}</p>
             </div>
           </div>
         )}
@@ -282,14 +366,15 @@ export default function EstacionamentoDetalhe() {
         {erro && <p className="text-[12px] text-red-500">{erro}</p>}
       </div>
 
-      {/* Ação fixa — só libera com período válido, veículo e cotação pronta */}
+      {/* Ação fixa — só libera com período, veículos, placas e vaga suficiente */}
       {(() => {
-        const pronto = periodoOk && !!cot && !!vehicleType &&
-          !(cot?.disponibilidade && cot.disponibilidade.tem_vaga === false)
+        const pronto = periodoOk && !!quotes && totalVagas >= 1 && placasOk && vagasOk
         const faltam = []
         if (!entradaD || !saidaD) faltam.push('período')
         else if (!periodoOk) faltam.push('saída depois da entrada')
-        if (!vehicleType) faltam.push('veículo')
+        if (totalVagas < 1) faltam.push('veículo')
+        else if (!placasOk) faltam.push('placa de cada veículo')
+        else if (!vagasOk) faltam.push('reduzir a quantidade (sem vaga)')
         return (
           <div className="fixed inset-x-0 bottom-[68px] px-4 pointer-events-none">
             <div className="max-w-[430px] mx-auto pointer-events-auto">
@@ -300,7 +385,7 @@ export default function EstacionamentoDetalhe() {
               )}
               <button onClick={adicionar} disabled={!pronto}
                 className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform shadow-lg shadow-brand/30 disabled:opacity-50 disabled:active:scale-100">
-                <ShoppingCart size={18} /> {pronto ? `Adicionar ao carrinho · ${fmt(cot.total)}` : 'Adicionar ao carrinho'}
+                <ShoppingCart size={18} /> {pronto ? `Adicionar ao carrinho · ${fmt(totalGeral)}` : 'Adicionar ao carrinho'}
               </button>
             </div>
           </div>
