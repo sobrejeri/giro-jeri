@@ -8,6 +8,11 @@ import { useCart } from '../contexts/CartContext'
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 // Período no fuso de Jeri (UTC−3, sem horário de verão).
 const iso = (date, time) => (date && time ? `${date}T${time}:00-03:00` : null)
+// Hoje (YYYY-MM-DD) no fuso de Jeri — para bloquear datas passadas no seletor.
+function hojeJeri() {
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' })
+  return p.format(new Date())
+}
 
 export default function EstacionamentoDetalhe() {
   const { id } = useParams()
@@ -26,6 +31,11 @@ export default function EstacionamentoDetalhe() {
   const [veiculo,  setVeiculo]  = useState('')
   const [placa,    setPlaca]    = useState('')
   const [erro,     setErro]     = useState('')
+  const hoje = hojeJeri() // data mínima (bloqueia passado no seletor)
+  // Se a saída ficar antes da entrada (ou no passado), zera para forçar nova escolha.
+  useEffect(() => {
+    if (saidaD && ((entradaD && saidaD < entradaD) || saidaD < hoje)) setSaidaD('')
+  }, [entradaD, saidaD, hoje])
 
   const tarifas = lot?.tariffs || []
   const vehicleType = veiculo || tarifas[0]?.vehicle_type || 'carro'
@@ -186,7 +196,7 @@ export default function EstacionamentoDetalhe() {
             <label className="text-[11px] font-semibold text-gray-500">Entrada
               <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1">
                 <Calendar size={14} className="text-brand shrink-0" />
-                <input type="date" value={entradaD} onChange={(e) => setEntradaD(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
+                <input type="date" min={hoje} value={entradaD} onChange={(e) => setEntradaD(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
               </div>
             </label>
             <label className="text-[11px] font-semibold text-gray-500">Horário
@@ -200,7 +210,7 @@ export default function EstacionamentoDetalhe() {
             <label className="text-[11px] font-semibold text-gray-500">Saída
               <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1">
                 <Calendar size={14} className="text-brand shrink-0" />
-                <input type="date" value={saidaD} onChange={(e) => setSaidaD(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
+                <input type="date" min={entradaD || hoje} value={saidaD} onChange={(e) => setSaidaD(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
               </div>
             </label>
             <label className="text-[11px] font-semibold text-gray-500">Horário
