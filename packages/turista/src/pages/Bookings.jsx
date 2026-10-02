@@ -622,6 +622,11 @@ function ParkingReservas() {
   const ativas = todas.filter((r) => !['completed', 'cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'].includes(r.status))
   // Concluídas e ainda sem avaliação (fecha o ciclo de reputação).
   const aAvaliar = todas.filter((r) => r.status === 'completed' && r.reviewed === false)
+  // Recentemente encerradas sem sucesso (expirou/recusada) — últimos 7 dias, para
+  // o cliente entender o que houve e poder solicitar de novo.
+  const encerradas = todas.filter((r) =>
+    ['expired_no_payment', 'expired_no_answer', 'rejected'].includes(r.status) &&
+    (Date.now() - new Date(r.created_at || 0).getTime()) < 7 * 864e5).slice(0, 3)
 
   const pedirRetirada = useMutation({
     mutationFn: (id) => api.parkingWithdrawal(id),
@@ -631,7 +636,7 @@ function ParkingReservas() {
     },
   })
 
-  if (ativas.length === 0 && aAvaliar.length === 0) return null
+  if (ativas.length === 0 && aAvaliar.length === 0 && encerradas.length === 0) return null
   const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
   const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
   return (
@@ -725,6 +730,25 @@ function ParkingReservas() {
         <ParkingReviewCard key={`rev-${r.id}`} reserva={r}
           onDone={() => queryClient.invalidateQueries({ queryKey: ['parking-my'] })} />
       ))}
+
+      {encerradas.map((r) => {
+        const texto = r.status === 'rejected' ? 'O estacionamento não aceitou.'
+          : r.status === 'expired_no_answer' ? 'Não houve resposta a tempo.'
+          : 'O prazo de pagamento expirou e a vaga foi liberada.'
+        return (
+          <div key={`exp-${r.id}`} className="bg-gray-50 rounded-2xl border border-gray-100 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[13px] font-semibold text-gray-700 truncate">{r.lot_name || 'Estacionamento'}</p>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 shrink-0">Encerrada</span>
+            </div>
+            <p className="text-[12px] text-gray-500 mt-0.5">{texto}</p>
+            <button onClick={() => navigate(`/estacionamento/${r.lot_id}`)}
+              className="mt-2 w-full border border-brand/30 text-brand font-semibold rounded-xl py-2 text-[13px] active:scale-[0.98]">
+              Solicitar novamente
+            </button>
+          </div>
+        )
+      })}
 
       {qrModal && <EntryQrModal data={qrModal} onClose={() => setQrModal(null)} />}
       {pinModal && <WithdrawalPinModal data={pinModal} onClose={() => setPinModal(null)} />}

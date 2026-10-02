@@ -38,10 +38,16 @@ const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractio
 const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
 
 const STATUS = {
+  awaiting_partner:          { label: 'Nova',          cls: 'bg-amber-100 text-amber-700' },
   accepted_awaiting_payment: { label: 'Aguardando pagamento', cls: 'bg-amber-100 text-amber-700' },
-  confirmed:                 { label: 'Confirmada',  cls: 'bg-emerald-100 text-emerald-700' },
-  in_lot:                    { label: 'No pátio',    cls: 'bg-blue-100 text-blue-700' },
-  completed:                 { label: 'Concluída',   cls: 'bg-gray-100 text-gray-600' },
+  confirmed:                 { label: 'Confirmada',    cls: 'bg-emerald-100 text-emerald-700' },
+  in_lot:                    { label: 'No pátio',      cls: 'bg-blue-100 text-blue-700' },
+  withdrawal_requested:      { label: 'Retirada solicitada', cls: 'bg-blue-100 text-blue-700' },
+  completed:                 { label: 'Concluída',     cls: 'bg-gray-100 text-gray-600' },
+  rejected:                  { label: 'Recusada',      cls: 'bg-red-100 text-red-600' },
+  cancelled:                 { label: 'Cancelada',     cls: 'bg-red-100 text-red-600' },
+  expired_no_answer:         { label: 'Expirou sem resposta', cls: 'bg-gray-100 text-gray-500' },
+  expired_no_payment:        { label: 'Expirou sem pagamento', cls: 'bg-gray-100 text-gray-500' },
 }
 
 // ── Painel do estacionamento (parceiro) — núcleo operacional ──────────────────
