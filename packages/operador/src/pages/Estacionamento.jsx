@@ -706,9 +706,10 @@ function InicioDashboard({ onGo, filaCount }) {
   const dt = (x) => { try { return new Date(x).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return x } }
 
   const Card = ({ icon: Icon, tint, big, label }) => (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tint}`}><Icon size={20} /></div>
-      <div><p className="text-[20px] font-extrabold text-gray-900 leading-none">{big}</p><p className="text-[11px] text-gray-400 mt-1">{label}</p></div>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-2">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tint}`}><Icon size={19} /></div>
+      <p className="text-[22px] font-extrabold text-gray-900 leading-none">{big}</p>
+      <p className="text-[12px] text-gray-400 leading-tight">{label}</p>
     </div>
   )
   return (
