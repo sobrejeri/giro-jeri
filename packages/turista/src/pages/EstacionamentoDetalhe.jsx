@@ -48,6 +48,16 @@ export default function EstacionamentoDetalhe() {
 
   const coberto = lot?.opening_hours?.coberto
 
+  // Carrossel da hero: alterna entre as fotos deste estacionamento a cada 20s.
+  const fotos = useMemo(() => (Array.isArray(lot?.photos) ? lot.photos.filter(Boolean) : []), [lot])
+  const [slide, setSlide] = useState(0)
+  useEffect(() => {
+    setSlide(0)
+    if (fotos.length < 2) return
+    const t = setInterval(() => setSlide((i) => (i + 1) % fotos.length), 20000)
+    return () => clearInterval(t)
+  }, [fotos.length])
+
   // Horários permitidos conforme o funcionamento. 24h → meia em meia hora o dia
   // todo; senão, só dentro de [abre, fecha]. Impede o cliente de escolher um
   // horário que o estacionamento não atende.
@@ -99,8 +109,6 @@ export default function EstacionamentoDetalhe() {
   if (isLoading) return <p className="p-6 text-center text-gray-400 text-sm">Carregando…</p>
   if (!lot) return <p className="p-6 text-center text-gray-400 text-sm">Estacionamento não encontrado.</p>
 
-  const foto = Array.isArray(lot.photos) ? lot.photos[0] : null
-
   return (
     <div className="pb-28">
       {/* Header */}
@@ -111,7 +119,25 @@ export default function EstacionamentoDetalhe() {
         <h1 className="text-[16px] font-bold text-gray-900 truncate">{lot.name}</h1>
       </div>
 
-      {foto && <div className="h-44 overflow-hidden"><img src={foto} alt="" className="w-full h-full object-cover" /></div>}
+      {fotos.length > 0 && (
+        <div className="relative h-44 overflow-hidden">
+          {fotos.map((f, i) => (
+            <img
+              key={f + i}
+              src={f}
+              alt=""
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`}
+            />
+          ))}
+          {fotos.length > 1 && (
+            <div className="absolute bottom-2.5 right-3 flex gap-1.5">
+              {fotos.map((_, i) => (
+                <span key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === slide ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="px-4 py-4 space-y-4">
         <div>
