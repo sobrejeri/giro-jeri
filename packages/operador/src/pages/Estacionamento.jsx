@@ -307,6 +307,10 @@ function LotEditor({ lot, notify, onSaved }) {
     address: lot.address || '', lat: lot.lat ?? '', lng: lot.lng ?? '',
     is_24h: oh.is_24h !== false, abre: oh.open || '08:00', fecha: oh.close || '18:00',
     coberto: !!oh.coberto,
+    // Taxa de atraso (excedente). Valor exibido em reais; salvo em centavos.
+    taxa_valor: lot.overstay_fee_cents ? (lot.overstay_fee_cents / 100).toString() : '',
+    taxa_unidade: lot.overstay_fee_unit || 'hour',
+    taxa_tolerancia: lot.overstay_grace_min ?? 0,
   })
   const [enviandoFoto, setEnviandoFoto] = useState(false)
   const [geoLoading, setGeoLoading] = useState(false)
@@ -332,6 +336,9 @@ function LotEditor({ lot, notify, onSaved }) {
         ...(lot.opening_hours || {}),
         is_24h: !!form.is_24h, open: form.abre, close: form.fecha, coberto: !!form.coberto,
       },
+      overstay_fee_cents: Math.max(0, Math.round(Number(form.taxa_valor || 0) * 100)),
+      overstay_fee_unit: form.taxa_unidade === 'day' ? 'day' : 'hour',
+      overstay_grace_min: Math.max(0, Number(form.taxa_tolerancia || 0)),
     }),
     onSuccess: () => { notify?.('ok', 'Cadastro atualizado!'); onSaved?.() },
     onError: (e) => notify?.('err', e?.message || 'Não foi possível salvar.'),
@@ -421,6 +428,30 @@ function LotEditor({ lot, notify, onSaved }) {
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" checked={!!form.coberto} onChange={(e) => setF('coberto', e.target.checked)} /> Vagas cobertas
         </label>
+      </div>
+
+      {/* Taxa por atraso (excedente) */}
+      <div className="border-t border-gray-100 pt-3 space-y-2">
+        <label className={label}>Taxa por atraso (excedente)</label>
+        <p className="text-[11px] text-gray-400 -mt-1">Cobrada quando o cliente ultrapassa o período reservado. O cliente vê o valor acumulando na reserva dele.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Valor (R$)</label>
+            <input type="number" min="0" step="0.01" value={form.taxa_valor} onChange={(e) => setF('taxa_valor', e.target.value)} className={campo} placeholder="0,00" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Cobrar por</label>
+            <select value={form.taxa_unidade} onChange={(e) => setF('taxa_unidade', e.target.value)} className={campo}>
+              <option value="hour">Hora</option>
+              <option value="day">Dia</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">Tolerância (min)</label>
+          <input type="number" min="0" value={form.taxa_tolerancia} onChange={(e) => setF('taxa_tolerancia', e.target.value)} className={campo} placeholder="0" />
+          <p className="text-[11px] text-gray-400 mt-1">Minutos de atraso sem cobrança (ex.: 15). Deixe 0 para cobrar desde o 1º minuto.</p>
+        </div>
       </div>
 
       {/* Campos da plataforma — só leitura */}

@@ -48,7 +48,9 @@ router.get('/lots/:id', authenticate, async (req, res, next) => {
   try {
     // Inclui address (migration 117) de forma tolerante — se a coluna não existe,
     // cai no conjunto público sem address.
-    let { data: lot, error } = await supabase.from('parking_lots').select(`${LOT_PUBLIC}, address`).eq('id', req.params.id).maybeSingle()
+    let { data: lot, error } = await supabase.from('parking_lots')
+      .select(`${LOT_PUBLIC}, address, overstay_fee_cents, overstay_fee_unit, overstay_grace_min`)
+      .eq('id', req.params.id).maybeSingle()
     if (error && error.code === '42703') ({ data: lot, error } = await supabase.from('parking_lots').select(LOT_PUBLIC).eq('id', req.params.id).maybeSingle())
     if (error) throw error
     if (!lot || !lot.is_active) return res.status(404).json({ error: 'Estacionamento não encontrado.' })
@@ -411,7 +413,13 @@ const partnerLotSchema = z.object({
   opening_hours: z.record(z.any()).optional(),
   photos:        z.array(z.string().max(2048)).max(10).optional(),
   is_active:     z.boolean().optional(),
+  // Taxa de excedente (atraso) — migration 118. Valor em centavos.
+  overstay_fee_cents: z.number().int().min(0).optional(),
+  overstay_fee_unit:  z.enum(['hour', 'day']).optional(),
+  overstay_grace_min: z.number().int().min(0).max(1440).optional(),
 })
+// Colunas que podem não existir se a migration correspondente estiver pendente.
+const COLUNAS_OPCIONAIS_LOT = ['address', 'overstay_fee_cents', 'overstay_fee_unit', 'overstay_grace_min']
 router.patch('/partner/lots/:id', authenticate, async (req, res, next) => {
   try {
     if (!(await podeOperarLot(req.user, req.params.id))) return res.status(403).json({ error: 'Este estacionamento não é seu.' })
@@ -419,9 +427,10 @@ router.patch('/partner/lots/:id', authenticate, async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
     const patch = { ...parsed.data, updated_at: new Date().toISOString() }
     let { error } = await supabase.from('parking_lots').update(patch).eq('id', req.params.id)
-    // Tolera coluna address ausente (migration 117 pendente).
-    if (error && error.code === '42703' && 'address' in patch) {
-      const { address, ...rest } = patch // eslint-disable-line no-unused-vars
+    // Tolera colunas ausentes (migrations 117/118 pendentes): remove as opcionais e retenta.
+    if (error && error.code === '42703' && COLUNAS_OPCIONAIS_LOT.some((c) => c in patch)) {
+      const rest = { ...patch }
+      for (const c of COLUNAS_OPCIONAIS_LOT) delete rest[c]
       ;({ error } = await supabase.from('parking_lots').update(rest).eq('id', req.params.id))
     }
     if (error) throw error
