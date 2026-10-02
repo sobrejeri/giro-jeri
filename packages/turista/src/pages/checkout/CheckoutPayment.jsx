@@ -423,7 +423,7 @@ const soDigitos = (s) => String(s || '').replace(/\D/g, '')
 // o checkout hospedado. Tokeniza no navegador e chama o MESMO handler de cartão
 // (onPagar = handleCardPayment), que já roteia por status (aprovado → sucesso,
 // recusado → mensagem). Não redireciona: a cobrança é síncrona.
-function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar, installmentFees }) {
+export function FormularioCartaoPagarme({ amount, publicKey, maxParcelas = 12, onPagar, installmentFees }) {
   const { t } = useTranslation()
   const [cpf,    setCpf]    = useState('')
   const [number, setNumber] = useState('')
