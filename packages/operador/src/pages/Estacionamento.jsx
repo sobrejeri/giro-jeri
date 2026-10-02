@@ -89,14 +89,17 @@ export default function Estacionamento({ section }) {
 
   if (isLoading) return <PageSpinner />
 
-  const TITULO = { inicio: 'Início', fila: 'Solicitações', reservas: 'Reservas', patio: 'Pátio', financeiro: 'Financeiro', meulocal: 'Meu local' }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <ParkingSquare size={20} className="text-brand" />
-        <h1 className="text-lg font-bold text-gray-900">{menuMode ? (TITULO[active] || 'Estacionamento') : 'Estacionamento'}</h1>
-      </div>
+      {/* No modo menu (operador de vagas), o cabeçalho superior já mostra a seção
+          — não repetimos o título aqui. No modo abas, mantém o título. */}
+      {!menuMode && (
+        <div className="flex items-center gap-2">
+          <ParkingSquare size={20} className="text-brand" />
+          <h1 className="text-lg font-bold text-gray-900">Estacionamento</h1>
+        </div>
+      )}
 
       {/* Abas (só no modo página única — admin/tours). No menu lateral some. */}
       {!menuMode && (
@@ -710,7 +713,6 @@ function InicioDashboard({ onGo, filaCount }) {
   )
   return (
     <div className="space-y-4">
-      {ov?.lot && <p className="text-[13px] text-gray-500">{ov.lot.name}</p>}
       <div className="grid grid-cols-2 gap-3">
         <Card icon={Car} tint="bg-blue-50 text-blue-600" big={`${s.no_patio}`} label="No pátio" />
         <Card icon={ParkingSquare} tint="bg-emerald-50 text-emerald-600" big={`${s.livres} de ${s.capacity}`} label="Vagas livres agora" />
