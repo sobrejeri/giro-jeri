@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search, Compass, Car, Clock } from 'lucide-react'
@@ -27,13 +27,21 @@ export default function Estacionamento() {
     !busca.trim() || (l.name || '').toLowerCase().includes(busca.trim().toLowerCase()))
 
   const cidade = nomeCidade(region)
-  // Fundo do banner: alterna entre as fotos dos estacionamentos da região; sorteia
-  // uma a cada carregamento da página.
+  // Fundo do banner: carrossel com as fotos dos estacionamentos da região,
+  // alternando automaticamente a cada 20s com transição suave (crossfade).
   const fotos = useMemo(
     () => (data?.data || []).flatMap((l) => (Array.isArray(l.photos) ? l.photos : [])).filter(Boolean),
     [data],
   )
-  const bgFoto = useMemo(() => (fotos.length ? fotos[Math.floor(Math.random() * fotos.length)] : null), [fotos.length])
+  const [slide, setSlide] = useState(0)
+  // Começa em uma foto aleatória e avança 1 a cada 20s enquanto houver >1 foto.
+  useEffect(() => {
+    if (fotos.length === 0) return
+    setSlide(Math.floor(Math.random() * fotos.length))
+    if (fotos.length < 2) return
+    const t = setInterval(() => setSlide((i) => (i + 1) % fotos.length), 20000)
+    return () => clearInterval(t)
+  }, [fotos.length])
 
   return (
     <div className="px-4 pb-10 pt-3 space-y-4">
@@ -52,14 +60,30 @@ export default function Estacionamento() {
         </button>
       </div>
 
-      {/* Banner — foto de fundo (alterna) + degradê; cidade conforme a região */}
+      {/* Banner — carrossel das fotos (crossfade a cada 20s) + degradê; cidade conforme a região */}
       <div className="relative rounded-2xl overflow-hidden text-white p-5 shadow-sm min-h-[128px] flex flex-col justify-center">
-        {bgFoto && <img src={bgFoto} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover" />}
-        <div className={`absolute inset-0 ${bgFoto ? 'bg-gradient-to-br from-black/70 via-black/45 to-brand/60' : 'bg-gradient-to-br from-brand to-orange-400'}`} />
+        {fotos.map((f, i) => (
+          <img
+            key={f + i}
+            src={f}
+            alt=""
+            aria-hidden="true"
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${i === slide ? 'opacity-100' : 'opacity-0'}`}
+          />
+        ))}
+        <div className={`absolute inset-0 ${fotos.length ? 'bg-gradient-to-br from-black/70 via-black/45 to-brand/60' : 'bg-gradient-to-br from-brand to-orange-400'}`} />
         <div className="relative">
           <h1 className="text-[22px] font-extrabold leading-tight drop-shadow-sm">Seu carro seguro.<br />Você em {cidade}.</h1>
           <p className="text-[13px] text-white/90 mt-1 drop-shadow-sm">Encontre onde estacionar e aproveite a viagem.</p>
         </div>
+        {/* Indicadores de slide */}
+        {fotos.length > 1 && (
+          <div className="absolute bottom-2.5 right-3 flex gap-1.5">
+            {fotos.map((_, i) => (
+              <span key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === slide ? 'w-4 bg-white' : 'w-1.5 bg-white/50'}`} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Busca */}
