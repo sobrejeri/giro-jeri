@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search, Compass, Car } from 'lucide-react'
+import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search, Compass, Car, Clock } from 'lucide-react'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 
@@ -90,6 +90,8 @@ export default function Estacionamento() {
           {lots.map((lot) => {
             const foto = Array.isArray(lot.photos) ? lot.photos[0] : null
             const coberto = lot.opening_hours?.coberto // flag opcional de cadastro
+            const oh = lot.opening_hours || {}
+            const horario = oh.is_24h === false && oh.open && oh.close ? `${oh.open}–${oh.close}` : '24 horas'
             return (
               <button
                 key={lot.id}
@@ -105,6 +107,9 @@ export default function Estacionamento() {
                   <div className="flex items-center gap-1.5 mt-2">
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
                       {coberto ? <Umbrella size={11} /> : <Sun size={11} />} {coberto ? 'Coberto' : 'Descoberto'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                      <Clock size={11} /> {horario}
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
