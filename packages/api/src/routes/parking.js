@@ -637,6 +637,40 @@ async function avaliarReembolso(r) {
   return { pago: true, elegivel, valor: elegivel ? Number(r.total_amount) : 0, cutoff_min: cutoffMin }
 }
 
+// Pagar com Pix — dono da reserva, pós-aceite, dentro do prazo. Gera o QR; a
+// confirmação vem por webhook + polling (GET .../pix-status).
+const payPixSchema = z.object({ email: z.string().email().optional() })
+router.post('/reservations/:id/pay-pix', authenticate, async (req, res, next) => {
+  try {
+    const parsed = payPixSchema.safeParse(req.body || {})
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, code, user_id, status, payment_status, total_amount, payment_deadline_at')
+      .eq('id', req.params.id).maybeSingle()
+    if (!r || r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (r.payment_status === 'paid' || ['confirmed', 'in_lot', 'completed'].includes(r.status)) return res.json({ ok: true, already: true })
+    if (r.status !== 'accepted_awaiting_payment') return res.status(409).json({ error: 'Esta reserva ainda não está liberada para pagamento.' })
+    if (r.payment_deadline_at && new Date(r.payment_deadline_at).getTime() <= Date.now()) return res.status(409).json({ error: 'O prazo de pagamento expirou. Solicite novamente.' })
+
+    const { data: cliente } = await supabase.from('users').select('full_name, email, document_number').eq('id', req.user.id).maybeSingle()
+    const { criarPixEstacionamento } = await import('../services/parking/pix.js')
+    const pix = await criarPixEstacionamento({ reserva: r, cliente, email: parsed.success ? parsed.data.email : undefined })
+    res.json({ ok: true, ...pix })
+  } catch (err) {
+    if (err?.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
+})
+
+// Status do Pix (polling) — confirma se o MP já aprovou.
+router.get('/reservations/:id/pix-status', authenticate, async (req, res, next) => {
+  try {
+    const { data: r } = await supabase.from('parking_reservations').select('id, user_id').eq('id', req.params.id).maybeSingle()
+    if (!r || r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    const { conferirPix } = await import('../services/parking/pix.js')
+    res.json(await conferirPix(req.params.id))
+  } catch (err) { next(err) }
+})
+
 // Cancelar — dono (ou admin). Libera capacidade e aplica a política de reembolso
 // por antecedência (registra elegibilidade/valor; o estorno é processado à parte).
 router.post('/reservations/:id/cancel', authenticate, async (req, res, next) => {

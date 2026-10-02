@@ -3276,6 +3276,22 @@ router.post('/webhook', async (req, res, next) => {
         console.error('[webhook] consulta para resolver external_reference falhou: %s', err.message)
       }
       const reservaId = oficial?.external_reference
+      // ── Estacionamento: external_reference "parking:<id>" ──────────────────
+      // Cobrança de VAGA, não de booking. Trata isolado e encerra aqui, sem
+      // tocar no fluxo de bookings abaixo.
+      if (reservaId && String(reservaId).startsWith('parking:')) {
+        const parkId = String(reservaId).slice('parking:'.length)
+        if (oficial?.status === 'approved') {
+          try {
+            const { confirmarPixAprovado } = await import('../services/parking/pix.js')
+            await confirmarPixAprovado(parkId)
+            console.log('[webhook] Pix de estacionamento %s confirmado (reserva %s)', gatewayId, parkId)
+          } catch (err) {
+            console.error('[webhook] falha ao confirmar Pix de estacionamento: %s', err.message)
+          }
+        }
+        return res.status(200).json({ ok: true, parking: true })
+      }
       if (reservaId) {
         // A linha mais recente daquela reserva que ainda não tem cobrança
         // ligada. `.is(null)` no UPDATE garante que duas entregas simultâneas
