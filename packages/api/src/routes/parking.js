@@ -665,7 +665,7 @@ router.post('/reservations/:id/pay-pix', authenticate, async (req, res, next) =>
   try {
     const parsed = payPixSchema.safeParse(req.body || {})
     const { data: r } = await supabase.from('parking_reservations')
-      .select('id, code, user_id, status, payment_status, total_amount, payment_deadline_at')
+      .select('id, code, user_id, status, payment_status, total_amount, payment_deadline_at, lot_id')
       .eq('id', req.params.id).maybeSingle()
     if (!r || r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })
     if (r.payment_status === 'paid' || ['confirmed', 'in_lot', 'completed'].includes(r.status)) return res.json({ ok: true, already: true })

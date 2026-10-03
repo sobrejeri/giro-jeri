@@ -11,6 +11,44 @@ import { confirmarReserva } from './payments.js'
 
 export const PARKING_REF_PREFIX = 'parking:'
 
+// ── Split (divisão automática) ───────────────────────────────────────────────
+// Quando o split está ligado (system_settings.payment_platform_receives_all =
+// 'false') E o DONO do lote conectou a conta Mercado Pago (OAuth), a cobrança
+// Pix nasce NA CONTA DELE com a comissão da plataforma retida (application_fee).
+// Fail-closed: qualquer incerteza (flag lida com erro, sem conta conectada,
+// comissão que não fecha) → devolve null e o valor cai inteiro na plataforma,
+// que repassa pela tela de Repasses. Errar para "fica com a plataforma" se
+// corrige com repasse; mandar para conta de terceiro é irreversível.
+async function contextoSplit(reserva) {
+  try {
+    if (!reserva?.lot_id) return null
+    const { data: lot } = await supabase.from('parking_lots')
+      .select('owner_user_id, commission_pct').eq('id', reserva.lot_id).maybeSingle()
+    if (!lot?.owner_user_id) return null
+
+    // Mesma chave do fluxo de bookings: só divide quando a plataforma NÃO recebe tudo.
+    const { data: cfgRows } = await supabase.from('system_settings')
+      .select('setting_value').eq('setting_key', 'payment_platform_receives_all').maybeSingle()
+    const v = cfgRows?.setting_value
+    const recebeTudo = v === undefined || v === null || v === '' ? true : String(v) !== 'false'
+    if (recebeTudo) return null
+
+    const { getOperatorMp } = await import('../../routes/payments.js')
+    const mp = await getOperatorMp(lot.owner_user_id)
+    if (!mp?.token) return null
+
+    const pct = lot.commission_pct != null ? Number(lot.commission_pct)
+      : (mp.platformPct != null ? Number(mp.platformPct) : 0)
+    const total = Number(reserva.total_amount)
+    const applicationFee = Math.round(total * (pct / 100) * 100) / 100
+    if (!(applicationFee > 0) || applicationFee >= total) return null
+    return { sellerAccessToken: mp.token, applicationFee, operatorId: lot.owner_user_id }
+  } catch (e) {
+    console.error('[parking split] falhou, caindo na plataforma:', e.message)
+    return null
+  }
+}
+
 // Cria (ou reusa) a cobrança Pix da reserva. Idempotente pela idempotency_key.
 export async function criarPixEstacionamento({ reserva, cliente, email }) {
   const payerEmail = email || cliente?.email
@@ -27,6 +65,9 @@ export async function criarPixEstacionamento({ reserva, cliente, email }) {
     }
   }
 
+  // Divisão automática: cobra na conta do operador com a comissão retida, se elegível.
+  const split = await contextoSplit(reserva)
+
   const { createPixPayment } = await import('../../services/mercadoPago.js')
   const pix = await createPixPayment({
     amount: Number(reserva.total_amount),
@@ -35,8 +76,12 @@ export async function criarPixEstacionamento({ reserva, cliente, email }) {
     payerName: cliente?.full_name,
     payerDoc: cliente?.document_number,
     externalRef: `${PARKING_REF_PREFIX}${reserva.id}`,
+    sellerAccessToken: split?.sellerAccessToken,
+    applicationFee: split?.applicationFee,
   })
-  const raw = { pix_code: pix.pix_code, qr_base64: pix.qr_base64, expires_at: pix.expires_at }
+  // split_operator_id permite ao polling/webhook consultar o pagamento na conta
+  // certa (quando a cobrança nasceu na conta do operador).
+  const raw = { pix_code: pix.pix_code, qr_base64: pix.qr_base64, expires_at: pix.expires_at, split_operator_id: split?.operatorId || null }
   await supabase.from('parking_payments').upsert({
     reservation_id: reserva.id, gateway: 'mercadopago', amount: reserva.total_amount,
     status: 'pending', external_ref: pix.mp_id, idempotency_key: idem, raw_response: raw,
@@ -63,13 +108,23 @@ export async function conferirPix(reservationId) {
   if (r.payment_status === 'paid') return { paid: true }
 
   const { data: pay } = await supabase.from('parking_payments')
-    .select('external_ref, status').eq('reservation_id', reservationId).eq('gateway', 'mercadopago')
+    .select('external_ref, status, raw_response').eq('reservation_id', reservationId).eq('gateway', 'mercadopago')
     .order('created_at', { ascending: false }).limit(1).maybeSingle()
   if (!pay?.external_ref) return { paid: false }
 
   try {
     const { getMpPaymentCompleto } = await import('../../services/mercadoPago.js')
-    const mp = await getMpPaymentCompleto(pay.external_ref)
+    // Com split, a cobrança nasceu na conta do operador → consulta com o token dele.
+    let sellerToken
+    const opId = pay.raw_response?.split_operator_id
+    if (opId) {
+      try {
+        const { getOperatorMp } = await import('../../routes/payments.js')
+        const mp = await getOperatorMp(opId)
+        sellerToken = mp?.token
+      } catch { /* cai na conta da plataforma abaixo */ }
+    }
+    const mp = await getMpPaymentCompleto(pay.external_ref, sellerToken)
     if (mp?.status === 'approved') {
       await confirmarPixAprovado(reservationId)
       return { paid: true }

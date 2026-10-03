@@ -3278,10 +3278,30 @@ router.post('/webhook', async (req, res, next) => {
       const reservaId = oficial?.external_reference
       // ── Estacionamento: external_reference "parking:<id>" ──────────────────
       // Cobrança de VAGA, não de booking. Trata isolado e encerra aqui, sem
-      // tocar no fluxo de bookings abaixo.
+      // tocar no fluxo de bookings abaixo. Com SPLIT, a cobrança nasce na conta
+      // do operador e a plataforma não a enxerga com o token dela: nesse caso
+      // casamos pelo id guardado em parking_payments e reconsultamos com o
+      // token do operador.
+      let parkId = null
+      let parkOficial = oficial
       if (reservaId && String(reservaId).startsWith('parking:')) {
-        const parkId = String(reservaId).slice('parking:'.length)
-        if (oficial?.status === 'approved') {
+        parkId = String(reservaId).slice('parking:'.length)
+      } else if (!reservaId) {
+        const { data: pp } = await supabase.from('parking_payments')
+          .select('reservation_id, raw_response').eq('external_ref', gatewayId).maybeSingle()
+        if (pp) {
+          parkId = pp.reservation_id
+          const opId = pp.raw_response?.split_operator_id
+          if (opId) {
+            try {
+              const mp = await getOperatorMp(opId)
+              if (mp?.token) parkOficial = await getMpPaymentCompleto(gatewayId, mp.token)
+            } catch (e) { console.error('[webhook] parking split lookup falhou: %s', e.message) }
+          }
+        }
+      }
+      if (parkId) {
+        if (parkOficial?.status === 'approved') {
           try {
             const { confirmarPixAprovado } = await import('../services/parking/pix.js')
             await confirmarPixAprovado(parkId)

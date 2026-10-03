@@ -478,6 +478,9 @@ export default function Perfil() {
       {/* Publicar na Descubra (fotos/vídeos dos serviços) */}
       <PublicarFeed meId={profile?.id} />
 
+      {/* Recebimento via Mercado Pago (split — divisão automática) */}
+      <MercadoPagoConnect />
+
       {/* Dados Pessoais */}
       <Card>
         <CardHeader>
