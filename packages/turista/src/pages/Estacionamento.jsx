@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search, Compass, Car, Clock } from 'lucide-react'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import EstacionamentoDesktop from './EstacionamentoDesktop'
 
 // Primeiro nome da cidade/região (sem sufixos) para o banner.
 function nomeCidade(region) {
@@ -44,7 +45,8 @@ export default function Estacionamento() {
   }, [fotos.length])
 
   return (
-    <div className="px-4 pb-10 pt-3 space-y-4">
+    <>
+    <div className="px-4 pb-10 pt-3 space-y-4 lg:hidden">
       {/* Alternador Passeios | Translados | Vagas (mesma lojinha) */}
       <div className="flex bg-gray-100 rounded-2xl p-1">
         <button onClick={() => navigate('/passeios')}
@@ -147,5 +149,11 @@ export default function Estacionamento() {
         </div>
       )}
     </div>
+
+    {/* Desktop/PC */}
+    <div className="hidden lg:block">
+      <EstacionamentoDesktop />
+    </div>
+    </>
   )
 }
