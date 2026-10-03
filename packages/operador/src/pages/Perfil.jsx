@@ -819,7 +819,12 @@ export default function Perfil() {
                   </div>
                   <div className="space-y-3 border-t border-gray-100 pt-3">
                     <p className="text-xs font-semibold text-gray-600">Sócio responsável</p>
-                    <p className="text-[11px] text-gray-400 -mt-1">O Pagar.me exige ao menos 1 responsável com dados completos.</p>
+                    <p className="text-[11px] text-gray-400 -mt-1 leading-relaxed">
+                      Informe o sócio administrador / representante legal da empresa. O Pagar.me
+                      exige uma pessoa física responsável pela conta para validar o recebimento
+                      (verificação de identidade/KYC) — basta 1. Se for MEI ou autônomo, é mais
+                      simples cadastrar como Pessoa Física (CPF) acima.
+                    </p>
                     <PessoaFisicaFields data={kyc.partner} set={(k, v) => setKycPath('partner.' + k, v)} comIdentificacao />
                   </div>
                 </div>
