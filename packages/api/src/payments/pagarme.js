@@ -24,6 +24,80 @@ function separaConta(bruto) {
   return { num: d.slice(0, -1), dv: d.slice(-1) }
 }
 
+// ── register_information (KYC exigido pelo Pagar.me para validar o recebedor) ──
+const soDigitos = (v) => String(v || '').replace(/\D/g, '')
+
+// Data ISO "YYYY-MM-DD" → "MM/DD/YYYY" (formato do register_information no
+// Pagar.me v5). PONTO A CONFIRMAR no sandbox: se o gateway recusar a data,
+// basta trocar a ordem aqui (um lugar só) para "DD/MM/YYYY".
+function dataPagarme(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : ''
+}
+
+// Telefone → { ddd, number, type }. Aceita {ddd,number} do formulário ou um
+// campo cru tipo "+55 88 99999-9999".
+function telefonePagarme(tel) {
+  if (tel && typeof tel === 'object' && (tel.ddd || tel.number)) {
+    const ddd = soDigitos(tel.ddd).slice(-3)
+    const number = soDigitos(tel.number).slice(0, 11)
+    return ddd && number ? { ddd, number, type: 'mobile' } : null
+  }
+  const d = soDigitos(tel).replace(/^55/, '')
+  if (d.length < 10) return null
+  return { ddd: d.slice(0, 2), number: d.slice(2), type: 'mobile' }
+}
+
+// Endereço no formato do Pagar.me v5 (street_number, complementary, zip_code…).
+function enderecoPagarme(a = {}) {
+  return {
+    street:          String(a?.street || '').trim(),
+    street_number:   String(a?.number || '').trim(),
+    complementary:   String(a?.complement || '').trim() || undefined,
+    neighborhood:    String(a?.neighborhood || '').trim(),
+    city:            String(a?.city || '').trim(),
+    state:           String(a?.state || '').trim().toUpperCase().slice(0, 2),
+    zip_code:        soDigitos(a?.zip).slice(0, 8),
+    reference_point: String(a?.reference || '').trim() || undefined,
+  }
+}
+function enderecoCompleto(e) {
+  return !!(e && e.street && e.street_number && e.neighborhood && e.city && e.state && e.zip_code)
+}
+
+// Monta o bloco de PESSOA FÍSICA do register_information — reaproveitado no PF e
+// no sócio responsável do PJ. Acumula em `faltam` o que estiver ausente, para a
+// mensagem acionável. `prefixo` distingue os campos do sócio ("sócio: …").
+function pessoaFisicaInfo(src = {}, faltam, prefixo = '') {
+  const doc       = soDigitos(src.document)
+  const birthdate = dataPagarme(src.birthdate)
+  const phone     = telefonePagarme(src.phone)
+  const address   = enderecoPagarme(src.address)
+  const income    = Math.round(Number(src.monthly_income) || 0)
+
+  if (!src.name)                      faltam.push(`${prefixo}nome`)
+  if (doc.length !== 11)              faltam.push(`${prefixo}CPF`)
+  if (!birthdate)                     faltam.push(`${prefixo}data de nascimento`)
+  if (!src.mother_name)              faltam.push(`${prefixo}nome da mãe`)
+  if (!income)                        faltam.push(`${prefixo}faturamento mensal`)
+  if (!src.professional_occupation)   faltam.push(`${prefixo}profissão`)
+  if (!phone)                         faltam.push(`${prefixo}telefone`)
+  if (!enderecoCompleto(address))     faltam.push(`${prefixo}endereço`)
+
+  return {
+    name:                    src.name,
+    email:                   src.email || undefined,
+    document:                doc,
+    type:                    'individual',
+    birthdate,
+    monthly_income:          income,
+    professional_occupation: src.professional_occupation || undefined,
+    mother_name:             src.mother_name || undefined,
+    phone_numbers:           phone ? [phone] : [],
+    address,
+  }
+}
+
 // Cria um recebedor no Pagar.me (o destino da fatia do operador no split).
 // Devolve o id (re_xxx) que entra na regra de split de cada cobrança.
 //
@@ -52,10 +126,60 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
 
   const temPix = !!(user.pix_key && user.pix_key_type)
 
+  // KYC completo (register_information). Quando presente, o Pagar.me consegue
+  // VALIDAR o recebedor sem o fluxo externo. Ausente (coluna não migrada ou
+  // operador ainda não preencheu) → mantém o cadastro mínimo de antes, que nasce
+  // em análise e se resolve pelo link de verificação.
+  const kyc = (user.recipient_kyc && typeof user.recipient_kyc === 'object') ? user.recipient_kyc : null
+  let register_information = null
+  if (kyc) {
+    const faltam = []
+    if (isCompany) {
+      const addr    = enderecoPagarme(kyc.address)
+      const phone   = telefonePagarme(kyc.phone)
+      const founding = dataPagarme(kyc.founding_date)
+      const revenue = Math.round(Number(kyc.annual_revenue) || 0)
+      if (!kyc.company_name)          faltam.push('razão social')
+      if (!kyc.trading_name)          faltam.push('nome fantasia')
+      if (!revenue)                   faltam.push('faturamento anual')
+      if (!founding)                  faltam.push('data de fundação')
+      if (!phone)                     faltam.push('telefone da empresa')
+      if (!enderecoCompleto(addr))    faltam.push('endereço da empresa')
+      const partner = pessoaFisicaInfo(kyc.partner || {}, faltam, 'sócio: ')
+      register_information = {
+        type:           'corporation',
+        document:        doc,
+        company_name:    kyc.company_name,
+        trading_name:    kyc.trading_name,
+        annual_revenue:  revenue,
+        founding_date:   founding,
+        email:           user.email || undefined,
+        phone_numbers:   phone ? [phone] : [],
+        address:         addr,
+        managing_partners: [{ ...partner, self_declared_legal_representative: true }],
+      }
+    } else {
+      register_information = pessoaFisicaInfo({
+        name:                    user.full_name,
+        email:                   user.email,
+        document:                doc,
+        birthdate:               kyc.birthdate || user.birth_date,
+        mother_name:             kyc.mother_name,
+        monthly_income:          kyc.monthly_income,
+        professional_occupation: kyc.professional_occupation,
+        phone:                   kyc.phone,
+        address:                 kyc.address,
+      }, faltam)
+    }
+    if (faltam.length) {
+      throw new Error(`Complete no perfil para validar o recebedor: ${faltam.join(', ')}.`)
+    }
+  }
+
   const auth = Buffer.from(`${apiKey}:`).toString('base64')
 
   const body = {
-    name:          user.full_name,
+    name:          isCompany && kyc?.company_name ? kyc.company_name : user.full_name,
     email:         user.email,
     document:      doc,
     document_type: isCompany ? 'cnpj' : 'cpf',
@@ -75,6 +199,8 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
     },
     // PIX é método EXTRA quando existe — não substitui a conta bancária.
     ...(temPix ? { pix_key: { type: user.pix_key_type, key: String(user.pix_key).trim() } } : {}),
+    // KYC completo quando o operador preencheu — é o que permite validar sem KYC externo.
+    ...(register_information ? { register_information } : {}),
   }
 
   const res = await fetch(`${BASE}/recipients`, {

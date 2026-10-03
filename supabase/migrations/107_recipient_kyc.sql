@@ -1,0 +1,17 @@
+-- 107 — KYC do recebedor (split Pagar.me)
+--
+-- Guarda, num ÚNICO campo JSONB, os dados extras que o Pagar.me exige para
+-- VALIDAR o recebedor (`register_information`), além de nome/documento/conta
+-- que já vivem em `users`:
+--   • PF  (individual):  data de nascimento, nome da mãe, faturamento mensal,
+--                        profissão, telefone (DDD+número) e endereço completo.
+--   • PJ  (corporation): razão social, nome fantasia, faturamento anual, data de
+--                        fundação, telefone, endereço + 1 sócio responsável
+--                        (managing_partner) com os mesmos dados de PF.
+--
+-- Um JSONB em vez de ~25 colunas novas: o conjunto é opcional, varia por tipo
+-- (PF/PJ) e só é lido na hora de montar o recebedor. A API é TOLERANTE à
+-- ausência desta coluna — sem ela, o cadastro degrada para o mínimo de hoje.
+--
+-- Aplicar manualmente no Supabase (SQL Editor). Idempotente.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recipient_kyc jsonb;

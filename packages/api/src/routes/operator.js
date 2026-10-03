@@ -74,6 +74,49 @@ const PROFILE_FIELDS = `
   gateway_recipient_id
 `.trim();
 
+// KYC do recebedor (register_information do Pagar.me). Guardado como JSONB em
+// users.recipient_kyc. Esquema permissivo (campos opcionais): a exigência do que
+// é obrigatório por tipo acontece no createRecipient, com mensagem acionável.
+const kycAddressSchema = z.object({
+  street:       z.string().max(200).optional().nullable(),
+  number:       z.string().max(20).optional().nullable(),
+  complement:   z.string().max(100).optional().nullable(),
+  neighborhood: z.string().max(120).optional().nullable(),
+  city:         z.string().max(120).optional().nullable(),
+  state:        z.string().max(2).optional().nullable(),
+  zip:          z.string().max(9).optional().nullable(),
+  reference:    z.string().max(200).optional().nullable(),
+}).partial();
+const kycPhoneSchema = z.object({
+  ddd:    z.string().max(3).optional().nullable(),
+  number: z.string().max(12).optional().nullable(),
+}).partial();
+const kycPersonSchema = z.object({
+  name:                    z.string().max(200).optional().nullable(),
+  document:                z.string().max(20).optional().nullable(),
+  email:                   z.string().max(200).optional().nullable(),
+  birthdate:               z.string().max(10).optional().nullable(),
+  mother_name:             z.string().max(200).optional().nullable(),
+  monthly_income:          z.union([z.number(), z.string()]).optional().nullable(),
+  professional_occupation: z.string().max(120).optional().nullable(),
+  phone:                   kycPhoneSchema.optional().nullable(),
+  address:                 kycAddressSchema.optional().nullable(),
+}).partial();
+const recipientKycSchema = z.object({
+  kind:                    z.enum(['individual', 'company']).optional().nullable(),
+  mother_name:             z.string().max(200).optional().nullable(),
+  monthly_income:          z.union([z.number(), z.string()]).optional().nullable(),
+  professional_occupation: z.string().max(120).optional().nullable(),
+  birthdate:               z.string().max(10).optional().nullable(),
+  phone:                   kycPhoneSchema.optional().nullable(),
+  address:                 kycAddressSchema.optional().nullable(),
+  company_name:            z.string().max(200).optional().nullable(),
+  trading_name:            z.string().max(200).optional().nullable(),
+  annual_revenue:          z.union([z.number(), z.string()]).optional().nullable(),
+  founding_date:           z.string().max(10).optional().nullable(),
+  partner:                 kycPersonSchema.optional().nullable(),
+}).partial();
+
 const profileSchema = z.object({
   full_name:           z.string().min(2).max(200).optional(),
   // E-mail é a credencial de login (ver PATCH /profile): sincronizado com o
@@ -93,6 +136,7 @@ const profileSchema = z.object({
   bank_account_number: z.string().max(30).optional().nullable(),
   bank_account_type:   z.enum(['corrente', 'poupanca']).optional().nullable(),
   bank_document:       z.string().max(30).optional().nullable(),
+  recipient_kyc:       recipientKycSchema.optional().nullable(),
 });
 
 const router = Router();
@@ -285,7 +329,13 @@ router.get('/profile', async (req, res, next) => {
       data = retry.data; error = retry.error;
     }
     if (error) throw error;
-    res.json(data);
+    // recipient_kyc (JSONB) vem à parte e tolera a coluna ausente (a migração 107
+    // pode não ter rodado): sem ela, o perfil volta sem o bloco de KYC.
+    let recipient_kyc = null;
+    const { data: k, error: kErr } = await supabase
+      .from('users').select('recipient_kyc').eq('id', req.user.id).single();
+    if (!kErr) recipient_kyc = k?.recipient_kyc ?? null;
+    res.json({ ...data, recipient_kyc });
   } catch (err) { next(err); }
 });
 
@@ -352,13 +402,30 @@ router.patch('/profile', async (req, res, next) => {
       }
     }
 
+    // recipient_kyc (JSONB) sai do update base: é tolerante à coluna ausente
+    // (migração 107) e não pode derrubar o salvamento do resto do perfil.
+    const { recipient_kyc, ...baseBody } = body;
+
     const { data, error } = await supabase
       .from('users')
-      .update({ ...body, updated_at: new Date().toISOString() })
+      .update({ ...baseBody, updated_at: new Date().toISOString() })
       .eq('id', req.user.id)
       .select(PROFILE_FIELDS)
       .single();
     if (error) throw error;
+
+    let kycSalvo = null;
+    if (recipient_kyc !== undefined) {
+      const { data: k, error: kErr } = await supabase
+        .from('users')
+        .update({ recipient_kyc })
+        .eq('id', req.user.id)
+        .select('recipient_kyc')
+        .single();
+      if (!kErr) kycSalvo = k?.recipient_kyc ?? null;
+      else if (kErr.code !== 'PGRST204' && kErr.code !== '42703') throw kErr;
+      // PGRST204 / 42703 = coluna ainda não migrada → ignora (não quebra o salvar).
+    }
 
     // Telefone mudou → rechecagem automática do WhatsApp (as corridas chegam
     // por lá; número inválido = coop sem aviso). Fire-and-forget.
@@ -371,7 +438,7 @@ router.patch('/profile', async (req, res, next) => {
         .catch((err) => console.error('[whatsapp] rechecagem coop falhou:', err.message));
     }
 
-    res.json(data);
+    res.json({ ...data, recipient_kyc: kycSalvo });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
@@ -399,7 +466,8 @@ router.get('/recipient-status', async (req, res, next) => {
       .like('setting_key', 'payment_%');
     const cfg = Object.fromEntries((rows || []).map((s) => [s.setting_key, s.setting_value]));
     const { chaveDoPagarme } = await import('./payments.js');
-    const configured = !!chaveDoPagarme(cfg);
+    const apiKey = chaveDoPagarme(cfg);
+    const configured = !!apiKey;
 
     // O Pagar.me EXIGE conta bancária no recebedor (provado em produção: "The
     // default_bank_account field is required."). Então o que libera a ativação é
@@ -409,6 +477,15 @@ router.get('/recipient-status', async (req, res, next) => {
     const missing = [];
     if (!String(user?.document_number || '').replace(/\D/g, '')) missing.push('documento');
     if (!(codigoDoBanco(user) && user?.bank_agency && user?.bank_account_number)) missing.push('banco');
+
+    // KYC completo (register_information) também é pré-requisito para VALIDAR.
+    // Só cobra quando a coluna recipient_kyc existe (migração 107); sem ela,
+    // preserva o fluxo mínimo de antes (cadastro + verificação externa).
+    {
+      const { data: k, error: kErr } = await supabase
+        .from('users').select('recipient_kyc').eq('id', req.user.id).single();
+      if (!kErr && !(k?.recipient_kyc && k.recipient_kyc.kind)) missing.push('dados');
+    }
 
     const rid = user?.gateway_recipient_id || null;
 
@@ -484,12 +561,19 @@ router.post('/register-recipient', async (req, res, next) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select(`id, full_name, email, user_type, document_type, document_number,
+      .select(`id, full_name, email, user_type, document_type, document_number, birth_date, phone,
                gateway_recipient_id, pix_key_type, pix_key,
                bank_name, bank_agency, bank_account_number, bank_account_type, bank_document`)
       .eq('id', req.user.id)
       .single();
     if (error) throw error;
+
+    // KYC completo (JSONB) à parte — tolerante à coluna ausente (migração 107).
+    // Com ele, o createRecipient monta o register_information e o Pagar.me valida
+    // sem o KYC externo; sem ele, cai no cadastro mínimo de antes.
+    const { data: k } = await supabase
+      .from('users').select('recipient_kyc').eq('id', req.user.id).single();
+    if (k?.recipient_kyc) user.recipient_kyc = k.recipient_kyc;
 
     // Idempotente: já sendo recebedor, não cria outro (recebedor duplicado é
     // dinheiro caindo em dois lugares e reconciliação manual depois).

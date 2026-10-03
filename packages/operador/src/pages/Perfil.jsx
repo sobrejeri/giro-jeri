@@ -85,121 +85,122 @@ const SITUACAO = {
   desconhecido:{ cor: 'text-gray-500',   Icone: AlertCircle, texto: 'Cadastrado — status indisponível no momento' },
 }
 
-function PagarmeRecipient() {
+// Traduz os códigos de `missing` numa frase do que falta preencher.
+function listaFaltas(missing = []) {
+  const m = []
+  if (missing.includes('documento')) m.push('o CPF/CNPJ')
+  if (missing.includes('banco'))     m.push('os dados bancários')
+  if (missing.includes('dados'))     m.push('os dados de cadastro (nascimento, endereço, telefone…)')
+  return m.join(', ') || 'os dados'
+}
+
+// Faixa de status do recebedor + botão "Salvar e validar". O botão primeiro
+// SALVA o perfil (onBeforeRegister, vindo do form) e só então chama o
+// register-recipient — assim o operador valida tudo num clique. Pendência/recusa
+// oferecem o link de verificação do Pagar.me (o operador não tem painel próprio).
+function PagarmeRecipient({ onBeforeRegister, saving }) {
   const qc = useQueryClient()
   const [err, setErr] = useState(null)
   const [kyc, setKyc] = useState(null)   // { url } quando a plataforma gera o link
+  const [busy, setBusy] = useState(false)
 
   const { data: status, isLoading, isFetching } = useQuery({
     queryKey: ['pagarme-recipient-status'],
     queryFn:  () => api.getRecipientStatus(),
   })
 
-  const registerMut = useMutation({
-    mutationFn: () => api.registerRecipient(),
-    onSuccess: () => {
-      setErr(null)
-      qc.invalidateQueries({ queryKey: ['pagarme-recipient-status'] })
-      qc.invalidateQueries({ queryKey: ['operator-profile'] })
-    },
-    onError: (e) => setErr(e?.message || 'Não foi possível ativar agora.'),
-  })
-
+  const registerMut = useMutation({ mutationFn: () => api.registerRecipient() })
   const kycMut = useMutation({
     mutationFn: () => api.recipientKycLink(),
     onSuccess: (r) => { setErr(null); setKyc(r); if (r?.url) window.open(r.url, '_blank', 'noopener') },
     onError: (e) => setErr(e?.message || 'Não foi possível gerar o link agora.'),
   })
 
-  // Enquanto carrega, ou quando a plataforma não habilitou o Pagar.me, o card
-  // não aparece — evita oferecer algo que ainda não cobra por aqui.
   if (isLoading || !status?.configured) return null
 
-  const faltaDoc   = status.missing?.includes('documento')
-  const faltaBanco = status.missing?.includes('banco')
   const sit = SITUACAO[status.situacao] || SITUACAO.desconhecido
   const pendente = status.registered && !status.apto && status.situacao !== 'desconhecido'
+  const ocupado  = busy || saving || registerMut.isPending
+
+  // Salva o perfil e valida no Pagar.me num passo só. Erros do gateway (campo
+  // inválido/faltando) voltam acionáveis para o operador corrigir e reenviar.
+  async function handleValidar() {
+    setErr(null); setBusy(true)
+    try {
+      if (onBeforeRegister) await onBeforeRegister()
+      await registerMut.mutateAsync()
+      qc.invalidateQueries({ queryKey: ['pagarme-recipient-status'] })
+      qc.invalidateQueries({ queryKey: ['operator-profile'] })
+    } catch (e) {
+      setErr(e?.message || 'Não foi possível validar agora.')
+    } finally { setBusy(false) }
+  }
 
   return (
-    <div className="mt-4 pt-4 border-t border-gray-100">
-      <div className="flex items-center gap-2 mb-2">
-        <CreditCard size={15} className="text-gray-400" />
-        <h3 className="text-sm font-semibold text-gray-700">Recebimento automático no cartão</h3>
-      </div>
-      <div>
-        <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-          Ative para receber sua parte de cada venda no cartão direto na sua conta
-          bancária, já com a comissão da plataforma descontada — sem repasse manual.
-        </p>
+    <div className="mt-2">
+      {status.registered ? (
+        <div className="space-y-3">
+          <div className={`flex items-center gap-1.5 text-sm font-medium ${sit.cor}`}>
+            <sit.Icone size={15} className={status.situacao === 'analise' ? 'animate-spin' : ''} />
+            {sit.texto}
+            <button
+              type="button"
+              onClick={() => qc.invalidateQueries({ queryKey: ['pagarme-recipient-status'] })}
+              disabled={isFetching}
+              className="ml-1 text-xs text-gray-400 hover:text-gray-600 underline disabled:opacity-50"
+            >
+              {isFetching ? 'atualizando…' : 'atualizar'}
+            </button>
+          </div>
+          {status.recipient_id && <p className="text-xs text-gray-400 font-mono">{status.recipient_id}</p>}
 
-        {status.registered ? (
-          <div className="space-y-3">
-            {/* Faixa de status ao vivo do Pagar.me */}
-            <div className={`flex items-center gap-1.5 text-sm font-medium ${sit.cor}`}>
-              <sit.Icone size={15} className={status.situacao === 'analise' ? 'animate-spin' : ''} />
-              {sit.texto}
-              <button
-                type="button"
-                onClick={() => qc.invalidateQueries({ queryKey: ['pagarme-recipient-status'] })}
-                disabled={isFetching}
-                className="ml-1 text-xs text-gray-400 hover:text-gray-600 underline disabled:opacity-50"
-              >
-                {isFetching ? 'atualizando…' : 'atualizar'}
-              </button>
-            </div>
-            {status.recipient_id && (
-              <p className="text-xs text-gray-400 font-mono">{status.recipient_id}</p>
-            )}
+          {status.apto && (
+            <p className="text-xs text-green-700 leading-relaxed">
+              Validado — sua parte cai na sua conta bancária a cada venda no cartão.
+            </p>
+          )}
 
-            {status.apto && (
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Tudo certo — sua parte cai na sua conta bancária a cada venda no cartão.
+          {pendente && (
+            <div>
+              <p className="text-xs text-gray-500 mb-2 leading-relaxed">
+                {status.situacao === 'recusado'
+                  ? 'A verificação foi recusada. Confira os dados abaixo, salve e reenvie — ou confirme pelo link do Pagar.me.'
+                  : 'Falta concluir a verificação do Pagar.me. Confira os dados e, se precisar, abra o link para confirmar.'}
               </p>
-            )}
-
-            {/* Pendência: link de verificação do Pagar.me (o operador não tem
-                acesso ao painel; a plataforma gera o link para ele). */}
-            {pendente && (
-              <div>
-                <p className="text-xs text-gray-500 mb-2 leading-relaxed">
-                  {status.situacao === 'recusado'
-                    ? 'A verificação foi recusada. Reenvie seus dados pelo link abaixo para liberar os repasses.'
-                    : 'Falta concluir a verificação do Pagar.me. Abra o link, confirme seus dados e a conta fica apta a receber.'}
-                </p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={handleValidar} disabled={ocupado}>
+                  {ocupado ? 'Reenviando…' : 'Salvar e reenviar'}
+                </Button>
                 <Button type="button" variant="secondary" onClick={() => kycMut.mutate()} disabled={kycMut.isPending}>
                   {kycMut.isPending ? 'Gerando link…' : 'Resolver pendência'}
                 </Button>
-                {kyc?.url && (
-                  <p className="text-xs text-gray-500 mt-2 break-all">
-                    Se a aba não abrir: <a href={kyc.url} target="_blank" rel="noreferrer" className="text-brand underline">{kyc.url}</a>
-                  </p>
-                )}
               </div>
-            )}
-            {err && <p className="text-sm text-red-500">{err}</p>}
-          </div>
-        ) : status.can_register ? (
-          <div>
-            <Button type="button" onClick={() => registerMut.mutate()} disabled={registerMut.isPending}>
-              {registerMut.isPending ? 'Ativando…' : 'Ativar recebimento automático'}
-            </Button>
-            {err && <p className="text-sm text-red-500 mt-2">{err}</p>}
-            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-              Usa o documento e a conta bancária do seu perfil. Depois de ativar, o
-              Pagar.me faz uma verificação — o status aparece aqui e você resolve
-              qualquer pendência por um link, sem sair do Turiva.
+              {kyc?.url && (
+                <p className="text-xs text-gray-500 mt-2 break-all">
+                  Se a aba não abrir: <a href={kyc.url} target="_blank" rel="noreferrer" className="text-brand underline">{kyc.url}</a>
+                </p>
+              )}
+            </div>
+          )}
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+      ) : (
+        <div>
+          {status.missing?.length > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed mb-3">
+              Complete {listaFaltas(status.missing)} acima e clique em validar. O Pagar.me exige conta bancária — a chave PIX sozinha não basta.
             </p>
-          </div>
-        ) : (
-          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">
-            Para ativar, cadastre
-            {faltaDoc && faltaBanco ? ' seu CPF/CNPJ e o banco, agência e conta acima'
-              : faltaDoc ? ' seu CPF/CNPJ acima'
-              : ' seu banco, agência e conta acima'}
-            {' '}e salve o perfil. O Pagar.me exige conta bancária — a chave PIX sozinha não basta.
+          )}
+          <Button type="button" onClick={handleValidar} disabled={ocupado}>
+            {ocupado ? 'Validando…' : 'Salvar e validar no Pagar.me'}
+          </Button>
+          {err && <p className="text-sm text-red-500 mt-2">{err}</p>}
+          <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+            Enviamos seus dados ao Pagar.me. Aprovando, o status fica verde aqui; se
+            ficar em análise, você resolve por um link — sem sair do Turiva.
           </p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -339,6 +340,77 @@ const DOC_TYPES = [
   { value: 'cnpj', label: 'CNPJ', placeholder: '00.000.000/0001-00',  maxLength: 18 },
 ]
 
+// ── KYC do recebedor (register_information do Pagar.me) ─────────
+const EMPTY_ADDR   = { street: '', number: '', complement: '', neighborhood: '', city: '', state: '', zip: '', reference: '' }
+const EMPTY_PERSON = {
+  name: '', document: '', email: '', birthdate: '', mother_name: '',
+  monthly_income: '', professional_occupation: '', phone: { ddd: '', number: '' }, address: { ...EMPTY_ADDR },
+}
+const DEFAULT_KYC = {
+  kind: 'individual',
+  // PF (e dados do próprio recebedor quando é empresa não se aplica)
+  mother_name: '', monthly_income: '', professional_occupation: '',
+  phone: { ddd: '', number: '' }, address: { ...EMPTY_ADDR },
+  // PJ
+  company_name: '', trading_name: '', annual_revenue: '', founding_date: '',
+  partner: { ...EMPTY_PERSON },
+}
+
+// Campos de endereço (Pagar.me exige endereço completo no recebedor).
+function AddressFields({ data = {}, set }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Input label="CEP" value={data.zip || ''} onChange={(e) => set('zip', e.target.value)} placeholder="00000-000" />
+        <div className="sm:col-span-2">
+          <Input label="Rua / logradouro" value={data.street || ''} onChange={(e) => set('street', e.target.value)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Input label="Número" value={data.number || ''} onChange={(e) => set('number', e.target.value)} />
+        <Input label="Complemento" value={data.complement || ''} onChange={(e) => set('complement', e.target.value)} />
+        <Input label="Bairro" value={data.neighborhood || ''} onChange={(e) => set('neighborhood', e.target.value)} />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Input label="Cidade" value={data.city || ''} onChange={(e) => set('city', e.target.value)} />
+        <Input label="UF" value={data.state || ''} maxLength={2} onChange={(e) => set('state', e.target.value.toUpperCase())} placeholder="CE" />
+      </div>
+    </div>
+  )
+}
+
+// Bloco de dados de uma PESSOA FÍSICA — reaproveitado no PF e no sócio
+// responsável do PJ. `comIdentificacao` acrescenta nome/CPF/e-mail/nascimento
+// (o PF reaproveita esses do perfil; o sócio precisa dos próprios).
+function PessoaFisicaFields({ data = {}, set, comIdentificacao = false }) {
+  return (
+    <div className="space-y-3">
+      {comIdentificacao && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="Nome completo" value={data.name || ''} onChange={(e) => set('name', e.target.value)} />
+            <Input label="CPF" value={data.document || ''} onChange={(e) => set('document', e.target.value)} placeholder="000.000.000-00" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="E-mail" value={data.email || ''} onChange={(e) => set('email', e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+            <Input label="Data de nascimento" type="date" value={data.birthdate || ''} onChange={(e) => set('birthdate', e.target.value)} />
+          </div>
+        </>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Input label="Nome da mãe" value={data.mother_name || ''} onChange={(e) => set('mother_name', e.target.value)} />
+        <Input label="Profissão / ocupação" value={data.professional_occupation || ''} onChange={(e) => set('professional_occupation', e.target.value)} />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Input label="Faturamento mensal (R$)" type="number" inputMode="numeric" value={data.monthly_income || ''} onChange={(e) => set('monthly_income', e.target.value)} />
+        <Input label="DDD" value={data.phone?.ddd || ''} maxLength={3} onChange={(e) => set('phone.ddd', e.target.value.replace(/\D/g, ''))} placeholder="88" />
+        <Input label="Telefone" value={data.phone?.number || ''} onChange={(e) => set('phone.number', e.target.value)} placeholder="99999-9999" />
+      </div>
+      <AddressFields data={data.address} set={(k, v) => set('address.' + k, v)} />
+    </div>
+  )
+}
+
 const EMPTY = {
   full_name:           '',
   email:               '',
@@ -356,6 +428,24 @@ const EMPTY = {
   bank_account_number: '',
   bank_account_type:   '',
   bank_document:       '',
+  recipient_kyc:       { ...DEFAULT_KYC },
+}
+
+// Mescla o KYC salvo (parcial) com os defaults, garantindo que os objetos
+// aninhados (phone/address/partner) existam para o form controlado.
+function mergeKyc(saved) {
+  const s = saved || {}
+  const p = s.partner || {}
+  return {
+    ...DEFAULT_KYC, ...s,
+    phone:   { ...DEFAULT_KYC.phone,   ...(s.phone   || {}) },
+    address: { ...DEFAULT_KYC.address, ...(s.address || {}) },
+    partner: {
+      ...DEFAULT_KYC.partner, ...p,
+      phone:   { ...DEFAULT_KYC.partner.phone,   ...(p.phone   || {}) },
+      address: { ...DEFAULT_KYC.partner.address, ...(p.address || {}) },
+    },
+  }
 }
 
 export default function Perfil() {
@@ -369,6 +459,13 @@ export default function Perfil() {
   const { data: profile, isLoading } = useQuery({
     queryKey: ['operator-profile'],
     queryFn:  () => api.getProfile(),
+  })
+
+  // Mesma chave do card PagarmeRecipient (o react-query deduplica) — só para
+  // decidir se a seção do Pagar.me aparece (plataforma habilitou a chave).
+  const { data: recipientStatus } = useQuery({
+    queryKey: ['pagarme-recipient-status'],
+    queryFn:  () => api.getRecipientStatus(),
   })
 
   useEffect(() => {
@@ -390,6 +487,7 @@ export default function Perfil() {
       bank_account_number: profile.bank_account_number || '',
       bank_account_type:   profile.bank_account_type   || '',
       bank_document:       profile.bank_document       || '',
+      recipient_kyc:       mergeKyc(profile.recipient_kyc),
     })
   }, [profile])
 
@@ -419,6 +517,48 @@ export default function Perfil() {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
+  // Setter profundo do recipient_kyc por caminho ("address.city",
+  // "partner.phone.ddd") — mantém o JSX dos campos aninhados enxuto.
+  function setKycPath(path, value) {
+    setForm((f) => {
+      const kyc = JSON.parse(JSON.stringify(f.recipient_kyc || DEFAULT_KYC))
+      const parts = path.split('.')
+      let o = kyc
+      for (let i = 0; i < parts.length - 1; i++) { o[parts[i]] = o[parts[i]] || {}; o = o[parts[i]] }
+      o[parts[parts.length - 1]] = value
+      return { ...f, recipient_kyc: kyc }
+    })
+  }
+
+  // Monta o corpo do PATCH /profile (usado ao salvar e ao validar no Pagar.me).
+  function buildPayload() {
+    const payload = {
+      full_name:           form.full_name           || undefined,
+      email:               form.email?.trim()       || undefined,
+      phone:               form.phone               || undefined,
+      document_type:       form.document_number ? form.document_type : null,
+      document_number:     form.document_number     || null,
+      birth_date:          form.birth_date          || null,
+      address:             form.address             || null,
+      cep:                 form.cep                 || null,
+      pix_key_type:        form.pix_key_type        || null,
+      pix_key:             form.pix_key             || null,
+      bank_name:           form.bank_name           || null,
+      bank_agency:         form.bank_agency         || null,
+      bank_account_number: form.bank_account_number || null,
+      bank_account_type:   form.bank_account_type   || null,
+      bank_document:       form.bank_document       || null,
+      recipient_kyc:       form.recipient_kyc
+        ? { ...form.recipient_kyc, kind: form.document_type === 'cnpj' ? 'company' : 'individual' }
+        : undefined,
+    }
+    // Só envia o username se REALMENTE mudou — evita reprocessar a unicidade.
+    if ((form.username || '') !== (profile?.username || '')) {
+      payload.username = form.username?.trim() ? form.username.trim() : null
+    }
+    return payload
+  }
+
   function handlePhotoChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -438,29 +578,7 @@ export default function Perfil() {
 
   function handleSubmit(e) {
     e.preventDefault()
-    const payload = {
-      full_name:           form.full_name           || undefined,
-      email:               form.email?.trim()       || undefined,
-      phone:               form.phone               || undefined,
-      document_type:       form.document_number ? form.document_type : null,
-      document_number:     form.document_number     || null,
-      birth_date:          form.birth_date          || null,
-      address:             form.address             || null,
-      cep:                 form.cep                 || null,
-      pix_key_type:        form.pix_key_type        || null,
-      pix_key:             form.pix_key             || null,
-      bank_name:           form.bank_name           || null,
-      bank_agency:         form.bank_agency         || null,
-      bank_account_number: form.bank_account_number || null,
-      bank_account_type:   form.bank_account_type   || null,
-      bank_document:       form.bank_document       || null,
-    }
-    // Só envia o username se REALMENTE mudou — evita reprocessar a unicidade
-    // e limpar sem querer o que já estava salvo.
-    if ((form.username || '') !== (profile?.username || '')) {
-      payload.username = form.username?.trim() ? form.username.trim() : null
-    }
-    saveMut.mutate(payload)
+    saveMut.mutate(buildPayload())
   }
 
   if (isLoading) return <PageSpinner />
@@ -468,6 +586,8 @@ export default function Perfil() {
   const currentPhoto = photoPreview || profile?.profile_photo_url
   const initials     = (form.full_name || profile?.full_name || 'O')[0].toUpperCase()
   const docMeta      = DOC_TYPES.find((d) => d.value === form.document_type) || DOC_TYPES[0]
+  const isPJ         = form.document_type === 'cnpj'
+  const kyc          = form.recipient_kyc || DEFAULT_KYC
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
@@ -631,6 +751,119 @@ export default function Perfil() {
           </div>
         </CardBody>
       </Card>
+
+      {/* Recebimento automático via Pagar.me (split) — só quando a plataforma
+          habilitou a chave. Coleta o KYC completo (PF/PJ) que o Pagar.me exige
+          para VALIDAR o recebedor e, num clique, salva e envia para validação. */}
+      {recipientStatus?.configured && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CreditCard size={16} className="text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-700">Recebimento automático no cartão (Pagar.me)</h2>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="space-y-4">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Receba sua parte de cada venda no cartão direto na sua conta, já com a
+                comissão da plataforma descontada — sem repasse manual. Preencha os dados
+                abaixo e clique em <strong>Salvar e validar</strong>. O Pagar.me confere e
+                o status aparece aqui.
+              </p>
+
+              {/* Tipo de recebedor + documento */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Select label="Tipo de recebedor" value={form.document_type} onChange={(e) => set('document_type', e.target.value)}>
+                  <option value="cpf">Pessoa Física (CPF)</option>
+                  <option value="cnpj">Pessoa Jurídica (CNPJ)</option>
+                </Select>
+                <Input
+                  label={isPJ ? 'CNPJ' : 'CPF'}
+                  value={form.document_number}
+                  onChange={(e) => set('document_number', e.target.value)}
+                  placeholder={docMeta.placeholder}
+                  maxLength={docMeta.maxLength}
+                />
+              </div>
+
+              {/* PF — dados do titular (nome/e-mail/nascimento vêm de Dados Pessoais) */}
+              {!isPJ && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-gray-600">Dados do titular</p>
+                  <p className="text-[11px] text-gray-400 -mt-1">Nome, e-mail e data de nascimento vêm de “Dados Pessoais” acima.</p>
+                  <PessoaFisicaFields data={kyc} set={setKycPath} />
+                </div>
+              )}
+
+              {/* PJ — dados da empresa + sócio responsável */}
+              {isPJ && (
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-gray-600">Dados da empresa</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input label="Razão social" value={kyc.company_name || ''} onChange={(e) => setKycPath('company_name', e.target.value)} />
+                      <Input label="Nome fantasia" value={kyc.trading_name || ''} onChange={(e) => setKycPath('trading_name', e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input label="Faturamento anual (R$)" type="number" inputMode="numeric" value={kyc.annual_revenue || ''} onChange={(e) => setKycPath('annual_revenue', e.target.value)} />
+                      <Input label="Data de fundação" type="date" value={kyc.founding_date || ''} onChange={(e) => setKycPath('founding_date', e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <Input label="DDD" value={kyc.phone?.ddd || ''} maxLength={3} onChange={(e) => setKycPath('phone.ddd', e.target.value.replace(/\D/g, ''))} placeholder="88" />
+                      <div className="sm:col-span-2">
+                        <Input label="Telefone da empresa" value={kyc.phone?.number || ''} onChange={(e) => setKycPath('phone.number', e.target.value)} placeholder="99999-9999" />
+                      </div>
+                    </div>
+                    <AddressFields data={kyc.address} set={(k, v) => setKycPath('address.' + k, v)} />
+                  </div>
+                  <div className="space-y-3 border-t border-gray-100 pt-3">
+                    <p className="text-xs font-semibold text-gray-600">Sócio responsável</p>
+                    <p className="text-[11px] text-gray-400 -mt-1">O Pagar.me exige ao menos 1 responsável com dados completos.</p>
+                    <PessoaFisicaFields data={kyc.partner} set={(k, v) => setKycPath('partner.' + k, v)} comIdentificacao />
+                  </div>
+                </div>
+              )}
+
+              {/* Conta bancária (destino do split) */}
+              <div className="space-y-3 border-t border-gray-100 pt-3">
+                <p className="text-xs font-semibold text-gray-600">Conta bancária (destino do repasse)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Select
+                    label="Banco"
+                    value={codigoDoNome(form.bank_name)}
+                    onChange={(e) => {
+                      const c = e.target.value
+                      const nome = (BANCOS.find((b) => b[0] === c) || [])[1]
+                      set('bank_name', c ? `${c} - ${nome}` : '')
+                    }}
+                  >
+                    <option value="">Selecione</option>
+                    {BANCOS.map(([code, nome]) => <option key={code} value={code}>{code} - {nome}</option>)}
+                  </Select>
+                  <Select label="Tipo de conta" value={form.bank_account_type} onChange={(e) => set('bank_account_type', e.target.value)}>
+                    <option value="">Selecione</option>
+                    {ACCOUNT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </Select>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Input label="Agência" value={form.bank_agency} onChange={(e) => set('bank_agency', e.target.value)} placeholder="0001" />
+                  <Input label="Conta com dígito" value={form.bank_account_number} onChange={(e) => set('bank_account_number', e.target.value)} placeholder="12345-6" />
+                  <Input label="CPF/CNPJ do titular" value={form.bank_document} onChange={(e) => set('bank_document', e.target.value)} placeholder="se diferente do acima" />
+                </div>
+              </div>
+
+              {/* Status + botão Salvar e validar (salva o perfil e envia ao Pagar.me) */}
+              <div className="border-t border-gray-100 pt-3">
+                <PagarmeRecipient
+                  onBeforeRegister={() => saveMut.mutateAsync(buildPayload())}
+                  saving={saveMut.isPending}
+                />
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Ações */}
       <div className="flex items-center gap-3">
