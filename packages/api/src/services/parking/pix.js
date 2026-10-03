@@ -26,12 +26,18 @@ async function contextoSplit(reserva) {
       .select('owner_user_id, commission_pct').eq('id', reserva.lot_id).maybeSingle()
     if (!lot?.owner_user_id) return null
 
-    // Mesma chave do fluxo de bookings: só divide quando a plataforma NÃO recebe tudo.
+    // Mesma chave que o admin liga em Configurações ("Dividir a cobrança no ato").
+    // Estacionamento é sempre de UM operador (o dono do lote) e sem executor
+    // fixo, então basta essa chave ligada (ou o antigo payment_platform_receives_all
+    // = 'false') para dividir. Fail-closed: na dúvida, não divide.
     const { data: cfgRows } = await supabase.from('system_settings')
-      .select('setting_value').eq('setting_key', 'payment_platform_receives_all').maybeSingle()
-    const v = cfgRows?.setting_value
-    const recebeTudo = v === undefined || v === null || v === '' ? true : String(v) !== 'false'
-    if (recebeTudo) return null
+      .select('setting_key, setting_value')
+      .in('setting_key', ['payment_split_single_operator', 'payment_platform_receives_all'])
+    const cfg = Object.fromEntries((cfgRows || []).map((s) => [s.setting_key, s.setting_value]))
+    const splitLigado = String(cfg.payment_split_single_operator) === 'true'
+    const recebeTudo = cfg.payment_platform_receives_all == null || cfg.payment_platform_receives_all === ''
+      ? true : String(cfg.payment_platform_receives_all) !== 'false'
+    if (!splitLigado && recebeTudo) return null
 
     const { getOperatorMp } = await import('../../routes/payments.js')
     const mp = await getOperatorMp(lot.owner_user_id)
