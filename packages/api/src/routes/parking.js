@@ -597,7 +597,7 @@ router.post('/reservations/:id/pay', authenticate, async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: 'Dados de pagamento inválidos.' })
 
     const { data: r } = await supabase.from('parking_reservations')
-      .select('id, code, user_id, status, payment_status, total_amount, payment_deadline_at')
+      .select('id, code, user_id, status, payment_status, total_amount, payment_deadline_at, lot_id')
       .eq('id', req.params.id).maybeSingle()
     if (!r) return res.status(404).json({ error: 'Reserva não encontrada.' })
     if (r.user_id !== req.user.id) return res.status(404).json({ error: 'Reserva não encontrada.' })

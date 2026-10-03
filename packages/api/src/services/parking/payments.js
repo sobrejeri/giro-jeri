@@ -44,9 +44,39 @@ export async function confirmarReserva(reservationId) {
   return { ok: false, no_capacity: data?.error === 'no_capacity', error: data?.error }
 }
 
+// Monta o split do Pagar.me para a reserva de estacionamento. Fail-closed:
+// qualquer peça faltando → null (valor inteiro na plataforma, repasse manual).
+// Mesma chave master do resto do sistema (payment_split_single_operator).
+async function splitPagarmeEstacionamento(reserva, cfg) {
+  try {
+    if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return null
+    if (!reserva?.lot_id) return null
+    const { data: lot } = await supabase.from('parking_lots')
+      .select('owner_user_id, commission_pct').eq('id', reserva.lot_id).maybeSingle()
+    if (!lot?.owner_user_id) return null
+
+    const recebedorPlataforma = String(cfg?.payment_pagarme_platform_recipient_id || '').trim()
+    if (!recebedorPlataforma) return null
+
+    const { data: op } = await supabase.from('users')
+      .select('gateway_recipient_id, platform_split_pct').eq('id', lot.owner_user_id).maybeSingle()
+    const recebedorOperador = String(op?.gateway_recipient_id || '').trim()
+    if (!recebedorOperador) return null
+
+    const pct = lot.commission_pct != null ? Number(lot.commission_pct)
+      : (op?.platform_split_pct != null ? Number(op.platform_split_pct) : Number(cfg?.payment_split_admin_pct)) || 0
+    const { montarSplit } = await import('../../payments/pagarmeSplit.js')
+    const split = montarSplit({ pctPlataforma: pct, recebedorPlataforma, recebedorOperador })
+    return split || null
+  } catch (e) {
+    console.error('[parking split pagarme] falhou, caindo na plataforma:', e.message)
+    return null
+  }
+}
+
 // Cobra no cartão (Pagar.me inline) e, se aprovado, confirma a reserva.
-// Sem split por enquanto (a plataforma recebe e repassa manualmente, igual ao
-// restante hoje). Pix/Mercado Pago ficam para uma fase seguinte.
+// Divisão automática (split) quando habilitada e o operador tem recebedor
+// cadastrado no gateway; caso contrário, a plataforma recebe e repassa manual.
 export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parcelas = 1, idempotencyKey }) {
   const cfg = await getPaymentSettings()
   const { chaveDoPagarme } = await import('../../routes/payments.js')
@@ -66,6 +96,8 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
     return { estado: 'approved', ...conf, reused: true }
   }
 
+  const split = await splitPagarmeEstacionamento(reserva, cfg)
+
   const { criarCobrancaCartao } = await import('../../payments/pagarmeCheckout.js')
   const cobranca = await criarCobrancaCartao({
     apiKey,
@@ -78,6 +110,7 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
     clienteTelefone: cliente?.phone,
     cardToken,
     parcelas,
+    split,
     item: { id: reserva.id, title: `Estacionamento ${reserva.code}` },
   })
 
@@ -139,11 +172,12 @@ export async function cobrarExtensaoEAplicar({ reserva, cliente, novo, cardToken
     return { estado: 'approved', ...ap, reused: true, delta }
   }
 
+  const split = await splitPagarmeEstacionamento(reserva, cfg)
   const { criarCobrancaCartao } = await import('../../payments/pagarmeCheckout.js')
   const cobranca = await criarCobrancaCartao({
     apiKey, amount: delta, description: `Extensão estacionamento ${reserva.code}`, bookingId: reserva.code,
     clienteNome: cliente?.full_name, clienteEmail: cliente?.email, clienteDoc: cliente?.document_number,
-    clienteTelefone: cliente?.phone, cardToken, parcelas,
+    clienteTelefone: cliente?.phone, cardToken, parcelas, split,
     item: { id: reserva.id, title: `Extensão ${reserva.code}` },
   })
   await marcarTentativa(tentativa.id, {
