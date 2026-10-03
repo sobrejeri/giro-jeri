@@ -2774,6 +2774,61 @@ router.put('/operators/:operatorId/modals/:modalId', requireAdmin, async (req, r
   }
 });
 
+// ── GET /api/admin/service-modals ──────────────────────
+// Config GLOBAL dos modais (por slug): nome + se é "não combinável"
+// (is_standalone). O admin usa para marcar serviços que saem do combo — ex.:
+// aéreo, que é cobrado/solicitado à parte e passa pelo split de operador único.
+// Tolerante à migração 109 ausente (is_standalone volta false) e à tabela
+// ausente (lista vazia).
+router.get('/service-modals', requireAdmin, async (_req, res, next) => {
+  try {
+    let { data, error } = await supabase
+      .from('service_modals')
+      .select('id, slug, name, is_standalone, executor_operator_id')
+      .order('sort_order', { ascending: true });
+    if (error?.code === '42703') {
+      ({ data, error } = await supabase
+        .from('service_modals').select('id, slug, name, executor_operator_id')
+        .order('sort_order', { ascending: true }));
+    }
+    if (error) {
+      if (error.code === '42P01') return res.json([]);
+      throw error;
+    }
+    res.json((data || []).map((m) => ({
+      id: m.id, slug: m.slug, name: m.name,
+      is_standalone: m.is_standalone === true,
+      has_fixed_executor: !!m.executor_operator_id,
+    })));
+  } catch (err) { next(err); }
+});
+
+// ── PUT /api/admin/service-modals/:id ──────────────────
+// Liga/desliga "solicitar separadamente" (não entra em combo) de um modal.
+const modalStandaloneSchema = z.object({ is_standalone: z.boolean() });
+router.put('/service-modals/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { is_standalone } = modalStandaloneSchema.parse(req.body);
+    const { data, error } = await supabase
+      .from('service_modals')
+      .update({ is_standalone })
+      .eq('id', req.params.id)
+      .select('id, slug, name, is_standalone')
+      .maybeSingle();
+    if (error) {
+      if (error.code === '42703') {
+        return res.status(400).json({ error: 'Rode a migration 109_standalone_service.sql no Supabase para usar este recurso.' });
+      }
+      throw error;
+    }
+    if (!data) return res.status(404).json({ error: 'Modal não encontrado' });
+    res.json(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
+    next(err);
+  }
+});
+
 // ── PUT /api/admin/operators/:operatorId/vehicles/:vehicleId ──
 const operatorVehiclePrefSchema = z.object({
   is_active: z.boolean(),

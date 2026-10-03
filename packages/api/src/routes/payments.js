@@ -2636,15 +2636,36 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       }
     }
 
-    // 2) Cria as N reservas com um order_group_id compartilhado (insert em lote
-    //    = atômico). booking_code único por item.
+    // Serviços "não combináveis" (ex.: aéreo) saem do grupo compartilhado: cada
+    // um ganha um order_group_id PRÓPRIO, para ser solicitado/cobrado à parte e
+    // passar pelo split de operador único. Resolve por item via o modal
+    // (categorias.modal → service_modals.is_standalone). Tolerante à coluna/linha
+    // ausente: sem ela, nada é isolado (comportamento atual).
+    const standaloneByIndex = await (async () => {
+      try {
+        const { modalDaReserva } = await import('../services/payouts.js')
+        const modais = await Promise.all(prepared.map(({ it }) =>
+          modalDaReserva({ service_id: it.service_id, service_type: it.service_type }).catch(() => null)))
+        const slugs = [...new Set(modais.filter(Boolean))]
+        if (!slugs.length) return prepared.map(() => false)
+        const { data: smRows, error } = await supabase
+          .from('service_modals').select('slug, is_standalone').in('slug', slugs)
+        if (error) return prepared.map(() => false)   // coluna is_standalone ausente → não isola
+        const flag = new Map((smRows || []).map((r) => [r.slug, r.is_standalone === true]))
+        return modais.map((m) => (m ? flag.get(m) === true : false))
+      } catch { return prepared.map(() => false) }
+    })()
+
+    // 2) Cria as N reservas. Itens combináveis compartilham UM order_group_id
+    //    (insert em lote = atômico); cada standalone recebe o seu. booking_code
+    //    único por item.
     const orderGroupId = crypto.randomUUID()
     const now = Date.now()
     const acceptanceExpiresAt = new Date(now + 24 * 60 * 60 * 1000).toISOString()
     const rows = prepared.map(({ it, chargedTotal, couponId, discountAmount, subtotal, seasonAdditional }, i) => ({
       booking_code:       `GJ${(now + i).toString(36).toUpperCase().slice(-6)}`,
       user_id:            req.user.id,
-      order_group_id:     orderGroupId,
+      order_group_id:     standaloneByIndex[i] ? crypto.randomUUID() : orderGroupId,
       region_id:          it.region_id || null,
       service_type:       it.service_type,
       service_id:         it.service_id,

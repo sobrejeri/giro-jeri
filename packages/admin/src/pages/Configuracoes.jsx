@@ -1212,6 +1212,9 @@ function TabPagamentos({ settings, qc }) {
       {/* Split por operador */}
       <SplitPorOperador globalAdminPct={adminPct} qc={qc} />
 
+      {/* Serviços não combináveis (ex.: aéreo) */}
+      <ServicosStandalone qc={qc} />
+
       {/* Conta de recebimento da plataforma */}
       <Card>
         <CardHeader>
@@ -1558,6 +1561,59 @@ function TabAparencia({ settings, qc }) {
 }
 
 // ── Main component ────────────────────────────────────────
+// ── Serviços não combináveis (ex.: aéreo) ──────────────────
+// Marca modais que NÃO entram em combo: cada serviço vira solicitação/cobrança
+// própria. Isolado, o aéreo (executor único) divide no cartão plataforma+executor.
+function ServicosStandalone({ qc }) {
+  const [err, setErr] = useState(null)
+  const { data: modais, isLoading } = useQuery({
+    queryKey: ['service-modals'],
+    queryFn:  () => api.getServiceModals(),
+  })
+  const mut = useMutation({
+    mutationFn: ({ id, v }) => api.setModalStandalone(id, v),
+    onSuccess: () => { setErr(null); qc.invalidateQueries({ queryKey: ['service-modals'] }) },
+    onError:   (e) => setErr(e?.message || 'Não foi possível salvar.'),
+  })
+  const lista = Array.isArray(modais) ? modais : []
+  if (isLoading || !lista.length) return null
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <SplitSquareHorizontal size={16} className="text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-200">Serviços solicitados separadamente</h2>
+        </div>
+      </CardHeader>
+      <CardBody>
+        <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+          Marque os modais que <b>não entram em combo</b> — cada serviço vira uma solicitação/cobrança
+          própria. Ideal para o aéreo (valor alto, executor único): isolado, o cartão divide direto
+          plataforma + executor.
+        </p>
+        <div className="space-y-2">
+          {lista.map((m) => (
+            <label key={m.id} className="flex items-center justify-between gap-3 bg-gray-800/40 rounded-lg px-3 py-2 cursor-pointer">
+              <span className="text-sm text-gray-200">
+                {m.name || m.slug}
+                {m.has_fixed_executor && <span className="ml-2 text-[11px] text-amber-400">executor fixo</span>}
+              </span>
+              <input
+                type="checkbox"
+                checked={m.is_standalone}
+                disabled={mut.isPending}
+                onChange={(e) => mut.mutate({ id: m.id, v: e.target.checked })}
+                className="w-4 h-4 accent-brand"
+              />
+            </label>
+          ))}
+        </div>
+        {err && <p className="text-sm text-red-400 mt-2">{err}</p>}
+      </CardBody>
+    </Card>
+  )
+}
+
 const TABS = [
   { id: 'sistema',    label: 'Sistema',    icon: Settings },
   { id: 'aparencia',  label: 'Aparência',  icon: ImageIcon },
