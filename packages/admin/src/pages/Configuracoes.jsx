@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Settings, RotateCcw, CreditCard, Landmark, SplitSquareHorizontal,
   Eye, EyeOff, CheckCircle, Pencil, Image as ImageIcon, Upload, Trash2, Route,
+  MessageCircle, Send, XCircle,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -1305,7 +1306,114 @@ function TabPagamentos({ settings, qc }) {
           </div>
         </CardBody>
       </Card>
+
+      {/* Diagnóstico do WhatsApp (Z-API) */}
+      <WhatsappDiag />
     </div>
+  )
+}
+
+// ── Diagnóstico do WhatsApp (Z-API) ───────────────────────
+// Mostra se as 3 credenciais do Z-API estão setadas no servidor e permite
+// enviar uma mensagem de teste para um número — tudo pela interface, sem
+// precisar chamar a API na mão. Backend: GET /wa-diag, POST /wa-test.
+function WhatsappDiag() {
+  const [phone, setPhone] = useState('')
+  const { data, isLoading } = useQuery({
+    queryKey: ['wa-diag'],
+    queryFn:  () => api.getWaDiag(),
+  })
+  const testMut = useMutation({ mutationFn: () => api.sendWaTest(phone.trim()) })
+
+  const enabled = !!data?.enabled
+  const r = testMut.data
+  const testeOk = r && r.ok !== false && !r.skipped
+
+  const StatusLinha = ({ ok, children }) => (
+    <div className="flex items-center gap-2 text-xs">
+      {ok
+        ? <CheckCircle size={14} className="text-green-400 shrink-0" />
+        : <XCircle size={14} className="text-red-400 shrink-0" />}
+      <span className={ok ? 'text-gray-300' : 'text-gray-400'}>{children}</span>
+    </div>
+  )
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <MessageCircle size={16} className="text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-200">Integração — WhatsApp (Z-API)</h2>
+        </div>
+      </CardHeader>
+      <CardBody>
+        {isLoading ? (
+          <p className="text-xs text-gray-500">Carregando status…</p>
+        ) : (
+          <div className="space-y-4">
+            {/* Status geral */}
+            <div className={`rounded-lg border p-3 ${enabled ? 'border-green-800 bg-green-900/20' : 'border-amber-800 bg-amber-900/20'}`}>
+              <div className="flex items-center gap-2">
+                {enabled
+                  ? <CheckCircle size={16} className="text-green-400" />
+                  : <XCircle size={16} className="text-amber-400" />}
+                <span className={`text-sm font-semibold ${enabled ? 'text-green-300' : 'text-amber-300'}`}>
+                  {enabled ? 'WhatsApp ativo' : 'WhatsApp desligado'}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-400">
+                {enabled
+                  ? 'As notificações automáticas por WhatsApp estão habilitadas.'
+                  : 'Faltam credenciais. Nenhuma mensagem de WhatsApp será enviada até configurar as 3 variáveis no servidor (Render).'}
+              </p>
+            </div>
+
+            {/* Checklist das 3 variáveis */}
+            <div className="space-y-1.5">
+              <StatusLinha ok={data?.has_instance_id}>ZAPI_INSTANCE_ID</StatusLinha>
+              <StatusLinha ok={data?.has_instance_token}>ZAPI_INSTANCE_TOKEN</StatusLinha>
+              <StatusLinha ok={data?.has_client_token}>ZAPI_CLIENT_TOKEN</StatusLinha>
+              <p className="text-[11px] text-gray-500 pt-1">Base: {data?.base_url || '—'}</p>
+            </div>
+
+            {/* Enviar mensagem de teste */}
+            <div className="border-t border-gray-800 pt-3 space-y-2">
+              <Input
+                label="Enviar mensagem de teste"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+5588999999999"
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => testMut.mutate()}
+                  disabled={!enabled || phone.trim().length < 8 || testMut.isPending}
+                >
+                  <Send size={13} /> {testMut.isPending ? 'Enviando…' : 'Enviar teste'}
+                </Button>
+                {!enabled && <span className="text-[11px] text-gray-500">Ative o WhatsApp para testar.</span>}
+              </div>
+
+              {testMut.isError && (
+                <p className="text-[11px] text-red-400">Falha ao chamar a API: {testMut.error?.message || 'erro desconhecido'}</p>
+              )}
+              {r && (
+                <div className={`text-[11px] rounded-lg border p-2.5 ${testeOk ? 'border-green-800 bg-green-900/20 text-green-300' : 'border-red-800 bg-red-900/20 text-red-300'}`}>
+                  {r.skipped
+                    ? `Z-API não configurada (${r.reason || 'sem credenciais'}).`
+                    : testeOk
+                      ? 'Mensagem enviada! Confira o WhatsApp do número informado.'
+                      : `O Z-API recusou (status ${r.status ?? '—'}). Verifique as credenciais e o número.`}
+                  <pre className="mt-1.5 whitespace-pre-wrap break-all text-[10px] text-gray-500">{JSON.stringify(r.body ?? r, null, 2).slice(0, 500)}</pre>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
   )
 }
 

@@ -132,6 +132,10 @@ export const api = {
   broadcastNotif:    (body)        => request('/api/notifications/broadcast', { method: 'POST', body }),
   getBroadcasts:     ()            => request('/api/notifications/broadcasts'),
 
+  // WhatsApp (Z-API) — diagnóstico e envio de teste
+  getWaDiag:         ()            => request('/api/notifications/wa-diag'),
+  sendWaTest:        (phone)       => request('/api/notifications/wa-test', { method: 'POST', body: { phone } }),
+
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),
   getFinancialDaily: (params = {}) => request(`/api/admin/financial-daily?${new URLSearchParams(params)}`),
