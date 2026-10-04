@@ -1565,18 +1565,36 @@ function TabAparencia({ settings, qc }) {
 // Marca modais que NÃO entram em combo: cada serviço vira solicitação/cobrança
 // própria. Isolado, o aéreo (executor único) divide no cartão plataforma+executor.
 function ServicosStandalone({ qc }) {
-  const [err, setErr] = useState(null)
+  const [err, setErr]     = useState(null)
+  const [saved, setSaved] = useState(false)
+  const [local, setLocal] = useState(null)   // { [id]: bool } — edição antes de salvar
   const { data: modais, isLoading } = useQuery({
     queryKey: ['service-modals'],
     queryFn:  () => api.getServiceModals(),
   })
-  const mut = useMutation({
-    mutationFn: ({ id, v }) => api.setModalStandalone(id, v),
-    onSuccess: () => { setErr(null); qc.invalidateQueries({ queryKey: ['service-modals'] }) },
+  const lista = Array.isArray(modais) ? modais : []
+
+  // Carrega os valores do servidor no estado local (e reaplica após salvar,
+  // quando o refetch traz os novos valores).
+  useEffect(() => {
+    if (lista.length) setLocal(Object.fromEntries(lista.map((m) => [m.id, m.is_standalone])))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modais])
+
+  const saveMut = useMutation({
+    // Salva só o que mudou (um PUT por modal alterado).
+    mutationFn: async () => {
+      const changed = lista.filter((m) => !!local[m.id] !== !!m.is_standalone)
+      for (const m of changed) await api.setModalStandalone(m.id, !!local[m.id])
+      return changed.length
+    },
+    onSuccess: () => { setErr(null); setSaved(true); setTimeout(() => setSaved(false), 3000); qc.invalidateQueries({ queryKey: ['service-modals'] }) },
     onError:   (e) => setErr(e?.message || 'Não foi possível salvar.'),
   })
-  const lista = Array.isArray(modais) ? modais : []
-  if (isLoading || !lista.length) return null
+
+  if (isLoading || !lista.length || !local) return null
+  const dirty = lista.some((m) => !!local[m.id] !== !!m.is_standalone)
+
   return (
     <Card>
       <CardHeader>
@@ -1600,13 +1618,22 @@ function ServicosStandalone({ qc }) {
               </span>
               <input
                 type="checkbox"
-                checked={m.is_standalone}
-                disabled={mut.isPending}
-                onChange={(e) => mut.mutate({ id: m.id, v: e.target.checked })}
+                checked={!!local[m.id]}
+                onChange={(e) => setLocal((l) => ({ ...l, [m.id]: e.target.checked }))}
                 className="w-4 h-4 accent-brand"
               />
             </label>
           ))}
+        </div>
+        <div className="flex items-center gap-3 mt-4">
+          <Button type="button" onClick={() => saveMut.mutate()} disabled={!dirty || saveMut.isPending}>
+            {saveMut.isPending ? 'Salvando…' : 'Salvar'}
+          </Button>
+          {saved && (
+            <span className="flex items-center gap-1.5 text-sm text-green-500">
+              <CheckCircle size={15} /> Salvo
+            </span>
+          )}
         </div>
         {err && <p className="text-sm text-red-400 mt-2">{err}</p>}
       </CardBody>
