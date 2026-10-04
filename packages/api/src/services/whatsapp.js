@@ -138,6 +138,34 @@ async function userPhone(supabase, userId) {
   return data?.phone || null
 }
 
+// Nome de um usuário por id (cliente/operador) — para os avisos do admin.
+async function userName(supabase, userId) {
+  if (!userId) return null
+  const { data } = await supabase.from('users').select('full_name').eq('id', userId).maybeSingle()
+  return data?.full_name || null
+}
+
+// Rótulo do meio de pagamento a partir do que o gateway devolve.
+function metodoPagamento(payment) {
+  const m = String(payment?.payment_method || payment?.method || '').toLowerCase()
+  if (m.includes('pix')) return 'Pix'
+  if (m.includes('card') || m.includes('cart') || m.includes('credit')) return 'Cartão'
+  if (m.includes('boleto')) return 'Boleto'
+  return null
+}
+
+// Nome do serviço contratado (passeio/rota). Resolve via serviceDetails;
+// cai no resumo tipo+rota se não achar.
+async function nomeServico(supabase, booking) {
+  try {
+    const { attachServiceDetails } = await import('./serviceDetails.js')
+    const [enriched] = await attachServiceDetails(supabase, [booking])
+    if (enriched?.service_name) return enriched.service_name
+  } catch { /* cai no resumo abaixo */ }
+  const { tipo, rota } = bookingSummary(booking)
+  return rota ? `${tipo} · ${rota}` : tipo
+}
+
 /**
  * Checa se um número TEM WhatsApp (Z-API phone-exists) — sem enviar mensagem.
  * Retorna { checked, exists }: checked=false quando o Z-API não está
@@ -335,6 +363,84 @@ export async function notifyAdminExpiredBooking(supabase, booking) {
     `👉 Abrir: ${linkCoopRides()}`
 
   await sendToMany(admins.map((a) => a.phone), message)
+}
+
+// Telefones de todos os admins ativos (para os avisos financeiros).
+async function adminPhones(supabase) {
+  const { data } = await supabase.from('users')
+    .select('phone').eq('user_type', 'admin').eq('is_active', true)
+  return (data || []).map((a) => a.phone).filter(Boolean)
+}
+
+// Admin — pagamento APROVADO. Mensagem rica: valor, cliente, operador que
+// aceitou e o serviço. Em carrinho/combo dispara uma por serviço (cada serviço
+// pode ter um operador diferente), espelhando o aviso interno. O valor é o do
+// SERVIÇO (booking.total_amount), não o total do carrinho.
+export async function notifyAdminPaymentApproved(supabase, { booking, payment = null }) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  const fones = await adminPhones(supabase)
+  if (!fones.length) return { skipped: true }
+
+  const [cliente, operador, servico] = await Promise.all([
+    userName(supabase, booking.user_id),
+    userName(supabase, booking.operator_id),
+    nomeServico(supabase, booking),
+  ])
+  const { data } = bookingSummary(booking)
+  const valor  = fmtBRL(booking.total_amount ?? payment?.amount_gross)
+  const metodo = metodoPagamento(payment)
+
+  const message =
+    `*TURIVA* · Pagamento aprovado 💰\n` +
+    `\n` +
+    `💰 *${valor}*${metodo ? ` · ${metodo}` : ''}\n` +
+    `🙋 Cliente: ${cliente || '—'}\n` +
+    `🧭 Operador: ${operador || 'a definir'}\n` +
+    `🎟 Serviço: ${servico}\n` +
+    `🗓 ${data}\n` +
+    `🔖 ${booking.booking_code || '-'}`
+  await sendToMany(fones, message)
+  return { sent: true }
+}
+
+// Admin — pagamento RECUSADO. Enriquece com cliente/operador/serviço quando dá
+// para carregar a reserva (as recusas disparam em vários pontos, nem sempre com
+// o booking em mãos — por isso aceita bookingId e busca o resto). `valor` chega
+// já formatado (ex.: "R$ 350,00").
+export async function notifyAdminPaymentRejected(supabase, { booking = null, bookingId = null, code = null, valor = null, motivo = null }) {
+  if (!isWhatsappEnabled()) return { skipped: true }
+  const fones = await adminPhones(supabase)
+  if (!fones.length) return { skipped: true }
+
+  let bk = booking
+  if (!bk && bookingId) {
+    const { data } = await supabase.from('bookings')
+      .select('id, user_id, operator_id, total_amount, booking_code, service_type, service_id, service_date, origin_text, destination_text')
+      .eq('id', bookingId).maybeSingle()
+    bk = data || null
+  }
+
+  let cliente = null, operador = null, servico = null, codigo = code
+  if (bk) {
+    ;[cliente, operador, servico] = await Promise.all([
+      userName(supabase, bk.user_id),
+      userName(supabase, bk.operator_id),
+      nomeServico(supabase, bk),
+    ])
+    codigo = codigo || bk.booking_code
+  }
+
+  const message =
+    `*TURIVA* · Pagamento recusado ⚠️\n` +
+    `\n` +
+    (valor    ? `💰 ${valor}\n` : '') +
+    (cliente  ? `🙋 Cliente: ${cliente}\n` : '') +
+    (operador ? `🧭 Operador: ${operador}\n` : '') +
+    (servico  ? `🎟 Serviço: ${servico}\n` : '') +
+    (codigo   ? `🔖 ${codigo}\n` : '') +
+    (motivo   ? `❌ Motivo: ${motivo}` : 'Uma tentativa de pagamento foi recusada.')
+  await sendToMany(fones, message)
+  return { sent: true }
 }
 
 // ── ORDEM DE SERVIÇO (Despacho) ────────────────────────

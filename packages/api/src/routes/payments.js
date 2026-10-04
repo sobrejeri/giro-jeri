@@ -4,7 +4,7 @@ import { z }         from 'zod'
 import { supabase }  from '../supabase.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { sendBookingConfirmation } from '../services/email.js'
-import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived, notifyOperatorDirectSale } from '../services/whatsapp.js'
+import { notifyOperatorsNewBooking, notifyClientPaymentConfirmed, notifyOperatorPaymentReceived, notifyOperatorDirectSale, notifyAdminPaymentApproved, notifyAdminPaymentRejected } from '../services/whatsapp.js'
 import { notifyUser, notifyOperatorsAndAdmin, notifyAdmins } from '../services/notify.js'
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateAdvance, applyCoupon } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
@@ -3894,6 +3894,10 @@ function avisarAdminRecusa({ bookingId = null, code = null, valor = null, motivo
     title:       'Pagamento recusado ⚠️',
     body:        detalhe ? `${linha1} · ${detalhe}` : linha1,
   }).catch(() => {})
+  // WhatsApp pro admin: mesmo evento, com cliente/operador/serviço (no-op se
+  // Z-API off). Busca a reserva pelo bookingId para enriquecer a mensagem.
+  notifyAdminPaymentRejected(supabase, { bookingId, code, valor, motivo }).catch((err) =>
+    console.error('[whatsapp] aviso admin recusa falhou:', err.message))
 }
 
 function notifyBookingPaid(booking, payment = null) {
@@ -3921,6 +3925,10 @@ function notifyBookingPaid(booking, payment = null) {
       title:       'Recebimento aprovado 💰',
       body:        detalhe ? `${linha1} · ${detalhe}` : linha1,
     }).catch(() => {})
+    // WhatsApp pro admin: valor, cliente, operador que aceitou e serviço
+    // (no-op se Z-API off). Em combo dispara uma por serviço.
+    notifyAdminPaymentApproved(supabase, { booking, payment }).catch((err) =>
+      console.error('[whatsapp] aviso admin pagamento falhou:', err.message))
   }
 
   notifyUser({
