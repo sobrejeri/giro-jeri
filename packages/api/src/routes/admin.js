@@ -2816,8 +2816,10 @@ router.put('/service-modals/:id', requireAdmin, async (req, res, next) => {
       .select('id, slug, name, is_standalone')
       .maybeSingle();
     if (error) {
-      if (error.code === '42703') {
-        return res.status(400).json({ error: 'Rode a migration 109_standalone_service.sql no Supabase para usar este recurso.' });
+      // Coluna ausente: no UPDATE o PostgREST devolve PGRST204 (não 42703, que é
+      // do SELECT). Trata os dois + a mensagem, para avisar em vez de dar 500.
+      if (error.code === '42703' || error.code === 'PGRST204' || /is_standalone/.test(error.message || '')) {
+        return res.status(400).json({ error: 'Rode a migration 109_standalone_service.sql no Supabase para habilitar este recurso.' });
       }
       throw error;
     }
