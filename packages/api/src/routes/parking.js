@@ -124,7 +124,7 @@ router.post('/reservations', authenticate, async (req, res, next) => {
     }
 
     const { data: lot } = await supabase.from('parking_lots')
-      .select('id, is_active, commission_pct, accept_deadline_min').eq('id', lot_id).maybeSingle()
+      .select('id, is_active, commission_pct, accept_deadline_min, owner_user_id').eq('id', lot_id).maybeSingle()
     if (!lot || !lot.is_active) return res.status(404).json({ error: 'Estacionamento indisponível.' })
 
     // Preço SEMPRE recalculado no servidor (ignora qualquer valor do cliente).
@@ -153,6 +153,21 @@ router.post('/reservations', authenticate, async (req, res, next) => {
       .select('id, code, status, total_amount, start_at, end_at, acceptance_expires_at')
       .single()
     if (error) throw error
+
+    // Avisa o DONO do lote da nova reserva (best-effort) — é o que o faz abrir e
+    // aceitar. Sem isso o pedido ficava parado sem ninguém saber.
+    if (lot.owner_user_id) {
+      try {
+        const { notifyUser } = await import('../services/notify.js')
+        await notifyUser({
+          userId:      lot.owner_user_id,
+          templateKey: 'parking_new_reservation',
+          title:       'Nova reserva de vaga 🅿️',
+          body:        `Você tem uma reserva nova (${reserva.code}) aguardando aceite. Abra para aceitar.`,
+        })
+      } catch { /* notificação é opcional */ }
+    }
+
     res.status(201).json(reserva)
   } catch (err) {
     if (err?.status === 422) return res.status(422).json({ error: err.message })
@@ -568,7 +583,7 @@ router.post('/reservations/:id/accept', authenticate, async (req, res, next) => 
 // Recusar — parceiro/admin. Encerra só esta solicitação.
 router.post('/reservations/:id/reject', authenticate, async (req, res, next) => {
   try {
-    const { data: r } = await supabase.from('parking_reservations').select('id, lot_id, status').eq('id', req.params.id).maybeSingle()
+    const { data: r } = await supabase.from('parking_reservations').select('id, lot_id, status, user_id, code').eq('id', req.params.id).maybeSingle()
     if (!r) return res.status(404).json({ error: 'Reserva não encontrada.' })
     if (!ehAdmin(req.user)) {
       const { data: lot } = await supabase.from('parking_lots').select('owner_user_id').eq('id', r.lot_id).maybeSingle()
@@ -579,6 +594,20 @@ router.post('/reservations/:id/reject', authenticate, async (req, res, next) => 
       .update({ status: 'rejected', updated_at: new Date().toISOString() })
       .eq('id', r.id).eq('status', 'awaiting_partner')
     if (error) throw error
+
+    // Avisa o CLIENTE que a reserva foi recusada (best-effort).
+    if (r.user_id) {
+      try {
+        const { notifyUser } = await import('../services/notify.js')
+        await notifyUser({
+          userId:      r.user_id,
+          templateKey: 'parking_rejected',
+          title:       'Reserva de vaga recusada',
+          body:        `O estacionamento não pôde aceitar sua reserva (${r.code}). Tente outro horário ou local.`,
+        })
+      } catch { /* notificação é opcional */ }
+    }
+
     res.json({ ok: true })
   } catch (err) { next(err) }
 })
