@@ -174,6 +174,12 @@ router.post('/reservations', authenticate, async (req, res, next) => {
       })
     } catch { /* notificação é opcional */ }
 
+    // WhatsApp para o DONO do lote (espelha o push; no-op se o Z-API estiver
+    // desligado). Fire-and-forget: nunca atrasa nem derruba a resposta.
+    import('../services/whatsapp.js').then(({ notifyParkingOwnerNewReservation }) =>
+      notifyParkingOwnerNewReservation(supabase, { reserva, ownerUserId: lot.owner_user_id, lotName: lot.name }),
+    ).catch((e) => console.error('[parking] whatsapp nova reserva falhou (ignorado):', e?.message))
+
     res.status(201).json(reserva)
   } catch (err) {
     if (err?.status === 422) return res.status(422).json({ error: err.message })
@@ -562,13 +568,19 @@ router.post('/reservations/:id/accept', authenticate, async (req, res, next) => 
       try {
         const { notifyUser } = await import('../services/notify.js')
         const { data: r } = await supabase.from('parking_reservations')
-          .select('user_id, code').eq('id', req.params.id).maybeSingle()
+          .select('id, user_id, code, start_at, total_amount').eq('id', req.params.id).maybeSingle()
         if (r?.user_id) {
           await notifyUser({
             userId: r.user_id, templateKey: 'parking_accepted',
             title: 'Vaga aceita! Pague para confirmar ✅',
             body: `O estacionamento aceitou sua reserva (${r.code}). Pague agora para garantir a vaga.`,
           })
+        }
+        // Mesmo aviso no WhatsApp, com botão de pagar (no-op se Z-API off).
+        if (r) {
+          const { notifyParkingClientAccepted } = await import('../services/whatsapp.js')
+          notifyParkingClientAccepted(supabase, r).catch((e) =>
+            console.error('[parking] whatsapp aceite falhou (ignorado):', e?.message))
         }
       } catch { /* notificação é opcional */ }
     }
@@ -612,6 +624,10 @@ router.post('/reservations/:id/reject', authenticate, async (req, res, next) => 
           body:        `O estacionamento não pôde aceitar sua reserva (${r.code}). Tente outro horário ou local.`,
         })
       } catch { /* notificação é opcional */ }
+      // Mesmo aviso no WhatsApp (no-op se Z-API off).
+      import('../services/whatsapp.js').then(({ notifyParkingClientRejected }) =>
+        notifyParkingClientRejected(supabase, r),
+      ).catch((e) => console.error('[parking] whatsapp recusa falhou (ignorado):', e?.message))
     }
 
     res.json({ ok: true })

@@ -53,15 +53,19 @@ export async function confirmarReserva(reservationId) {
 // Pagamento confirmado → avisa o DONO do lote e os ADMINS (best-effort).
 async function notificarReservaPaga(reservationId) {
   const { data: r } = await supabase.from('parking_reservations')
-    .select('code, lot_id').eq('id', reservationId).maybeSingle()
+    .select('id, code, lot_id, user_id, start_at, total_amount').eq('id', reservationId).maybeSingle()
   if (!r) return
   const { data: lot } = await supabase.from('parking_lots')
-    .select('owner_user_id').eq('id', r.lot_id).maybeSingle()
+    .select('owner_user_id, name').eq('id', r.lot_id).maybeSingle()
   const { notifyUser, notifyAdmins } = await import('../notify.js')
   const title = 'Reserva de vaga paga ✅'
   const body  = `A reserva ${r.code} foi paga e está confirmada.`
   if (lot?.owner_user_id) await notifyUser({ userId: lot.owner_user_id, templateKey: 'parking_paid', title, body })
   await notifyAdmins({ templateKey: 'parking_paid', title, body })
+  // WhatsApp: cliente (vaga garantida) + dono (vaga paga). No-op se Z-API off.
+  import('../whatsapp.js').then(({ notifyParkingPaid }) =>
+    notifyParkingPaid(supabase, { reserva: r, ownerUserId: lot?.owner_user_id, lotName: lot?.name }),
+  ).catch((e) => console.error('[parking] whatsapp pagamento falhou (ignorado):', e?.message))
 }
 
 // Monta o split do Pagar.me para a reserva de estacionamento. Fail-closed:

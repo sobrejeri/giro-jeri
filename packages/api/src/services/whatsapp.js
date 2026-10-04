@@ -606,6 +606,110 @@ export async function notifyOperatorDirectSale(supabase, booking, operatorId) {
   return { sent: true }
 }
 
+// ── ESTACIONAMENTO ──────────────────────────────────────
+// Espelha no WhatsApp os avisos que o estacionamento já dá por push/central.
+// Deep links: o cliente vê a reserva no app do turista; o parceiro (dono do
+// lote) aceita na fila do app do operador.
+const linkParkingReserva = (id) => `${TURISTA_APP}/estacionamento/reserva/${id}`
+const linkParkingFila    = ()   => `${COOP_APP}/estacionamento/solicitacoes`
+const linkParkingReservas = ()  => `${COOP_APP}/estacionamento/reservas`
+
+function parkingSummary(reserva) {
+  const data = reserva?.start_at
+    ? new Date(reserva.start_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : 'a definir'
+  return { data, code: reserva?.code || '-' }
+}
+
+// Dono do lote (parceiro) — nova reserva aguardando aceite.
+export async function notifyParkingOwnerNewReservation(supabase, { reserva, ownerUserId, lotName }) {
+  if (!isWhatsappEnabled() || !reserva || !ownerUserId) return { skipped: true }
+  const phone = await userPhone(supabase, ownerUserId)
+  if (!phone) return { skipped: true }
+  const { data, code } = parkingSummary(reserva)
+  const message =
+    `*TURIVA* · Nova reserva de vaga 🅿️\n` +
+    `\n` +
+    `${lotName ? `${lotName}\n` : ''}` +
+    `🗓 ${data}\n` +
+    `🔖 ${code}\n` +
+    `\n` +
+    `Uma reserva está aguardando seu aceite.\n` +
+    `👉 Aceitar agora: ${linkParkingFila()}`
+  await sendToMany([phone], message)
+  return { sent: true }
+}
+
+// Cliente — vaga aceita, pague para confirmar (gatilho de conversão).
+export async function notifyParkingClientAccepted(supabase, reserva) {
+  if (!isWhatsappEnabled() || !reserva) return { skipped: true }
+  const phone = await userPhone(supabase, reserva.user_id)
+  if (!phone) return { skipped: true }
+  const { data, code } = parkingSummary(reserva)
+  const message =
+    `*TURIVA* · Vaga aceita! 🎉\n` +
+    `\n` +
+    `O estacionamento aceitou sua reserva.\n` +
+    `🗓 ${data}\n` +
+    (reserva.total_amount != null ? `💰 *${fmtBRL(reserva.total_amount)}*\n` : '') +
+    `🔖 ${code}\n` +
+    `\n` +
+    `Pague agora para garantir a vaga.`
+  await sendButtonLink(phone, message, 'Pagar agora', linkParkingReserva(reserva.id))
+  return { sent: true }
+}
+
+// Cliente — vaga recusada pelo estacionamento.
+export async function notifyParkingClientRejected(supabase, reserva) {
+  if (!isWhatsappEnabled() || !reserva) return { skipped: true }
+  const phone = await userPhone(supabase, reserva.user_id)
+  if (!phone) return { skipped: true }
+  const { code } = parkingSummary(reserva)
+  const message =
+    `*TURIVA* · Reserva de vaga recusada\n` +
+    `\n` +
+    `O estacionamento não pôde aceitar sua reserva (${code}).\n` +
+    `Tente outro horário ou local: ${TURISTA_APP}/estacionamento`
+  await sendToMany([phone], message)
+  return { sent: true }
+}
+
+// Pagamento confirmado — avisa o CLIENTE (vaga garantida) e o DONO (vaga paga).
+export async function notifyParkingPaid(supabase, { reserva, ownerUserId, lotName }) {
+  if (!isWhatsappEnabled() || !reserva) return { skipped: true }
+  const { data, code } = parkingSummary(reserva)
+
+  const cliPhone = await userPhone(supabase, reserva.user_id)
+  if (cliPhone) {
+    const msg =
+      `*TURIVA* · Vaga confirmada ✅\n` +
+      `\n` +
+      `Pagamento recebido! Sua vaga está garantida.\n` +
+      `${lotName ? `${lotName}\n` : ''}` +
+      `🗓 ${data}\n` +
+      `🔖 ${code}\n` +
+      `\n` +
+      `👉 Ver reserva: ${linkParkingReserva(reserva.id)}`
+    await sendToMany([cliPhone], msg)
+  }
+
+  if (ownerUserId) {
+    const donoPhone = await userPhone(supabase, ownerUserId)
+    if (donoPhone) {
+      const msg =
+        `*TURIVA* · Vaga paga 💰\n` +
+        `\n` +
+        `A reserva ${code} foi paga e está confirmada.\n` +
+        (reserva.total_amount != null ? `💰 *${fmtBRL(reserva.total_amount)}*\n` : '') +
+        `🗓 ${data}\n` +
+        `\n` +
+        `👉 Suas reservas: ${linkParkingReservas()}`
+      await sendToMany([donoPhone], msg)
+    }
+  }
+  return { sent: true }
+}
+
 export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {
   if (!isWhatsappEnabled()) return { skipped: true };
 
