@@ -68,6 +68,13 @@ async function notificarReservaPaga(reservationId) {
   ).catch((e) => console.error('[parking] whatsapp pagamento falhou (ignorado):', e?.message))
 }
 
+// Cartão recusado → aviso financeiro aos ADMINS no WhatsApp (best-effort,
+// no-op se Z-API off). O `reserva` traz lot_id/user_id/total_amount/code.
+async function notificarReservaRecusada(reserva, cliente, motivo) {
+  const { notifyAdminParkingRejected } = await import('../whatsapp.js')
+  await notifyAdminParkingRejected(supabase, { reserva, cliente, motivo })
+}
+
 // Monta o split do Pagar.me para a reserva de estacionamento. Fail-closed:
 // qualquer peça faltando → null (valor inteiro na plataforma, repasse manual).
 // Mesma chave master do resto do sistema (payment_split_single_operator).
@@ -145,6 +152,12 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
   })
 
   if (cobranca.estado !== 'approved') {
+    // Só a recusa de fato ('failed') vira aviso ao admin — 'pending'/'in_process'
+    // ainda podem aprovar no polling/webhook, então não são recusa.
+    if (cobranca.estado === 'failed') {
+      notificarReservaRecusada(reserva, cliente, cobranca.motivo).catch((e) =>
+        console.error('[parking] aviso de recusa falhou (ignorado):', e?.message))
+    }
     return { estado: cobranca.estado, motivo: cobranca.motivo }
   }
 

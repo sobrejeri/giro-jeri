@@ -836,6 +836,36 @@ export async function notifyParkingPaid(supabase, { reserva, ownerUserId, lotNam
   return { sent: true }
 }
 
+// Admin — pagamento de vaga RECUSADO. Mesmo aviso financeiro dos passeios, para
+// o estacionamento. `cliente` chega do checkout; o parceiro/lote vêm do lot_id.
+export async function notifyAdminParkingRejected(supabase, { reserva, cliente = null, motivo = null }) {
+  if (!isWhatsappEnabled() || !reserva) return { skipped: true }
+  const fones = await adminPhones(supabase)
+  if (!fones.length) return { skipped: true }
+
+  let lotName = null, parceiro = null
+  if (reserva.lot_id) {
+    const { data: lot } = await supabase.from('parking_lots')
+      .select('name, owner_user_id').eq('id', reserva.lot_id).maybeSingle()
+    lotName = lot?.name || null
+    if (lot?.owner_user_id) parceiro = await userName(supabase, lot.owner_user_id)
+  }
+  const nomeCli = cliente?.full_name || await userName(supabase, reserva.user_id)
+  const { code } = parkingSummary(reserva)
+
+  const message =
+    `*TURIVA* · Pagamento recusado ⚠️ (Estacionamento)\n` +
+    `\n` +
+    (reserva.total_amount != null ? `💰 ${fmtBRL(reserva.total_amount)}\n` : '') +
+    (nomeCli  ? `🙋 Cliente: ${nomeCli}\n` : '') +
+    (parceiro ? `🧭 Operador: ${parceiro}\n` : '') +
+    `🎟 Serviço: Estacionamento${lotName ? ` — ${lotName}` : ''}\n` +
+    `🔖 ${code}\n` +
+    (motivo ? `❌ Motivo: ${motivo}` : 'Uma tentativa de pagamento foi recusada.')
+  await sendToMany(fones, message)
+  return { sent: true }
+}
+
 export async function sendWhatsappOtp({ phone, code, lang = 'pt' }) {
   if (!isWhatsappEnabled()) return { skipped: true };
 
