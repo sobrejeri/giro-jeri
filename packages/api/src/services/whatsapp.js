@@ -813,6 +813,26 @@ export async function notifyParkingPaid(supabase, { reserva, ownerUserId, lotNam
       await sendToMany([donoPhone], msg)
     }
   }
+
+  // Admin — mesmo aviso financeiro dos passeios/translados, agora para a vaga.
+  // O "operador" aqui é o parceiro (dono do estacionamento) que vai receber.
+  const fones = await adminPhones(supabase)
+  if (fones.length) {
+    const [cliente, parceiro] = await Promise.all([
+      userName(supabase, reserva.user_id),
+      userName(supabase, ownerUserId),
+    ])
+    const msg =
+      `*TURIVA* · Pagamento aprovado 💰 (Estacionamento)\n` +
+      `\n` +
+      `💰 *${fmtBRL(reserva.total_amount)}*\n` +
+      `🙋 Cliente: ${cliente || '—'}\n` +
+      `🧭 Operador: ${parceiro || '—'}\n` +
+      `🎟 Serviço: Estacionamento${lotName ? ` — ${lotName}` : ''}\n` +
+      `🗓 ${data}\n` +
+      `🔖 ${code}`
+    await sendToMany(fones, msg)
+  }
   return { sent: true }
 }
 
