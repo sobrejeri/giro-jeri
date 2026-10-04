@@ -40,8 +40,28 @@ export async function marcarTentativa(id, patch) {
 export async function confirmarReserva(reservationId) {
   const { data, error } = await supabase.rpc('parking_confirm_payment', { p_reservation_id: reservationId })
   if (error) throw error
-  if (data?.ok) return { ok: true, already: !!data.already }
+  if (data?.ok) {
+    // Só na PRIMEIRA confirmação (não em reenvio/extensão, que vêm com
+    // already=true): avisa o dono do lote e os admins que a vaga foi paga.
+    if (!data.already) notificarReservaPaga(reservationId).catch((e) =>
+      console.error('[parking] aviso de pagamento falhou (ignorado):', e?.message))
+    return { ok: true, already: !!data.already }
+  }
   return { ok: false, no_capacity: data?.error === 'no_capacity', error: data?.error }
+}
+
+// Pagamento confirmado → avisa o DONO do lote e os ADMINS (best-effort).
+async function notificarReservaPaga(reservationId) {
+  const { data: r } = await supabase.from('parking_reservations')
+    .select('code, lot_id').eq('id', reservationId).maybeSingle()
+  if (!r) return
+  const { data: lot } = await supabase.from('parking_lots')
+    .select('owner_user_id').eq('id', r.lot_id).maybeSingle()
+  const { notifyUser, notifyAdmins } = await import('../notify.js')
+  const title = 'Reserva de vaga paga ✅'
+  const body  = `A reserva ${r.code} foi paga e está confirmada.`
+  if (lot?.owner_user_id) await notifyUser({ userId: lot.owner_user_id, templateKey: 'parking_paid', title, body })
+  await notifyAdmins({ templateKey: 'parking_paid', title, body })
 }
 
 // Monta o split do Pagar.me para a reserva de estacionamento. Fail-closed:

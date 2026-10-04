@@ -124,7 +124,7 @@ router.post('/reservations', authenticate, async (req, res, next) => {
     }
 
     const { data: lot } = await supabase.from('parking_lots')
-      .select('id, is_active, commission_pct, accept_deadline_min, owner_user_id').eq('id', lot_id).maybeSingle()
+      .select('id, name, is_active, commission_pct, accept_deadline_min, owner_user_id').eq('id', lot_id).maybeSingle()
     if (!lot || !lot.is_active) return res.status(404).json({ error: 'Estacionamento indisponível.' })
 
     // Preço SEMPRE recalculado no servidor (ignora qualquer valor do cliente).
@@ -155,18 +155,24 @@ router.post('/reservations', authenticate, async (req, res, next) => {
     if (error) throw error
 
     // Avisa o DONO do lote da nova reserva (best-effort) — é o que o faz abrir e
-    // aceitar. Sem isso o pedido ficava parado sem ninguém saber.
-    if (lot.owner_user_id) {
-      try {
-        const { notifyUser } = await import('../services/notify.js')
+    // aceitar. Sem isso o pedido ficava parado sem ninguém saber. Os ADMINS
+    // também recebem (mesma visibilidade que têm nas reservas de passeio).
+    try {
+      const { notifyUser, notifyAdmins } = await import('../services/notify.js')
+      if (lot.owner_user_id) {
         await notifyUser({
           userId:      lot.owner_user_id,
           templateKey: 'parking_new_reservation',
           title:       'Nova reserva de vaga 🅿️',
           body:        `Você tem uma reserva nova (${reserva.code}) aguardando aceite. Abra para aceitar.`,
         })
-      } catch { /* notificação é opcional */ }
-    }
+      }
+      await notifyAdmins({
+        templateKey: 'parking_new_reservation',
+        title:       'Nova reserva de vaga 🅿️',
+        body:        `Nova reserva (${reserva.code}) em ${lot.name || 'um estacionamento'} aguardando aceite do parceiro.`,
+      })
+    } catch { /* notificação é opcional */ }
 
     res.status(201).json(reserva)
   } catch (err) {
