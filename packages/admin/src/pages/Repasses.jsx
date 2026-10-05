@@ -285,7 +285,45 @@ function FilaLiberacao() {
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-x-auto">
+      {/* Celular: cards (a tabela fica para o PC, logo abaixo). */}
+      <div className="md:hidden space-y-2">
+        {fila.isLoading ? <div className="py-10"><PageSpinner /></div> : rows.length === 0 ? (
+          <div className="rounded-xl border border-gray-800 bg-gray-900/40 py-8 text-center text-gray-500 text-sm">Nada na fila para este filtro.</div>
+        ) : rows.map((r) => (
+          <div key={r.booking_id} className={`rounded-xl border p-3 ${sel.has(r.booking_id) ? 'border-brand/40 bg-brand/5' : 'border-gray-700/60 bg-gray-900/40'}`}>
+            <div className="flex items-start gap-2.5">
+              {r.elegivel_liberar && (
+                <input type="checkbox" className="accent-brand mt-1 shrink-0" checked={sel.has(r.booking_id)} onChange={() => toggle(r.booking_id)} />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-gray-200">{r.booking_code}</span>
+                  <SituacaoTag r={r} />
+                </div>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {r.service_type === 'transfer' ? 'Transfer' : 'Passeio'} · {gwLabel(r.gateway)} · {fmtDataHora(r.completed_at)}
+                </p>
+                <p className="text-sm text-gray-300 mt-1">{r.operador?.nome || '—'}</p>
+                {r.elegivel_liberar && <div className="mt-0.5"><ChavePix chave={r.operador?.pix_key} tipo={r.operador?.pix_key_type} /></div>}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs">
+                  <span className="text-gray-500">Pago <span className="text-gray-300">{fmtR$(r.valor_pago)}</span></span>
+                  <span className="text-gray-500">Plataforma <span className="text-gray-400">{fmtR$(r.plataforma_valor)}</span></span>
+                  <span className="text-gray-500">Operador <span className="text-gray-200 font-medium">{r.operador_valor != null ? fmtR$(r.operador_valor) : '—'}</span></span>
+                </div>
+                {r.elegivel_liberar && (
+                  <button onClick={() => liberarUm(r)} disabled={liberarMut.isPending}
+                    className="mt-2 w-full text-xs px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 disabled:opacity-40 transition-colors">
+                    Liberar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* PC: tabela compacta. */}
+      <div className="hidden md:block rounded-xl border border-gray-800 bg-gray-900/40 overflow-x-auto">
         {fila.isLoading ? <div className="py-10"><PageSpinner /></div> : (
           <table className="w-full text-sm">
             <thead>
