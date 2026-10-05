@@ -96,7 +96,7 @@ export default function Reputacao() {
             <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
               <MessageSquare size={14} /> Comentários dos clientes
             </h2>
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {reviews.map((r) => (
                 <Card key={r.id}>
                   <CardBody className="flex items-start gap-3">

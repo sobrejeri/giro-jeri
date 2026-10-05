@@ -79,7 +79,7 @@ export default function Passeios() {
         <CardHeader>
           <p className="text-sm font-semibold text-gray-700">Executo ({active.length})</p>
         </CardHeader>
-        <div className="divide-y divide-gray-100">
+        <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
           {active.map((t) => (
             <TourRow
               key={t.id}
@@ -103,7 +103,7 @@ export default function Passeios() {
           <CardHeader>
             <p className="text-sm font-semibold text-gray-400">Não executo ({inactive.length})</p>
           </CardHeader>
-          <div className="divide-y divide-gray-100">
+          <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
             {inactive.map((t) => (
               <TourRow
                 key={t.id}
@@ -135,7 +135,7 @@ export default function Passeios() {
 function TourRow({ tour: t, enabled, onToggle, pending }) {
   const grad = GRADIENTS[gi(t.id)]
   return (
-    <div className={`flex items-center gap-3 px-5 py-3 transition-opacity ${enabled ? '' : 'opacity-50'}`}>
+    <div className={`flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50 transition-opacity ${enabled ? '' : 'opacity-50'}`}>
       {/* Capa */}
       <div className={`w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-gradient-to-br ${grad} flex items-center justify-center`}>
         {t.cover_image_url

@@ -177,7 +177,7 @@ function groupByOrder(list) {
 // segue POR serviço (cada um pode ter veículo/motorista diferente).
 function GroupedList({ list, onDispatch, onStart, onComplete, operador }) {
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
       {groupByOrder(list).map((it) => it.type === 'group' ? (
         <div key={it.gid} className="rounded-2xl border border-violet-200 overflow-hidden">
           <div className="bg-violet-50 px-4 py-2 flex items-center justify-between border-b border-violet-100">

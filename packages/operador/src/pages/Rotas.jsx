@@ -75,7 +75,7 @@ export default function Rotas() {
         <CardHeader>
           <p className="text-sm font-semibold text-gray-700">Atendo ({active.length})</p>
         </CardHeader>
-        <div className="divide-y divide-gray-100">
+        <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
           {active.map((r) => (
             <RouteRow
               key={r.id}
@@ -98,7 +98,7 @@ export default function Rotas() {
           <CardHeader>
             <p className="text-sm font-semibold text-gray-400">Não atendo ({inactive.length})</p>
           </CardHeader>
-          <div className="divide-y divide-gray-100">
+          <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
             {inactive.map((r) => (
               <RouteRow
                 key={r.id}
@@ -130,7 +130,7 @@ export default function Rotas() {
 function RouteRow({ route: r, enabled, onToggle, pending }) {
   const price = fmt(r.default_price)
   return (
-    <div className={`flex items-center gap-4 px-5 py-3 transition-opacity ${enabled ? '' : 'opacity-50'}`}>
+    <div className={`flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50 transition-opacity ${enabled ? '' : 'opacity-50'}`}>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900">
           {r.origin_name} → {r.destination_name}

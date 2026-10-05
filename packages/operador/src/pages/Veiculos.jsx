@@ -133,7 +133,7 @@ export default function Veiculos() {
             <CardHeader>
               <p className="text-sm font-semibold text-gray-700">{t.sectionOperating(operating.length)}</p>
             </CardHeader>
-            <div className="divide-y divide-gray-100">
+            <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
               {operating.map((v) => (
                 <VehicleRow key={v.id} vehicle={v} operating />
               ))}
@@ -154,7 +154,7 @@ export default function Veiculos() {
               <CardHeader>
                 <p className="text-sm font-semibold text-gray-500">{t.sectionBlocked(blocked.length)}</p>
               </CardHeader>
-              <div className="divide-y divide-gray-100">
+              <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
                 {blocked.map((v) => (
                   <VehicleRow key={v.id} vehicle={v} operating={false} />
                 ))}
@@ -169,7 +169,7 @@ export default function Veiculos() {
 
 function VehicleRow({ vehicle: v, operating }) {
   return (
-    <div className={`flex items-center gap-3 px-5 py-3 transition-opacity ${operating ? '' : 'opacity-60'}`}>
+    <div className={`flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50 transition-opacity ${operating ? '' : 'opacity-60'}`}>
       <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
         {v.image_url
           ? <img src={v.image_url} alt={v.name} className="w-full h-full object-cover" />
