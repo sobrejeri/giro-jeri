@@ -738,12 +738,13 @@ export default function Catalogo() {
         ))}
       </div>
 
-      {/* Filtro por município */}
+      {/* Filtro por município — uma linha só, rolável na horizontal (em vez de
+          quebrar em 3-4 linhas e empurrar a lista para baixo). */}
       {allRegions.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin -mx-1 px-1">
           <button
             onClick={() => setFilterRegion(null)}
-            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+            className={`shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
               !filterRegion ? 'bg-brand text-white border-brand' : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
             }`}
           >
@@ -753,7 +754,7 @@ export default function Catalogo() {
             <button
               key={r.id}
               onClick={() => setFilterRegion(filterRegion === r.id ? null : r.id)}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                 filterRegion === r.id ? 'bg-brand text-white border-brand' : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
               }`}
             >
@@ -821,7 +822,7 @@ export default function Catalogo() {
             {/* Separação por categoria — mesma barra das rotas. Só com 1+
                 categoria: sem nenhuma, seria um botão sozinho sem função. */}
             {categoriasAtivas.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
+              <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1 scrollbar-thin">
                 {[{ id: 'todos', name: `Todos (${filteredTours.length})` },
                   ...categoriasAtivas.map((c) => ({
                     id: c.id,
@@ -832,7 +833,7 @@ export default function Catalogo() {
                   <button
                     key={op.id}
                     onClick={() => setCatPasseio(op.id)}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                    className={`shrink-0 whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
                       catPasseio === op.id
                         ? 'bg-brand/15 border-brand/60 text-brand'
                         : 'border-gray-700 text-gray-400 hover:text-gray-200'
@@ -952,7 +953,7 @@ export default function Catalogo() {
               {/* Separação por tipo de translado. Só aparece com 2+ tipos: com
                   um só, a barra seria um botão inútil ocupando espaço. */}
               {transfers.length > 1 && (
-                <div className="flex flex-wrap gap-1.5 mt-3">
+                <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1 scrollbar-thin">
                   {[{ id: 'todos', name: `Todas (${routes.length})` },
                     ...transfers.map((tr) => ({
                       id: tr.id,
@@ -961,7 +962,7 @@ export default function Catalogo() {
                     <button
                       key={op.id}
                       onClick={() => { setTipoRota(op.id); setSoSemFoto(false) }}
-                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                      className={`shrink-0 whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
                         tipoRota === op.id
                           ? 'bg-brand/15 border-brand/60 text-brand'
                           : 'border-gray-700 text-gray-400 hover:text-gray-200'
@@ -1071,53 +1072,83 @@ export default function Catalogo() {
           </CardHeader>
           {l4 ? (
             <CardBody><p className="text-sm text-gray-500">Carregando…</p></CardBody>
-          ) : (
-            <div className="divide-y divide-gray-800">
-              {filteredVehicles.map((v) => (
-                <div key={v.id} className="flex items-center gap-3 px-5 py-3">
-                  {v.image_url ? (
-                    <img src={v.image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center shrink-0">
-                      <Car size={16} className="text-gray-500" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-200">{v.name}</p>
-                    {/* Meta neutra (uma paleta só) — antes eram 4 cores brigando.
-                        Regiões ficam na linha de baixo, colapsadas. */}
-                    <div className="flex items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500 flex-wrap mt-0.5">
-                      <span className="text-gray-300">{VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type}</span>
-                      <span className="text-gray-600">·</span>
-                      <span className="inline-flex items-center gap-1"><Users size={10} className="text-gray-500" />{v.seat_capacity} pax</span>
-                      <span className="text-gray-600">·</span>
-                      <span className="text-gray-400">{nomeDoModal(v.modal)}</span>
-                      {(v.is_tour_allowed || v.is_transfer_allowed || v.is_shared_allowed) && (
-                        <>
-                          <span className="text-gray-600">·</span>
-                          <span>{[v.is_tour_allowed && 'Passeios', v.is_transfer_allowed && 'Transfer', v.is_shared_allowed && 'Compart.'].filter(Boolean).join(' · ')}</span>
-                        </>
-                      )}
-                    </div>
-                    {v.region_ids?.length > 0 && <div className="mt-0.5"><RegionTags ids={v.region_ids} /></div>}
-                  </div>
-                  <Badge value={String(v.is_active)} />
-                  <MenuAcoes
-                    onEdit={() => openEditVehicle(v)}
-                    onDelete={() => { if (confirm(`Desativar "${v.name}"?`)) deleteVehicleMut.mutate(v.id) }}
-                    deleteLabel="Desativar"
-                  />
+          ) : filteredVehicles.length === 0 ? (
+            <CardBody>
+              {vehicles.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Car size={32} className="mx-auto text-gray-700 mb-2" />
+                  <p className="text-sm text-gray-600">Nenhum veículo cadastrado.</p>
+                  <p className="text-xs text-gray-700 mt-1">Cadastre veículos para que apareçam nos passeios privativos.</p>
                 </div>
-              ))}
-              {vehicles.length === 0 && (
-                <CardBody>
-                  <div className="py-8 text-center">
-                    <Car size={32} className="mx-auto text-gray-700 mb-2" />
-                    <p className="text-sm text-gray-600">Nenhum veículo cadastrado.</p>
-                    <p className="text-xs text-gray-700 mt-1">Cadastre veículos para que apareçam nos passeios privativos.</p>
-                  </div>
-                </CardBody>
+              ) : (
+                <p className="text-sm text-gray-600">Nenhum veículo neste município.</p>
               )}
+            </CardBody>
+          ) : (
+            <div>
+              {(() => {
+                // Agrupa por modal (Terrestre/Aéreo/Aquático), na ordem dos modais
+                // cadastrados; veículo sem modal conhecido cai em "Outros". O modal
+                // vira subtítulo do grupo, então sai da linha de meta do card.
+                const ordem   = modais.map((m) => m.slug)
+                const porSlug = new Map()
+                const grupos  = []
+                for (const v of filteredVehicles) {
+                  const slug = v.modal || '__outros'
+                  if (!porSlug.has(slug)) {
+                    const g = { slug, nome: v.modal ? nomeDoModal(v.modal) : 'Outros', veiculos: [] }
+                    porSlug.set(slug, g); grupos.push(g)
+                  }
+                  porSlug.get(slug).veiculos.push(v)
+                }
+                grupos.sort((a, b) => {
+                  const ia = ordem.indexOf(a.slug), ib = ordem.indexOf(b.slug)
+                  return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+                })
+                return grupos.map((grupo) => (
+                  <div key={grupo.slug}>
+                    <div className="px-5 py-1.5 bg-gray-900/40 border-b border-gray-800 flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{grupo.nome}</span>
+                      <span className="text-[11px] text-gray-600">{grupo.veiculos.length}</span>
+                    </div>
+                    <div className="divide-y divide-gray-800">
+                      {grupo.veiculos.map((v) => (
+                        <div key={v.id} className="flex items-center gap-3 px-5 py-3">
+                          {v.image_url ? (
+                            <img src={v.image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center shrink-0">
+                              <Car size={16} className="text-gray-500" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-200">{v.name}</p>
+                            {/* Meta neutra (uma paleta só); o modal já é o título do grupo. */}
+                            <div className="flex items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500 flex-wrap mt-0.5">
+                              <span className="text-gray-300">{VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type}</span>
+                              <span className="text-gray-600">·</span>
+                              <span className="inline-flex items-center gap-1"><Users size={10} className="text-gray-500" />{v.seat_capacity} pax</span>
+                              {(v.is_tour_allowed || v.is_transfer_allowed || v.is_shared_allowed) && (
+                                <>
+                                  <span className="text-gray-600">·</span>
+                                  <span>{[v.is_tour_allowed && 'Passeios', v.is_transfer_allowed && 'Transfer', v.is_shared_allowed && 'Compart.'].filter(Boolean).join(' · ')}</span>
+                                </>
+                              )}
+                            </div>
+                            {v.region_ids?.length > 0 && <div className="mt-0.5"><RegionTags ids={v.region_ids} /></div>}
+                          </div>
+                          <Badge value={String(v.is_active)} />
+                          <MenuAcoes
+                            onEdit={() => openEditVehicle(v)}
+                            onDelete={() => { if (confirm(`Desativar "${v.name}"?`)) deleteVehicleMut.mutate(v.id) }}
+                            deleteLabel="Desativar"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              })()}
             </div>
           )}
         </Card>
