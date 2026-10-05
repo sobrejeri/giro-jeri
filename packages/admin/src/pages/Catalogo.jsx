@@ -781,9 +781,9 @@ export default function Catalogo() {
           count={categorias.length}
           action={<Button size="sm" onClick={openNewCategory}><Plus size={14} /> Nova Categoria</Button>}
         >
-          <div className="divide-y divide-gray-800">
+          <div className="p-3 space-y-2">
             {categorias.map((c) => (
-              <div key={c.id} className="flex items-center gap-3 px-5 py-3">
+              <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-200">{c.name}</p>
                   <p className="text-xs text-gray-500">
@@ -841,9 +841,9 @@ export default function Catalogo() {
               </div>
             </div>
           )}
-          <div className="divide-y divide-gray-800">
+          <div className="p-3 space-y-2">
             {passeiosVisiveis.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 px-5 py-3">
+              <div key={t.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                 {t.cover_image_url ? (
                   <img src={t.cover_image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                 ) : (
@@ -897,9 +897,9 @@ export default function Catalogo() {
             count={filterRegion ? `${filteredTransfers.length}/${transfers.length}` : filteredTransfers.length}
             action={<Button size="sm" onClick={openNewTransfer}><Plus size={14} /> Nova Categoria</Button>}
           >
-            <div className="divide-y divide-gray-800">
+            <div className="p-3 space-y-2">
               {filteredTransfers.map((t) => (
-                <div key={t.id} className="flex items-center gap-4 px-5 py-3">
+                <div key={t.id} className="flex items-center gap-4 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{t.name}</p>
                     <p className="text-xs text-gray-500">{t.pricing_mode}<RegionTags ids={t.region_ids} /></p>
@@ -960,9 +960,9 @@ export default function Catalogo() {
                 )}
               </div>
             )}
-            <div className="divide-y divide-gray-800">
+            <div className="p-3 space-y-2">
               {rotasVisiveis.map((r) => (
-                <div key={r.id} className="flex items-center gap-3 px-5 py-3">
+                <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                   {/* EXATAMENTE a mesma miniatura da lista de passeios (mesmo
                       tamanho, mesmo cinza no vazio) — pedido do dono para as
                       duas listas se lerem do mesmo jeito. O `title` fica como
@@ -1017,11 +1017,11 @@ export default function Catalogo() {
           <p className="px-5 pt-3 text-xs text-gray-500">
             O veículo só é oferecido em serviço do mesmo modal. Quem define o modal do serviço é a categoria dele.
           </p>
-          <div className="divide-y divide-gray-800">
+          <div className="p-3 space-y-2">
             {modais.map((m) => {
               const usoVeiculos = vehicles.filter((v) => v.modal === m.slug).length
               return (
-                <div key={m.slug} className="flex items-center gap-3 px-5 py-3">
+                <div key={m.slug} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{m.name}</p>
                     <p className="text-xs text-gray-500">
@@ -1088,13 +1088,14 @@ export default function Catalogo() {
                 })
                 return grupos.map((grupo) => (
                   <div key={grupo.slug}>
-                    <div className="px-5 py-1.5 bg-gray-900/40 border-b border-gray-800 flex items-center justify-between">
+                    <div className="px-4 pt-3 pb-0.5 flex items-center gap-2">
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{grupo.nome}</span>
+                      <span className="h-px flex-1 bg-gray-800" />
                       <span className="text-[11px] text-gray-600">{grupo.veiculos.length}</span>
                     </div>
-                    <div className="divide-y divide-gray-800">
+                    <div className="p-3 space-y-2">
                       {grupo.veiculos.map((v) => (
-                        <div key={v.id} className="flex items-center gap-3 px-5 py-3">
+                        <div key={v.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                           {v.image_url ? (
                             <img src={v.image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                           ) : (
