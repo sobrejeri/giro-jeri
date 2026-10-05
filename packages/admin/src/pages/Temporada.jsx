@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Sun, CalendarDays } from 'lucide-react'
+import { Plus, Sun, CalendarDays } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Select } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import MenuAcoes from '../components/ui/MenuAcoes'
 
 const MONTHS = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -216,48 +217,42 @@ export default function Temporada() {
         </Card>
       ) : (
         <Card>
-          <div className="divide-y divide-gray-800">
+          <div className="p-3 space-y-2">
             {seasons.map((s) => (
-              <div key={s.id} className="flex items-center gap-4 px-5 py-4">
-                <div className="w-9 h-9 rounded-lg bg-amber-900/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
+                <div className="w-9 h-9 rounded-lg bg-amber-900/30 flex items-center justify-center text-amber-400 shrink-0">
                   <Sun size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-200">{s.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     {s.regions?.name || 'Todas as regiões'} · +{s.additional_value}%
                   </p>
+                  {sobreposicao.get(s.id) === 'perdeu' && (
+                    <span
+                      title="Outra regra ativa cobre as mesmas datas e foi editada depois — é ela que vale."
+                      className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400"
+                    >
+                      Sobreposta
+                    </span>
+                  )}
+                  {sobreposicao.get(s.id) === 'vigora' && (
+                    <span
+                      title="Há outra regra para as mesmas datas, mas esta foi editada por último — é a que vale."
+                      className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-400"
+                    >
+                      Em vigor
+                    </span>
+                  )}
                 </div>
-                {sobreposicao.get(s.id) === 'perdeu' && (
-                  <span
-                    title="Outra regra ativa cobre as mesmas datas e foi editada depois — é ela que vale."
-                    className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 whitespace-nowrap"
-                  >
-                    Sobreposta
-                  </span>
-                )}
-                {sobreposicao.get(s.id) === 'vigora' && (
-                  <span
-                    title="Há outra regra para as mesmas datas, mas esta foi editada por último — é a que vale."
-                    className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-400 whitespace-nowrap"
-                  >
-                    Em vigor
-                  </span>
-                )}
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.is_active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${s.is_active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
                   {s.is_active ? 'Ativa' : 'Inativa'}
                 </span>
-                <div className="flex gap-1">
-                  <button onClick={() => openEdit(s)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
-                    <Pencil size={13} />
-                  </button>
-                  <button
-                    onClick={() => confirm('Remover regra?') && deleteMut.mutate(s.id)}
-                    className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
+                <MenuAcoes
+                  onEdit={() => openEdit(s)}
+                  onDelete={() => { if (confirm('Remover regra?')) deleteMut.mutate(s.id) }}
+                  deleteLabel="Remover"
+                />
               </div>
             ))}
           </div>
@@ -317,25 +312,26 @@ export default function Temporada() {
         </CardBody></Card>
       ) : (
         <Card>
-          <div className="divide-y divide-gray-800">
+          <div className="p-3 space-y-2">
             {holidays.map((h) => (
-              <div key={h.id} className="flex items-center gap-4 px-5 py-4">
-                <div className="w-9 h-9 rounded-lg bg-rose-900/30 flex items-center justify-center text-rose-400 flex-shrink-0">
+              <div key={h.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
+                <div className="w-9 h-9 rounded-lg bg-rose-900/30 flex items-center justify-center text-rose-400 shrink-0">
                   <CalendarDays size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-200">{h.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     {fmtDateBR(h.holiday_date)} · {h.regions?.name || 'Todas as regiões'} · +{h.additional_value}%
                   </p>
                 </div>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${h.is_active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${h.is_active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
                   {h.is_active ? 'Ativo' : 'Inativo'}
                 </span>
-                <div className="flex gap-1">
-                  <button onClick={() => openEditHoliday(h)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg"><Pencil size={13} /></button>
-                  <button onClick={() => confirm('Remover esta data?') && deleteHoliday.mutate(h.id)} className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"><Trash2 size={13} /></button>
-                </div>
+                <MenuAcoes
+                  onEdit={() => openEditHoliday(h)}
+                  onDelete={() => { if (confirm('Remover esta data?')) deleteHoliday.mutate(h.id) }}
+                  deleteLabel="Remover"
+                />
               </div>
             ))}
           </div>
