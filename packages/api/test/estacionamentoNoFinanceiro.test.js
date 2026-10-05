@@ -47,6 +47,16 @@ test('Financeiro (/financial): bruto += vaga, repasse += líquido, resultado += 
   assert.match(admin, /comissoes_plataforma: comissoesTotal/)
 })
 
+test('os contadores do topo do Dashboard somam o estacionamento', () => {
+  // Mapa de status do estacionamento para os contadores.
+  assert.match(admin, /\.eq\('status', 'awaiting_partner'\)/, 'aguardando operador')
+  assert.match(admin, /\.eq\('status', 'accepted_awaiting_payment'\)/, 'aguardando pagamento')
+  assert.match(admin, /reservas_hoje:\s+\(reservasHoje \|\| 0\) \+ pkResHoje/)
+  assert.match(admin, /pendencias:\s+\(pendentes \|\| 0\) \+ pkAgPag/)
+  assert.match(admin, /aguardando_aceite:\s+\(aguardandoAceite \|\| 0\) \+ pkAgOp/)
+  assert.match(admin, /cancelamentos:\s+\(cancelamentos \|\| 0\) \+ pkCancel/)
+})
+
 test('o flag de dados incompletos continua só sobre passeios', () => {
   // Não pode usar os totais com estacionamento, senão vaga de 0% de comissão
   // dispararia o aviso de "dados incompletos" sem necessidade.

@@ -104,11 +104,36 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
       console.error('[stats] estacionamento no financeiro falhou (ignorado):', e?.message);
     }
 
+    // Estacionamento nos contadores do topo. Mapa de status: aguardando operador
+    // → awaiting_partner; aguardando pagamento → accepted_awaiting_payment;
+    // reservas de hoje = vagas que começam hoje e não estão mortas; cancelamentos
+    // de hoje = canceladas/recusadas criadas hoje (aproximação — não há coluna de
+    // "cancelada em"). Best-effort — se falhar, os contadores seguem só de passeios.
+    let pkResHoje = 0, pkAgPag = 0, pkAgOp = 0, pkCancel = 0;
+    try {
+      const amanha = dayjs().add(1, 'day').format('YYYY-MM-DD');
+      const mortos = ['cancelled', 'rejected', 'expired_no_answer', 'expired_no_payment'];
+      const [rHoje, rPag, rOp, rCancel] = await Promise.all([
+        supabase.from('parking_reservations').select('*', { count: 'exact', head: true })
+          .gte('start_at', today).lt('start_at', amanha).not('status', 'in', `(${mortos.join(',')})`),
+        supabase.from('parking_reservations').select('*', { count: 'exact', head: true })
+          .eq('status', 'accepted_awaiting_payment'),
+        supabase.from('parking_reservations').select('*', { count: 'exact', head: true })
+          .eq('status', 'awaiting_partner'),
+        supabase.from('parking_reservations').select('*', { count: 'exact', head: true })
+          .in('status', ['cancelled', 'rejected']).gte('created_at', today),
+      ]);
+      pkResHoje = rHoje.count || 0; pkAgPag = rPag.count || 0;
+      pkAgOp = rOp.count || 0; pkCancel = rCancel.count || 0;
+    } catch (e) {
+      console.error('[stats] contadores de estacionamento falharam (ignorado):', e?.message);
+    }
+
     res.json({
-      reservas_hoje:      reservasHoje || 0,
-      pendencias:         pendentes || 0,
-      aguardando_aceite:  aguardandoAceite || 0,
-      cancelamentos:      cancelamentos || 0,
+      reservas_hoje:      (reservasHoje || 0) + pkResHoje,
+      pendencias:         (pendentes || 0) + pkAgPag,
+      aguardando_aceite:  (aguardandoAceite || 0) + pkAgOp,
+      cancelamentos:      (cancelamentos || 0) + pkCancel,
       valor_bruto_hoje:   valorBrutoHoje,
       valor_liquido_hoje: valorLiquidoHoje,
       valor_bruto_mes:    valorBrutoMes,
