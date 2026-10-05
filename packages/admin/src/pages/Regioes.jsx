@@ -98,34 +98,34 @@ export default function Regioes() {
           </CardBody>
         </Card>
       ) : (
-        <Card>
-          <div className="divide-y divide-gray-800">
-            {regions.map((r) => (
-              <div key={r.id} className="flex items-center gap-4 px-5 py-4">
-                <div className="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center text-gray-500 flex-shrink-0">
+        <div className="space-y-2">
+          {regions.map((r) => (
+            <Card key={r.id}>
+              <div className="flex items-center gap-3 p-4">
+                <div className="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center text-gray-500 shrink-0">
                   <Globe size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-200">{r.name}</p>
-                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                    <span className="text-xs text-gray-500">{r.slug} · {r.timezone}</span>
-                    {r.center_latitude && r.center_longitude && (
-                      <span className="text-xs text-gray-600 flex items-center gap-1">
-                        <MapPin size={10} />
-                        {Number(r.center_latitude).toFixed(4)}, {Number(r.center_longitude).toFixed(4)}
-                        {r.service_radius_km && <span className="text-gray-700">· {r.service_radius_km} km</span>}
-                      </span>
-                    )}
-                  </div>
+                  <p className="text-sm font-semibold text-gray-200 truncate">{r.name}</p>
+                  {/* Meta em linhas separadas — antes a linha de coordenadas
+                      quebrava torto ao lado do slug no celular. */}
+                  <p className="text-xs text-gray-500 truncate mt-0.5">{r.slug} · {r.timezone}</p>
+                  {r.center_latitude && r.center_longitude && (
+                    <p className="text-xs text-gray-600 flex items-center gap-1 mt-0.5">
+                      <MapPin size={10} className="shrink-0" />
+                      {Number(r.center_latitude).toFixed(4)}, {Number(r.center_longitude).toFixed(4)}
+                      {r.service_radius_km ? <span className="text-gray-700">· {r.service_radius_km} km</span> : null}
+                    </p>
+                  )}
                 </div>
                 <Badge value={String(r.is_active)} />
-                <button onClick={() => openEdit(r)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
+                <button onClick={() => openEdit(r)} className="p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-700 rounded-lg shrink-0">
                   <Pencil size={14} />
                 </button>
               </div>
-            ))}
-          </div>
-        </Card>
+            </Card>
+          ))}
+        </div>
       )}
 
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.isNew ? 'Nova Região' : 'Editar Região'} size="md">
