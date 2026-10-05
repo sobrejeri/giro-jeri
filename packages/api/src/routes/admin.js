@@ -60,9 +60,9 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
         .or(`effective_date.gte.${monthStart},and(effective_date.is.null,created_at.gte.${monthStart})`),
     ]);
 
-    const valorBrutoHoje = (financeiroHoje.data || [])
+    let valorBrutoHoje = (financeiroHoje.data || [])
       .reduce((s, r) => s + Number(r.amount), 0);
-    const valorBrutoMes  = (financeiroMes.data || [])
+    let valorBrutoMes  = (financeiroMes.data || [])
       .reduce((s, r) => s + Number(r.amount), 0);
 
     // LÍQUIDO REAL, do próprio razão. Era `bruto * 0,93` — 7% chutados no
@@ -86,6 +86,22 @@ router.get('/stats', requireAdmin, async (req, res, next) => {
       ]);
     } catch (e) {
       console.error('[stats] líquido do razão falhou:', e.message);
+    }
+
+    // Estacionamento: soma a receita de vaga ao bruto e a comissão da plataforma
+    // ao líquido do dia/mês. Best-effort — se falhar, o painel segue sem ele.
+    try {
+      const { parkingFinanceiro } = await import('../services/parking/financial.js');
+      const [pkHoje, pkMes] = await Promise.all([
+        parkingFinanceiro({ from: today }),
+        parkingFinanceiro({ from: monthStart }),
+      ]);
+      valorBrutoHoje += pkHoje.brutoC / 100;
+      valorBrutoMes  += pkMes.brutoC  / 100;
+      if (pkHoje.brutoC > 0) valorLiquidoHoje = (valorLiquidoHoje || 0) + pkHoje.comissaoC / 100;
+      if (pkMes.brutoC  > 0) valorLiquidoMes  = (valorLiquidoMes  || 0) + pkMes.comissaoC  / 100;
+    } catch (e) {
+      console.error('[stats] estacionamento no financeiro falhou (ignorado):', e?.message);
     }
 
     res.json({
@@ -896,26 +912,43 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
     const round2 = (v) => Math.round(v * 100) / 100;
     const comissoesAfiliados = round2((afRows || []).reduce((s, r) => s + Number(r.commission_amount || 0), 0));
 
-    // Resultado da plataforma = o que ela realmente retém: comissão da plataforma
-    // menos a taxa de gateway e menos o que é pago aos afiliados.
-    const resultado = round2(comissoes - taxas - comissoesAfiliados);
+    // Estacionamento entra na conta (modelo INVERSO ao do passeio): a receita de
+    // vaga soma no BRUTO, o líquido do parceiro soma no REPASSE, e a comissão do
+    // estacionamento é RESULTADO da plataforma. Taxas de gateway e afiliados não
+    // se aplicam ao estacionamento. Best-effort — se falhar, segue só com passeios.
+    let parkBruto = 0, parkComissao = 0, parkLiquido = 0;
+    try {
+      const { parkingFinanceiro } = await import('../services/parking/financial.js');
+      const pk = await parkingFinanceiro({ from: starts[period] || starts.month });
+      parkBruto = pk.brutoC / 100; parkComissao = pk.comissaoC / 100; parkLiquido = pk.liquidoC / 100;
+    } catch (e) { console.error('[financial] estacionamento falhou (ignorado):', e?.message); }
+
+    const brutoTotal     = round2(bruto + parkBruto);
+    const comissoesTotal = round2(comissoes + parkComissao);
+    const repassesTotal  = round2(repassesOut + parkLiquido);
+    const liquidoTotal   = round2(liquido + parkComissao);
+
+    // Resultado da plataforma = o que ela realmente retém: comissões (passeio +
+    // estacionamento) menos a taxa de gateway e menos o que é pago aos afiliados.
+    const resultado = round2(comissoesTotal - taxas - comissoesAfiliados);
 
     // Os lançamentos commission_platform/payout_operator só passaram a ser
     // gravados a partir do deploy de 24/07. Períodos que incluem receita ANTERIOR
     // a isso têm booking_gross sem a comissão correspondente — aí `resultado`
     // fica artificialmente baixo (até negativo) e NÃO deve ser lido como
     // prejuízo. Este flag avisa a tela para exibir "—" em vez de um número falso.
+    // Vale SÓ para passeios: o estacionamento tem comissão própria, não entra aqui.
     const dadosIncompletos = bruto > 0 && comissoes === 0;
 
     res.json({
-      bruto, taxas, liquido,
+      bruto: brutoTotal, taxas, liquido: liquidoTotal,
       nao_creditado: naoCredit,
-      comissoes_plataforma: comissoes,
+      comissoes_plataforma: comissoesTotal,
       comissoes_afiliados: comissoesAfiliados,
-      repasses: repassesOut,
+      repasses: repassesTotal,
       resultado_plataforma: resultado,
       dados_incompletos: dadosIncompletos,
-      margem_percent: (bruto > 0 && !dadosIncompletos) ? Math.round((resultado / bruto) * 100) : null,
+      margem_percent: (brutoTotal > 0 && !dadosIncompletos) ? Math.round((resultado / brutoTotal) * 100) : null,
     });
   } catch (err) { next(err); }
 });
@@ -2980,6 +3013,20 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
       if (!byDay[d]) byDay[d] = { total: 0, net: null };
       if (row.entry_type === 'booking_gross') byDay[d].total += Number(row.amount);
       else byDay[d].net = (byDay[d].net || 0) + Number(row.amount);
+    }
+
+    // Estacionamento: soma a receita de vaga (total) e a comissão da plataforma
+    // (net) por dia. Best-effort — se falhar, o gráfico segue sem ele.
+    try {
+      const { parkingFaturamentoDiario } = await import('../services/parking/financial.js');
+      const pk = await parkingFaturamentoDiario({ since });
+      for (const [d, v] of Object.entries(pk)) {
+        if (!byDay[d]) byDay[d] = { total: 0, net: null };
+        byDay[d].total += v.brutoC / 100;
+        byDay[d].net = (byDay[d].net || 0) + v.comissaoC / 100;
+      }
+    } catch (e) {
+      console.error('[financial-daily] estacionamento falhou (ignorado):', e?.message);
     }
 
     const series = Object.entries(byDay)
