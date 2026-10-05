@@ -810,19 +810,15 @@ export default function Catalogo() {
           </div>
         </Secao>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-300">
-                Passeios ({passeiosVisiveis.length}{passeiosVisiveis.length !== tours.length ? `/${tours.length}` : ''})
-              </h2>
-              <Button size="sm" onClick={openNewTour}><Plus size={14} /> Novo Passeio</Button>
-            </div>
-
-            {/* Separação por categoria — mesma barra das rotas. Só com 1+
-                categoria: sem nenhuma, seria um botão sozinho sem função. */}
-            {categoriasAtivas.length > 0 && (
-              <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1 scrollbar-thin">
+        <Secao
+          title="Passeios"
+          count={passeiosVisiveis.length !== tours.length ? `${passeiosVisiveis.length}/${tours.length}` : tours.length}
+          action={<Button size="sm" onClick={openNewTour}><Plus size={14} /> Novo Passeio</Button>}
+        >
+          {/* Filtro por categoria — dentro da seção, numa linha rolável. */}
+          {categoriasAtivas.length > 0 && (
+            <div className="px-5 pt-3">
+              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                 {[{ id: 'todos', name: `Todos (${filteredTours.length})` },
                   ...categoriasAtivas.map((c) => ({
                     id: c.id,
@@ -843,8 +839,8 @@ export default function Catalogo() {
                   </button>
                 ))}
               </div>
-            )}
-          </CardHeader>
+            </div>
+          )}
           <div className="divide-y divide-gray-800">
             {passeiosVisiveis.map((t) => (
               <div key={t.id} className="flex items-center gap-3 px-5 py-3">
@@ -880,7 +876,7 @@ export default function Catalogo() {
               </p></CardBody>
             )}
           </div>
-        </Card>
+        </Secao>
         </>
       )}
 
@@ -916,64 +912,54 @@ export default function Catalogo() {
             </div>
           </Secao>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Route size={16} className="text-gray-500" />
-                  <h2 className="text-sm font-semibold text-gray-300">
-                    Rotas Tabeladas ({rotasDoTipo.length}{tipoRota !== 'todos' ? `/${routes.length}` : ''})
-                  </h2>
-                  {/* Com dezenas de rotas, "quantas faltam" é mais útil do que
-                      conferir uma a uma percorrendo a lista. */}
-                  {rotasDoTipo.length > 0 && (
-                    <span className="text-xs text-gray-500">
-                      · {rotasComFoto} com foto
-                      {rotasSemFoto > 0 && <span className="text-amber-500/90"> · {rotasSemFoto} sem</span>}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {rotasSemFoto > 0 && (
-                    <button
-                      onClick={() => setSoSemFoto((v) => !v)}
-                      className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
-                        soSemFoto
-                          ? 'bg-amber-900/30 border-amber-700/50 text-amber-300'
-                          : 'border-gray-700 text-gray-400 hover:text-gray-200'
-                      }`}
-                    >
-                      {soSemFoto ? 'Mostrar todas' : 'Só sem foto'}
-                    </button>
-                  )}
-                  <Button size="sm" variant="secondary" onClick={openNewRoute}><Plus size={14} /> Nova Rota</Button>
-                </div>
+          <Secao
+            title="Rotas Tabeladas"
+            count={tipoRota !== 'todos' ? `${rotasDoTipo.length}/${routes.length}` : routes.length}
+            action={<Button size="sm" variant="secondary" onClick={openNewRoute}><Plus size={14} /> Nova Rota</Button>}
+          >
+            {/* Controles da lista (dentro da seção): status de foto e filtro por tipo. */}
+            {(rotasDoTipo.length > 0 || transfers.length > 1) && (
+              <div className="px-5 pt-3 space-y-2">
+                {rotasDoTipo.length > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span>{rotasComFoto} com foto{rotasSemFoto > 0 && <span className="text-amber-500/90"> · {rotasSemFoto} sem</span>}</span>
+                    {rotasSemFoto > 0 && (
+                      <button
+                        onClick={() => setSoSemFoto((v) => !v)}
+                        className={`shrink-0 whitespace-nowrap text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                          soSemFoto
+                            ? 'bg-amber-900/30 border-amber-700/50 text-amber-300'
+                            : 'border-gray-700 text-gray-400 hover:text-gray-200'
+                        }`}
+                      >
+                        {soSemFoto ? 'Mostrar todas' : 'Só sem foto'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {transfers.length > 1 && (
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                    {[{ id: 'todos', name: `Todas (${routes.length})` },
+                      ...transfers.map((tr) => ({
+                        id: tr.id,
+                        name: `${tr.name} (${routes.filter((r) => r.transfer_id === tr.id).length})`,
+                      }))].map((op) => (
+                      <button
+                        key={op.id}
+                        onClick={() => { setTipoRota(op.id); setSoSemFoto(false) }}
+                        className={`shrink-0 whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                          tipoRota === op.id
+                            ? 'bg-brand/15 border-brand/60 text-brand'
+                            : 'border-gray-700 text-gray-400 hover:text-gray-200'
+                        }`}
+                      >
+                        {op.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {/* Separação por tipo de translado. Só aparece com 2+ tipos: com
-                  um só, a barra seria um botão inútil ocupando espaço. */}
-              {transfers.length > 1 && (
-                <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1 scrollbar-thin">
-                  {[{ id: 'todos', name: `Todas (${routes.length})` },
-                    ...transfers.map((tr) => ({
-                      id: tr.id,
-                      name: `${tr.name} (${routes.filter((r) => r.transfer_id === tr.id).length})`,
-                    }))].map((op) => (
-                    <button
-                      key={op.id}
-                      onClick={() => { setTipoRota(op.id); setSoSemFoto(false) }}
-                      className={`shrink-0 whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                        tipoRota === op.id
-                          ? 'bg-brand/15 border-brand/60 text-brand'
-                          : 'border-gray-700 text-gray-400 hover:text-gray-200'
-                      }`}
-                    >
-                      {op.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </CardHeader>
+            )}
             <div className="divide-y divide-gray-800">
               {rotasVisiveis.map((r) => (
                 <div key={r.id} className="flex items-center gap-3 px-5 py-3">
@@ -1007,7 +993,7 @@ export default function Catalogo() {
               ))}
               {routes.length === 0 && <CardBody><p className="text-sm text-gray-600">Nenhuma rota</p></CardBody>}
             </div>
-          </Card>
+          </Secao>
         </>
       )}
 
@@ -1060,16 +1046,11 @@ export default function Catalogo() {
           </div>
         </Secao>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Car size={16} className="text-gray-500" />
-                <h2 className="text-sm font-semibold text-gray-300">Veículos ({filteredVehicles.length}{filterRegion ? `/${vehicles.length}` : ''})</h2>
-              </div>
-              <Button size="sm" onClick={openNewVehicle}><Plus size={14} /> Novo Veículo</Button>
-            </div>
-          </CardHeader>
+        <Secao
+          title="Veículos"
+          count={filterRegion ? `${filteredVehicles.length}/${vehicles.length}` : vehicles.length}
+          action={<Button size="sm" onClick={openNewVehicle}><Plus size={14} /> Novo Veículo</Button>}
+        >
           {l4 ? (
             <CardBody><p className="text-sm text-gray-500">Carregando…</p></CardBody>
           ) : filteredVehicles.length === 0 ? (
@@ -1151,7 +1132,7 @@ export default function Catalogo() {
               })()}
             </div>
           )}
-        </Card>
+        </Secao>
         </>
       )}
 
