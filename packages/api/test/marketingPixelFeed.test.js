@@ -35,6 +35,14 @@ test('o feed só inclui passeio ATIVO, com preço E imagem', () => {
   assert.match(feed, /if \(!preco \|\| !img\) continue/, 'sem preço ou imagem → fora do feed (a Meta/Google rejeitam)')
 })
 
+test('o feed inclui passeios E transfers (rotas de translado ativas)', () => {
+  assert.match(feed, /from\('tours'\)/, 'passeios no feed')
+  assert.match(feed, /from\('transfer_routes'\)/, 'rotas de translado no feed')
+  assert.match(feed, /\$\{TURISTA_APP\}\/transfers/, 'o item de transfer leva à aba de translados')
+  assert.match(feed, /Promise\.allSettled\(\[itensDeTours\(\), itensDeTransfers\(\)\]\)/,
+    'uma parte falhar não derruba a outra (feed é consumido por crawler externo)')
+})
+
 test('o feed expõe as colunas do catálogo e o link aponta pro site', () => {
   for (const col of ["'id'", "'title'", "'price'", "'link'", "'image_link'"]) {
     assert.match(feed, new RegExp(col), `coluna ${col} ausente no feed`)

@@ -202,7 +202,7 @@ function FeedUrlBox({ url, count }) {
       </div>
       <p className="text-xs text-gray-500 flex items-center gap-1.5">
         <Share2 size={13} />
-        {count != null ? `${count} passeio(s) no feed (ativos, com preço e imagem).` : 'Carregando contagem do feed…'}
+        {count != null ? `${count} item(ns) no feed — passeios e transfers ativos, com preço e imagem.` : 'Carregando contagem do feed…'}
       </p>
     </div>
   )
