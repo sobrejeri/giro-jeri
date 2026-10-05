@@ -582,10 +582,10 @@ export default function Dashboard() {
   const safePage   = Math.min(page, pageCount)
   const pageItems  = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE)
 
-  // Unidades da lista (mobile): itens do mesmo pedido (order_group_id) com 2+
-  // serviços viram um bloco "Combo"; o resto fica avulso. Assim o combo não
-  // aparece espalhado em cards soltos.
-  const mobileUnits = (() => {
+  // Unidades da lista (mobile e desktop): itens do mesmo pedido (order_group_id)
+  // com 2+ serviços viram um bloco "Combo"; o resto fica avulso. Assim o combo
+  // não aparece espalhado — nem em cards soltos nem em linhas soltas na tabela.
+  const unidadesLista = (() => {
     const grupos = new Map()
     const ordem  = []
     for (const b of pageItems) {
@@ -801,7 +801,7 @@ export default function Dashboard() {
 
         {/* Cards (mobile) — cada reserva é um bloco separado; combos vêm juntos */}
         <div className="md:hidden p-3 space-y-3 bg-gray-50/60">
-          {mobileUnits.map((u) => u.type === 'combo' ? (
+          {unidadesLista.map((u) => u.type === 'combo' ? (
             <div key={`g-${u.gid}`} className="rounded-2xl border border-violet-200 bg-white overflow-hidden shadow-sm">
               <div className="bg-violet-50 px-4 py-2 flex items-center gap-1.5 border-b border-violet-100">
                 <Package size={13} className="text-violet-600" />
@@ -841,9 +841,24 @@ export default function Dashboard() {
                 <th className="text-right py-2 pl-3 pr-5 font-bold">Ações</th>
               </tr>
             </thead>
-            <tbody>
-              {pageItems.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={b.order_group_id ? (comboSizes.get(b.order_group_id) || 0) : 0} />)}
-            </tbody>
+            {/* Combos vêm juntos: um cabeçalho do pedido + as pernas (o badge
+                por linha fica suprimido, comboSize=0, pois o cabeçalho já mostra). */}
+            {unidadesLista.map((u) => u.type === 'combo' ? (
+              <tbody key={`g-${u.gid}`}>
+                <tr className="bg-violet-50/70">
+                  <td colSpan={6} className="py-1.5 pl-5 pr-3">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-violet-700">
+                      <Package size={12} /> Combo #{comboShort(u.gid)} · {comboSizes.get(u.gid) || u.items.length} serviços
+                    </span>
+                  </td>
+                </tr>
+                {u.items.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={0} />)}
+              </tbody>
+            ) : (
+              <tbody key={u.b.id}>
+                <BookingRow b={u.b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={0} />
+              </tbody>
+            ))}
           </table>
 
           {pageItems.length === 0 && (
