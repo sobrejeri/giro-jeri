@@ -6,6 +6,7 @@ import { api } from '../../lib/api'
 import { paymentMethodsDoBrick, formasAtivas } from '../../lib/formasPagamento'
 import { totalComJuros, tabelaDeParcelas } from '../../lib/parcelamento'
 import { useAuth } from '../../contexts/AuthContext'
+import { trackInitiateCheckout } from '../../lib/marketing'
 
 // ─── helpers ────────────────────────────────────────────────
 function fmt(v) {
@@ -906,6 +907,19 @@ export default function CheckoutPayment() {
       .finally(() => { clearTimeout(prazo); seguir() })
     return () => { decidido = true; clearTimeout(prazo) }
   }, [state?.existing_booking_id])
+
+  // Marketing: InitiateCheckout (Meta/Google) ao abrir a tela de pagamento —
+  // alimenta o funil e o retargeting de "iniciou mas não pagou". Uma vez só.
+  const checkoutFired = useRef(false)
+  useEffect(() => {
+    if (checkoutFired.current || !state) return
+    checkoutFired.current = true
+    const val = Number(state.total_price)
+    trackInitiateCheckout({
+      value: isNaN(val) ? undefined : val,
+      ids:   state.service_id ? [state.service_id] : undefined,
+    })
+  }, [state])
 
   if (!state) { navigate(-1); return null }
 

@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle, Clock, ArrowRight, Home, Calendar, Users } from 'lucide-react'
+import { trackPurchase } from '../../lib/marketing'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
 
@@ -8,6 +10,20 @@ export default function CheckoutSucesso() {
   const navigate  = useNavigate()
   const { state } = useLocation()
   const { t }     = useTranslation()
+
+  // Marketing: Purchase (Meta/GA4/Ads) uma única vez ao cair na tela de sucesso.
+  // O ref evita a dupla-execução do StrictMode (dev); um refresh não dispara de
+  // novo porque sem `state` a tela redireciona antes.
+  const purchaseFired = useRef(false)
+  useEffect(() => {
+    if (purchaseFired.current || !state) return
+    purchaseFired.current = true
+    trackPurchase({
+      value:         Number(state.amount ?? state.total_price) || undefined,
+      transactionId: state.booking_code || state.booking_id || undefined,
+      ids:           state.service_id ? [state.service_id] : undefined,
+    })
+  }, [state])
 
   if (!state) { navigate('/'); return null }
 

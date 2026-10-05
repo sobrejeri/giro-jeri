@@ -10,6 +10,7 @@ import Precos from './pages/Precos'
 import Regioes from './pages/Regioes'
 import Cupons from './pages/Cupons'
 import Afiliados from './pages/Afiliados'
+import Marketing from './pages/Marketing'
 import Temporada from './pages/Temporada'
 import Financeiro from './pages/Financeiro'
 import Auditoria from './pages/Auditoria'
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="regioes"      element={<Regioes />} />
         <Route path="cupons"       element={<Cupons />} />
         <Route path="afiliados"    element={<Afiliados />} />
+        <Route path="marketing"    element={<Marketing />} />
         <Route path="temporada"    element={<Temporada />} />
         <Route path="feed"         element={<Feed />} />
         <Route path="stories"      element={<Stories />} />

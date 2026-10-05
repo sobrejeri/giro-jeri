@@ -295,6 +295,9 @@ export const api = {
   getServiceModals:   ()        => request('/api/admin/service-modals'),
   setModalStandalone: (id, v)   => request(`/api/admin/service-modals/${id}`, { method: 'PUT', body: { is_standalone: v } }),
 
+  // Marketing: prévia/contagem do feed de catálogo (passeios ativos com preço+imagem).
+  getMarketingFeed:   ()        => request('/api/marketing/catalog.json'),
+
   // Upload de imagens do site (banner da home etc.) → devolve { url }
   uploadSiteImage: (photo_data, name) => request('/api/admin/site-image', { method: 'POST', body: { photo_data, name } }),
 

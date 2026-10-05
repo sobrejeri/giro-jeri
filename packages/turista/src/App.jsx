@@ -1,6 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from './contexts/AuthContext'
+import { api } from './lib/api'
+import { initMarketing, trackPageView } from './lib/marketing'
 import Layout              from './components/layout/Layout'
 import CheckoutLayout      from './components/layout/CheckoutLayout'
 import CheckoutSummary     from './pages/checkout/CheckoutSummary'
@@ -84,6 +87,26 @@ function SpaRedirectHandler() {
   return null
 }
 
+// Marketing: carrega os pixels (Meta/Google) a partir das settings públicas e
+// registra a visita a cada troca de rota. O carregamento inicial já conta 1
+// PageView dentro do initMarketing, então pulamos a 1ª execução do efeito de
+// rota para não contar a landing duas vezes. Best-effort: sem IDs, é no-op.
+function MarketingTracker() {
+  const location = useLocation()
+  const primeira = useRef(true)
+  const { data: settings } = useQuery({
+    queryKey: ['public-settings'],
+    queryFn:  () => api.getPublicSettings(),
+    staleTime: 5 * 60 * 1000,
+  })
+  useEffect(() => { if (settings) initMarketing(settings) }, [settings])
+  useEffect(() => {
+    if (primeira.current) { primeira.current = false; return }
+    trackPageView()
+  }, [location.pathname])
+  return null
+}
+
 // Tela inicial por papel: admin/operador abrem direto na Lojinha (Passeios);
 // turista continua na Home.
 function InicioPorPapel() {
@@ -97,6 +120,7 @@ export default function App() {
   return (
     <>
     <SpaRedirectHandler />
+    <MarketingTracker />
     <Routes>
       {/* Auth — full screen, sem layout */}
       <Route path="/c/:slug"  element={<PartnerLink />} />

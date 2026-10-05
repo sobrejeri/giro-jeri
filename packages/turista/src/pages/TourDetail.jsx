@@ -12,6 +12,7 @@ import OriginPicker from '../components/OriginPicker'
 import TourReviews from '../components/TourReviews'
 import { useMoeda } from '../lib/moeda'
 import { setSEO } from '../lib/seo'
+import { trackViewContent } from '../lib/marketing'
 import { precoDeEntrada } from '../lib/precoCartao'
 import { hora } from '../lib/formato'
 import {
@@ -167,6 +168,14 @@ export default function TourDetail() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tour?.id, tour?.name])
+
+  // Marketing: ViewContent (Meta/Google) ao abrir o passeio. content_ids = id
+  // do passeio, o mesmo do feed — é o que casa a visita com o anúncio dinâmico.
+  useEffect(() => {
+    if (!tour?.id) return
+    trackViewContent({ id: tour.id, name: tour.name, value: Number(precoDeEntrada(tour)?.valor) || undefined })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tour?.id])
 
   const { data: vehiclesData, isFetched: vehiclesLoaded } = useQuery({
     queryKey: ['tour-vehicles', id, region?.id],

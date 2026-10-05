@@ -47,6 +47,14 @@ const PUBLIC_KEYS = [
   // para tokenizar o cartão no formulário inline, sem o número passar pelo
   // nosso servidor. A Secret Key (sk_) e o webhook secret NUNCA saem daqui.
   'payment_pagarme_public_key',
+  // Rastreamento de marketing. São IDs PÚBLICOS por natureza — o pixel/tag vive
+  // no navegador do visitante. O app do turista lê daqui e injeta os scripts +
+  // dispara os eventos de conversão. Segredos (ex.: token da Conversions API)
+  // NUNCA entram nesta lista.
+  'marketing_meta_pixel_id',
+  'marketing_ga4_id',
+  'marketing_google_ads_id',
+  'marketing_google_ads_purchase_label',
 ];
 
 // Chaves que decidem QUAIS botões de cartão o checkout mostra. Não vão na lista
