@@ -136,7 +136,44 @@ export default function Afiliados() {
         </Card>
       ) : (
         <Card>
-          <div className="overflow-x-auto">
+          {/* Celular: cards (a tabela fica para o PC, logo abaixo). */}
+          <div className="md:hidden p-3 space-y-2">
+            {rows.map((c) => (
+              <div key={c.id} className="p-3 rounded-xl bg-gray-900/40 border border-gray-700/60 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-gray-100 truncate min-w-0">{c.affiliate?.full_name || '—'}</p>
+                  <Badge value={c.payout_status || 'pending'} />
+                </div>
+                {c.affiliate?.affiliate_pix_key ? (
+                  <button onClick={() => copyText(c.id, c.affiliate.affiliate_pix_key)} className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-mono max-w-full">
+                    {copied === c.id ? <Check size={11} /> : <Copy size={11} />}
+                    <span className="truncate">{c.affiliate.affiliate_pix_key}</span>
+                    <span className="text-[10px] text-gray-500 uppercase border border-gray-700 rounded px-1 shrink-0">{PIX_LABEL[c.affiliate.affiliate_pix_key_type] || 'PIX'}</span>
+                  </button>
+                ) : (
+                  <button onClick={() => copyText(c.id, `${c.affiliate?.full_name || ''} · ${c.affiliate?.email || ''} · ${c.affiliate?.phone || ''}`.trim())} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 text-left max-w-full">
+                    {copied === c.id ? <Check size={11} /> : <Copy size={11} />}
+                    <span className="truncate">⚠ sem chave PIX · {c.affiliate?.email || c.affiliate?.phone || 'sem contato'}</span>
+                  </button>
+                )}
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="min-w-0">
+                    <p className="text-gray-300 truncate">{c.bookings?.booking_code || '—'} · {c.bookings?.service_type === 'transfer' ? 'Translado' : 'Passeio'}</p>
+                    <p className="text-gray-500">Repasse até {c.payout_status === 'paid' ? fmtDia(c.payout_paid_at) : fmtDia(c.payout_due_date)}</p>
+                  </div>
+                  <p className="font-bold text-orange-400 shrink-0">{fmtBRL(c.commission_amount)} <span className="text-gray-500 font-normal">({Number(c.commission_percent)}%)</span></p>
+                </div>
+                {c.payout_status !== 'paid' && c.payout_status !== 'cancelled' && (
+                  <Button size="sm" className="w-full" disabled={payMut.isPending}
+                    onClick={() => { if (window.confirm(`Confirmar que o PIX de ${fmtBRL(c.commission_amount)} para ${c.affiliate?.full_name || 'o afiliado'}${c.affiliate?.affiliate_pix_key ? ` (chave: ${c.affiliate.affiliate_pix_key})` : ''} já foi feito?`)) payMut.mutate(c.id) }}>
+                    Marcar pago
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+          {/* PC: tabela compacta. */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-400 border-b border-gray-800">

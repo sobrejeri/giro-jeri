@@ -751,7 +751,7 @@ export default function Catalogo() {
           count={categorias.length}
           action={<Button size="sm" onClick={openNewCategory}><Plus size={14} /> Nova Categoria</Button>}
         >
-          <div className="p-3 space-y-2">
+          <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
             {categorias.map((c) => (
               <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                 <div className="flex-1 min-w-0">
@@ -811,7 +811,7 @@ export default function Catalogo() {
               </div>
             </div>
           )}
-          <div className="p-3 space-y-2">
+          <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
             {passeiosVisiveis.map((t) => (
               <div key={t.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                 {t.cover_image_url ? (
@@ -867,7 +867,7 @@ export default function Catalogo() {
             count={filterRegion ? `${filteredTransfers.length}/${transfers.length}` : filteredTransfers.length}
             action={<Button size="sm" onClick={openNewTransfer}><Plus size={14} /> Nova Categoria</Button>}
           >
-            <div className="p-3 space-y-2">
+            <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
               {filteredTransfers.map((t) => (
                 <div key={t.id} className="flex items-center gap-4 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                   <div className="flex-1 min-w-0">
@@ -930,7 +930,7 @@ export default function Catalogo() {
                 )}
               </div>
             )}
-            <div className="p-3 space-y-2">
+            <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
               {rotasVisiveis.map((r) => (
                 <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                   {/* EXATAMENTE a mesma miniatura da lista de passeios (mesmo
@@ -987,7 +987,7 @@ export default function Catalogo() {
           <p className="px-5 pt-3 text-xs text-gray-500">
             O veículo só é oferecido em serviço do mesmo modal. Quem define o modal do serviço é a categoria dele.
           </p>
-          <div className="p-3 space-y-2">
+          <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
             {modais.map((m) => {
               const usoVeiculos = vehicles.filter((v) => v.modal === m.slug).length
               return (
@@ -1063,7 +1063,7 @@ export default function Catalogo() {
                       <span className="h-px flex-1 bg-gray-800" />
                       <span className="text-[11px] text-gray-600">{grupo.veiculos.length}</span>
                     </div>
-                    <div className="p-3 space-y-2">
+                    <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
                       {grupo.veiculos.map((v) => (
                         <div key={v.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                           {v.image_url ? (

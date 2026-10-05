@@ -217,7 +217,7 @@ export default function Temporada() {
         </Card>
       ) : (
         <Card>
-          <div className="p-3 space-y-2">
+          <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
             {seasons.map((s) => (
               <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                 <div className="w-9 h-9 rounded-lg bg-amber-900/30 flex items-center justify-center text-amber-400 shrink-0">
@@ -312,7 +312,7 @@ export default function Temporada() {
         </CardBody></Card>
       ) : (
         <Card>
-          <div className="p-3 space-y-2">
+          <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
             {holidays.map((h) => (
               <div key={h.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                 <div className="w-9 h-9 rounded-lg bg-rose-900/30 flex items-center justify-center text-rose-400 shrink-0">

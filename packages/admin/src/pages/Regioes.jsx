@@ -98,7 +98,7 @@ export default function Regioes() {
           </CardBody>
         </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {regions.map((r) => (
             <Card key={r.id}>
               <div className="flex items-center gap-3 p-4">
