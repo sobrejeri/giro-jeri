@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Route, ImagePlus, X, Car, Users } from 'lucide-react'
+import { Plus, Pencil, Trash2, Route, ImagePlus, X, Car, Users, ChevronDown, MoreVertical, MapPin } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
@@ -189,6 +189,97 @@ const TABS = [
   { key: 'vehicles', label: 'Veículos'  },
 ]
 
+// ─── Apresentação do catálogo (redesign) ─────────────────────
+// Peças reutilizadas pelas três abas para a lista ler limpa e escanear bem no
+// celular: resumo em números no topo, regiões colapsadas (em vez do muro de
+// municípios), seção recolhível e ações atrás de um menu "⋯".
+
+// Resumo em números por aba (ex.: "18 passeios · 15 ativos · 5 categorias").
+function ResumoTab({ itens }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {itens.map((it) => (
+        <div key={it.label} className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5">
+          <p className={`text-lg font-bold leading-none ${it.alerta && it.value > 0 ? 'text-amber-400' : 'text-gray-100'}`}>{it.value}</p>
+          <p className="text-[11px] text-gray-500 mt-1">{it.label}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Regiões colapsadas: até 2 aparecem inline; acima disso vira "N municípios"
+// com toque para expandir — resolve o "muro de regiões" que dominava o card.
+function RegionBadge({ names = [] }) {
+  const [aberto, setAberto] = useState(false)
+  if (!names.length) return null
+  if (names.length <= 2) return <span className="text-[11px] text-gray-500">{names.join(' · ')}</span>
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); setAberto((v) => !v) }}
+      className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 align-middle"
+    >
+      <MapPin size={11} />
+      {aberto ? names.join(' · ') : `${names.length} municípios`}
+      <ChevronDown size={11} className={`transition-transform ${aberto ? 'rotate-180' : ''}`} />
+    </button>
+  )
+}
+
+// Menu "⋯" de ações (editar/excluir): tira os ícones repetidos de cada linha.
+// Fecha ao clicar fora (backdrop transparente) ou ao escolher uma opção.
+function MenuAcoes({ onEdit, onDelete, editLabel = 'Editar', deleteLabel = 'Excluir' }) {
+  const [aberto, setAberto] = useState(false)
+  return (
+    <div className="relative shrink-0">
+      <button type="button" onClick={() => setAberto((v) => !v)} aria-label="Ações"
+        className="p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-700 rounded-lg">
+        <MoreVertical size={16} />
+      </button>
+      {aberto && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAberto(false)} />
+          <div className="absolute right-0 top-9 z-20 w-36 bg-gray-800 border border-gray-700 rounded-lg shadow-lg overflow-hidden py-1">
+            <button onClick={() => { setAberto(false); onEdit?.() }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-200 hover:bg-gray-700">
+              <Pencil size={13} /> {editLabel}
+            </button>
+            {onDelete && (
+              <button onClick={() => { setAberto(false); onDelete() }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-900/20">
+                <Trash2 size={13} /> {deleteLabel}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Seção recolhível (categorias/modais): deixa a lista de itens respirar. O botão
+// de ação (+ Novo) segue sempre visível no cabeçalho, mesmo recolhida.
+function Secao({ title, count, action, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-2 min-w-0">
+            <ChevronDown size={16} className={`text-gray-500 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+            <h2 className="text-sm font-semibold text-gray-300 truncate">
+              {title}{count != null ? ` (${count})` : ''}
+            </h2>
+          </button>
+          {action}
+        </div>
+      </CardHeader>
+      {open && children}
+    </Card>
+  )
+}
+
 export default function Catalogo() {
   const [tab, setTab]       = useState('tours')
   const [modal, setModal]   = useState(null)
@@ -295,10 +386,8 @@ export default function Catalogo() {
   const filteredVehicles  = vehicles.filter(byRegion)
 
   function RegionTags({ ids }) {
-    if (!ids?.length) return null
-    const names = ids.map((id) => allRegions.find((r) => r.id === id)?.name).filter(Boolean)
-    if (!names.length) return null
-    return <span className="text-[10px] text-brand/60 ml-1">{names.join(' · ')}</span>
+    const names = (ids || []).map((id) => allRegions.find((r) => r.id === id)?.name).filter(Boolean)
+    return <RegionBadge names={names} />
   }
 
   /* ── Tour mutations ──────────────────────────────────────── */
@@ -677,16 +766,20 @@ export default function Catalogo() {
       {/* ── Tours ──────────────────────────────────────────────── */}
       {tab === 'tours' && (
         <>
-        {/* Mesma lógica das categorias de translado: a categoria agrupa os
-            passeios e, marcada, vira um carrossel próprio no app com o nome
-            dela de título. */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-300">Categorias ({categorias.length})</h2>
-              <Button size="sm" onClick={openNewCategory}><Plus size={14} /> Nova Categoria</Button>
-            </div>
-          </CardHeader>
+        <ResumoTab itens={[
+          { label: 'Passeios',   value: tours.length },
+          { label: 'Ativos',     value: tours.filter((t) => t.is_active).length },
+          { label: 'Categorias', value: categorias.length },
+          { label: 'Sem foto',   value: tours.filter((t) => !t.cover_image_url).length, alerta: true },
+        ]} />
+
+        {/* A categoria agrupa os passeios e, marcada, vira um carrossel próprio
+            no app. Recolhida por padrão para a lista de passeios respirar. */}
+        <Secao
+          title="Categorias"
+          count={categorias.length}
+          action={<Button size="sm" onClick={openNewCategory}><Plus size={14} /> Nova Categoria</Button>}
+        >
           <div className="divide-y divide-gray-800">
             {categorias.map((c) => (
               <div key={c.id} className="flex items-center gap-3 px-5 py-3">
@@ -698,19 +791,11 @@ export default function Catalogo() {
                   </p>
                 </div>
                 <Badge value={String(c.is_active)} />
-                <div className="flex gap-1">
-                  <button onClick={() => openEditCategory(c)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
-                    <Pencil size={13} />
-                  </button>
-                  {c.is_active && (
-                    <button
-                      onClick={() => confirm(`Apagar a categoria "${c.name}"?\n\nSó é possível se ela não tiver nenhum passeio.`) && deleteCatMut.mutate(c.id)}
-                      className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </div>
+                <MenuAcoes
+                  onEdit={() => openEditCategory(c)}
+                  onDelete={c.is_active ? () => { if (confirm(`Apagar a categoria "${c.name}"?\n\nSó é possível se ela não tiver nenhum passeio.`)) deleteCatMut.mutate(c.id) } : undefined}
+                  deleteLabel="Apagar"
+                />
               </div>
             ))}
             {categorias.length === 0 && (
@@ -722,7 +807,7 @@ export default function Catalogo() {
               </CardBody>
             )}
           </div>
-        </Card>
+        </Secao>
 
         <Card>
           <CardHeader>
@@ -780,17 +865,11 @@ export default function Catalogo() {
                   </p>
                 </div>
                 <Badge value={String(t.is_active)} />
-                <div className="flex gap-1">
-                  <button onClick={() => openEditTour(t)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
-                    <Pencil size={13} />
-                  </button>
-                  <button
-                    onClick={() => confirm(`Apagar o passeio "${t.name}"?\n\nNão tem como desfazer. Passeio com reservas ou avaliações é recusado — nesse caso, desative pelo editar.`) && deleteTourMut.mutate(t.id)}
-                    className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
+                <MenuAcoes
+                  onEdit={() => openEditTour(t)}
+                  onDelete={() => { if (confirm(`Apagar o passeio "${t.name}"?\n\nNão tem como desfazer. Passeio com reservas ou avaliações é recusado — nesse caso, desative pelo editar.`)) deleteTourMut.mutate(t.id) }}
+                  deleteLabel="Apagar"
+                />
               </div>
             ))}
             {passeiosVisiveis.length === 0 && (
@@ -807,16 +886,20 @@ export default function Catalogo() {
       {/* ── Transfers ──────────────────────────────────────────── */}
       {tab === 'transfers' && (
         <>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                {/* "Categoria" e não "Transfer": é o que agrupa as rotas e vira um
-                    carrossel no app. O nome antigo descrevia a implementação
-                    (o serviço-pai), não o que a coisa faz. */}
-                <h2 className="text-sm font-semibold text-gray-300">Categorias ({filteredTransfers.length}{filterRegion ? `/${transfers.length}` : ''})</h2>
-                <Button size="sm" onClick={openNewTransfer}><Plus size={14} /> Nova Categoria</Button>
-              </div>
-            </CardHeader>
+          <ResumoTab itens={[
+            { label: 'Rotas',      value: routes.length },
+            { label: 'Ativas',     value: routes.filter((r) => r.is_active !== false).length },
+            { label: 'Categorias', value: transfers.length },
+            { label: 'Sem foto',   value: routes.filter((r) => !r.cover_image_url).length, alerta: true },
+          ]} />
+
+          {/* A categoria agrupa as rotas e vira um carrossel no app. Recolhida
+              por padrão para a lista de rotas respirar. */}
+          <Secao
+            title="Categorias"
+            count={filterRegion ? `${filteredTransfers.length}/${transfers.length}` : filteredTransfers.length}
+            action={<Button size="sm" onClick={openNewTransfer}><Plus size={14} /> Nova Categoria</Button>}
+          >
             <div className="divide-y divide-gray-800">
               {filteredTransfers.map((t) => (
                 <div key={t.id} className="flex items-center gap-4 px-5 py-3">
@@ -825,14 +908,12 @@ export default function Catalogo() {
                     <p className="text-xs text-gray-500">{t.pricing_mode}<RegionTags ids={t.region_ids} /></p>
                   </div>
                   <Badge value={String(t.is_active)} />
-                  <button onClick={() => openEditTransfer(t)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
-                    <Pencil size={13} />
-                  </button>
+                  <MenuAcoes onEdit={() => openEditTransfer(t)} />
                 </div>
               ))}
               {filteredTransfers.length === 0 && <CardBody><p className="text-sm text-gray-600">{filterRegion ? 'Nenhum transfer neste município' : 'Nenhum transfer'}</p></CardBody>}
             </div>
-          </Card>
+          </Secao>
 
           <Card>
             <CardHeader>
@@ -916,17 +997,11 @@ export default function Catalogo() {
                   <span className="text-sm font-bold text-brand">
                     {Number(r.default_price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
-                  <div className="flex gap-1">
-                    <button onClick={() => openEditRoute(r)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={() => confirm('Apagar esta rota?\n\nNão tem como desfazer. Rota com reservas é recusada — nesse caso, desative.') && deleteRouteMut.mutate(r.id)}
-                      className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                  <MenuAcoes
+                    onEdit={() => openEditRoute(r)}
+                    onDelete={() => { if (confirm('Apagar esta rota?\n\nNão tem como desfazer. Rota com reservas é recusada — nesse caso, desative.')) deleteRouteMut.mutate(r.id) }}
+                    deleteLabel="Apagar"
+                  />
                 </div>
               ))}
               {routes.length === 0 && <CardBody><p className="text-sm text-gray-600">Nenhuma rota</p></CardBody>}
@@ -938,18 +1013,23 @@ export default function Catalogo() {
       {/* ── Veículos ───────────────────────────────────────────── */}
       {tab === 'vehicles' && (
         <>
+        <ResumoTab itens={[
+          { label: 'Veículos', value: vehicles.length },
+          { label: 'Ativos',   value: vehicles.filter((v) => v.is_active).length },
+          { label: 'Modais',   value: modais.length },
+          { label: 'Sem foto', value: vehicles.filter((v) => !v.image_url).length, alerta: true },
+        ]} />
+
         {/* Modais de operação — a lista que alimenta o campo "Modal" do veículo
-            e das duas categorias. Era fixa no código; agora é cadastro. */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-300">Modais de operação ({modais.length})</h2>
-              <Button size="sm" onClick={openNewModal}><Plus size={14} /> Novo Modal</Button>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              O veículo só é oferecido em serviço do mesmo modal. Quem define o modal do serviço é a categoria dele.
-            </p>
-          </CardHeader>
+            e das duas categorias. Recolhida por padrão. */}
+        <Secao
+          title="Modais de operação"
+          count={modais.length}
+          action={<Button size="sm" onClick={openNewModal}><Plus size={14} /> Novo Modal</Button>}
+        >
+          <p className="px-5 pt-3 text-xs text-gray-500">
+            O veículo só é oferecido em serviço do mesmo modal. Quem define o modal do serviço é a categoria dele.
+          </p>
           <div className="divide-y divide-gray-800">
             {modais.map((m) => {
               const usoVeiculos = vehicles.filter((v) => v.modal === m.slug).length
@@ -967,23 +1047,17 @@ export default function Catalogo() {
                   </div>
                   <Badge value={String(m.is_active !== false)} />
                   {m.id && (
-                    <div className="flex gap-1">
-                      <button onClick={() => openEditModal(m)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => confirm(`Remover o modal "${m.name}"?`) && deleteModalMut.mutate(m.id)}
-                        className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+                    <MenuAcoes
+                      onEdit={() => openEditModal(m)}
+                      onDelete={() => { if (confirm(`Remover o modal "${m.name}"?`)) deleteModalMut.mutate(m.id) }}
+                      deleteLabel="Remover"
+                    />
                   )}
                 </div>
               )
             })}
           </div>
-        </Card>
+        </Secao>
 
         <Card>
           <CardHeader>
@@ -1010,31 +1084,29 @@ export default function Catalogo() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{v.name}</p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-                      <span>{VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type}</span>
-                      <span>·</span>
-                      <Users size={10} className="text-gray-500" />
-                      <span>{v.seat_capacity} pax</span>
-                      <span>·</span>
-                      <span className="text-sky-400/80">{nomeDoModal(v.modal)}</span>
-                      {v.is_tour_allowed && <span className="text-brand/70">· Passeios</span>}
-                      {v.is_transfer_allowed && <span className="text-purple-400/70">· Transfer</span>}
-                      {v.is_shared_allowed && <span className="text-amber-400/70">· Compartilhado</span>}
-                      <RegionTags ids={v.region_ids} />
+                    {/* Meta neutra (uma paleta só) — antes eram 4 cores brigando.
+                        Regiões ficam na linha de baixo, colapsadas. */}
+                    <div className="flex items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500 flex-wrap mt-0.5">
+                      <span className="text-gray-300">{VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type}</span>
+                      <span className="text-gray-600">·</span>
+                      <span className="inline-flex items-center gap-1"><Users size={10} className="text-gray-500" />{v.seat_capacity} pax</span>
+                      <span className="text-gray-600">·</span>
+                      <span className="text-gray-400">{nomeDoModal(v.modal)}</span>
+                      {(v.is_tour_allowed || v.is_transfer_allowed || v.is_shared_allowed) && (
+                        <>
+                          <span className="text-gray-600">·</span>
+                          <span>{[v.is_tour_allowed && 'Passeios', v.is_transfer_allowed && 'Transfer', v.is_shared_allowed && 'Compart.'].filter(Boolean).join(' · ')}</span>
+                        </>
+                      )}
                     </div>
+                    {v.region_ids?.length > 0 && <div className="mt-0.5"><RegionTags ids={v.region_ids} /></div>}
                   </div>
                   <Badge value={String(v.is_active)} />
-                  <div className="flex gap-1">
-                    <button onClick={() => openEditVehicle(v)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={() => confirm(`Desativar "${v.name}"?`) && deleteVehicleMut.mutate(v.id)}
-                      className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                  <MenuAcoes
+                    onEdit={() => openEditVehicle(v)}
+                    onDelete={() => { if (confirm(`Desativar "${v.name}"?`)) deleteVehicleMut.mutate(v.id) }}
+                    deleteLabel="Desativar"
+                  />
                 </div>
               ))}
               {vehicles.length === 0 && (
