@@ -8,6 +8,7 @@ import {
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
+import MenuAcoes from '../components/ui/MenuAcoes'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -337,9 +338,42 @@ export default function Usuarios() {
         </div>
       </Card>
 
-      {/* Tabela */}
+      {/* Lista */}
       <Card>
-        <div className="overflow-x-auto">
+        {/* Celular: cards (a tabela fica para o PC, logo abaixo). */}
+        <div className="md:hidden p-3 space-y-2">
+          {users.map((u) => (
+            <div key={u.id} className="p-3 rounded-xl bg-gray-900/40 border border-gray-700/60 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-200 truncate">{u.full_name || '—'}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {u.user_type === 'operator' && u.document_number
+                    ? `${String(u.document_number).replace(/\D/g, '').length === 11 ? 'CPF' : 'CNPJ'}: ${u.document_number}`
+                    : u.email || u.phone || '—'}
+                </p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Badge value={u.user_type} />
+                  {u.user_type === 'operator' && (
+                    u.gateway_recipient_id
+                      ? <CheckCircle2 size={12} className="text-green-400" title="Recebimento ativo" />
+                      : <AlertCircle size={12} className="text-amber-400" title="Recebimento não configurado" />
+                  )}
+                  {u.created_at && <span className="text-[11px] text-gray-600">· {format(parseISO(u.created_at), 'dd/MM/yyyy')}</span>}
+                </div>
+              </div>
+              <Badge value={String(u.is_active)} />
+              <MenuAcoes
+                onEdit={() => openEdit(u)}
+                extras={[{ label: u.is_active ? 'Desativar' : 'Reativar', onClick: () => alternarAtivo(u), icon: u.is_active ? <Ban size={13} /> : <CheckCircle2 size={13} /> }]}
+                onDelete={u.id === meuId ? undefined : () => apagar(u)}
+                deleteLabel="Apagar"
+              />
+            </div>
+          ))}
+          {users.length === 0 && <p className="text-center text-gray-600 text-sm py-10">Nenhum resultado</p>}
+        </div>
+        {/* PC: tabela compacta. */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-700">

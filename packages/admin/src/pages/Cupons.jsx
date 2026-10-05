@@ -9,6 +9,7 @@ import Modal from '../components/ui/Modal'
 import Input, { Select } from '../components/ui/Input'
 import Card, { CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
+import MenuAcoes from '../components/ui/MenuAcoes'
 import DivulgarCupom from '../components/DivulgarCupom'
 
 const EMPTY = {
@@ -107,7 +108,33 @@ export default function Cupons() {
             </div>
           </CardBody>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Celular: cards (a tabela fica para o PC, logo abaixo). */}
+            <div className="md:hidden p-3 space-y-2">
+              {coupons.map((c) => (
+                <div key={c.id} className="p-3 rounded-xl bg-gray-900/40 border border-gray-700/60 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono font-bold text-brand truncate">
+                      {c.code}
+                      {c.applicable_service_type && <span className="ml-2 text-xs text-gray-500 font-sans font-normal">({c.applicable_service_type})</span>}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {fmtDiscount(c)} · {c.times_used ?? 0}{c.usage_limit_total ? `/${c.usage_limit_total}` : '/∞'} usos
+                      {c.valid_until ? ` · até ${format(parseISO(c.valid_until), 'dd/MM/yyyy')}` : ''}
+                    </p>
+                  </div>
+                  <Badge value={String(c.is_active)} />
+                  <MenuAcoes
+                    onEdit={() => openEdit(c)}
+                    extras={c.is_active ? [{ label: 'Divulgar', onClick: () => setDivulgar(c), icon: <Send size={13} /> }] : []}
+                    onDelete={() => { if (confirm('Desativar cupom?')) deleteMut.mutate(c.id) }}
+                    deleteLabel="Desativar"
+                  />
+                </div>
+              ))}
+            </div>
+            {/* PC: tabela compacta. */}
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-700">
@@ -165,7 +192,8 @@ export default function Cupons() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </Card>
 
