@@ -43,7 +43,7 @@ export default function Estacionamentos() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2"><ParkingSquare size={22} className="text-brand" /> Estacionamentos</h1>
+        <h1 className="text-xl font-bold text-gray-100 flex items-center gap-2"><ParkingSquare size={22} className="text-brand" /> Estacionamentos</h1>
         {aba === 'catalogo' && (
           <button onClick={() => setEdit({ ...LOT_VAZIO })}
             className="flex items-center gap-2 bg-brand text-white font-semibold rounded-xl px-4 py-2.5 text-sm active:scale-95">
@@ -55,7 +55,7 @@ export default function Estacionamentos() {
       <div className="flex gap-2">
         {[['catalogo', 'Catálogo'], ['reservas', 'Reservas'], ['repasses', 'Repasses']].map(([id, label]) => (
           <button key={id} onClick={() => setAba(id)}
-            className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border ${aba === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>
+            className={`px-3.5 py-2 rounded-full text-[13px] font-semibold border ${aba === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-700 text-gray-500 bg-gray-800'}`}>
             {label}
           </button>
         ))}
@@ -70,7 +70,7 @@ export default function Estacionamentos() {
         <p className="text-gray-400 text-sm">Carregando…</p>
       ) : lots.length === 0 ? (
         <div className="py-16 text-center text-gray-400">
-          <ParkingSquare size={36} className="mx-auto mb-2 text-gray-200" />
+          <ParkingSquare size={36} className="mx-auto mb-2 text-gray-700" />
           <p className="text-sm">Nenhum estacionamento cadastrado ainda.</p>
         </div>
       ) : (
@@ -78,22 +78,22 @@ export default function Estacionamentos() {
           {lots.map((l) => {
             const tarifas = (l.parking_tariffs || []).filter((t) => t.is_active !== false)
             return (
-              <div key={l.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <div key={l.id} className="bg-gray-800 rounded-2xl border border-gray-700 shadow-sm p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-bold text-gray-900">{l.name}</p>
+                    <p className="font-bold text-gray-100">{l.name}</p>
                     <p className="text-[12px] text-gray-400">Capacidade {l.capacity} · comissão {l.commission_pct}%</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!l.is_active && <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Inativo</span>}
+                    {!l.is_active && <span className="text-[10px] font-bold text-gray-500 bg-gray-700 px-2 py-0.5 rounded-full">Inativo</span>}
                     <button onClick={() => setEdit(l)} className="p-2 text-gray-400 hover:text-brand"><Pencil size={16} /></button>
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {tarifas.length === 0 ? (
-                    <span className="text-[11px] text-amber-600">Sem tarifa — defina ao editar</span>
+                    <span className="text-[11px] text-amber-400">Sem tarifa — defina ao editar</span>
                   ) : tarifas.map((t) => (
-                    <span key={t.id} className="text-[11px] bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5 text-gray-600 capitalize">
+                    <span key={t.id} className="text-[11px] bg-gray-900/40 border border-gray-700 rounded-full px-2 py-0.5 text-gray-400 capitalize">
                       {t.vehicle_type}: {money(t.price_per_unit)}
                     </span>
                   ))}
@@ -126,25 +126,25 @@ function ReservasAdmin() {
   const dt = (s) => { try { return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return s } }
   return (
     <div className="space-y-3">
-      <select value={status} onChange={(e) => setStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand">
+      <select value={status} onChange={(e) => setStatus(e.target.value)} className="border border-gray-700 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand bg-gray-900 text-gray-100 placeholder-gray-500">
         <option value="">Todos os status</option>
         {Object.entries(RES_STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
       </select>
       {isLoading ? <p className="text-gray-400 text-sm">Carregando…</p> : lista.length === 0 ? (
         <p className="text-gray-400 text-sm py-10 text-center">Nenhuma reserva.</p>
       ) : (
-        <div className="overflow-x-auto bg-white rounded-2xl border border-gray-100">
+        <div className="overflow-x-auto bg-gray-800 rounded-2xl border border-gray-700">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-[11px] text-gray-400 border-b border-gray-100">
+            <thead><tr className="text-left text-[11px] text-gray-400 border-b border-gray-700">
               <th className="px-3 py-2">Código</th><th className="px-3 py-2">Estacionamento</th><th className="px-3 py-2">Cliente</th>
               <th className="px-3 py-2">Período</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Total</th>
             </tr></thead>
             <tbody>
               {lista.map((r) => (
-                <tr key={r.id} className="border-b border-gray-50">
+                <tr key={r.id} className="border-b border-gray-800">
                   <td className="px-3 py-2 font-mono text-[11px] text-brand">{r.code}</td>
                   <td className="px-3 py-2">{r.lot_name}</td>
-                  <td className="px-3 py-2 text-gray-600">{r.user_name}</td>
+                  <td className="px-3 py-2 text-gray-400">{r.user_name}</td>
                   <td className="px-3 py-2 text-[12px] text-gray-500">{dt(r.start_at)} → {dt(r.end_at)}</td>
                   <td className="px-3 py-2 text-[12px]">{RES_STATUS[r.status] || r.status}{r.refund_status === 'eligible' ? ' · reemb.' : ''}</td>
                   <td className="px-3 py-2 text-right font-semibold">{money(r.total_amount)}</td>
@@ -172,25 +172,25 @@ function RepassesAdmin() {
       <div className="flex gap-2">
         {[['mes', 'Este mês'], ['30d', 'Últimos 30d'], ['tudo', 'Tudo']].map(([id, label]) => (
           <button key={id} onClick={() => setPeriodo(id)}
-            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${periodo === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>{label}</button>
+            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${periodo === id ? 'border-brand text-brand bg-brand/5' : 'border-gray-700 text-gray-500 bg-gray-800'}`}>{label}</button>
         ))}
       </div>
       {isLoading ? <p className="text-gray-400 text-sm">Carregando…</p> : parceiros.length === 0 ? (
         <p className="text-gray-400 text-sm py-10 text-center">Sem repasses no período.</p>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
+        <div className="bg-gray-800 rounded-2xl border border-gray-700 divide-y divide-gray-800">
           {parceiros.map((p) => (
             <div key={p.owner_user_id} className="flex items-center justify-between px-4 py-3">
               <div>
-                <p className="font-semibold text-gray-900 text-sm">{p.nome}</p>
+                <p className="font-semibold text-gray-100 text-sm">{p.nome}</p>
                 <p className="text-[11px] text-gray-400">{p.qtd} reserva(s) · bruto {money(p.bruto)} · comissão {money(p.comissao)}</p>
               </div>
-              <span className="font-extrabold text-emerald-600">{money(p.liquido)}</span>
+              <span className="font-extrabold text-emerald-400">{money(p.liquido)}</span>
             </div>
           ))}
-          <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
-            <span className="font-semibold text-gray-700 text-sm">Total a repassar</span>
-            <span className="font-extrabold text-gray-900">{money(totalLiquido)}</span>
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-900/40">
+            <span className="font-semibold text-gray-300 text-sm">Total a repassar</span>
+            <span className="font-extrabold text-gray-100">{money(totalLiquido)}</span>
           </div>
         </div>
       )}
@@ -244,7 +244,7 @@ function LotModal({ lot, onClose, onSaved }) {
     onError: (e) => setErro(e?.message || 'Não foi possível salvar.'),
   })
 
-  const campo = 'w-full border border-gray-200 rounded-lg px-3 h-10 text-sm outline-none focus:border-brand'
+  const campo = 'w-full border border-gray-700 rounded-lg px-3 h-10 text-sm outline-none focus:border-brand bg-gray-900 text-gray-100 placeholder-gray-500'
   const label = 'block text-[12px] font-semibold text-gray-500 mb-1'
 
   function submit() {
@@ -256,9 +256,9 @@ function LotModal({ lot, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100 sticky top-0 bg-white">
-          <h2 className="font-bold text-gray-900">{novo ? 'Novo estacionamento' : 'Editar estacionamento'}</h2>
+      <div className="bg-gray-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 h-14 border-b border-gray-700 sticky top-0 bg-gray-800">
+          <h2 className="font-bold text-gray-100">{novo ? 'Novo estacionamento' : 'Editar estacionamento'}</h2>
           <button onClick={onClose} className="p-2 text-gray-400"><X size={20} /></button>
         </div>
 
@@ -284,21 +284,21 @@ function LotModal({ lot, onClose, onSaved }) {
           <div>
             <label className={label}>Descrição</label>
             <textarea value={form.description || ''} onChange={(e) => setF('description', e.target.value)} rows={2}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand resize-none" />
+              className="w-full border border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand bg-gray-900 text-gray-100 placeholder-gray-500 resize-none" />
           </div>
 
           <div>
             <label className={label}>Fotos</label>
             <div className="flex flex-wrap gap-2">
               {(form.photos || []).map((url, i) => (
-                <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-100">
+                <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-700">
                   <img src={url} alt="" className="w-full h-full object-cover" />
                   <button onClick={() => setForm((f) => ({ ...f, photos: f.photos.filter((_, j) => j !== i) }))}
                     className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"><Trash2 size={12} /></button>
                 </div>
               ))}
               {(form.photos || []).length < 10 && (
-                <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand hover:text-brand">
+                <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-700 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand hover:text-brand">
                   {enviandoFoto ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}
                   <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onPickPhoto} />
                 </label>
@@ -317,7 +317,7 @@ function LotModal({ lot, onClose, onSaved }) {
             <div><label className={label}>Longitude</label><input value={form.lng ?? ''} onChange={(e) => setF('lng', e.target.value)} className={campo} /></div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-300">
             <input type="checkbox" checked={!!form.is_active} onChange={(e) => setF('is_active', e.target.checked)} /> Ativo (aparece para os clientes)
           </label>
 
@@ -326,8 +326,8 @@ function LotModal({ lot, onClose, onSaved }) {
           {erro && <p className="text-[12px] text-red-500">{erro}</p>}
         </div>
 
-        <div className="px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white flex gap-2">
-          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
+        <div className="px-5 py-4 border-t border-gray-700 sticky bottom-0 bg-gray-800 flex gap-2">
+          <button onClick={onClose} className="flex-1 border border-gray-700 text-gray-300 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>
           <button onClick={submit} disabled={salvar.isPending}
             className="flex-1 flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-60">
             {salvar.isPending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Salvar
@@ -359,20 +359,20 @@ function TarifasEditor({ lot }) {
   })
 
   return (
-    <div className="border-t border-gray-100 pt-3">
+    <div className="border-t border-gray-700 pt-3">
       <p className="text-[12px] font-semibold text-gray-500 mb-2">Tarifas por veículo</p>
       <div className="space-y-1.5 mb-2">
-        {tarifas.length === 0 && <p className="text-[12px] text-amber-600">Nenhuma tarifa — adicione ao menos uma.</p>}
+        {tarifas.length === 0 && <p className="text-[12px] text-amber-400">Nenhuma tarifa — adicione ao menos uma.</p>}
         {tarifas.map((t) => (
-          <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
-            <span className="capitalize text-gray-700">{t.vehicle_type} · {money(t.price_per_unit)} / {t.hours_per_unit}h</span>
+          <div key={t.id} className="flex items-center justify-between bg-gray-900/40 rounded-lg px-3 py-2 text-sm">
+            <span className="capitalize text-gray-300">{t.vehicle_type} · {money(t.price_per_unit)} / {t.hours_per_unit}h</span>
             <button onClick={() => remover.mutate(t.id)} className="text-red-400 hover:text-red-600"><X size={15} /></button>
           </div>
         ))}
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <input value={nova.vehicle_type} onChange={(e) => setNova((n) => ({ ...n, vehicle_type: e.target.value }))} placeholder="Veículo (ex.: carro)" className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand" />
-        <input value={nova.price_per_unit} onChange={(e) => setNova((n) => ({ ...n, price_per_unit: e.target.value }))} inputMode="decimal" placeholder="Preço/diária" className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand" />
+        <input value={nova.vehicle_type} onChange={(e) => setNova((n) => ({ ...n, vehicle_type: e.target.value }))} placeholder="Veículo (ex.: carro)" className="border border-gray-700 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand bg-gray-900 text-gray-100 placeholder-gray-500" />
+        <input value={nova.price_per_unit} onChange={(e) => setNova((n) => ({ ...n, price_per_unit: e.target.value }))} inputMode="decimal" placeholder="Preço/diária" className="border border-gray-700 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand bg-gray-900 text-gray-100 placeholder-gray-500" />
       </div>
       <button onClick={() => add.mutate()} disabled={!nova.vehicle_type.trim() || !nova.price_per_unit || add.isPending}
         className="mt-2 w-full flex items-center justify-center gap-2 border border-brand text-brand font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
