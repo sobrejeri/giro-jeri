@@ -106,6 +106,31 @@ router.get('/admin', authenticate, requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── GET /api/stories/mine — destaques do OPERADOR logado ─
+// Todos os estados (ativo/inativo), com itens — para o operador gerenciar os
+// próprios destaques no painel.
+router.get('/mine', authenticate, requireOperator, async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('story_highlights')
+      .select(`
+        id, title, cover_image_url, sort_order, is_active, created_at,
+        stories!stories_highlight_id_fkey (
+          id, display_name, media_url, media_type, duration_sec, sort_order
+        )
+      `)
+      .eq('created_by_user_id', req.user.id)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    const result = (data || []).map((h) => ({
+      ...h,
+      stories: (h.stories || []).sort((a, b) => a.sort_order - b.sort_order),
+    }));
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 // ═══════════════════════════════════════════════════════════════════════
 // Stories EFÊMEROS do perfil (24h) — círculo colorido na foto do perfil.
 // Diferente dos destaques (permanentes). Registram quem viu.

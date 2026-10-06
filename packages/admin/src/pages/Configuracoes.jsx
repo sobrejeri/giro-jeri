@@ -888,7 +888,7 @@ function TabPagamentos({ settings, qc }) {
         <CardHeader>
           <div className="flex items-center gap-2 border-l-2 border-sky-500/70 pl-2">
             <CreditCard size={16} className="text-sky-400" />
-            <h2 className="text-sm font-semibold text-gray-200">Mercado Pago</h2>
+            <h2 className="text-sm font-semibold text-gray-200">Integração — Mercado Pago</h2>
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300">Conta da plataforma</span>
           </div>
         </CardHeader>
@@ -1077,7 +1077,7 @@ function TabPagamentos({ settings, qc }) {
         <CardHeader>
           <div className="flex items-center gap-2 border-l-2 border-emerald-500/70 pl-2">
             <CreditCard size={16} className="text-emerald-400" />
-            <h2 className="text-sm font-semibold text-gray-200">Pagar.me (Stone)</h2>
+            <h2 className="text-sm font-semibold text-gray-200">Integração — Pagar.me (Stone)</h2>
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">Conta da plataforma</span>
           </div>
         </CardHeader>
