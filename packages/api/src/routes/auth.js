@@ -520,6 +520,16 @@ router.get('/me', authenticate, async (req, res, next) => {
     }
     if (error) return res.status(500).json({ error: error.message });
 
+    // Garante um @ para QUALQUER usuário (turista ou operador): se não tiver,
+    // gera a partir do nome. Assim o @ já aparece no perfil e nos comentários.
+    if (profile && !profile.username) {
+      try {
+        const { garantirUsername } = await import('../services/usernameService.js');
+        const gerado = await garantirUsername(req.user.id);
+        if (gerado) profile.username = gerado;
+      } catch { /* melhor-esforço */ }
+    }
+
     const { data: cover } = await supabase
       .from('users').select('cover_photo_url').eq('id', req.user.id).maybeSingle();
     if (cover && 'cover_photo_url' in cover) profile.cover_photo_url = cover.cover_photo_url;

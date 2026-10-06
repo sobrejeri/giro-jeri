@@ -675,7 +675,7 @@ export default function Profile() {
                           maxLength={30}
                         />
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1">Para entrar sem o e-mail. Letras, números, ponto e sublinhado.</p>
+                      <p className="text-[10px] text-gray-400 mt-1">Aparece nos seus comentários e serve para entrar sem o e-mail. Até 2 trocas a cada 15 dias e não pode repetir outro usuário.</p>
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">{t('profile.phone')}</label>

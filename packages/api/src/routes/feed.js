@@ -75,7 +75,7 @@ router.get('/:id/comments', async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('post_comments')
-      .select('id, body, created_at, user_id, users(full_name, profile_photo_url)')
+      .select('id, body, created_at, user_id, users(full_name, username, profile_photo_url)')
       .eq('post_id', req.params.id)
       .order('created_at', { ascending: true });
     if (error) throw error;
@@ -184,10 +184,12 @@ router.post('/:id/comments', async (req, res, next) => {
     if (!body || body.length > 500) {
       return res.status(400).json({ error: 'Comentário deve ter entre 1 e 500 caracteres' });
     }
+    // Garante o @ de quem comenta (turista inclusive) — o comentário sai com o @.
+    try { const { garantirUsername } = await import('../services/usernameService.js'); await garantirUsername(req.user.id); } catch { /* best-effort */ }
     const { data, error } = await supabase
       .from('post_comments')
       .insert({ post_id: req.params.id, user_id: req.user.id, body })
-      .select('id, body, created_at, user_id, users(full_name, profile_photo_url)')
+      .select('id, body, created_at, user_id, users(full_name, username, profile_photo_url)')
       .single();
     if (error) throw error;
     res.status(201).json(data);

@@ -195,7 +195,7 @@ function CommentsSection({ postId, commentCount, user, open, setOpen }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[12px]">
-                      <span className="font-bold text-gray-900">{c.users?.full_name || t('feedPg.anonymousUser')}</span>{' '}
+                      <span className="font-bold text-gray-900">{c.users?.username ? `@${c.users.username}` : (c.users?.full_name || t('feedPg.anonymousUser'))}</span>{' '}
                       <span className="text-gray-600">{c.body}</span>
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
@@ -335,7 +335,7 @@ function ReviewModal({ place, onClose, user }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-bold text-gray-900">{r.users?.full_name || t('feedPg.anonymousUser')}</span>
+                      <span className="text-[12px] font-bold text-gray-900">{r.users?.username ? `@${r.users.username}` : (r.users?.full_name || t('feedPg.anonymousUser'))}</span>
                       <StarRating value={r.rating} size={11} />
                     </div>
                     {r.comment && <p className="text-[12px] text-gray-600 mt-0.5">{r.comment}</p>}
