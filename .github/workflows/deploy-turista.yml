@@ -114,6 +114,20 @@ jobs:
           </html>
           EOF
 
+      # Callback do OAuth (login com Google) servido como PÁGINA REAL. Sem isto,
+      # /auth/callback 404a no Pages e o token do fragmento tem de sobreviver ao
+      # desvio 404 → sessionStorage → raiz → re-navegação — cadeia frágil que
+      # quebra em vários navegadores. Com o index.html real nesse caminho, o
+      # redirect do Google cai direto numa página que já boota o app com o
+      # #access_token intacto. Os assets usam caminho absoluto (base '/'), então
+      # a cópia funciona em qualquer profundidade. Só no domínio próprio (raiz
+      # '/'); sem ele o app vive em /giro-jeri/ e o OAuth não é usado.
+      - name: Create real OAuth callback page
+        if: ${{ env.CUSTOM_DOMAIN != '' }}
+        run: |
+          mkdir -p dist/auth/callback
+          cp dist/index.html dist/auth/callback/index.html
+
       # O CNAME precisa estar DENTRO do artefato: o Pages recria o arquivo a
       # cada publicação e, sem ele aqui, o domínio próprio é desconfigurado no
       # deploy seguinte — o site volta para o endereço github.io sozinho.

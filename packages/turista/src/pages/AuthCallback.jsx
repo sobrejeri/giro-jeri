@@ -6,6 +6,37 @@ import { useAuth } from '../contexts/AuthContext'
 // Retorno do login com Google (OAuth via Supabase). A sessão volta no fragmento
 // da URL (#access_token=…&refresh_token=…). Garantimos o perfil no backend
 // (vínculo por e-mail / criação de turista) e entramos.
+//
+// A URL pode chegar de duas formas:
+//  1. Direto em /auth/callback#… — quando o Pages serve a página real (ideal).
+//  2. Via 404.html → sessionStorage('spa_redirect') → raiz → re-navegação —
+//     quando /auth/callback 404a no Pages. Aí o fragmento pode já ter saído do
+//     window.location, então também olhamos o destino salvo.
+function lerParametros() {
+  // Tenta o fragmento atual.
+  const hash = window.location.hash || ''
+  let raw = hash.startsWith('#') ? hash.slice(1) : hash
+
+  // Fallback: destino salvo pelo roteador 404 do GitHub Pages (traz o #token).
+  if (!raw || raw.indexOf('access_token') === -1) {
+    try {
+      const saved = sessionStorage.getItem('spa_redirect') || ''
+      const i = saved.indexOf('#')
+      if (i !== -1) { raw = saved.slice(i + 1); sessionStorage.removeItem('spa_redirect') }
+    } catch { /* storage indisponível */ }
+  }
+
+  const p = new URLSearchParams(raw)
+  // Erros do provedor às vezes voltam na query (?error=…), não no fragmento.
+  const q = new URLSearchParams(window.location.search || '')
+  return {
+    access_token:  p.get('access_token'),
+    refresh_token: p.get('refresh_token'),
+    error: p.get('error_description') || p.get('error') ||
+           q.get('error_description') || q.get('error'),
+  }
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate()
   const { login } = useAuth()
@@ -15,12 +46,8 @@ export default function AuthCallback() {
     let vivo = true
     ;(async () => {
       try {
-        const raw = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash
-        const p = new URLSearchParams(raw)
-        const errDesc = p.get('error_description') || p.get('error')
-        if (errDesc) { if (vivo) setErro(decodeURIComponent(errDesc)); return }
-        const access_token  = p.get('access_token')
-        const refresh_token = p.get('refresh_token')
+        const { access_token, refresh_token, error } = lerParametros()
+        if (error) { if (vivo) setErro(decodeURIComponent(error)); return }
         if (!access_token) { if (vivo) setErro('Não foi possível concluir o login com Google.'); return }
 
         const { user, needs_phone } = await api.googleSync(access_token)
