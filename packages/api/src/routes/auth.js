@@ -352,7 +352,7 @@ router.post('/login', async (req, res, next) => {
       // vazio/'CNPJ'/outro. O que identifica é o próprio número.
       const { data: candidates, error: lookupErr } = await supabase
         .from('users')
-        .select('email, document_number, document_type')
+        .select('email, document_number, document_type, user_type')
         .in('user_type', ['operator', 'admin'])
         .not('document_number', 'is', null);
 
@@ -373,7 +373,13 @@ router.post('/login', async (req, res, next) => {
       if (!opUser) {
         return res.status(401).json({ error: 'CNPJ/CPF não encontrado ou não autorizado' });
       }
-      authEmail = opUser.email;
+      // Operador loga PELO DOCUMENTO: o e-mail de autenticação é o sintético
+      // (<documento>@op.girojeri.app), reconstruído aqui — assim o e-mail do
+      // PERFIL (users.email) pode ficar em branco ou ser o real, sem afetar o
+      // acesso. Admin (login por documento, caso raro) usa o e-mail dele.
+      authEmail = opUser.user_type === 'operator'
+        ? `${docDigits}@op.girojeri.app`
+        : opUser.email;
       authPhone = undefined;
     }
 

@@ -225,7 +225,8 @@ router.post('/import-auth-user', requireAdmin, async (req, res, next) => {
 
     let docNumber = null;
     let docType   = null;
-    let email     = authUser.email;
+    let email     = authUser.email;      // e-mail de login (auth)
+    let profileEmail = authUser.email;   // e-mail do perfil (users.email)
 
     if (body.user_type === 'operator' && body.cnpj) {
       const cnpjDigits = body.cnpj.replace(/\D/g, '');
@@ -234,11 +235,14 @@ router.post('/import-auth-user', requireAdmin, async (req, res, next) => {
       if (docErr) return res.status(400).json({ error: docErr });
       docNumber = cnpjDigits;
       docType   = 'cnpj';
-      if (!email || !email.endsWith('@op.girojeri.app')) {
-        const syntheticEmail = `${cnpjDigits}@op.girojeri.app`;
+      // Login do operador é pelo documento → e-mail sintético no auth.
+      const syntheticEmail = `${cnpjDigits}@op.girojeri.app`;
+      if (email !== syntheticEmail) {
         await supabase.auth.admin.updateUserById(body.auth_id, { email: syntheticEmail });
         email = syntheticEmail;
       }
+      // Perfil em branco, a menos que o auth importado já tenha um e-mail real.
+      profileEmail = (authUser.email && !authUser.email.endsWith('@op.girojeri.app')) ? authUser.email : null;
     }
 
     const { data: profile, error: profileErr } = await supabase
@@ -246,7 +250,7 @@ router.post('/import-auth-user', requireAdmin, async (req, res, next) => {
       .insert({
         auth_id:         body.auth_id,
         full_name:       body.full_name,
-        email,
+        email:           profileEmail,
         phone:           authUser.phone || null,
         user_type:       body.user_type,
         document_number: docNumber,
@@ -349,9 +353,12 @@ router.post('/users', requireAdmin, async (req, res, next) => {
   try {
     const body = createUserSchema.parse(req.body);
 
-    // Operadores autenticam via CNPJ → e-mail sintético interno
+    // Operadores autenticam via CNPJ → e-mail sintético interno. O e-mail do
+    // PERFIL (profileEmail) é separado: pode ficar em branco e o operador
+    // completa o e-mail real depois, nos dados pessoais.
     let authEmail = body.email;
     let authPhone = body.phone;
+    let profileEmail = body.email;
     let docNumber = null;
     let docType   = null;
 
@@ -380,6 +387,8 @@ router.post('/users', requireAdmin, async (req, res, next) => {
       // todo o sistema — trocar quebraria o acesso de quem já está cadastrado.
       authEmail = `${digits}@op.girojeri.app`;
       authPhone = undefined;
+      // Perfil em branco: o operador preenche o e-mail real nos dados pessoais.
+      profileEmail = (body.email && body.email.trim()) || null;
       docNumber = digits;
       docType   = tipo;
     }
@@ -395,7 +404,7 @@ router.post('/users', requireAdmin, async (req, res, next) => {
     const baseRow = {
       auth_id:         authData.user.id,
       full_name:       body.full_name,
-      email:           authEmail,
+      email:           profileEmail,
       phone:           authPhone,
       user_type:       body.user_type,
       document_number: docNumber,

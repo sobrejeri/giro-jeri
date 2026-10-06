@@ -263,7 +263,7 @@ export default function Usuarios() {
       password:  createForm.password,
       user_type: createForm.user_type,
       ...(isOp
-        ? { cnpj: createForm.cnpj }
+        ? { cnpj: createForm.cnpj, ...(createForm.email ? { email: createForm.email } : {}) }
         : {
             ...(createForm.email ? { email: createForm.email } : {}),
             ...(createForm.phone ? { phone: createForm.phone } : {}),
@@ -631,14 +631,23 @@ export default function Usuarios() {
             required
           />
           {createForm.user_type === 'operator' ? (
-            <Input
-              label="CNPJ ou CPF"
-              value={createForm.cnpj}
-              onChange={(e) => setCreateForm({ ...createForm, cnpj: e.target.value })}
-              placeholder="CNPJ (operador) ou CPF (operador pessoa física)"
-              inputMode="numeric"
-              required
-            />
+            <>
+              <Input
+                label="CNPJ ou CPF"
+                value={createForm.cnpj}
+                onChange={(e) => setCreateForm({ ...createForm, cnpj: e.target.value })}
+                placeholder="CNPJ (operador) ou CPF (operador pessoa física)"
+                inputMode="numeric"
+                required
+              />
+              <Input
+                label="E-mail do operador (opcional)"
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                placeholder="Se tiver, informe o e-mail real — senão fica em branco e o operador preenche no perfil"
+              />
+            </>
           ) : (
             <>
               <Input
