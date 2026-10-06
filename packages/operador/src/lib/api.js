@@ -269,4 +269,5 @@ export const api = {
   deleteHighlight: (id)        => request('/api/stories/highlights/' + id, { method: 'DELETE' }),
   addStoryItem:    (hid, body) => request('/api/stories/highlights/' + hid + '/items', { method: 'POST', body }),
   deleteStoryItem: (id)        => request('/api/stories/items/' + id, { method: 'DELETE' }),
+  createLiveStory: (body)      => request('/api/stories/live', { method: 'POST', body }),
 }

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, ImagePlus, Loader2, Film, Play, Pencil, Eye, EyeOff, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, ImagePlus, Loader2, Film, Play, Pencil, Eye, EyeOff, ChevronRight, Clock } from 'lucide-react'
 import { api } from '../lib/api'
 import Card, { CardBody } from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -63,6 +63,7 @@ export default function StoriesOperador() {
   const qc = useQueryClient()
   const [hlModal, setHlModal] = useState(null)   // 'new' | highlight
   const [itemsHl, setItemsHl] = useState(null)   // highlight sendo gerenciado
+  const [liveOpen, setLiveOpen] = useState(false) // publicar story 24h
 
   const { data: highlights = [], isLoading } = useQuery({
     queryKey: ['my-highlights'],
@@ -77,9 +78,12 @@ export default function StoriesOperador() {
   return (
     <Card>
       <CardBody>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <p className="text-sm font-semibold text-gray-700">Meus destaques</p>
-          <Button onClick={() => setHlModal('new')} className="flex items-center gap-1.5"><Plus size={15} /> Novo Destaque</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setLiveOpen(true)} className="flex items-center gap-1.5"><Clock size={15} /> Story 24h</Button>
+            <Button onClick={() => setHlModal('new')} className="flex items-center gap-1.5"><Plus size={15} /> Novo Destaque</Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -124,7 +128,66 @@ export default function StoriesOperador() {
         onSaved={() => { setHlModal(null); qc.invalidateQueries({ queryKey: ['my-highlights'] }) }} />}
       {itemsHl && <ItemsModal hl={itemsHl} onClose={() => setItemsHl(null)}
         onChanged={() => qc.invalidateQueries({ queryKey: ['my-highlights'] })} />}
+      {liveOpen && <LiveStoryModal onClose={() => setLiveOpen(false)} />}
     </Card>
+  )
+}
+
+// Story efêmero de 24h (círculo no perfil). Notifica os turistas ao publicar.
+function LiveStoryModal({ onClose }) {
+  const fileRef = useRef(null)
+  const [media, setMedia] = useState(null) // { url, type }
+  const [caption, setCaption] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [pct, setPct] = useState(0)
+  const [err, setErr] = useState('')
+  const [feito, setFeito] = useState(false)
+
+  async function onPick(e) {
+    const file = e.target.files?.[0]; if (!file) return
+    setErr(''); setUploading(true); setPct(0)
+    try { setMedia(await uploadMedia(file, setPct)) }
+    catch (ex) { setErr(ex.message || 'Falha ao enviar.') }
+    finally { setUploading(false); setPct(0); e.target.value = '' }
+  }
+
+  const pub = useMutation({
+    mutationFn: () => api.createLiveStory({ media_url: media.url, media_type: media.type, caption: caption.trim() || null }),
+    onSuccess: () => setFeito(true),
+    onError: (e) => setErr(e?.message || 'Não foi possível publicar.'),
+  })
+
+  return (
+    <Modal open onClose={onClose} title="Publicar story (24h)">
+      {feito ? (
+        <div className="text-center py-6 space-y-3">
+          <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto"><Clock size={22} /></div>
+          <p className="text-sm text-gray-700">Story publicado! Fica no ar por 24h e os turistas foram avisados.</p>
+          <Button onClick={onClose} className="w-full">Fechar</Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={onPick} />
+          <button type="button" onClick={() => fileRef.current?.click()}
+            className="w-full aspect-[9/16] max-h-72 border-2 border-dashed border-gray-200 rounded-xl overflow-hidden flex items-center justify-center text-gray-400 relative mx-auto">
+            {media ? (
+              media.type === 'video'
+                ? <video src={media.url} className="w-full h-full object-contain" muted playsInline />
+                : <img src={media.url} alt="" className="w-full h-full object-contain" />
+            ) : <span className="flex flex-col items-center gap-1"><ImagePlus size={26} /> <span className="text-xs">Selecionar foto ou vídeo</span></span>}
+            {uploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white"><Loader2 size={20} className="animate-spin" /> <span className="ml-2 text-xs">{pct > 0 ? `${pct}%` : ''}</span></div>}
+          </button>
+          <Input label="Legenda (opcional)" value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Diga algo sobre o story" maxLength={200} />
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose} className="flex-1">Cancelar</Button>
+            <Button onClick={() => pub.mutate()} disabled={!media || uploading || pub.isPending} className="flex-1">
+              {pub.isPending ? <Loader2 size={15} className="animate-spin" /> : 'Publicar'}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 

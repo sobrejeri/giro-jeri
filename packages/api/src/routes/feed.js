@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
+import { notifyTourists } from '../services/notify.js';
 
 const router = Router();
 
@@ -128,6 +129,23 @@ router.post('/', requireOperator, async (req, res, next) => {
     const { data, error } = await supabase
       .from('feed_posts').insert(payload).select().single();
     if (error) throw error;
+
+    // Avisa os turistas da nova publicação (best-effort, não bloqueia a resposta).
+    (async () => {
+      try {
+        const { data: autor } = await supabase.from('users')
+          .select('full_name, user_type').eq('id', req.user.id).maybeSingle();
+        const nome = autor?.user_type === 'admin' ? 'Turiva' : (autor?.full_name || 'Operador');
+        await notifyTourists({
+          title:       data.title || `Novidade de ${nome} 🌴`,
+          body:        data.body || `${nome} publicou na Descubra. Confira!`,
+          image:       data.image_url || null,
+          url:         'eventos',
+          templateKey: 'nova_publicacao',
+        });
+      } catch (e) { console.error('[feed] notificação de publicação falhou:', e.message); }
+    })();
+
     res.status(201).json(data);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });

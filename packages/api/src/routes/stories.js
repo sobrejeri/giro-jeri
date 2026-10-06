@@ -230,6 +230,23 @@ router.post('/live', authenticate, requireOperator, async (req, res, next) => {
       created_by_user_id: req.user.id,
     });
     if (error) throw error;
+
+    // Avisa os turistas do novo story (best-effort).
+    (async () => {
+      try {
+        const { data: autor } = await supabase.from('users')
+          .select('full_name, user_type').eq('id', req.user.id).maybeSingle();
+        const nome = autor?.user_type === 'admin' ? 'Turiva' : (autor?.full_name || 'Operador');
+        await notifyTourists({
+          title:       `Novo story de ${nome} 🌴`,
+          body:        body.caption || `${nome} publicou um story. Veja antes de expirar!`,
+          image:       data.media_type === 'image' ? data.media_url : null,
+          url:         'eventos',
+          templateKey: 'nova_publicacao',
+        });
+      } catch (e) { console.error('[stories/live] notificação falhou:', e.message); }
+    })();
+
     res.status(201).json(data);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors });
@@ -333,30 +350,31 @@ router.post('/highlights/:id/items', donoDoHighlight, async (req, res, next) => 
       .single();
     if (error) throw error;
 
-    // Notificação automática só para destaques do ADMIN (Turiva) — evita que
-    // cada operador dispare push para todos os turistas. Best-effort.
-    if (req.user.user_type === 'admin') {
-      (async () => {
-        try {
-          const { data: hl } = await supabase
-            .from('story_highlights')
-            .select('title, cover_image_url, is_active')
-            .eq('id', req.params.id)
-            .maybeSingle();
-          if (!hl || hl.is_active === false) return; // destaque oculto não avisa
-          const imagem = data.media_type === 'image' ? data.media_url : (hl.cover_image_url || null);
-          await notifyTourists({
-            title:       hl.title || 'Novidade na Turiva 🌴',
-            body:        data.display_name || `Nova publicação em ${hl.title || 'Jericoacoara'}. Confira!`,
-            image:       imagem,
-            url:         'eventos',        // abre a "Descubra a Vila"
-            templateKey: 'nova_publicacao',
-          });
-        } catch (err) {
-          console.error('[stories] notificação de publicação falhou:', err.message);
-        }
-      })();
-    }
+    // Notifica os turistas ao publicar num destaque (admin ou operador).
+    // Best-effort: não bloqueia nem derruba a criação do item.
+    (async () => {
+      try {
+        const { data: hl } = await supabase
+          .from('story_highlights')
+          .select('title, cover_image_url, is_active')
+          .eq('id', req.params.id)
+          .maybeSingle();
+        if (!hl || hl.is_active === false) return; // destaque oculto não avisa
+        const { data: autor } = await supabase.from('users')
+          .select('full_name, user_type').eq('id', req.user.id).maybeSingle();
+        const nome = autor?.user_type === 'admin' ? 'Turiva' : (autor?.full_name || 'Operador');
+        const imagem = data.media_type === 'image' ? data.media_url : (hl.cover_image_url || null);
+        await notifyTourists({
+          title:       hl.title || `Novidade de ${nome} 🌴`,
+          body:        data.display_name || `Nova publicação de ${nome} em ${hl.title || 'Jericoacoara'}. Confira!`,
+          image:       imagem,
+          url:         'eventos',        // abre a "Descubra a Vila"
+          templateKey: 'nova_publicacao',
+        });
+      } catch (err) {
+        console.error('[stories] notificação de publicação falhou:', err.message);
+      }
+    })();
 
     res.status(201).json(data);
   } catch (err) {
