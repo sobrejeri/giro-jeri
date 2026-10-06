@@ -210,15 +210,37 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
     ...(temPix ? { pix_key: { type: user.pix_key_type, key: String(user.pix_key).trim() } } : {}),
     // KYC completo quando o operador preencheu — é o que permite validar sem KYC externo.
     ...(register_information ? { register_information } : {}),
+    // Antecipação automática LIGADA já no cadastro: 100% por volume. Assim o
+    // operador recebe sua parte antecipada sem precisar mexer no painel.
+    automatic_anticipation_settings: {
+      enabled:           true,
+      type:              'full',      // por volume (não D+X)
+      volume_percentage: '100',
+      delay:             null,
+    },
   }
 
-  const res = await fetch(`${BASE}/recipients`, {
-    method:  'POST',
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body),
-  })
+  const postRecebedor = async (payload) => {
+    const r = await fetch(`${BASE}/recipients`, {
+      method:  'POST',
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    })
+    const d = await r.json().catch(() => ({}))
+    return { r, d }
+  }
 
-  const data = await res.json().catch(() => ({}))
+  let { r: res, d: data } = await postRecebedor(body)
+
+  // A antecipação depende do contrato da conta master. Se ela for recusada,
+  // recria o recebedor SEM antecipação (não vale perder o split por causa disso).
+  const mencionaAntecipacao = (d) => /anticipat|antecipa/i.test(JSON.stringify(d || {}))
+  if (!res.ok && mencionaAntecipacao(data)) {
+    console.warn('[pagarme] antecipação recusada pela conta — recriando recebedor sem antecipação automática')
+    const { automatic_anticipation_settings, ...semAntecip } = body // eslint-disable-line no-unused-vars
+    ;({ r: res, d: data } = await postRecebedor(semAntecip))
+  }
+
   if (!res.ok) {
     // A mensagem do Pagar.me é sobre os DADOS do operador ("document is
     // invalid") — acionável e não é segredo, então pode ir para ele. O corpo
