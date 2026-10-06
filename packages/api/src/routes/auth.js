@@ -538,6 +538,73 @@ router.get('/me', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── GET /api/auth/google/url — URL de login com Google (via Supabase) ─────
+// O app redireciona para esta URL; o Supabase cuida do OAuth do Google e volta
+// para <TURISTA_URL>/auth/callback com a sessão no fragmento.
+router.get('/google/url', (req, res) => {
+  const base = String(process.env.TURISTA_URL || process.env.TURISTA_APP_URL || '').replace(/\/+$/, '');
+  if (!base || !process.env.SUPABASE_URL) {
+    return res.status(503).json({ error: 'Login com Google indisponível: configure TURISTA_URL e o provedor Google no Supabase.' });
+  }
+  const redirectTo = `${base}/auth/callback`;
+  const url = `${process.env.SUPABASE_URL.replace(/\/+$/, '')}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectTo)}`;
+  res.json({ url });
+});
+
+// ── POST /api/auth/google/sync — garante o perfil do usuário Google ───────
+// Recebe o access_token da sessão Supabase (obtido no callback do OAuth),
+// valida, e: usa a conta já existente (por auth_id); senão VINCULA por e-mail
+// à conta existente; senão cria um perfil de TURISTA. Gera o @ automaticamente.
+router.post('/google/sync', async (req, res, next) => {
+  try {
+    const token = req.body?.access_token;
+    if (!token) return res.status(400).json({ error: 'access_token obrigatório' });
+
+    const { data: ures, error: uerr } = await freshAuthClient().auth.getUser(token);
+    if (uerr || !ures?.user) return res.status(401).json({ error: 'Sessão do Google inválida.' });
+    const authUser = ures.user;
+    const email = String(authUser.email || '').toLowerCase();
+    const meta  = authUser.user_metadata || {};
+    const nome  = meta.full_name || meta.name || (email ? email.split('@')[0] : 'Turista');
+    const foto  = meta.avatar_url || meta.picture || null;
+
+    const SEL = 'id, full_name, username, email, phone, user_type, profile_photo_url, phone_verified';
+
+    // 1) Já há linha por auth_id (conta vinculada pelo Supabase) → usa.
+    let { data: profile } = await supabase.from('users').select(SEL).eq('auth_id', authUser.id).maybeSingle();
+
+    // 2) Senão, vincula por e-mail à conta existente (preserva reservas e @).
+    if (!profile && email) {
+      const { data: byEmail } = await supabase.from('users').select(SEL).eq('email', email).maybeSingle();
+      if (byEmail) {
+        await supabase.from('users').update({ auth_id: authUser.id }).eq('id', byEmail.id);
+        profile = byEmail;
+      }
+    }
+
+    // 3) Novo usuário Google → cria perfil de turista (e-mail já verificado).
+    if (!profile) {
+      const ins = await supabase.from('users').insert({
+        auth_id: authUser.id, full_name: nome, email, user_type: 'tourist',
+        email_verified: true, phone_verified: false, profile_photo_url: foto,
+      }).select(SEL).single();
+      if (ins.error) return res.status(400).json({ error: ins.error.message });
+      profile = ins.data;
+    }
+
+    // Garante o @ a partir do nome.
+    if (!profile.username) {
+      try {
+        const { garantirUsername } = await import('../services/usernameService.js');
+        const g = await garantirUsername(profile.id);
+        if (g) profile.username = g;
+      } catch { /* melhor-esforço */ }
+    }
+
+    res.json({ user: profile, needs_phone: !profile.phone });
+  } catch (err) { next(err); }
+});
+
 // ── POST /api/auth/forgot-password ────────────────────────
 // Item 3: identifica o usuário por e-mail OU telefone e envia o link de reset
 // por WhatsApp (com fallback para e-mail se não houver telefone). Resposta

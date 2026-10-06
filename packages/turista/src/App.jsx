@@ -28,6 +28,7 @@ import BookingDetail   from './pages/BookingDetail'
 import Profile         from './pages/Profile'
 import Favoritos       from './pages/Favoritos'
 import Auth            from './pages/Auth'
+import AuthCallback    from './pages/AuthCallback'
 import Oferta from './pages/Oferta'
 import SairDasOfertas from './pages/SairDasOfertas'
 import ResetPassword   from './pages/ResetPassword'
@@ -129,6 +130,7 @@ export default function App() {
       <Route path="/login"    element={<Auth defaultTab="login" />} />
       <Route path="/cadastro" element={<Auth defaultTab="register" />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       {/* Links das ofertas enviadas por WhatsApp — abrem sem login */}
       <Route path="/oferta/:code"            element={<Oferta />} />
       <Route path="/nao-quero-ofertas/:token" element={<SairDasOfertas />} />

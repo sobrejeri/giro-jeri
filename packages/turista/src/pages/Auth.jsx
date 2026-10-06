@@ -39,6 +39,32 @@ function TextField({ label, type = 'text', value, onChange, placeholder, require
   )
 }
 
+// Botão "Continuar com Google" + separador "ou".
+function GoogleButton({ onClick, label }) {
+  return (
+    <>
+      <div className="flex items-center gap-3 py-1">
+        <span className="flex-1 h-px bg-gray-200" />
+        <span className="text-[11px] text-gray-400 font-medium">ou</span>
+        <span className="flex-1 h-px bg-gray-200" />
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full h-12 border border-gray-200 bg-white text-gray-700 rounded-xl font-semibold text-[14px] flex items-center justify-center gap-2.5 active:scale-[0.98] transition-transform hover:bg-gray-50"
+      >
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#FFC107" d="M43.6 20.5h-1.9V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 4.1 29.3 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22 22-9.8 22-22c0-1.5-.2-2.7-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 4.1 29.3 2 24 2 15.6 2 8.3 6.8 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 46c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 37 26.7 38 24 38c-5.2 0-9.6-3.3-11.2-7.9l-6.5 5C8.2 41.1 15.5 46 24 46z"/>
+          <path fill="#1976D2" d="M43.6 20.5H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.4l6.2 5.2C41.1 36 46 30.5 46 24c0-1.5-.2-2.7-.4-3.5z"/>
+        </svg>
+        {label}
+      </button>
+    </>
+  )
+}
+
 export default function Auth({ defaultTab = 'login' }) {
   const navigate  = useNavigate()
   const location  = useLocation()
@@ -93,6 +119,18 @@ export default function Auth({ defaultTab = 'login' }) {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  /* ── Entrar com Google (OAuth via Supabase) ──────────── */
+  async function startGoogle() {
+    setError('')
+    try {
+      const { url } = await api.googleUrl()
+      if (!url) throw new Error('Login com Google indisponível no momento.')
+      window.location.href = url
+    } catch (err) {
+      setError(err?.message || 'Não foi possível iniciar o login com Google.')
     }
   }
 
@@ -293,6 +331,7 @@ export default function Auth({ defaultTab = 'login' }) {
             >
               {loading ? t('auth.loginLoading') : t('auth.loginBtn')}
             </button>
+            <GoogleButton onClick={startGoogle} label="Entrar com Google" />
             <p className="text-center pt-1">
               <button type="button" onClick={() => { setTab('forgot'); setError(''); setSuccess('') }} className="text-[12px] text-gray-400 hover:text-brand font-medium">
                 Esqueci minha senha
@@ -408,6 +447,7 @@ export default function Auth({ defaultTab = 'login' }) {
             >
               {loading ? t('auth.registerLoading') : t('auth.registerBtn')}
             </button>
+            <GoogleButton onClick={startGoogle} label="Cadastrar com Google" />
             <p className="text-center text-[12px] text-gray-400 pt-1">
               {t('auth.hasAccount')}{' '}
               <button type="button" onClick={() => { setTab('login'); setError('') }} className="text-brand font-semibold">
