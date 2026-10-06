@@ -5,6 +5,7 @@ import { ChevronLeft, ShieldCheck, CreditCard, Loader2, Copy, Check } from 'luci
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { FormularioCartaoPagarme } from './checkout/CheckoutPayment'
+import { tabelaDeParcelas } from '../lib/parcelamento'
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 
@@ -82,7 +83,7 @@ export default function EstacionamentoPagamento() {
                 </button>
                 {metodo === 'cartao' && (
                   <div className="mt-3">
-                    <FormularioCartaoPagarme amount={Number(r.total_amount)} publicKey={publicKey} maxParcelas={maxParcelas} onPagar={onPagarCartao} installmentFees={settings?.payment_installment_fees} />
+                    <FormularioCartaoPagarme amount={Number(r.total_amount)} publicKey={publicKey} maxParcelas={maxParcelas} onPagar={onPagarCartao} installmentFees={tabelaDeParcelas(settings?.payment_installment_fees)} />
                   </div>
                 )}
               </div>

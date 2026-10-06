@@ -78,7 +78,10 @@ async function notificarReservaRecusada(reserva, cliente, motivo) {
 // Monta o split do Pagar.me para a reserva de estacionamento. Fail-closed:
 // qualquer peça faltando → null (valor inteiro na plataforma, repasse manual).
 // Mesma chave master do resto do sistema (payment_split_single_operator).
-async function splitPagarmeEstacionamento(reserva, cfg) {
+// `chargedTotal` (quando > base) é o total COM acréscimo de parcelamento: o
+// operador continua recebendo o líquido da BASE e o acréscimo fica inteiro com
+// a plataforma, que paga a taxa de parcelamento ao gateway.
+async function splitPagarmeEstacionamento(reserva, cfg, chargedTotal = null) {
   try {
     if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return null
     if (!reserva?.lot_id) return null
@@ -94,10 +97,21 @@ async function splitPagarmeEstacionamento(reserva, cfg) {
     const recebedorOperador = String(op?.gateway_recipient_id || '').trim()
     if (!recebedorOperador) return null
 
-    const pct = lot.commission_pct != null ? Number(lot.commission_pct)
+    const commissionPct = lot.commission_pct != null ? Number(lot.commission_pct)
       : (op?.platform_split_pct != null ? Number(op.platform_split_pct) : Number(cfg?.payment_split_admin_pct)) || 0
+
+    // Sem acréscimo → percentual direto da comissão. Com acréscimo, ajusta o
+    // percentual para o operador receber EXATAMENTE o líquido da base.
+    const base  = Number(reserva.total_amount)
+    const total = Number(chargedTotal) > 0 ? Number(chargedTotal) : base
+    let pctPlataforma = commissionPct
+    if (total > base + 0.001 && base > 0) {
+      const liquidoOperador = base * (100 - commissionPct) / 100
+      pctPlataforma = (1 - liquidoOperador / total) * 100
+    }
+
     const { montarSplit } = await import('../../payments/pagarmeSplit.js')
-    const split = montarSplit({ pctPlataforma: pct, recebedorPlataforma, recebedorOperador })
+    const split = montarSplit({ pctPlataforma, recebedorPlataforma, recebedorOperador })
     return split || null
   } catch (e) {
     console.error('[parking split pagarme] falhou, caindo na plataforma:', e.message)
@@ -118,8 +132,18 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
     throw e
   }
 
+  // Juros do parcelamento repassado ao cliente (crédito 2x+). O servidor
+  // recalcula o total — nunca confia em valor do cliente — e bate com o que o
+  // checkout mostrou (WYSIWYG). 1x não tem acréscimo.
+  const nParc = Number(parcelas) || 1
+  let chargedTotal = Number(reserva.total_amount)
+  if (nParc >= 2) {
+    const { totalComJuros, tabelaDeParcelas } = await import('../../services/parcelas.js')
+    chargedTotal = totalComJuros(chargedTotal, nParc, tabelaDeParcelas(cfg?.payment_installment_fees)).total
+  }
+
   const tentativa = await registrarTentativa({
-    reservationId: reserva.id, gateway: 'pagarme', amount: reserva.total_amount, idempotencyKey,
+    reservationId: reserva.id, gateway: 'pagarme', amount: chargedTotal, idempotencyKey,
   })
   // Já aprovada antes (reenvio): não cobra de novo, só garante a confirmação.
   if (tentativa.status === 'approved') {
@@ -127,12 +151,12 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
     return { estado: 'approved', ...conf, reused: true }
   }
 
-  const split = await splitPagarmeEstacionamento(reserva, cfg)
+  const split = await splitPagarmeEstacionamento(reserva, cfg, chargedTotal)
 
   const { criarCobrancaCartao } = await import('../../payments/pagarmeCheckout.js')
   const cobranca = await criarCobrancaCartao({
     apiKey,
-    amount:        reserva.total_amount,
+    amount:        chargedTotal,
     description:   `Estacionamento ${reserva.code}`,
     bookingId:     reserva.code,
     clienteNome:   cliente?.full_name,
@@ -140,7 +164,7 @@ export async function cobrarCartaoEConfirmar({ reserva, cliente, cardToken, parc
     clienteDoc:    cliente?.document_number,
     clienteTelefone: cliente?.phone,
     cardToken,
-    parcelas,
+    parcelas:      nParc,
     split,
     item: { id: reserva.id, title: `Estacionamento ${reserva.code}` },
   })
@@ -203,18 +227,27 @@ export async function cobrarExtensaoEAplicar({ reserva, cliente, novo, cardToken
   const apiKey = chaveDoPagarme(cfg)
   if (!apiKey) { const e = new Error('Pagamento por cartão indisponível no momento.'); e.status = 503; throw e }
 
-  const tentativa = await registrarTentativa({ reservationId: reserva.id, gateway: 'pagarme', amount: delta, idempotencyKey })
+  // Juros do parcelamento sobre o DELTA da extensão (crédito 2x+).
+  const nParc = Number(parcelas) || 1
+  let chargedDelta = delta
+  if (nParc >= 2) {
+    const { totalComJuros, tabelaDeParcelas } = await import('../../services/parcelas.js')
+    chargedDelta = totalComJuros(delta, nParc, tabelaDeParcelas(cfg?.payment_installment_fees)).total
+  }
+
+  const tentativa = await registrarTentativa({ reservationId: reserva.id, gateway: 'pagarme', amount: chargedDelta, idempotencyKey })
   if (tentativa.status === 'approved') {
     const ap = await aplicarExtensao({ reservationId: reserva.id, newEndAt: novo.end_at, newUnits: novo.units, newTotal: novo.total })
     return { estado: 'approved', ...ap, reused: true, delta }
   }
 
-  const split = await splitPagarmeEstacionamento(reserva, cfg)
+  // A base do split da extensão é o DELTA (não o total da reserva).
+  const split = await splitPagarmeEstacionamento({ ...reserva, total_amount: delta }, cfg, chargedDelta)
   const { criarCobrancaCartao } = await import('../../payments/pagarmeCheckout.js')
   const cobranca = await criarCobrancaCartao({
-    apiKey, amount: delta, description: `Extensão estacionamento ${reserva.code}`, bookingId: reserva.code,
+    apiKey, amount: chargedDelta, description: `Extensão estacionamento ${reserva.code}`, bookingId: reserva.code,
     clienteNome: cliente?.full_name, clienteEmail: cliente?.email, clienteDoc: cliente?.document_number,
-    clienteTelefone: cliente?.phone, cardToken, parcelas, split,
+    clienteTelefone: cliente?.phone, cardToken, parcelas: nParc, split,
     item: { id: reserva.id, title: `Extensão ${reserva.code}` },
   })
   await marcarTentativa(tentativa.id, {
