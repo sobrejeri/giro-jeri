@@ -11,7 +11,7 @@ import {
   CalendarCheck, Clock, XCircle, TrendingUp, DollarSign,
   Plus, User, Phone, Mail, Calendar, Users, Banknote, Check,
   Filter, Car, MapPin, Briefcase, Trophy, ArrowDown, Hourglass,
-  Wallet, ChevronRight,
+  Wallet, ChevronRight, KeyRound,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -734,6 +734,73 @@ function RankingOperadores() {
   )
 }
 
+// Solicitações de redefinição de senha pendentes. Cada pedido feito na tela de
+// login (turista por @/e-mail, operador por CPF/CNPJ) gera um aviso interno
+// para os admins; aqui ele vira um card acionável. "Resolver" marca como lido
+// (some daqui e do sininho). Some quando não há nada pendente.
+function SolicitacoesResetSenha() {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const { data } = useQuery({
+    queryKey: ['admin-reset-requests'],
+    queryFn:  () => api.getResetRequests(),
+    refetchInterval: 60_000,
+  })
+  const items = data?.items || []
+  const resolver = useMutation({
+    mutationFn: (id) => api.markNotificationRead(id),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['admin-reset-requests'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+  if (!items.length) return null
+
+  const quando = (iso) => {
+    try { return format(parseISO(iso), "d MMM 'às' HH:mm", { locale: ptBR }) } catch { return '' }
+  }
+
+  return (
+    <Card className="border-amber-500/30">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <KeyRound size={15} className="text-amber-400" />
+          <h2 className="text-sm font-semibold text-gray-200">
+            Redefinição de senha — {items.length} solicitaç{items.length > 1 ? 'ões' : 'ão'}
+          </h2>
+        </div>
+      </CardHeader>
+      <CardBody>
+        <div className="space-y-2">
+          {items.map((it) => (
+            <div key={it.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-gray-200 leading-snug">{it.message_body}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{quando(it.created_at)}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <button
+                  onClick={() => navigate('/usuarios')}
+                  className="text-xs font-semibold text-brand hover:underline whitespace-nowrap"
+                >
+                  Enviar link
+                </button>
+                <button
+                  onClick={() => resolver.mutate(it.id)}
+                  disabled={resolver.isPending}
+                  className="text-[11px] text-gray-500 hover:text-gray-300 whitespace-nowrap disabled:opacity-50"
+                >
+                  Resolver
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -816,6 +883,9 @@ export default function Dashboard() {
           <ChevronRight size={16} className="text-amber-400/70" />
         </button>
       )}
+
+      {/* Solicitações de redefinição de senha (some quando não há) */}
+      <SolicitacoesResetSenha />
 
       {/* Acompanhamento operacional — filtro por operador / passeio / transfer */}
       <AcompanhamentoOperacional />

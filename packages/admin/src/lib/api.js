@@ -322,7 +322,10 @@ export const api = {
   // Notificações
   getNotifications:      ()    => request('/api/notifications?app=admin'),
   markNotificationsRead: ()    => request('/api/notifications/read-all', { method: 'POST' }),
+  markNotificationRead:  (id) => request(`/api/notifications/${id}/read`, { method: 'POST' }),
   deleteNotification:    (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
+  // Solicitações de redefinição de senha pendentes (card do Dashboard)
+  getResetRequests:      ()    => request('/api/admin/reset-requests'),
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   pushUnsubscribe:       (body) => request('/api/notifications/push-unsubscribe', { method: 'POST', body }),
   getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),

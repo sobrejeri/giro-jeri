@@ -524,6 +524,25 @@ router.post('/users/:id/reset-link', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── GET /api/admin/reset-requests ──────────────────────
+// Solicitações de redefinição de senha PENDENTES para o admin logado — fonte
+// do card no Dashboard. Reaproveita as notificações internas (uma por admin)
+// geradas pelo /auth/forgot-password; "pendente" = ainda não marcada como lida.
+// Resolver uma solicitação é marcá-la como lida (POST /api/notifications/:id/read).
+router.get('/reset-requests', requireAdmin, async (req, res, next) => {
+  try {
+    const { data } = await supabase
+      .from('notifications')
+      .select('id, title, message_body, created_at')
+      .eq('user_id', req.user.id)
+      .eq('template_key', 'admin_reset_request')
+      .is('read_at', null)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    res.json({ items: data || [] });
+  } catch (err) { next(err); }
+});
+
 // ── DELETE /api/admin/users/:id ────────────────────────
 // Apagar de vez, e só quando é seguro.
 //

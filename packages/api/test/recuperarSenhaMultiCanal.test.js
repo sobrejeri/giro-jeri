@@ -34,11 +34,24 @@ test('forgot-password reconhece @username, e-mail, CPF/CNPJ e telefone', () => {
   assert.match(auth, /phone\.eq\.\$\{e164\},phone\.eq\.\$\{digits\}/, 'resolve por telefone')
 })
 
-test('fallback: sem entrega por WhatsApp, avisa os admins (uma vez)', () => {
+test('admin é SEMPRE avisado da solicitação (mensagem conforme a entrega)', () => {
   assert.match(auth, /let delivered = false/, 'rastreia se o WhatsApp saiu')
   assert.match(auth, /delivered = !r\?\.skipped/, 'entrega = WhatsApp não pulado')
-  assert.match(auth, /if \(!delivered\) \{[\s\S]*?notifyAdmins\(\{[\s\S]*?templateKey: 'admin_reset_request'/,
-    'só chama o admin quando o link não foi entregue')
+  assert.match(auth, /notifyAdmins\(\{[\s\S]*?templateKey: 'admin_reset_request'/, 'sempre avisa os admins')
+  assert.match(auth, /o link já foi enviado por WhatsApp\./, 'mensagem quando o link saiu automático')
+  assert.match(auth, /Envie manualmente pelo painel de Usuários\./, 'mensagem quando precisa de envio manual')
+})
+
+test('dashboard do admin lista as solicitações pendentes', () => {
+  const admin     = read('../src/routes/admin.js')
+  const adminApi  = read('../../admin/src/lib/api.js')
+  const dashboard = read('../../admin/src/pages/Dashboard.jsx')
+  assert.match(admin, /router\.get\('\/reset-requests', requireAdmin/, 'endpoint das solicitações pendentes')
+  assert.match(admin, /template_key', 'admin_reset_request'\)[\s\S]*?\.is\('read_at', null\)/,
+    'só as pendentes (não lidas) do admin logado')
+  assert.match(adminApi, /getResetRequests:\s*\(\)\s*=> request\('\/api\/admin\/reset-requests'\)/, 'helper da api')
+  assert.match(dashboard, /function SolicitacoesResetSenha/, 'card no dashboard')
+  assert.match(dashboard, /api\.getResetRequests\(\)/, 'o card busca as solicitações')
 })
 
 test('template admin_reset_request existe e é exclusivo do app admin', () => {

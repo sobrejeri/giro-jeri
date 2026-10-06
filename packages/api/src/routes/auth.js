@@ -690,21 +690,22 @@ router.post('/forgot-password', async (req, res, next) => {
           .catch((err) => console.error('[reset] email falhou:', err?.message));
       }
 
-      // 3) Não deu para entregar automaticamente → avisa os ADMINs (sininho do
-      //    painel + push) para enviarem o link manualmente pelo painel de
-      //    Usuários. NÃO embute o token na notificação: o admin gera um novo.
-      if (!delivered) {
-        const quem = user.full_name
-          || (user.username ? '@' + user.username : null)
-          || user.email
-          || (user.document_number ? `documento ${user.document_number}` : null)
-          || user.id;
-        await notifyAdmins({
-          templateKey: 'admin_reset_request',
-          title: 'Redefinição de senha pendente 🔐',
-          body: `${quem} pediu para redefinir a senha e não há WhatsApp para receber o link. Envie manualmente pelo painel de Usuários.`,
-        });
-      }
+      // 3) SEMPRE avisa os ADMINs da solicitação — aparece no sininho (PWA) e
+      //    no card do Dashboard. A mensagem diz se o link já saiu por WhatsApp
+      //    ou se o admin precisa enviar manualmente pelo painel de Usuários.
+      //    NÃO embute o token: o admin gera um link novo no painel.
+      const quem = user.full_name
+        || (user.username ? '@' + user.username : null)
+        || user.email
+        || (user.document_number ? `documento ${user.document_number}` : null)
+        || user.id;
+      await notifyAdmins({
+        templateKey: 'admin_reset_request',
+        title: 'Redefinição de senha solicitada 🔐',
+        body: delivered
+          ? `${quem} pediu para redefinir a senha — o link já foi enviado por WhatsApp.`
+          : `${quem} pediu para redefinir a senha e NÃO há WhatsApp para receber o link. Envie manualmente pelo painel de Usuários.`,
+      });
     }
     // Resposta SEMPRE idêntica, exista a conta ou não (anti-enumeração).
     res.json({ ok: true });
