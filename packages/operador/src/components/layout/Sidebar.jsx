@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare, Home, Wallet, Settings } from 'lucide-react'
+import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare, Home, Wallet, Settings, ImagePlus } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 // Menu do operador de ESTACIONAMENTO (segmento parking) — espelha o mockup.
@@ -10,6 +10,7 @@ const NAV_PARKING = [
   { to: '/estacionamento/patio',         icon: Car,           label: 'Pátio'        },
   { to: '/estacionamento/financeiro',    icon: Wallet,        label: 'Financeiro'   },
   { to: '/estacionamento/meu-local',     icon: Settings,      label: 'Meu local'    },
+  { to: '/publicacoes',                   icon: ImagePlus,        label: 'Publicações'  },
   { to: '/perfil',                       icon: UserCircle,    label: 'Meu Perfil'   },
 ]
 
@@ -25,6 +26,7 @@ const NAV = [
   { to: '/rotas',      icon: MapPin,          label: 'Rotas',        seg: 'tours'   },
   { to: '/financeiro', icon: BarChart3,       label: 'Financeiro',   seg: 'tours'   },
   { to: '/reputacao',  icon: Star,            label: 'Reputação',    seg: 'tours'   },
+  { to: '/publicacoes', icon: ImagePlus,         label: 'Publicações',  seg: 'both'    },
   { to: '/perfil',     icon: UserCircle,      label: 'Meu Perfil',   seg: 'both'    },
 ]
 

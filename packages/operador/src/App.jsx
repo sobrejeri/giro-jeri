@@ -13,6 +13,7 @@ import Rotas from './pages/Rotas'
 import Perfil from './pages/Perfil'
 import Reservas from './pages/Reservas'
 import Reputacao from './pages/Reputacao'
+import Publicacoes from './pages/Publicacoes'
 import OsPublica from './pages/OsPublica'
 import UpdatePrompt from './components/UpdatePrompt'
 
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="passeios"   element={<Passeios />} />
         <Route path="rotas"      element={<Rotas />} />
         <Route path="reputacao"  element={<Reputacao />} />
+        <Route path="publicacoes" element={<Publicacoes />} />
         <Route path="perfil"     element={<Perfil />} />
       </Route>
       <Route path="*" element={<HomeRedirect />} />
