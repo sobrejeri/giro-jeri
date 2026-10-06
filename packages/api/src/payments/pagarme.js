@@ -181,15 +181,21 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
 
   const auth = Buffer.from(`${apiKey}:`).toString('base64')
 
+  // Com register_information (KYC completo), o Pagar.me v5 REJEITA os campos de
+  // topo name/type/email/document ("… cannot be populated when the
+  // register_information field is populated") — eles já vão dentro do KYC. Sem
+  // KYC, mandamos o cadastro mínimo legado (name/email/document/type).
   const body = {
-    name:          isCompany && kyc?.company_name ? kyc.company_name : user.full_name,
-    email:         user.email,
-    document:      doc,
     document_type: isCompany ? 'cnpj' : 'cpf',
-    type:          isCompany ? 'company' : 'individual',
     // Referência externa = id do operador. Deixa reconciliar recebedor↔usuário
     // depois sem ter de casar nome ou documento.
     ...(user.id ? { code: String(user.id) } : {}),
+    ...(register_information ? {} : {
+      name:     isCompany && kyc?.company_name ? kyc.company_name : user.full_name,
+      email:    user.email,
+      document: doc,
+      type:     isCompany ? 'company' : 'individual',
+    }),
     default_bank_account: {
       holder_name:        user.full_name,
       holder_type:        isCompany ? 'company' : 'individual',
