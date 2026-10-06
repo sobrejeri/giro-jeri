@@ -17,6 +17,7 @@ import Auditoria from './pages/Auditoria'
 import Configuracoes from './pages/Configuracoes'
 import Reservas from './pages/Reservas'
 import Feed from './pages/Feed'
+import Conteudo from './pages/Conteudo'
 import Estabelecimentos from './pages/Estabelecimentos'
 import Estacionamentos from './pages/Estacionamentos'
 import Stories from './pages/Stories'
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="afiliados"    element={<Afiliados />} />
         <Route path="marketing"    element={<Marketing />} />
         <Route path="temporada"    element={<Temporada />} />
+        <Route path="conteudo"     element={<Conteudo />} />
         <Route path="feed"         element={<Feed />} />
         <Route path="stories"      element={<Stories />} />
         <Route path="estabelecimentos" element={<Estabelecimentos />} />

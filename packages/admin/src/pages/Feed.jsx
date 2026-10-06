@@ -46,7 +46,7 @@ const fmtDate = (d) => {
   try { return d ? format(parseISO(d), 'dd/MM/yyyy') : null } catch { return d }
 }
 
-export default function Feed() {
+export default function Feed({ embedded = false }) {
   const [modal, setModal] = useState(null)
   const [form, setForm]   = useState(EMPTY)
   const [uploading, setUploading] = useState(false)
@@ -131,10 +131,12 @@ export default function Feed() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-100">Eventos & Promoções</h1>
-          <p className="text-sm text-gray-500">Aparecem na aba “Descubra a Vila” do app do turista.</p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="text-lg font-semibold text-gray-100">Eventos & Promoções</h1>
+            <p className="text-sm text-gray-500">Aparecem na aba “Descubra a Vila” do app do turista.</p>
+          </div>
+        )}
         <Button onClick={openNew} className="ml-auto"><Plus size={16} /> Novo</Button>
       </div>
 
@@ -148,10 +150,10 @@ export default function Feed() {
           </CardBody>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
           {posts.map((p) => (
             <Card key={p.id}>
-              <div className="relative h-40 rounded-t-xl overflow-hidden bg-gray-900">
+              <div className="relative h-24 rounded-t-xl overflow-hidden bg-gray-900">
                 {p.image_url
                   ? <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-gradient-to-br from-[#FF6A00] via-[#FF8A3D] to-[#1A4D5F]" />}

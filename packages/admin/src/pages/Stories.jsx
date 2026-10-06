@@ -199,7 +199,7 @@ function VideoUploadBtn({ onUrl }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function Stories() {
+export default function Stories({ embedded = false }) {
   const qc = useQueryClient()
 
   const { data: highlights = [], isLoading } = useQuery({
@@ -332,12 +332,14 @@ export default function Stories() {
 
       {/* ── Page header ───────────────────────────────────────────────── */}
       <div className="flex items-center gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-100">Destaques</h1>
-          <p className="text-sm text-gray-500">
-            Tópicos exibidos na home do turista, estilo Destaques do Instagram.
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1 className="text-lg font-semibold text-gray-100">Destaques</h1>
+            <p className="text-sm text-gray-500">
+              Tópicos exibidos na home do turista, estilo Destaques do Instagram.
+            </p>
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Button variant="secondary" onClick={openPublish} className="flex items-center gap-1.5">
             <Upload size={15} /> Publicar story
@@ -356,7 +358,7 @@ export default function Stories() {
             <h2 className="text-sm font-bold text-gray-200">Grade de publicações</h2>
             <span className="text-xs text-gray-500">{gradePosts.length} no feed</span>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1">
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1">
             {gradePosts.map((post) => (
               <button
                 key={post.id}
@@ -406,11 +408,11 @@ export default function Stories() {
       )}
 
       {/* ── Highlights grid ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
         {highlights.map((h) => (
           <Card key={h.id}>
             {/* Cover */}
-            <div className="relative h-36 rounded-t-xl overflow-hidden bg-gray-900 flex items-center justify-center">
+            <div className="relative h-24 rounded-t-xl overflow-hidden bg-gray-900 flex items-center justify-center">
               {h.cover_image_url ? (
                 <img src={h.cover_image_url} alt={h.title} className="w-full h-full object-cover" />
               ) : (
