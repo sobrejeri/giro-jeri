@@ -49,16 +49,19 @@ function telefonePagarme(tel) {
 }
 
 // Endereço no formato do Pagar.me v5 (street_number, complementary, zip_code…).
+// O Pagar.me EXIGE complementary e reference_point no register_information
+// (provado em produção: "The complementary/reference_point field is required").
+// São opcionais no nosso formulário, então caem num placeholder quando vazios.
 function enderecoPagarme(a = {}) {
   return {
     street:          String(a?.street || '').trim(),
     street_number:   String(a?.number || '').trim(),
-    complementary:   String(a?.complement || '').trim() || undefined,
+    complementary:   String(a?.complement || '').trim() || 'N/A',
     neighborhood:    String(a?.neighborhood || '').trim(),
     city:            String(a?.city || '').trim(),
     state:           String(a?.state || '').trim().toUpperCase().slice(0, 2),
     zip_code:        soDigitos(a?.zip).slice(0, 8),
-    reference_point: String(a?.reference || '').trim() || undefined,
+    reference_point: String(a?.reference || '').trim() || 'N/A',
   }
 }
 function enderecoCompleto(e) {
