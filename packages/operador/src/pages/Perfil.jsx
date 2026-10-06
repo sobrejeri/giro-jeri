@@ -113,8 +113,13 @@ function PagarmeRecipient({ onBeforeRegister, saving }) {
   const registerMut = useMutation({ mutationFn: () => api.registerRecipient() })
   const antecipMut = useMutation({
     mutationFn: () => api.recipientAnticipation(),
-    onSuccess: () => { setErr(null); setAviso('Antecipação automática ativada (100% por volume).') },
-    onError: (e) => { setAviso(null); setErr(e?.message || 'Não foi possível ativar a antecipação agora.') },
+    onSuccess: (r) => {
+      setErr(null)
+      const t = r?.transfer?.ok ? 'Transferência automática ativada (diária).' : `Transferência: ${r?.transfer?.error || 'não ativada'}.`
+      const a = r?.anticipation?.ok ? 'Antecipação automática ativada (100%).' : `Antecipação: ${r?.anticipation?.error || 'não ativada'}.`
+      setAviso(`${t} ${a}`)
+    },
+    onError: (e) => { setAviso(null); setErr(e?.message || 'Não foi possível ativar as automações agora.') },
   })
   const kycMut = useMutation({
     mutationFn: () => api.recipientKycLink(),
@@ -166,9 +171,9 @@ function PagarmeRecipient({ onBeforeRegister, saving }) {
                 Validado — sua parte cai na sua conta bancária a cada venda no cartão.
               </p>
               <Button type="button" variant="secondary" onClick={() => antecipMut.mutate()} disabled={antecipMut.isPending}>
-                {antecipMut.isPending ? 'Ativando antecipação…' : 'Reaplicar antecipação automática'}
+                {antecipMut.isPending ? 'Ativando…' : 'Ativar transferência e antecipação automáticas'}
               </Button>
-              {aviso && <p className="text-xs text-green-700">{aviso}</p>}
+              {aviso && <p className="text-xs text-gray-600 leading-relaxed">{aviso}</p>}
             </div>
           )}
 

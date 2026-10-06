@@ -30,6 +30,31 @@ export async function setAutomaticAnticipation(apiKey, recipientId, opcoes = {})
   return data
 }
 
+// Liga/ajusta a transferência automática (saldo → conta bancária) de um
+// recebedor. Padrão: diária. É independente da antecipação (não exige contrato
+// especial). Intervalos: 'Daily' | 'Weekly' | 'Monthly'.
+export async function setTransferSettings(apiKey, recipientId, opcoes = {}) {
+  if (!apiKey) throw new Error('API Key do Pagar.me não configurada')
+  if (!recipientId) throw new Error('recipientId ausente')
+  const { enabled = true, interval = 'Daily', day = 0 } = opcoes
+  const auth = Buffer.from(`${apiKey}:`).toString('base64')
+  const res = await fetch(`${BASE}/recipients/${encodeURIComponent(recipientId)}/transfer-settings`, {
+    method:  'PATCH',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ transfer_enabled: enabled, transfer_interval: interval, transfer_day: day }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    console.error('[pagarme] transferência automática falhou:', res.status, JSON.stringify(data).slice(0, 300))
+    const detalhes = data?.errors && typeof data.errors === 'object'
+      ? Object.entries(data.errors).flatMap(([c, ms]) => (Array.isArray(ms) ? ms : [ms]).map((m) => `${c}: ${m}`)).join(' · ')
+      : ''
+    const base = data.message || `Pagar.me recusou a transferência automática (${res.status})`
+    throw new Error(detalhes ? `${base} — ${detalhes}` : base)
+  }
+  return data
+}
+
 // Código febraban (3 dígitos) do banco. Preferimos a coluna `bank_code`; se ela
 // não existir (ainda não há migration), caímos nos dígitos à ESQUERDA de
 // `bank_name`, porque o seletor de bancos salva "260 - Nubank". Nunca os
@@ -240,31 +265,14 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
     ...(temPix ? { pix_key: { type: user.pix_key_type, key: String(user.pix_key).trim() } } : {}),
     // KYC completo quando o operador preencheu — é o que permite validar sem KYC externo.
     ...(register_information ? { register_information } : {}),
-    // Antecipação automática LIGADA já no cadastro: 100% por volume. Assim o
-    // operador recebe sua parte antecipada sem precisar mexer no painel.
-    automatic_anticipation_settings: anticipationSettings(),
   }
 
-  const postRecebedor = async (payload) => {
-    const r = await fetch(`${BASE}/recipients`, {
-      method:  'POST',
-      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    })
-    const d = await r.json().catch(() => ({}))
-    return { r, d }
-  }
-
-  let { r: res, d: data } = await postRecebedor(body)
-
-  // A antecipação depende do contrato da conta master. Se ela for recusada,
-  // recria o recebedor SEM antecipação (não vale perder o split por causa disso).
-  const mencionaAntecipacao = (d) => /anticipat|antecipa/i.test(JSON.stringify(d || {}))
-  if (!res.ok && mencionaAntecipacao(data)) {
-    console.warn('[pagarme] antecipação recusada pela conta — recriando recebedor sem antecipação automática')
-    const { automatic_anticipation_settings, ...semAntecip } = body // eslint-disable-line no-unused-vars
-    ;({ r: res, d: data } = await postRecebedor(semAntecip))
-  }
+  const res = await fetch(`${BASE}/recipients`, {
+    method:  'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({}))
 
   if (!res.ok) {
     // A mensagem do Pagar.me é sobre os DADOS do operador ("document is
@@ -283,7 +291,34 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
     throw new Error(detalhes ? `${base} — ${detalhes}` : base)
   }
 
+  // Recebedor criado. Transferência e antecipação automáticas são BEST-EFFORT e
+  // INDEPENDENTES: uma falhar (ex.: antecipação sem contrato na conta master)
+  // não derruba o cadastro nem impede a outra. O split já funciona de qualquer
+  // forma; o operador pode reaplicar depois pelo painel.
+  await aplicarAutomacoes(apiKey, data.id)
+
   return data.id
+}
+
+// Liga transferência (diária) e antecipação (100% por volume) num recebedor,
+// best-effort. Devolve { transfer, anticipation } com ok/erro de cada uma.
+export async function aplicarAutomacoes(apiKey, recipientId) {
+  const out = { transfer: { ok: false }, anticipation: { ok: false } }
+  try {
+    await setTransferSettings(apiKey, recipientId)
+    out.transfer = { ok: true }
+  } catch (e) {
+    out.transfer = { ok: false, error: e.message }
+    console.warn('[pagarme] transferência automática não aplicada:', e.message)
+  }
+  try {
+    await setAutomaticAnticipation(apiKey, recipientId)
+    out.anticipation = { ok: true }
+  } catch (e) {
+    out.anticipation = { ok: false, error: e.message }
+    console.warn('[pagarme] antecipação automática não aplicada:', e.message)
+  }
+  return out
 }
 
 // Traduz o caminho do campo que o Pagar.me devolve em `errors` para um rótulo

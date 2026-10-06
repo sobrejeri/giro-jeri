@@ -619,15 +619,16 @@ router.post('/register-recipient', async (req, res, next) => {
 });
 
 // ── POST /api/operator/recipient/anticipation ─────────
-// Reaplica a antecipação automática (100% por volume) num recebedor já criado.
-// Útil para recebedores cadastrados antes de a antecipação virar padrão, ou
-// depois de a conta master passar a permitir antecipação.
+// Reaplica transferência (diária) e antecipação (100% por volume) automáticas
+// num recebedor já criado. São independentes: a transferência costuma ligar sem
+// contrato; a antecipação depende do contrato da conta master. Devolve o
+// resultado de cada uma para a tela informar o que ficou pendente.
 router.post('/recipient/anticipation', async (req, res, next) => {
   try {
     const { data: user } = await supabase
       .from('users').select('gateway_recipient_id').eq('id', req.user.id).single()
     if (!user?.gateway_recipient_id) {
-      return res.status(400).json({ error: 'Cadastre-se como recebedor no Pagar.me antes de ativar a antecipação.' })
+      return res.status(400).json({ error: 'Cadastre-se como recebedor no Pagar.me antes de ativar as automações.' })
     }
     const { data: rows = [] } = await supabase
       .from('system_settings').select('setting_key, setting_value').like('setting_key', 'payment_%')
@@ -637,9 +638,9 @@ router.post('/recipient/anticipation', async (req, res, next) => {
     if (!apiKey) {
       return res.status(400).json({ error: 'O recebimento pelo Pagar.me ainda não foi habilitado pelo administrador.' })
     }
-    const { setAutomaticAnticipation } = await import('../payments/pagarme.js')
-    await setAutomaticAnticipation(apiKey, user.gateway_recipient_id, { enabled: true, volumePercentage: '100' })
-    res.json({ ok: true })
+    const { aplicarAutomacoes } = await import('../payments/pagarme.js')
+    const resultado = await aplicarAutomacoes(apiKey, user.gateway_recipient_id)
+    res.json({ ok: true, ...resultado })
   } catch (err) {
     if (err.message) return res.status(400).json({ error: err.message })
     next(err)

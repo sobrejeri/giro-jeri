@@ -98,8 +98,12 @@ test('com conta completa, monta default_bank_account e devolve o id', async () =
   try {
     const id = await createRecipient(OPERADOR, 'sk_test')
     assert.equal(id, 're_novo')
-    assert.equal(i.chamadas.length, 1)
-    const [c] = i.chamadas
+    // 1 criação + 2 automações best-effort (transferência e antecipação).
+    assert.equal(i.chamadas.length, 3)
+    const c = i.chamadas.find((x) => /\/core\/v5\/recipients$/.test(x.url))
+    assert.ok(c, 'o POST de criação do recebedor foi feito')
+    assert.ok(i.chamadas.some((x) => /\/transfer-settings$/.test(x.url)), 'liga transferência automática')
+    assert.ok(i.chamadas.some((x) => /\/automatic-anticipation-settings$/.test(x.url)), 'liga antecipação automática')
     assert.match(c.url, /\/core\/v5\/recipients$/)
     assert.match(c.init.headers.Authorization, /^Basic /)
     const body = JSON.parse(c.init.body)
