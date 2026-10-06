@@ -17,11 +17,11 @@ const auth    = read('../src/routes/auth.js')
 const usuarios = read('../../admin/src/pages/Usuarios.jsx')
 const migration = read('../../../supabase/migrations/120_operador_email_opcional.sql')
 
-test('criar operador: login sintético, perfil em branco ou e-mail real', () => {
+test('criar operador: e-mail obrigatório no perfil, login sintético', () => {
+  assert.match(admin, /if \(body\.user_type === 'operator' && !\(body\.email && body\.email\.trim\(\)\)\)/,
+    'operador exige e-mail (o perfil não sobe em branco)')
   assert.match(admin, /authEmail = `\$\{digits\}@op\.girojeri\.app`/, 'login do operador é o e-mail sintético')
-  assert.match(admin, /profileEmail = \(body\.email && body\.email\.trim\(\)\) \|\| null/,
-    'o perfil recebe o e-mail informado, ou fica nulo')
-  assert.match(admin, /email:\s+profileEmail,/, 'users.email usa o e-mail do perfil, não o de login')
+  assert.match(admin, /email:\s+profileEmail,/, 'users.email é o e-mail do perfil, não o de login')
 })
 
 test('login do operador reconstrói o e-mail sintético pelo documento', () => {
@@ -29,10 +29,10 @@ test('login do operador reconstrói o e-mail sintético pelo documento', () => {
     'operador autentica pelo documento; o e-mail do perfil não afeta o login')
 })
 
-test('o admin pode informar o e-mail do operador na criação', () => {
+test('o admin informa o e-mail do operador na criação (obrigatório)', () => {
   assert.match(usuarios, /\? \{ cnpj: createForm\.cnpj, \.\.\.\(createForm\.email \? \{ email: createForm\.email \} : \{\}\) \}/,
-    'o form envia o e-mail do operador quando informado')
-  assert.match(usuarios, /E-mail do operador \(opcional\)/, 'o form tem o campo de e-mail do operador')
+    'o form envia o e-mail do operador')
+  assert.match(usuarios, /label="E-mail do operador"/, 'o form tem o campo de e-mail do operador')
 })
 
 test('a migração 120 relaxa o CHECK para aceitar operador só com documento', () => {

@@ -353,9 +353,14 @@ router.post('/users', requireAdmin, async (req, res, next) => {
   try {
     const body = createUserSchema.parse(req.body);
 
+    // Operador precisa de e-mail real: o login é pelo documento, mas o perfil
+    // não pode subir em branco — o admin informa o e-mail do operador.
+    if (body.user_type === 'operator' && !(body.email && body.email.trim())) {
+      return res.status(400).json({ error: 'Informe o e-mail do operador.' });
+    }
+
     // Operadores autenticam via CNPJ → e-mail sintético interno. O e-mail do
-    // PERFIL (profileEmail) é separado: pode ficar em branco e o operador
-    // completa o e-mail real depois, nos dados pessoais.
+    // PERFIL (profileEmail) é separado do e-mail de login (auth).
     let authEmail = body.email;
     let authPhone = body.phone;
     let profileEmail = body.email;

@@ -641,11 +641,12 @@ export default function Usuarios() {
                 required
               />
               <Input
-                label="E-mail do operador (opcional)"
+                label="E-mail do operador"
                 type="email"
                 value={createForm.email}
                 onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                placeholder="Se tiver, informe o e-mail real — senão fica em branco e o operador preenche no perfil"
+                placeholder="E-mail real do operador (login continua pelo CNPJ/CPF)"
+                required
               />
             </>
           ) : (
