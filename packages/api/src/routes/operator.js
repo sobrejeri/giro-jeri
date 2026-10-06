@@ -618,6 +618,34 @@ router.post('/register-recipient', async (req, res, next) => {
   }
 });
 
+// ── POST /api/operator/recipient/anticipation ─────────
+// Reaplica a antecipação automática (100% por volume) num recebedor já criado.
+// Útil para recebedores cadastrados antes de a antecipação virar padrão, ou
+// depois de a conta master passar a permitir antecipação.
+router.post('/recipient/anticipation', async (req, res, next) => {
+  try {
+    const { data: user } = await supabase
+      .from('users').select('gateway_recipient_id').eq('id', req.user.id).single()
+    if (!user?.gateway_recipient_id) {
+      return res.status(400).json({ error: 'Cadastre-se como recebedor no Pagar.me antes de ativar a antecipação.' })
+    }
+    const { data: rows = [] } = await supabase
+      .from('system_settings').select('setting_key, setting_value').like('setting_key', 'payment_%')
+    const cfg = Object.fromEntries((rows || []).map((s) => [s.setting_key, s.setting_value]))
+    const { chaveDoPagarme } = await import('./payments.js')
+    const apiKey = chaveDoPagarme(cfg)
+    if (!apiKey) {
+      return res.status(400).json({ error: 'O recebimento pelo Pagar.me ainda não foi habilitado pelo administrador.' })
+    }
+    const { setAutomaticAnticipation } = await import('../payments/pagarme.js')
+    await setAutomaticAnticipation(apiKey, user.gateway_recipient_id, { enabled: true, volumePercentage: '100' })
+    res.json({ ok: true })
+  } catch (err) {
+    if (err.message) return res.status(400).json({ error: err.message })
+    next(err)
+  }
+})
+
 // GET /api/operator/preferences
 // Preferências são opcionais (opt-in de quais serviços o operador executa).
 // Qualquer falha aqui — tabela faltando, RLS, coluna divergente — NÃO deve

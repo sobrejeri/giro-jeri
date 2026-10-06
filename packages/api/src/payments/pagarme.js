@@ -1,5 +1,35 @@
 const BASE = 'https://api.pagar.me/core/v5'
 
+// Configuração padrão de antecipação automática (100% por volume). Centralizada
+// para o cadastro e o "reaplicar antecipação" usarem exatamente a mesma coisa.
+function anticipationSettings({ enabled = true, volumePercentage = '100', type = 'full', delay = null } = {}) {
+  return { enabled, type, volume_percentage: String(volumePercentage), delay }
+}
+
+// Liga/ajusta a antecipação automática de um recebedor JÁ existente. Usado pelo
+// botão "reaplicar antecipação" quando o recebedor foi criado antes disso ou a
+// conta master passou a permitir antecipação.
+export async function setAutomaticAnticipation(apiKey, recipientId, opcoes = {}) {
+  if (!apiKey) throw new Error('API Key do Pagar.me não configurada')
+  if (!recipientId) throw new Error('recipientId ausente')
+  const auth = Buffer.from(`${apiKey}:`).toString('base64')
+  const res = await fetch(`${BASE}/recipients/${encodeURIComponent(recipientId)}/automatic-anticipation-settings`, {
+    method:  'PATCH',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify(anticipationSettings(opcoes)),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    console.error('[pagarme] antecipação automática falhou:', res.status, JSON.stringify(data).slice(0, 300))
+    const detalhes = data?.errors && typeof data.errors === 'object'
+      ? Object.entries(data.errors).flatMap(([c, ms]) => (Array.isArray(ms) ? ms : [ms]).map((m) => `${c}: ${m}`)).join(' · ')
+      : ''
+    const base = data.message || `Pagar.me recusou a antecipação automática (${res.status})`
+    throw new Error(detalhes ? `${base} — ${detalhes}` : base)
+  }
+  return data
+}
+
 // Código febraban (3 dígitos) do banco. Preferimos a coluna `bank_code`; se ela
 // não existir (ainda não há migration), caímos nos dígitos à ESQUERDA de
 // `bank_name`, porque o seletor de bancos salva "260 - Nubank". Nunca os
@@ -212,12 +242,7 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
     ...(register_information ? { register_information } : {}),
     // Antecipação automática LIGADA já no cadastro: 100% por volume. Assim o
     // operador recebe sua parte antecipada sem precisar mexer no painel.
-    automatic_anticipation_settings: {
-      enabled:           true,
-      type:              'full',      // por volume (não D+X)
-      volume_percentage: '100',
-      delay:             null,
-    },
+    automatic_anticipation_settings: anticipationSettings(),
   }
 
   const postRecebedor = async (payload) => {

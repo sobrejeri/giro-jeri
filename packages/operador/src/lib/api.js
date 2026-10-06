@@ -240,6 +240,7 @@ export const api = {
   getRecipientStatus: () => request('/api/operator/recipient-status'),
   registerRecipient:  () => request('/api/operator/register-recipient', { method: 'POST', body: {} }),
   recipientKycLink:   () => request('/api/operator/recipient-kyc-link', { method: 'POST', body: {} }),
+  recipientAnticipation: () => request('/api/operator/recipient/anticipation', { method: 'POST', body: {} }),
 
   // Notificações
   getConversations:   ()         => request('/api/bookings/conversations'),

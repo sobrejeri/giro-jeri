@@ -101,6 +101,7 @@ function listaFaltas(missing = []) {
 function PagarmeRecipient({ onBeforeRegister, saving }) {
   const qc = useQueryClient()
   const [err, setErr] = useState(null)
+  const [aviso, setAviso] = useState(null)
   const [kyc, setKyc] = useState(null)   // { url } quando a plataforma gera o link
   const [busy, setBusy] = useState(false)
 
@@ -110,6 +111,11 @@ function PagarmeRecipient({ onBeforeRegister, saving }) {
   })
 
   const registerMut = useMutation({ mutationFn: () => api.registerRecipient() })
+  const antecipMut = useMutation({
+    mutationFn: () => api.recipientAnticipation(),
+    onSuccess: () => { setErr(null); setAviso('Antecipação automática ativada (100% por volume).') },
+    onError: (e) => { setAviso(null); setErr(e?.message || 'Não foi possível ativar a antecipação agora.') },
+  })
   const kycMut = useMutation({
     mutationFn: () => api.recipientKycLink(),
     onSuccess: (r) => { setErr(null); setKyc(r); if (r?.url) window.open(r.url, '_blank', 'noopener') },
@@ -155,9 +161,15 @@ function PagarmeRecipient({ onBeforeRegister, saving }) {
           {status.recipient_id && <p className="text-xs text-gray-400 font-mono">{status.recipient_id}</p>}
 
           {status.apto && (
-            <p className="text-xs text-green-700 leading-relaxed">
-              Validado — sua parte cai na sua conta bancária a cada venda no cartão.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-green-700 leading-relaxed">
+                Validado — sua parte cai na sua conta bancária a cada venda no cartão.
+              </p>
+              <Button type="button" variant="secondary" onClick={() => antecipMut.mutate()} disabled={antecipMut.isPending}>
+                {antecipMut.isPending ? 'Ativando antecipação…' : 'Reaplicar antecipação automática'}
+              </Button>
+              {aviso && <p className="text-xs text-green-700">{aviso}</p>}
+            </div>
           )}
 
           {pendente && (
