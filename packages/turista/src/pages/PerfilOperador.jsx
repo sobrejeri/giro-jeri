@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, Play, Star, Loader2, Store, Grid3x3, Plus, Check } from 'lucide-react'
+import { ChevronLeft, Play, Star, Loader2, Store, Grid3x3, Plus, Check, ChevronDown, Flame } from 'lucide-react'
 import { api } from '../lib/api'
 import { setPreferredOp } from '../lib/preferredOp'
 import { useCart } from '../contexts/CartContext'
@@ -15,6 +15,7 @@ export default function PerfilOperador() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [tab, setTab] = useState('posts') // 'posts' | 'shop'
+  const [lojaAberta, setLojaAberta] = useState(false) // lojinha recolhida por padrão
 
   const { data: op, isLoading, isError } = useQuery({
     queryKey: ['operatorPublic', id],
@@ -29,7 +30,9 @@ export default function PerfilOperador() {
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
 
-  const services = op?.services || []
+  const services  = op?.services || []
+  const destaques = services.filter((s) => s.featured)  // "mais buscados" (≤5)
+  const demais    = services.filter((s) => !s.featured)
 
   const { items: cartItems, upsertItem, removeItem } = useCart()
   const { region } = useRegion()
@@ -44,6 +47,40 @@ export default function PerfilOperador() {
     if (cartIds.has(service.id)) { removeItem(service.id); return }
     setPreferredOp({ id: op.id, name: op.full_name, photo: op.profile_photo_url })
     upsertItem(draftFromTour(service, { region_id: region?.id || service.region_id || null }))
+  }
+
+  // Item da lojinha. `destaque` mostra a tag "mais buscados".
+  function ServicoItem({ s, destaque }) {
+    return (
+      <div className={`flex items-center gap-3 rounded-xl p-2.5 ${destaque ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-gray-50'}`}>
+        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-200 shrink-0">
+          {s.cover_image_url
+            ? <img src={s.cover_image_url} alt={s.name} className="w-full h-full object-cover" />
+            : <div className="w-full h-full flex items-center justify-center text-gray-300"><Store size={20} /></div>}
+        </div>
+        <div className="flex-1 min-w-0">
+          {destaque && (
+            <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 mb-1">
+              <Flame size={11} className="fill-amber-500 text-amber-500" /> mais buscados
+            </span>
+          )}
+          <p className="text-[13.5px] font-semibold text-gray-800 leading-tight line-clamp-2">{s.name}</p>
+          {s.price_from && (
+            <p className="text-[12px] text-gray-500 mt-0.5">a partir de R$ {Number(s.price_from).toLocaleString('pt-BR')}</p>
+          )}
+        </div>
+        <button
+          onClick={() => toggleCarrinho(s)}
+          className={`shrink-0 flex items-center gap-1 text-[12px] font-bold rounded-lg px-3 py-2 active:scale-95 transition-transform ${
+            cartIds.has(s.id) ? 'bg-emerald-500 text-white' : 'bg-brand text-white'
+          }`}
+        >
+          {cartIds.has(s.id)
+            ? <><Check size={13} /> Adicionado</>
+            : <><Plus size={13} /> Adicionar</>}
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -172,31 +209,32 @@ export default function PerfilOperador() {
                     <p className="text-[11.5px] text-gray-400 px-1">
                       Reservando pela lojinha, o atendimento tem prioridade com {op.full_name?.split(' ')[0]}.
                     </p>
-                    {services.map((s) => (
-                      <div key={s.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-2.5">
-                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-200 shrink-0">
-                          {s.cover_image_url
-                            ? <img src={s.cover_image_url} alt={s.name} className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center text-gray-300"><Store size={20} /></div>}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13.5px] font-semibold text-gray-800 leading-tight line-clamp-2">{s.name}</p>
-                          {s.price_from && (
-                            <p className="text-[12px] text-gray-500 mt-0.5">a partir de R$ {Number(s.price_from).toLocaleString('pt-BR')}</p>
-                          )}
-                        </div>
+
+                    {/* Mais buscados: sempre visíveis, no topo. */}
+                    {destaques.map((s) => <ServicoItem key={s.id} s={s} destaque />)}
+
+                    {/* Demais serviços: recolhidos por padrão, expandem ao clicar. */}
+                    {demais.length > 0 && (
+                      lojaAberta ? (
+                        <>
+                          {demais.map((s) => <ServicoItem key={s.id} s={s} />)}
+                          <button
+                            onClick={() => setLojaAberta(false)}
+                            className="w-full text-center text-[12.5px] font-semibold text-gray-500 py-2 active:scale-[0.98]"
+                          >
+                            Mostrar menos
+                          </button>
+                        </>
+                      ) : (
                         <button
-                          onClick={() => toggleCarrinho(s)}
-                          className={`shrink-0 flex items-center gap-1 text-[12px] font-bold rounded-lg px-3 py-2 active:scale-95 transition-transform ${
-                            cartIds.has(s.id) ? 'bg-emerald-500 text-white' : 'bg-brand text-white'
-                          }`}
+                          onClick={() => setLojaAberta(true)}
+                          className="w-full flex items-center justify-center gap-1.5 text-[13px] font-semibold text-brand bg-brand/5 rounded-xl py-3 active:scale-[0.98]"
                         >
-                          {cartIds.has(s.id)
-                            ? <><Check size={13} /> Adicionado</>
-                            : <><Plus size={13} /> Adicionar</>}
+                          Ver todos os serviços ({demais.length})
+                          <ChevronDown size={16} />
                         </button>
-                      </div>
-                    ))}
+                      )
+                    )}
                   </div>
                 )
               )}

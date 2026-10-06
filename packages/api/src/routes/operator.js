@@ -223,23 +223,42 @@ router.get('/:id/public', async (req, res, next) => {
     // preferências de passeio, mostra todos os passeios ativos (padrão do app).
     let services = [];
     try {
-      const { data: prefs } = await supabase
+      // Preferências do operador. is_featured pode não existir ainda (migration
+      // 123): se a coluna faltar, relê sem ela e trata tudo como não-destacado.
+      let r = await supabase
         .from('operator_service_preferences')
-        .select('entity_id, is_active')
+        .select('entity_id, is_active, is_featured')
         .eq('operator_id', data.id)
         .eq('entity_type', 'tour');
-      const ativos = (prefs || []).filter((p) => p.is_active).map((p) => p.entity_id);
+      if (r.error && r.error.code === '42703') {
+        r = await supabase
+          .from('operator_service_preferences')
+          .select('entity_id, is_active')
+          .eq('operator_id', data.id)
+          .eq('entity_type', 'tour');
+      }
+      const prefs = r.data || [];
+      const ativos     = prefs.filter((p) => p.is_active).map((p) => p.entity_id);
+      const destacados = new Set(prefs.filter((p) => p.is_active && p.is_featured).map((p) => p.entity_id));
+      // O destaque é um REALCE, não um filtro: se o operador só tem destaques
+      // (nenhum opt-in "comum"), a lojinha segue mostrando todos os passeios.
+      const optInReal = prefs.some((p) => p.is_active && !p.is_featured);
+
       let q = supabase
         .from('tours')
         .select('id, name, slug, cover_image_url, shared_price_per_person, is_active')
         .eq('is_active', true);
-      if (ativos.length) q = q.in('id', ativos);
+      if (optInReal && ativos.length) q = q.in('id', ativos);
       const { data: tours } = await q.order('display_order', { ascending: true });
       services = (tours || []).map((t) => ({
         id: t.id, name: t.name, slug: t.slug,
         cover_image_url: t.cover_image_url || null,
         price_from: t.shared_price_per_person || null,
+        featured: destacados.has(t.id),
       }));
+      // Destacados ("mais buscados") primeiro, mantendo a ordem do catálogo dentro
+      // de cada grupo.
+      services.sort((a, b) => (a.featured === b.featured ? 0 : a.featured ? -1 : 1));
     } catch { /* catálogo indisponível — lojinha vazia */ }
 
     res.json({
@@ -740,6 +759,80 @@ router.put('/preferences/:type/:entityId', async (req, res, next) => {
 
     if (error) throw error;
     res.json(data);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/operator/preferences/:type/:entityId/featured
+// body: { featured: boolean }
+// Marca/desmarca um serviço como "mais buscado" (destaque no perfil público).
+// Limite de 5 destaques por operador, aplicado aqui. Destacar implica deixar o
+// serviço visível (is_active=true); desmarcar NÃO mexe no is_active (não
+// reativa um serviço que o operador tenha escondido).
+router.put('/preferences/:type/:entityId/featured', async (req, res, next) => {
+  try {
+    const { type, entityId } = req.params;
+    const featured = !!req.body?.featured;
+    if (!['tour', 'transfer'].includes(type)) {
+      return res.status(400).json({ error: 'entity_type inválido' });
+    }
+
+    if (featured) {
+      // Trava de 5: conta destaques atuais (ignora o próprio, se já marcado).
+      const { data: atuais, error: cErr } = await supabase
+        .from('operator_service_preferences')
+        .select('entity_id')
+        .eq('operator_id', req.user.id)
+        .eq('is_featured', true);
+      if (cErr && (cErr.code === '42703' || cErr.code === 'PGRST204')) {
+        return res.status(503).json({ error: 'Destaque indisponível: migration pendente.' });
+      }
+      if (!cErr) {
+        const jaMarcado = (atuais || []).some((p) => p.entity_id === entityId);
+        if (!jaMarcado && (atuais || []).length >= 5) {
+          return res.status(400).json({ error: 'Você pode destacar no máximo 5 serviços.' });
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('operator_service_preferences')
+        .upsert(
+          {
+            operator_id: req.user.id,
+            entity_type: type,
+            entity_id:   entityId,
+            is_active:   true,
+            is_featured: true,
+            updated_at:  new Date().toISOString(),
+          },
+          { onConflict: 'operator_id,entity_type,entity_id' },
+        )
+        .select()
+        .single();
+      if (error) {
+        if (error.code === '42703' || error.code === 'PGRST204') {
+          return res.status(503).json({ error: 'Destaque indisponível: migration pendente.' });
+        }
+        throw error;
+      }
+      return res.json(data);
+    }
+
+    // Desmarcar: só zera is_featured de uma linha existente (sem tocar is_active).
+    const { data, error } = await supabase
+      .from('operator_service_preferences')
+      .update({ is_featured: false, updated_at: new Date().toISOString() })
+      .eq('operator_id', req.user.id)
+      .eq('entity_type', type)
+      .eq('entity_id', entityId)
+      .select()
+      .maybeSingle();
+    if (error) {
+      if (error.code === '42703' || error.code === 'PGRST204') {
+        return res.status(503).json({ error: 'Destaque indisponível: migration pendente.' });
+      }
+      throw error;
+    }
+    res.json(data || { entity_id: entityId, is_featured: false });
   } catch (err) { next(err); }
 });
 

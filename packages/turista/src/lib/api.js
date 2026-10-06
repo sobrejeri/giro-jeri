@@ -312,6 +312,11 @@ export const api = {
   // Perfil público do operador
   getOperatorPublic: (id) => request('/api/operator/' + id + '/public'),
 
+  // Operador: marca/desmarca um serviço como "mais buscado" (máx 5, destaque no
+  // perfil público). type é sempre 'tour' hoje (a lojinha é de passeios).
+  setFeaturedService: (type, id, featured) =>
+    request(`/api/operator/preferences/${type}/${id}/featured`, { method: 'PUT', body: { featured } }),
+
   // Stories efêmeros do perfil (24h, círculo colorido na foto) + visualizações
   getLiveStories:     ()        => request('/api/stories/live'),
   addLiveStory:       (body)    => request('/api/stories/live', { method: 'POST', body }),

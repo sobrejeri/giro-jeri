@@ -14,9 +14,11 @@ import LiveAvatarStories from '../components/LiveAvatarStories'
 import ProfilePostsFeed from '../components/ProfilePostsFeed'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
-  Camera, Pencil, Check, X, Heart,
+  Camera, Pencil, Check, X, Heart, Star,
   Phone, Flag, AlertCircle, Globe, Loader2, Calendar, CreditCard, Play, Map,
 } from 'lucide-react'
+
+const MAX_DESTAQUES = 5
 
 // "10 mil", "1,2 mi" — número compacto (pt-BR), para a contagem de curtidas.
 const fmtCompacto = (n) =>
@@ -142,20 +144,54 @@ function PontosCard({ token }) {
   )
 }
 
-// Lojinha do operador (preview no próprio perfil) — os serviços que ele
-// oferece, como o cliente vê no perfil público. Editar quais serviços = tela
-// de Passeios (preferências), então aqui é só a prévia.
+// Lojinha do operador (no próprio perfil). Aqui o operador ESCOLHE até 5
+// serviços para destacar como "mais buscados" — é o que ganha realce no perfil
+// público que o cliente visita. Tocar na estrela marca/desmarca; passado o
+// limite de 5, a API recusa e avisamos.
 function MinhaLojinha({ meId }) {
   const [data, setData] = useState(null)
+  const [featured, setFeatured] = useState(() => new Set()) // ids destacados
+  const [saving, setSaving] = useState(null)                // id em gravação
+  const [aviso, setAviso] = useState('')
+
   useEffect(() => {
     if (!meId) return
     let vivo = true
     api.getOperatorPublic(meId)
-      .then((d) => { if (vivo) setData(d) })
+      .then((d) => {
+        if (!vivo) return
+        setData(d)
+        setFeatured(new Set((d?.services || []).filter((s) => s.featured).map((s) => s.id)))
+      })
       .catch(() => { if (vivo) setData({ services: [] }) })
     return () => { vivo = false }
   }, [meId])
+
   const servicos = data?.services || []
+
+  async function toggleDestaque(s) {
+    if (saving) return
+    setAviso('')
+    const marcar = !featured.has(s.id)
+    if (marcar && featured.size >= MAX_DESTAQUES) {
+      setAviso(`Você pode destacar no máximo ${MAX_DESTAQUES} serviços.`)
+      return
+    }
+    // Otimista: reflete já e reverte se a API recusar.
+    const prev = new Set(featured)
+    const next = new Set(featured)
+    marcar ? next.add(s.id) : next.delete(s.id)
+    setFeatured(next); setSaving(s.id)
+    try {
+      await api.setFeaturedService('tour', s.id, marcar)
+    } catch (e) {
+      setFeatured(prev)
+      setAviso(e?.message || 'Não foi possível salvar o destaque.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   return (
     <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
@@ -170,16 +206,40 @@ function MinhaLojinha({ meId }) {
         </p>
       ) : (
         <div className="p-3 space-y-2">
-          <p className="text-[11.5px] text-gray-400 px-1">É o que seus clientes veem no seu perfil, com prioridade de atendimento para você.</p>
-          {servicos.slice(0, 6).map((s) => (
-            <div key={s.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-2">
-              <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-200 shrink-0">
-                {s.cover_image_url && <img src={s.cover_image_url} alt={s.name} className="w-full h-full object-cover" />}
+          <div className="flex items-center justify-between px-1">
+            <p className="text-[11.5px] text-gray-400 pr-2">
+              Escolha até {MAX_DESTAQUES} serviços para destacar como <b className="text-amber-600">mais buscados</b> no seu perfil.
+            </p>
+            <span className="shrink-0 text-[11px] font-bold text-amber-600">{featured.size}/{MAX_DESTAQUES}</span>
+          </div>
+          {aviso && <p className="text-[11.5px] text-red-500 px-1">{aviso}</p>}
+          {servicos.map((s) => {
+            const on = featured.has(s.id)
+            const bloqueado = !on && featured.size >= MAX_DESTAQUES
+            return (
+              <div key={s.id} className={`flex items-center gap-3 rounded-xl p-2 ${on ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-gray-50'}`}>
+                <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-200 shrink-0">
+                  {s.cover_image_url && <img src={s.cover_image_url} alt={s.name} className="w-full h-full object-cover" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-gray-800 leading-tight line-clamp-2">{s.name}</p>
+                  {s.price_from && <span className="text-[11.5px] text-gray-500">R$ {Number(s.price_from).toLocaleString('pt-BR')}</span>}
+                </div>
+                <button
+                  onClick={() => toggleDestaque(s)}
+                  disabled={saving === s.id || bloqueado}
+                  aria-label={on ? 'Remover destaque' : 'Destacar como mais buscado'}
+                  className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition ${
+                    on ? 'bg-amber-400 text-white' : bloqueado ? 'bg-gray-100 text-gray-300' : 'bg-white text-gray-400 ring-1 ring-gray-200'
+                  }`}
+                >
+                  {saving === s.id
+                    ? <Loader2 size={16} className="animate-spin" />
+                    : <Star size={17} className={on ? 'fill-white' : ''} />}
+                </button>
               </div>
-              <p className="flex-1 text-[13px] font-semibold text-gray-800 leading-tight line-clamp-2">{s.name}</p>
-              {s.price_from && <span className="text-[11.5px] text-gray-500 shrink-0">R$ {Number(s.price_from).toLocaleString('pt-BR')}</span>}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
