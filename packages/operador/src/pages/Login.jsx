@@ -35,8 +35,35 @@ export default function Login() {
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Esqueci a senha (self-service por CPF/CNPJ).
+  const [view, setView]             = useState('login')   // 'login' | 'forgot'
+  const [forgotDoc, setForgotDoc]   = useState('')
+  const [forgotMsg, setForgotMsg]   = useState('')
+  const [forgotErr, setForgotErr]   = useState('')
+  const [forgotBusy, setForgotBusy] = useState(false)
+
   function handleDoc(e) {
     setForm({ ...form, cnpj: formatDoc(e.target.value) })
+  }
+
+  async function handleForgot(e) {
+    e.preventDefault()
+    setForgotErr(''); setForgotMsg('')
+    const digits = forgotDoc.replace(/\D/g, '')
+    if (digits.length !== 11 && digits.length !== 14) {
+      setForgotErr('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).')
+      return
+    }
+    setForgotBusy(true)
+    try {
+      await api.forgotPassword({ identifier: digits })
+      // Mensagem única, exista a conta ou não (anti-enumeração).
+      setForgotMsg('Se o documento estiver cadastrado, enviamos o link pelo WhatsApp. Sem WhatsApp cadastrado, o administrador é avisado e te envia o link.')
+    } catch (err) {
+      setForgotErr(err.message || 'Não foi possível solicitar agora. Tente de novo.')
+    } finally {
+      setForgotBusy(false)
+    }
   }
 
   async function handleSubmit(e) {
@@ -76,48 +103,82 @@ export default function Login() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="CNPJ ou CPF"
-              value={form.cnpj}
-              onChange={handleDoc}
-              placeholder="CNPJ do operador ou seu CPF"
-              inputMode="numeric"
-              required
-              autoFocus
-            />
-            <Input
-              label="Senha"
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-            />
-            {error && (
-              <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
-            )}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Entrando…' : 'Entrar'}
-            </Button>
-          </form>
-          <p className="mt-5 text-center text-xs text-gray-400">
-            Acesso com o CNPJ ou CPF cadastrado pelo administrador da plataforma.
-          </p>
+          {view === 'login' ? (
+            <>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Input
+                  label="CNPJ ou CPF"
+                  value={form.cnpj}
+                  onChange={handleDoc}
+                  placeholder="CNPJ do operador ou seu CPF"
+                  inputMode="numeric"
+                  required
+                  autoFocus
+                />
+                <Input
+                  label="Senha"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required
+                />
+                {error && (
+                  <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+                )}
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? 'Entrando…' : 'Entrar'}
+                </Button>
+              </form>
+              <p className="mt-5 text-center text-xs text-gray-400">
+                Acesso com o CNPJ ou CPF cadastrado pelo administrador da plataforma.
+              </p>
 
-          <button
-            type="button"
-            onClick={() => {
-              const phone = import.meta.env.VITE_ADMIN_WHATSAPP || '5588999999999'
-              const cnpj  = form.cnpj || '____________'
-              const msg = encodeURIComponent(
-                `Olá! Preciso redefinir a senha do meu acesso de operador.\n\nCNPJ/CPF: ${cnpj}`
-              )
-              window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
-            }}
-            className="block mx-auto mt-2 text-xs text-brand hover:underline"
-          >
-            Esqueci minha senha → falar com o administrador
-          </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotDoc(form.cnpj)
+                  setForgotErr(''); setForgotMsg('')
+                  setView('forgot')
+                }}
+                className="block mx-auto mt-2 text-xs text-brand hover:underline"
+              >
+                Esqueci minha senha
+              </button>
+            </>
+          ) : (
+            <form onSubmit={handleForgot} className="space-y-4">
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Informe seu <strong>CPF ou CNPJ</strong> cadastrado. Se tiver WhatsApp, você recebe
+                o link na hora; se não, o administrador é avisado e te envia o link.
+              </p>
+              <Input
+                label="CNPJ ou CPF"
+                value={forgotDoc}
+                onChange={(e) => { setForgotErr(''); setForgotDoc(formatDoc(e.target.value)) }}
+                placeholder="Seu CPF ou o CNPJ do operador"
+                inputMode="numeric"
+                required
+                autoFocus
+              />
+              {forgotErr && (
+                <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{forgotErr}</p>
+              )}
+              {forgotMsg ? (
+                <p className="text-sm text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg">{forgotMsg}</p>
+              ) : (
+                <Button type="submit" className="w-full" disabled={forgotBusy}>
+                  {forgotBusy ? 'Solicitando…' : 'Solicitar redefinição'}
+                </Button>
+              )}
+              <button
+                type="button"
+                onClick={() => { setView('login'); setForgotErr(''); setForgotMsg('') }}
+                className="block mx-auto mt-1 text-xs text-brand hover:underline"
+              >
+                Voltar para o login
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>

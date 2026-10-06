@@ -29,6 +29,10 @@ export const DEFAULT_TEMPLATES = {
   admin_new_user:          { enabled: true, title: 'Novo cadastro 👤',        body: 'Um novo usuário acabou de criar conta na Turiva.' },
   admin_payment_approved:  { enabled: true, title: 'Recebimento aprovado 💰', body: 'Um pagamento foi aprovado.' },
   admin_payment_rejected:  { enabled: true, title: 'Pagamento recusado ⚠️',   body: 'Uma tentativa de pagamento foi recusada.' },
+  // Pedido de redefinição de senha que NÃO pôde ir por WhatsApp (sem telefone
+  // ou Z-API desligada). Cai para o admin enviar o link manualmente pelo
+  // painel de Usuários. O texto real é montado com o nome/identificador.
+  admin_reset_request:     { enabled: true, title: 'Redefinição de senha pendente 🔐', body: 'Um usuário pediu para redefinir a senha e não há WhatsApp para enviar o link. Envie manualmente pelo painel de Usuários.' },
 }
 
 // Lê um modelo do banco; se a tabela não existir ou não houver linha, cai no

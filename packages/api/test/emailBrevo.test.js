@@ -201,7 +201,10 @@ test('a rota de forgot-password não usa mais o mecanismo paralelo do Supabase',
   assert.notEqual(i, -1)
   // Sem comentários: o próprio código traz `resetPasswordForEmail` escrito na
   // explicação de por que ele saiu. Verificar a prosa daria falso positivo.
-  const rota = fonte.slice(i, i + 2200).replace(/\/\/.*$/gm, '')
+  // Limita ao corpo do handler (até a próxima rota), não a um nº fixo de chars:
+  // o handler cresceu (resolução multicanal) e uma janela fixa cortava o trecho.
+  const fim = fonte.indexOf('\nrouter.', i + 10)
+  const rota = fonte.slice(i, fim === -1 ? fonte.length : fim).replace(/\/\/.*$/gm, '')
   assert.ok(!/resetPasswordForEmail/.test(rota),
     'voltou o caminho paralelo do Supabase — dois tokens diferentes para a mesma senha')
   assert.ok(/sendPasswordReset/.test(rota), 'o e-mail precisa sair pelo nosso serviço')

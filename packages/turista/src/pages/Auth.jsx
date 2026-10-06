@@ -347,14 +347,15 @@ export default function Auth({ defaultTab = 'login' }) {
         ) : tab === 'forgot' ? (
           <form onSubmit={handleForgot} className="space-y-4">
             <p className="text-[13px] text-gray-500 leading-relaxed">
-              Digite seu e-mail ou telefone (WhatsApp) e enviaremos um link para redefinir a senha.
+              Digite seu <strong>@usuário</strong>, e-mail ou telefone (WhatsApp) e enviaremos um
+              link para redefinir a senha. Se você não tiver WhatsApp cadastrado, nossa equipe te envia o link.
             </p>
             <TextField
-              label="E-mail ou telefone (WhatsApp)"
+              label="@usuário, e-mail ou telefone"
               type="text"
               value={forgotEmail}
               onChange={(e) => { setError(''); setForgotEmail(e.target.value) }}
-              placeholder="seu@email.com ou +55 88 99999-9999"
+              placeholder="@seuusuario, seu@email.com ou +55 88 99999-9999"
               required
               autoFocus
             />

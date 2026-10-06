@@ -43,7 +43,7 @@
     "invalidCredentials": "Incorrect email or password",
     "registerError": "Error creating account",
     "accountCreated": "Account created! Please sign in to continue.",
-    "forgotSent": "If the account exists, we sent a password reset link via WhatsApp."
+    "forgotSent": "If the account exists, you'll get a password reset link via WhatsApp. Without a WhatsApp number on file, our team sends you the link."
   },
   "profile": {
     "title": "Profile",

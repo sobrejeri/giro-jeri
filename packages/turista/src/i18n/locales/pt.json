@@ -43,7 +43,7 @@
     "invalidCredentials": "E-mail ou senha incorretos",
     "registerError": "Erro ao criar conta",
     "accountCreated": "Conta criada! Faça login para continuar.",
-    "forgotSent": "Se a conta existir, enviamos um link pelo WhatsApp para redefinir a senha."
+    "forgotSent": "Se a conta existir, você receberá um link pelo WhatsApp para redefinir a senha. Sem WhatsApp cadastrado, nossa equipe te envia o link."
   },
   "profile": {
     "title": "Perfil",

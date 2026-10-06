@@ -618,62 +618,95 @@ const forgotSchema = z.object({
 
 router.post('/forgot-password', async (req, res, next) => {
   try {
-    const { email, phone, identifier, redirect_url } = forgotSchema.parse(req.body);
+    const { email, phone, identifier } = forgotSchema.parse(req.body);
     const raw = (identifier || email || phone || '').trim();
-    if (!raw) return res.status(400).json({ error: 'Informe seu e-mail ou telefone.' });
+    if (!raw) return res.status(400).json({ error: 'Informe seu @, e-mail, documento ou telefone.' });
 
-    const isEmail = raw.includes('@');
+    // Reconhece QUALQUER identificador das telas de login: @username ou e-mail
+    // (turista) e CPF/CNPJ (operador), além de telefone. Resposta sempre
+    // genérica no fim (anti-enumeração) — não revela se a conta existe.
+    const SEL = 'id, full_name, username, email, phone, document_number, password_reset_version';
+    const digits = raw.replace(/\D/g, '');
     let user = null;
-    if (isEmail) {
-      const { data } = await supabase.from('users')
-        .select('id, email, phone, password_reset_version').ilike('email', raw).maybeSingle();
+
+    if (raw.startsWith('@')) {
+      // @handle explícito
+      const handle = normalizeUsername(raw.slice(1));
+      if (handle) {
+        const { data } = await supabase.from('users').select(SEL).eq('username', handle).maybeSingle();
+        user = data;
+      }
+    } else if (raw.includes('@')) {
+      // e-mail
+      const { data } = await supabase.from('users').select(SEL).ilike('email', raw).maybeSingle();
       user = data;
     } else {
-      const e164 = normalizeToE164(raw) || raw;
-      const digits = raw.replace(/\D/g, '');
-      const { data } = await supabase.from('users')
-        .select('id, email, phone, password_reset_version')
-        .or(`phone.eq.${e164},phone.eq.${digits}`)
-        .limit(1).maybeSingle();
-      user = data;
-    }
-
-    // Envia se achou; senão, responde ok mesmo assim (anti-enumeração).
-    if (user) {
-      const token = signResetToken(user.id, user.password_reset_version ?? 0);
-      if (user.phone) {
-        notifyPasswordReset(user.phone, token).catch((err) =>
-          console.error('[reset] whatsapp falhou:', err.message));
-      } else if (user.email) {
-        // Sem telefone → e-mail com o MESMO token e o MESMO link do WhatsApp.
-        //
-        // Antes aqui rodava `supabase.auth.resetPasswordForEmail`, um mecanismo
-        // completamente diferente: outro token, outro remetente, outra página.
-        // Eram duas formas de redefinir a mesma senha, e só a do WhatsApp
-        // passava pelas nossas regras — expiração de 30 min, escopo por
-        // propósito e o rate limit de /api/auth/reset-password. Agora os dois
-        // canais entregam o mesmo link e caem na mesma validação.
-        sendPasswordReset({ to: user.email, url: linkPasswordReset(token) })
-          .then((r) => {
-            // Hoje NÃO há provedor de e-mail configurado: o envio vira no-op e
-            // o cliente fica esperando uma mensagem que não sai. A resposta da
-            // API continua genérica (anti-enumeração), então o único lugar
-            // onde isso aparece é aqui. Sem este log, uma conta sem telefone
-            // some do funil sem deixar rastro.
-            if (r?.skipped) {
-              console.warn('[reset] conta %s não tem telefone e não há provedor de ' +
-                'e-mail configurado — NADA foi enviado. Redefina pelo admin.', user.id);
-            }
-          })
-          .catch((err) => console.error('[reset] email falhou:', err?.message));
-      } else {
-        console.warn('[reset] conta %s não tem telefone nem e-mail — nenhum canal ' +
-          'de recuperação disponível.', user.id);
+      // CPF (11) ou CNPJ (14): o documento pode estar gravado com máscara, então
+      // comparamos só os dígitos em memória (mesmo caminho do login do operador).
+      if (digits.length === 11 || digits.length === 14) {
+        const { data } = await supabase.from('users').select(SEL).not('document_number', 'is', null);
+        user = (data || []).find((u) => String(u.document_number || '').replace(/\D/g, '') === digits) || null;
+      }
+      // Telefone — também cobre o número de 11 dígitos que, na verdade, era um
+      // celular BR (DDD + 9) e não um CPF: só tenta aqui se o documento não bateu.
+      if (!user && digits.length >= 8) {
+        const e164 = normalizeToE164(raw) || raw;
+        const { data } = await supabase.from('users').select(SEL)
+          .or(`phone.eq.${e164},phone.eq.${digits}`).limit(1).maybeSingle();
+        user = data;
+      }
+      // Handle digitado sem o @ (texto puro, sem dígitos).
+      if (!user && !/\d/.test(raw)) {
+        const handle = normalizeUsername(raw);
+        if (handle) {
+          const { data } = await supabase.from('users').select(SEL).eq('username', handle).maybeSingle();
+          user = data;
+        }
       }
     }
-    // Resposta SEMPRE idêntica, exista a conta ou não. Devolver o canal real
-    // ('whatsapp' vs 'email') era um oráculo: dava para descobrir se um e-mail
-    // /telefone está cadastrado e se a conta tem WhatsApp, só olhando o retorno.
+
+    // Achou a conta → tenta entregar o link. O ADMIN só entra no circuito se o
+    // WhatsApp não sair (sem telefone ou Z-API desligada).
+    if (user) {
+      const token = signResetToken(user.id, user.password_reset_version ?? 0);
+      const link  = linkPasswordReset(token);
+
+      // 1) WhatsApp é o canal principal. Aguardamos para saber se SAIU — é isso
+      //    que decide se o admin precisa enviar manualmente.
+      let delivered = false;
+      if (user.phone) {
+        try {
+          const r = await notifyPasswordReset(user.phone, token);
+          delivered = !r?.skipped;
+        } catch (err) {
+          console.error('[reset] whatsapp falhou:', err?.message);
+        }
+      }
+
+      // 2) Sem WhatsApp, tenta e-mail com o MESMO link (hoje no-op sem provedor).
+      if (!delivered && user.email) {
+        sendPasswordReset({ to: user.email, url: link })
+          .then((r) => { if (r?.skipped) console.warn('[reset] conta %s sem provedor de e-mail — nada enviado.', user.id); })
+          .catch((err) => console.error('[reset] email falhou:', err?.message));
+      }
+
+      // 3) Não deu para entregar automaticamente → avisa os ADMINs (sininho do
+      //    painel + push) para enviarem o link manualmente pelo painel de
+      //    Usuários. NÃO embute o token na notificação: o admin gera um novo.
+      if (!delivered) {
+        const quem = user.full_name
+          || (user.username ? '@' + user.username : null)
+          || user.email
+          || (user.document_number ? `documento ${user.document_number}` : null)
+          || user.id;
+        await notifyAdmins({
+          templateKey: 'admin_reset_request',
+          title: 'Redefinição de senha pendente 🔐',
+          body: `${quem} pediu para redefinir a senha e não há WhatsApp para receber o link. Envie manualmente pelo painel de Usuários.`,
+        });
+      }
+    }
+    // Resposta SEMPRE idêntica, exista a conta ou não (anti-enumeração).
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos' });

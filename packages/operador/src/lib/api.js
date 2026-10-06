@@ -137,6 +137,10 @@ export const api = {
   login: (body) => request('/api/auth/login', { method: 'POST', body }),
   me:    () => request('/api/auth/me'),
 
+  // Recuperação de senha: o operador informa CPF/CNPJ; a API acha a conta e,
+  // se tiver WhatsApp, manda o link automático — senão avisa o admin.
+  forgotPassword: (body) => request('/api/auth/forgot-password', { method: 'POST', body }),
+
   // Painel operacional (Kanban)
   getOperational:       (params = {}) => request(`/api/admin/operational?${new URLSearchParams(params)}`),
   updateBookingStatus:  (id, body)    => request(`/api/bookings/${id}/status`, { method: 'PATCH', body }),

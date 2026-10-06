@@ -32,7 +32,7 @@ router.post('/wa-test', authenticate, requireAdmin, async (req, res) => {
 // Avisos internos (só fazem sentido no PWA do admin). Nos apps de
 // turista/operador eles são escondidos da central mesmo que o usuário tenha
 // os dois papéis na mesma conta.
-const ADMIN_ONLY_KEYS = ['admin_new_user', 'admin_payment_approved', 'admin_payment_rejected']
+const ADMIN_ONLY_KEYS = ['admin_new_user', 'admin_payment_approved', 'admin_payment_rejected', 'admin_reset_request']
 function filtrarPorApp(items, app) {
   if (app === 'turista' || app === 'operador') {
     return items.filter((n) => !ADMIN_ONLY_KEYS.includes(n.template_key))
