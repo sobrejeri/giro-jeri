@@ -197,10 +197,10 @@ function fileToResizedDataUrl(file, max = 1600, quality = 0.82) {
   })
 }
 
-function MaskedInput({ label, value, onChange, placeholder }) {
+function MaskedInput({ label, value, onChange, placeholder, className = '' }) {
   const [show, setShow] = useState(false)
   return (
-    <div className="relative">
+    <div className={`relative ${className}`}>
       <Input
         label={label}
         type={show ? 'text' : 'password'}
@@ -208,12 +208,14 @@ function MaskedInput({ label, value, onChange, placeholder }) {
         onChange={onChange}
         placeholder={placeholder}
         className="pr-10"
+        autoComplete="off"
       />
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
         className="absolute right-3 bottom-2.5 text-gray-500 hover:text-gray-300 transition-colors"
         tabIndex={-1}
+        aria-label={show ? 'Esconder' : 'Mostrar'}
       >
         {show ? <EyeOff size={15} /> : <Eye size={15} />}
       </button>
@@ -1242,7 +1244,7 @@ function TabPagamentos({ settings, qc }) {
                 ))}
               </Select>
               <div className="col-span-2">
-                <Input
+                <MaskedInput
                   label="Chave PIX"
                   value={form.payment_admin_pix_key}
                   onChange={(e) => set('payment_admin_pix_key', e.target.value)}
@@ -1268,7 +1270,7 @@ function TabPagamentos({ settings, qc }) {
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
+              <MaskedInput
                 label="Número da conta"
                 placeholder="00000-0"
                 value={form.payment_admin_bank_account}
@@ -1284,7 +1286,7 @@ function TabPagamentos({ settings, qc }) {
                 ))}
               </Select>
             </div>
-            <Input
+            <MaskedInput
               label="CPF / CNPJ do titular"
               placeholder="00.000.000/0001-00"
               value={form.payment_admin_bank_document}
