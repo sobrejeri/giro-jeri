@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { z }      from 'zod';
 import { supabase }                   from '../supabase.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
-import { notifyTourists } from '../services/notify.js';
+import { notifyTourists, podeNotificarPublicacao } from '../services/notify.js';
 
 const router = Router();
 
@@ -237,6 +237,7 @@ router.post('/live', authenticate, requireOperator, async (req, res, next) => {
         const { data: autor } = await supabase.from('users')
           .select('full_name, user_type').eq('id', req.user.id).maybeSingle();
         const nome = autor?.user_type === 'admin' ? 'Turiva' : (autor?.full_name || 'Operador');
+        if (!(await podeNotificarPublicacao(req.user.id, autor?.user_type === 'admin'))) return;
         await notifyTourists({
           title:       `Novo story de ${nome} 🌴`,
           body:        body.caption || `${nome} publicou um story. Veja antes de expirar!`,
@@ -363,6 +364,7 @@ router.post('/highlights/:id/items', donoDoHighlight, async (req, res, next) => 
         const { data: autor } = await supabase.from('users')
           .select('full_name, user_type').eq('id', req.user.id).maybeSingle();
         const nome = autor?.user_type === 'admin' ? 'Turiva' : (autor?.full_name || 'Operador');
+        if (!(await podeNotificarPublicacao(req.user.id, autor?.user_type === 'admin'))) return;
         const imagem = data.media_type === 'image' ? data.media_url : (hl.cover_image_url || null);
         await notifyTourists({
           title:       hl.title || `Novidade de ${nome} 🌴`,

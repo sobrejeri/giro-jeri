@@ -104,6 +104,28 @@ export async function notifyTourists({ title, body, image = null, url = null, te
   }
 }
 
+// Anti-flood: limita a 1 notificação de publicação por OPERADOR a cada 24h
+// (orçamento único entre feed/posters, destaques e stories). O admin (Turiva)
+// não entra no limite. Marca o último envio em system_settings. Devolve true
+// quando pode notificar (e já registra). Fail-open: em erro, deixa notificar.
+export async function podeNotificarPublicacao(operatorId, isAdmin) {
+  if (isAdmin) return true
+  if (!operatorId) return true
+  const key = `op_notify_last:${operatorId}`
+  try {
+    const { data } = await supabase.from('system_settings')
+      .select('setting_value').eq('setting_key', key).maybeSingle()
+    const last = data?.setting_value ? Date.parse(data.setting_value) : 0
+    if (last && Date.now() - last < 24 * 60 * 60 * 1000) return false
+    await supabase.from('system_settings')
+      .upsert({ setting_key: key, setting_value: new Date().toISOString() }, { onConflict: 'setting_key' })
+    return true
+  } catch (e) {
+    console.error('[notify] gate de publicação falhou (deixa passar):', e.message)
+    return true
+  }
+}
+
 // Notifica só os ADMINs ativos (avisos internos: novo cadastro, recebimento
 // aprovado/recusado). Respeita o toggle "ativa/desativada" do modelo no admin.
 export async function notifyAdmins({ bookingId = null, templateKey = null, title, body }) {

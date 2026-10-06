@@ -136,6 +136,8 @@ router.post('/', requireOperator, async (req, res, next) => {
         const { data: autor } = await supabase.from('users')
           .select('full_name, user_type').eq('id', req.user.id).maybeSingle();
         const nome = autor?.user_type === 'admin' ? 'Turiva' : (autor?.full_name || 'Operador');
+        const { podeNotificarPublicacao } = await import('../services/notify.js');
+        if (!(await podeNotificarPublicacao(req.user.id, autor?.user_type === 'admin'))) return;
         await notifyTourists({
           title:       data.title || `Novidade de ${nome} 🌴`,
           body:        data.body || `${nome} publicou na Descubra. Confira!`,
