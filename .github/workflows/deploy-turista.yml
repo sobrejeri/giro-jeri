@@ -27,7 +27,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # O domínio é público — o lugar dele é em Variables. Aceitar também um
       # Secret evita a falha mais chata daqui: `vars.` não enxerga o que foi
@@ -48,7 +48,7 @@ jobs:
           if [ -n "$DOMINIO" ]; then echo "Domínio próprio ativo."
           else echo "Sem domínio próprio — publicando em /giro-jeri/."; fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
 
