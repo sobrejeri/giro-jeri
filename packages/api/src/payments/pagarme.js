@@ -214,11 +214,48 @@ export async function createRecipient(user, apiKey, env = 'sandbox') {
     // A mensagem do Pagar.me é sobre os DADOS do operador ("document is
     // invalid") — acionável e não é segredo, então pode ir para ele. O corpo
     // completo, que pode trazer mais dado, fica no log.
-    console.error('[pagarme] criar recebedor falhou:', res.status, JSON.stringify(data).slice(0, 300))
-    throw new Error(data.message || `Pagar.me recusou o cadastro do recebedor (${res.status})`)
+    console.error('[pagarme] criar recebedor falhou:', res.status, JSON.stringify(data).slice(0, 500))
+    // "The request is invalid." vem SEM detalhe; os erros por campo ficam em
+    // `data.errors` ({ "campo": ["motivo"] }). Traduz o campo e junta à mensagem
+    // para o operador saber exatamente o que corrigir.
+    const detalhes = data?.errors && typeof data.errors === 'object'
+      ? Object.entries(data.errors)
+          .flatMap(([campo, msgs]) => (Array.isArray(msgs) ? msgs : [msgs]).map((m) => `${rotuloCampo(campo)}: ${m}`))
+          .join(' · ')
+      : ''
+    const base = data.message || `Pagar.me recusou o cadastro do recebedor (${res.status})`
+    throw new Error(detalhes ? `${base} — ${detalhes}` : base)
   }
 
   return data.id
+}
+
+// Traduz o caminho do campo que o Pagar.me devolve em `errors` para um rótulo
+// que o operador reconhece no formulário do perfil.
+function rotuloCampo(campo) {
+  const c = String(campo || '')
+  const mapa = {
+    'default_bank_account.account_number': 'Conta bancária (número)',
+    'default_bank_account.account_check_digit': 'Conta bancária (dígito)',
+    'default_bank_account.branch_number': 'Agência',
+    'default_bank_account.bank': 'Banco',
+    'default_bank_account.holder_document': 'CPF/CNPJ do titular da conta',
+    'default_bank_account.holder_name': 'Nome do titular da conta',
+    'default_bank_account': 'Conta bancária',
+    'document': 'CPF/CNPJ',
+    'register_information.birthdate': 'Data de nascimento',
+    'register_information.monthly_income': 'Faturamento mensal',
+    'register_information.professional_occupation': 'Profissão',
+    'register_information.mother_name': 'Nome da mãe',
+    'register_information.phone_numbers': 'Telefone',
+    'register_information.address': 'Endereço',
+    'register_information.annual_revenue': 'Faturamento anual',
+    'register_information.founding_date': 'Data de fundação',
+  }
+  if (mapa[c]) return mapa[c]
+  // Normaliza chaves tipo "register_information.address.zip_code".
+  for (const [k, v] of Object.entries(mapa)) if (c.startsWith(k + '.') || c.startsWith(k)) return v
+  return c
 }
 
 // Consulta o status ATUAL de um recebedor. Só leitura. Devolve apenas o que a
