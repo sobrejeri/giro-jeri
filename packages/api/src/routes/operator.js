@@ -17,7 +17,7 @@ import {
 } from '../services/whatsapp.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
 import { isMarketplaceConfigured } from '../services/mercadoPago.js';
-import { validateUsername } from '../lib/username.js';
+import { validateUsername } from '../lib/username.js'; // eslint-disable-line no-unused-vars
 import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
 
 // Porteiro do Mercado Pago (desativado): os repasses a operadores e motoristas
@@ -186,14 +186,28 @@ router.get('/partners', async (_req, res, next) => {
 // GET /api/operator/:id/public — perfil público do operador (aberto a todos)
 router.get('/:id/public', async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('users')
-      .select('id, full_name, profile_photo_url, partner_slug, user_type, is_active')
+      .select('id, full_name, username, profile_photo_url, partner_slug, user_type, is_active')
       .eq('id', req.params.id)
       .eq('user_type', 'operator')
       .maybeSingle();
+    if (error?.code === '42703') {
+      ({ data, error } = await supabase
+        .from('users')
+        .select('id, full_name, profile_photo_url, partner_slug, user_type, is_active')
+        .eq('id', req.params.id).eq('user_type', 'operator').maybeSingle());
+    }
     if (error) throw error;
     if (!data || data.is_active === false) return res.status(404).json({ error: 'Operador não encontrado' });
+    // Garante o @ do operador para o perfil público exibi-lo.
+    if (!data.username) {
+      try {
+        const { garantirUsername } = await import('../services/usernameService.js');
+        const gerado = await garantirUsername(data.id);
+        if (gerado) data.username = gerado;
+      } catch { /* melhor-esforço */ }
+    }
 
     let rating_average = null, rating_count = 0;
     try {
@@ -329,6 +343,16 @@ router.get('/profile', async (req, res, next) => {
       data = retry.data; error = retry.error;
     }
     if (error) throw error;
+
+    // Garante um @ para o operador: se ainda não tiver, gera a partir do nome
+    // (não conta no limite de trocas). Assim os posts/stories já saem com o @.
+    if (data && !data.username) {
+      try {
+        const { garantirUsername } = await import('../services/usernameService.js');
+        const gerado = await garantirUsername(req.user.id);
+        if (gerado) data.username = gerado;
+      } catch { /* melhor-esforço */ }
+    }
     // recipient_kyc (JSONB) vem à parte e tolera a coluna ausente (a migração 107
     // pode não ter rodado): sem ela, o perfil volta sem o bloco de KYC.
     let recipient_kyc = null;
@@ -344,24 +368,23 @@ router.patch('/profile', async (req, res, next) => {
   try {
     const body = profileSchema.parse(req.body);
 
-    // Nome de usuário: é o que permite ao operador ENTRAR no app de turista
-    // (login por @usuário) e ver o próprio perfil lá. Valida formato e unicidade
-    // (case-insensitive); vazio limpa; guardado em minúsculas. Mesma regra do
-    // PATCH /api/auth/me, para não haver duas definições divergentes.
+    // Nome de usuário: é o que aparece nos posts/stories e permite ENTRAR no app
+    // de turista. Valida formato, unicidade (case-insensitive) e o LIMITE de 2
+    // trocas a cada 15 dias. Vazio limpa. Mesma regra em todo lugar.
     if (body.username !== undefined) {
       if (body.username === null || body.username.trim() === '') {
         body.username = null;
       } else {
-        const { username, error: uErr } = validateUsername(body.username);
-        if (uErr) return res.status(400).json({ error: uErr });
-        const { data: taken, error: tErr } = await supabase
-          .from('users').select('id').eq('username', username).neq('id', req.user.id).maybeSingle();
-        if (tErr?.code === '42703') {
-          return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 061 (coluna username) no banco.' });
-        }
-        if (tErr) return res.status(500).json({ error: tErr.message });
-        if (taken) return res.status(409).json({ error: 'Este nome de usuário já está em uso.' });
-        body.username = username;
+        const { data: atualU } = await supabase
+          .from('users').select('username, username_changes').eq('id', req.user.id).maybeSingle();
+        const { prepararTrocaUsername } = await import('../services/usernameService.js');
+        const r = await prepararTrocaUsername({
+          userId: req.user.id, novoRaw: body.username,
+          atual: atualU?.username || null, changesAtuais: atualU?.username_changes || [],
+        });
+        if (r.error) return res.status(r.status || 400).json({ error: r.error });
+        body.username = r.username;
+        if (r.changes) body.username_changes = r.changes;
       }
     }
 
@@ -406,12 +429,23 @@ router.patch('/profile', async (req, res, next) => {
     // (migração 107) e não pode derrubar o salvamento do resto do perfil.
     const { recipient_kyc, ...baseBody } = body;
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('users')
       .update({ ...baseBody, updated_at: new Date().toISOString() })
       .eq('id', req.user.id)
       .select(PROFILE_FIELDS)
       .single();
+    // username_changes pode não existir (migration 120 pendente) → regrava sem
+    // ela (a troca acontece, só o histórico do limite não é guardado).
+    if (error && (error.code === '42703' || error.code === 'PGRST204') && 'username_changes' in baseBody) {
+      const { username_changes, ...semHist } = baseBody; // eslint-disable-line no-unused-vars
+      ({ data, error } = await supabase
+        .from('users')
+        .update({ ...semHist, updated_at: new Date().toISOString() })
+        .eq('id', req.user.id)
+        .select(PROFILE_FIELDS)
+        .single());
+    }
     if (error) throw error;
 
     let kycSalvo = null;

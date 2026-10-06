@@ -151,7 +151,7 @@ router.get('/live', async (_req, res, next) => {
     const nowIso = new Date().toISOString();
     const { data, error } = await supabase
       .from('avatar_stories')
-      .select('id, media_url, media_type, caption, duration_sec, created_at, expires_at, created_by_user_id, author:created_by_user_id ( full_name, profile_photo_url, user_type )')
+      .select('id, media_url, media_type, caption, duration_sec, created_at, expires_at, created_by_user_id, author:created_by_user_id ( full_name, username, profile_photo_url, user_type )')
       .gt('expires_at', nowIso)
       .order('created_at', { ascending: true });
     if (error) throw error;
@@ -173,6 +173,7 @@ router.get('/live', async (_req, res, next) => {
       author_id:     s.created_by_user_id || null,
       author_type:   author?.user_type || null,
       author_name:   author?.user_type === 'admin' ? 'Turiva' : (author?.full_name || 'Operador'),
+      author_username: author?.user_type === 'admin' ? null : (author?.username || null),
       author_avatar: author?.profile_photo_url || null,
     })));
   } catch (err) { next(err); }
@@ -220,6 +221,7 @@ router.get('/live/:id/viewers', authenticate, requireOperator, async (req, res, 
 router.post('/live', authenticate, requireOperator, async (req, res, next) => {
   try {
     const body = liveStorySchema.parse(req.body);
+    try { const { garantirUsername } = await import('../services/usernameService.js'); await garantirUsername(req.user.id); } catch { /* best-effort */ }
     const { data, error } = await inserirComGeo('avatar_stories', {
       media_url:    body.media_url,
       media_type:   body.media_type || 'image',

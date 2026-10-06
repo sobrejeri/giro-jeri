@@ -46,7 +46,7 @@ router.get('/', async (_req, res, next) => {
       supabase.from('post_likes').select('post_id').in('post_id', ids),
       supabase.from('post_comments').select('post_id').in('post_id', ids),
       authorIds.length
-        ? supabase.from('users').select('id, full_name, profile_photo_url, user_type').in('id', authorIds)
+        ? supabase.from('users').select('id, full_name, username, profile_photo_url, user_type').in('id', authorIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -63,6 +63,7 @@ router.get('/', async (_req, res, next) => {
       comment_count: commentMap[p.id] || 0,
       author_avatar: authorMap[p.created_by_user_id]?.profile_photo_url || null,
       author_name:   authorMap[p.created_by_user_id]?.full_name || null,
+      author_username: authorMap[p.created_by_user_id]?.username || null,
       author_type:   authorMap[p.created_by_user_id]?.user_type || null,
     })));
   } catch (err) { next(err); }
@@ -126,6 +127,8 @@ router.post('/', requireOperator, async (req, res, next) => {
   try {
     const body = postSchema.parse(req.body);
     const payload = clean({ ...body, created_by_user_id: req.user.id });
+    // Garante o @ do operador antes de publicar (posts saem com o @).
+    try { const { garantirUsername } = await import('../services/usernameService.js'); await garantirUsername(req.user.id); } catch { /* best-effort */ }
     const { data, error } = await supabase
       .from('feed_posts').insert(payload).select().single();
     if (error) throw error;

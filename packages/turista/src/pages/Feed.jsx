@@ -437,9 +437,11 @@ export function PostCard({ post, liked, onLike, user, isAdmin, canEdit, onEdit, 
   const isPromo  = post.kind === 'promo'
   const dateLabel = fmtDate(post.event_date)
   const validLabel = fmtDate(post.valid_until)
-  // Autor do post: operador (nome próprio) ou Turiva (admin).
+  // Autor do post: operador (@username, com fallback no nome) ou Turiva (admin).
   const isOperatorPost = post.author_type === 'operator'
-  const authorName = isOperatorPost ? (post.author_name || 'Operador') : 'Turiva'
+  const authorName = isOperatorPost
+    ? (post.author_username ? `@${post.author_username}` : (post.author_name || 'Operador'))
+    : 'Turiva'
   // Anel de story do AUTOR do post (Turiva ou o operador que publicou).
   const grupoAutor = grupoDe(post.created_by_user_id)
   const hasUnseen  = grupoAutor?.hasUnseen

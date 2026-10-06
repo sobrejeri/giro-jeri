@@ -16,6 +16,21 @@ export function normalizeUsername(raw) {
   return String(raw ?? '').trim().toLowerCase();
 }
 
+// Gera uma BASE de username válida a partir do nome completo: sem acentos,
+// minúsculas, separadores viram ponto, 3–24 caracteres (deixa espaço para um
+// sufixo numérico de desempate). Não garante unicidade — isso é feito no banco.
+export function slugUsername(fullName) {
+  let s = String(fullName ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')  // qualquer separador → ponto
+    .replace(/\.+/g, '.')         // colapsa pontos
+    .replace(/^\.+|\.+$/g, '');   // tira pontos das pontas
+  s = s.slice(0, 24);
+  while (s.length < 3) s += '0';  // garante o mínimo de 3
+  return s;
+}
+
 // Retorna { username } quando válido, ou { error } com mensagem amigável (pt).
 export function validateUsername(raw) {
   const u = normalizeUsername(raw);

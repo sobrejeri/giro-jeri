@@ -692,8 +692,9 @@ export default function Perfil() {
                 maxLength={30}
               />
               <p className="text-xs text-gray-400 mt-1">
-                Necessário para entrar no app de turista (turivabrasil.com) com seu usuário e ver seu perfil por lá.
-                Letras, números, ponto e sublinhado — de 3 a 30 caracteres.
+                É o <b>@</b> que aparece nos seus posts, stories e no seu perfil. Também serve para entrar no app
+                de turista (turivabrasil.com). Letras, números, ponto e sublinhado — de 3 a 30 caracteres.
+                Pode ser alterado até <b>2 vezes a cada 15 dias</b> e não pode repetir o de outro usuário.
               </p>
             </div>
 

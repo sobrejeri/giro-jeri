@@ -88,6 +88,7 @@ export default function PerfilOperador() {
                 </div>
               </div>
               <p className="font-bold text-gray-900 text-[15px] mt-3">{op.full_name}</p>
+              {op.username && <p className="text-[12.5px] text-brand font-semibold">@{op.username}</p>}
               <p className="text-[12.5px] text-gray-500">Operador parceiro · Jericoacoara</p>
 
               {/* Nota do operador (avaliações recebidas dos clientes) — visível

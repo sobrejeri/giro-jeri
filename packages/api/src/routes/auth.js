@@ -688,20 +688,16 @@ router.patch('/me', authenticate, async (req, res, next) => {
       if (body.username === null || body.username.trim() === '') {
         body.username = null;
       } else {
-        const { username, error: uErr } = validateUsername(body.username);
-        if (uErr) return res.status(400).json({ error: uErr });
-        const { data: taken, error: tErr } = await supabase
-          .from('users')
-          .select('id')
-          .eq('username', username)
-          .neq('id', req.user.id)
-          .maybeSingle();
-        if (tErr?.code === '42703') {
-          return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 061 (coluna username) no banco.' });
-        }
-        if (tErr) return res.status(500).json({ error: tErr.message });
-        if (taken) return res.status(409).json({ error: 'Este nome de usuário já está em uso.' });
-        body.username = username;
+        const { data: atualU } = await supabase
+          .from('users').select('username, username_changes').eq('id', req.user.id).maybeSingle();
+        const { prepararTrocaUsername } = await import('../services/usernameService.js');
+        const r = await prepararTrocaUsername({
+          userId: req.user.id, novoRaw: body.username,
+          atual: atualU?.username || null, changesAtuais: atualU?.username_changes || [],
+        });
+        if (r.error) return res.status(r.status || 400).json({ error: r.error });
+        body.username = r.username;
+        if (r.changes) body.username_changes = r.changes;
       }
     }
 
@@ -723,7 +719,7 @@ router.patch('/me', authenticate, async (req, res, next) => {
       body.bank_document = body.bank_document.replace(/\D/g, '');
     }
 
-    const { data: updated, error } = await supabase
+    let { data: updated, error } = await supabase
       .from('users')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', req.user.id)
@@ -732,6 +728,21 @@ router.patch('/me', authenticate, async (req, res, next) => {
                pix_key_type, pix_key, bank_name, bank_agency,
                bank_account_number, bank_account_type, bank_document`)
       .single();
+
+    // username_changes pode não existir (migration 120 pendente) → regrava sem
+    // ela; a troca acontece, só o histórico do limite não é guardado.
+    if (error && (error.code === '42703' || error.code === 'PGRST204') && 'username_changes' in body) {
+      const { username_changes, ...semHist } = body; // eslint-disable-line no-unused-vars
+      ({ data: updated, error } = await supabase
+        .from('users')
+        .update({ ...semHist, updated_at: new Date().toISOString() })
+        .eq('id', req.user.id)
+        .select(`id, full_name, email, phone, user_type, profile_photo_url,
+                 document_number, birth_date, language, preferred_region_id,
+                 pix_key_type, pix_key, bank_name, bank_agency,
+                 bank_account_number, bank_account_type, bank_document`)
+        .single());
+    }
 
     if (error) {
       // Corrida de unicidade do username (índice único) — mensagem amigável.
