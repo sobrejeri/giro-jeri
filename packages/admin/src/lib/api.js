@@ -150,6 +150,7 @@ export const api = {
   // que impede e sugere desativar.
   deleteUser:        (id)          => request(`/api/admin/users/${id}`, { method: 'DELETE' }),
   resetUserPassword: (id, new_password) => request(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: { new_password } }),
+  sendUserResetLink: (id)          => request(`/api/admin/users/${id}/reset-link`, { method: 'POST' }),
   registerRecipient: (id)          => request(`/api/admin/users/${id}/register-recipient`, { method: 'POST', body: {} }),
   getAuthOrphans:    ()            => request('/api/admin/auth-orphans'),
   importAuthUser:    (body)        => request('/api/admin/import-auth-user', { method: 'POST', body }),

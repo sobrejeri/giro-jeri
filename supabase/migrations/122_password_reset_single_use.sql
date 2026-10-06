@@ -1,0 +1,13 @@
+-- 122 — Link de redefinição de senha de USO ÚNICO
+--
+-- O token de reset era um JWT de 30 min REUTILIZÁVEL até expirar. Agora cada
+-- usuário tem uma "versão" de reset: o token carrega a versão vigente no
+-- momento em que foi gerado; ao redefinir a senha com sucesso, a versão é
+-- incrementada — o que invalida aquele link (e qualquer outro da mesma versão).
+-- Resultado: o link vale por UMA tentativa.
+--
+-- Tokens antigos (sem a claim de versão) seguem válidos até expirar (30 min),
+-- para não quebrar links já enviados no momento do deploy.
+--
+-- Aplicar manualmente no Supabase (SQL Editor). Idempotente.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_version INT NOT NULL DEFAULT 0;

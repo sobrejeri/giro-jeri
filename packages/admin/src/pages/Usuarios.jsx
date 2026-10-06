@@ -4,6 +4,7 @@ import {
   Search, Pencil, ChevronLeft, ChevronRight, UserPlus, Landmark, CheckCircle2, AlertCircle,
   Ban, Trash2,
   KeyRound, Copy, UserCheck, Settings2, ToggleRight, ToggleLeft, Car, Users,
+  Send, Link2,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
@@ -72,6 +73,7 @@ export default function Usuarios() {
   const [createForm, setCreateForm] = useState(CREATE_EMPTY)
   const [resetPwd, setResetPwd]     = useState('')
   const [resetCopied, setResetCopied] = useState(false)
+  const [linkCopied, setLinkCopied]   = useState(false)
   const [importForm, setImportForm]   = useState(IMPORT_EMPTY)
   const qc                            = useQueryClient()
 
@@ -160,6 +162,13 @@ export default function Usuarios() {
     },
   })
 
+  // Gera um link de redefinição de uso único e tenta enviá-lo por WhatsApp.
+  // Resposta: { ok, whatsapp_sent, has_phone, link }. Quando o WhatsApp não
+  // sai (Z-API desligada ou sem telefone), o admin copia o link do resultado.
+  const sendLinkMut = useMutation({
+    mutationFn: (id) => api.sendUserResetLink(id),
+  })
+
   const recipientMut = useMutation({
     mutationFn: (id) => api.registerRecipient(id),
     onSuccess: (result) => {
@@ -234,7 +243,17 @@ export default function Usuarios() {
     setModal({ mode: 'reset', user: u })
     setResetPwd(genPassword())
     setResetCopied(false)
+    setLinkCopied(false)
     resetMut.reset()
+    sendLinkMut.reset()
+  }
+
+  function copyResetLink() {
+    const link = sendLinkMut.data?.link
+    if (!link) return
+    navigator.clipboard?.writeText(link)
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 1500)
   }
 
   function handleResetSubmit(e) {
@@ -849,7 +868,7 @@ export default function Usuarios() {
         size="sm"
       >
         {modal?.mode === 'reset' && (
-          <form onSubmit={handleResetSubmit} className="space-y-4">
+          <div className="space-y-4">
             <div className="bg-gray-900 rounded-lg p-3 text-sm">
               <p className="font-medium text-gray-200">{modal.user.full_name}</p>
               <p className="text-gray-500 text-xs">
@@ -859,48 +878,112 @@ export default function Usuarios() {
               </p>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">Nova senha</label>
-              <div className="flex gap-2">
-                <input
-                  value={resetPwd}
-                  onChange={(e) => setResetPwd(e.target.value)}
-                  className="flex-1 h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 font-mono focus:outline-none focus:border-brand"
-                  minLength={6}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={copyPwd}
-                  title="Copiar"
-                  className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-gray-400 hover:text-brand"
-                >
-                  {resetCopied ? <CheckCircle2 size={14} className="text-green-400" /> : <Copy size={14} />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setResetPwd(genPassword())}
-                  className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-xs text-gray-400 hover:text-brand"
-                >
-                  Gerar
-                </button>
+            {/* Opção 1 — link de uso único por WhatsApp (o usuário define a própria senha) */}
+            <div className="border border-gray-700 rounded-xl p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Send size={13} className="text-gray-500" />
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Enviar link por WhatsApp</p>
               </div>
-              <p className="text-[10px] text-gray-500 mt-1">Mínimo 6 caracteres. Copie e envie ao usuário por canal seguro.</p>
+              <p className="text-[11px] text-gray-500">
+                Gera um link de uso único (vale 30 min) para o próprio usuário criar a senha — enviado por WhatsApp quando há telefone cadastrado.
+              </p>
+
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full gap-1.5"
+                onClick={() => sendLinkMut.mutate(modal.user.id)}
+                disabled={sendLinkMut.isPending}
+              >
+                <Send size={13} /> {sendLinkMut.isPending ? 'Gerando…' : 'Gerar e enviar link'}
+              </Button>
+
+              {sendLinkMut.isError && (
+                <p className="text-sm text-red-400">{sendLinkMut.error?.message || 'Erro ao gerar link'}</p>
+              )}
+              {sendLinkMut.isSuccess && (
+                <div className="space-y-2">
+                  <p className="text-sm text-green-400 bg-green-900/20 px-3 py-2 rounded-lg">
+                    {sendLinkMut.data?.whatsapp_sent
+                      ? 'Link enviado por WhatsApp.'
+                      : sendLinkMut.data?.has_phone
+                        ? 'WhatsApp indisponível — copie e envie o link manualmente.'
+                        : 'Usuário sem telefone — copie e envie o link manualmente.'}
+                  </p>
+                  {sendLinkMut.data?.link && (
+                    <div className="flex gap-2">
+                      <input
+                        readOnly
+                        value={sendLinkMut.data.link}
+                        onFocus={(e) => e.target.select()}
+                        className="flex-1 h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-xs text-gray-300 font-mono focus:outline-none focus:border-brand"
+                      />
+                      <button
+                        type="button"
+                        onClick={copyResetLink}
+                        title="Copiar link"
+                        className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-gray-400 hover:text-brand"
+                      >
+                        {linkCopied ? <CheckCircle2 size={14} className="text-green-400" /> : <Link2 size={14} />}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {resetMut.isError && (
-              <p className="text-sm text-red-400">{resetMut.error?.message || 'Erro ao redefinir'}</p>
-            )}
-            {resetMut.isSuccess && (
-              <p className="text-sm text-green-400 bg-green-900/20 px-3 py-2 rounded-lg">
-                Senha atualizada. Envie a nova senha ao usuário.
-              </p>
-            )}
+            {/* divisor */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-700" />
+              <span className="text-[10px] uppercase tracking-wide text-gray-600">ou defina agora</span>
+              <div className="flex-1 h-px bg-gray-700" />
+            </div>
 
-            <Button type="submit" className="w-full" disabled={resetMut.isPending}>
-              {resetMut.isPending ? 'Atualizando…' : 'Confirmar Nova Senha'}
-            </Button>
-          </form>
+            {/* Opção 2 — admin define a senha na hora */}
+            <form onSubmit={handleResetSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">Nova senha</label>
+                <div className="flex gap-2">
+                  <input
+                    value={resetPwd}
+                    onChange={(e) => setResetPwd(e.target.value)}
+                    className="flex-1 h-9 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 font-mono focus:outline-none focus:border-brand"
+                    minLength={6}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={copyPwd}
+                    title="Copiar"
+                    className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-gray-400 hover:text-brand"
+                  >
+                    {resetCopied ? <CheckCircle2 size={14} className="text-green-400" /> : <Copy size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetPwd(genPassword())}
+                    className="px-3 rounded-lg border border-gray-700 bg-gray-900 text-xs text-gray-400 hover:text-brand"
+                  >
+                    Gerar
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">Mínimo 6 caracteres. Copie e envie ao usuário por canal seguro.</p>
+              </div>
+
+              {resetMut.isError && (
+                <p className="text-sm text-red-400">{resetMut.error?.message || 'Erro ao redefinir'}</p>
+              )}
+              {resetMut.isSuccess && (
+                <p className="text-sm text-green-400 bg-green-900/20 px-3 py-2 rounded-lg">
+                  Senha atualizada. Envie a nova senha ao usuário.
+                </p>
+              )}
+
+              <Button type="submit" className="w-full" disabled={resetMut.isPending}>
+                {resetMut.isPending ? 'Atualizando…' : 'Confirmar Nova Senha'}
+              </Button>
+            </form>
+          </div>
         )}
       </Modal>
 

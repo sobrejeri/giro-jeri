@@ -17,9 +17,11 @@ function b64urlDecode(str) {
 }
 const HEADER_B64 = b64url(Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
 
-export function signResetToken(userId) {
+// `version` é a versão de reset do usuário no momento da geração (uso único):
+// ao redefinir a senha, a versão é incrementada e este token deixa de valer.
+export function signResetToken(userId, version = 0) {
   const now = Math.floor(Date.now() / 1000);
-  const claims = { purpose: 'pwd_reset', user_id: userId, iat: now, exp: now + 30 * 60 };
+  const claims = { purpose: 'pwd_reset', user_id: userId, v: version, iat: now, exp: now + 30 * 60 };
   const body = b64url(Buffer.from(JSON.stringify(claims)));
   const data = `${HEADER_B64}.${body}`;
   const sig  = b64url(crypto.createHmac('sha256', SECRET()).update(data).digest());
@@ -40,5 +42,7 @@ export function verifyResetToken(token) {
   catch { const e = new Error('Token malformado'); e.status = 400; throw e; }
   if (claims.purpose !== 'pwd_reset') { const e = new Error('Token inválido'); e.status = 400; throw e; }
   if (claims.exp < Math.floor(Date.now() / 1000)) { const e = new Error('Link expirado — peça um novo.'); e.status = 410; throw e; }
-  return { user_id: claims.user_id };
+  // `v` ausente = token legado (antes do uso único): devolve null, e o
+  // reset-password pula a checagem de versão para não quebrar links já enviados.
+  return { user_id: claims.user_id, v: typeof claims.v === 'number' ? claims.v : null };
 }

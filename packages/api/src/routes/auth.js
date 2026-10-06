@@ -626,13 +626,13 @@ router.post('/forgot-password', async (req, res, next) => {
     let user = null;
     if (isEmail) {
       const { data } = await supabase.from('users')
-        .select('id, email, phone').ilike('email', raw).maybeSingle();
+        .select('id, email, phone, password_reset_version').ilike('email', raw).maybeSingle();
       user = data;
     } else {
       const e164 = normalizeToE164(raw) || raw;
       const digits = raw.replace(/\D/g, '');
       const { data } = await supabase.from('users')
-        .select('id, email, phone')
+        .select('id, email, phone, password_reset_version')
         .or(`phone.eq.${e164},phone.eq.${digits}`)
         .limit(1).maybeSingle();
       user = data;
@@ -640,7 +640,7 @@ router.post('/forgot-password', async (req, res, next) => {
 
     // Envia se achou; senão, responde ok mesmo assim (anti-enumeração).
     if (user) {
-      const token = signResetToken(user.id);
+      const token = signResetToken(user.id, user.password_reset_version ?? 0);
       if (user.phone) {
         notifyPasswordReset(user.phone, token).catch((err) =>
           console.error('[reset] whatsapp falhou:', err.message));
@@ -695,11 +695,22 @@ router.post('/reset-password', async (req, res, next) => {
     catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
 
     const { data: profile } = await supabase.from('users')
-      .select('id, auth_id, email').eq('id', claims.user_id).maybeSingle();
+      .select('id, auth_id, email, password_reset_version').eq('id', claims.user_id).maybeSingle();
     if (!profile?.auth_id) return res.status(404).json({ error: 'Conta não encontrada.' });
+
+    // Uso único: o token carrega a versão de reset vigente na geração. Se não
+    // bate com a atual, o link já foi usado (ou foi gerado um novo depois).
+    // Token legado (v=null, antes do deploy) pula a checagem.
+    if (claims.v != null && claims.v !== (profile.password_reset_version ?? 0)) {
+      return res.status(410).json({ error: 'Este link já foi usado. Peça um novo.' });
+    }
 
     const { error } = await supabase.auth.admin.updateUserById(profile.auth_id, { password: new_password });
     if (error) throw error;
+    // Invalida o link usado, incrementando a versão de reset do usuário.
+    await supabase.from('users')
+      .update({ password_reset_version: (profile.password_reset_version ?? 0) + 1 })
+      .eq('id', profile.id);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

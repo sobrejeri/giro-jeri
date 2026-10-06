@@ -184,7 +184,11 @@ test('e-mail e WhatsApp entregam EXATAMENTE o mesmo link', async () => {
 test('o token do e-mail passa pela MESMA validação — 30 min e escopo de propósito', () => {
   const id = '22222222-2222-2222-2222-222222222222'
   const token = signResetToken(id)
-  assert.deepEqual(verifyResetToken(token), { user_id: id })
+  // Além do user_id, o token agora carrega a VERSÃO de reset (uso único):
+  // sem versão explícita, é a versão 0.
+  assert.deepEqual(verifyResetToken(token), { user_id: id, v: 0 })
+  // A versão carimbada sobrevive à verificação (é o que o reset-password confere).
+  assert.deepEqual(verifyResetToken(signResetToken(id, 3)), { user_id: id, v: 3 })
   // Token adulterado é recusado
   assert.throws(() => verifyResetToken(token.slice(0, -2) + 'xx'), /inválido|malformado/i)
   assert.throws(() => verifyResetToken('nao.e.token'), /inválido|malformado/i)

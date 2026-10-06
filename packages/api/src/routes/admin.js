@@ -486,6 +486,44 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) =>
   }
 });
 
+// ── POST /api/admin/users/:id/reset-link ───────────────
+// Gera um link de redefinição de senha de USO ÚNICO e envia para o WhatsApp do
+// usuário — o próprio usuário cria a senha nova (com confirmação) na página de
+// reset. É o caminho self-service; o reset manual (acima) continua disponível.
+// Devolve também o link, para o admin copiar e enviar por outro canal se
+// o WhatsApp não estiver configurado.
+router.post('/users/:id/reset-link', requireAdmin, async (req, res, next) => {
+  try {
+    const { data: target } = await supabase
+      .from('users').select('id, phone, full_name, password_reset_version')
+      .eq('id', req.params.id).maybeSingle();
+    if (!target?.id) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const { signResetToken } = await import('../lib/resetToken.js');
+    const { notifyPasswordReset, linkPasswordReset } = await import('../services/whatsapp.js');
+    const token = signResetToken(target.id, target.password_reset_version ?? 0);
+
+    let whatsappSent = false;
+    if (target.phone) {
+      try {
+        const r = await notifyPasswordReset(target.phone, token);
+        whatsappSent = !r?.skipped;
+      } catch (e) {
+        console.error('[reset-link] whatsapp falhou (ignorado):', e?.message);
+      }
+    }
+
+    await supabase.from('audit_logs').insert({
+      user_id:     req.user.id,
+      entity_type: 'users',
+      entity_id:   req.params.id,
+      action_type: 'reset_link_sent',
+    });
+
+    res.json({ ok: true, whatsapp_sent: whatsappSent, has_phone: !!target.phone, link: linkPasswordReset(token) });
+  } catch (err) { next(err); }
+});
+
 // ── DELETE /api/admin/users/:id ────────────────────────
 // Apagar de vez, e só quando é seguro.
 //
