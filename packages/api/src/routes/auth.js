@@ -395,13 +395,49 @@ router.post('/login', async (req, res, next) => {
     // Usa client scoped ao token do usuário para que RLS passe corretamente
     const sc = userScopedClient(data.session.access_token);
 
-    // Carrega perfil
-    let { data: profile, error: pErr1 } = await sc
-      .from('users')
-      .select(`${PROFILE_COLS}, email_verified, phone_verified`)
-      .eq('auth_id', data.user.id)
-      .maybeSingle();
-    if (pErr1) console.error('[login] auth_id lookup error', pErr1);
+    // Vincula o auth_id do token ao perfil, de forma IDEMPOTENTE e à prova da
+    // constraint UNIQUE(auth_id): se outra linha estiver segurando este auth_id
+    // (resíduo de vínculo indevido), libera-a antes. Sem isso o UPDATE falha
+    // calado, o auth_id fica inconsistente e o painel entra em loop de 401.
+    const curarAuthId = async (rowId) => {
+      try {
+        await supabase.from('users').update({ auth_id: null }).eq('auth_id', data.user.id).neq('id', rowId);
+        const { error: upErr } = await supabase.from('users').update({ auth_id: data.user.id }).eq('id', rowId);
+        if (upErr) console.error('[login] heal auth_id falhou id=%s err=%s', rowId, upErr.message);
+      } catch (e) { console.error('[login] heal auth_id exceção', e?.message); }
+    };
+
+    let profile = null;
+
+    // Login por DOCUMENTO (operador/admin): resolve pelo número comparando só os
+    // dígitos (o document_number pode estar salvo com máscara, então .eq() exato
+    // falharia) e força o vínculo correto do auth_id.
+    if (body.cnpj) {
+      const docDigits = String(body.cnpj).replace(/\D/g, '');
+      const { data: cands } = await supabase
+        .from('users')
+        .select(`${PROFILE_COLS}, auth_id, email_verified, phone_verified`)
+        .in('user_type', ['operator', 'admin'])
+        .not('document_number', 'is', null);
+      const match = (cands || []).find(
+        (u) => String(u.document_number || '').replace(/\D/g, '') === docDigits,
+      );
+      if (match) {
+        profile = match;
+        if (match.auth_id !== data.user.id) await curarAuthId(match.id);
+      }
+    }
+
+    // Caminho padrão (e-mail/usuário/telefone): perfil pelo auth_id do token.
+    if (!profile) {
+      const { data: byAuth, error: pErr1 } = await sc
+        .from('users')
+        .select(`${PROFILE_COLS}, email_verified, phone_verified`)
+        .eq('auth_id', data.user.id)
+        .maybeSingle();
+      if (pErr1) console.error('[login] auth_id lookup error', pErr1);
+      if (byAuth) profile = byAuth;
+    }
 
     const fallbackEmail = authEmail || data.user.email;
     if (!profile && fallbackEmail) {
@@ -413,21 +449,7 @@ router.post('/login', async (req, res, next) => {
       if (pErr2) console.error('[login] email lookup error', pErr2);
       if (byEmail) {
         profile = byEmail;
-        await sc.from('users').update({ auth_id: data.user.id }).eq('id', byEmail.id);
-      }
-    }
-
-    if (!profile && body.cnpj) {
-      const cnpjDigits = body.cnpj.replace(/\D/g, '');
-      const { data: byCnpj, error: pErr3 } = await supabase
-        .from('users')
-        .select(`${PROFILE_COLS}, email_verified, phone_verified`)
-        .eq('document_number', cnpjDigits)
-        .maybeSingle();
-      if (pErr3) console.error('[login] cnpj lookup error', pErr3);
-      if (byCnpj) {
-        profile = byCnpj;
-        await supabase.from('users').update({ auth_id: data.user.id }).eq('id', byCnpj.id);
+        await curarAuthId(byEmail.id);
       }
     }
 
