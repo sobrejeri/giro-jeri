@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, Play, Star, Loader2, Store, Grid3x3, Plus, Check, ChevronDown, Flame } from 'lucide-react'
 import { api } from '../lib/api'
+import LiveAvatarStories from '../components/LiveAvatarStories'
 import { setPreferredOp } from '../lib/preferredOp'
 import { useCart } from '../contexts/CartContext'
 import { useRegion } from '../contexts/RegionContext'
@@ -108,11 +109,13 @@ export default function PerfilOperador() {
             {/* Cabeçalho */}
             <div className="bg-white rounded-2xl shadow-sm px-5 py-5">
               <div className="flex items-center gap-5">
-                <div className="w-[82px] h-[82px] rounded-full bg-brand/10 flex items-center justify-center overflow-hidden ring-2 ring-gray-100 shrink-0">
-                  {op.profile_photo_url
-                    ? <img src={op.profile_photo_url} alt={op.full_name} className="w-full h-full object-cover" />
-                    : <span className="text-brand font-bold text-[26px]">{(op.full_name || '?')[0]}</span>}
-                </div>
+                {/* Avatar com anel de story (24h): gradiente = story não visto,
+                    cinza = já visto. Toca para abrir. Usa o id DO OPERADOR. */}
+                <LiveAvatarStories
+                  ownerId={op.id}
+                  avatarUrl={op.profile_photo_url}
+                  initials={(op.full_name || '?')[0]}
+                />
                 <div className="flex-1 flex justify-around text-center">
                   <div>
                     <p className="text-[20px] font-extrabold text-gray-900 leading-none">{posts.length}</p>

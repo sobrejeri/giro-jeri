@@ -8,17 +8,25 @@ import LiveStoryComposer from './LiveStoryComposer'
 
 /**
  * LiveAvatarStories — foto do perfil com anel de story (24h), estilo Instagram.
- * Toca no avatar → abre o story. Anel colorido = story novo (não visto).
- * Admin: botão "+" para adicionar, "quem viu" e excluir.
+ * Toca no avatar → abre o story. Anel colorido = story novo (não visto);
+ * cinza = já visto.
+ *
+ * `ownerId` é o DONO do perfil que está sendo exibido: no meu perfil é o
+ * próprio usuário logado (default), mas no perfil de um operador (visto por um
+ * turista) é o id DO OPERADOR — senão o anel procuraria os stories do turista
+ * e nunca apareceria.
+ *
+ * Os botões de "trocar foto" (câmera) e "+ story" só aparecem para o DONO:
+ * a câmera só quando há `onPickPhoto`; o "+" só quando `isAdmin`.
  */
-export default function LiveAvatarStories({ avatarUrl, initials, isAdmin, uploadingPhoto, onPickPhoto }) {
+export default function LiveAvatarStories({ ownerId, avatarUrl, initials, isAdmin, uploadingPhoto, onPickPhoto }) {
   const { user } = useAuth()
   const qc = useQueryClient()
   const [viewerOpen, setViewerOpen]   = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
   // Só os stories do DONO do perfil (não os de todo mundo).
   const { grupoDe, bumpSeen } = useLiveStories()
-  const meu = grupoDe(user?.id)
+  const meu = grupoDe(ownerId ?? user?.id)
   const hasStories = !!meu
   const hasUnseen  = meu?.hasUnseen
 
@@ -43,14 +51,16 @@ export default function LiveAvatarStories({ avatarUrl, initials, isAdmin, upload
         </div>
       </button>
 
-      {/* Trocar foto (admin) */}
-      <button
-        onClick={(e) => { e.stopPropagation(); if (!uploadingPhoto) onPickPhoto?.() }}
-        className="absolute bottom-0 right-0 w-7 h-7 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform z-10"
-        aria-label="Trocar foto"
-      >
-        {uploadingPhoto ? <Loader2 size={13} className="text-white animate-spin" /> : <Camera size={13} className="text-white" />}
-      </button>
+      {/* Trocar foto — só no próprio perfil (quem pode escolher foto) */}
+      {onPickPhoto && (
+        <button
+          onClick={(e) => { e.stopPropagation(); if (!uploadingPhoto) onPickPhoto?.() }}
+          className="absolute bottom-0 right-0 w-7 h-7 bg-brand rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform z-10"
+          aria-label="Trocar foto"
+        >
+          {uploadingPhoto ? <Loader2 size={13} className="text-white animate-spin" /> : <Camera size={13} className="text-white" />}
+        </button>
+      )}
 
       {/* Adicionar story (admin) */}
       {isAdmin && (
