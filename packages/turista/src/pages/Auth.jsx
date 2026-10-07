@@ -101,6 +101,11 @@ export default function Auth({ defaultTab = 'login' }) {
         ? { email: raw, password: loginForm.password }
         : { username: raw, password: loginForm.password }
       const data = await api.login(payload)
+      // Blindagem: sem user/token no retorno, trata como credencial inválida em
+      // vez de estourar em data.user (o "null is not an object" da tela).
+      if (!data || !data.user || !data.token) {
+        throw new Error(t('auth.invalidCredentials'))
+      }
       login(data.user, data.token, data.refresh_token)
       navigate(from, { replace: true })
     } catch (err) {
@@ -263,6 +268,7 @@ export default function Auth({ defaultTab = 'login' }) {
             // Conta ativada → entra direto com as credenciais do formulário
             try {
               const data = await api.login({ email: verif.email, password: verif.password })
+              if (!data || !data.user || !data.token) throw new Error('login falhou')
               login(data.user, data.token, data.refresh_token)
               navigate(from, { replace: true })
             } catch {
