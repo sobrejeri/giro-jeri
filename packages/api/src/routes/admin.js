@@ -1054,16 +1054,40 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
     // estacionamento tem apuração própria (parkingFinanceiro) e ainda não é
     // quebrado por gateway, então fica fora deste recorte.
     const GW_LABELS = { mercado_pago: 'Mercado Pago', pagarme: 'Pagar.me', manual: 'Manual', outros: 'Outros' };
+    // Passeios e estacionamento gravam o MP com nomes diferentes
+    // ('mercado_pago' vs 'mercadopago') — canoniza para somarem juntos.
+    const canonGw = (g) => {
+      const s = String(g || 'outros').toLowerCase();
+      if (s === 'mercadopago' || s === 'mercado_pago' || s === 'mp') return 'mercado_pago';
+      if (s === 'pagarme' || s === 'pagar_me') return 'pagarme';
+      return s;
+    };
     const byGwRaw = {};
+    const bump = (g) => (byGwRaw[g] ||= { bruto: 0, taxas: 0, liquido: 0 });
+
+    // Passeios/transfers: do razão (bruto/taxa/líquido por pagamento).
     for (const row of (data || [])) {
       if (!['booking_gross', 'gateway_fee', 'booking_net'].includes(row.entry_type)) continue;
-      const g = row.payments?.gateway_name || 'outros';
-      byGwRaw[g] ||= { bruto: 0, taxas: 0, liquido: 0 };
+      const g = canonGw(row.payments?.gateway_name);
+      const slot = bump(g);
       const amt = Number(row.amount) || 0;
-      if (row.entry_type === 'booking_gross') byGwRaw[g].bruto   += amt;
-      else if (row.entry_type === 'gateway_fee') byGwRaw[g].taxas += amt;
-      else if (row.entry_type === 'booking_net') byGwRaw[g].liquido += amt;
+      if (row.entry_type === 'booking_gross') slot.bruto   += amt;
+      else if (row.entry_type === 'gateway_fee') slot.taxas += amt;
+      else if (row.entry_type === 'booking_net') slot.liquido += amt;
     }
+
+    // Estacionamento: soma o bruto/líquido por gateway (sem taxa de gateway no
+    // nosso razão). Best-effort — se falhar, o recorte segue só com passeios.
+    try {
+      const { parkingFinanceiroPorGateway } = await import('../services/parking/financial.js');
+      const pkGw = await parkingFinanceiroPorGateway({ from: starts[period] || starts.month });
+      for (const [g, v] of Object.entries(pkGw)) {
+        const slot = bump(canonGw(g));
+        slot.bruto   += v.brutoC / 100;
+        slot.liquido += v.brutoC / 100; // sem taxa de gateway → líquido = bruto
+      }
+    } catch (e) { console.error('[financial] estacionamento por gateway falhou (ignorado):', e?.message); }
+
     const by_gateway = Object.entries(byGwRaw)
       .map(([gateway, v]) => ({
         gateway,

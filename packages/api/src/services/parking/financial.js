@@ -37,6 +37,36 @@ export async function parkingFinanceiro({ from = null, to = null } = {}) {
   return { brutoC, comissaoC, liquidoC: brutoC - comissaoC, qtd: (data || []).length }
 }
 
+// Apuração do estacionamento POR GATEWAY (MP vs Pagar.me vs manual), para o
+// recorte "Receita por gateway" do Financeiro. Usa parking_payments (aprovado)
+// para saber o gateway, e a reserva paga para bruto/comissão. O estacionamento
+// não tem taxa de gateway no nosso razão, então `taxaC` é sempre 0 aqui.
+// → { '<gateway>': { brutoC, comissaoC, liquidoC, taxaC, qtd } } em centavos.
+export async function parkingFinanceiroPorGateway({ from = null, to = null } = {}) {
+  let q = supabase.from('parking_payments')
+    .select('gateway, amount, created_at, parking_reservations!inner(total_amount, commission_pct, payment_status)')
+    .eq('status', 'approved')
+  if (from) q = q.gte('created_at', from)
+  if (to)   q = q.lt('created_at', to)
+  const { data, error } = await q
+  if (error) throw error
+
+  const out = {}
+  for (const p of data || []) {
+    const r = p.parking_reservations
+    if (!r || r.payment_status !== 'paid') continue
+    const g = String(p.gateway || 'outros')
+    const b = centavos(p.amount ?? r.total_amount)
+    const c = Math.round(b * Number(r.commission_pct || 0) / 100)
+    out[g] ||= { brutoC: 0, comissaoC: 0, liquidoC: 0, taxaC: 0, qtd: 0 }
+    out[g].brutoC   += b
+    out[g].comissaoC += c
+    out[g].liquidoC += (b - c)
+    out[g].qtd      += 1
+  }
+  return out
+}
+
 // Série diária para o gráfico de faturamento: { 'YYYY-MM-DD': { brutoC, comissaoC } }.
 export async function parkingFaturamentoDiario({ since } = {}) {
   let q = supabase.from('parking_reservations')

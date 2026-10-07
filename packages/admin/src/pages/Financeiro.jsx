@@ -140,7 +140,7 @@ export default function Financeiro() {
               ))}
             </div>
             <p className="mt-3 text-[11px] text-gray-500">
-              Taxa de gateway estimada pela tarifa de tabela de cada método (PIX, débito, crédito). Estacionamento não entra neste recorte.
+              Inclui passeios e estacionamento. Taxa de gateway estimada pela tarifa de tabela de cada método (PIX, débito, crédito); o estacionamento não tem taxa de gateway no razão.
             </p>
           </CardBody>
         </Card>
