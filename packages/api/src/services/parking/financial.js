@@ -42,19 +42,21 @@ export async function parkingFinanceiro({ from = null, to = null } = {}) {
 // para saber o gateway, e a reserva paga para bruto/comissão. O estacionamento
 // não tem taxa de gateway no nosso razão, então `taxaC` é sempre 0 aqui.
 // → { '<gateway>': { brutoC, comissaoC, liquidoC, taxaC, qtd } } em centavos.
-export async function parkingFinanceiroPorGateway({ from = null, to = null } = {}) {
+export async function parkingFinanceiroPorGateway({ from = null, to = null, lotIds = null } = {}) {
   let q = supabase.from('parking_payments')
-    .select('gateway, amount, created_at, parking_reservations!inner(total_amount, commission_pct, payment_status)')
+    .select('gateway, amount, created_at, parking_reservations!inner(total_amount, commission_pct, payment_status, lot_id)')
     .eq('status', 'approved')
   if (from) q = q.gte('created_at', from)
   if (to)   q = q.lt('created_at', to)
   const { data, error } = await q
   if (error) throw error
 
+  const lotSet = Array.isArray(lotIds) ? new Set(lotIds) : null
   const out = {}
   for (const p of data || []) {
     const r = p.parking_reservations
     if (!r || r.payment_status !== 'paid') continue
+    if (lotSet && !lotSet.has(r.lot_id)) continue // só os lotes pedidos (operador)
     const g = String(p.gateway || 'outros')
     const b = centavos(p.amount ?? r.total_amount)
     const c = Math.round(b * Number(r.commission_pct || 0) / 100)

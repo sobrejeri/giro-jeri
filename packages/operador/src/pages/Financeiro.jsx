@@ -94,6 +94,31 @@ export default function Financeiro() {
         <KpiCard icon={AlertCircle}   label="Não creditado"  value={fmt(summary?.nao_creditado)}   color="text-amber-600" />
       </div>
 
+      {/* Receita por gateway (MP vs Pagar.me) */}
+      {Array.isArray(summary?.by_gateway) && summary.by_gateway.length > 0 && (
+        <Card>
+          <CardHeader><h2 className="text-sm font-semibold text-gray-700">Receita por gateway</h2></CardHeader>
+          <CardBody>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {summary.by_gateway.map((g) => (
+                <div key={g.gateway} className="rounded-xl border border-gray-100 p-4 bg-gray-50">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-800">{g.label}</span>
+                    <span className="text-[11px] text-gray-400 uppercase tracking-wide">{g.gateway}</span>
+                  </div>
+                  <dl className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-500">Bruto</span><span className="text-gray-800 font-semibold">{fmt(g.bruto)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">(-) Taxa gateway</span><span className="text-red-500">- {fmt(g.taxas)}</span></div>
+                    <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-600">Líquido</span><span className="text-green-600 font-bold">{fmt(g.liquido)}</span></div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[11px] text-gray-400">Inclui passeios e o seu estacionamento. Taxa estimada pela tarifa de cada método.</p>
+          </CardBody>
+        </Card>
+      )}
+
       {/* Gráfico */}
       <Card>
         <CardHeader>

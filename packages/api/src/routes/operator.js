@@ -2197,7 +2197,7 @@ router.get('/financial', async (req, res, next) => {
 
     const { data, error } = await supabase
       .from('financial_ledger')
-      .select('entry_type, amount, direction, financial_status')
+      .select('entry_type, amount, direction, financial_status, payments(gateway_name)')
       .in('booking_id', bookingIds)
       .gte('created_at', starts[period] || starts.month);
     if (error) throw error;
@@ -2209,12 +2209,51 @@ router.get('/financial', async (req, res, next) => {
     const comissoes = sumByType(data, 'commission_platform',  'outflow');
     const repasses  = sumByType(data, 'payout_operator',      'outflow');
 
+    // Receita por GATEWAY (as reservas DESTE operador + o estacionamento dos
+    // lotes dele). Mesma lógica do painel admin, só que filtrada ao operador.
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const GW_LABELS = { mercado_pago: 'Mercado Pago', pagarme: 'Pagar.me', manual: 'Manual', outros: 'Outros' };
+    const canonGw = (g) => {
+      const s = String(g || 'outros').toLowerCase();
+      if (s === 'mercadopago' || s === 'mercado_pago' || s === 'mp') return 'mercado_pago';
+      if (s === 'pagarme' || s === 'pagar_me') return 'pagarme';
+      return s;
+    };
+    const byGwRaw = {};
+    const bump = (g) => (byGwRaw[g] ||= { bruto: 0, taxas: 0, liquido: 0 });
+    for (const row of (data || [])) {
+      if (!['booking_gross', 'gateway_fee', 'booking_net'].includes(row.entry_type)) continue;
+      const slot = bump(canonGw(row.payments?.gateway_name));
+      const amt = Number(row.amount) || 0;
+      if (row.entry_type === 'booking_gross') slot.bruto   += amt;
+      else if (row.entry_type === 'gateway_fee') slot.taxas += amt;
+      else if (row.entry_type === 'booking_net') slot.liquido += amt;
+    }
+    try {
+      const { data: lots } = await supabase.from('parking_lots').select('id').eq('owner_user_id', req.user.id);
+      const lotIds = (lots || []).map((l) => l.id);
+      if (lotIds.length) {
+        const { parkingFinanceiroPorGateway } = await import('../services/parking/financial.js');
+        const pkGw = await parkingFinanceiroPorGateway({ from: starts[period] || starts.month, lotIds });
+        for (const [g, v] of Object.entries(pkGw)) {
+          const slot = bump(canonGw(g));
+          slot.bruto   += v.brutoC / 100;
+          slot.liquido += v.brutoC / 100;
+        }
+      }
+    } catch (e) { console.error('[operator/financial] estacionamento por gateway falhou (ignorado):', e?.message); }
+
+    const by_gateway = Object.entries(byGwRaw)
+      .map(([gateway, v]) => ({ gateway, label: GW_LABELS[gateway] || gateway, bruto: round2(v.bruto), taxas: round2(v.taxas), liquido: round2(v.liquido) }))
+      .sort((a, b) => b.bruto - a.bruto);
+
     res.json({
       bruto, taxas, liquido,
       nao_creditado:        naoCredit,
       comissoes_plataforma: comissoes,
       repasses,
       margem_percent: bruto > 0 ? Math.round(((bruto - taxas - comissoes) / bruto) * 100) : 0,
+      by_gateway,
     });
   } catch (err) { next(err); }
 });
