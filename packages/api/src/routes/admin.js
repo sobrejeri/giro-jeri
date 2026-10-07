@@ -462,10 +462,39 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) =>
     const { new_password } = resetPasswordSchema.parse(req.body);
 
     const { data: target } = await supabase
-      .from('users').select('auth_id, full_name').eq('id', req.params.id).single();
+      .from('users').select('auth_id, full_name, user_type, document_number').eq('id', req.params.id).single();
     if (!target?.auth_id) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-    const { error } = await supabase.auth.admin.updateUserById(target.auth_id, {
+    // Operador loga por documento (e-mail sintético <doc>@op.girojeri.app). O
+    // auth_id do perfil pode ter sido repontado (ex.: vínculo indevido por
+    // login Google), então NÃO confiamos nele cegamente: localizamos o usuário
+    // de auth certo pelo e-mail sintético e, de quebra, reparamos o vínculo.
+    // Assim o reset sempre atinge a conta que o painel usa de verdade.
+    let authId = target.auth_id;
+    const docDigits = String(target.document_number || '').replace(/\D/g, '');
+    if (target.user_type === 'operator' && docDigits) {
+      const syntheticEmail = `${docDigits}@op.girojeri.app`;
+      let syntheticUser = null;
+      try {
+        const { data: list } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+        syntheticUser = (list?.users || []).find((u) => u.email === syntheticEmail) || null;
+      } catch { /* listagem indisponível — cai no fluxo padrão abaixo */ }
+
+      if (syntheticUser) {
+        // Já existe o usuário de login por CPF: reseta a senha NELE e reaponta.
+        authId = syntheticUser.id;
+        if (target.auth_id !== syntheticUser.id) {
+          await supabase.from('users').update({ auth_id: syntheticUser.id }).eq('id', req.params.id);
+        }
+      } else {
+        // Não existe: converte o auth atual para o e-mail sintético (passa a ser
+        // a conta de login por CPF). updateUserById abaixo também troca a senha.
+        const { error: convErr } = await supabase.auth.admin.updateUserById(target.auth_id, { email: syntheticEmail });
+        if (convErr) return res.status(400).json({ error: convErr.message });
+      }
+    }
+
+    const { error } = await supabase.auth.admin.updateUserById(authId, {
       password: new_password,
     });
     if (error) return res.status(400).json({ error: error.message });
