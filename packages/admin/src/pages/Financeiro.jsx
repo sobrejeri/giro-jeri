@@ -110,6 +110,42 @@ export default function Financeiro() {
         <KpiCard icon={AlertCircle}  label="Não creditado"       value={fmt(summary?.nao_creditado)}        color="text-amber-400"  />
       </div>
 
+      {/* Receita por gateway (MP vs Pagar.me) */}
+      {Array.isArray(summary?.by_gateway) && summary.by_gateway.length > 0 && (
+        <Card>
+          <CardHeader><h2 className="text-sm font-semibold text-gray-300">Receita por gateway</h2></CardHeader>
+          <CardBody>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {summary.by_gateway.map((g) => (
+                <div key={g.gateway} className="rounded-xl border border-gray-700/50 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-200">{g.label}</span>
+                    <span className="text-[11px] text-gray-500 uppercase tracking-wide">{g.gateway}</span>
+                  </div>
+                  <dl className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Bruto</span>
+                      <span className="text-gray-100 font-semibold">{fmt(g.bruto)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">(-) Taxa gateway</span>
+                      <span className="text-red-400">- {fmt(g.taxas)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-gray-700/50 pt-2">
+                      <span className="text-gray-400">Líquido</span>
+                      <span className="text-green-400 font-bold">{fmt(g.liquido)}</span>
+                    </div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[11px] text-gray-500">
+              Taxa de gateway estimada pela tarifa de tabela de cada método (PIX, débito, crédito). Estacionamento não entra neste recorte.
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
       {/* Gráfico área */}
       <Card>
         <CardHeader>

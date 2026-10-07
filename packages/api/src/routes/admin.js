@@ -1009,7 +1009,7 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
 
     let query = supabase
       .from('financial_ledger')
-      .select('entry_type, amount, direction, financial_status, effective_date')
+      .select('entry_type, amount, direction, financial_status, effective_date, payments(gateway_name)')
       .gte('created_at', starts[period] || starts.month);
 
     if (region_id) query = query.eq('region_id', region_id);
@@ -1048,6 +1048,32 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
       parkBruto = pk.brutoC / 100; parkComissao = pk.comissaoC / 100; parkLiquido = pk.liquidoC / 100;
     } catch (e) { console.error('[financial] estacionamento falhou (ignorado):', e?.message); }
 
+    // Receita por GATEWAY (MP vs Pagar.me vs manual). Usa o gateway do pagamento
+    // ligado a cada lançamento do razão. Só as linhas de dinheiro por pagamento
+    // (bruto/taxa/líquido) entram — comissão/repasse não têm gateway. O
+    // estacionamento tem apuração própria (parkingFinanceiro) e ainda não é
+    // quebrado por gateway, então fica fora deste recorte.
+    const GW_LABELS = { mercado_pago: 'Mercado Pago', pagarme: 'Pagar.me', manual: 'Manual', outros: 'Outros' };
+    const byGwRaw = {};
+    for (const row of (data || [])) {
+      if (!['booking_gross', 'gateway_fee', 'booking_net'].includes(row.entry_type)) continue;
+      const g = row.payments?.gateway_name || 'outros';
+      byGwRaw[g] ||= { bruto: 0, taxas: 0, liquido: 0 };
+      const amt = Number(row.amount) || 0;
+      if (row.entry_type === 'booking_gross') byGwRaw[g].bruto   += amt;
+      else if (row.entry_type === 'gateway_fee') byGwRaw[g].taxas += amt;
+      else if (row.entry_type === 'booking_net') byGwRaw[g].liquido += amt;
+    }
+    const by_gateway = Object.entries(byGwRaw)
+      .map(([gateway, v]) => ({
+        gateway,
+        label:   GW_LABELS[gateway] || gateway,
+        bruto:   round2(v.bruto),
+        taxas:   round2(v.taxas),
+        liquido: round2(v.liquido),
+      }))
+      .sort((a, b) => b.bruto - a.bruto);
+
     const brutoTotal     = round2(bruto + parkBruto);
     const comissoesTotal = round2(comissoes + parkComissao);
     const repassesTotal  = round2(repassesOut + parkLiquido);
@@ -1074,6 +1100,7 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
       resultado_plataforma: resultado,
       dados_incompletos: dadosIncompletos,
       margem_percent: (brutoTotal > 0 && !dadosIncompletos) ? Math.round((resultado / brutoTotal) * 100) : null,
+      by_gateway,
     });
   } catch (err) { next(err); }
 });
