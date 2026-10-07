@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend,
@@ -71,6 +71,19 @@ export default function Financeiro() {
     } finally {
       setReconBusy(false)
     }
+  }
+
+  // Flag de conciliação automática diária (aplicar). Desligada por padrão.
+  const qc = useQueryClient()
+  const { data: settings = [] } = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.getSettings() })
+  const autoOn = (settings || []).find((s) => s.setting_key === 'payment_pagarme_fee_autoreconcile')?.setting_value === 'true'
+  const [autoBusy, setAutoBusy] = useState(false)
+  async function toggleAuto(checked) {
+    setAutoBusy(true)
+    try {
+      await api.updateSetting('payment_pagarme_fee_autoreconcile', { setting_value: checked ? 'true' : 'false', value_type: 'boolean' })
+      qc.invalidateQueries({ queryKey: ['admin-settings'] })
+    } finally { setAutoBusy(false) }
   }
 
   const { data: summary, isLoading: l1 } = useQuery({
@@ -180,6 +193,11 @@ export default function Financeiro() {
               Aplicar ajustes
             </button>
           </div>
+          <label className="mt-3 flex items-center gap-2 text-xs text-gray-400 select-none">
+            <input type="checkbox" checked={autoOn} disabled={autoBusy}
+              onChange={(e) => toggleAuto(e.target.checked)} className="accent-brand" />
+            Aplicar automaticamente todo dia (conciliação diária às ~5h). Ligue só depois de validar a prévia.
+          </label>
           {reconErr && <p className="mt-3 text-sm text-red-400">{reconErr}</p>}
           {recon && (
             <div className="mt-4 text-sm text-gray-300 space-y-1">

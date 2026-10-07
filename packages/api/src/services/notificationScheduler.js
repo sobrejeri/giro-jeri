@@ -198,6 +198,21 @@ async function runParkingDeadlines() {
   }
 }
 
+// Conciliação diária da taxa REAL da Pagar.me (payables). Roda em DRY-RUN e só
+// aplica se a flag payment_pagarme_fee_autoreconcile estiver 'true' (desligada
+// por padrão — o admin liga depois de validar a prévia). Janela curta (10 dias)
+// porque os payables liquidam em poucos dias; o que não casar hoje casa amanhã.
+async function runPagarmeReconcile() {
+  const { data } = await supabase
+    .from('system_settings').select('setting_value')
+    .eq('setting_key', 'payment_pagarme_fee_autoreconcile').maybeSingle()
+  const apply = String(data?.setting_value || '') === 'true'
+  const { reconcilePagarmeFees } = await import('./pagarmeReconcile.js')
+  const r = await reconcilePagarmeFees({ days: 10, apply })
+  console.log('[scheduler] pagarme-reconcile: apply=%s analisados=%d divergencias=%d atualizados=%d ajuste=%s',
+    apply, r.pagamentos_analisados, r.divergencias, r.atualizados || 0, r.ajuste_total_taxa ?? '-')
+}
+
 async function tick() {
   try { await runParkingDeadlines() } catch (e) { console.error('[scheduler] parking-deadlines:', e.message) }
   try { await runServiceReminders() } catch (e) { console.error('[scheduler] service-soon:', e.message) }
@@ -208,6 +223,11 @@ async function tick() {
     // ano garante 1x mesmo se o horário casar em ticks seguidos.
     if (fortaleza().hour === 9) await runBirthdays()
   } catch (e) { console.error('[scheduler] birthday:', e.message) }
+  try {
+    // Conciliação Pagar.me 1x/dia (~5h Fortaleza). O tick é de hora em hora,
+    // então a checagem de hora garante 1x/dia.
+    if (fortaleza().hour === 5) await runPagarmeReconcile()
+  } catch (e) { console.error('[scheduler] pagarme-reconcile:', e.message) }
 }
 
 export function startNotificationScheduler() {
