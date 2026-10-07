@@ -10,6 +10,7 @@ const NAV_PARKING = [
   { to: '/estacionamento/patio',         icon: Car,           label: 'Pátio'        },
   { to: '/estacionamento/financeiro',    icon: Wallet,        label: 'Financeiro'   },
   { to: '/estacionamento/meu-local',     icon: Settings,      label: 'Meu local'    },
+  { to: '/reputacao',                     icon: Star,          label: 'Avaliações'   },
   { to: '/publicacoes',                   icon: ImagePlus,        label: 'Publicações'  },
   { to: '/perfil',                       icon: UserCircle,    label: 'Meu Perfil'   },
 ]

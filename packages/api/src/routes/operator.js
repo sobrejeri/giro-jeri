@@ -281,24 +281,46 @@ router.use(authenticate, requireOperator);
 // (a coop só vê as próprias). Tolerante à migration 060 ausente.
 router.get('/reviews', async (req, res, next) => {
   try {
-    const { data: rows, error } = await supabase
-      .from('reviews')
-      .select('id, rating, comment_text, service_type, service_id, user_id, created_at')
-      .eq('operator_id', req.user.id)
-      .eq('is_public', true)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    if (error) {
-      // Sem migration 060 (coluna operator_id): reputação ainda vazia.
-      if (error.code === '42703') return res.json({ summary: emptyReviewSummary(), reviews: [] });
-      throw error;
+    // 1) Avaliações de PASSEIO/TRANSLADO (tabela reviews).
+    let rows = [];
+    {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('id, rating, comment_text, service_type, service_id, user_id, created_at')
+        .eq('operator_id', req.user.id)
+        .eq('is_public', true)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      // Sem migration 060 (coluna operator_id): segue só com o estacionamento.
+      if (error && error.code !== '42703') throw error;
+      rows = data || [];
     }
-    const list = rows || [];
 
-    // Enriquecimento em memória: autor + nome do serviço.
-    const userIds  = [...new Set(list.map((r) => r.user_id).filter(Boolean))];
-    const tourIds  = [...new Set(list.filter((r) => r.service_type === 'tour').map((r) => r.service_id))];
-    const routeIds = [...new Set(list.filter((r) => r.service_type === 'transfer').map((r) => r.service_id))];
+    // 2) Avaliações de ESTACIONAMENTO (parking_reviews dos pátios deste
+    //    operador). Domínio separado no banco; aqui juntamos para a MESMA tela
+    //    de Reputação — senão o operador de estacionamento nunca via nota.
+    //    Tolerante à ausência das tabelas de estacionamento.
+    let prows = [];
+    try {
+      const { data: lots } = await supabase
+        .from('parking_lots').select('id, name').eq('owner_user_id', req.user.id);
+      const lotIds = (lots || []).map((l) => l.id);
+      if (lotIds.length) {
+        const { data: pr } = await supabase
+          .from('parking_reviews')
+          .select('id, rating, comment, lot_id, user_id, created_at')
+          .in('lot_id', lotIds)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        const lotName = new Map((lots || []).map((l) => [l.id, l.name]));
+        prows = (pr || []).map((r) => ({ ...r, _lotName: lotName.get(r.lot_id) }));
+      }
+    } catch { /* estacionamento ausente → ignora */ }
+
+    // 3) Enriquecimento em memória: autores (das duas fontes) + nome do serviço.
+    const userIds  = [...new Set([...rows.map((r) => r.user_id), ...prows.map((r) => r.user_id)].filter(Boolean))];
+    const tourIds  = [...new Set(rows.filter((r) => r.service_type === 'tour').map((r) => r.service_id))];
+    const routeIds = [...new Set(rows.filter((r) => r.service_type === 'transfer').map((r) => r.service_id))];
     const [usersRes, toursRes, routesRes] = await Promise.all([
       userIds.length  ? supabase.from('users').select('id, full_name, profile_photo_url').in('id', userIds) : { data: [] },
       tourIds.length  ? supabase.from('tours').select('id, name').in('id', tourIds) : { data: [] },
@@ -309,33 +331,50 @@ router.get('/reviews', async (req, res, next) => {
     const routeById = new Map((routesRes.data || []).map((r) => [r.id, r]));
     const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || 'Turista';
 
-    // Resumo: média, total e distribuição 1..5.
+    const normTour = (r) => {
+      const author = userById.get(r.user_id);
+      const route  = routeById.get(r.service_id);
+      return {
+        id:           r.id,
+        rating:       r.rating,
+        comment:      r.comment_text,
+        created_at:   r.created_at,
+        service_type: r.service_type,
+        service_name: r.service_type === 'tour'
+          ? (tourById.get(r.service_id)?.name || 'Passeio')
+          : route ? `${route.origin_name} → ${route.destination_name}` : 'Translado',
+        author_name:  firstName(author?.full_name),
+        author_photo: author?.profile_photo_url || null,
+      };
+    };
+    const normParking = (r) => {
+      const author = userById.get(r.user_id);
+      return {
+        id:           r.id,
+        rating:       r.rating,
+        comment:      r.comment,
+        created_at:   r.created_at,
+        service_type: 'parking',
+        service_name: r._lotName || 'Estacionamento',
+        author_name:  firstName(author?.full_name),
+        author_photo: author?.profile_photo_url || null,
+      };
+    };
+
+    // 4) Mescla as duas fontes, ordena por data e limita.
+    const merged = [...rows.map(normTour), ...prows.map(normParking)]
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, 100);
+
+    // 5) Resumo combinado: média, total e distribuição 1..5.
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     let sum = 0;
-    for (const r of list) { dist[r.rating] = (dist[r.rating] || 0) + 1; sum += r.rating; }
-    const summary = list.length
-      ? { rating_average: Math.round((sum / list.length) * 10) / 10, rating_count: list.length, distribution: dist }
+    for (const r of merged) { dist[r.rating] = (dist[r.rating] || 0) + 1; sum += r.rating; }
+    const summary = merged.length
+      ? { rating_average: Math.round((sum / merged.length) * 10) / 10, rating_count: merged.length, distribution: dist }
       : emptyReviewSummary();
 
-    res.json({
-      summary,
-      reviews: list.map((r) => {
-        const author = userById.get(r.user_id);
-        const route  = routeById.get(r.service_id);
-        return {
-          id:           r.id,
-          rating:       r.rating,
-          comment:      r.comment_text,
-          created_at:   r.created_at,
-          service_type: r.service_type,
-          service_name: r.service_type === 'tour'
-            ? (tourById.get(r.service_id)?.name || 'Passeio')
-            : route ? `${route.origin_name} → ${route.destination_name}` : 'Translado',
-          author_name:  firstName(author?.full_name),
-          author_photo: author?.profile_photo_url || null,
-        };
-      }),
-    });
+    res.json({ summary, reviews: merged });
   } catch (err) { next(err); }
 });
 
