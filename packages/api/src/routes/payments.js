@@ -3697,6 +3697,33 @@ async function orderCommissionRows(booking, payment, effectiveDate, cfg) {
 // EXATAMENTE o mesmo caminho de aprovação do webhook e do polling — inclusive a
 // reserva atômica do ledger. Duplicar essa lógica seria criar uma segunda
 // verdade sobre quando uma reserva vira paga.
+// Taxa REAL do gateway para registrar no razão, em vez da estimativa de tabela.
+// MP: lê `fee_details` da cobrança (síncrono). Pagar.me: a taxa real só existe
+// nos recebíveis (payables), que são assíncronos — então aqui devolve null e a
+// correção vem depois, pela reconciliação de payables. Best-effort: qualquer
+// falha devolve null e o chamador mantém a estimativa.
+async function taxaRealGateway({ gateway_name, gateway_transaction_id, operator_id }) {
+  try {
+    if (gateway_name === 'mercado_pago' && gateway_transaction_id) {
+      const { getMpPaymentFee } = await import('../services/mercadoPago.js')
+      const opMp = await getOperatorMp(operator_id)
+      const r = await getMpPaymentFee(gateway_transaction_id, opMp?.token)
+      return r?.fee_amount ?? null
+    }
+  } catch (e) {
+    console.error('[ledger] taxa real do gateway falhou (usa estimativa):', e?.message)
+  }
+  return null
+}
+
+// Escolhe a taxa a lançar: real (se plausível: 0 < real < bruto), senão o valor
+// já gravado no pagamento (estimativa), senão o cálculo por % de fallback.
+function escolherTaxa({ real, gravada, bruto, feePct }) {
+  if (real != null && real > 0 && real < bruto) return Math.round(real * 100) / 100
+  if (gravada > 0) return Number(gravada)
+  return Math.round(bruto * feePct * 100) / 100
+}
+
 export async function onPaymentApproved(payment) {
   // Carrinho universal: pagamento de GRUPO segue por caminho próprio, que
   // aplica a aprovação a TODAS as reservas do grupo. O caminho de reserva
@@ -3780,16 +3807,26 @@ export async function onPaymentApproved(payment) {
     .update({ ledger_created: true })
     .eq('id', payment.id)
     .eq('ledger_created', false)
-    .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount')
+    .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount, gateway_name, gateway_transaction_id')
     .maybeSingle()
 
   if (freshPayment) {
     const amount     = freshPayment?.amount_gross ?? payment.amount_gross
-    // Usa a taxa real registrada no payment; fallback 3.5% para linhas antigas sem gateway_fee_pct
     const feePct     = freshPayment?.gateway_fee_pct ?? 0.035
-    const gatewayFee = freshPayment?.gateway_fee_amount > 0
-      ? freshPayment.gateway_fee_amount
-      : Math.round(amount * feePct * 100) / 100
+    // Taxa REAL do gateway (MP via fee_details); cai na estimativa se não vier.
+    const realFee    = await taxaRealGateway({
+      gateway_name:           freshPayment.gateway_name,
+      gateway_transaction_id: freshPayment.gateway_transaction_id,
+      operator_id:            booking?.operator_id,
+    })
+    const gatewayFee = escolherTaxa({ real: realFee, gravada: freshPayment?.gateway_fee_amount, bruto: amount, feePct })
+    // Persiste a taxa real no pagamento (conciliação com o extrato do gateway).
+    if (realFee != null && gatewayFee !== Number(freshPayment?.gateway_fee_amount)) {
+      await supabase.from('payments')
+        .update({ gateway_fee_amount: gatewayFee, gateway_fee_pct: amount > 0 ? Math.round((gatewayFee / amount) * 10000) / 10000 : null })
+        .eq('id', payment.id)
+        .then(({ error }) => { if (error) console.error('[ledger] gravar taxa real falhou:', error.message) })
+    }
     // Data efetiva do recebimento — o gráfico de faturamento agrupa por ela
     const effectiveDate = new Date().toISOString().slice(0, 10)
     const cfg = await getPaymentSettings()
@@ -4020,15 +4057,25 @@ async function onGroupPaymentApproved(payment) {
     .update({ ledger_created: true })
     .eq('id', payment.id)
     .eq('ledger_created', false)
-    .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount')
+    .select('ledger_created, amount_gross, gateway_fee_pct, gateway_fee_amount, gateway_name, gateway_transaction_id')
     .maybeSingle()
 
   if (fresh) {
     const combined = Number(fresh?.amount_gross ?? payment.amount_gross) || 0
     const feePct   = fresh?.gateway_fee_pct ?? 0.035
-    const totalFee = fresh?.gateway_fee_amount > 0
-      ? Number(fresh.gateway_fee_amount)
-      : Math.round(combined * feePct * 100) / 100
+    // Taxa REAL do gateway para o grupo inteiro (MP via fee_details).
+    const realFeeGrupo = await taxaRealGateway({
+      gateway_name:           fresh.gateway_name,
+      gateway_transaction_id: fresh.gateway_transaction_id,
+      operator_id:            list[0]?.operator_id,
+    })
+    const totalFee = escolherTaxa({ real: realFeeGrupo, gravada: fresh?.gateway_fee_amount, bruto: combined, feePct })
+    if (realFeeGrupo != null && totalFee !== Number(fresh?.gateway_fee_amount)) {
+      await supabase.from('payments')
+        .update({ gateway_fee_amount: totalFee, gateway_fee_pct: combined > 0 ? Math.round((totalFee / combined) * 10000) / 10000 : null })
+        .eq('id', payment.id)
+        .then(({ error }) => { if (error) console.error('[ledger] grupo: gravar taxa real falhou:', error.message) })
+    }
     const effectiveDate = new Date().toISOString().slice(0, 10)
     const sumTotals = list.reduce((s, b) => s + Number(b.total_amount || 0), 0) || combined
     const cfg = await getPaymentSettings()

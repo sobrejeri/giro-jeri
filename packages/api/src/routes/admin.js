@@ -1129,6 +1129,83 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/admin/financial/reconcile-pagarme-fees ───
+// Concilia a taxa REAL da Pagar.me (recebíveis/payables) com o razão.
+// DRY-RUN por padrão (só relata). Com { apply: true } atualiza gateway_fee e
+// booking_net onde achou taxa real plausível. Experimental: a taxa real só
+// existe nos payables (assíncronos) — rode em dry-run e confira contra o painel
+// Pagar.me antes de aplicar. Pagamentos de GRUPO (carrinho) não são ajustados
+// automaticamente (vários gateway_fee por pagamento) — ficam listados à parte.
+router.post('/financial/reconcile-pagarme-fees', requireAdmin, async (req, res, next) => {
+  try {
+    const days  = Math.min(Math.max(parseInt(req.body?.days, 10) || 30, 1), 180);
+    const apply = req.body?.apply === true;
+    const since = dayjs().subtract(days, 'day').toISOString();
+    const round2 = (v) => Math.round(v * 100) / 100;
+
+    const { data: cfgRows = [] } = await supabase
+      .from('system_settings').select('setting_key, setting_value').like('setting_key', 'payment_%');
+    const cfg = Object.fromEntries(cfgRows.map((s) => [s.setting_key, s.setting_value]));
+    const { chaveDoPagarme } = await import('./payments.js');
+    const apiKey = chaveDoPagarme(cfg);
+    if (!apiKey) return res.status(400).json({ error: 'Configure a API Key do Pagar.me.' });
+
+    const { data: pays = [] } = await supabase
+      .from('payments')
+      .select('id, booking_id, amount_gross, gateway_transaction_id')
+      .eq('gateway_name', 'pagarme')
+      .eq('status', 'approved')
+      .eq('ledger_created', true)
+      .gte('created_at', since)
+      .limit(500);
+
+    const { somarTaxaPayables } = await import('../payments/pagarmeCheckout.js');
+    const itens = [];
+    const grupos_ignorados = [];
+    let atualizados = 0, ajusteTotal = 0;
+
+    for (const p of pays) {
+      if (!p.gateway_transaction_id) continue;
+      const real = await somarTaxaPayables(apiKey, p.gateway_transaction_id);
+      if (!real || !(real.fee > 0)) continue;
+      const bruto = Number(p.amount_gross) || 0;
+      if (!(real.fee < bruto)) continue; // plausibilidade: taxa < bruto
+
+      const { data: feeRows = [] } = await supabase
+        .from('financial_ledger')
+        .select('id, amount')
+        .eq('payment_id', p.id).eq('entry_type', 'gateway_fee');
+      const atual = (feeRows || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+      const nova  = round2(real.fee);
+      if (Math.abs(nova - atual) < 0.01) continue; // já bate
+
+      const item = { payment_id: p.id, booking_id: p.booking_id, taxa_atual: round2(atual), taxa_real: nova, diferenca: round2(nova - atual), payables: real.payables };
+
+      if ((feeRows || []).length !== 1) { grupos_ignorados.push(item); continue; } // grupo: não ajusta auto
+      itens.push(item);
+
+      if (apply) {
+        await supabase.from('financial_ledger').update({ amount: nova }).eq('id', feeRows[0].id);
+        await supabase.from('financial_ledger').update({ amount: round2(bruto - nova) }).eq('payment_id', p.id).eq('entry_type', 'booking_net');
+        await supabase.from('payments').update({ gateway_fee_amount: nova, gateway_fee_pct: bruto > 0 ? Math.round((nova / bruto) * 10000) / 10000 : null }).eq('id', p.id);
+        atualizados += 1; ajusteTotal = round2(ajusteTotal + (nova - atual));
+      }
+    }
+
+    res.json({
+      dry_run: !apply,
+      periodo_dias: days,
+      pagamentos_analisados: pays.length,
+      divergencias: itens.length,
+      atualizados: apply ? atualizados : 0,
+      ajuste_total_taxa: apply ? ajusteTotal : null,
+      itens: itens.slice(0, 100),
+      grupos_ignorados: grupos_ignorados.slice(0, 50),
+      aviso: 'Experimental. A taxa real vem dos recebíveis (payables), assíncronos; rode em dry-run e confira contra o painel Pagar.me antes de aplicar.',
+    });
+  } catch (err) { next(err); }
+});
+
 // ── POST /api/admin/operational/:id/os-link ────────────
 // Reenvia a Ordem de Serviço (link público) no WhatsApp do cliente e do
 // motorista. Separado do /assign: o despacho é a operação crítica e não pode

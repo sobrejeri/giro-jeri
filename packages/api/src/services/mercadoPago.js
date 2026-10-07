@@ -563,6 +563,30 @@ export async function getMpPaymentStatus(mpId, sellerAccessToken) {
   return null
 }
 
+// Taxa REAL cobrada pelo Mercado Pago numa cobrança (soma de `fee_details`),
+// para o razão registrar o custo exato em vez da estimativa de tabela. Devolve
+// { fee_amount, net } ou null (cobrança não encontrada / sem detalhe de taxa).
+// Nunca lança — conciliação é best-effort e cai na estimativa se falhar.
+export async function getMpPaymentFee(mpId, sellerAccessToken) {
+  const tentativas = sellerAccessToken ? [sellerAccessToken, null] : [null]
+  for (const token of tentativas) {
+    const client = paymentClientFor(token)
+    if (!client) continue
+    try {
+      const r = await client.get({ id: mpId })
+      if (!r?.status) continue
+      const fee = Array.isArray(r.fee_details)
+        ? Math.round(r.fee_details.reduce((s, f) => s + (Number(f?.amount) || 0), 0) * 100) / 100
+        : null
+      if (fee == null) return null
+      const net = r.transaction_details?.net_received_amount == null
+        ? null : Number(r.transaction_details.net_received_amount)
+      return { fee_amount: fee, net }
+    } catch { /* tenta a próxima conta */ }
+  }
+  return null
+}
+
 // Auditoria: a cobrança COMPLETA no Mercado Pago, não só o status.
 // `getMpPaymentStatus` devolve uma string — suficiente para decidir o fluxo,
 // inútil para descobrir POR QUE uma cobrança foi recusada. Aqui vem o

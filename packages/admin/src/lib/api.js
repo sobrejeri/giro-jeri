@@ -177,6 +177,7 @@ export const api = {
 
   // Financeiro
   getFinancial: (params = {}) => request(`/api/admin/financial?${new URLSearchParams(params)}`),
+  reconcilePagarmeFees: (body = {}) => request('/api/admin/financial/reconcile-pagarme-fees', { method: 'POST', body }),
 
   // Catálogo — Tours
   getTours:   (params = {}) => request(`/api/catalog/tours?${new URLSearchParams(params)}`),

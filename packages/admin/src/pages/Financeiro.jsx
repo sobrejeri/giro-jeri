@@ -57,6 +57,22 @@ const TooltipDark = ({ active, payload, label }) => {
 export default function Financeiro() {
   const [period, setPeriod] = useState('month')
 
+  // Conciliação da taxa REAL da Pagar.me (via payables). Dry-run primeiro.
+  const [recon, setRecon]         = useState(null)
+  const [reconBusy, setReconBusy] = useState(false)
+  const [reconErr, setReconErr]   = useState('')
+  async function rodarReconciliacao(apply) {
+    setReconBusy(true); setReconErr('')
+    try {
+      const r = await api.reconcilePagarmeFees({ days: DAYS_BY_PERIOD[period], apply })
+      setRecon(r)
+    } catch (e) {
+      setReconErr(e?.message || 'Falha na conciliação.')
+    } finally {
+      setReconBusy(false)
+    }
+  }
+
   const { data: summary, isLoading: l1 } = useQuery({
     queryKey: ['financial-summary', period],
     queryFn:  () => api.getFinancial({ period }),
@@ -145,6 +161,57 @@ export default function Financeiro() {
           </CardBody>
         </Card>
       )}
+
+      {/* Conciliação da taxa real da Pagar.me (payables) */}
+      <Card>
+        <CardHeader><h2 className="text-sm font-semibold text-gray-300">Conciliar taxa real — Pagar.me</h2></CardHeader>
+        <CardBody>
+          <p className="text-xs text-gray-500 mb-3">
+            Puxa a taxa real (MDR + antecipação) dos recebíveis da Pagar.me e compara com o razão. Experimental:
+            rode a <b>prévia</b> e confira contra o painel da Pagar.me antes de <b>aplicar</b>. Período: {DAYS_BY_PERIOD[period]} dias.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => rodarReconciliacao(false)} disabled={reconBusy}
+              className="text-sm font-semibold px-4 py-2 rounded-lg bg-gray-800 text-gray-100 border border-gray-700 disabled:opacity-50">
+              {reconBusy ? 'Processando…' : 'Prévia (dry-run)'}
+            </button>
+            <button onClick={() => rodarReconciliacao(true)} disabled={reconBusy || !recon || !recon.divergencias}
+              className="text-sm font-semibold px-4 py-2 rounded-lg bg-brand text-white disabled:opacity-40">
+              Aplicar ajustes
+            </button>
+          </div>
+          {reconErr && <p className="mt-3 text-sm text-red-400">{reconErr}</p>}
+          {recon && (
+            <div className="mt-4 text-sm text-gray-300 space-y-1">
+              <p>{recon.dry_run ? 'Prévia' : 'Aplicado'} · {recon.pagamentos_analisados} pagamentos analisados · <b>{recon.divergencias}</b> divergência(s){recon.grupos_ignorados?.length ? ` · ${recon.grupos_ignorados.length} de grupo (manual)` : ''}</p>
+              {!recon.dry_run && <p className="text-green-400">Atualizados: {recon.atualizados} · ajuste total de taxa: {fmt(recon.ajuste_total_taxa)}</p>}
+              {recon.itens?.length > 0 && (
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-gray-500"><tr>
+                      <th className="text-left py-1 pr-3">Reserva</th>
+                      <th className="text-right py-1 px-3">Taxa atual</th>
+                      <th className="text-right py-1 px-3">Taxa real</th>
+                      <th className="text-right py-1 pl-3">Diferença</th>
+                    </tr></thead>
+                    <tbody>
+                      {recon.itens.map((it) => (
+                        <tr key={it.payment_id} className="border-t border-gray-800">
+                          <td className="py-1 pr-3 text-gray-400">{it.booking_id?.slice(0, 8)}</td>
+                          <td className="py-1 px-3 text-right">{fmt(it.taxa_atual)}</td>
+                          <td className="py-1 px-3 text-right text-gray-100">{fmt(it.taxa_real)}</td>
+                          <td className={`py-1 pl-3 text-right ${it.diferenca >= 0 ? 'text-red-400' : 'text-green-400'}`}>{it.diferenca >= 0 ? '+' : ''}{fmt(it.diferenca)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {recon.aviso && <p className="text-[11px] text-gray-500 mt-2">{recon.aviso}</p>}
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       {/* Gráfico área */}
       <Card>

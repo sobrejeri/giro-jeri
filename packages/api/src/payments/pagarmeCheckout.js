@@ -281,6 +281,36 @@ export async function consultarPedido(apiKey, pedidoId) {
   }
 }
 
+// Taxa REAL do Pagar.me numa transação, somando os recebíveis (payables) das
+// cobranças do pedido. A taxa real (MDR + taxa de antecipação) só existe nos
+// payables, gerados DEPOIS da liquidação — por isso é conciliação assíncrona,
+// não dá para ler na hora do pagamento. Pagar.me trabalha em CENTAVOS;
+// devolvemos REAIS. Devolve null quando ainda não há payable (ou em falha).
+export async function somarTaxaPayables(apiKey, pedidoId) {
+  try {
+    const pedido = await consultarPedido(apiKey, pedidoId)
+    const chargeIds = (pedido?.charges || []).map((c) => c?.id).filter(Boolean)
+    if (!chargeIds.length) return null
+
+    let feeC = 0
+    let encontrou = 0
+    for (const chargeId of chargeIds) {
+      const r = await chamar(`/payables?charge_id=${encodeURIComponent(chargeId)}&size=100`, apiKey).catch(() => null)
+      // Filtra por charge_id em memória (segurança, caso o filtro de query seja ignorado).
+      const lista = (r?.data || []).filter((p) => !p.charge_id || String(p.charge_id) === String(chargeId))
+      for (const p of lista) {
+        feeC += Math.round(Number(p.fee || 0)) + Math.round(Number(p.anticipation_fee || 0))
+        encontrou += 1
+      }
+    }
+    if (!encontrou) return null
+    return { fee: Math.round(feeC) / 100, payables: encontrou }
+  } catch (e) {
+    console.error('[pagarme] somarTaxaPayables falhou pedido=%s: %s', pedidoId, e?.message)
+    return null
+  }
+}
+
 // Acha o pedido pelo NOSSO código (o id da reserva). É o equivalente da busca
 // por external_reference no Mercado Pago: o caminho de descobrir uma aprovação
 // quando o webhook não chegou.
