@@ -98,14 +98,30 @@ async function request(path, options = {}, isRetry = false) {
   })
 
   if (res.status === 401) {
-    if (!isRetry) {
-      const r = await refreshOnce()
-      if (r === 'ok') return request(path, options, true)
-      // Servidor lento/instável: não desloga — evita o loop de login.
-      if (r === 'network') throw new Error('Conexão instável. Tente novamente em instantes.')
+    // Endpoints de autenticação: 401 = credenciais inválidas, NÃO sessão
+    // expirada. Não tenta refresh nem limpa sessão — deixa o erro cair no
+    // throw abaixo e chegar ao formulário com a mensagem do servidor
+    // ("Credenciais incorretas"). Sem isto, o login retornava null e a tela
+    // travava sem mostrar o motivo.
+    const isAuthEndpoint =
+      path.startsWith('/api/auth/login') ||
+      path.startsWith('/api/auth/register') ||
+      path.startsWith('/api/auth/refresh') ||
+      path.startsWith('/api/auth/otp') ||
+      path.startsWith('/api/auth/forgot-password') ||
+      path.startsWith('/api/auth/reset-password') ||
+      path.startsWith('/api/auth/google')
+    if (!isAuthEndpoint) {
+      if (!isRetry) {
+        const r = await refreshOnce()
+        if (r === 'ok') return request(path, options, true)
+        // Servidor lento/instável: não desloga — evita o loop de login.
+        if (r === 'network') throw new Error('Conexão instável. Tente novamente em instantes.')
+      }
+      clearSession()
+      return null
     }
-    clearSession()
-    return null
+    // Endpoint de auth: segue para o parse do corpo e o throw com a mensagem.
   }
 
   if (res.status === 204) return null
