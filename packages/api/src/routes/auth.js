@@ -570,12 +570,23 @@ router.post('/google/sync', async (req, res, next) => {
 
     const SEL = 'id, full_name, username, email, phone, user_type, profile_photo_url, phone_verified';
 
+    // Login com Google é EXCLUSIVO de turista. Uma conta de operador/admin
+    // autentica por documento+senha (e-mail sintético <doc>@op.girojeri.app) e
+    // resolve o perfil pelo auth_id; vincular o Google por e-mail sobrescreveria
+    // esse auth_id e QUEBRARIA o acesso ao painel. Então, se o e-mail do Google
+    // bate numa conta operador/admin, recusamos — sem tocar em nada.
+    const BLOQUEADO = 'Este e-mail pertence a uma conta de operador/administrador. Entre pelo painel com documento e senha.';
+    const ehEquipe = (u) => u && (u.user_type === 'operator' || u.user_type === 'admin');
+
     // 1) Já há linha por auth_id (conta vinculada pelo Supabase) → usa.
     let { data: profile } = await supabase.from('users').select(SEL).eq('auth_id', authUser.id).maybeSingle();
+    if (ehEquipe(profile)) return res.status(409).json({ error: BLOQUEADO });
 
     // 2) Senão, vincula por e-mail à conta existente (preserva reservas e @).
+    //    Só para TURISTA — nunca sequestra o auth_id de operador/admin.
     if (!profile && email) {
       const { data: byEmail } = await supabase.from('users').select(SEL).eq('email', email).maybeSingle();
+      if (ehEquipe(byEmail)) return res.status(409).json({ error: BLOQUEADO });
       if (byEmail) {
         await supabase.from('users').update({ auth_id: authUser.id }).eq('id', byEmail.id);
         profile = byEmail;
