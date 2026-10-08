@@ -1343,6 +1343,10 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
       const v = req.body?.[campo];
       if (v !== undefined) payload[campo] = (typeof v === 'string' ? v.trim() : v) || null;
     }
+    // O tipo da chave PIX tem CHECK em minúsculas ('cpf','cnpj','email','phone',
+    // 'random_key'). Normaliza para não quebrar o despacho se vier 'CPF' (ou de
+    // um executor salvo numa versão antiga): maiúsculo violava o CHECK → 500.
+    if (payload.driver_pix_key_type) payload.driver_pix_key_type = String(payload.driver_pix_key_type).toLowerCase();
 
     // Verifica se já existe um assignment para essa reserva. `.limit(1)` em vez
     // de `.maybeSingle()`: não há UNIQUE em booking_id, e duas linhas fariam o
@@ -1373,10 +1377,25 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
     }
 
     let { data: result, error: gravaErr } = await gravar(payload);
-    if (gravaErr?.code === '42703') {
+    // Recuperáveis ligados aos campos de repasse (081): coluna ausente (42703),
+    // violação de CHECK (23514, ex.: tipo de PIX) ou valor inválido (22P02).
+    // Nesses casos o DESPACHO em si não pode falhar — regrava sem os extras e
+    // o repasse é completado depois na aba de Repasses. Logamos o motivo real.
+    if (gravaErr && ['42703', '23514', '22P02'].includes(gravaErr.code)) {
+      console.error('[despacho] assign: regravando sem campos de repasse — code=%s msg=%s details=%s',
+        gravaErr.code, gravaErr.message, gravaErr.details);
       ({ data: result, error: gravaErr } = await gravar(semExtras(payload)));
     }
-    if (gravaErr) throw gravaErr;
+    if (gravaErr) {
+      console.error('[despacho] assign FALHOU booking=%s code=%s msg=%s details=%s hint=%s',
+        bookingId, gravaErr.code, gravaErr.message, gravaErr.details, gravaErr.hint);
+      // Devolve o motivo REAL (código + mensagem) em vez de um 500 genérico —
+      // assim o operador/admin vê na tela o que o banco recusou e dá para
+      // corrigir a causa sem depender do log do servidor.
+      return res.status(400).json({
+        error: `Falha ao salvar o despacho (${gravaErr.code || 'erro'}): ${gravaErr.message || 'erro no banco'}`,
+      });
+    }
 
     // Atualiza status operacional da reserva
     await supabase
