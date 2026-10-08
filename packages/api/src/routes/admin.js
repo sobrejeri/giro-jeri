@@ -1196,16 +1196,17 @@ router.get('/operational', requireOperator, async (req, res, next) => {
     const showAll    = !desde && !ate && (!date || date === 'all');
     const targetDate = (desde || ate) ? null : (showAll ? null : date);
 
-    let query = supabase
-      .from('bookings')
-      // ATENÇÃO: nada de comentário `--` aqui dentro. Isto NÃO é SQL — é a lista
-      // de colunas que vai no `select` do PostgREST, e ele lê `--` como nome de
-      // coluna. Foi assim que este endpoint quebrou inteiro e os painéis do
-      // operador e do admin ficaram zerados, sem nenhum erro visível na tela.
-      //
-      // `created_at` está aqui porque o painel ordena pela entrada da
-      // solicitação — a data do serviço não diz quando o pedido chegou.
-      .select(`
+    // Escopo por operador: um operador (não-admin) só enxerga as PRÓPRIAS
+    // reservas no painel operacional/despacho. Admin vê tudo (ou filtra por
+    // operator_id quando quiser). Calculado antes de montar a query.
+    const isAdmin = req.user?.user_type === 'admin';
+
+    // ATENÇÃO: nada de comentário `--` dentro do select — PostgREST lê como nome
+    // de coluna e o endpoint quebra inteiro (painéis zerados). `created_at`
+    // ordena pela entrada da solicitação. O embed de operational_assignments
+    // inclui os dados de REPASSE do executor (081) para o modal de conclusão
+    // pré-preencher CPF/chave PIX a partir do que foi informado no despacho.
+    const colunas = (embedAssign) => `
         id, booking_code, service_type, service_id, booking_mode, user_id, operator_id,
         order_group_id, created_at,
         service_date, service_time, people_count, total_amount,
@@ -1213,31 +1214,29 @@ router.get('/operational', requireOperator, async (req, res, next) => {
         pickup_place_name, destination_place_name, special_notes,
         origin_text, destination_text,
         booking_vehicles ( vehicle_name_snapshot, quantity ),
-        operational_assignments ( real_vehicle_text, dispatch_notes, driver_name, driver_phone, assigned_driver_user_id, assigned_guide_user_id )
-      `)
-      // Canceladas NÃO são excluídas aqui: o operador precisa acompanhar quando
-      // o cliente cancela uma reserva sua. Elas são separadas depois (num array
-      // `cancelled`), fora das colunas ativas, para não poluir kanban/estatísticas.
-      .neq('status_commercial', 'draft')
-      .order('service_date', { ascending: true });
+        operational_assignments ( ${embedAssign} )
+      `;
+    const montar = (embedAssign) => {
+      let q = supabase.from('bookings').select(colunas(embedAssign))
+        .neq('status_commercial', 'draft')
+        .order('service_date', { ascending: true });
+      if (targetDate)    q = q.eq('service_date', targetDate);
+      if (desde)         q = q.gte('service_date', desde);
+      if (ate)           q = q.lte('service_date', ate);
+      if (service_type)  q = q.eq('service_type', service_type);
+      if (!isAdmin)         q = q.eq('operator_id', req.user.id);
+      else if (operator_id) q = q.eq('operator_id', operator_id);
+      return q;
+    };
 
-    if (targetDate)    query = query.eq('service_date', targetDate);
-    // Intervalo aberto de um lado é válido: "de hoje em diante" e "até ontem"
-    // são as duas perguntas mais comuns de quem acompanha a operação.
-    if (desde)         query = query.gte('service_date', desde);
-    if (ate)           query = query.lte('service_date', ate);
-    if (service_type)  query = query.eq('service_type', service_type);
-
-    // Escopo por operador: um operador (não-admin) só enxerga as PRÓPRIAS
-    // reservas no painel operacional/despacho — nunca solicitações que ele ainda
-    // não aceitou (operator_id nulo) nem reservas de outros operadores. Sem
-    // isso, uma corrida "sem operador" aparecia com "Despachar" para todos.
-    // Admin vê tudo (ou filtra por operator_id quando quiser).
-    const isAdmin = req.user?.user_type === 'admin';
-    if (!isAdmin)         query = query.eq('operator_id', req.user.id);
-    else if (operator_id) query = query.eq('operator_id', operator_id);
-
-    const { data, error } = await query;
+    // Com os campos de repasse; se as colunas não existirem (migração 066/081
+    // pendente), relê SEM elas — o painel não pode quebrar por causa disso.
+    const EMBED_FULL = 'real_vehicle_text, dispatch_notes, driver_name, driver_phone, driver_document, driver_pix_key, driver_pix_key_type, assigned_driver_user_id, assigned_guide_user_id';
+    const EMBED_BASE = 'real_vehicle_text, dispatch_notes, driver_name, driver_phone, assigned_driver_user_id, assigned_guide_user_id';
+    let { data, error } = await montar(EMBED_FULL);
+    if (error && ['42703', 'PGRST204', 'PGRST200'].includes(error.code)) {
+      ({ data, error } = await montar(EMBED_BASE));
+    }
     if (error) throw error;
 
     // Sem embed por FK (frágil) — busca clientes e operadores à parte e junta em memória.
