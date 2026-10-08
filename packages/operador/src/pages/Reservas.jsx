@@ -717,11 +717,12 @@ export default function Reservas() {
   // ações diferentes em cada um, era a confusão que esta lista causava.
   // A concluída volta a aparecer aqui, como histórico: o Despacho só mostra o
   // que ainda está em aberto.
-  // Duas condições, não uma: só some daqui o que está PAGO **e** já entrou no
-  // fluxo de despacho. `assigned` sozinho não serve de marca — é o que a
-  // aceitação grava, então filtrar por ele escondia justamente a corrida
-  // aceita que ainda aguarda o pagamento do cliente.
-  const NO_DESPACHO = ['awaiting_dispatch', 'confirmed', 'en_route', 'in_progress']
+  // Só some daqui o que está PAGO **e** já está no Despacho. Como o filtro é
+  // gatilhado por `paid`, incluir 'assigned' é seguro: a reserva aceita que
+  // AINDA aguarda pagamento (assigned + não paga) continua aparecendo aqui; a
+  // paga vai direto para a aba Despacho. (No backend, pagar já promove para
+  // 'awaiting_dispatch'; manter 'assigned' aqui cobre reservas pagas antigas.)
+  const NO_DESPACHO = ['assigned', 'awaiting_dispatch', 'confirmed', 'en_route', 'in_progress']
   const mineAtivas = mine.filter(
     (b) => !(b.status_commercial === 'paid' && NO_DESPACHO.includes(b.status_operational)),
   )

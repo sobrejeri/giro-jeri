@@ -3756,11 +3756,16 @@ export async function onPaymentApproved(payment) {
   const { data: booking } = await supabase
     .from('bookings').select('*').eq('id', payment.booking_id).maybeSingle()
 
-  // Fluxo novo (solicitar→aceitar→pagar): o operador já está atribuída, então
-  // a reserva permanece 'assigned' e segue direto para o atendimento. Fluxo
-  // antigo (paga primeiro): vai para a fila de despacho para alguém aceitar.
+  // Pago → vai DIRETO para a fila de Despacho (aba Despacho), tanto no fluxo
+  // novo (aceitar→pagar, reserva fica 'assigned') quanto no antigo (paga
+  // primeiro, sem operador). Assim ela sai de "Minhas corridas" e o operador
+  // só preenche motorista/veículo quando for despachar de fato — sem o modal
+  // abrir antes da hora. Não rebaixa estados já à frente (en_route/in_progress/
+  // completed), que não deveriam chegar aqui, mas ficam protegidos.
   const bookingUpdate = { status_commercial: 'paid', payment_status: 'approved' }
-  if (!booking?.operator_id) bookingUpdate.status_operational = 'awaiting_dispatch'
+  if (!booking?.operator_id || ['new', 'assigned'].includes(booking?.status_operational)) {
+    bookingUpdate.status_operational = 'awaiting_dispatch'
+  }
   // Cancelada e reembolsada NÃO voltam a ser pagas. O caminho de GRUPO já
   // filtrava assim; este, de reserva única, promovia qualquer estado —
   // inclusive uma reserva que o cliente cancelou. Dinheiro que chega para uma
@@ -4037,7 +4042,11 @@ async function onGroupPaymentApproved(payment) {
   // 1) Marca cada reserva do grupo como paga (idempotente).
   for (const b of list) {
     const upd = { status_commercial: 'paid', payment_status: 'approved' }
-    if (!b.operator_id) upd.status_operational = 'awaiting_dispatch'
+    // Pago → fila de Despacho direto (ver onPaymentApproved). Não rebaixa
+    // estados já à frente.
+    if (!b.operator_id || ['new', 'assigned'].includes(b.status_operational)) {
+      upd.status_operational = 'awaiting_dispatch'
+    }
     await supabase.from('bookings').update(upd).eq('id', b.id)
     if (b.service_type === 'transfer' && b.service_id) {
       try {
