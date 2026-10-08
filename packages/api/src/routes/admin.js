@@ -1020,7 +1020,10 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
     const bruto       = sum(data, 'booking_gross',   'inflow');
     const taxas       = sum(data, 'gateway_fee',      'outflow');
     const liquido     = sum(data, 'booking_net',      'inflow');
-    const naoCredit   = sumByStatus(data, 'inflow',   'pending');
+    // "Não creditado" = receita BRUTA que entrou mas ainda não foi liquidada
+    // pelo gateway (status 'pending'). Conta só booking_gross: sem o filtro,
+    // somava bruto + líquido da mesma venda e dobrava (ex.: R$100 + R$97,36).
+    const naoCredit   = sumByStatus(data, 'inflow',   'pending', 'booking_gross');
     const comissoes   = sum(data, 'commission_platform', 'outflow');
     const repassesOut = sum(data, 'payout_operator',  'outflow');
 
@@ -3491,9 +3494,13 @@ function sum(rows, entryType, direction) {
     .filter(r => r.entry_type === entryType && r.direction === direction)
     .reduce((s, r) => s + Number(r.amount), 0);
 }
-function sumByStatus(rows, direction, status) {
+// `entryType` opcional: cada reserva paga grava DUAS linhas de inflow — o bruto
+// (booking_gross) e o líquido (booking_net), que são duas VISÕES do mesmo
+// dinheiro. Somar todo inflow pendente (sem filtrar o tipo) contava os dois e
+// dobrava o valor. Filtrando por 'booking_gross' conta o bruto uma única vez.
+function sumByStatus(rows, direction, status, entryType) {
   return rows
-    .filter(r => r.direction === direction && r.financial_status === status)
+    .filter(r => r.direction === direction && r.financial_status === status && (!entryType || r.entry_type === entryType))
     .reduce((s, r) => s + Number(r.amount), 0);
 }
 

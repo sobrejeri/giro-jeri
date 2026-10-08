@@ -2006,9 +2006,13 @@ function sumByType(rows, entryType, direction) {
     .filter((r) => r.entry_type === entryType && r.direction === direction)
     .reduce((s, r) => s + Number(r.amount), 0);
 }
-function sumByStatus(rows, direction, status) {
+// `entryType` opcional: cada reserva paga grava DUAS linhas de inflow — bruto
+// (booking_gross) e líquido (booking_net), duas visões do mesmo dinheiro. Somar
+// todo inflow pendente contava as duas e dobrava; filtrar por 'booking_gross'
+// conta o bruto uma vez só.
+function sumByStatus(rows, direction, status, entryType) {
   return rows
-    .filter((r) => r.direction === direction && r.financial_status === status)
+    .filter((r) => r.direction === direction && r.financial_status === status && (!entryType || r.entry_type === entryType))
     .reduce((s, r) => s + Number(r.amount), 0);
 }
 
@@ -2205,7 +2209,9 @@ router.get('/financial', async (req, res, next) => {
     const bruto     = sumByType(data, 'booking_gross',        'inflow');
     const taxas     = sumByType(data, 'gateway_fee',          'outflow');
     const liquido   = sumByType(data, 'booking_net',          'inflow');
-    const naoCredit = sumByStatus(data, 'inflow', 'pending');
+    // Bruto pendente de liquidação (conta só booking_gross: senão soma bruto +
+    // líquido da mesma venda e dobra).
+    const naoCredit = sumByStatus(data, 'inflow', 'pending', 'booking_gross');
     const comissoes = sumByType(data, 'commission_platform',  'outflow');
     const repasses  = sumByType(data, 'payout_operator',      'outflow');
 
