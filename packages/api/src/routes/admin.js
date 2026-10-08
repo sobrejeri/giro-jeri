@@ -1381,7 +1381,7 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
     // violação de CHECK (23514, ex.: tipo de PIX) ou valor inválido (22P02).
     // Nesses casos o DESPACHO em si não pode falhar — regrava sem os extras e
     // o repasse é completado depois na aba de Repasses. Logamos o motivo real.
-    if (gravaErr && ['42703', '23514', '22P02'].includes(gravaErr.code)) {
+    if (gravaErr && ['42703', 'PGRST204', '23514', '22P02'].includes(gravaErr.code)) {
       console.error('[despacho] assign: regravando sem campos de repasse — code=%s msg=%s details=%s',
         gravaErr.code, gravaErr.message, gravaErr.details);
       ({ data: result, error: gravaErr } = await gravar(semExtras(payload)));
