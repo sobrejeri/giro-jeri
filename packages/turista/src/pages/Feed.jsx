@@ -854,10 +854,10 @@ export default function Feed() {
       (m, p) => (String(p.created_at || '') > m ? String(p.created_at || '') : m), '')
     if (maxTs) { try { localStorage.setItem('feed_seen_ts', maxTs) } catch { /* storage bloqueado */ } }
   }, [allPostsRaw])
-  // Diretório 100% ao vivo do Google (via /nearby): sem lista curada do banco,
-  // para não misturar duas fontes e evitar duplicidade/desatualização.
+  // Diretório ao vivo via /nearby (Geoapify/OpenStreetMap — gratuito): sem lista
+  // curada do banco, para não misturar duas fontes e evitar duplicidade.
   const googlePlaces = nearbyData?.results || []
-  // Patrocinados (banco, is_featured) primeiro; o Google preenche o resto,
+  // Patrocinados (banco, is_featured) primeiro; o diretório preenche o resto,
   // sem repetir um lugar que já é patrocinado (dedupe por nome).
   const sponsored = useMemo(
     () => (sponsoredData || []).filter((p) => p.is_featured).map((p) => ({ ...p, sponsored: true })),
