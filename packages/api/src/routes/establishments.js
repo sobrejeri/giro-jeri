@@ -155,6 +155,11 @@ router.get('/nearby', async (req, res, next) => {
         debug: true,
         has_google_key: !!key,
         google_key_len: key ? key.length : 0,
+        // Impressão digital segura: início + fim da chave, para você conferir
+        // que a chave do Render é a MESMA que você está editando no Google
+        // Cloud (o miolo nunca aparece — não dá pra reconstruir a chave).
+        google_key_head: key ? key.slice(0, 12) : null,
+        google_key_tail: key ? key.slice(-4) : null,
         has_geoapify_key: !!process.env.GEOAPIFY_API_KEY,
         new_api: null,
         legacy_api: null,
