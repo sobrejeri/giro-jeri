@@ -109,8 +109,7 @@ async function request(path, options = {}, isRetry = false) {
       path.startsWith('/api/auth/refresh') ||
       path.startsWith('/api/auth/otp') ||
       path.startsWith('/api/auth/forgot-password') ||
-      path.startsWith('/api/auth/reset-password') ||
-      path.startsWith('/api/auth/google')
+      path.startsWith('/api/auth/reset-password')
     if (!isAuthEndpoint) {
       if (!isRetry) {
         const r = await refreshOnce()
@@ -167,8 +166,6 @@ async function request(path, options = {}, isRetry = false) {
 export const api = {
   // Auth
   login:          (body) => request('/api/auth/login',           { method: 'POST', body }),
-  googleUrl:      ()     => request('/api/auth/google/url'),
-  googleSync:     (access_token) => request('/api/auth/google/sync', { method: 'POST', body: { access_token } }),
   register:       (body) => request('/api/auth/register',        { method: 'POST', body }),
   otpRequest:     (body) => request('/api/auth/otp/request',      { method: 'POST', body }),
   otpVerify:      (body) => request('/api/auth/otp/verify',       { method: 'POST', body }),
