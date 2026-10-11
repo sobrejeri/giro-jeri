@@ -143,6 +143,69 @@ router.get('/nearby', async (req, res, next) => {
     const radius   = Math.min(Math.max(Number(req.query.radius) || 8000, 500), 50000);
     const category = req.query.category;
 
+    // ── Diagnóstico (?debug=1) ─────────────────────────────
+    // "Descubra a Vila" vem vazio quando o Google devolve 0 lugares E o Geoapify
+    // não tem chave. Este modo mostra, numa URL, exatamente ONDE quebra: se a
+    // chave do Google existe no Render, qual o status/corpo bruto que a Places
+    // API (New) responde (403 billing, 400 formato, 200 vazio…) e se a API
+    // legada responde. Não vaza a chave — só o booleano e a resposta do Google.
+    if (req.query.debug === '1') {
+      const key = process.env.GOOGLE_MAPS_API_KEY;
+      const out = {
+        debug: true,
+        has_google_key: !!key,
+        google_key_len: key ? key.length : 0,
+        has_geoapify_key: !!process.env.GEOAPIFY_API_KEY,
+        new_api: null,
+        legacy_api: null,
+      };
+      if (key) {
+        // Places API (New) — searchNearby
+        try {
+          const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+            method: 'POST',
+            headers: {
+              'Content-Type':     'application/json',
+              'X-Goog-Api-Key':   key,
+              'X-Goog-FieldMask': 'places.id,places.displayName',
+            },
+            body: JSON.stringify({
+              includedTypes:  ['restaurant'],
+              maxResultCount: 5,
+              locationRestriction: { circle: { center: { latitude: lat, longitude: lon }, radius: 5000 } },
+              languageCode: 'pt-BR',
+              regionCode:   'BR',
+            }),
+          });
+          const body = await r.json().catch(() => null);
+          out.new_api = {
+            status: r.status,
+            ok: r.ok,
+            places_count: body?.places?.length ?? null,
+            error: body?.error || null,
+          };
+        } catch (e) { out.new_api = { fetch_error: e.message }; }
+
+        // Places API legada — nearbysearch
+        try {
+          const url = new URL('https://maps.googleapis.com/maps/api/place/nearbysearch/json');
+          url.searchParams.set('location', `${lat},${lon}`);
+          url.searchParams.set('radius', '5000');
+          url.searchParams.set('type', 'restaurant');
+          url.searchParams.set('key', key);
+          const r = await fetch(url);
+          const body = await r.json().catch(() => null);
+          out.legacy_api = {
+            status: r.status,
+            api_status: body?.status || null,
+            results_count: body?.results?.length ?? null,
+            error_message: body?.error_message || null,
+          };
+        } catch (e) { out.legacy_api = { fetch_error: e.message }; }
+      }
+      return res.json(out);
+    }
+
     // Base do proxy de fotos (URL absoluta, para o <img> do app). No Render a
     // API fica atrás de proxy, então req.protocol vem "http" — usar isso geraria
     // uma imagem http:// dentro de um app https:// (mixed content, bloqueada).
