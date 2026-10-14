@@ -20,6 +20,7 @@ test('endpoint reset-info valida o token e devolve dados não sensíveis', () =>
   assert.match(auth, /email:\s*profile\.email \? maskDestination\('email', profile\.email\) : null/,
     'o e-mail vai MASCARADO, nunca cru')
   assert.match(auth, /name:\s*profile\.full_name \|\| null/, 'devolve o nome')
+  assert.match(auth, /photo:\s*profile\.profile_photo_url \|\| null/, 'devolve a foto do perfil')
 })
 
 test('turista: helper resetInfo e endpoint tratado como público', () => {
@@ -31,4 +32,5 @@ test('a página busca e mostra a conta identificada', () => {
   assert.match(page, /api\.resetInfo\(token\)/, 'busca a identificação pelo token')
   assert.match(page, /info\.name \|\| \(info\.username \? `@\$\{info\.username\}`/, 'mostra o nome/@ da conta')
   assert.match(page, /info\.email/, 'mostra o e-mail mascarado')
+  assert.match(page, /info\.photo\s*\?\s*<img/, 'mostra a foto do perfil (com inicial como fallback)')
 })

@@ -770,9 +770,9 @@ router.post('/reset-info', async (req, res, next) => {
 
     let profile = null;
     const full = await supabase.from('users')
-      .select('full_name, email, username').eq('id', claims.user_id).maybeSingle();
+      .select('full_name, email, username, profile_photo_url').eq('id', claims.user_id).maybeSingle();
     if (full.error?.code === '42703') {
-      const base = await supabase.from('users').select('full_name, email').eq('id', claims.user_id).maybeSingle();
+      const base = await supabase.from('users').select('full_name, email, profile_photo_url').eq('id', claims.user_id).maybeSingle();
       profile = base.data;
     } else {
       profile = full.data;
@@ -783,6 +783,7 @@ router.post('/reset-info', async (req, res, next) => {
       name:     profile.full_name || null,
       username: profile.username || null,
       email:    profile.email ? maskDestination('email', profile.email) : null,
+      photo:    profile.profile_photo_url || null,
     });
   } catch (err) { next(err); }
 });

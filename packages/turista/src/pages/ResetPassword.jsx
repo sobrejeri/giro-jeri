@@ -67,8 +67,10 @@ export default function ResetPassword() {
           <form onSubmit={submit} className="mt-4 space-y-3">
             {info ? (
               <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 rounded-2xl px-3 py-2.5">
-                <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-brand font-bold text-[15px] shrink-0">
-                  {String(info.name || info.username || '?')[0].toUpperCase()}
+                <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-brand font-bold text-[15px] shrink-0 overflow-hidden">
+                  {info.photo
+                    ? <img src={info.photo} alt="" className="w-full h-full object-cover" />
+                    : String(info.name || info.username || '?')[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold text-gray-900 truncate">
