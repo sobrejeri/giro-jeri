@@ -2,7 +2,15 @@ const BASE = 'https://api.pagar.me/core/v5'
 
 // Configuração padrão de antecipação automática (100% por volume). Centralizada
 // para o cadastro e o "reaplicar antecipação" usarem exatamente a mesma coisa.
-function anticipationSettings({ enabled = true, volumePercentage = '100', type = 'full', delay = null } = {}) {
+//
+// `delay` = quantidade de dias que NÃO entram no cálculo do valor antecipável
+// (contados do dia da antecipação para trás). Quanto MENOR o delay, mais cedo o
+// recebedor recebe. Enviar `delay: null` fazia a Pagar.me assumir o padrão dela
+// (365 dias) — aí quase nada era antecipado e o dinheiro só caía na liquidação
+// natural (D+30). Com delay = 1, antecipa ~tudo e o operador recebe no próximo
+// dia útil. (Para mudar o prazo, ajuste este número — 1 = o mais cedo possível.)
+const ANTICIPATION_DELAY_DAYS = 1
+function anticipationSettings({ enabled = true, volumePercentage = '100', type = 'full', delay = ANTICIPATION_DELAY_DAYS } = {}) {
   return { enabled, type, volume_percentage: String(volumePercentage), delay }
 }
 
