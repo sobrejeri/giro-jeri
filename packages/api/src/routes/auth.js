@@ -584,7 +584,10 @@ router.post('/forgot-password', async (req, res, next) => {
     // Reconhece QUALQUER identificador das telas de login: @username ou e-mail
     // (turista) e CPF/CNPJ (operador), além de telefone. Resposta sempre
     // genérica no fim (anti-enumeração) — não revela se a conta existe.
-    const SEL = 'id, full_name, username, email, phone, document_number, password_reset_version';
+    // Sem password_reset_version aqui: a versão (uso único) é lida à parte, de
+    // forma tolerante à migration 122 ausente — senão TODA busca abaixo falharia
+    // (42703) e ninguém receberia link antes de a migration ser aplicada.
+    const SEL = 'id, full_name, username, email, phone, document_number';
     const digits = raw.replace(/\D/g, '');
     let user = null;
 
@@ -627,7 +630,10 @@ router.post('/forgot-password', async (req, res, next) => {
     // Achou a conta → tenta entregar o link. O ADMIN só entra no circuito se o
     // WhatsApp não sair (sem telefone ou Z-API desligada).
     if (user) {
-      const token = signResetToken(user.id, user.password_reset_version ?? 0);
+      // Versão de reset (uso único), tolerante à coluna ausente → 0.
+      const { data: vRow } = await supabase.from('users')
+        .select('password_reset_version').eq('id', user.id).maybeSingle();
+      const token = signResetToken(user.id, vRow?.password_reset_version ?? 0);
       const link  = linkPasswordReset(token);
 
       // 1) WhatsApp é o canal principal. Aguardamos para saber se SAIU — é isso
@@ -687,23 +693,64 @@ router.post('/reset-password', async (req, res, next) => {
     try { claims = verifyResetToken(token); }
     catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
 
-    const { data: profile } = await supabase.from('users')
-      .select('id, auth_id, email, password_reset_version').eq('id', claims.user_id).maybeSingle();
-    if (!profile?.auth_id) return res.status(404).json({ error: 'Conta não encontrada.' });
+    // Tolerante à migration 122 (password_reset_version) ainda não aplicada: sem
+    // a coluna, a consulta falhava (42703) e caía em "Conta não encontrada".
+    let profile = null;
+    let hasVersionCol = true;
+    {
+      const full = await supabase.from('users')
+        .select('id, auth_id, email, password_reset_version').eq('id', claims.user_id).maybeSingle();
+      if (full.error?.code === '42703') {
+        hasVersionCol = false;
+        const base = await supabase.from('users').select('id, auth_id, email').eq('id', claims.user_id).maybeSingle();
+        profile = base.data;
+      } else {
+        profile = full.data;
+      }
+    }
+    if (!profile?.id) return res.status(404).json({ error: 'Conta não encontrada.' });
 
-    // Uso único: o token carrega a versão de reset vigente na geração. Se não
-    // bate com a atual, o link já foi usado (ou foi gerado um novo depois).
-    // Token legado (v=null, antes do deploy) pula a checagem.
-    if (claims.v != null && claims.v !== (profile.password_reset_version ?? 0)) {
+    // Uso único (só quando a coluna existe): o token carrega a versão vigente.
+    // Token legado (v=null) ou sem a coluna pula a checagem.
+    if (hasVersionCol && claims.v != null && claims.v !== (profile.password_reset_version ?? 0)) {
       return res.status(410).json({ error: 'Este link já foi usado. Peça um novo.' });
     }
 
-    const { error } = await supabase.auth.admin.updateUserById(profile.auth_id, { password: new_password });
+    // Resolve a conta de auth pelo e-mail do perfil e CRIA o login se não
+    // existir — destrava quem veio do Google e ficou sem senha (mesmo padrão do
+    // reset do admin). O token já provou que o pedido é para este usuário.
+    let authId = profile.auth_id;
+    const profileEmail = String(profile.email || '').trim().toLowerCase();
+    if (profileEmail) {
+      let authUser = null;
+      try {
+        const { data: list } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+        authUser = (list?.users || []).find((u) => String(u.email || '').toLowerCase() === profileEmail) || null;
+      } catch { /* listagem indisponível → usa o auth_id atual */ }
+      if (authUser) {
+        authId = authUser.id;
+        if (profile.auth_id !== authUser.id) {
+          await supabase.from('users').update({ auth_id: authUser.id }).eq('id', profile.id);
+        }
+      } else {
+        const { data: created, error: cErr } = await supabase.auth.admin.createUser({
+          email: profileEmail, password: new_password, email_confirm: true,
+        });
+        if (cErr) return res.status(400).json({ error: cErr.message });
+        authId = created.user.id;
+        await supabase.from('users').update({ auth_id: authId }).eq('id', profile.id);
+      }
+    }
+    if (!authId) return res.status(404).json({ error: 'Conta não encontrada.' });
+
+    const { error } = await supabase.auth.admin.updateUserById(authId, { password: new_password });
     if (error) throw error;
-    // Invalida o link usado, incrementando a versão de reset do usuário.
-    await supabase.from('users')
-      .update({ password_reset_version: (profile.password_reset_version ?? 0) + 1 })
-      .eq('id', profile.id);
+    // Invalida o link usado, incrementando a versão de reset (só se a coluna existir).
+    if (hasVersionCol) {
+      await supabase.from('users')
+        .update({ password_reset_version: (profile.password_reset_version ?? 0) + 1 })
+        .eq('id', profile.id);
+    }
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

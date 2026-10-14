@@ -557,14 +557,30 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) =>
 // o WhatsApp não estiver configurado.
 router.post('/users/:id/reset-link', requireAdmin, async (req, res, next) => {
   try {
-    const { data: target } = await supabase
-      .from('users').select('id, phone, full_name, password_reset_version')
-      .eq('id', req.params.id).maybeSingle();
+    // Tolerante à migration 122 (password_reset_version) ainda não aplicada: sem
+    // a coluna, a consulta falhava (42703) e caía em "Usuário não encontrado",
+    // sem gerar link nenhum. Nesse caso usamos versão 0 (o link ainda vale 30
+    // min; o uso único só entra em vigor quando a migration 122 for aplicada).
+    let target = null;
+    let version = 0;
+    {
+      const full = await supabase
+        .from('users').select('id, phone, full_name, password_reset_version')
+        .eq('id', req.params.id).maybeSingle();
+      if (full.error?.code === '42703') {
+        const base = await supabase.from('users').select('id, phone, full_name')
+          .eq('id', req.params.id).maybeSingle();
+        target = base.data;
+      } else {
+        target = full.data;
+        version = full.data?.password_reset_version ?? 0;
+      }
+    }
     if (!target?.id) return res.status(404).json({ error: 'Usuário não encontrado' });
 
     const { signResetToken } = await import('../lib/resetToken.js');
     const { notifyPasswordReset, linkPasswordReset } = await import('../services/whatsapp.js');
-    const token = signResetToken(target.id, target.password_reset_version ?? 0);
+    const token = signResetToken(target.id, version);
 
     let whatsappSent = false;
     if (target.phone) {

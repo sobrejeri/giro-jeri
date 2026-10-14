@@ -23,8 +23,10 @@ const migration  = read('../../../supabase/migrations/122_password_reset_single_
 test('API: endpoint reset-link gera token com versão e devolve o link', () => {
   assert.match(admin, /router\.post\('\/users\/:id\/reset-link', requireAdmin/,
     'existe o endpoint POST /users/:id/reset-link protegido por admin')
-  assert.match(admin, /signResetToken\(target\.id, target\.password_reset_version \?\? 0\)/,
-    'o token é carimbado com a versão de reset vigente do usuário')
+  assert.match(admin, /signResetToken\(target\.id, version\)/,
+    'o token é carimbado com a versão de reset (tolerante à coluna ausente → 0)')
+  assert.match(admin, /full\.error\?\.code === '42703'/,
+    'tolerante à migration 122 (password_reset_version) ausente')
   assert.match(admin, /notifyPasswordReset\(target\.phone, token\)/,
     'tenta enviar por WhatsApp quando há telefone')
   assert.match(admin, /whatsapp_sent: whatsappSent, has_phone: !!target\.phone, link: linkPasswordReset\(token\)/,
@@ -48,8 +50,8 @@ test('reset-password valida a versão (410) e incrementa ao concluir', () => {
 })
 
 test('forgot-password também carimba o token com a versão', () => {
-  assert.match(auth, /signResetToken\(user\.id, user\.password_reset_version \?\? 0\)/,
-    'o link do "esqueci a senha" é de uso único do mesmo jeito')
+  assert.match(auth, /signResetToken\(user\.id, vRow\?\.password_reset_version \?\? 0\)/,
+    'o link do "esqueci a senha" usa a versão lida à parte (tolerante à coluna ausente)')
 })
 
 test('admin: helper e botão "Enviar link por WhatsApp"', () => {
