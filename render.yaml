@@ -2,7 +2,12 @@ services:
   - type: web
     name: giro-jeri-api
     runtime: node
-    buildCommand: npm install
+    # Instala SÓ as dependências do workspace da API (11 libs), não as dos 3
+    # apps de front (React/Vite/mapbox/recharts — centenas de pacotes que a API
+    # nunca usa). Build muito mais rápido e com MUITO menos superfície para o
+    # `npm install` travar quando o Render está instável. --omit=dev pula o
+    # nodemon (só usado no dev). A API roda com `node src/index.js`.
+    buildCommand: npm install --omit=dev --workspace packages/api --include-workspace-root
     startCommand: npm run start --workspace=packages/api
     envVars:
       - key: NODE_ENV
