@@ -462,17 +462,18 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) =>
     const { new_password } = resetPasswordSchema.parse(req.body);
 
     const { data: target } = await supabase
-      .from('users').select('auth_id, full_name, user_type, document_number').eq('id', req.params.id).single();
-    if (!target?.auth_id) return res.status(404).json({ error: 'Usuário não encontrado' });
+      .from('users').select('auth_id, email, full_name, user_type, document_number').eq('id', req.params.id).single();
+    if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-    // Operador loga por documento (e-mail sintético <doc>@op.girojeri.app). O
-    // auth_id do perfil pode ter sido repontado (ex.: vínculo indevido por
-    // login Google), então NÃO confiamos nele cegamente: localizamos o usuário
-    // de auth certo pelo e-mail sintético e, de quebra, reparamos o vínculo.
-    // Assim o reset sempre atinge a conta que o painel usa de verdade.
+    // NÃO confiamos cegamente no auth_id do perfil: ele pode estar ausente
+    // (perfil sem login) ou cross-linkado. Resolvemos a conta de auth pelo
+    // identificador REAL de login de cada tipo e reparamos o vínculo.
     let authId = target.auth_id;
     const docDigits = String(target.document_number || '').replace(/\D/g, '');
+
     if (target.user_type === 'operator' && docDigits) {
+      // Operador loga por documento (e-mail sintético <doc>@op.girojeri.app).
+      if (!authId) return res.status(404).json({ error: 'Usuário não encontrado' });
       const syntheticEmail = `${docDigits}@op.girojeri.app`;
       let syntheticUser = null;
       try {
@@ -492,8 +493,41 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) =>
         const { error: convErr } = await supabase.auth.admin.updateUserById(target.auth_id, { email: syntheticEmail });
         if (convErr) return res.status(400).json({ error: convErr.message });
       }
+    } else {
+      // Turista/admin: o login é por E-MAIL. Resolve a conta de auth pelo e-mail
+      // do PERFIL e CRIA o login se não existir — é o que destrava quem se
+      // cadastrou pelo Google e ficou sem senha quando o login Google saiu (ou
+      // qualquer perfil sem conta de auth / com auth_id pendurado).
+      const profileEmail = String(target.email || '').trim().toLowerCase();
+      if (!profileEmail && !authId) {
+        return res.status(400).json({ error: 'Este usuário não tem e-mail no perfil nem login vinculado. Preencha o e-mail antes de definir a senha.' });
+      }
+      if (profileEmail) {
+        let authUser = null;
+        try {
+          const { data: list } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+          authUser = (list?.users || []).find((u) => String(u.email || '').toLowerCase() === profileEmail) || null;
+        } catch { /* listagem indisponível → cai no auth_id atual */ }
+
+        if (authUser) {
+          authId = authUser.id;
+          if (target.auth_id !== authUser.id) {
+            await supabase.from('users').update({ auth_id: authUser.id }).eq('id', req.params.id);
+          }
+        } else {
+          // Nenhuma conta de auth com o e-mail do perfil → cria o login por
+          // e-mail + senha (email já confirmado) e vincula ao perfil.
+          const { data: created, error: cErr } = await supabase.auth.admin.createUser({
+            email: profileEmail, password: new_password, email_confirm: true,
+          });
+          if (cErr) return res.status(400).json({ error: cErr.message });
+          authId = created.user.id;
+          await supabase.from('users').update({ auth_id: authId }).eq('id', req.params.id);
+        }
+      }
     }
 
+    if (!authId) return res.status(404).json({ error: 'Usuário não encontrado' });
     const { error } = await supabase.auth.admin.updateUserById(authId, {
       password: new_password,
     });
