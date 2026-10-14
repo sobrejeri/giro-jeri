@@ -44,5 +44,7 @@ export function verifyResetToken(token) {
   if (claims.exp < Math.floor(Date.now() / 1000)) { const e = new Error('Link expirado — peça um novo.'); e.status = 410; throw e; }
   // `v` ausente = token legado (antes do uso único): devolve null, e o
   // reset-password pula a checagem de versão para não quebrar links já enviados.
-  return { user_id: claims.user_id, v: typeof claims.v === 'number' ? claims.v : null };
+  // `exp` (epoch em segundos) acompanha para quem quiser mostrar o tempo
+  // restante do link (ex.: barra de contagem regressiva na página de reset).
+  return { user_id: claims.user_id, v: typeof claims.v === 'number' ? claims.v : null, exp: claims.exp };
 }

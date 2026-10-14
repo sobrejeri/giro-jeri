@@ -17,16 +17,32 @@ export default function ResetPassword() {
   const [done, setDone]     = useState(false)
   // Identifica PARA QUEM é a senha (nome + e-mail mascarado), a partir do token —
   // para o usuário confirmar que está atualizando a conta certa.
-  const [info, setInfo]     = useState(null)
+  const [info, setInfo]           = useState(null)
+  // Tempo restante do link (segundos) para a barra de contagem regressiva.
+  const [remaining, setRemaining] = useState(null)
 
   useEffect(() => {
     if (!token) return
     let vivo = true
     api.resetInfo(token)
-      .then((d) => { if (vivo) setInfo(d) })
+      .then((d) => {
+        if (!vivo) return
+        setInfo(d)
+        if (typeof d.expires_in === 'number') setRemaining(d.expires_in)
+      })
       .catch(() => { /* token inválido/expirado: o envio mostra o erro */ })
     return () => { vivo = false }
   }, [token])
+
+  // Conta regressiva: 1 tick por segundo até zerar.
+  useEffect(() => {
+    if (remaining == null) return undefined
+    const id = setInterval(() => setRemaining((r) => (r != null && r > 0 ? r - 1 : 0)), 1000)
+    return () => clearInterval(id)
+  }, [remaining == null])
+
+  const expired = remaining === 0
+  const fmtMMSS = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
   async function submit(e) {
     e.preventDefault()
@@ -86,6 +102,36 @@ export default function ResetPassword() {
             ) : (
               <p className="text-[12px] text-gray-500 text-center">Crie uma nova senha para sua conta.</p>
             )}
+
+            {/* Barra de validade do link (contagem regressiva dos 30 min) */}
+            {remaining != null && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-gray-400">
+                    {expired ? 'Link expirado' : 'Este link expira em'}
+                  </span>
+                  <span className={`text-[11px] font-bold tabular-nums ${
+                    expired || remaining <= 60 ? 'text-red-500' : remaining <= 300 ? 'text-amber-500' : 'text-emerald-500'
+                  }`}>
+                    {expired ? '0:00' : fmtMMSS(remaining)}
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ease-linear ${
+                      expired || remaining <= 60 ? 'bg-red-500' : remaining <= 300 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.max(0, Math.min(100, (remaining / 1800) * 100))}%` }}
+                  />
+                </div>
+                {expired && (
+                  <p className="text-[11px] text-red-500 mt-1.5">
+                    Peça um novo link pelo "Esqueci minha senha".
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="relative">
               <input
                 type={show ? 'text' : 'password'}
@@ -109,10 +155,11 @@ export default function ResetPassword() {
             {err && <p className="text-[12px] text-red-500 bg-red-50 rounded-xl px-3 py-2">{err}</p>}
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || expired}
               className="w-full h-12 bg-brand text-white font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60"
             >
-              {busy ? <><Loader2 size={16} className="animate-spin" /> Salvando…</> : 'Redefinir senha'}
+              {busy ? <><Loader2 size={16} className="animate-spin" /> Salvando…</>
+                : expired ? 'Link expirado' : 'Redefinir senha'}
             </button>
           </form>
         )}

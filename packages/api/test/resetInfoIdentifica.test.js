@@ -34,3 +34,14 @@ test('a página busca e mostra a conta identificada', () => {
   assert.match(page, /info\.email/, 'mostra o e-mail mascarado')
   assert.match(page, /info\.photo\s*\?\s*<img/, 'mostra a foto do perfil (com inicial como fallback)')
 })
+
+test('barra de contagem regressiva: endpoint devolve o tempo e a página conta', () => {
+  const resetToken = read('../src/lib/resetToken.js')
+  assert.match(resetToken, /exp: claims\.exp/, 'verifyResetToken expõe o exp do token')
+  assert.match(auth, /expires_in:\s*expiresIn/, 'reset-info devolve os segundos restantes')
+  assert.match(auth, /Math\.max\(0, claims\.exp - Math\.floor\(Date\.now\(\) \/ 1000\)\)/, 'calcula quanto falta agora')
+  assert.match(page, /if \(typeof d\.expires_in === 'number'\) setRemaining\(d\.expires_in\)/, 'a página inicia a contagem')
+  assert.match(page, /setInterval\(\(\) => setRemaining/, 'decrementa 1 por segundo')
+  assert.match(page, /const expired = remaining === 0/, 'sabe quando expirou')
+  assert.match(page, /disabled=\{busy \|\| expired\}/, 'bloqueia o envio quando expira')
+})

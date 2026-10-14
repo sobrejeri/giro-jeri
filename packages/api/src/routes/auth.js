@@ -779,11 +779,16 @@ router.post('/reset-info', async (req, res, next) => {
     }
     if (!profile) return res.status(404).json({ error: 'Conta não encontrada.' });
 
+    // Segundos restantes do link (para a barra de contagem na página). O token
+    // vale 30 min; aqui devolvemos quanto falta AGORA.
+    const expiresIn = claims.exp ? Math.max(0, claims.exp - Math.floor(Date.now() / 1000)) : null;
+
     res.json({
-      name:     profile.full_name || null,
-      username: profile.username || null,
-      email:    profile.email ? maskDestination('email', profile.email) : null,
-      photo:    profile.profile_photo_url || null,
+      name:       profile.full_name || null,
+      username:   profile.username || null,
+      email:      profile.email ? maskDestination('email', profile.email) : null,
+      photo:      profile.profile_photo_url || null,
+      expires_in: expiresIn,
     });
   } catch (err) { next(err); }
 });
