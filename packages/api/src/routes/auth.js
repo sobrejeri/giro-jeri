@@ -755,6 +755,38 @@ router.post('/reset-password', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── POST /api/auth/reset-info ─────────────────────────────
+// Identifica a conta de um token de reset — para a página de redefinição mostrar
+// PARA QUEM é a senha e evitar o usuário atualizar a conta errada. Devolve só
+// nome + @ + e-mail MASCARADO (nada sensível). Mesma validação do token (expira
+// em 30 min, escopo por propósito). Tolerante à coluna username ausente.
+router.post('/reset-info', async (req, res, next) => {
+  try {
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ error: 'Link inválido.' });
+    let claims;
+    try { claims = verifyResetToken(token); }
+    catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+
+    let profile = null;
+    const full = await supabase.from('users')
+      .select('full_name, email, username').eq('id', claims.user_id).maybeSingle();
+    if (full.error?.code === '42703') {
+      const base = await supabase.from('users').select('full_name, email').eq('id', claims.user_id).maybeSingle();
+      profile = base.data;
+    } else {
+      profile = full.data;
+    }
+    if (!profile) return res.status(404).json({ error: 'Conta não encontrada.' });
+
+    res.json({
+      name:     profile.full_name || null,
+      username: profile.username || null,
+      email:    profile.email ? maskDestination('email', profile.email) : null,
+    });
+  } catch (err) { next(err); }
+});
+
 // ── POST /api/auth/refresh ─────────────────────────────────
 router.post('/refresh', async (req, res, next) => {
   try {

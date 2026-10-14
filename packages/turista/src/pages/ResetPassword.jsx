@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Lock, Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 import { api } from '../lib/api'
@@ -15,6 +15,18 @@ export default function ResetPassword() {
   const [busy, setBusy]     = useState(false)
   const [err, setErr]       = useState(null)
   const [done, setDone]     = useState(false)
+  // Identifica PARA QUEM é a senha (nome + e-mail mascarado), a partir do token —
+  // para o usuário confirmar que está atualizando a conta certa.
+  const [info, setInfo]     = useState(null)
+
+  useEffect(() => {
+    if (!token) return
+    let vivo = true
+    api.resetInfo(token)
+      .then((d) => { if (vivo) setInfo(d) })
+      .catch(() => { /* token inválido/expirado: o envio mostra o erro */ })
+    return () => { vivo = false }
+  }, [token])
 
   async function submit(e) {
     e.preventDefault()
@@ -53,7 +65,25 @@ export default function ResetPassword() {
           </div>
         ) : (
           <form onSubmit={submit} className="mt-4 space-y-3">
-            <p className="text-[12px] text-gray-500 text-center">Crie uma nova senha para sua conta.</p>
+            {info ? (
+              <div className="flex items-center gap-3 bg-gray-50 border border-gray-100 rounded-2xl px-3 py-2.5">
+                <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-brand font-bold text-[15px] shrink-0">
+                  {String(info.name || info.username || '?')[0].toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-gray-900 truncate">
+                    {info.name || (info.username ? `@${info.username}` : 'Sua conta')}
+                  </p>
+                  {(info.email || info.username) && (
+                    <p className="text-[11px] text-gray-400 truncate">
+                      {info.email || `@${info.username}`}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-[12px] text-gray-500 text-center">Crie uma nova senha para sua conta.</p>
+            )}
             <div className="relative">
               <input
                 type={show ? 'text' : 'password'}

@@ -109,7 +109,8 @@ async function request(path, options = {}, isRetry = false) {
       path.startsWith('/api/auth/refresh') ||
       path.startsWith('/api/auth/otp') ||
       path.startsWith('/api/auth/forgot-password') ||
-      path.startsWith('/api/auth/reset-password')
+      path.startsWith('/api/auth/reset-password') ||
+      path.startsWith('/api/auth/reset-info')
     if (!isAuthEndpoint) {
       if (!isRetry) {
         const r = await refreshOnce()
@@ -171,6 +172,7 @@ export const api = {
   otpVerify:      (body) => request('/api/auth/otp/verify',       { method: 'POST', body }),
   forgotPassword: (body) => request('/api/auth/forgot-password', { method: 'POST', body }),
   resetPassword:  (body) => request('/api/auth/reset-password',  { method: 'POST', body }),
+  resetInfo:      (token) => request('/api/auth/reset-info',     { method: 'POST', body: { token } }),
   me:            ()     => request('/api/auth/me'),
   updateProfile: (body) => request('/api/auth/me',           { method: 'PATCH', body }),
   getLoyalty:    ()          => request('/api/auth/me/loyalty'),
