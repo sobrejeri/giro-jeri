@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ShieldCheck, AlertCircle } from 'lucide-react'
 import { api } from '../../lib/api'
+import { TURIVA_WHATSAPP } from '../../lib/support'
 import { paymentMethodsDoBrick, formasAtivas } from '../../lib/formasPagamento'
 import { totalComJuros, tabelaDeParcelas } from '../../lib/parcelamento'
 import { useAuth } from '../../contexts/AuthContext'
@@ -340,7 +341,7 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
             Tentar de novo
           </button>
           <a
-            href="https://wa.me/5588981222990"
+            href={`https://wa.me/${TURIVA_WHATSAPP}`}
             className="text-[12.5px] font-semibold text-gray-600 underline"
           >
             Falar no WhatsApp

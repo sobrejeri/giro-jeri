@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
+import { TURIVA_WHATSAPP } from '../lib/support'
 import { resolveStatusReserva } from '../lib/statusReserva'
 import { PageSpinner } from '../components/ui/Spinner'
 import ReviewSheet from '../components/ReviewSheet'
@@ -15,8 +16,8 @@ import {
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-const WHATSAPP_NUMBER = '5588999999999'
-const PHONE_NUMBER    = '(88) 9 9999-9999'
+const WHATSAPP_NUMBER = TURIVA_WHATSAPP
+const PHONE_NUMBER    = '(88) 9 8158-1999'
 
 function WhatsAppIcon() {
   return (

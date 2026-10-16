@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { RefreshCw, WifiOff } from 'lucide-react'
+import { TURIVA_WHATSAPP } from '../lib/support'
 
 // ── Barreira de erro ─────────────────────────────────────────────────────────
 // Sem isto, QUALQUER erro durante o render desmonta a árvore inteira do React e
@@ -63,7 +64,7 @@ export default class ErroNaTela extends Component {
         </button>
 
         <a
-          href="https://wa.me/5588981222990"
+          href={`https://wa.me/${TURIVA_WHATSAPP}`}
           className="mt-4 text-[13px] font-semibold text-gray-500 underline"
         >
           Falar com a gente no WhatsApp
