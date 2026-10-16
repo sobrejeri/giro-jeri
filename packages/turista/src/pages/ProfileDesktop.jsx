@@ -60,8 +60,6 @@ export default function ProfileDesktop() {
     queryFn:  () => api.getMyBookings(),
     enabled:  !!token,
   })
-  // WhatsApp de suporte — configurável no admin, com padrão oficial do Turiva.
-  const { data: settings } = useQuery({ queryKey: ['public-settings'], queryFn: () => api.getPublicSettings() })
   // Sempre lista — ver a mesma defesa em Home.jsx.
   const bookings  = Array.isArray(bookingsData?.data) ? bookingsData.data
                   : Array.isArray(bookingsData)       ? bookingsData
@@ -89,7 +87,7 @@ export default function ProfileDesktop() {
   ]
 
   function helpWA(text) {
-    window.open(waSupportLink(settings, text), '_blank')
+    window.open(waSupportLink(text), '_blank')
   }
 
   const DOC_TYPES = [

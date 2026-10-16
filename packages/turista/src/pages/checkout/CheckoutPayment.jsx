@@ -341,7 +341,7 @@ function PaymentBrick({ amount, publicKey, onCard, onPix, settings }) {
             Tentar de novo
           </button>
           <a
-            href={waSupportLink(settings)}
+            href={waSupportLink()}
             className="text-[12.5px] font-semibold text-gray-600 underline"
           >
             Falar no WhatsApp
