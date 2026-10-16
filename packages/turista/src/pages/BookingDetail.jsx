@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
-import { TURIVA_WHATSAPP } from '../lib/support'
+import { waSupportLink } from '../lib/support'
 import { resolveStatusReserva } from '../lib/statusReserva'
 import { PageSpinner } from '../components/ui/Spinner'
 import ReviewSheet from '../components/ReviewSheet'
@@ -16,7 +16,6 @@ import {
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-const WHATSAPP_NUMBER = TURIVA_WHATSAPP
 const PHONE_NUMBER    = '(88) 9 8158-1999'
 
 function WhatsAppIcon() {
@@ -133,6 +132,11 @@ export default function BookingDetail() {
     const t = setInterval(() => setNowTs(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // WhatsApp de suporte — configurável no admin (Configurações → "WhatsApp do
+  // suporte"); cai no número oficial do Turiva como padrão. Mesma queryKey das
+  // outras telas, então vem do cache.
+  const { data: settings } = useQuery({ queryKey: ['public-settings'], queryFn: () => api.getPublicSettings() })
 
   const { data, isLoading } = useQuery({
     queryKey:        ['booking', id],
@@ -716,7 +720,7 @@ export default function BookingDetail() {
         <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
         {/* WhatsApp Support */}
         <button
-          onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank')}
+          onClick={() => window.open(waSupportLink(settings), '_blank')}
           className="w-full bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm active:bg-gray-50 transition-colors"
         >
           <div className="w-9 h-9 rounded-xl bg-[#E8F8EE] flex items-center justify-center text-[#25D366] shrink-0">
