@@ -10,6 +10,7 @@ import {
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
+import { duracao } from '../lib/formato'
 import { lerOferta } from '../lib/oferta'
 import { itemMissing, requestPayloadFor } from '../lib/cartCheckout'
 import { getPartner as getPartnerAttribution } from '../lib/partner'
@@ -1050,7 +1051,7 @@ function CartItemDetails({ item }) {
         )}
         {!isTransfer && tour?.duration_hours && (
           <p className="inline-flex items-center gap-1.5">
-            <Clock size={12} className="text-brand shrink-0" /> {t('tourDetailPg.durationHours', { hours: tour.duration_hours })}
+            <Clock size={12} className="text-brand shrink-0" /> {duracao(tour.duration_hours)}
           </p>
         )}
         {isLoading && !isTransfer ? (

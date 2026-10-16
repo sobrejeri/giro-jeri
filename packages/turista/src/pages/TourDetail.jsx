@@ -14,7 +14,7 @@ import { useMoeda } from '../lib/moeda'
 import { setSEO } from '../lib/seo'
 import { trackViewContent } from '../lib/marketing'
 import { precoDeEntrada } from '../lib/precoCartao'
-import { hora } from '../lib/formato'
+import { duracao, hora } from '../lib/formato'
 import {
   Clock, Users, ChevronLeft, CheckCircle, XCircle,
   Zap, Sun, Waves, Anchor, UserCheck,
@@ -329,7 +329,7 @@ export default function TourDetail() {
             </h1>
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 mb-4">
               {tour.duration_hours && (
-                <span className="flex items-center gap-1.5"><Clock size={15} /> {t('tourDetailPg.durationHours', { hours: tour.duration_hours })}</span>
+                <span className="flex items-center gap-1.5"><Clock size={15} /> {duracao(tour.duration_hours)}</span>
               )}
               {tour.max_people && (
                 <span className="flex items-center gap-1.5"><Users size={15} /> {t('tourDetailPg.maxPeople', { count: tour.max_people })}</span>
@@ -482,7 +482,7 @@ export default function TourDetail() {
                         R$ {sharedPrice.toLocaleString('pt-BR')}
                       </p>
                       <p className="text-white/70 text-[12px] mt-0.5">
-                        {tour.name}{tour.duration_hours ? ` · ${tour.duration_hours}h` : ''}
+                        {tour.name}{tour.duration_hours ? ` · ${duracao(tour.duration_hours)}` : ''}
                       </p>
                       <div className="flex items-center justify-between mt-3 bg-white/15 rounded-lg px-3 py-2">
                         <span className="text-white/80 text-[13px]">

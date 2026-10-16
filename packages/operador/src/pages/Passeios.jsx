@@ -19,6 +19,18 @@ function gi(id = '') {
   let n = 0; for (const c of id) n += c.charCodeAt(0); return n % GRADIENTS.length
 }
 
+// Duração em horas decimais → texto curto (4 → "4h", 1.5 → "1h30", 0.42 → "25min").
+// Evita mostrar valores quebrados tipo "0.4166h" quando a duração tem minutos.
+function fmtDur(horas) {
+  const n = Number(horas)
+  if (!Number.isFinite(n) || n <= 0) return null
+  if (n < 1) return `${Math.round(n * 60)}min`
+  const h = Math.floor(n)
+  const m = Math.round((n - h) * 60)
+  if (m === 60) return `${h + 1}h`
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`
+}
+
 export default function Passeios() {
   const qc = useQueryClient()
   const [toggleError, setToggleError] = useState(null)
@@ -149,7 +161,7 @@ function TourRow({ tour: t, enabled, onToggle, pending }) {
           {t.duration_hours && (
             <>
               <Clock size={10} />
-              <span>{t.duration_hours}h</span>
+              <span>{fmtDur(t.duration_hours)}</span>
             </>
           )}
           {t.max_people && (

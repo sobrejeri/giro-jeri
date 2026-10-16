@@ -56,7 +56,7 @@ function HoraMinInput({ value, onChange, placeholderHoras = '0' }) {
         <select value={m === '' ? '' : String(m)}
           onChange={(e) => emit(h === '' ? '' : String(h), e.target.value)} className={box}>
           <option value="">00</option>
-          {[0, 15, 30, 45].map((x) => <option key={x} value={x}>{String(x).padStart(2, '0')}</option>)}
+          {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((x) => <option key={x} value={x}>{String(x).padStart(2, '0')}</option>)}
         </select>
         <span className="block text-[10px] text-gray-500 mt-0.5 text-center">min</span>
       </div>
@@ -94,6 +94,18 @@ function fileToResizedDataUrl(file, max = 1280, quality = 0.82) {
     }
     reader.readAsDataURL(file)
   })
+}
+
+// Duração em horas decimais → texto curto (2 → "2h", 1.5 → "1h30", 0.42 → "25min").
+// Sem isto o card mostraria "0.4166h" quando a duração tem minutos quebrados.
+function fmtDur(horas) {
+  const n = Number(horas)
+  if (!Number.isFinite(n) || n <= 0) return null
+  if (n < 1) return `${Math.round(n * 60)}min`
+  const h = Math.floor(n)
+  const m = Math.round((n - h) * 60)
+  if (m === 60) return `${h + 1}h`
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`
 }
 
 const TOUR_EMPTY = {
@@ -822,7 +834,7 @@ export default function Catalogo() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-200">{t.name}</p>
                   <p className="text-xs text-gray-500">
-                    {t.duration_hours}h · cap. {t.max_people}
+                    {fmtDur(t.duration_hours)} · cap. {t.max_people}
                     {t.is_private_enabled && ' · Privativo'}
                     {t.is_shared_enabled && ' · Compartilhado'}
                     {/* Nome da categoria direto na linha: sem isto só dava para

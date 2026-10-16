@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { rolarAteAncora } from '../lib/ancora'
 import { precoDeEntrada } from '../lib/precoCartao'
+import { duracao } from '../lib/formato'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import DesktopDatePicker from '../components/DesktopDatePicker'
@@ -77,7 +78,7 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
         <p className="font-bold text-gray-900 text-[13px] leading-tight line-clamp-1">{tour?.name}</p>
         <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-1">
           {tour?.duration_hours && (
-            <span className="inline-flex items-center gap-1"><Clock size={11} />{tour.duration_hours}h</span>
+            <span className="inline-flex items-center gap-1"><Clock size={11} />{duracao(tour.duration_hours)}</span>
           )}
           {tour?.rating_average > 0 && (
             <span className="inline-flex items-center gap-1"><Star size={11} className="text-amber-400 fill-amber-400" />{tour.rating_average}</span>

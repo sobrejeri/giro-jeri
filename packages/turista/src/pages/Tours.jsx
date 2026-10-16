@@ -1082,7 +1082,7 @@ export default function Tours() {
                     R$ {pricePerPerson.toLocaleString('pt-BR')}
                   </p>
                   <p className="text-white/70 text-[12px] mt-0.5">
-                    {selectedTour.name}{selectedTour.duration_hours ? ` · ${selectedTour.duration_hours}h` : ''}
+                    {selectedTour.name}{selectedTour.duration_hours ? ` · ${duracao(selectedTour.duration_hours)}` : ''}
                   </p>
 
                   <div className="flex items-center justify-between mt-4 bg-white/15 rounded-xl px-3 py-2.5">
