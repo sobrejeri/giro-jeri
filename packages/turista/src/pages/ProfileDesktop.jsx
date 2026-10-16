@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import PhoneInput from '../components/PhoneInput'
 import { api } from '../lib/api'
+import { waSupportLink } from '../lib/support'
 import { versionLabel } from '../lib/version'
 import { setLang, LANGS } from '../i18n/index.js'
 import { validateBrDoc } from '../lib/document'
@@ -59,6 +60,8 @@ export default function ProfileDesktop() {
     queryFn:  () => api.getMyBookings(),
     enabled:  !!token,
   })
+  // WhatsApp de suporte — configurável no admin, com padrão oficial do Turiva.
+  const { data: settings } = useQuery({ queryKey: ['public-settings'], queryFn: () => api.getPublicSettings() })
   // Sempre lista — ver a mesma defesa em Home.jsx.
   const bookings  = Array.isArray(bookingsData?.data) ? bookingsData.data
                   : Array.isArray(bookingsData)       ? bookingsData
@@ -86,8 +89,7 @@ export default function ProfileDesktop() {
   ]
 
   function helpWA(text) {
-    const phone = import.meta.env.VITE_ADMIN_WHATSAPP || '5588999999999'
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
+    window.open(waSupportLink(settings, text), '_blank')
   }
 
   const DOC_TYPES = [

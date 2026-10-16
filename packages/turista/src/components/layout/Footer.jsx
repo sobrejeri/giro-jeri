@@ -33,7 +33,7 @@ export default function Footer() {
             <ul className="space-y-2 text-sm">
               <li>Jericoacoara, CE — Brasil</li>
               <li>contato@girojeri.com.br</li>
-              <li>(88) 9 9999-9999</li>
+              <li>(88) 9 8158-1999</li>
             </ul>
           </div>
         </div>

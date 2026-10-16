@@ -12,10 +12,12 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
-const support       = read('../../turista/src/lib/support.js')
-const erroNaTela    = read('../../turista/src/components/ErroNaTela.jsx')
-const checkoutPay   = read('../../turista/src/pages/checkout/CheckoutPayment.jsx')
-const bookingDetail = read('../../turista/src/pages/BookingDetail.jsx')
+const support        = read('../../turista/src/lib/support.js')
+const erroNaTela     = read('../../turista/src/components/ErroNaTela.jsx')
+const checkoutPay    = read('../../turista/src/pages/checkout/CheckoutPayment.jsx')
+const bookingDetail  = read('../../turista/src/pages/BookingDetail.jsx')
+const profileDesktop = read('../../turista/src/pages/ProfileDesktop.jsx')
+const footer         = read('../../turista/src/components/layout/Footer.jsx')
 
 test('o número oficial do Turiva é o padrão (fonte única)', () => {
   assert.match(support, /export const TURIVA_WHATSAPP = '5588981581999'/, 'número oficial (55 88 98158-1999)')
@@ -33,8 +35,19 @@ test('checkout e reserva leem o número do admin (via settings); erro usa o padr
   assert.match(erroNaTela,    /https:\/\/wa\.me\/\$\{TURIVA_WHATSAPP\}/, 'a tela de erro usa o padrão oficial direto')
 })
 
+test('o suporte do perfil (desktop) também lê o número do admin', () => {
+  assert.match(profileDesktop, /waSupportLink\(settings, text\)/, 'helpWA usa o helper com os settings')
+  assert.match(profileDesktop, /queryKey: \['public-settings'\]/, 'carrega os settings públicos')
+  assert.doesNotMatch(profileDesktop, /VITE_ADMIN_WHATSAPP|5588999999999/, 'sem o número/env antigo')
+})
+
+test('o rodapé mostra o número oficial do Turiva', () => {
+  assert.match(footer, /\(88\) 9 8158-1999/, 'número de contato atualizado')
+  assert.doesNotMatch(footer, /9999-9999/, 'sem o placeholder antigo')
+})
+
 test('nenhuma tela de suporte tem mais número de placeholder', () => {
-  for (const [nome, src] of [['ErroNaTela', erroNaTela], ['CheckoutPayment', checkoutPay], ['BookingDetail', bookingDetail]]) {
+  for (const [nome, src] of [['ErroNaTela', erroNaTela], ['CheckoutPayment', checkoutPay], ['BookingDetail', bookingDetail], ['ProfileDesktop', profileDesktop]]) {
     assert.doesNotMatch(src, /5588981222990|5588999999999/, `${nome} sem placeholder`)
   }
 })
