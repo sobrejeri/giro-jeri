@@ -453,7 +453,7 @@ export default function Precos() {
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-gray-800">
-                <th className={`sticky left-0 top-0 z-30 ${thBase} min-w-[200px]`}>Veículo</th>
+                <th className={`sticky left-0 top-0 z-30 ${thBase} w-[170px] min-w-[170px] max-w-[170px] sm:w-[228px] sm:min-w-[228px] sm:max-w-[228px]`}>Veículo</th>
                 {visibleTours.map((t) => (
                   <th key={t.id} className={`sticky top-0 z-20 ${thBase} w-[150px] min-w-[150px] max-w-[150px] align-bottom`}>
                     <span className="block line-clamp-2 leading-snug" title={t.name}>{t.name}</span>
@@ -491,21 +491,21 @@ export default function Precos() {
                 return (
                   <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800/30">
                     {/* Coluna fixa: veículo */}
-                    <td className="sticky left-0 z-10 bg-gray-900 px-4 py-3">
+                    <td className="sticky left-0 z-10 bg-gray-900 px-3 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-9 h-9 rounded-lg bg-gray-700 flex items-center justify-center shrink-0 overflow-hidden">
                           {v.image_url
                             ? <img src={v.image_url} className="w-full h-full object-cover" alt="" />
                             : <Car size={14} className="text-gray-500" />}
                         </div>
-                        <div className="min-w-0">
+                        <div className="w-[100px] sm:w-[158px] min-w-0">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <p className="text-sm font-medium text-gray-200 truncate">{v.name}</p>
+                            <p className="text-sm font-medium text-gray-200 truncate min-w-0" title={v.name}>{v.name}</p>
                             {!v.is_active && (
-                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 text-[9px] font-medium">inativo</span>
+                              <span className="shrink-0 px-1 py-0.5 rounded bg-gray-700 text-gray-300 text-[9px] font-medium">inativo</span>
                             )}
                           </div>
-                          <p className="text-[11px] text-gray-500">Até {v.seat_capacity} pax · {rowCount}/{visibleTours.length} preços</p>
+                          <p className="text-[11px] text-gray-500 truncate">Até {v.seat_capacity} pax · {rowCount}/{visibleTours.length}</p>
                         </div>
                       </div>
                     </td>
