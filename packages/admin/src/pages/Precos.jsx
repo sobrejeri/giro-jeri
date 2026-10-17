@@ -42,6 +42,7 @@ export default function Precos() {
   const [search, setSearch]   = useState('')
   const [regionId, setRegionId] = useState('')
   const [catId, setCatId]       = useState('')  // '' = todas · '__sem' = sem categoria
+  const [statusTour, setStatusTour] = useState('ativos')  // 'ativos' | 'inativos' | 'todos'
   const qc = useQueryClient()
 
   const { data: rules = [],    isLoading: l1 } = useQuery({ queryKey: ['pricing-rules'], queryFn: () => api.getPricingRules() })
@@ -78,7 +79,15 @@ export default function Precos() {
   }, [rules, multiRegion, effectiveRegion])
 
   const eligibleVehicles = vehicles.filter((v) => v.is_tour_allowed && v.is_active)
-  const eligibleTours    = tours.filter((t) => t.is_active !== false)
+  // Passeios por status. A /api/catalog/tours devolve ativos E inativos; o
+  // padrão "ativos" preserva o comportamento de antes, e o filtro deixa ver/
+  // precificar também os inativos (ex.: passeio sazonal desligado).
+  const nAtivos   = tours.filter((t) => t.is_active !== false).length
+  const nInativos = tours.length - nAtivos
+  const eligibleTours =
+    statusTour === 'inativos' ? tours.filter((t) => t.is_active === false)
+    : statusTour === 'todos'  ? tours
+    : tours.filter((t) => t.is_active !== false)
 
   // Categorias que realmente têm passeio ativo, com a contagem. 19 colunas numa
   // grade só não deixam achar nada; por categoria, cada recorte cabe na tela.
@@ -351,6 +360,28 @@ export default function Precos() {
         </div>
       </div>
 
+      {/* Filtro por status do passeio (ativos / inativos / todos) */}
+      <div className="flex items-center gap-2 text-[12px]">
+        <span className="text-gray-500 shrink-0">Passeios:</span>
+        <div className="inline-flex rounded-full border border-gray-700 overflow-hidden">
+          {[
+            { id: 'ativos',   label: 'Ativos',   n: nAtivos },
+            { id: 'inativos', label: 'Inativos', n: nInativos },
+            { id: 'todos',    label: 'Todos',    n: tours.length },
+          ].map((opt) => (
+            <button
+              key={opt.id}
+              onClick={() => { setStatusTour(opt.id); setCatId('') }}
+              className={`px-3 py-1.5 font-medium transition-colors ${
+                statusTour === opt.id ? 'bg-brand text-white' : 'bg-gray-900 text-gray-300 hover:text-gray-100'
+              }`}
+            >
+              {opt.label} <span className={statusTour === opt.id ? 'text-white/70' : 'text-gray-500'}>{opt.n}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Filtro por categoria — só aparece se houver categoria cadastrada */}
       {categorias.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
@@ -395,6 +426,9 @@ export default function Precos() {
                 {visibleTours.map((t) => (
                   <th key={t.id} className={`sticky top-0 z-20 ${thBase} w-[150px] min-w-[150px] max-w-[150px] align-bottom`}>
                     <span className="block line-clamp-2 leading-snug" title={t.name}>{t.name}</span>
+                    {t.is_active === false && (
+                      <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 text-[9px] font-medium normal-case">inativo</span>
+                    )}
                     {(() => {
                       const nomes = new Map(catsCadastro.map((c) => [c.id, c.name]))
                       const rotulo = catsDoPasseio(t).map((id) => nomes.get(id)).filter(Boolean).join(' · ')
@@ -409,8 +443,13 @@ export default function Precos() {
                 ))}
                 {visibleTours.length === 0 && (
                   <th className={`sticky top-0 z-20 ${thBase} text-gray-600 normal-case`}>
-                    {q ? `Nenhum passeio para “${search}”` : 'Nenhum passeio nesta categoria'}
-                    {catId && q ? ' nesta categoria.' : '.'}
+                    {q
+                      ? `Nenhum passeio para “${search}”.`
+                      : statusTour === 'inativos'
+                        ? 'Nenhum passeio inativo.'
+                        : catId
+                          ? 'Nenhum passeio nesta categoria.'
+                          : 'Nenhum passeio.'}
                   </th>
                 )}
               </tr>
