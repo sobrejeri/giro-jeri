@@ -43,6 +43,7 @@ export default function Precos() {
   const [regionId, setRegionId] = useState('')
   const [catId, setCatId]       = useState('')  // '' = todas · '__sem' = sem categoria
   const [statusTour, setStatusTour] = useState('ativos')  // 'ativos' | 'inativos' | 'todos'
+  const [statusVeic, setStatusVeic] = useState('ativos')  // idem, para os veículos (linhas)
   const qc = useQueryClient()
 
   const { data: rules = [],    isLoading: l1 } = useQuery({ queryKey: ['pricing-rules'], queryFn: () => api.getPricingRules() })
@@ -78,7 +79,15 @@ export default function Precos() {
     return m
   }, [rules, multiRegion, effectiveRegion])
 
-  const eligibleVehicles = vehicles.filter((v) => v.is_tour_allowed && v.is_active)
+  // Veículos (linhas) por status — base: só os liberados para passeio
+  // (is_tour_allowed). O padrão "ativos" preserva o comportamento de antes.
+  const veicBase      = vehicles.filter((v) => v.is_tour_allowed)
+  const nVeicAtivos   = veicBase.filter((v) => v.is_active).length
+  const nVeicInativos = veicBase.length - nVeicAtivos
+  const eligibleVehicles =
+    statusVeic === 'inativos' ? veicBase.filter((v) => !v.is_active)
+    : statusVeic === 'todos'  ? veicBase
+    : veicBase.filter((v) => v.is_active)
   // Passeios por status. A /api/catalog/tours devolve ativos E inativos; o
   // padrão "ativos" preserva o comportamento de antes, e o filtro deixa ver/
   // precificar também os inativos (ex.: passeio sazonal desligado).
@@ -360,25 +369,47 @@ export default function Precos() {
         </div>
       </div>
 
-      {/* Filtro por status do passeio (ativos / inativos / todos) */}
-      <div className="flex items-center gap-2 text-[12px]">
-        <span className="text-gray-500 shrink-0">Passeios:</span>
-        <div className="inline-flex rounded-full border border-gray-700 overflow-hidden">
-          {[
-            { id: 'ativos',   label: 'Ativos',   n: nAtivos },
-            { id: 'inativos', label: 'Inativos', n: nInativos },
-            { id: 'todos',    label: 'Todos',    n: tours.length },
-          ].map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => { setStatusTour(opt.id); setCatId('') }}
-              className={`px-3 py-1.5 font-medium transition-colors ${
-                statusTour === opt.id ? 'bg-brand text-white' : 'bg-gray-900 text-gray-300 hover:text-gray-100'
-              }`}
-            >
-              {opt.label} <span className={statusTour === opt.id ? 'text-white/70' : 'text-gray-500'}>{opt.n}</span>
-            </button>
-          ))}
+      {/* Filtros de status: passeios (colunas) e veículos (linhas) */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 shrink-0">Passeios:</span>
+          <div className="inline-flex rounded-full border border-gray-700 overflow-hidden">
+            {[
+              { id: 'ativos',   label: 'Ativos',   n: nAtivos },
+              { id: 'inativos', label: 'Inativos', n: nInativos },
+              { id: 'todos',    label: 'Todos',    n: tours.length },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => { setStatusTour(opt.id); setCatId('') }}
+                className={`px-3 py-1.5 font-medium transition-colors ${
+                  statusTour === opt.id ? 'bg-brand text-white' : 'bg-gray-900 text-gray-300 hover:text-gray-100'
+                }`}
+              >
+                {opt.label} <span className={statusTour === opt.id ? 'text-white/70' : 'text-gray-500'}>{opt.n}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 shrink-0">Veículos:</span>
+          <div className="inline-flex rounded-full border border-gray-700 overflow-hidden">
+            {[
+              { id: 'ativos',   label: 'Ativos',   n: nVeicAtivos },
+              { id: 'inativos', label: 'Inativos', n: nVeicInativos },
+              { id: 'todos',    label: 'Todos',    n: veicBase.length },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setStatusVeic(opt.id)}
+                className={`px-3 py-1.5 font-medium transition-colors ${
+                  statusVeic === opt.id ? 'bg-brand text-white' : 'bg-gray-900 text-gray-300 hover:text-gray-100'
+                }`}
+              >
+                {opt.label} <span className={statusVeic === opt.id ? 'text-white/70' : 'text-gray-500'}>{opt.n}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -468,7 +499,12 @@ export default function Precos() {
                             : <Car size={14} className="text-gray-500" />}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-200 truncate">{v.name}</p>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="text-sm font-medium text-gray-200 truncate">{v.name}</p>
+                            {!v.is_active && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 text-[9px] font-medium">inativo</span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-gray-500">Até {v.seat_capacity} pax · {rowCount}/{visibleTours.length} preços</p>
                         </div>
                       </div>
