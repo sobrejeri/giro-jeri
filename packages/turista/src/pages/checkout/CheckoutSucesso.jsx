@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { CheckCircle, Clock, ArrowRight, Home, Calendar, Users } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { CheckCircle, Clock, ArrowRight, Home, Calendar, Users, Car, XCircle } from 'lucide-react'
 import { trackPurchase } from '../../lib/marketing'
+import { api } from '../../lib/api'
+import { resolveStatusReserva } from '../../lib/statusReserva'
 
 function fmt(v) { return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
 
@@ -25,14 +28,48 @@ export default function CheckoutSucesso() {
     })
   }, [state])
 
+  const bookingId = state?.booking_id
+
+  // Status AO VIVO. Antes esta tela mostrava um "Aguardando operador aceitar"
+  // FIXO (vinha só do location.state) e nunca mudava — mesmo depois de o
+  // operador aceitar, despachar e iniciar a corrida. Agora relê a reserva e
+  // vai acompanhando (mesmo polling e mesma regra de status do detalhe).
+  const { data: bookingLive } = useQuery({
+    queryKey:        ['booking', bookingId],
+    queryFn:         () => api.getBooking(bookingId),
+    enabled:         !!bookingId,
+    refetchInterval: (q) => {
+      const s = resolveStatusReserva(q.state.data)
+      return ['waiting_acceptance', 'waiting_payment', 'confirmed', 'in_progress'].includes(s) ? 8000 : false
+    },
+    refetchOnWindowFocus: true,
+  })
+
   if (!state) { navigate('/'); return null }
 
   const {
     service_name, service_date, service_time, people_count,
-    total_price, amount, booking_code, booking_id, cover_image_url,
+    total_price, amount, booking_code, cover_image_url,
   } = state
 
   const value = amount || total_price
+
+  // Enquanto a reserva não voltou do servidor, mostra "aguardando aceite"
+  // (estado logo após pagar). Depois, o status real manda.
+  const status = bookingLive ? resolveStatusReserva(bookingLive) : 'waiting_acceptance'
+
+  // Rótulos/cores reaproveitam as chaves do detalhe da reserva (já traduzidas).
+  const STATUS_META = {
+    waiting_payment:    { label: t('bookingDetailPg.statusMeta.waitingPayment'),    sub: t('payment.success.awaitingCoopSub'),                                                          color: 'text-amber-900',   bg: 'bg-amber-50',   border: 'border-amber-200',   dot: 'bg-amber-400',   icon: Clock },
+    waiting_acceptance: { label: t('payment.success.awaitingCoop'),                 sub: t('payment.success.awaitingCoopSub'),                                                          color: 'text-amber-900',   bg: 'bg-amber-50',   border: 'border-amber-200',   dot: 'bg-amber-400',   icon: Clock },
+    confirmed:          { label: t('bookingDetailPg.timeline.confirmed'),           sub: t('payment.success.confirmedSub',  { defaultValue: 'O operador confirmou sua reserva. Acompanhe os próximos passos por aqui.' }), color: 'text-emerald-900', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-400', icon: CheckCircle },
+    in_progress:        { label: t('bookingDetailPg.timeline.inProgress'),          sub: t('payment.success.inProgressSub', { defaultValue: 'Seu serviço começou. Bom passeio! 🌴' }),       color: 'text-blue-900',    bg: 'bg-blue-50',    border: 'border-blue-200',    dot: 'bg-blue-400',    icon: Car },
+    completed:          { label: t('bookingDetailPg.timeline.completed'),           sub: t('payment.success.completedSub',  { defaultValue: 'Serviço concluído. Obrigado por viajar com a Turiva!' }), color: 'text-gray-700',    bg: 'bg-gray-50',    border: 'border-gray-200',    dot: 'bg-gray-400',    icon: CheckCircle },
+    cancelled:          { label: t('bookingDetailPg.statusMeta.cancelled'),         sub: t('payment.success.cancelledSub',  { defaultValue: 'Esta reserva foi cancelada.' }),                color: 'text-red-900',     bg: 'bg-red-50',     border: 'border-red-200',     dot: 'bg-red-400',     icon: XCircle },
+  }
+  const meta  = STATUS_META[status] || STATUS_META.waiting_acceptance
+  const pulse = ['waiting_acceptance', 'waiting_payment', 'confirmed', 'in_progress'].includes(status)
+  const StatusIcon = meta.icon
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -53,18 +90,18 @@ export default function CheckoutSucesso() {
           {t('payment.success.subtitle')}
         </p>
 
-        {/* Status aguardando operador */}
-        <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 flex items-start gap-3">
+        {/* Status da reserva — AO VIVO (acompanha o operador aceitar/iniciar) */}
+        <div className={`w-full ${meta.bg} border ${meta.border} rounded-2xl p-4 mb-4 flex items-start gap-3`}>
           <div className="relative shrink-0 mt-0.5">
-            <div className="w-8 h-8 rounded-full bg-amber-300 animate-ping absolute inset-0 opacity-50" />
-            <div className="relative w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center">
-              <Clock size={16} className="text-white" />
+            {pulse && <div className={`w-8 h-8 rounded-full ${meta.dot} animate-ping absolute inset-0 opacity-50`} />}
+            <div className={`relative w-8 h-8 rounded-full ${meta.dot} flex items-center justify-center`}>
+              <StatusIcon size={16} className="text-white" />
             </div>
           </div>
           <div>
-            <p className="text-[14px] font-bold text-amber-900">{t('payment.success.awaitingCoop')}</p>
-            <p className="text-[12px] text-amber-700 mt-0.5 leading-relaxed">
-              {t('payment.success.awaitingCoopSub')}
+            <p className={`text-[14px] font-bold ${meta.color}`}>{meta.label}</p>
+            <p className={`text-[12px] ${meta.color} opacity-80 mt-0.5 leading-relaxed`}>
+              {meta.sub}
             </p>
           </div>
         </div>
@@ -79,8 +116,8 @@ export default function CheckoutSucesso() {
           <div className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <p className="text-[15px] font-bold text-gray-900 flex-1">{service_name}</p>
-              <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-full shrink-0 whitespace-nowrap">
-                {t('payment.success.statusTag')}
+              <span className={`${meta.bg} ${meta.color} text-[10px] font-bold px-2 py-1 rounded-full shrink-0 whitespace-nowrap`}>
+                {meta.label}
               </span>
             </div>
 
@@ -118,7 +155,7 @@ export default function CheckoutSucesso() {
 
         <div className="w-full space-y-2.5">
           <button
-            onClick={() => navigate(booking_id ? `/minhas-reservas/${booking_id}` : '/minhas-reservas')}
+            onClick={() => navigate(bookingId ? `/minhas-reservas/${bookingId}` : '/minhas-reservas')}
             className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform"
           >
             {t('payment.success.trackBtn')} <ArrowRight size={16} />
