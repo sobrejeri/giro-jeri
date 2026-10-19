@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -19,6 +19,10 @@ import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
+// "Novas" (solicitações disponíveis + cotações) é a MESMA tela de antes,
+// embutida aqui como aba do cockpit — reaproveita toda a lógica de aceitar/
+// combo/perna/cotação sem duplicar nada.
+import Reservas from './Reservas'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -412,9 +416,12 @@ const PER_PAGE = 8
 // ele que o split manda a parte dele de cada reserva. O aviso explica o
 // bloqueio antes da tentativa, em vez de deixar o erro aparecer só no clique.
 export default function Dashboard() {
+  const [searchParams] = useSearchParams()
   const [date, setDate]        = useState('all')
   const [serviceType, setType] = useState('')
-  const [tab, setTab]          = useState('active')
+  // Abre direto em "Novas" quando vem do link do WhatsApp (/reservas →
+  // /dashboard?tab=novas) ou do pop-up de nova solicitação.
+  const [tab, setTab]          = useState(searchParams.get('tab') === 'novas' ? 'novas' : 'active')
   const [search, setSearch]    = useState('')
   const [page, setPage]        = useState(1)
   const [showMore, setShowMore] = useState(false) // painel "Mais filtros"
@@ -454,6 +461,22 @@ export default function Dashboard() {
     staleTime: 5 * 60_000, retry: false,
   })
   const executores = Array.isArray(executoresData) ? executoresData : []
+
+  // Contagem da aba "Novas" (solicitações disponíveis + cotações a responder).
+  // Mesmas chaves de cache do componente embutido → sem chamadas a mais.
+  const { data: obData } = useQuery({
+    queryKey:        ['operator-bookings'],
+    queryFn:         () => api.getOperatorBookings(),
+    refetchInterval: 15_000,
+  })
+  const { data: quotesPendRaw } = useQuery({
+    queryKey:        ['quotes-pending'],
+    queryFn:         () => api.getPendingQuotes(),
+    refetchInterval: 30_000,
+  })
+  const novasCount = (obData?.pending?.length || 0)
+    + (Array.isArray(quotesPendRaw) ? quotesPendRaw : (quotesPendRaw?.data || []))
+        .filter((q) => q.status === 'pending_quote').length
 
   const operador = profile ? {
     full_name:         profile.full_name,
@@ -607,6 +630,7 @@ export default function Dashboard() {
 
   const activeBooks = allBooks.filter((b) => b.status_operational !== 'completed')
   const TABS = [
+    { key: 'novas',      label: 'Novas',        count: novasCount,             dot: 'bg-brand' },
     { key: 'active',     label: 'Ativas',       count: activeBooks.length,     dot: '' },
     { key: 'pending',    label: 'Aguardando',   count: awaitingDispatch.length, dot: 'bg-amber-500' },
     { key: 'started',    label: 'Em andamento', count: inProgress.length,      dot: 'bg-orange-500' },
@@ -616,7 +640,7 @@ export default function Dashboard() {
     { key: 'all',        label: 'Todas',        count: allBooks.length,        dot: '' },
   ]
   // Abas primárias (visíveis) + as extras, atrás de "Mais filtros".
-  const PRIMARY_KEYS = ['active', 'pending', 'started']
+  const PRIMARY_KEYS = ['novas', 'active', 'pending', 'started']
   const primaryTabs  = TABS.filter((t) => PRIMARY_KEYS.includes(t.key))
   const moreTabs     = TABS.filter((t) => !PRIMARY_KEYS.includes(t.key))
   const moreActive   = moreTabs.some((t) => t.key === tab)
@@ -728,7 +752,8 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Busca + botão de filtros */}
+        {/* Busca + botão de filtros — não aplica à aba "Novas". */}
+        {tab !== 'novas' && (
         <div className="px-5 pb-3 flex items-center gap-2">
           <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 h-11 bg-white focus-within:border-brand">
             <Search size={16} className="text-gray-400 shrink-0" />
@@ -750,6 +775,7 @@ export default function Dashboard() {
             <SlidersHorizontal size={18} />
           </button>
         </div>
+        )}
 
         {/* Abas primárias + "Mais filtros" — uma linha só, rolável na horizontal */}
         <div className="px-5 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
@@ -799,6 +825,14 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Aba "Novas": reaproveita a tela de Solicitações embutida (aceitar +
+            cotações). As demais abas mostram o pipeline (tabela/cards). */}
+        {tab === 'novas' ? (
+          <div className="p-3 sm:p-4 bg-gray-50/60">
+            <Reservas soNovas />
+          </div>
+        ) : (
+        <>
         {/* Cards (mobile) — cada reserva é um bloco separado; combos vêm juntos */}
         <div className="md:hidden p-3 space-y-3 bg-gray-50/60">
           {unidadesLista.map((u) => u.type === 'combo' ? (
@@ -890,6 +924,8 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
 

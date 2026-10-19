@@ -18,9 +18,9 @@ const NAV_PARKING = [
 // seg: em qual segmento o item aparece — 'tours' (passeios/transfers), 'parking'
 // (estacionamento) ou 'both'. O admin vê tudo.
 const NAV = [
+  // "Solicitações" e "Despacho" foram unificados dentro de Operações (aba
+  // "Novas" para aceitar/cotar + o pipeline aguardando/despachar/iniciar/concluir).
   { to: '/dashboard',  icon: LayoutDashboard, label: 'Operações',    seg: 'tours'   },
-  { to: '/reservas',   icon: CalendarCheck,   label: 'Solicitações', seg: 'tours'   },
-  { to: '/despacho',   icon: Truck,           label: 'Despacho',     seg: 'tours'   },
   { to: '/estacionamento', icon: ParkingSquare, label: 'Estacionamento', seg: 'parking' },
   { to: '/veiculos',   icon: Car,             label: 'Veículos',     seg: 'tours'   },
   { to: '/passeios',   icon: Compass,         label: 'Passeios',     seg: 'tours'   },

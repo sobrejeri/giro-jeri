@@ -642,7 +642,11 @@ function QuoteRequestCard({ quote, onQuote }) {
 }
 
 // ── Página principal ──────────────────────────────────────
-export default function Reservas() {
+// `soNovas`: quando embutido na aba "Novas" do painel Operações, mostra APENAS
+// as solicitações disponíveis + cotações (sem "Minhas corridas", sem cabeçalho
+// nem abas próprias — o cockpit já tem tudo isso). As "minhas" viraram o
+// pipeline do próprio Operações (Aguardando/Em andamento/…).
+export default function Reservas({ soNovas = false }) {
   const { user }    = useAuth()
   const navigate    = useNavigate()
   const isElevated  = user?.user_type === 'admin'
@@ -651,6 +655,7 @@ export default function Reservas() {
   const [searchParams, setSearchParams] = useSearchParams()
   const abaValida = ['pending', 'cotacoes', 'mine']
   const [tab, setTab] = useState(() => {
+    if (soNovas) return 'pending'
     const t = searchParams.get('tab')
     return abaValida.includes(t) ? t : 'pending'
   })
@@ -661,6 +666,7 @@ export default function Reservas() {
   // então o useState inicial sozinho não trocaria a aba). Depois de aplicar,
   // limpa o ?tab da URL para não "grudar" num reload ou ao voltar no histórico.
   useEffect(() => {
+    if (soNovas) return
     const t = searchParams.get('tab')
     if (!t) return
     if (abaValida.includes(t)) setTab(t)
@@ -763,8 +769,9 @@ export default function Reservas() {
       if (isLeg) await api.acceptLeg(id)
       else       await api.acceptBooking(id)
       queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      if (soNovas) queryClient.invalidateQueries({ queryKey: ['operational'] })
       setToast({ message: 'Reserva aceita! Aguardando o cliente pagar.', type: 'success' })
-      setTab('mine')
+      if (!soNovas) setTab('mine')
     } catch (err) {
       if (err.message?.includes('já foi aceita')) {
         queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
@@ -788,11 +795,12 @@ export default function Reservas() {
     try {
       const r = await api.acceptGroup(gid)
       queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
+      if (soNovas) queryClient.invalidateQueries({ queryKey: ['operational'] })
       setToast({
         message: `Pedido aceito (${r?.accepted_count ?? items.length} serviços)! Aguardando o cliente pagar tudo.`,
         type: 'success',
       })
-      setTab('mine')
+      if (!soNovas) setTab('mine')
     } catch (err) {
       queryClient.invalidateQueries({ queryKey: ['operator-bookings'] })
       setToast({ message: err.message || 'Não foi possível aceitar o pedido', type: 'error' })
@@ -955,8 +963,9 @@ export default function Reservas() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-2xl mx-auto">
-      {/* Header */}
+    <div className={soNovas ? '' : 'p-4 sm:p-6 max-w-2xl mx-auto'}>
+      {/* Header — some quando embutido no cockpit (Operações já tem o seu). */}
+      {!soNovas && (
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Solicitações</h1>
@@ -980,9 +989,10 @@ export default function Reservas() {
           <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
         </button>
       </div>
+      )}
 
       {/* Faixa modo administrador — visível só quando o usuário logado é admin */}
-      {isElevated && (
+      {!soNovas && isElevated && (
         <div
           role="status"
           className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5"
@@ -995,7 +1005,9 @@ export default function Reservas() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — ocultas no cockpit (Operações só mostra "Novas"; as "minhas"
+          viraram o pipeline do próprio painel). */}
+      {!soNovas && (
       <div className="flex bg-gray-100 rounded-xl p-1 mb-5">
         {[
           // Disponíveis soma corridas (passeio/translado fixo) + cotações pendentes —
@@ -1027,6 +1039,7 @@ export default function Reservas() {
           </button>
         ))}
       </div>
+      )}
 
       {/* Conteúdo */}
       {isError ? (

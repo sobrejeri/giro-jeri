@@ -4,14 +4,12 @@ import { useAuth } from './contexts/AuthContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Despacho from './pages/Despacho'
 import EstacionamentoPainel from './pages/Estacionamento'
 import Veiculos from './pages/Veiculos'
 import Financeiro from './pages/Financeiro'
 import Passeios from './pages/Passeios'
 import Rotas from './pages/Rotas'
 import Perfil from './pages/Perfil'
-import Reservas from './pages/Reservas'
 import Reputacao from './pages/Reputacao'
 import Publicacoes from './pages/Publicacoes'
 import OsPublica from './pages/OsPublica'
@@ -65,9 +63,12 @@ export default function App() {
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<HomeRedirect />} />
         <Route path="dashboard"  element={<Dashboard />} />
-        <Route path="reservas"   element={<Reservas />} />
-        <Route path="cotacoes"   element={<Navigate to="/reservas" replace />} />
-        <Route path="despacho"   element={<Despacho />} />
+        {/* Unificadas no cockpit: Solicitações/Cotações viraram a aba "Novas" do
+            painel Operações, e o Despacho acontece dentro dele. Mantemos as
+            rotas (links do WhatsApp apontam para /reservas) redirecionando. */}
+        <Route path="reservas"   element={<Navigate to="/dashboard?tab=novas" replace />} />
+        <Route path="cotacoes"   element={<Navigate to="/dashboard?tab=novas" replace />} />
+        <Route path="despacho"   element={<Navigate to="/dashboard" replace />} />
         <Route path="estacionamento" element={<EstacionamentoPainel />} />
         <Route path="estacionamento/solicitacoes" element={<EstacionamentoPainel section="fila" />} />
         <Route path="estacionamento/reservas"     element={<EstacionamentoPainel section="reservas" />} />

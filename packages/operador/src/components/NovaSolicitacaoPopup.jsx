@@ -155,8 +155,8 @@ export default function NovaSolicitacaoPopup() {
       }
       setTimeout(() => setAviso(null), 3500)
       // Não precisa dispensar: aceita, sai de `pending` no próximo feed.
-      // Leva direto às Solicitações, já na aba "Minhas corridas".
-      navigate('/reservas?tab=mine')
+      // Leva ao cockpit (Operações) — a corrida aceita está no pipeline (Ativas).
+      navigate('/dashboard')
     } catch (err) {
       const jaAceita = err?.message?.includes('já foi aceita') || err?.message?.includes('já foi aceito') || err?.status === 409
       qc.invalidateQueries({ queryKey: ['operator-bookings'] })
@@ -201,7 +201,7 @@ export default function NovaSolicitacaoPopup() {
               </button>
               <button
                 type="button"
-                onClick={() => { dispensarAviso(avisoAtual); navigate('/reservas?tab=mine') }}
+                onClick={() => { dispensarAviso(avisoAtual); navigate('/dashboard') }}
                 className="flex-[1.4] flex items-center justify-center gap-1.5 bg-brand text-white font-bold px-3 py-2.5 rounded-xl text-[13px] active:scale-95 transition-all shadow-md shadow-brand/30"
               >
                 <Check size={15} /> Ver reserva
