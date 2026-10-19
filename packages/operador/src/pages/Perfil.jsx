@@ -115,7 +115,7 @@ function PagarmeRecipient({ onBeforeRegister, saving }) {
     onSuccess: (r) => {
       setErr(null)
       const t = r?.transfer?.ok ? 'Transferência automática ativada (diária).' : `Transferência: ${r?.transfer?.error || 'não ativada'}.`
-      const a = r?.anticipation?.ok ? 'Antecipação automática ativada (100%).' : `Antecipação: ${r?.anticipation?.error || 'não ativada'}.`
+      const a = r?.anticipation?.ok ? 'Antecipação automática ativada (recebimento em D+X).' : `Antecipação: ${r?.anticipation?.error || 'não ativada'}.`
       setAviso(`${t} ${a}`)
     },
     onError: (e) => { setAviso(null); setErr(e?.message || 'Não foi possível ativar as automações agora.') },
