@@ -330,6 +330,7 @@ export const api = {
   pushSubscribe:         (sub) => request('/api/notifications/push-subscribe', { method: 'POST', body: sub }),
   pushUnsubscribe:       (body) => request('/api/notifications/push-unsubscribe', { method: 'POST', body }),
   getVapidKey:           ()    => request('/api/notifications/vapid-public-key'),
+  pushTest:              ()    => request('/api/notifications/push-test', { method: 'POST' }),
 
   // Destaques (Instagram Highlights) — admin
   getStories:      ()          => request('/api/stories/admin'),
