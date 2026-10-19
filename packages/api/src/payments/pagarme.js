@@ -1,17 +1,23 @@
 const BASE = 'https://api.pagar.me/core/v5'
 
-// Configuração padrão de antecipação automática (100% por volume). Centralizada
-// para o cadastro e o "reaplicar antecipação" usarem exatamente a mesma coisa.
+// Configuração padrão de antecipação automática: modelo "Recebimento em D+X"
+// (type '1025'). A venda inteira é antecipada para D+X dias úteis após a compra
+// — é o modelo previsível que garante o repasse rápido ao recebedor (confirmado
+// funcionando no painel da conta). Centralizada para o cadastro e o "reaplicar
+// antecipação" usarem exatamente a mesma coisa.
 //
-// `delay` = quantidade de dias que NÃO entram no cálculo do valor antecipável
-// (contados do dia da antecipação para trás). Quanto MENOR o delay, mais cedo o
-// recebedor recebe. Enviar `delay: null` fazia a Pagar.me assumir o padrão dela
-// (365 dias) — aí quase nada era antecipado e o dinheiro só caía na liquidação
-// natural (D+30). Com delay = 1, antecipa ~tudo e o operador recebe no próximo
-// dia útil. (Para mudar o prazo, ajuste este número — 1 = o mais cedo possível.)
+// `delay` = o X do D+X (nº de dias até o recebedor receber). delay = 1 → D+1
+// (próximo dia útil); "até 2 dias úteis" fica folgado. Para mudar o prazo,
+// ajuste este número.
+//
+// Antes era type 'full' ("Recebimento por volume" — antecipava pela regra de
+// volume máximo). O `volume_percentage` só faz sentido naquele modo; no D+X o
+// que manda é o `delay`, então nem enviamos o volume aqui.
 const ANTICIPATION_DELAY_DAYS = 1
-function anticipationSettings({ enabled = true, volumePercentage = '100', type = 'full', delay = ANTICIPATION_DELAY_DAYS } = {}) {
-  return { enabled, type, volume_percentage: String(volumePercentage), delay }
+function anticipationSettings({ enabled = true, volumePercentage = '100', type = '1025', delay = ANTICIPATION_DELAY_DAYS } = {}) {
+  const base = { enabled, type, delay }
+  if (type === 'full') base.volume_percentage = String(volumePercentage)
+  return base
 }
 
 // Liga/ajusta a antecipação automática de um recebedor JÁ existente. Usado pelo

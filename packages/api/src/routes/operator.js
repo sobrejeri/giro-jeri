@@ -711,7 +711,7 @@ router.post('/register-recipient', async (req, res, next) => {
 });
 
 // ── POST /api/operator/recipient/anticipation ─────────
-// Reaplica transferência (diária) e antecipação (100% por volume) automáticas
+// Reaplica transferência (diária) e antecipação automática (modelo D+X)
 // num recebedor já criado. São independentes: a transferência costuma ligar sem
 // contrato; a antecipação depende do contrato da conta master. Devolve o
 // resultado de cada uma para a tela informar o que ficou pendente.
