@@ -1056,7 +1056,9 @@ export default function Reservas({ soNovas = false }) {
           <RefreshCw size={24} className="animate-spin" />
         </div>
       ) : tab === 'pending' ? (
-        pending.length === 0 && pendingQuotes.length === 0 ? (
+        // No cockpit ("Novas"), cotações já enviadas (aguardando cliente) também
+        // contam — senão a tela diria "vazio" escondendo cotação em aberto.
+        pending.length === 0 && pendingQuotes.length === 0 && !(soNovas && quotedQuotes.length > 0) ? (
           <div className="text-center py-16 text-gray-400">
             <CalendarCheck size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium">Sem solicitações disponíveis</p>
@@ -1087,6 +1089,18 @@ export default function Reservas({ soNovas = false }) {
             {pendingQuotes.map((q) => (
               <QuoteRequestCard key={q.id} quote={q} onQuote={openQuoteModal} />
             ))}
+            {/* Cockpit: cotações já enviadas, aguardando o cliente aceitar — pra
+                não sumirem da vista do operador entre o preço e o pagamento. */}
+            {soNovas && quotedQuotes.length > 0 && (
+              <>
+                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wide pt-2">
+                  Cotações enviadas · aguardando o cliente
+                </p>
+                {quotedQuotes.map((q) => (
+                  <QuoteRequestCard key={`q-sent-${q.id}`} quote={q} onQuote={openQuoteModal} />
+                ))}
+              </>
+            )}
           </div>
         )
       ) : tab === 'cotacoes' ? (
