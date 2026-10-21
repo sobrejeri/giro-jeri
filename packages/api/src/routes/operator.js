@@ -14,6 +14,7 @@ import { notifyUser } from '../services/notify.js';
 import {
   notifyAdminExpiredBooking, notifyClientBookingAccepted,
   notifyClientRideStarted, notifyClientRideCompleted, notifyClientReviewRequest,
+  notifyDriverRideStarted,
 } from '../services/whatsapp.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
 import { isMarketplaceConfigured } from '../services/mercadoPago.js';
@@ -1712,7 +1713,7 @@ router.post('/bookings/:id/start', async (req, res, next) => {
       .eq('id', req.params.id)
       .eq('operator_id', req.user.id)
       .eq('status_commercial', 'paid')
-      .select('id, user_id, service_type, booking_code, service_date, service_time, origin_text, destination_text, pickup_place_name')
+      .select('id, user_id, service_type, booking_code, service_date, service_time, origin_text, destination_text, pickup_place_name, pickup_latitude, pickup_longitude')
 
     if (error) throw error
     if (!data || data.length === 0) {
@@ -1760,6 +1761,10 @@ router.post('/bookings/:id/start', async (req, res, next) => {
     // Item 3: WhatsApp "motorista a caminho" (best-effort).
     if (b) notifyClientRideStarted(supabase, b).catch((err) =>
       console.error('[whatsapp] aviso a caminho falhou:', err.message))
+    // Reenvia ao MOTORISTA o ponto de embarque com o pin da localização do
+    // turista ao iniciar (dados do motorista já preenchidos no despacho).
+    if (b) notifyDriverRideStarted(supabase, b).catch((err) =>
+      console.error('[whatsapp] pin ao motorista (início) falhou:', err.message))
     res.json({ ok: true })
   } catch (err) { next(err) }
 })

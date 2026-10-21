@@ -541,8 +541,42 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
       `🔖 ${booking.booking_code}` + obs +
       (osUrl ? `\n\n📄 Ordem de Serviço: ${osUrl}` : '')
     await sendToMany([motoFone], msg)
+    // Pin nativo com a localização do turista (ponto de embarque) — o motorista
+    // toca e abre a navegação no Waze/Maps. No-op se a reserva não tiver coords.
+    await sendLocationPin(motoFone, {
+      lat: booking.pickup_latitude, lng: booking.pickup_longitude,
+      title: `Embarque${cli?.full_name ? ` — ${cli.full_name}` : ''}`,
+      address: embarque,
+    })
   }
 
+  return { sent: true }
+}
+
+// Ao INICIAR a corrida, reenvia ao MOTORISTA o ponto de embarque com o pin de
+// localização do turista. Os dados do motorista já foram preenchidos no
+// despacho (tabela operational_assignments), então aqui só carregamos o
+// telefone. Best-effort: sem motorista ou sem coordenada, no-op.
+export async function notifyDriverRideStarted(supabase, booking) {
+  if (!isWhatsappEnabled() || !booking) return { skipped: true }
+  const { data: asg } = await supabase.from('operational_assignments')
+    .select('driver_phone').eq('booking_id', booking.id).maybeSingle()
+  const motoFone = asg?.driver_phone
+  if (!motoFone) return { skipped: true }
+  const embarque = booking.origin_text || booking.pickup_place_name || ''
+  const cliNome = await userName(supabase, booking.user_id)
+  const msg =
+    `*TURIVA* · Corrida iniciada 🚗💨\n\n` +
+    `A corrida ${booking.booking_code || '-'} começou.\n` +
+    (embarque ? `📍 Embarque: ${embarque}\n` : '') +
+    (cliNome ? `🙋 Cliente: ${cliNome}\n` : '') +
+    `\nSiga para o ponto de embarque do cliente.`
+  await sendToMany([motoFone], msg)
+  await sendLocationPin(motoFone, {
+    lat: booking.pickup_latitude, lng: booking.pickup_longitude,
+    title: `Embarque${cliNome ? ` — ${cliNome}` : ''}`,
+    address: embarque,
+  })
   return { sent: true }
 }
 

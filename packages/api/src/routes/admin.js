@@ -1459,7 +1459,7 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
     // Best-effort — nunca derruba a resposta do despacho.
     try {
       const { data: bk } = await supabase.from('bookings')
-        .select('id, booking_code, user_id, service_type, booking_mode, service_date, service_time, people_count, origin_text, destination_text, pickup_place_name, destination_place_name')
+        .select('id, booking_code, user_id, service_type, booking_mode, service_date, service_time, people_count, origin_text, destination_text, pickup_place_name, destination_place_name, pickup_latitude, pickup_longitude')
         .eq('id', bookingId).maybeSingle();
       if (bk) notifyDispatchOS(supabase, { booking: bk, assignment: result })
         .catch((err) => console.error('[whatsapp] OS de despacho falhou:', err.message));
