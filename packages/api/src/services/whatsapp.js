@@ -727,6 +727,60 @@ function parkingSummary(reserva) {
   return { data, code: reserva?.code || '-' }
 }
 
+// Localização do lote (nome/endereço/coordenadas) para as mensagens ao cliente.
+// Best-effort: sem lot_id, sem a coluna ou com erro, devolve null e a mensagem
+// segue sem o bloco de "como chegar".
+async function lotLocation(supabase, lotId) {
+  if (!lotId) return null
+  try {
+    const { data } = await supabase.from('parking_lots')
+      .select('name, address, lat, lng').eq('id', lotId).maybeSingle()
+    return data || null
+  } catch { return null }
+}
+
+// Bloco de texto "como chegar": endereço + links de navegação (Google Maps e
+// Waze). Usa as coordenadas quando houver (o link abre direto no ponto); senão
+// cai no endereço. Devolve '' quando não há nem endereço nem coordenada.
+function comoChegarTexto(lot) {
+  if (!lot) return ''
+  const temGeo = lot.lat != null && lot.lng != null
+  if (!temGeo && !lot.address) return ''
+  const q = temGeo ? `${lot.lat},${lot.lng}` : encodeURIComponent(lot.address || lot.name || 'Jericoacoara')
+  const gmaps = `https://www.google.com/maps/search/?api=1&query=${q}`
+  const waze  = temGeo ? `https://waze.com/ul?ll=${lot.lat},${lot.lng}&navigate=yes` : `https://waze.com/ul?q=${q}&navigate=yes`
+  return (
+    (lot.address ? `📍 ${lot.address}\n` : '') +
+    `🗺 Google Maps: ${gmaps}\n` +
+    `🧭 Waze: ${waze}\n`
+  )
+}
+
+// PIN de localização nativo do WhatsApp (Z-API send-location): o cliente toca e
+// abre a navegação no app de mapas que preferir. Best-effort — sem coordenada
+// ou se a conta não suportar, apenas ignora (o texto já traz os links).
+async function sendLocationPin(phone, { lat, lng, title, address }) {
+  if (!isWhatsappEnabled() || !phone || lat == null || lng == null) return { skipped: true }
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
+  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-location`
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
+      body: JSON.stringify({
+        phone: toZapiPhone(phone),
+        title: title || 'Estacionamento',
+        address: address || '',
+        latitude: String(lat),
+        longitude: String(lng),
+      }),
+    })
+  } catch (err) {
+    console.error('[whatsapp] send-location falhou (ignorado):', err.message)
+  }
+  return { sent: true }
+}
+
 // Dono do lote (parceiro) — nova reserva aguardando aceite.
 export async function notifyParkingOwnerNewReservation(supabase, { reserva, ownerUserId, lotName }) {
   if (!isWhatsappEnabled() || !reserva || !ownerUserId) return { skipped: true }
@@ -752,16 +806,22 @@ export async function notifyParkingClientAccepted(supabase, reserva) {
   const phone = await userPhone(supabase, reserva.user_id)
   if (!phone) return { skipped: true }
   const { data, code } = parkingSummary(reserva)
+  const lot = await lotLocation(supabase, reserva.lot_id)
+  const comoChegar = comoChegarTexto(lot)
   const message =
     `*TURIVA* · Vaga aceita! 🎉\n` +
     `\n` +
     `O estacionamento aceitou sua reserva.\n` +
+    (lot?.name ? `🅿️ ${lot.name}\n` : '') +
     `🗓 ${data}\n` +
     (reserva.total_amount != null ? `💰 *${fmtBRL(reserva.total_amount)}*\n` : '') +
     `🔖 ${code}\n` +
+    (comoChegar ? `\n${comoChegar}` : '') +
     `\n` +
     `Pague agora para garantir a vaga.`
   await sendButtonLink(phone, message, 'Pagar agora', linkParkingReserva(reserva.id))
+  // Pin nativo de localização (abre no Waze/Maps com um toque). No-op sem coords.
+  await sendLocationPin(phone, { lat: lot?.lat, lng: lot?.lng, title: lot?.name, address: lot?.address })
   return { sent: true }
 }
 
@@ -784,6 +844,9 @@ export async function notifyParkingClientRejected(supabase, reserva) {
 export async function notifyParkingPaid(supabase, { reserva, ownerUserId, lotName }) {
   if (!isWhatsappEnabled() || !reserva) return { skipped: true }
   const { data, code } = parkingSummary(reserva)
+  const lot = await lotLocation(supabase, reserva.lot_id)
+  const nome = lotName || lot?.name
+  const comoChegar = comoChegarTexto(lot)
 
   const cliPhone = await userPhone(supabase, reserva.user_id)
   if (cliPhone) {
@@ -791,12 +854,15 @@ export async function notifyParkingPaid(supabase, { reserva, ownerUserId, lotNam
       `*TURIVA* · Vaga confirmada ✅\n` +
       `\n` +
       `Pagamento recebido! Sua vaga está garantida.\n` +
-      `${lotName ? `${lotName}\n` : ''}` +
+      `${nome ? `🅿️ ${nome}\n` : ''}` +
       `🗓 ${data}\n` +
       `🔖 ${code}\n` +
+      (comoChegar ? `\n${comoChegar}` : '') +
       `\n` +
       `👉 Ver reserva: ${linkParkingReserva(reserva.id)}`
     await sendToMany([cliPhone], msg)
+    // Pin nativo de localização para o cliente chegar (Waze/Maps). No-op sem coords.
+    await sendLocationPin(cliPhone, { lat: lot?.lat, lng: lot?.lng, title: nome, address: lot?.address })
   }
 
   if (ownerUserId) {

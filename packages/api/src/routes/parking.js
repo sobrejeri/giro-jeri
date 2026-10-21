@@ -709,7 +709,7 @@ router.post('/reservations/:id/accept', authenticate, async (req, res, next) => 
       try {
         const { notifyUser } = await import('../services/notify.js')
         const { data: r } = await supabase.from('parking_reservations')
-          .select('id, user_id, code, start_at, total_amount').eq('id', req.params.id).maybeSingle()
+          .select('id, user_id, lot_id, code, start_at, total_amount').eq('id', req.params.id).maybeSingle()
         if (r?.user_id) {
           await notifyUser({
             userId: r.user_id, templateKey: 'parking_accepted',
