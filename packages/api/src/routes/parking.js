@@ -330,12 +330,41 @@ router.get('/partner/overview', authenticate, async (req, res, next) => {
       supabase.from('parking_stays').select('id', { count: 'exact', head: true }).in('lot_id', lotIds).is('exited_at', null).gte('expected_exit_at', diaIni).lte('expected_exit_at', diaFim),
     ])
     const noPatio = patio.count || 0
+
+    // Vagas livres POR TIPO (migração 120): só os tipos com vagas definidas na
+    // tarifa. Ocupação = veículos daquele tipo no pátio agora. Best-effort.
+    let byType = []
+    try {
+      const { data: tars, error: tErr } = await supabase
+        .from('parking_tariffs').select('vehicle_type, capacity').in('lot_id', lotIds).eq('is_active', true)
+      const capByType = new Map()
+      if (!tErr) for (const t of tars || []) {
+        if (t.capacity == null) continue
+        const k = String(t.vehicle_type || '').toLowerCase()
+        capByType.set(k, (capByType.get(k) || 0) + Number(t.capacity))
+      }
+      if (capByType.size) {
+        const { data: staysRaw } = await supabase
+          .from('parking_stays').select('vehicle_type').in('lot_id', lotIds).is('exited_at', null)
+        const ocupByType = new Map()
+        for (const s of staysRaw || []) {
+          const k = String(s.vehicle_type || '').toLowerCase()
+          ocupByType.set(k, (ocupByType.get(k) || 0) + 1)
+        }
+        byType = [...capByType.entries()].map(([vehicle_type, cap]) => {
+          const ocup = ocupByType.get(vehicle_type) || 0
+          return { vehicle_type, capacity: cap, no_patio: ocup, livres: Math.max(0, cap - ocup) }
+        })
+      }
+    } catch { /* coluna capacity ausente → sem breakdown por tipo */ }
+
     res.json({
       lot: lots[0],
       stats: {
         no_patio: noPatio, capacity, livres: Math.max(0, capacity - noPatio),
         entradas_hoje: entradas.count || 0,
         saidas_hoje: (saidasRes.count || 0) + (saidasStay.count || 0),
+        by_type: byType,
       },
     })
   } catch (err) { next(err) }

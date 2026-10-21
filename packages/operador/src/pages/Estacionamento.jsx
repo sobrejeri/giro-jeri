@@ -801,6 +801,15 @@ function InicioDashboard({ onGo, filaCount, reservas = [], aceitar, recusar }) {
             <span>{ocupadas} {ocupadas === 1 ? 'veículo' : 'veículos'} no pátio</span>
             <span className="font-semibold">{lotado ? 'Pátio lotado' : `${pctOcup}% ocupado`}</span>
           </div>
+          {Array.isArray(s.by_type) && s.by_type.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {s.by_type.map((t) => (
+                <span key={t.vehicle_type} className="text-[11px] font-semibold bg-white/15 rounded-full px-2.5 py-1 capitalize">
+                  {t.vehicle_type} <span className="font-extrabold">{t.livres}</span>/{t.capacity}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
