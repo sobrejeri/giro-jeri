@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode, MapPin } from 'lucide-react'
 import { api } from '../lib/api'
@@ -61,8 +61,13 @@ export default function Estacionamento({ section }) {
   // admin/tours (entrada única) continua com abas dentro da página.
   const menuMode = !!section || (user?.user_type !== 'admin' && user?.operator_segment === 'parking')
   const [aba, setAba] = useState('inicio')
+  const [patioModo, setPatioModo] = useState('entrada') // qual lado do Pátio abrir: entrada x retirada
   const active = section || (menuMode ? (section || 'inicio') : aba)
-  const irPara = (sec) => { if (menuMode) navigate(SECTION_PATH[sec] || '/estacionamento'); else setAba(sec) }
+  const irPara = (sec, modo) => {
+    if (modo) setPatioModo(modo)
+    if (menuMode) navigate((SECTION_PATH[sec] || '/estacionamento') + (modo ? `?modo=${modo}` : ''))
+    else setAba(sec)
+  }
   const [toast, setToast] = useState(null)
   const notify = (t, m, ms = 3500) => { setToast({ t, m }); setTimeout(() => setToast(null), ms) }
 
@@ -118,7 +123,7 @@ export default function Estacionamento({ section }) {
       {active === 'inicio' ? (
         <InicioDashboard onGo={irPara} filaCount={fila.length} />
       ) : active === 'patio' ? (
-        <PatioView notify={notify} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
+        <PatioView notify={notify} modoProp={patioModo} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
       ) : active === 'financeiro' ? (
         <FinanceiroParking />
       ) : active === 'meulocal' ? (
@@ -753,10 +758,10 @@ function InicioDashboard({ onGo, filaCount }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => onGo('patio')} className="bg-brand text-white rounded-2xl p-4 text-left active:scale-[0.99]">
+        <button onClick={() => onGo('patio', 'entrada')} className="bg-brand text-white rounded-2xl p-4 text-left active:scale-[0.99]">
           <LogIn size={20} /><p className="font-bold text-[14px] mt-2">Registrar entrada</p><p className="text-[11px] text-white/80">Código ou balcão</p>
         </button>
-        <button onClick={() => onGo('patio')} className="bg-white border border-brand text-brand rounded-2xl p-4 text-left active:scale-[0.99]">
+        <button onClick={() => onGo('patio', 'retirada')} className="bg-white border border-brand text-brand rounded-2xl p-4 text-left active:scale-[0.99]">
           <KeyRound size={20} /><p className="font-bold text-[14px] mt-2">Liberar retirada</p><p className="text-[11px] text-brand/70">Validar PIN do cliente</p>
         </button>
       </div>
@@ -776,7 +781,7 @@ function InicioDashboard({ onGo, filaCount }) {
                 <span className="text-[11px] text-gray-400">{v.spot ? `Vaga ${v.spot} · ` : ''}{dt(v.entered_at)}</span>
               </div>
             ))}
-            {patio.length > 6 && <button onClick={() => onGo('patio')} className="text-[12px] text-brand font-semibold pt-1">Ver todos →</button>}
+            {patio.length > 6 && <button onClick={() => onGo('patio', 'retirada')} className="text-[12px] text-brand font-semibold pt-1">Ver todos →</button>}
           </div>
         )}
       </div>
@@ -785,9 +790,13 @@ function InicioDashboard({ onGo, filaCount }) {
 }
 
 // ── Pátio: lista de veículos + entrada presencial + balcão (código/PIN) ───────
-function PatioView({ notify, onDone }) {
+function PatioView({ notify, onDone, modoProp }) {
   const qc = useQueryClient()
+  const [sp] = useSearchParams()
   const [walkin, setWalkin] = useState(false)
+  // Separa os dois fluxos do pátio (antes vinham juntos e confundiam):
+  // "entrada" = registrar quem chega; "retirada" = liberar quem sai.
+  const [modo, setModo] = useState((sp.get('modo') || modoProp) === 'retirada' ? 'retirada' : 'entrada')
   const { data: pt } = useQuery({ queryKey: ['parking-patio'], queryFn: () => api.parkingPatio(), refetchInterval: 15000 })
   const noPatio = pt?.no_patio || []
   const saidas = pt?.saidas_hoje || []
@@ -807,10 +816,34 @@ function PatioView({ notify, onDone }) {
   const lista = verSaidas ? saidas : noPatio
   return (
     <div className="space-y-4">
+      {/* Alterna entre os dois fluxos — um de cada vez, pra não confundir. */}
+      <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-2xl">
+        <button onClick={() => setModo('entrada')}
+          className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-bold transition-colors ${modo === 'entrada' ? 'bg-brand text-white shadow-sm' : 'text-gray-500'}`}>
+          <LogIn size={15} /> Registrar entrada
+        </button>
+        <button onClick={() => setModo('retirada')}
+          className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-bold transition-colors ${modo === 'retirada' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500'}`}>
+          <KeyRound size={15} /> Validar retirada
+        </button>
+      </div>
+
+      {/* Formulário do lado ativo: código (entrada) ou PIN (retirada). */}
+      <PatioBalcao only={modo} notify={notify} onDone={refresh} />
+
+      {modo === 'entrada' ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <p className="text-[12px] text-gray-500 mb-2">Cliente sem reserva pelo app? Registre a entrada presencial (balcão).</p>
+          <button onClick={() => setWalkin(true)}
+            className="w-full flex items-center justify-center gap-1.5 border border-brand text-brand font-semibold rounded-xl py-2.5 text-[13px] active:scale-[0.99]">
+            <Plus size={15} /> Entrada presencial
+          </button>
+        </div>
+      ) : (
+      <>
       <div className="flex gap-2">
         <button onClick={() => setVerSaidas(false)} className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${!verSaidas ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>No pátio ({noPatio.length})</button>
         <button onClick={() => setVerSaidas(true)} className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${verSaidas ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>Saídas hoje ({saidas.length})</button>
-        <button onClick={() => setWalkin(true)} className="ml-auto flex items-center gap-1.5 bg-brand text-white font-semibold rounded-full px-3 py-1.5 text-[12px] active:scale-95"><Plus size={13} /> Entrada presencial</button>
       </div>
 
       {lista.length === 0 ? (
@@ -842,9 +875,8 @@ function PatioView({ notify, onDone }) {
           ))}
         </div>
       )}
-
-      {/* Balcão: entrada por código + retirada por PIN */}
-      <PatioBalcao notify={notify} onDone={refresh} />
+      </>
+      )}
 
       {walkin && <WalkinModal notify={notify} onClose={() => setWalkin(false)} onDone={() => { setWalkin(false); refresh() }} />}
       {saidaStay && <SaidaPinModal stay={saidaStay} pending={sair.isPending} onClose={() => setSaidaStay(null)} onConfirm={(pin) => sair.mutate({ id: saidaStay.id, pin })} />}
@@ -1148,7 +1180,7 @@ function QRScannerModal({ onClose, onDetected }) {
 // ── Balcão do pátio: registrar entrada (código) e validar retirada (PIN) ──────
 // O PIN é um segredo do cliente — o parceiro só digita o que o cliente mostra;
 // nada do PIN é exibido ou guardado aqui.
-function PatioBalcao({ notify, onDone }) {
+function PatioBalcao({ notify, onDone, only = 'ambos' }) {
   const [lotId, setLotId] = useState('')
   const [code, setCode]   = useState('')
   const [plate, setPlate] = useState('')
@@ -1195,7 +1227,8 @@ function PatioBalcao({ notify, onDone }) {
         </div>
       )}
 
-      {/* Entrada por código */}
+      {/* Entrada por código — só no fluxo de entrada */}
+      {only !== 'retirada' && (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
         <div className="flex items-center gap-2 text-gray-900 font-semibold text-[14px]">
           <LogIn size={16} className="text-brand" /> Registrar entrada
@@ -1215,8 +1248,10 @@ function PatioBalcao({ notify, onDone }) {
           {entrada.isPending ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />} Dar entrada
         </button>
       </div>
+      )}
 
-      {/* Retirada por PIN */}
+      {/* Retirada por PIN — só no fluxo de retirada */}
+      {only !== 'entrada' && (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
         <div className="flex items-center gap-2 text-gray-900 font-semibold text-[14px]">
           <KeyRound size={16} className="text-brand" /> Validar retirada
@@ -1229,6 +1264,7 @@ function PatioBalcao({ notify, onDone }) {
           {retirada.isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Liberar saída
         </button>
       </div>
+      )}
     </div>
   )
 }
