@@ -16,7 +16,7 @@ import { authenticate } from '../middleware/auth.js'
 import { cotarComTarifa } from '../services/parking/pricing.js'
 import { temVaga, blocoDe } from '../services/parking/capacity.js'
 import { cobrarCartaoEConfirmar, cobrarExtensaoEAplicar } from '../services/parking/payments.js'
-import { registrarEntrada, abrirRetirada, consumirRetirada, definirPinStay, verificarPinStay } from '../services/parking/entry.js'
+import { registrarEntrada, garantirCodigoEntrada, abrirRetirada, consumirRetirada, definirPinStay, verificarPinStay } from '../services/parking/entry.js'
 
 const router = Router()
 
@@ -1033,6 +1033,33 @@ router.post('/partner/entry', authenticate, async (req, res, next) => {
       const map = { not_found: 404, bad_state: 409 }
       const msg = {
         not_found: 'Código não encontrado neste estacionamento.',
+        bad_state: 'Esta reserva não está confirmada/paga para dar entrada.',
+      }[data?.error] || 'Não foi possível registrar a entrada.'
+      return res.status(map[data?.error] || 400).json({ error: msg })
+    }
+    res.json({ ok: true, already: !!data.already, code: data.code })
+  } catch (err) { next(err) }
+})
+
+// Dar entrada direto pela RESERVA escolhida na lista (sem digitar o código) —
+// parceiro/admin do lot. O servidor resolve o código de entrada da reserva.
+router.post('/partner/reservations/:id/entry', authenticate, async (req, res, next) => {
+  try {
+    const { data: r } = await supabase.from('parking_reservations')
+      .select('id, lot_id').eq('id', req.params.id).maybeSingle()
+    if (!r) return res.status(404).json({ error: 'Reserva não encontrada.' })
+    if (!(await podeOperarLot(req.user, r.lot_id))) {
+      return res.status(403).json({ error: 'Este estacionamento não é seu.' })
+    }
+    const code = await garantirCodigoEntrada(r.id)
+    if (!code) return res.status(409).json({ error: 'Reserva sem código de entrada.' })
+    const spot  = (req.body?.spot  || '').toString().trim().slice(0, 20) || null
+    const plate = (req.body?.plate || '').toString().trim().slice(0, 12) || null
+    const data = await registrarEntrada({ lotId: r.lot_id, code, actorId: req.user.id, spot, plate })
+    if (!data?.ok) {
+      const map = { not_found: 404, bad_state: 409 }
+      const msg = {
+        not_found: 'Reserva não encontrada neste estacionamento.',
         bad_state: 'Esta reserva não está confirmada/paga para dar entrada.',
       }[data?.error] || 'Não foi possível registrar a entrada.'
       return res.status(map[data?.error] || 400).json({ error: msg })

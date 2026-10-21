@@ -70,8 +70,9 @@ export default function App() {
         <Route path="cotacoes"   element={<Navigate to="/dashboard?tab=novas" replace />} />
         <Route path="despacho"   element={<Navigate to="/dashboard" replace />} />
         <Route path="estacionamento" element={<EstacionamentoPainel />} />
-        <Route path="estacionamento/solicitacoes" element={<EstacionamentoPainel section="fila" />} />
-        <Route path="estacionamento/reservas"     element={<EstacionamentoPainel section="reservas" />} />
+        {/* Solicitações e Reservas foram unificadas no Início e no Pátio. */}
+        <Route path="estacionamento/solicitacoes" element={<Navigate to="/estacionamento" replace />} />
+        <Route path="estacionamento/reservas"     element={<Navigate to="/estacionamento/patio?modo=reservas" replace />} />
         <Route path="estacionamento/patio"        element={<EstacionamentoPainel section="patio" />} />
         <Route path="estacionamento/financeiro"   element={<EstacionamentoPainel section="financeiro" />} />
         <Route path="estacionamento/meu-local"    element={<EstacionamentoPainel section="meulocal" />} />

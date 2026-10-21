@@ -121,9 +121,9 @@ export default function Estacionamento({ section }) {
       )}
 
       {active === 'inicio' ? (
-        <InicioDashboard onGo={irPara} filaCount={fila.length} />
+        <InicioDashboard onGo={irPara} filaCount={fila.length} reservas={reservas} aceitar={aceitar} recusar={recusar} />
       ) : active === 'patio' ? (
-        <PatioView notify={notify} modoProp={patioModo} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
+        <PatioView notify={notify} modoProp={patioModo} reservas={reservas} onDone={() => qc.invalidateQueries({ queryKey: ['parking-partner'] })} />
       ) : active === 'financeiro' ? (
         <FinanceiroParking />
       ) : active === 'meulocal' ? (
@@ -521,7 +521,7 @@ function financeiro(r) {
 }
 
 // ── Solicitações: Novas / Aceitas / Recusadas + análise ───────────────────────
-function SolicitacoesView({ reservas, aceitar, recusar }) {
+function SolicitacoesView({ reservas, aceitar, recusar, soAcionavel = false }) {
   const qc = useQueryClient()
   const [sub, setSub] = useState('novas')
   const [analise, setAnalise] = useState(null)
@@ -533,10 +533,17 @@ function SolicitacoesView({ reservas, aceitar, recusar }) {
     recusadas: reservas.filter((r) => ['rejected', 'expired_no_answer', 'expired_no_payment', 'cancelled'].includes(r.status)),
   }
   const lista = grupos[sub] || []
-  const TABS = [['novas', 'Novas'], ['aceitas', 'Aceitas'], ['recusadas', 'Recusadas'], ['alteracoes', 'Alterações']]
+  const TABS = soAcionavel
+    ? [['novas', 'Novas'], ['alteracoes', 'Alterações']]
+    : [['novas', 'Novas'], ['aceitas', 'Aceitas'], ['recusadas', 'Recusadas'], ['alteracoes', 'Alterações']]
 
   const aprovarCh = useMutation({ mutationFn: (id) => api.parkingApproveChange(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['parking-changes'] }) })
   const recusarCh = useMutation({ mutationFn: (id) => api.parkingRejectChange(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['parking-changes'] }) })
+
+  // No Início (soAcionavel): sem novas nem alterações, não ocupa espaço.
+  if (soAcionavel && grupos.novas.length === 0 && changes.length === 0) {
+    return <p className="text-[13px] text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm py-4 text-center">Nenhuma solicitação nova. 👍</p>
+  }
 
   return (
     <div className="space-y-3">
@@ -734,7 +741,7 @@ function ReservaDetalhe({ reserva: r, onClose }) {
 }
 
 // ── Início: visão geral do estacionamento (dashboard) ─────────────────────────
-function InicioDashboard({ onGo, filaCount }) {
+function InicioDashboard({ onGo, filaCount, reservas = [], aceitar, recusar }) {
   const { data: ov } = useQuery({ queryKey: ['parking-overview'], queryFn: () => api.parkingOverview(), refetchInterval: 20000 })
   const { data: pt } = useQuery({ queryKey: ['parking-patio'], queryFn: () => api.parkingPatio(), refetchInterval: 20000 })
   const s = ov?.stats || { no_patio: 0, capacity: 0, livres: 0, entradas_hoje: 0, saidas_hoje: 0 }
@@ -799,18 +806,11 @@ function InicioDashboard({ onGo, filaCount }) {
         <Stat icon={Clock} tint="bg-orange-50 text-orange-600" big={s.saidas_hoje} label="Saídas hoje" />
       </div>
 
-      {/* Solicitações pendentes — destaca quando há algo esperando. */}
-      <button onClick={() => onGo('fila')}
-        className={`w-full flex items-center justify-between rounded-2xl border p-3.5 active:scale-[0.99] transition-colors ${filaCount > 0 ? 'bg-brand/5 border-brand/30' : 'bg-white border-gray-100 shadow-sm'}`}>
-        <span className="flex items-center gap-2.5 font-semibold text-gray-800 text-[14px]">
-          <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${filaCount > 0 ? 'bg-brand/15 text-brand' : 'bg-gray-100 text-gray-400'}`}><Bell size={16} /></span>
-          Solicitações pendentes
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className={`text-[12px] font-bold rounded-full px-2.5 py-0.5 ${filaCount > 0 ? 'bg-brand text-white' : 'bg-gray-100 text-gray-500'}`}>{filaCount}</span>
-          <ChevronRight size={16} className="text-gray-300" />
-        </span>
-      </button>
+      {/* Solicitações (novas + alterações) — acionável aqui no Início. */}
+      <div>
+        <p className="text-[13px] font-bold text-gray-900 mb-2 px-0.5 flex items-center gap-1.5"><Bell size={15} className="text-brand" /> Solicitações</p>
+        <SolicitacoesView soAcionavel reservas={reservas} aceitar={aceitar} recusar={recusar} />
+      </div>
 
       {/* Veículos no pátio. */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
@@ -835,13 +835,14 @@ function InicioDashboard({ onGo, filaCount }) {
 }
 
 // ── Pátio: lista de veículos + entrada presencial + balcão (código/PIN) ───────
-function PatioView({ notify, onDone, modoProp }) {
+function PatioView({ notify, onDone, modoProp, reservas = [] }) {
   const qc = useQueryClient()
   const [sp] = useSearchParams()
   const [walkin, setWalkin] = useState(false)
   // Separa os dois fluxos do pátio (antes vinham juntos e confundiam):
   // "entrada" = registrar quem chega; "retirada" = liberar quem sai.
-  const [modo, setModo] = useState((sp.get('modo') || modoProp) === 'retirada' ? 'retirada' : 'entrada')
+  const modoIni = sp.get('modo') || modoProp
+  const [modo, setModo] = useState(modoIni === 'retirada' || modoIni === 'reservas' ? modoIni : 'entrada')
   const { data: pt } = useQuery({ queryKey: ['parking-patio'], queryFn: () => api.parkingPatio(), refetchInterval: 15000 })
   const noPatio = pt?.no_patio || []
   const saidas = pt?.saidas_hoje || []
@@ -865,21 +866,57 @@ function PatioView({ notify, onDone, modoProp }) {
     onSuccess: () => { notify?.('ok', 'Saída liberada!'); setSaidaReserva(null); refresh() },
     onError: (e) => notify?.('err', e?.message || 'PIN inválido.'),
   })
+  // Reservas confirmadas/pagas ainda não no pátio → "aguardando entrada".
+  const aguardando = (reservas || []).filter((r) => r.status === 'confirmed')
+  const darEntrada = useMutation({
+    mutationFn: (id) => api.parkingReservaEntrada(id),
+    onSuccess: () => { notify?.('ok', 'Entrada registrada!'); refresh() },
+    onError: (e) => notify?.('err', e?.message || 'Não foi possível dar entrada.'),
+  })
 
   const lista = verSaidas ? saidas : noPatio
   return (
     <div className="space-y-4">
-      {/* Alterna entre os dois fluxos — um de cada vez, pra não confundir. */}
-      <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-2xl">
+      {/* Três frentes do pátio, uma de cada vez: entrada · retirada · reservas. */}
+      <div className="grid grid-cols-3 gap-1.5 bg-gray-100 p-1 rounded-2xl">
         <button onClick={() => setModo('entrada')}
-          className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-bold transition-colors ${modo === 'entrada' ? 'bg-brand text-white shadow-sm' : 'text-gray-500'}`}>
-          <LogIn size={15} /> Registrar entrada
+          className={`flex items-center justify-center gap-1 py-2.5 rounded-xl text-[12px] font-bold transition-colors ${modo === 'entrada' ? 'bg-brand text-white shadow-sm' : 'text-gray-500'}`}>
+          <LogIn size={14} /> Entrada
         </button>
         <button onClick={() => setModo('retirada')}
-          className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-bold transition-colors ${modo === 'retirada' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500'}`}>
-          <KeyRound size={15} /> Validar retirada
+          className={`flex items-center justify-center gap-1 py-2.5 rounded-xl text-[12px] font-bold transition-colors ${modo === 'retirada' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500'}`}>
+          <KeyRound size={14} /> Retirada
+        </button>
+        <button onClick={() => setModo('reservas')}
+          className={`flex items-center justify-center gap-1 py-2.5 rounded-xl text-[12px] font-bold transition-colors ${modo === 'reservas' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500'}`}>
+          <ParkingSquare size={14} /> Reservas
         </button>
       </div>
+
+      {modo === 'reservas' ? (
+        <ReservasView reservas={reservas} />
+      ) : (
+      <>
+      {/* Reservas pagas aguardando chegar ao pátio — dar entrada em 1 toque. */}
+      {modo === 'entrada' && aguardando.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <p className="text-[13px] font-bold text-gray-900 mb-2 flex items-center gap-1.5"><Clock size={15} className="text-brand" /> Aguardando entrada ({aguardando.length})</p>
+          <div className="space-y-2">
+            {aguardando.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-2 border border-gray-100 rounded-xl p-2.5">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-gray-800 truncate">{r.user_name || 'Cliente'}{r.plate ? <span className="font-mono text-gray-500"> · {r.plate}</span> : ''}</p>
+                  <p className="text-[11px] text-gray-400 capitalize truncate">{r.vehicle_type} · {dtBR(r.start_at)}</p>
+                </div>
+                <button onClick={() => darEntrada.mutate(r.id)} disabled={darEntrada.isPending}
+                  className="shrink-0 flex items-center gap-1 text-[12px] font-bold text-white bg-brand rounded-lg px-3 py-2 active:scale-95 disabled:opacity-50">
+                  <LogIn size={13} /> Dar entrada
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Formulário do lado ativo: código (entrada) ou PIN (retirada). */}
       <PatioBalcao only={modo} notify={notify} onDone={refresh} />
@@ -929,6 +966,8 @@ function PatioView({ notify, onDone, modoProp }) {
             </div>
           ))}
         </div>
+      )}
+      </>
       )}
       </>
       )}

@@ -206,6 +206,7 @@ export const api = {
   parkingReject:       (id) => request(`/api/parking/reservations/${id}/reject`, { method: 'POST', body: {} }),
   parkingPartnerLots:  () => request('/api/parking/partner/lots'),
   parkingRegisterEntry: (body) => request('/api/parking/partner/entry', { method: 'POST', body }),
+  parkingReservaEntrada: (id) => request('/api/parking/partner/reservations/' + id + '/entry', { method: 'POST' }),
   parkingValidateWithdrawal: (body) => request('/api/parking/partner/withdrawal', { method: 'POST', body }),
   parkingFinancial:    (q = '') => request(`/api/parking/partner/financial${q}`),
   parkingMyLots:       () => request('/api/parking/partner/my-lots'),

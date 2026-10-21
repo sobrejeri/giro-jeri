@@ -5,8 +5,6 @@ import { useAuth } from '../../contexts/AuthContext'
 // Menu do operador de ESTACIONAMENTO (segmento parking) — espelha o mockup.
 const NAV_PARKING = [
   { to: '/estacionamento',               icon: Home,          label: 'Início',       end: true },
-  { to: '/estacionamento/solicitacoes',  icon: CalendarCheck, label: 'Solicitações' },
-  { to: '/estacionamento/reservas',      icon: ParkingSquare, label: 'Reservas'     },
   { to: '/estacionamento/patio',         icon: Car,           label: 'Pátio'        },
   { to: '/estacionamento/financeiro',    icon: Wallet,        label: 'Financeiro'   },
   { to: '/estacionamento/meu-local',     icon: Settings,      label: 'Meu local'    },
