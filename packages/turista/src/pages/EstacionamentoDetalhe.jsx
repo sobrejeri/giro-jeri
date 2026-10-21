@@ -247,7 +247,7 @@ export default function EstacionamentoDetalhe() {
             <label className="text-[11px] font-semibold text-gray-500">Entrada
               <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1">
                 <Calendar size={14} className="text-brand shrink-0" />
-                <input type="date" min={hoje} value={entradaD} onChange={(e) => setEntradaD(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
+                <input type="date" min={hoje} value={entradaD} onChange={(e) => { const v = e.target.value; setEntradaD(v && v < hoje ? hoje : v) }} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
               </div>
             </label>
             <label className="text-[11px] font-semibold text-gray-500">Horário
@@ -261,7 +261,7 @@ export default function EstacionamentoDetalhe() {
             <label className="text-[11px] font-semibold text-gray-500">Saída
               <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1">
                 <Calendar size={14} className="text-brand shrink-0" />
-                <input type="date" min={entradaD || hoje} value={saidaD} onChange={(e) => setSaidaD(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
+                <input type="date" min={entradaD || hoje} value={saidaD} onChange={(e) => { const v = e.target.value; setSaidaD(v && v < hoje ? hoje : v) }} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
               </div>
             </label>
             <label className="text-[11px] font-semibold text-gray-500">Horário
