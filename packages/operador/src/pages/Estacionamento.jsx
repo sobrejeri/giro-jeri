@@ -96,7 +96,7 @@ export default function Estacionamento({ section }) {
 
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-6xl mx-auto w-full">
       {/* No modo menu (operador de vagas), o cabeçalho superior já mostra a seção
           — não repetimos o título aqui. No modo abas, mantém o título. */}
       {!menuMode && (
@@ -763,7 +763,7 @@ function InicioDashboard({ onGo, filaCount, reservas = [], aceitar, recusar }) {
   const lotado   = capacity > 0 && livres <= 0
 
   return (
-    <div className="space-y-4 max-w-5xl">
+    <div className="space-y-4">
       {/* Hero: ocupação do pátio — o número que mais importa, em destaque. */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand to-orange-600 text-white p-5 shadow-lg shadow-orange-500/20">
         <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-white/10" />
@@ -806,7 +806,8 @@ function InicioDashboard({ onGo, filaCount, reservas = [], aceitar, recusar }) {
         <Stat icon={Clock} tint="bg-orange-50 text-orange-600" big={s.saidas_hoje} label="Saídas hoje" />
       </div>
 
-      {/* Solicitações (novas + alterações) — acionável aqui no Início. */}
+      {/* Solicitações + veículos no pátio — lado a lado no desktop. */}
+      <div className="grid lg:grid-cols-2 gap-4 items-start">
       <div>
         <p className="text-[13px] font-bold text-gray-900 mb-2 px-0.5 flex items-center gap-1.5"><Bell size={15} className="text-brand" /> Solicitações</p>
         <SolicitacoesView soAcionavel reservas={reservas} aceitar={aceitar} recusar={recusar} />
@@ -829,6 +830,7 @@ function InicioDashboard({ onGo, filaCount, reservas = [], aceitar, recusar }) {
             {patio.length > 6 && <button onClick={() => onGo('patio', 'retirada')} className="text-[12px] text-brand font-semibold pt-1">Ver todos →</button>}
           </div>
         )}
+      </div>
       </div>
     </div>
   )
@@ -876,7 +878,7 @@ function PatioView({ notify, onDone, modoProp, reservas = [] }) {
 
   const lista = verSaidas ? saidas : noPatio
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-2xl mx-auto">
       {/* Três frentes do pátio, uma de cada vez: entrada · retirada · reservas. */}
       <div className="grid grid-cols-3 gap-1.5 bg-gray-100 p-1 rounded-2xl">
         <button onClick={() => setModo('entrada')}
