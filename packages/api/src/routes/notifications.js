@@ -1,7 +1,7 @@
 import { Router }       from 'express'
 import { supabase }     from '../supabase.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
-import { isWhatsappEnabled, sendTestMessage } from '../services/whatsapp.js'
+import { isWhatsappEnabled, sendTestMessage, sendTestLocation } from '../services/whatsapp.js'
 import { sendPushToUser, isConfigured as pushConfigured } from '../services/webpush.js'
 import { notifyUser, getTemplate, DEFAULT_TEMPLATES } from '../services/notify.js'
 
@@ -25,6 +25,16 @@ router.post('/wa-test', authenticate, requireAdmin, async (req, res) => {
   const phone = String(req.body?.phone || '').trim()
   if (!phone) return res.status(400).json({ error: 'Informe um phone (ex.: +5588999999999)' })
   const result = await sendTestMessage(phone)
+  res.json(result)
+})
+
+// ── POST /api/notifications/wa-test-location — envia um PIN de teste (admin) ──
+// body: { phone: '+5588...' }. Usa o MESMO send-location dos pins reais de
+// embarque (passeio/translado) e do estacionamento. Retorna a resposta da Z-API.
+router.post('/wa-test-location', authenticate, requireAdmin, async (req, res) => {
+  const phone = String(req.body?.phone || '').trim()
+  if (!phone) return res.status(400).json({ error: 'Informe um phone (ex.: +5588999999999)' })
+  const result = await sendTestLocation(phone)
   res.json(result)
 })
 

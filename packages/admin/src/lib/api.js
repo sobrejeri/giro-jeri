@@ -135,6 +135,7 @@ export const api = {
   // WhatsApp (Z-API) — diagnóstico e envio de teste
   getWaDiag:         ()            => request('/api/notifications/wa-diag'),
   sendWaTest:        (phone)       => request('/api/notifications/wa-test', { method: 'POST', body: { phone } }),
+  sendWaTestLocation:(phone)       => request('/api/notifications/wa-test-location', { method: 'POST', body: { phone } }),
 
   // Dashboard KPIs
   getStats:          () => request('/api/admin/stats'),

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Settings, RotateCcw, CreditCard, Landmark, SplitSquareHorizontal,
   Eye, EyeOff, CheckCircle, Pencil, Image as ImageIcon, Upload, Trash2, Route,
-  MessageCircle, Send, XCircle,
+  MessageCircle, Send, XCircle, MapPin,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -1328,10 +1328,13 @@ function WhatsappDiag() {
     queryFn:  () => api.getWaDiag(),
   })
   const testMut = useMutation({ mutationFn: () => api.sendWaTest(phone.trim()) })
+  const locMut  = useMutation({ mutationFn: () => api.sendWaTestLocation(phone.trim()) })
 
   const enabled = !!data?.enabled
   const r = testMut.data
   const testeOk = r && r.ok !== false && !r.skipped
+  const rl = locMut.data
+  const locOk = rl && rl.ok !== false && !rl.skipped
 
   const StatusLinha = ({ ok, children }) => (
     <div className="flex items-center gap-2 text-xs">
@@ -1388,7 +1391,7 @@ function WhatsappDiag() {
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+5588999999999"
               />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   type="button"
                   size="sm"
@@ -1397,11 +1400,23 @@ function WhatsappDiag() {
                 >
                   <Send size={13} /> {testMut.isPending ? 'Enviando…' : 'Enviar teste'}
                 </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => locMut.mutate()}
+                  disabled={!enabled || phone.trim().length < 8 || locMut.isPending}
+                >
+                  <MapPin size={13} /> {locMut.isPending ? 'Enviando…' : 'Testar pin 📍'}
+                </Button>
                 {!enabled && <span className="text-[11px] text-gray-500">Ative o WhatsApp para testar.</span>}
               </div>
+              <p className="text-[11px] text-gray-500">
+                "Enviar teste" manda um texto; "Testar pin" manda um cartão de localização (mesmo mecanismo do embarque e do estacionamento) — toque nele no WhatsApp para abrir no Waze/Maps.
+              </p>
 
-              {testMut.isError && (
-                <p className="text-[11px] text-red-400">Falha ao chamar a API: {testMut.error?.message || 'erro desconhecido'}</p>
+              {(testMut.isError || locMut.isError) && (
+                <p className="text-[11px] text-red-400">Falha ao chamar a API: {(testMut.error || locMut.error)?.message || 'erro desconhecido'}</p>
               )}
               {r && (
                 <div className={`text-[11px] rounded-lg border p-2.5 ${testeOk ? 'border-green-800 bg-green-900/20 text-green-300' : 'border-red-800 bg-red-900/20 text-red-300'}`}>
@@ -1411,6 +1426,16 @@ function WhatsappDiag() {
                       ? 'Mensagem enviada! Confira o WhatsApp do número informado.'
                       : `O Z-API recusou (status ${r.status ?? '—'}). Verifique as credenciais e o número.`}
                   <pre className="mt-1.5 whitespace-pre-wrap break-all text-[10px] text-gray-500">{JSON.stringify(r.body ?? r, null, 2).slice(0, 500)}</pre>
+                </div>
+              )}
+              {rl && (
+                <div className={`text-[11px] rounded-lg border p-2.5 ${locOk ? 'border-green-800 bg-green-900/20 text-green-300' : 'border-red-800 bg-red-900/20 text-red-300'}`}>
+                  {rl.skipped
+                    ? `Z-API não configurada (${rl.reason || 'sem credenciais'}).`
+                    : locOk
+                      ? '📍 Pin de localização enviado! Confira o WhatsApp — deve chegar um cartão de mapa (Jericoacoara) para tocar e abrir no Waze/Maps.'
+                      : `O Z-API recusou o pin (status ${rl.status ?? '—'}). A conta pode não suportar send-location — me avise com este retorno.`}
+                  <pre className="mt-1.5 whitespace-pre-wrap break-all text-[10px] text-gray-500">{JSON.stringify(rl.body ?? rl, null, 2).slice(0, 500)}</pre>
                 </div>
               )}
             </div>

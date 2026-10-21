@@ -191,6 +191,32 @@ export async function checkPhoneExists(phone) {
   }
 }
 
+// Envia um PIN de localização de TESTE (centro de Jericoacoara) e devolve a
+// resposta crua da Z-API — mesmo mecanismo (send-location) dos pins reais de
+// embarque/estacionamento, para o painel conferir se o pin está chegando.
+export async function sendTestLocation(phone) {
+  if (!isWhatsappEnabled()) return { skipped: true, reason: 'Z-API não configurada' }
+  const { ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN } = process.env
+  const url = `${ZAPI_BASE}/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-location`
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN },
+      body: JSON.stringify({
+        phone:     toZapiPhone(phone),
+        title:     'Turiva — teste de localização 📍',
+        address:   'Jericoacoara, Jijoca de Jericoacoara — CE',
+        latitude:  '-2.7975',
+        longitude: '-40.5137',
+      }),
+    })
+    const body = await res.json().catch(() => ({}))
+    return { ok: res.ok, status: res.status, body }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+}
+
 // Envia pra 1 número e RETORNA o resultado da Z-API (usado no diagnóstico).
 export async function sendTestMessage(phone) {
   if (!isWhatsappEnabled()) return { skipped: true, reason: 'Z-API não configurada' }
