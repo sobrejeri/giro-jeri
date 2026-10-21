@@ -50,6 +50,12 @@ export function draftFromRoute(route, { region_id = null, shortName } = {}) {
     name: nome,
     origin: route.origin_name,
     dest:   route.destination_name,
+    // Coordenadas da origem da rota → pin de localização do motorista (embarque)
+    // no WhatsApp, igual ao passeio. Mesmas chaves do passeio para o checkout
+    // tratar os dois do mesmo jeito.
+    pickup_latitude:   num(route.origin_latitude),
+    pickup_longitude:  num(route.origin_longitude),
+    pickup_place_name: route.origin_name || null,
     cover_image_url: route.cover_image_url || null,
     region_id: route.region_id || region_id,
     // No transfer o preço é da ROTA, não do veículo: cada veículo escolhido
