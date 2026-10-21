@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, Calendar, Clock, Car, Umbrella, Sun, MapPin, Info, ShoppingCart } from 'lucide-react'
+import { ChevronLeft, Calendar, Clock, Car, Umbrella, Sun, MapPin, Info, ShoppingCart, ParkingSquare } from 'lucide-react'
 import { format, startOfDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
