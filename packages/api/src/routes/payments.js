@@ -9,6 +9,7 @@ import { notifyUser, notifyOperatorsAndAdmin, notifyAdmins } from '../services/n
 import { calculatePrivateTour, calculateSharedTour, getDateSurcharge, validateAdvance, applyCoupon } from '../services/priceEngine.js'
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js'
 import { sweepExpiredLegBookings } from '../services/legFlow.js'
+import { hojeJeri } from '../services/bookingExpiry.js'
 import {
   reivindicarAprovacao as claimAprovacao,
   reservarTentativa as claimTentativa,
@@ -1335,6 +1336,14 @@ router.post('/intent', authenticate, async (req, res, next) => {
           s === 'expired'             ? 'O prazo de pagamento desta reserva venceu. Faça uma nova solicitação.' :
                                         'Esta reserva não pode ser paga agora. Fale com a gente pelo WhatsApp.'
         return res.status(409).json({ error: msg })
+      }
+      // Data do serviço já passou (reserva vencida) → não pode mais pagar: cancela
+      // na hora e avisa. Evita pagar um passeio cuja data já ficou no passado.
+      if (existing.service_date && existing.service_date < hojeJeri()) {
+        await supabase.from('bookings')
+          .update({ status_commercial: 'cancelled', status_operational: 'cancelled' })
+          .eq('id', existing.id).in('status_commercial', PODE_PAGAR)
+        return res.status(409).json({ error: 'A data desta reserva já passou — ela foi cancelada. Faça uma nova solicitação.' })
       }
 
       booking     = existing

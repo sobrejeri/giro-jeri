@@ -11,6 +11,7 @@ import {
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
 import { sweepExpiredLegBookings } from '../services/legFlow.js';
+import { cancelExpiredUnpaidBookings } from '../services/bookingExpiry.js';
 import { reconciliarPagamentosDoCliente } from '../services/paymentReconcile.js';
 import { onPaymentApproved, getOperatorMp } from './payments.js';
 import dayjs from 'dayjs';
@@ -375,6 +376,9 @@ router.get('/', authenticate, async (req, res, next) => {
     // Varredura lazy (R3): cancela reservas com prazo de pagamento vencido antes
     // de o cliente ver a lista. Best-effort e inerte com a flag off.
     await sweepExpiredLegBookings().catch(() => {});
+    // Reservas NÃO PAGAS cuja DATA do serviço já passou → Canceladas, para não
+    // aparecerem como pagáveis. Best-effort.
+    await cancelExpiredUnpaidBookings().catch(() => {});
 
     // Conciliação lazy: confere no Mercado Pago os pagamentos AINDA PENDENTES
     // deste cliente antes de montar a lista. É o momento certo — quem pagou o

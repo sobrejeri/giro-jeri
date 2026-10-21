@@ -10,6 +10,7 @@
 
 import { supabase } from '../supabase.js'
 import { notifyUser, getTemplate } from './notify.js'
+import { cancelExpiredUnpaidBookings } from './bookingExpiry.js'
 
 const HORA = 60 * 60 * 1000
 
@@ -215,6 +216,8 @@ async function runPagarmeReconcile() {
 
 async function tick() {
   try { await runParkingDeadlines() } catch (e) { console.error('[scheduler] parking-deadlines:', e.message) }
+  // Reservas de passeio/translado NÃO PAGAS cuja data já passou → Canceladas.
+  try { await cancelExpiredUnpaidBookings() } catch (e) { console.error('[scheduler] booking-date-expiry:', e.message) }
   try { await runServiceReminders() } catch (e) { console.error('[scheduler] service-soon:', e.message) }
   try { await runCartReminders() } catch (e) { console.error('[scheduler] cart:', e.message) }
   try { await runCartPending() } catch (e) { console.error('[scheduler] cart-pending:', e.message) }
