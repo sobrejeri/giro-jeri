@@ -110,17 +110,22 @@ export async function abrirRetirada({ reservationId, ttlMin }) {
 // Consome o PIN apresentado no balcão (parceiro). Verifica contra TODOS os PINs
 // pendentes do lot: para cada salt, calcula o hash candidato e deixa a função
 // SQL fazer a comparação + consumo atômico. Rate-limit e consumo único no SQL.
-export async function consumirRetirada({ lotId, pin, actorId }) {
-  const { data: pendentes } = await supabase
+export async function consumirRetirada({ lotId, pin, actorId, reservationId = null }) {
+  let q = supabase
     .from('parking_withdrawals')
     .select('pin_salt, parking_reservations!inner(lot_id)')
     .eq('status', 'pending')
     .eq('parking_reservations.lot_id', lotId)
+  // Fluxo "escolher na lista": só considera o PIN pendente DESTA reserva, então
+  // o PIN de outra reserva não libera o carro selecionado (o salt é único por
+  // retirada, logo o hash candidato só casa com a reserva certa).
+  if (reservationId) q = q.eq('reservation_id', reservationId)
+  const { data: pendentes } = await q
 
   // Um hash candidato por salt pendente; o SQL casa qualquer um e consome o
   // único que bater. Uma submissão = uma tentativa (rate-limit no SQL).
   const salts = [...new Set((pendentes || []).map((w) => w.pin_salt))]
-  if (salts.length === 0) return { ok: false, error: 'invalid_pin' }
+  if (salts.length === 0) return { ok: false, error: reservationId ? 'no_pending' : 'invalid_pin' }
 
   const candidates = salts.map((salt) => hashPin(pin, salt))
   const { data, error } = await supabase.rpc('parking_consume_withdrawal', {

@@ -857,6 +857,14 @@ function PatioView({ notify, onDone, modoProp }) {
     onError: (e) => notify?.('err', e?.message || 'Erro ao registrar saída.'),
   })
   const pagar = useMutation({ mutationFn: (id) => api.parkingStayMarkPaid(id), onSuccess: () => { notify?.('ok', 'Marcado como pago.'); refresh() }, onError: (e) => notify?.('err', e?.message) })
+  // Reserva Turiva escolhida na lista para liberar (identifica o cliente ANTES
+  // do PIN). O PIN fica amarrado a ESTA reserva no servidor (reservation_id).
+  const [saidaReserva, setSaidaReserva] = useState(null)
+  const liberarReserva = useMutation({
+    mutationFn: ({ lot_id, reservation_id, pin }) => api.parkingValidateWithdrawal({ lot_id, pin, reservation_id: reservation_id || undefined }),
+    onSuccess: () => { notify?.('ok', 'Saída liberada!'); setSaidaReserva(null); refresh() },
+    onError: (e) => notify?.('err', e?.message || 'PIN inválido.'),
+  })
 
   const lista = verSaidas ? saidas : noPatio
   return (
@@ -913,7 +921,9 @@ function PatioView({ notify, onDone, modoProp }) {
                   {v.origin === 'walkin' && (
                     <button onClick={() => setSaidaStay(v)} disabled={sair.isPending} className="flex-1 text-[12px] font-semibold text-white bg-gray-900 rounded-lg py-1.5">Registrar saída</button>
                   )}
-                  {v.origin !== 'walkin' && <span className="text-[11px] text-gray-400 py-1.5">Saída pelo PIN do cliente (abaixo)</span>}
+                  {v.origin !== 'walkin' && (
+                    <button onClick={() => setSaidaReserva(v)} disabled={liberarReserva.isPending} className="flex-1 text-[12px] font-semibold text-white bg-gray-900 rounded-lg py-1.5">Liberar saída</button>
+                  )}
                 </div>
               )}
             </div>
@@ -925,6 +935,7 @@ function PatioView({ notify, onDone, modoProp }) {
 
       {walkin && <WalkinModal notify={notify} onClose={() => setWalkin(false)} onDone={() => { setWalkin(false); refresh() }} />}
       {saidaStay && <SaidaPinModal stay={saidaStay} pending={sair.isPending} onClose={() => setSaidaStay(null)} onConfirm={(pin) => sair.mutate({ id: saidaStay.id, pin })} />}
+      {saidaReserva && <SaidaPinModal stay={saidaReserva} pending={liberarReserva.isPending} onClose={() => setSaidaReserva(null)} onConfirm={(pin) => liberarReserva.mutate({ lot_id: saidaReserva.lot_id, reservation_id: saidaReserva.reservation_id, pin })} />}
     </div>
   )
 }
@@ -940,13 +951,23 @@ function SaidaPinModal({ stay, pending, onClose, onConfirm }) {
           <button onClick={onClose} className="p-2 text-gray-400"><X size={20} /></button>
         </div>
         <div className="p-5 space-y-3">
-          <p className="text-[13px] text-gray-600">Peça ao cliente o <b>PIN de retirada</b> do veículo <span className="font-mono font-bold">{stay.plate || '—'}</span>.</p>
-          <input
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            inputMode="numeric" placeholder="PIN (6 dígitos)" autoFocus
-            className="w-full border border-gray-200 rounded-xl px-3 h-12 text-center font-mono text-[22px] tracking-[0.3em] outline-none focus:border-brand"
-          />
+          {/* Carro/cliente reconhecido — o operador vê de quem é ANTES de liberar. */}
+          <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
+            <p className="font-mono font-extrabold text-[18px] text-gray-900">{stay.plate || '—'}</p>
+            {[stay.client_name, stay.vehicle_type, stay.spot ? `Vaga ${stay.spot}` : null].filter(Boolean).length > 0 && (
+              <p className="text-[12px] text-gray-500 mt-0.5">{[stay.client_name, stay.vehicle_type, stay.spot ? `Vaga ${stay.spot}` : null].filter(Boolean).join(' · ')}</p>
+            )}
+          </div>
+          <p className="text-[13px] text-gray-600">Peça o <b>PIN de retirada</b> ao cliente (ou leia o QR do app dele).</p>
+          <div className="flex gap-2">
+            <input
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputMode="numeric" placeholder="PIN (6 dígitos)" autoFocus
+              className="flex-1 border border-gray-200 rounded-xl px-3 h-12 text-center font-mono text-[22px] tracking-[0.3em] outline-none focus:border-brand"
+            />
+            <ScanQRButton onDetected={(v) => setPin(String(v).replace(/\D/g, '').slice(0, 6))} />
+          </div>
         </div>
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm">Cancelar</button>

@@ -1067,6 +1067,9 @@ router.post('/reservations/:id/withdrawal', authenticate, async (req, res, next)
 const withdrawSchema = z.object({
   lot_id: z.string().uuid(),
   pin:    z.string().min(4).max(10),
+  // Opcional: amarra a validação a UMA reserva (fluxo "escolher na lista").
+  // Sem ele, valida contra todas as retiradas pendentes do lot (PIN/QR direto).
+  reservation_id: z.string().uuid().optional(),
 })
 router.post('/partner/withdrawal', authenticate, async (req, res, next) => {
   try {
@@ -1075,13 +1078,14 @@ router.post('/partner/withdrawal', authenticate, async (req, res, next) => {
     if (!(await podeOperarLot(req.user, parsed.data.lot_id))) {
       return res.status(403).json({ error: 'Este estacionamento não é seu.' })
     }
-    const data = await consumirRetirada({ lotId: parsed.data.lot_id, pin: parsed.data.pin, actorId: req.user.id })
+    const data = await consumirRetirada({ lotId: parsed.data.lot_id, pin: parsed.data.pin, actorId: req.user.id, reservationId: parsed.data.reservation_id })
     if (!data?.ok) {
-      const map = { invalid_pin: 422, expired: 410, bad_state: 409 }
+      const map = { invalid_pin: 422, expired: 410, bad_state: 409, no_pending: 409 }
       const msg = {
         invalid_pin: 'PIN inválido. Confira com o cliente.',
         expired: 'Este PIN expirou. Peça ao cliente para gerar um novo.',
         bad_state: 'Esta reserva não está no pátio para retirada.',
+        no_pending: 'O cliente ainda não pediu a retirada no app. Peça para ele tocar em "Pedir retirada".',
       }[data?.error] || 'Não foi possível validar a retirada.'
       return res.status(map[data?.error] || 400).json({ error: msg })
     }
