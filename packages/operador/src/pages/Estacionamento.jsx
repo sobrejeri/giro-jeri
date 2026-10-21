@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode, MapPin, Bell, ChevronRight } from 'lucide-react'
+import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode, MapPin, Bell, ChevronRight, ChevronDown, Info, CalendarDays } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -280,6 +280,26 @@ function RepasseDetalhe({ item: i, onClose }) {
   )
 }
 
+// Seção recolhível (acordeão) — agrupa o cadastro por tópico para não virar um
+// formulário gigante. Cada tópico é um card com cabeçalho clicável (mostra/esconde).
+function Secao({ title, icon: Icon, hint, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <button type="button" onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2.5 px-4 py-3 text-left active:bg-gray-50">
+        {Icon && <span className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0"><Icon size={16} className="text-brand" /></span>}
+        <span className="flex-1 min-w-0">
+          <span className="block text-[13px] font-bold text-gray-900">{title}</span>
+          {hint && <span className="block text-[11px] text-gray-400 mt-0.5 truncate">{hint}</span>}
+        </span>
+        <ChevronDown size={18} className={`text-gray-400 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-100">{children}</div>}
+    </div>
+  )
+}
+
 // ── Meu local: o parceiro completa/edita o próprio cadastro ───────────────────
 // Admin provisiona a casca; aqui o dono preenche fotos, descrição, capacidade e
 // tarifas. Comissão/prazos/reembolso são da plataforma (só leitura).
@@ -364,90 +384,96 @@ function LotEditor({ lot, notify, onSaved }) {
   const campo = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand'
   const label = 'block text-[12px] font-semibold text-gray-500 mb-1'
 
+  const tiposAtivos = (lot.parking_tariffs || []).filter((t) => t.is_active !== false)
+  const regrasAtivas = (lot.season_rules || []).filter((r) => r.is_active !== false)
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-      <div>
-        <label className={label}>Nome</label>
-        <input value={form.name} onChange={(e) => setF('name', e.target.value)} className={campo} />
-      </div>
-      <div>
-        <label className={label}>Descrição</label>
-        <textarea value={form.description} onChange={(e) => setF('description', e.target.value)} rows={2}
-          className={`${campo} resize-none`} placeholder="Conte como é o seu estacionamento, segurança, cobertura…" />
-      </div>
-      <div>
-        <label className={label}>Endereço</label>
-        <input value={form.address} onChange={(e) => setF('address', e.target.value)} className={campo}
-          placeholder="Rua, nº, bairro — Jijoca de Jericoacoara" />
-      </div>
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-[12px] font-semibold text-gray-500">Localização no mapa</label>
-          <button type="button" onClick={usarLocalizacao} disabled={geoLoading}
-            className="text-[11px] font-semibold text-brand flex items-center gap-1">
-            {geoLoading ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} Usar localização atual
-          </button>
+    <div className="space-y-3">
+      <Secao title="Identificação" icon={Info} hint={form.name || 'Nome, descrição e endereço'} defaultOpen>
+        <div>
+          <label className={label}>Nome</label>
+          <input value={form.name} onChange={(e) => setF('name', e.target.value)} className={campo} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <input value={form.lat} onChange={(e) => setF('lat', e.target.value)} inputMode="decimal" placeholder="Latitude" className={campo} />
-          <input value={form.lng} onChange={(e) => setF('lng', e.target.value)} inputMode="decimal" placeholder="Longitude" className={campo} />
+        <div>
+          <label className={label}>Descrição</label>
+          <textarea value={form.description} onChange={(e) => setF('description', e.target.value)} rows={2}
+            className={`${campo} resize-none`} placeholder="Conte como é o seu estacionamento, segurança, cobertura…" />
         </div>
-        <p className="text-[11px] text-gray-400 mt-1">Com as coordenadas, o cliente abre a rota no Google Maps/Waze.</p>
-      </div>
-      <div>
-        <label className={label}>Fotos</label>
-        <div className="flex flex-wrap gap-2">
-          {(form.photos || []).map((url, i) => (
-            <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-100">
-              <img src={url} alt="" className="w-full h-full object-cover" />
-              <button onClick={() => setForm((f) => ({ ...f, photos: f.photos.filter((_, j) => j !== i) }))}
-                className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"><Trash2 size={12} /></button>
-            </div>
-          ))}
-          {(form.photos || []).length < 10 && (
-            <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand hover:text-brand">
-              {enviandoFoto ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}
-              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onPickPhoto} />
-            </label>
-          )}
+        <div>
+          <label className={label}>Endereço</label>
+          <input value={form.address} onChange={(e) => setF('address', e.target.value)} className={campo}
+            placeholder="Rua, nº, bairro — Jijoca de Jericoacoara" />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><label className={label}>Capacidade (vagas)</label>
-          {(lot.parking_tariffs || []).some((t) => t.is_active !== false && t.capacity != null) ? (
-            <>
-              <input type="number" readOnly value={(lot.parking_tariffs || []).filter((t) => t.is_active !== false).reduce((a, t) => a + (t.capacity != null ? Number(t.capacity) : 0), 0)} className={`${campo} bg-gray-50 text-gray-500`} />
-              <p className="text-[11px] text-gray-400 mt-1">Soma automática das vagas por tipo (abaixo).</p>
-            </>
-          ) : (
-            <input type="number" min="0" value={form.capacity} onChange={(e) => setF('capacity', e.target.value)} className={campo} />
-          )}
-        </div>
-        <label className="flex items-end gap-2 text-sm text-gray-700 pb-2.5">
-          <input type="checkbox" checked={!!form.is_active} onChange={(e) => setF('is_active', e.target.checked)} /> Ativo (aparece pros clientes)
-        </label>
-      </div>
+      </Secao>
 
-      {/* Funcionamento */}
-      <div className="border-t border-gray-100 pt-3 space-y-2">
-        <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={!!form.is_24h} onChange={(e) => setF('is_24h', e.target.checked)} /> Funciona 24 horas
-        </label>
-        {!form.is_24h && (
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className={label}>Abre</label><input type="time" value={form.abre} onChange={(e) => setF('abre', e.target.value)} className={campo} /></div>
-            <div><label className={label}>Fecha</label><input type="time" value={form.fecha} onChange={(e) => setF('fecha', e.target.value)} className={campo} /></div>
+      <Secao title="Localização e fotos" icon={MapPin} hint={`${(form.photos || []).length} foto(s)${form.lat ? ' · ponto no mapa' : ''}`}>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[12px] font-semibold text-gray-500">Localização no mapa</label>
+            <button type="button" onClick={usarLocalizacao} disabled={geoLoading}
+              className="text-[11px] font-semibold text-brand flex items-center gap-1">
+              {geoLoading ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} Usar localização atual
+            </button>
           </div>
-        )}
-        <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={!!form.coberto} onChange={(e) => setF('coberto', e.target.checked)} /> Vagas cobertas
-        </label>
-      </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input value={form.lat} onChange={(e) => setF('lat', e.target.value)} inputMode="decimal" placeholder="Latitude" className={campo} />
+            <input value={form.lng} onChange={(e) => setF('lng', e.target.value)} inputMode="decimal" placeholder="Longitude" className={campo} />
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">Com as coordenadas, o cliente abre a rota no Google Maps/Waze.</p>
+        </div>
+        <div>
+          <label className={label}>Fotos</label>
+          <div className="flex flex-wrap gap-2">
+            {(form.photos || []).map((url, i) => (
+              <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-100">
+                <img src={url} alt="" className="w-full h-full object-cover" />
+                <button onClick={() => setForm((f) => ({ ...f, photos: f.photos.filter((_, j) => j !== i) }))}
+                  className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"><Trash2 size={12} /></button>
+              </div>
+            ))}
+            {(form.photos || []).length < 10 && (
+              <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand hover:text-brand">
+                {enviandoFoto ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onPickPhoto} />
+              </label>
+            )}
+          </div>
+        </div>
+      </Secao>
 
-      {/* Taxa por atraso (excedente) */}
-      <div className="border-t border-gray-100 pt-3 space-y-2">
-        <label className={label}>Taxa por atraso (excedente)</label>
-        <p className="text-[11px] text-gray-400 -mt-1">Cobrada quando o cliente ultrapassa o período reservado. O cliente vê o valor acumulando na reserva dele.</p>
+      <Secao title="Capacidade e funcionamento" icon={ParkingSquare} hint={`${form.is_24h ? '24 horas' : `${form.abre}–${form.fecha}`}${form.coberto ? ' · coberto' : ''}`}>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className={label}>Capacidade (vagas)</label>
+            {tiposAtivos.some((t) => t.capacity != null) ? (
+              <>
+                <input type="number" readOnly value={tiposAtivos.reduce((a, t) => a + (t.capacity != null ? Number(t.capacity) : 0), 0)} className={`${campo} bg-gray-50 text-gray-500`} />
+                <p className="text-[11px] text-gray-400 mt-1">Soma automática das vagas por tipo (em “Tarifas”).</p>
+              </>
+            ) : (
+              <input type="number" min="0" value={form.capacity} onChange={(e) => setF('capacity', e.target.value)} className={campo} />
+            )}
+          </div>
+          <label className="flex items-end gap-2 text-sm text-gray-700 pb-2.5">
+            <input type="checkbox" checked={!!form.is_active} onChange={(e) => setF('is_active', e.target.checked)} /> Ativo (aparece pros clientes)
+          </label>
+        </div>
+        <div className="border-t border-gray-100 pt-3 space-y-2">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={!!form.is_24h} onChange={(e) => setF('is_24h', e.target.checked)} /> Funciona 24 horas
+          </label>
+          {!form.is_24h && (
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className={label}>Abre</label><input type="time" value={form.abre} onChange={(e) => setF('abre', e.target.value)} className={campo} /></div>
+              <div><label className={label}>Fecha</label><input type="time" value={form.fecha} onChange={(e) => setF('fecha', e.target.value)} className={campo} /></div>
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={!!form.coberto} onChange={(e) => setF('coberto', e.target.checked)} /> Vagas cobertas
+          </label>
+        </div>
+      </Secao>
+
+      <Secao title="Taxa por atraso (excedente)" icon={Wallet} hint={Number(form.taxa_valor) > 0 ? `R$ ${form.taxa_valor}/${form.taxa_unidade === 'day' ? 'dia' : 'hora'}` : 'Sem cobrança de atraso'}>
+        <p className="text-[11px] text-gray-400">Cobrada quando o cliente ultrapassa o período reservado. O cliente vê o valor acumulando na reserva dele.</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 mb-1">Valor (R$)</label>
@@ -466,7 +492,7 @@ function LotEditor({ lot, notify, onSaved }) {
           <input type="number" min="0" value={form.taxa_tolerancia} onChange={(e) => setF('taxa_tolerancia', e.target.value)} className={campo} placeholder="0" />
           <p className="text-[11px] text-gray-400 mt-1">Minutos de atraso sem cobrança (ex.: 15). Deixe 0 para cobrar desde o 1º minuto.</p>
         </div>
-      </div>
+      </Secao>
 
       {/* Campos da plataforma — só leitura */}
       <div className="text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
@@ -474,12 +500,16 @@ function LotEditor({ lot, notify, onSaved }) {
       </div>
 
       <button onClick={() => salvar.mutate()} disabled={salvar.isPending || !form.name.trim()}
-        className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-50">
+        className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-xl py-3 text-sm disabled:opacity-50 shadow-sm shadow-brand/20">
         {salvar.isPending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Salvar cadastro
       </button>
 
-      <TarifasDoParceiro lot={lot} notify={notify} onChange={() => qc.invalidateQueries({ queryKey: ['parking-my-lots'] })} />
-      <RegrasTemporada lot={lot} notify={notify} onChange={() => qc.invalidateQueries({ queryKey: ['parking-my-lots'] })} />
+      <Secao title="Tarifas e vagas por veículo" icon={Car} hint={tiposAtivos.length ? `${tiposAtivos.length} tipo(s) de veículo` : 'Nenhuma tarifa ainda'}>
+        <TarifasDoParceiro lot={lot} notify={notify} onChange={() => qc.invalidateQueries({ queryKey: ['parking-my-lots'] })} />
+      </Secao>
+      <Secao title="Alta temporada e feriados" icon={CalendarDays} hint={regrasAtivas.length ? `${regrasAtivas.length} regra(s)` : 'Preços valem o ano todo'}>
+        <RegrasTemporada lot={lot} notify={notify} onChange={() => qc.invalidateQueries({ queryKey: ['parking-my-lots'] })} />
+      </Secao>
     </div>
   )
 }
@@ -503,8 +533,7 @@ function TarifasDoParceiro({ lot, notify, onChange }) {
   })
   const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
   return (
-    <div className="border-t border-gray-100 pt-3">
-      <p className="text-[12px] font-semibold text-gray-500 mb-1">Tarifas e vagas por veículo</p>
+    <div>
       <p className="text-[11px] text-gray-400 mb-2">Quantas vagas de cada tipo. Em branco = usa a capacidade total do pátio.</p>
       <div className="space-y-1.5 mb-2">
         {tarifas.length === 0 && <p className="text-[12px] text-amber-600">Adicione ao menos uma tarifa para começar a receber reservas.</p>}
@@ -568,8 +597,7 @@ function RegrasTemporada({ lot, notify, onChange }) {
   const addOk = nova.additional_value !== '' && (nova.kind === 'season' ? (nova.start_date && nova.end_date) : nova.holiday_date)
   const inp = 'border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand'
   return (
-    <div className="border-t border-gray-100 pt-3">
-      <p className="text-[12px] font-semibold text-gray-500 mb-1">Alta temporada e feriados</p>
+    <div>
       <p className="text-[11px] text-gray-400 mb-2">Dias com acréscimo na diária. Temporada é recorrente (todo ano); feriado é data exata.</p>
       <div className="space-y-1.5 mb-2">
         {regras.length === 0 && <p className="text-[12px] text-gray-400">Nenhuma regra — os preços valem o ano todo.</p>}
