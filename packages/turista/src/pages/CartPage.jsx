@@ -182,6 +182,13 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
   const [time, setTime]         = useState(item.time || '')
   const [people, setPeople]     = useState(item.people || 1)
   const [originText, setOrigin] = useState(item.origin_text || '')
+  // Coordenadas do ponto de embarque quando o cliente ESCOLHE um lugar da lista
+  // do buscador. Alimentam o pin de localização que o motorista recebe no
+  // WhatsApp. Texto livre (sem escolher da lista) fica sem coordenada → sem pin.
+  const [originGeo, setOriginGeo] = useState(() =>
+    item.pickup_latitude != null
+      ? { lat: item.pickup_latitude, lon: item.pickup_longitude, name: item.pickup_place_name || item.origin_text || '' }
+      : null)
   const [vehicles, setVehicles] = useState(() => (item.vehicles || []).map((v) => ({ ...v })))
   // Privativo x compartilhado mudou de lugar: era um seletor no topo da tela
   // de Passeios, hoje é decisão por item, aqui, junto do que ela muda.
@@ -442,7 +449,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
     onSave({
       ...item,
       dateIso, time, people,
-      ...(isTransfer ? {} : { origin_text: originText.trim(), mode }),
+      ...(isTransfer ? {} : { origin_text: originText.trim(), mode, pickup_latitude: originGeo?.lat ?? null, pickup_longitude: originGeo?.lon ?? null, pickup_place_name: originGeo?.name || null }),
       // No compartilhado o veículo não faz parte do pedido — guardar os que
       // sobraram de uma passagem pelo privativo mandaria veículo no payload.
       vehicles: compartilhado ? [] : vehicles,
@@ -475,7 +482,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
     const commit = (patch = {}) => onSave({
       ...item,
       dateIso, time, people,
-      ...(isTransfer ? {} : { origin_text: originText.trim(), mode }),
+      ...(isTransfer ? {} : { origin_text: originText.trim(), mode, pickup_latitude: originGeo?.lat ?? null, pickup_longitude: originGeo?.lon ?? null, pickup_place_name: originGeo?.name || null }),
       vehicles: compartilhado ? [] : vehicles,
       total: totalCom(patch.dateIso),
       ...patch,
@@ -546,8 +553,8 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
               <>
                 <PlaceInput
                   value={originText}
-                  onChange={setOrigin}
-                  onPick={(p) => { if (p) setOrigin(p.label || p.address || '') }}
+                  onChange={(v) => { setOrigin(v); setOriginGeo(null) }}
+                  onPick={(p) => { if (p) { setOrigin(p.label || p.address || ''); setOriginGeo(p.lat != null ? { lat: p.lat, lon: p.lon, name: p.label || p.address } : null) } }}
                   placeholder={t('cartPg.editSheet.originPlaceholder')}
                   dotClass="bg-brand"
                 />
@@ -763,8 +770,8 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
               <div className="mt-1">
                 <PlaceInput
                   value={originText}
-                  onChange={setOrigin}
-                  onPick={(p) => { if (p) setOrigin(p.label || p.address || '') }}
+                  onChange={(v) => { setOrigin(v); setOriginGeo(null) }}
+                  onPick={(p) => { if (p) { setOrigin(p.label || p.address || ''); setOriginGeo(p.lat != null ? { lat: p.lat, lon: p.lon, name: p.label || p.address } : null) } }}
                   placeholder={t('cartPg.editSheet.originPlaceholder')}
                   dotClass="bg-brand"
                 />

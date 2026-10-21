@@ -398,6 +398,12 @@ function CheckoutSummaryInner() {
     service_date_iso: format(date, 'yyyy-MM-dd'),
     service_time:    time || 'A confirmar',
     people_count:    people,
+    // Ponto de embarque (texto) + coordenadas quando o cliente escolheu um lugar
+    // da lista — as coordenadas viram o pin de localização do motorista.
+    origin_text:       ls.origin_text || undefined,
+    pickup_latitude:   ls.pickup_latitude ?? undefined,
+    pickup_longitude:  ls.pickup_longitude ?? undefined,
+    pickup_place_name: ls.pickup_place_name || undefined,
     vehicles:        cartHasItems
       ? cartItems.map(({ vehicle, qty }) => ({ vehicle_id: vehicle.id, qty, unit_price: Number(unitPriceFor(vehicle)) || 0 }))
       : ls.vehicles,

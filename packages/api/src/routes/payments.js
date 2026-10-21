@@ -137,6 +137,10 @@ const requestSchema = z.object({
   })).optional(),
   origin_text:      z.string().max(500).optional(),
   destination_text: z.string().max(500).optional(),
+  // Coordenadas do embarque (passeio): viram o pin de localização do motorista.
+  pickup_latitude:  z.number({ coerce: true }).optional(),
+  pickup_longitude: z.number({ coerce: true }).optional(),
+  pickup_place_name: z.string().max(300).optional(),
   service_name:     z.string().max(300).optional(),
   cover_image_url:  z.string().url().optional().nullable().or(z.literal('')),
   coupon_code:      z.string().max(50).optional(),
@@ -2416,6 +2420,7 @@ router.post('/request', authenticate, async (req, res, next) => {
       service_type, service_id, booking_mode,
       service_date_iso, service_time, people_count, region_id,
       vehicles = [], origin_text, destination_text, partner_slug,
+      pickup_latitude, pickup_longitude, pickup_place_name,
       preferred_operator_id,
     } = parsed.data
     // Prioridade da lojinha só vale se NÃO for venda direta por link (partner).
@@ -2475,6 +2480,9 @@ router.post('/request', authenticate, async (req, res, next) => {
       people_count:       Number(people_count) || 1,
       origin_text:        origin_text || null,
       destination_text:   destination_text || null,
+      pickup_latitude:    pickup_latitude ?? null,
+      pickup_longitude:   pickup_longitude ?? null,
+      pickup_place_name:  pickup_place_name || null,
       subtotal_amount:          subtotal,
       season_additional_amount: seasonAdditional,
       total_amount:       chargedTotal,
@@ -2675,6 +2683,9 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       people_count:       Number(it.people_count) || 1,
       origin_text:        it.origin_text || null,
       destination_text:   it.destination_text || null,
+      pickup_latitude:    it.pickup_latitude ?? null,
+      pickup_longitude:   it.pickup_longitude ?? null,
+      pickup_place_name:  it.pickup_place_name || null,
       subtotal_amount:          subtotal,
       season_additional_amount: seasonAdditional,
       total_amount:       chargedTotal,

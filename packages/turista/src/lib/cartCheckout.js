@@ -17,6 +17,10 @@ export function checkoutStateFor(item) {
     region_id:        item.region_id || null,
     service_id:       item.id,
     origin_text:      isTransfer ? (item.origin || '') : (item.origin_text || ''),
+    // Passa adiante as coordenadas de embarque do passeio (para o pin do motorista).
+    ...(!isTransfer && item.pickup_latitude != null
+      ? { pickup_latitude: item.pickup_latitude, pickup_longitude: item.pickup_longitude, pickup_place_name: item.pickup_place_name || null }
+      : {}),
     destination_text: isTransfer ? (item.dest || null) : null,
     vehicles,
     vehicle_name:     (item.vehicles || []).map((v) => `${v.qty}x ${v.name}`).join(' + '),
@@ -87,6 +91,11 @@ export function requestPayloadFor(item) {
     base.destination_text = item.dest || undefined
   } else {
     base.origin_text = item.origin_text || undefined
+    // Coordenadas do embarque (quando o cliente escolheu um lugar da lista) —
+    // viram o pin de localização do motorista no WhatsApp.
+    if (item.pickup_latitude != null)  base.pickup_latitude   = item.pickup_latitude
+    if (item.pickup_longitude != null) base.pickup_longitude  = item.pickup_longitude
+    if (item.pickup_place_name)        base.pickup_place_name = item.pickup_place_name
   }
   return base
 }
