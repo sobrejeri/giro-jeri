@@ -340,6 +340,7 @@ function Configurador({ lotId, onClose }) {
             ? (entradaD ? new Date(entradaD + 'T00:00:00') : null)
             : (saidaD ? new Date(saidaD + 'T00:00:00') : null)}
           minDate={sheet === 'saida' && entradaD ? new Date(entradaD + 'T00:00:00') : startOfDay(new Date())}
+          seasons={lot?.season_rules}
           onChange={(day) => {
             const s = format(day, 'yyyy-MM-dd')
             if (sheet === 'entrada') { setEntradaD(s); setSaidaD((sd) => (sd && sd < s ? '' : sd)) }

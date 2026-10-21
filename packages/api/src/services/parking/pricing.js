@@ -57,17 +57,29 @@ export async function cotarComTarifa({ lotId, vehicleType, startMs, endMs }) {
     horasPorDiaria: tarifa.hours_per_unit,
     minDiarias: tarifa.min_units,
   })
+  // Acréscimo de alta temporada/feriado do PRÓPRIO estacionamento, por diária.
+  const { listLotSeasonRules, surchargeForPeriod } = await import('./seasonRules.js')
+  const rules = await listLotSeasonRules(lotId)
+  const surcharge = surchargeForPeriod({
+    rules, startMs, diarias,
+    horasPorDiaria: tarifa.hours_per_unit || 24,
+    precoDiariaReais: tarifa.price_per_unit,
+  })
+  const totalCentsFinal = totalCents + Math.round(surcharge * 100)
   return {
     diarias,
     unit_price: Number(tarifa.price_per_unit),
-    total,
-    totalCents,
+    total: totalCentsFinal / 100,
+    totalCents: totalCentsFinal,
+    base_total: total,   // total sem o acréscimo de temporada/feriado
+    surcharge,           // acréscimo (reais) de temporada/feriado
     policy_snapshot: {
       tariff_id: tarifa.id,
       tariff_version: tarifa.version,
       unit: tarifa.unit,
       hours_per_unit: tarifa.hours_per_unit,
       min_units: tarifa.min_units,
+      season_surcharge: surcharge,
     },
   }
 }

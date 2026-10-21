@@ -479,6 +479,7 @@ function LotEditor({ lot, notify, onSaved }) {
       </button>
 
       <TarifasDoParceiro lot={lot} notify={notify} onChange={() => qc.invalidateQueries({ queryKey: ['parking-my-lots'] })} />
+      <RegrasTemporada lot={lot} notify={notify} onChange={() => qc.invalidateQueries({ queryKey: ['parking-my-lots'] })} />
     </div>
   )
 }
@@ -536,6 +537,78 @@ function TarifasDoParceiro({ lot, notify, onChange }) {
         className="mt-2 w-full flex items-center justify-center gap-2 border border-brand text-brand font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
         {add.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Adicionar tarifa
       </button>
+    </div>
+  )
+}
+
+// Alta temporada e feriados do estacionamento — dias com acréscimo na diária.
+function RegrasTemporada({ lot, notify, onChange }) {
+  const vazia = { kind: 'season', name: '', start_date: '', end_date: '', holiday_date: '', additional_type: 'percentage', additional_value: '' }
+  const [nova, setNova] = useState(vazia)
+  const regras = (lot.season_rules || []).filter((r) => r.is_active !== false)
+  const add = useMutation({
+    mutationFn: () => {
+      const base = nova.kind === 'season'
+        ? { kind: 'season', start_date: nova.start_date, end_date: nova.end_date }
+        : { kind: 'holiday', holiday_date: nova.holiday_date }
+      return api.parkingAddSeasonRule(lot.id, {
+        ...base, name: nova.name.trim() || null,
+        additional_type: nova.additional_type,
+        additional_value: Number(nova.additional_value) || 0,
+      })
+    },
+    onSuccess: () => { setNova(vazia); onChange?.() },
+    onError: (e) => notify?.('err', e?.message || 'Não foi possível adicionar.'),
+  })
+  const remover = useMutation({ mutationFn: (id) => api.parkingUpdateSeasonRule(id, { is_active: false }), onSuccess: () => onChange?.() })
+  const dm = (s) => { const p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s }
+  const acr = (r) => r.additional_type === 'fixed'
+    ? `+R$ ${Number(r.additional_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/diária`
+    : `+${Number(r.additional_value)}%`
+  const addOk = nova.additional_value !== '' && (nova.kind === 'season' ? (nova.start_date && nova.end_date) : nova.holiday_date)
+  const inp = 'border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand'
+  return (
+    <div className="border-t border-gray-100 pt-3">
+      <p className="text-[12px] font-semibold text-gray-500 mb-1">Alta temporada e feriados</p>
+      <p className="text-[11px] text-gray-400 mb-2">Dias com acréscimo na diária. Temporada é recorrente (todo ano); feriado é data exata.</p>
+      <div className="space-y-1.5 mb-2">
+        {regras.length === 0 && <p className="text-[12px] text-gray-400">Nenhuma regra — os preços valem o ano todo.</p>}
+        {regras.map((r) => (
+          <div key={r.id} className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
+            <div className="min-w-0 truncate">
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mr-1.5 ${r.kind === 'holiday' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>{r.kind === 'holiday' ? 'Feriado' : 'Temporada'}</span>
+              <span className="text-gray-700">{r.name ? `${r.name} · ` : ''}{r.kind === 'holiday' ? dm(r.holiday_date) : `${dm(r.start_date)}–${dm(r.end_date)}`} · <b className="text-amber-700">{acr(r)}</b></span>
+            </div>
+            <button onClick={() => remover.mutate(r.id)} className="text-red-400 hover:text-red-600 shrink-0"><X size={15} /></button>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2 bg-gray-50/60 rounded-lg p-2.5">
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setNova((n) => ({ ...n, kind: 'season' }))} className={`py-1.5 rounded-lg text-[12px] font-semibold border ${nova.kind === 'season' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>Temporada</button>
+          <button onClick={() => setNova((n) => ({ ...n, kind: 'holiday' }))} className={`py-1.5 rounded-lg text-[12px] font-semibold border ${nova.kind === 'holiday' ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'}`}>Feriado</button>
+        </div>
+        <input value={nova.name} onChange={(e) => setNova((n) => ({ ...n, name: e.target.value }))} placeholder="Nome (opcional, ex.: Réveillon)" className={`w-full ${inp}`} />
+        {nova.kind === 'season' ? (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[11px] text-gray-500">Início<input type="date" value={nova.start_date} onChange={(e) => setNova((n) => ({ ...n, start_date: e.target.value }))} className={`w-full ${inp}`} /></label>
+            <label className="text-[11px] text-gray-500">Fim<input type="date" value={nova.end_date} onChange={(e) => setNova((n) => ({ ...n, end_date: e.target.value }))} className={`w-full ${inp}`} /></label>
+          </div>
+        ) : (
+          <label className="text-[11px] text-gray-500 block">Data do feriado<input type="date" value={nova.holiday_date} onChange={(e) => setNova((n) => ({ ...n, holiday_date: e.target.value }))} className={`w-full ${inp}`} /></label>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <select value={nova.additional_type} onChange={(e) => setNova((n) => ({ ...n, additional_type: e.target.value }))} className={inp}>
+            <option value="percentage">Percentual (%)</option>
+            <option value="fixed">Valor fixo (R$)</option>
+          </select>
+          <input value={nova.additional_value} onChange={(e) => setNova((n) => ({ ...n, additional_value: e.target.value.replace(/[^\d.,]/g, '').replace(',', '.') }))} inputMode="decimal" placeholder={nova.additional_type === 'fixed' ? 'R$ / diária' : '%'} className={inp} />
+        </div>
+        <button onClick={() => add.mutate()} disabled={!addOk || add.isPending}
+          className="w-full flex items-center justify-center gap-2 border border-brand text-brand font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
+          {add.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Adicionar regra
+        </button>
+      </div>
     </div>
   )
 }

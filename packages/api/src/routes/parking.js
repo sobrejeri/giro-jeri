@@ -58,7 +58,16 @@ router.get('/lots/:id', authenticate, async (req, res, next) => {
       .from('parking_tariffs')
       .select('vehicle_type, price_per_unit, unit, hours_per_unit, min_units')
       .eq('lot_id', lot.id).eq('is_active', true)
-    res.json({ ...lot, tariffs: tarifas || [] })
+    // Regras de alta temporada/feriado do lot (migração 121) — marcam o calendário.
+    let season_rules = []
+    try {
+      const { data: sr, error: srErr } = await supabase
+        .from('parking_season_rules')
+        .select('id, kind, name, start_date, end_date, holiday_date, additional_type, additional_value, is_active')
+        .eq('lot_id', lot.id).eq('is_active', true)
+      if (!srErr) season_rules = sr || []
+    } catch { /* tabela ausente → sem regras */ }
+    res.json({ ...lot, tariffs: tarifas || [], season_rules })
   } catch (err) { next(err) }
 })
 
@@ -109,6 +118,7 @@ router.post('/quote', authenticate, async (req, res, next) => {
     const { cot, disp } = await cotarEDisponibilidade(parsed.data)
     res.json({
       diarias: cot.diarias, unit_price: cot.unit_price, total: cot.total,
+      base_total: cot.base_total, surcharge: cot.surcharge,
       disponibilidade: disp, policy_snapshot: cot.policy_snapshot,
     })
   } catch (err) {
@@ -487,7 +497,23 @@ router.get('/partner/my-lots', authenticate, async (req, res, next) => {
       ({ data, error } = await sel('id, vehicle_type, price_per_unit, hours_per_unit, min_units, is_active'))
     }
     if (error) throw error
-    res.json({ data: data || [] })
+    const lots = data || []
+    // Anexa as regras de temporada/feriado de cada lot (migração 121). Tolerante.
+    try {
+      const ids = lots.map((l) => l.id)
+      if (ids.length) {
+        const { data: sr, error: srErr } = await supabase
+          .from('parking_season_rules')
+          .select('id, lot_id, kind, name, start_date, end_date, holiday_date, additional_type, additional_value, is_active')
+          .in('lot_id', ids).eq('is_active', true)
+        if (!srErr) {
+          const byLot = new Map()
+          for (const r of sr || []) { const a = byLot.get(r.lot_id) || []; a.push(r); byLot.set(r.lot_id, a) }
+          for (const l of lots) l.season_rules = byLot.get(l.id) || []
+        }
+      }
+    } catch { /* tabela ausente → sem regras */ }
+    res.json({ data: lots })
   } catch (err) { next(err) }
 })
 
@@ -582,6 +608,43 @@ router.patch('/partner/tariffs/:id', authenticate, async (req, res, next) => {
     }
     if (error) throw error
     await recomputeLotCapacity(t.lot_id)
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+})
+
+// ── Regras de alta temporada / feriado do estacionamento (migração 121) ──────
+const seasonRuleSchema = z.object({
+  kind:             z.enum(['season', 'holiday']),
+  name:             z.string().max(80).optional().nullable(),
+  start_date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  end_date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  holiday_date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  additional_type:  z.enum(['percentage', 'fixed']),
+  additional_value: z.number().min(0),
+})
+router.post('/partner/lots/:id/season-rules', authenticate, async (req, res, next) => {
+  try {
+    if (!(await podeOperarLot(req.user, req.params.id))) return res.status(403).json({ error: 'Este estacionamento não é seu.' })
+    const parsed = seasonRuleSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados da regra inválidos.' })
+    const d = parsed.data
+    if (d.kind === 'season' && (!d.start_date || !d.end_date)) return res.status(400).json({ error: 'Informe o início e o fim da temporada.' })
+    if (d.kind === 'holiday' && !d.holiday_date) return res.status(400).json({ error: 'Informe a data do feriado.' })
+    const { data, error } = await supabase.from('parking_season_rules')
+      .insert({ lot_id: req.params.id, ...d }).select('id').single()
+    if (error) throw error
+    res.status(201).json(data)
+  } catch (err) { next(err) }
+})
+router.patch('/partner/season-rules/:id', authenticate, async (req, res, next) => {
+  try {
+    const { data: r } = await supabase.from('parking_season_rules').select('lot_id').eq('id', req.params.id).maybeSingle()
+    if (!r) return res.status(404).json({ error: 'Regra não encontrada.' })
+    if (!(await podeOperarLot(req.user, r.lot_id))) return res.status(403).json({ error: 'Esta regra não é sua.' })
+    const parsed = seasonRuleSchema.partial().extend({ is_active: z.boolean().optional() }).safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
+    const { error } = await supabase.from('parking_season_rules').update(parsed.data).eq('id', req.params.id)
+    if (error) throw error
     res.json({ ok: true })
   } catch (err) { next(err) }
 })

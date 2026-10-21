@@ -90,6 +90,10 @@ export default function EstacionamentoDetalhe() {
     if (!quotes) return 0
     return selecionados.reduce((s, t) => s + (Number(quotes[t.vehicle_type]?.total) || 0) * (qtys[t.vehicle_type] || 0), 0)
   }, [quotes, selecionados, qtys])
+  const totalSurcharge = useMemo(() => {
+    if (!quotes) return 0
+    return selecionados.reduce((s, t) => s + (Number(quotes[t.vehicle_type]?.surcharge) || 0) * (qtys[t.vehicle_type] || 0), 0)
+  }, [quotes, selecionados, qtys])
   const PLACA_MIN = 6
   const placasOk = selecionados.length > 0 && selecionados.every((t) => {
     const arr = plates[t.vehicle_type] || []
@@ -365,6 +369,7 @@ export default function EstacionamentoDetalhe() {
             <div>
               <p className="text-[13px] font-bold text-gray-900">{totalVagas} veículo(s) × {diarias} diária(s)</p>
               <p className="text-[11px] text-gray-500 mt-0.5">Você só paga após o estacionamento aceitar.</p>
+              {totalSurcharge > 0 && <p className="text-[11px] font-semibold text-amber-600 mt-0.5">Inclui {fmt(totalSurcharge)} de alta temporada/feriado</p>}
             </div>
             <div className="text-right">
               <p className="text-[10px] text-gray-400">Total</p>
@@ -408,6 +413,7 @@ export default function EstacionamentoDetalhe() {
             ? (entradaD ? new Date(entradaD + 'T00:00:00') : null)
             : (saidaD ? new Date(saidaD + 'T00:00:00') : null)}
           minDate={sheet === 'saida' && entradaD ? new Date(entradaD + 'T00:00:00') : startOfDay(new Date())}
+          seasons={lot?.season_rules}
           onChange={(day) => {
             const s = format(day, 'yyyy-MM-dd')
             if (sheet === 'entrada') { setEntradaD(s); setSaidaD((sd) => (sd && sd < s ? '' : sd)) }
