@@ -13,6 +13,10 @@
 const num = (v) => (v == null || v === '' ? null : Number(v))
 
 export function draftFromTour(tour, { region_id = null } = {}) {
+  // Embarque FIXO (definido pelo admin, ex.: heliponto): quando o passeio tem
+  // ponto de embarque com coordenadas, o cliente NÃO escolhe o local de saída —
+  // ele já vem pronto e vira o pin de localização no WhatsApp.
+  const embarqueFixo = tour.meeting_latitude != null && tour.meeting_longitude != null
   return {
     id:   tour.id,
     kind: 'tour',
@@ -29,7 +33,14 @@ export function draftFromTour(tour, { region_id = null } = {}) {
     // A API devolve o passeio ora com `region_id`, ora com o join `regions`.
     region_id: tour.region_id || tour.regions?.id || region_id,
     // Pendentes — preenchidos no carrinho
-    dateIso: '', time: '', people: 1, origin_text: '',
+    dateIso: '', time: '', people: 1,
+    origin_text: embarqueFixo ? (tour.meeting_point_name || 'Local de embarque definido') : '',
+    // Quando fixo, o carrinho mostra o embarque pronto (read-only) e já leva as
+    // coordenadas para o pin do turista e do motorista.
+    embarque_fixo: embarqueFixo,
+    pickup_latitude:   embarqueFixo ? num(tour.meeting_latitude)  : null,
+    pickup_longitude:  embarqueFixo ? num(tour.meeting_longitude) : null,
+    pickup_place_name: embarqueFixo ? (tour.meeting_point_name || null) : null,
     vehicles: [], total: 0,
     // Regras que a folha de edição precisa para validar data/horário
     booking_cutoff_time:  tour.booking_cutoff_time || null,

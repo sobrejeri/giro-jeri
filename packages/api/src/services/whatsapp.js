@@ -685,6 +685,24 @@ export async function notifyClientQuoteReady(supabase, quote) {
   await sendButtonLink(phone, message, 'Ver cotação', linkMyBookings())
 }
 
+// Pin do ponto de EMBARQUE para o TURISTA (onde ele vai embarcar) — igual ao do
+// estacionamento. Usa as coordenadas da reserva; busca na tabela se não vieram
+// no objeto. Best-effort: sem coordenada (passeio sem embarque fixo e sem ponto
+// escolhido), no-op.
+async function enviarEmbarquePinCliente(supabase, booking, phone) {
+  let lat = booking.pickup_latitude, lng = booking.pickup_longitude
+  let nome = booking.pickup_place_name || booking.origin_text
+  if (lat == null || lng == null) {
+    try {
+      const { data } = await supabase.from('bookings')
+        .select('pickup_latitude, pickup_longitude, pickup_place_name, origin_text')
+        .eq('id', booking.id).maybeSingle()
+      if (data) { lat = data.pickup_latitude; lng = data.pickup_longitude; nome = data.pickup_place_name || data.origin_text }
+    } catch { /* segue sem o pin */ }
+  }
+  await sendLocationPin(phone, { lat, lng, title: nome ? `Embarque — ${nome}` : 'Local de embarque', address: nome })
+}
+
 // Pagamento confirmado → segurança pro cliente de que deu tudo certo.
 export async function notifyClientPaymentConfirmed(supabase, booking) {
   if (!isWhatsappEnabled() || !booking) return { skipped: true }
@@ -702,6 +720,8 @@ export async function notifyClientPaymentConfirmed(supabase, booking) {
     `O operador já vai cuidar do seu atendimento. Boa viagem! 🚗`
   // Botão clicável (cai para o link sozinho na linha se a conta não tiver botão).
   await sendButtonLink(phone, message, 'Ver reserva', linkBookingPay(booking.id))
+  // Pin do ponto de embarque para o turista (ex.: heliponto do voo). No-op sem coords.
+  await enviarEmbarquePinCliente(supabase, booking, phone)
 }
 
 // ── OPERADOR ────────────────────────────────────────

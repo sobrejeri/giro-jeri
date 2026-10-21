@@ -116,6 +116,7 @@ const TOUR_EMPTY = {
   shared_price_per_person: '', cover_image_url: '', is_active: true,
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '',
+  meeting_point_name: '', meeting_latitude: '', meeting_longitude: '',
   display_order: 0,
 }
 const TRANSFER_EMPTY = {
@@ -1440,6 +1441,29 @@ export default function Catalogo() {
                 onChange={(v) => setForm({ ...form, min_advance_hours: v })} placeholderHoras="24" />
               <p className="text-[11px] text-gray-500 mt-1">
                 Horas mínimas entre a reserva e o transfer. Deixe em branco para usar o padrão.
+              </p>
+            </div>
+
+            {/* Local de embarque FIXO (ex.: heliponto do voo panorâmico). Quando
+                preenchido com coordenadas, o cliente NÃO escolhe o local de saída
+                — ele já vem definido, aparece pronto no carrinho e vira o pin de
+                localização no WhatsApp (turista e motorista). */}
+            <div className="space-y-2 border-t border-gray-800 pt-3">
+              <p className="text-xs font-medium text-gray-400">Local de embarque fixo (opcional)</p>
+              <p className="text-[11px] text-gray-500 -mt-1">
+                Para passeios com saída definida (ex.: voo de helicóptero). Preenchido, o cliente não escolhe o local: ele já aparece pronto e vira o pin de localização enviado no WhatsApp.
+              </p>
+              <Input label="Nome do ponto de embarque" value={form.meeting_point_name || ''}
+                onChange={(e) => setForm({ ...form, meeting_point_name: e.target.value })}
+                placeholder="Ex.: Heliponto de Jericoacoara" />
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Latitude" value={form.meeting_latitude ?? ''}
+                  onChange={(e) => setForm({ ...form, meeting_latitude: e.target.value })} placeholder="-2.7975" />
+                <Input label="Longitude" value={form.meeting_longitude ?? ''}
+                  onChange={(e) => setForm({ ...form, meeting_longitude: e.target.value })} placeholder="-40.5137" />
+              </div>
+              <p className="text-[11px] text-gray-500">
+                Coordenadas: no Google Maps, clique no ponto exato e copie os dois números. Sem coordenadas, o cliente escolhe o local normalmente.
               </p>
             </div>
 

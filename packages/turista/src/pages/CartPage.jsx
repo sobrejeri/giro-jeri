@@ -1505,6 +1505,21 @@ export default function CartPage() {
                       />
                     )}
 
+                    {/* Embarque FIXO definido pelo operador (ex.: heliponto do
+                        voo): mostra pronto — o cliente não escolhe o local. */}
+                    {item.embarque_fixo && (
+                      <div className="px-3 pt-2">
+                        <div className="flex items-start gap-2 bg-brand/5 border border-brand/20 rounded-xl px-3 py-2.5">
+                          <MapPin size={15} className="text-brand shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-bold text-brand uppercase tracking-wide">Local de embarque</p>
+                            <p className="text-[13px] font-semibold text-gray-800 truncate">{item.origin_text || 'Definido pelo operador'}</p>
+                            <p className="text-[11px] text-gray-500">Ponto de saída já definido — você recebe a localização no WhatsApp.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Chips compactos: cada um abre o editor para preencher e
                         fechar. Some o de veículo no compartilhado (não se
                         escolhe veículo — o preço é por pessoa). */}

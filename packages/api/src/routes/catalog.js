@@ -404,6 +404,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       cover_image_url, category_id, category_ids, region_ids, is_featured, display_order,
       booking_cutoff_time, min_advance_hours, is_exclusive,
       service_window_start, service_window_end,
+      meeting_point_name, meeting_latitude, meeting_longitude,
     } = req.body;
 
     const slug = `${slugify(name)}-${Date.now().toString(36)}`;
@@ -429,12 +430,19 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       service_window_start:    service_window_start || null,
       service_window_end:      service_window_end   || null,
     };
+    // Ponto de embarque fixo (opcional, migração 124). Só entra no insert quando
+    // preenchido — assim criar passeios normais nunca quebra se a coluna ainda
+    // não existir (a ausência só pesa quando há valor a gravar).
+    if (meeting_point_name) linha.meeting_point_name = meeting_point_name;
+    if (meeting_latitude  != null && meeting_latitude  !== '') linha.meeting_latitude  = Number(meeting_latitude);
+    if (meeting_longitude != null && meeting_longitude !== '') linha.meeting_longitude = Number(meeting_longitude);
     const { data, error } = await req.supabase.from('tours').insert(linha).select().single();
 
-    // Banco ainda sem a migration 083: insere sem o array e mantém a categoria
-    // única. Melhor um passeio com uma categoria do que erro ao cadastrar.
+    // Banco ainda sem a migration 083/124: insere sem o array (e sem o ponto de
+    // embarque) e mantém a categoria única. Melhor um passeio com uma categoria
+    // do que erro ao cadastrar.
     if (error?.code === '42703') {
-      const { category_ids: _drop, ...semArray } = linha;
+      const { category_ids: _drop, meeting_point_name: _m, meeting_latitude: _ml, meeting_longitude: _mg, ...semArray } = linha;
       const retry = await req.supabase.from('tours').insert(semArray).select().single();
       if (retry.error) throw retry.error;
       return res.status(201).json(retry.data);
@@ -453,6 +461,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
       latitude, longitude, service_radius_km, region_ids,
       booking_cutoff_time, min_advance_hours, is_exclusive,
       service_window_start, service_window_end,
+      meeting_point_name, meeting_latitude, meeting_longitude,
     } = req.body;
 
     const update = {};
@@ -481,6 +490,11 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (longitude          !== undefined) update.longitude               = longitude === '' || longitude === null ? null : Number(longitude);
     if (service_radius_km  !== undefined) update.service_radius_km       = service_radius_km === '' || service_radius_km === null ? null : Number(service_radius_km);
     if (region_ids         !== undefined) update.region_ids              = Array.isArray(region_ids) ? region_ids : [];
+    // Ponto de embarque fixo (migração 124). O loop tolerante abaixo remove a
+    // coluna sozinho se a migração ainda não rodou.
+    if (meeting_point_name !== undefined) update.meeting_point_name      = meeting_point_name || null;
+    if (meeting_latitude   !== undefined) update.meeting_latitude        = meeting_latitude  === '' || meeting_latitude  === null ? null : Number(meeting_latitude);
+    if (meeting_longitude  !== undefined) update.meeting_longitude       = meeting_longitude === '' || meeting_longitude === null ? null : Number(meeting_longitude);
 
     // Salva tolerando colunas ausentes (migração atrasada): se o banco/PostgREST
     // reclamar de uma coluna que não existe, remove SÓ ela e tenta de novo, até

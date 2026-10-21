@@ -2409,6 +2409,21 @@ router.post('/validate-coupon', authenticate, async (req, res, next) => {
   }
 })
 
+// Embarque FIXO do passeio (migração 124): quando o admin define um ponto de
+// embarque com coordenadas em tours.meeting_*, ELE manda — a reserva nasce com
+// esse ponto (texto + coordenadas do pin), ignorando o que o cliente mandou.
+// Passeio sem ponto fixo (ou migração pendente) → devolve null e segue normal.
+async function embarqueFixoDoTour(service_type, service_id) {
+  if (service_type !== 'tour' || !service_id) return null
+  try {
+    const { data } = await supabase.from('tours')
+      .select('meeting_point_name, meeting_latitude, meeting_longitude')
+      .eq('id', service_id).maybeSingle()
+    if (data?.meeting_latitude != null && data?.meeting_longitude != null) return data
+  } catch { /* coluna ausente (migração 124 pendente) → segue sem o embarque fixo */ }
+  return null
+}
+
 router.post('/request', authenticate, async (req, res, next) => {
   try {
     const parsed = requestSchema.safeParse(nullToUndefined(req.body))
@@ -2467,6 +2482,8 @@ router.post('/request', authenticate, async (req, res, next) => {
       })
     }
 
+    // Embarque fixo do passeio (admin) tem prioridade sobre o que o cliente mandou.
+    const mp = await embarqueFixoDoTour(service_type, service_id)
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
     const baseBooking = {
       booking_code:       bookingCode,
@@ -2478,11 +2495,11 @@ router.post('/request', authenticate, async (req, res, next) => {
       service_date:       service_date_iso,
       service_time:       service_time || null,
       people_count:       Number(people_count) || 1,
-      origin_text:        origin_text || null,
+      origin_text:        mp?.meeting_point_name || origin_text || null,
       destination_text:   destination_text || null,
-      pickup_latitude:    pickup_latitude ?? null,
-      pickup_longitude:   pickup_longitude ?? null,
-      pickup_place_name:  pickup_place_name || null,
+      pickup_latitude:    mp ? Number(mp.meeting_latitude)  : (pickup_latitude ?? null),
+      pickup_longitude:   mp ? Number(mp.meeting_longitude) : (pickup_longitude ?? null),
+      pickup_place_name:  mp?.meeting_point_name || pickup_place_name || null,
       subtotal_amount:          subtotal,
       season_additional_amount: seasonAdditional,
       total_amount:       chargedTotal,
@@ -2667,6 +2684,20 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
     // 2) Cria as N reservas. Itens combináveis compartilham UM order_group_id
     //    (insert em lote = atômico); cada standalone recebe o seu. booking_code
     //    único por item.
+    // Embarque fixo dos passeios (admin, migração 124): resolve os pontos de uma
+    // vez; cada passeio com ponto definido nasce com esse embarque (texto +
+    // coords do pin), ignorando o que o cliente mandou.
+    const tourIds = [...new Set(prepared.filter((p) => p.it.service_type === 'tour').map((p) => p.it.service_id).filter(Boolean))]
+    const meetingByTour = new Map()
+    if (tourIds.length) {
+      try {
+        const { data: ts } = await supabase.from('tours')
+          .select('id, meeting_point_name, meeting_latitude, meeting_longitude').in('id', tourIds)
+        for (const t of (ts || [])) {
+          if (t.meeting_latitude != null && t.meeting_longitude != null) meetingByTour.set(t.id, t)
+        }
+      } catch { /* migração 124 pendente → segue sem embarque fixo */ }
+    }
     const orderGroupId = crypto.randomUUID()
     const now = Date.now()
     const acceptanceExpiresAt = new Date(now + 24 * 60 * 60 * 1000).toISOString()
@@ -2681,11 +2712,11 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
       service_date:       it.service_date_iso,
       service_time:       it.service_time || null,
       people_count:       Number(it.people_count) || 1,
-      origin_text:        it.origin_text || null,
+      origin_text:        meetingByTour.get(it.service_id)?.meeting_point_name || it.origin_text || null,
       destination_text:   it.destination_text || null,
-      pickup_latitude:    it.pickup_latitude ?? null,
-      pickup_longitude:   it.pickup_longitude ?? null,
-      pickup_place_name:  it.pickup_place_name || null,
+      pickup_latitude:    meetingByTour.get(it.service_id) ? Number(meetingByTour.get(it.service_id).meeting_latitude)  : (it.pickup_latitude ?? null),
+      pickup_longitude:   meetingByTour.get(it.service_id) ? Number(meetingByTour.get(it.service_id).meeting_longitude) : (it.pickup_longitude ?? null),
+      pickup_place_name:  meetingByTour.get(it.service_id)?.meeting_point_name || it.pickup_place_name || null,
       subtotal_amount:          subtotal,
       season_additional_amount: seasonAdditional,
       total_amount:       chargedTotal,
