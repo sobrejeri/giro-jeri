@@ -345,13 +345,27 @@ export function operatorServesVehicles(opId, vehicleIds, optIn, prefs, combo = f
 //
 // Fail-open em qualquer erro: notificar demais é melhor do que a cotação não
 // chegar a ninguém e o cliente ficar sem resposta.
-export async function eligibleOperatorsForModal(supabase, modalSlug) {
-  const { data: ops } = await supabase
+
+// Operadores ATIVOS que atendem passeio/translado (frota). Exclui o segmento de
+// estacionamento (migração 114): quem só cuida de vaga não deve receber pedido
+// de passeio/translado. Tolerante: sem a coluna operator_segment, cai para
+// todos os operadores (fail-open, como era antes).
+async function activeFleetOperators(supabase) {
+  const { data, error } = await supabase
     .from('users')
-    .select('id, phone')
+    .select('id, phone, operator_segment')
     .eq('user_type', 'operator')
     .eq('is_active', true);
-  const operators = ops || [];
+  if (error) {
+    const { data: d2 } = await supabase
+      .from('users').select('id, phone').eq('user_type', 'operator').eq('is_active', true);
+    return d2 || [];
+  }
+  return (data || []).filter((o) => o.operator_segment !== 'parking');
+}
+
+export async function eligibleOperatorsForModal(supabase, modalSlug) {
+  const operators = await activeFleetOperators(supabase);
   if (!modalSlug || operators.length === 0) return operators;
 
   try {
@@ -375,12 +389,7 @@ export async function eligibleOperatorsForModal(supabase, modalSlug) {
 
 // Operadores ativos ELEGÍVEIS para uma reserva. Retorna [{ id, phone }].
 export async function eligibleOperatorsForBooking(supabase, bookingId) {
-  const { data: ops } = await supabase
-    .from('users')
-    .select('id, phone')
-    .eq('user_type', 'operator')
-    .eq('is_active', true);
-  const operators = ops || [];
+  const operators = await activeFleetOperators(supabase);
   if (!bookingId || operators.length === 0) return operators;
 
   try {

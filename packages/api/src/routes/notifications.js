@@ -40,6 +40,22 @@ function filtrarPorApp(items, app) {
   return items
 }
 
+// Solicitações de passeio/translado (frota) que NÃO fazem sentido para o
+// operador de estacionamento. Esconde do sininho dele — defesa em profundidade,
+// além do corte na origem (eligibleOperators* em fleet.js). Tolerante à coluna
+// operator_segment ausente (migração 114): sem ela, não corta nada.
+const FLEET_ONLY_KEYS = ['new_booking', 'new_transfer_quote']
+async function filtrarPorSegmento(items, user, app) {
+  if (app !== 'operador' || user?.user_type !== 'operator') return items
+  let segment = null
+  try {
+    const { data } = await supabase.from('users').select('operator_segment').eq('id', user.id).maybeSingle()
+    segment = data?.operator_segment || null
+  } catch { /* coluna ausente → sem corte */ }
+  if (segment === 'parking') return items.filter((n) => !FLEET_ONLY_KEYS.includes(n.template_key))
+  return items
+}
+
 router.get('/', authenticate, async (req, res) => {
   const app = req.query.app
   // Caminho normal (após a migração 021, com a coluna read_at)
@@ -51,7 +67,8 @@ router.get('/', authenticate, async (req, res) => {
     .limit(30)
 
   if (!withRead.error) {
-    const items = filtrarPorApp(withRead.data || [], app)
+    let items = filtrarPorApp(withRead.data || [], app)
+    items = await filtrarPorSegmento(items, req.user, app)
     return res.json({ items, unread: items.filter((n) => !n.read_at).length })
   }
 
@@ -68,7 +85,8 @@ router.get('/', authenticate, async (req, res) => {
     console.error('[notifications] list falhou:', basic.error.message)
     return res.json({ items: [], unread: 0 })
   }
-  const items = filtrarPorApp((basic.data || []).map((n) => ({ ...n, read_at: '1970-01-01T00:00:00Z' })), app)
+  let items = filtrarPorApp((basic.data || []).map((n) => ({ ...n, read_at: '1970-01-01T00:00:00Z' })), app)
+  items = await filtrarPorSegmento(items, req.user, app)
   res.json({ items, unread: 0 })
 })
 
