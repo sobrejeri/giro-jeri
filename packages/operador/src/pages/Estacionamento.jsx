@@ -475,33 +475,53 @@ function LotEditor({ lot, notify, onSaved }) {
 }
 
 function TarifasDoParceiro({ lot, notify, onChange }) {
-  const [nova, setNova] = useState({ vehicle_type: '', price_per_unit: '' })
+  const [nova, setNova] = useState({ vehicle_type: '', price_per_unit: '', capacity: '' })
   const tarifas = (lot.parking_tariffs || []).filter((t) => t.is_active !== false)
   const add = useMutation({
-    mutationFn: () => api.parkingAddMyTariff(lot.id, { vehicle_type: nova.vehicle_type.trim(), price_per_unit: Number(nova.price_per_unit), hours_per_unit: 24, min_units: 1 }),
-    onSuccess: () => { setNova({ vehicle_type: '', price_per_unit: '' }); onChange?.() },
+    mutationFn: () => api.parkingAddMyTariff(lot.id, { vehicle_type: nova.vehicle_type.trim(), price_per_unit: Number(nova.price_per_unit), capacity: nova.capacity !== '' ? Math.max(0, parseInt(nova.capacity, 10) || 0) : null, hours_per_unit: 24, min_units: 1 }),
+    onSuccess: () => { setNova({ vehicle_type: '', price_per_unit: '', capacity: '' }); onChange?.() },
     onError: (e) => notify?.('err', e?.message || 'Não foi possível adicionar.'),
   })
   const remover = useMutation({
     mutationFn: (id) => api.parkingUpdateMyTariff(id, { is_active: false }),
     onSuccess: () => onChange?.(),
   })
+  const salvarVagas = useMutation({
+    mutationFn: ({ id, capacity }) => api.parkingUpdateMyTariff(id, { capacity }),
+    onSuccess: () => { notify?.('ok', 'Vagas atualizadas.'); onChange?.() },
+    onError: (e) => notify?.('err', e?.message || 'Não foi possível salvar as vagas.'),
+  })
   const money = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
   return (
     <div className="border-t border-gray-100 pt-3">
-      <p className="text-[12px] font-semibold text-gray-500 mb-2">Tarifas por veículo</p>
+      <p className="text-[12px] font-semibold text-gray-500 mb-1">Tarifas e vagas por veículo</p>
+      <p className="text-[11px] text-gray-400 mb-2">Quantas vagas de cada tipo. Em branco = usa a capacidade total do pátio.</p>
       <div className="space-y-1.5 mb-2">
         {tarifas.length === 0 && <p className="text-[12px] text-amber-600">Adicione ao menos uma tarifa para começar a receber reservas.</p>}
         {tarifas.map((t) => (
-          <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
-            <span className="capitalize text-gray-700">{t.vehicle_type} · {money(t.price_per_unit)} / diária</span>
-            <button onClick={() => remover.mutate(t.id)} className="text-red-400 hover:text-red-600"><X size={15} /></button>
+          <div key={t.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
+            <span className="capitalize text-gray-700 flex-1 min-w-0 truncate">{t.vehicle_type} · {money(t.price_per_unit)}/diária</span>
+            <input
+              type="number" min="0" inputMode="numeric"
+              defaultValue={t.capacity ?? ''}
+              onBlur={(e) => {
+                const raw = e.target.value.trim()
+                const novo = raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0)
+                if (novo === (t.capacity ?? null)) return
+                salvarVagas.mutate({ id: t.id, capacity: novo })
+              }}
+              placeholder="—" title="Vagas deste tipo"
+              className="w-14 border border-gray-200 rounded-lg px-2 h-8 text-sm text-center outline-none focus:border-brand shrink-0"
+            />
+            <span className="text-[11px] text-gray-400 shrink-0">vagas</span>
+            <button onClick={() => remover.mutate(t.id)} className="text-red-400 hover:text-red-600 shrink-0"><X size={15} /></button>
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <input value={nova.vehicle_type} onChange={(e) => setNova((n) => ({ ...n, vehicle_type: e.target.value }))} placeholder="Veículo (ex.: carro)" className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand" />
+      <div className="grid grid-cols-3 gap-2">
+        <input value={nova.vehicle_type} onChange={(e) => setNova((n) => ({ ...n, vehicle_type: e.target.value }))} placeholder="Veículo" className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand" />
         <input value={nova.price_per_unit} onChange={(e) => setNova((n) => ({ ...n, price_per_unit: e.target.value }))} inputMode="decimal" placeholder="Preço/diária" className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand" />
+        <input value={nova.capacity} onChange={(e) => setNova((n) => ({ ...n, capacity: e.target.value.replace(/\D/g, '') }))} inputMode="numeric" placeholder="Vagas" className="border border-gray-200 rounded-lg px-3 h-9 text-sm outline-none focus:border-brand" />
       </div>
       <button onClick={() => add.mutate()} disabled={!nova.vehicle_type.trim() || !nova.price_per_unit || add.isPending}
         className="mt-2 w-full flex items-center justify-center gap-2 border border-brand text-brand font-semibold rounded-lg py-2 text-sm disabled:opacity-50">

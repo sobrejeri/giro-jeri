@@ -77,16 +77,25 @@ async function cotarEDisponibilidade({ lot_id, vehicle_type, start_at, end_at })
 
   // Disponibilidade INDICATIVA (não é um hold): pico de ocupação no intervalo.
   const { data: lot } = await supabase.from('parking_lots').select('capacity').eq('id', lot_id).maybeSingle()
-  const { data: blocksRaw } = await supabase
+  // Capacidade por TIPO (migração 120): se definida, conta só blocos do tipo.
+  let typeCap = null
+  const { data: tar, error: tErr } = await supabase.from('parking_tariffs')
+    .select('capacity').eq('lot_id', lot_id).eq('vehicle_type', vehicle_type).eq('is_active', true).maybeSingle()
+  if (!tErr && tar && tar.capacity != null) typeCap = Number(tar.capacity)
+
+  let bq = supabase
     .from('parking_capacity_blocks')
-    .select('start_at, end_at, qty, kind, expires_at')
+    .select('start_at, end_at, qty, kind, expires_at, vehicle_type')
     .eq('lot_id', lot_id).eq('status', 'active')
     .lt('start_at', end_at).gt('end_at', start_at)
+  if (typeCap != null) bq = bq.eq('vehicle_type', vehicle_type)
+  const { data: blocksRaw } = await bq
   const agora = Date.now()
   const blocks = (blocksRaw || [])
     .filter((b) => b.kind !== 'temp_hold' || !b.expires_at || new Date(b.expires_at).getTime() > agora)
     .map((b) => blocoDe(b))
-  const disp = temVaga({ capacidade: lot?.capacity ?? 0, blocks, start: startMs, end: endMs, want: 1 })
+  const capacidade = typeCap != null ? typeCap : (lot?.capacity ?? 0)
+  const disp = temVaga({ capacidade, blocks, start: startMs, end: endMs, want: 1 })
   return { cot, disp: { disponivel: Math.max(0, disp.disponivel), tem_vaga: disp.cabe } }
 }
 
@@ -432,11 +441,18 @@ router.post('/partner/stays/:id/exit', authenticate, async (req, res, next) => {
 // parceiro — ficam só no admin.
 router.get('/partner/my-lots', authenticate, async (req, res, next) => {
   try {
-    let q = supabase.from('parking_lots')
-      .select('*, parking_tariffs(id, vehicle_type, price_per_unit, hours_per_unit, min_units, is_active)')
-      .order('created_at', { ascending: false })
-    if (!ehAdmin(req.user)) q = q.eq('owner_user_id', req.user.id)
-    const { data, error } = await q
+    const sel = (cols) => {
+      let q = supabase.from('parking_lots')
+        .select(`*, parking_tariffs(${cols})`)
+        .order('created_at', { ascending: false })
+      if (!ehAdmin(req.user)) q = q.eq('owner_user_id', req.user.id)
+      return q
+    }
+    let { data, error } = await sel('id, vehicle_type, price_per_unit, hours_per_unit, min_units, is_active, capacity')
+    // Coluna capacity ausente (migração 120 pendente) → sem ela.
+    if (error && /capacity/.test(error.message || '')) {
+      ({ data, error } = await sel('id, vehicle_type, price_per_unit, hours_per_unit, min_units, is_active'))
+    }
     if (error) throw error
     res.json({ data: data || [] })
   } catch (err) { next(err) }
@@ -482,14 +498,20 @@ const partnerTariffSchema = z.object({
   price_per_unit: z.number().min(0),
   hours_per_unit: z.number().int().min(1).optional(),
   min_units:      z.number().int().min(1).optional(),
+  capacity:       z.number().int().min(0).optional().nullable(),
 })
 router.post('/partner/lots/:id/tariffs', authenticate, async (req, res, next) => {
   try {
     if (!(await podeOperarLot(req.user, req.params.id))) return res.status(403).json({ error: 'Este estacionamento não é seu.' })
     const parsed = partnerTariffSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Dados da tarifa inválidos.' })
-    const { data, error } = await supabase.from('parking_tariffs')
-      .insert({ lot_id: req.params.id, ...parsed.data }).select('id').single()
+    const row = { lot_id: req.params.id, ...parsed.data }
+    let { data, error } = await supabase.from('parking_tariffs').insert(row).select('id').single()
+    // Coluna capacity ausente (migração 120 pendente) → grava sem ela.
+    if (error && /capacity/.test(error.message || '')) {
+      const { capacity, ...rest } = row
+      ;({ data, error } = await supabase.from('parking_tariffs').insert(rest).select('id').single())
+    }
     if (error) throw error
     res.status(201).json(data)
   } catch (err) { next(err) }
@@ -502,7 +524,12 @@ router.patch('/partner/tariffs/:id', authenticate, async (req, res, next) => {
     if (!(await podeOperarLot(req.user, t.lot_id))) return res.status(403).json({ error: 'Esta tarifa não é sua.' })
     const parsed = partnerTariffSchema.partial().extend({ is_active: z.boolean().optional() }).safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos.' })
-    const { error } = await supabase.from('parking_tariffs').update(parsed.data).eq('id', req.params.id)
+    let { error } = await supabase.from('parking_tariffs').update(parsed.data).eq('id', req.params.id)
+    // Coluna capacity ausente (migração 120 pendente) → atualiza sem ela.
+    if (error && /capacity/.test(error.message || '')) {
+      const { capacity, ...rest } = parsed.data
+      ;({ error } = await supabase.from('parking_tariffs').update(rest).eq('id', req.params.id))
+    }
     if (error) throw error
     res.json({ ok: true })
   } catch (err) { next(err) }
