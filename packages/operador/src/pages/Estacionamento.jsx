@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode, MapPin } from 'lucide-react'
+import { ParkingSquare, Clock, Car, Check, X, Loader2, LogIn, KeyRound, Wallet, Settings, ImagePlus, Trash2, Plus, QrCode, MapPin, Bell, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -741,42 +741,87 @@ function InicioDashboard({ onGo, filaCount }) {
   const patio = pt?.no_patio || []
   const dt = (x) => { try { return new Date(x).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return x } }
 
-  const Card = ({ icon: Icon, tint, big, label }) => (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-2">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tint}`}><Icon size={19} /></div>
-      <p className="text-[22px] font-extrabold text-gray-900 leading-none">{big}</p>
-      <p className="text-[12px] text-gray-400 leading-tight">{label}</p>
+  const Stat = ({ icon: Icon, tint, big, label }) => (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5 flex flex-col gap-1.5">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${tint}`}><Icon size={17} /></div>
+      <p className="text-[20px] font-extrabold text-gray-900 leading-none">{big}</p>
+      <p className="text-[11px] text-gray-400 leading-tight">{label}</p>
     </div>
   )
+
+  const ocupadas = Math.max(0, Number(s.no_patio) || 0)
+  const capacity = Math.max(0, Number(s.capacity) || 0)
+  const livres   = s.livres != null ? s.livres : Math.max(0, capacity - ocupadas)
+  const pctOcup  = capacity > 0 ? Math.min(100, Math.round((ocupadas / capacity) * 100)) : 0
+  const lotado   = capacity > 0 && livres <= 0
+
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <Card icon={Car} tint="bg-blue-50 text-blue-600" big={`${s.no_patio}`} label="No pátio" />
-        <Card icon={ParkingSquare} tint="bg-emerald-50 text-emerald-600" big={`${s.livres} de ${s.capacity}`} label="Vagas livres agora" />
-        <Card icon={LogIn} tint="bg-indigo-50 text-indigo-600" big={`${s.entradas_hoje}`} label="Entradas previstas hoje" />
-        <Card icon={Clock} tint="bg-orange-50 text-orange-600" big={`${s.saidas_hoje}`} label="Saídas previstas hoje" />
+    <div className="space-y-4 max-w-5xl">
+      {/* Hero: ocupação do pátio — o número que mais importa, em destaque. */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand to-orange-600 text-white p-5 shadow-lg shadow-orange-500/20">
+        <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-white/10" />
+        <ParkingSquare size={128} className="absolute -right-3 -bottom-4 opacity-10" />
+        <div className="relative">
+          <p className="text-[12px] font-semibold text-white/85 flex items-center gap-1.5"><ParkingSquare size={14} /> Ocupação do pátio</p>
+          <div className="flex items-end gap-2 mt-1.5">
+            <span className="text-[42px] font-extrabold leading-none">{livres}</span>
+            <span className="text-[14px] font-semibold text-white/85 mb-1.5">{livres === 1 ? 'vaga livre' : 'vagas livres'}{capacity > 0 ? ` de ${capacity}` : ''}</span>
+          </div>
+          <div className="mt-3 h-2.5 rounded-full bg-black/15 overflow-hidden">
+            <div className="h-full rounded-full bg-white/95 transition-all" style={{ width: `${pctOcup}%` }} />
+          </div>
+          <div className="flex items-center justify-between mt-1.5 text-[11.5px] text-white/90">
+            <span>{ocupadas} {ocupadas === 1 ? 'veículo' : 'veículos'} no pátio</span>
+            <span className="font-semibold">{lotado ? 'Pátio lotado' : `${pctOcup}% ocupado`}</span>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => onGo('patio', 'entrada')} className="bg-brand text-white rounded-2xl p-4 text-left active:scale-[0.99]">
-          <LogIn size={20} /><p className="font-bold text-[14px] mt-2">Registrar entrada</p><p className="text-[11px] text-white/80">Código ou balcão</p>
+      {/* Ações principais. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button onClick={() => onGo('patio', 'entrada')}
+          className="flex items-center gap-3 bg-brand text-white rounded-2xl p-4 text-left shadow-sm shadow-orange-500/20 active:scale-[0.99] transition-transform">
+          <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0"><LogIn size={22} /></div>
+          <div className="min-w-0"><p className="font-bold text-[15px] leading-tight">Registrar entrada</p><p className="text-[11.5px] text-white/80">Código ou balcão</p></div>
         </button>
-        <button onClick={() => onGo('patio', 'retirada')} className="bg-white border border-brand text-brand rounded-2xl p-4 text-left active:scale-[0.99]">
-          <KeyRound size={20} /><p className="font-bold text-[14px] mt-2">Liberar retirada</p><p className="text-[11px] text-brand/70">Validar PIN do cliente</p>
+        <button onClick={() => onGo('patio', 'retirada')}
+          className="flex items-center gap-3 bg-white border border-gray-200 text-gray-900 rounded-2xl p-4 text-left shadow-sm active:scale-[0.99] transition-transform">
+          <div className="w-11 h-11 rounded-xl bg-brand/10 text-brand flex items-center justify-center shrink-0"><KeyRound size={22} /></div>
+          <div className="min-w-0"><p className="font-bold text-[15px] leading-tight">Liberar retirada</p><p className="text-[11.5px] text-gray-500">Validar PIN do cliente</p></div>
         </button>
       </div>
 
-      <button onClick={() => onGo('fila')} className="w-full flex items-center justify-between bg-white rounded-2xl border border-gray-100 shadow-sm p-4 active:scale-[0.99]">
-        <span className="font-semibold text-gray-800 text-[14px]">Solicitações pendentes</span>
-        <span className="text-[12px] font-bold text-white bg-brand rounded-full px-2.5 py-0.5">{filaCount}</span>
+      {/* Indicadores do dia. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Stat icon={Car} tint="bg-blue-50 text-blue-600" big={ocupadas} label="No pátio" />
+        <Stat icon={ParkingSquare} tint="bg-emerald-50 text-emerald-600" big={livres} label="Vagas livres" />
+        <Stat icon={LogIn} tint="bg-indigo-50 text-indigo-600" big={s.entradas_hoje} label="Entradas hoje" />
+        <Stat icon={Clock} tint="bg-orange-50 text-orange-600" big={s.saidas_hoje} label="Saídas hoje" />
+      </div>
+
+      {/* Solicitações pendentes — destaca quando há algo esperando. */}
+      <button onClick={() => onGo('fila')}
+        className={`w-full flex items-center justify-between rounded-2xl border p-3.5 active:scale-[0.99] transition-colors ${filaCount > 0 ? 'bg-brand/5 border-brand/30' : 'bg-white border-gray-100 shadow-sm'}`}>
+        <span className="flex items-center gap-2.5 font-semibold text-gray-800 text-[14px]">
+          <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${filaCount > 0 ? 'bg-brand/15 text-brand' : 'bg-gray-100 text-gray-400'}`}><Bell size={16} /></span>
+          Solicitações pendentes
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className={`text-[12px] font-bold rounded-full px-2.5 py-0.5 ${filaCount > 0 ? 'bg-brand text-white' : 'bg-gray-100 text-gray-500'}`}>{filaCount}</span>
+          <ChevronRight size={16} className="text-gray-300" />
+        </span>
       </button>
 
+      {/* Veículos no pátio. */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-        <p className="font-bold text-gray-900 text-[14px] mb-2 flex items-center gap-2"><Car size={16} className="text-brand" /> Veículos no pátio ({patio.length})</p>
-        {patio.length === 0 ? <p className="text-[13px] text-gray-400 py-4 text-center">Nenhum veículo no pátio.</p> : (
+        <div className="flex items-center justify-between mb-2">
+          <p className="font-bold text-gray-900 text-[14px] flex items-center gap-2"><Car size={16} className="text-brand" /> Veículos no pátio</p>
+          <span className="text-[11px] font-semibold text-gray-400">{patio.length}</span>
+        </div>
+        {patio.length === 0 ? <p className="text-[13px] text-gray-400 py-5 text-center">Nenhum veículo no pátio.</p> : (
           <div className="space-y-1.5">
             {patio.slice(0, 6).map((v) => (
-              <div key={v.id} className="flex items-center justify-between text-[13px] border-b border-gray-50 pb-1.5">
+              <div key={v.id} className="flex items-center justify-between text-[13px] border-b border-gray-50 pb-1.5 last:border-0">
                 <div><span className="font-mono font-semibold text-gray-800">{v.plate || '—'}</span> <span className="text-gray-500">{v.client_name || ''}</span></div>
                 <span className="text-[11px] text-gray-400">{v.spot ? `Vaga ${v.spot} · ` : ''}{dt(v.entered_at)}</span>
               </div>
