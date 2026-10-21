@@ -1231,6 +1231,7 @@ function PatioBalcao({ notify, onDone, only = 'ambos' }) {
   const [plate, setPlate] = useState('')
   const [spot, setSpot]   = useState('')
   const [pin, setPin]     = useState('')
+  const [liberado, setLiberado] = useState(null) // reserva recém-liberada (mostra qual carro entregar)
 
   const { data: lotsData, isLoading } = useQuery({
     queryKey: ['parking-partner-lots'],
@@ -1246,7 +1247,7 @@ function PatioBalcao({ notify, onDone, only = 'ambos' }) {
   })
   const retirada = useMutation({
     mutationFn: () => api.parkingValidateWithdrawal({ lot_id: lot, pin: pin.trim() }),
-    onSuccess: (r) => { notify('ok', `Retirada liberada (${r?.code || ''}). Boa viagem!`); setPin(''); onDone?.() },
+    onSuccess: (r) => { setLiberado(r?.reservation || { code: r?.code }); notify('ok', 'Saída liberada!'); setPin(''); onDone?.() },
     onError:   (e) => notify('err', e?.message || 'PIN inválido.'),
   })
 
@@ -1301,13 +1302,34 @@ function PatioBalcao({ notify, onDone, only = 'ambos' }) {
         <div className="flex items-center gap-2 text-gray-900 font-semibold text-[14px]">
           <KeyRound size={16} className="text-brand" /> Validar retirada
         </div>
-        <p className="text-[12px] text-gray-500 -mt-1">Digite o PIN que o cliente apresenta no app. Ele tem validade curta.</p>
-        <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder="PIN de retirada"
-          className={`${field} font-mono tracking-[0.3em] text-center text-lg`} maxLength={10} />
+        <p className="text-[12px] text-gray-500 -mt-1">Leia o QR do cliente (ou digite o PIN que ele mostra no app). Tem validade curta.</p>
+        <div className="flex gap-2">
+          <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder="PIN de retirada"
+            className={`${field} font-mono tracking-[0.3em] text-center text-lg flex-1`} maxLength={10} />
+          <ScanQRButton onDetected={(v) => setPin(String(v).replace(/\D/g, ''))} />
+        </div>
         <button onClick={() => retirada.mutate()} disabled={!lot || pin.trim().length < 4 || retirada.isPending}
           className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-[14px] rounded-xl py-3 active:scale-[0.99] disabled:opacity-50">
           {retirada.isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Liberar saída
         </button>
+
+        {liberado && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2.5">
+            <div className="w-9 h-9 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0"><Check size={18} /></div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-bold text-emerald-800">Saída liberada — entregue o veículo</p>
+              {(liberado.plate || liberado.client_name || liberado.vehicle_type) && (
+                <p className="text-[13px] text-emerald-900 mt-0.5 truncate">
+                  {liberado.plate && <span className="font-mono font-bold">{liberado.plate}</span>}
+                  {liberado.plate && (liberado.client_name || liberado.vehicle_type) ? ' · ' : ''}
+                  {liberado.client_name || ''}{liberado.vehicle_type ? ` · ${liberado.vehicle_type}` : ''}
+                </p>
+              )}
+              {liberado.code && <p className="text-[11px] text-emerald-700/80 mt-0.5">Reserva {liberado.code}</p>}
+            </div>
+            <button onClick={() => setLiberado(null)} className="text-emerald-600 shrink-0"><X size={16} /></button>
+          </div>
+        )}
       </div>
       )}
     </div>

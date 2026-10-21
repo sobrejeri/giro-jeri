@@ -1085,7 +1085,19 @@ router.post('/partner/withdrawal', authenticate, async (req, res, next) => {
       }[data?.error] || 'Não foi possível validar a retirada.'
       return res.status(map[data?.error] || 400).json({ error: msg })
     }
-    res.json({ ok: true, code: data.code })
+    // Devolve qual carro/cliente foi liberado, para o balcão identificar na
+    // hora da entrega — o PIN sozinho não diz qual veículo buscar. Best-effort.
+    let reservation = null
+    try {
+      const { data: r } = await supabase.from('parking_reservations')
+        .select('code, plate, vehicle_type, start_at, end_at, users(full_name)')
+        .eq('lot_id', parsed.data.lot_id).eq('code', data.code).maybeSingle()
+      if (r) reservation = {
+        code: r.code, plate: r.plate || null, vehicle_type: r.vehicle_type || null,
+        client_name: r.users?.full_name || null, start_at: r.start_at, end_at: r.end_at,
+      }
+    } catch { /* detalhes são best-effort */ }
+    res.json({ ok: true, code: data.code, reservation })
   } catch (err) { next(err) }
 })
 

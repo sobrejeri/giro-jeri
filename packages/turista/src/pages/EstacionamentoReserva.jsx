@@ -272,6 +272,14 @@ function Contagem({ until, prefixo, expirado }) {
 
 function PinModal({ data, onClose }) {
   const [restante, setRestante] = useState('')
+  const [img, setImg] = useState('')
+  // QR do PIN — o atendente lê na saída, igual ao QR do código na entrada.
+  useEffect(() => {
+    let vivo = true
+    import('qrcode').then((m) => (m.default || m).toDataURL(String(data.pin), { width: 320, margin: 1 }))
+      .then((url) => { if (vivo) setImg(url) }).catch(() => {})
+    return () => { vivo = false }
+  }, [data.pin])
   useEffect(() => {
     const alvo = data.expires_at ? new Date(data.expires_at).getTime() : 0
     const tick = () => {
@@ -286,9 +294,10 @@ function PinModal({ data, onClose }) {
       <div className="bg-white rounded-3xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
         <div className="w-12 h-12 rounded-full bg-gray-900 text-white flex items-center justify-center mx-auto mb-3"><KeyRound size={22} /></div>
         <h3 className="text-[16px] font-extrabold text-gray-900">PIN de retirada</h3>
-        <p className="text-[12px] text-gray-500 mt-1">Mostre ao atendente. Uso único{restante ? ` · expira em ${restante}` : ''}.</p>
-        <div className="my-5 font-mono text-[40px] font-black tracking-[0.3em] text-gray-900">{data.pin}</div>
-        <button onClick={onClose} className="w-full bg-gray-900 text-white font-bold rounded-xl py-3 text-[14px]">Fechar</button>
+        <p className="text-[12px] text-gray-500 mt-1">Mostre o QR (ou o PIN) ao atendente. Uso único{restante ? ` · expira em ${restante}` : ''}.</p>
+        {img ? <img src={img} alt="QR do PIN de retirada" className="mx-auto my-4 w-48 h-48" /> : <div className="my-4 h-48 flex items-center justify-center text-gray-300"><Loader2 size={28} className="animate-spin" /></div>}
+        <div className="font-mono text-[34px] font-black tracking-[0.3em] text-gray-900">{data.pin}</div>
+        <button onClick={onClose} className="mt-4 w-full bg-gray-900 text-white font-bold rounded-xl py-3 text-[14px]">Fechar</button>
       </div>
     </div>, document.body,
   )
