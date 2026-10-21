@@ -358,10 +358,14 @@ router.get('/partner/overview', authenticate, async (req, res, next) => {
       }
     } catch { /* coluna capacity ausente → sem breakdown por tipo */ }
 
+    // Com vagas por tipo, o total exibido é a SOMA das vagas por tipo (e os
+    // livres, a soma dos livres). Sem vagas por tipo, usa o total do lot.
+    const capExib = byType.length ? byType.reduce((a, t) => a + t.capacity, 0) : capacity
+    const livresExib = byType.length ? byType.reduce((a, t) => a + t.livres, 0) : Math.max(0, capacity - noPatio)
     res.json({
       lot: lots[0],
       stats: {
-        no_patio: noPatio, capacity, livres: Math.max(0, capacity - noPatio),
+        no_patio: noPatio, capacity: capExib, livres: livresExib,
         entradas_hoje: entradas.count || 0,
         saidas_hoje: (saidasRes.count || 0) + (saidasStay.count || 0),
         by_type: byType,
@@ -522,6 +526,22 @@ router.patch('/partner/lots/:id', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// Mantém parking_lots.capacity = SOMA das vagas por tipo quando há vagas por
+// tipo definidas (migração 120). Assim o "total" é contabilizado automático e
+// bate com a soma por tipo. Sem vagas por tipo, não mexe no total manual.
+// Best-effort — nunca derruba a rota que chamou.
+async function recomputeLotCapacity(lotId) {
+  try {
+    const { data: tars, error } = await supabase.from('parking_tariffs')
+      .select('capacity').eq('lot_id', lotId).eq('is_active', true)
+    if (error) return
+    const caps = (tars || []).map((t) => t.capacity).filter((c) => c != null)
+    if (caps.length === 0) return
+    const soma = caps.reduce((a, c) => a + Number(c), 0)
+    await supabase.from('parking_lots').update({ capacity: soma }).eq('id', lotId)
+  } catch { /* best-effort */ }
+}
+
 const partnerTariffSchema = z.object({
   vehicle_type:   z.string().min(1).max(40),
   price_per_unit: z.number().min(0),
@@ -542,6 +562,7 @@ router.post('/partner/lots/:id/tariffs', authenticate, async (req, res, next) =>
       ;({ data, error } = await supabase.from('parking_tariffs').insert(rest).select('id').single())
     }
     if (error) throw error
+    await recomputeLotCapacity(req.params.id)
     res.status(201).json(data)
   } catch (err) { next(err) }
 })
@@ -560,6 +581,7 @@ router.patch('/partner/tariffs/:id', authenticate, async (req, res, next) => {
       ;({ error } = await supabase.from('parking_tariffs').update(rest).eq('id', req.params.id))
     }
     if (error) throw error
+    await recomputeLotCapacity(t.lot_id)
     res.json({ ok: true })
   } catch (err) { next(err) }
 })

@@ -413,7 +413,16 @@ function LotEditor({ lot, notify, onSaved }) {
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div><label className={label}>Capacidade (vagas)</label><input type="number" min="0" value={form.capacity} onChange={(e) => setF('capacity', e.target.value)} className={campo} /></div>
+        <div><label className={label}>Capacidade (vagas)</label>
+          {(lot.parking_tariffs || []).some((t) => t.is_active !== false && t.capacity != null) ? (
+            <>
+              <input type="number" readOnly value={(lot.parking_tariffs || []).filter((t) => t.is_active !== false).reduce((a, t) => a + (t.capacity != null ? Number(t.capacity) : 0), 0)} className={`${campo} bg-gray-50 text-gray-500`} />
+              <p className="text-[11px] text-gray-400 mt-1">Soma automática das vagas por tipo (abaixo).</p>
+            </>
+          ) : (
+            <input type="number" min="0" value={form.capacity} onChange={(e) => setF('capacity', e.target.value)} className={campo} />
+          )}
+        </div>
         <label className="flex items-end gap-2 text-sm text-gray-700 pb-2.5">
           <input type="checkbox" checked={!!form.is_active} onChange={(e) => setF('is_active', e.target.checked)} /> Ativo (aparece pros clientes)
         </label>
