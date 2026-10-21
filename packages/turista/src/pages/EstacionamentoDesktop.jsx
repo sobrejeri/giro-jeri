@@ -5,9 +5,12 @@ import {
   MapPin, ParkingSquare, Umbrella, Sun, Search, X, Clock, Car, ChevronRight,
   ShieldCheck, Info, Compass, Calendar,
 } from 'lucide-react'
+import { format, startOfDay } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useCart } from '../contexts/CartContext'
+import DateSheet from '../components/DateSheet'
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 const iso = (date, time) => (date && time ? `${date}T${time}:00-03:00` : null)
@@ -68,6 +71,7 @@ function Configurador({ lotId, onClose }) {
   const [entradaD, setEntradaD] = useState('')
   const [entradaH, setEntradaH] = useState('10:00')
   const [saidaD, setSaidaD] = useState('')
+  const [sheet, setSheet] = useState(null) // 'entrada' | 'saida' — calendário aberto
   const [saidaH, setSaidaH] = useState('10:00')
   const [qtys, setQtys] = useState({})
   const [plates, setPlates] = useState({})
@@ -212,10 +216,12 @@ function Configurador({ lotId, onClose }) {
       {/* Período */}
       <div className="grid grid-cols-2 gap-2 mt-4">
         <label className="text-[11px] font-semibold text-gray-500">Entrada
-          <div className={campoSel}>
+          <button type="button" onClick={() => setSheet('entrada')} className={`${campoSel} w-full text-left`}>
             <Calendar size={14} className="text-brand shrink-0" />
-            <input type="date" min={hoje} value={entradaD} onChange={(e) => { const v = e.target.value; setEntradaD(v && v < hoje ? hoje : v) }} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
-          </div>
+            <span className={`flex-1 min-w-0 text-[13px] truncate ${entradaD ? 'text-gray-900' : 'text-gray-400'}`}>
+              {entradaD ? format(new Date(entradaD + 'T00:00:00'), "d 'de' MMM 'de' yyyy", { locale: ptBR }) : 'Escolher'}
+            </span>
+          </button>
         </label>
         <label className="text-[11px] font-semibold text-gray-500">Horário
           <div className={campoSel}>
@@ -226,10 +232,12 @@ function Configurador({ lotId, onClose }) {
           </div>
         </label>
         <label className="text-[11px] font-semibold text-gray-500">Saída
-          <div className={campoSel}>
+          <button type="button" onClick={() => setSheet('saida')} className={`${campoSel} w-full text-left`}>
             <Calendar size={14} className="text-brand shrink-0" />
-            <input type="date" min={entradaD || hoje} value={saidaD} onChange={(e) => { const v = e.target.value; setSaidaD(v && v < hoje ? hoje : v) }} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none" />
-          </div>
+            <span className={`flex-1 min-w-0 text-[13px] truncate ${saidaD ? 'text-gray-900' : 'text-gray-400'}`}>
+              {saidaD ? format(new Date(saidaD + 'T00:00:00'), "d 'de' MMM 'de' yyyy", { locale: ptBR }) : 'Escolher'}
+            </span>
+          </button>
         </label>
         <label className="text-[11px] font-semibold text-gray-500">Horário
           <div className={campoSel}>
@@ -325,6 +333,21 @@ function Configurador({ lotId, onClose }) {
       <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[12px] text-gray-400">
         <ShieldCheck size={14} className="text-emerald-500 shrink-0" /> Você só paga após o estacionamento aceitar.
       </p>
+
+      {sheet && (
+        <DateSheet
+          value={sheet === 'entrada'
+            ? (entradaD ? new Date(entradaD + 'T00:00:00') : null)
+            : (saidaD ? new Date(saidaD + 'T00:00:00') : null)}
+          minDate={sheet === 'saida' && entradaD ? new Date(entradaD + 'T00:00:00') : startOfDay(new Date())}
+          onChange={(day) => {
+            const s = format(day, 'yyyy-MM-dd')
+            if (sheet === 'entrada') { setEntradaD(s); setSaidaD((sd) => (sd && sd < s ? '' : sd)) }
+            else setSaidaD(s)
+          }}
+          onClose={() => setSheet(null)}
+        />
+      )}
     </div>
   )
 }
