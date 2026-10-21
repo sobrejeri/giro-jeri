@@ -95,7 +95,10 @@ async function sendButtonLink(phone, message, label, url) {
     })
     if (res.ok) return
   } catch { /* cai para texto abaixo */ }
-  await sendToMany([phone], `${message}\n\n👉 ${label}: ${url}`)
+  // Fallback sem botão: a URL fica SOZINHA na própria linha. O WhatsApp só
+  // transforma em link um endereço isolado por espaços/quebras — colada a um
+  // rótulo ('Ver reserva: http...') ela às vezes não vira link clicável.
+  await sendToMany([phone], `${message}\n\n👉 ${label}:\n${url}`)
 }
 
 // Envia um DOCUMENTO (PDF) pelo Z-API. `document` aceita URL pública ou data
@@ -677,9 +680,9 @@ export async function notifyClientQuoteReady(supabase, quote) {
     `${rota ? `${rota}\n` : ''}` +
     `💰 *${fmtBRL(quote.quoted_price)}*\n` +
     `\n` +
-    `Aceite e pague para confirmar (válido por tempo limitado).\n` +
-    `👉 Ver cotação: ${linkMyBookings()}`
-  await sendToMany([phone], message)
+    `Aceite e pague para confirmar (válido por tempo limitado).`
+  // Botão clicável (cai para o link sozinho na linha se a conta não tiver botão).
+  await sendButtonLink(phone, message, 'Ver cotação', linkMyBookings())
 }
 
 // Pagamento confirmado → segurança pro cliente de que deu tudo certo.
@@ -696,9 +699,9 @@ export async function notifyClientPaymentConfirmed(supabase, booking) {
     `🗓 ${data}\n` +
     `🔖 ${booking.booking_code || '-'}\n` +
     `\n` +
-    `O operador já vai cuidar do seu atendimento. Boa viagem! 🚗\n` +
-    `👉 Ver reserva: ${linkBookingPay(booking.id)}`
-  await sendToMany([phone], message)
+    `O operador já vai cuidar do seu atendimento. Boa viagem! 🚗`
+  // Botão clicável (cai para o link sozinho na linha se a conta não tiver botão).
+  await sendButtonLink(phone, message, 'Ver reserva', linkBookingPay(booking.id))
 }
 
 // ── OPERADOR ────────────────────────────────────────
@@ -890,11 +893,10 @@ export async function notifyParkingPaid(supabase, { reserva, ownerUserId, lotNam
       `Pagamento recebido! Sua vaga está garantida.\n` +
       `${nome ? `🅿️ ${nome}\n` : ''}` +
       `🗓 ${data}\n` +
-      `🔖 ${code}\n` +
-      (comoChegar ? `\n${comoChegar}` : '') +
-      `\n` +
-      `👉 Ver reserva: ${linkParkingReserva(reserva.id)}`
-    await sendToMany([cliPhone], msg)
+      `🔖 ${code}` +
+      (comoChegar ? `\n\n${comoChegar}` : '')
+    // Botão clicável (cai para o link sozinho na linha se a conta não tiver botão).
+    await sendButtonLink(cliPhone, msg, 'Ver reserva', linkParkingReserva(reserva.id))
     // Pin nativo de localização para o cliente chegar (Waze/Maps). No-op sem coords.
     await sendLocationPin(cliPhone, { lat: lot?.lat, lng: lot?.lng, title: nome, address: lot?.address })
   }
