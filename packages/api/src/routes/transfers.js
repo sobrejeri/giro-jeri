@@ -653,6 +653,11 @@ router.post('/quotes/:id/accept', authenticate, async (req, res, next) => {
       people_count:       quote.people_count,
       origin_text:        quote.origin_place_name,
       destination_text:   quote.destination_place_name,
+      // Coordenadas do embarque (vindas da cotação) → pin de localização do
+      // motorista no WhatsApp, igual ao passeio.
+      pickup_latitude:    quote.origin_latitude ?? null,
+      pickup_longitude:   quote.origin_longitude ?? null,
+      pickup_place_name:  quote.origin_place_name || null,
       total_amount:       quote.quoted_price,
       status_commercial:  'awaiting_payment',
       status_operational: 'assigned',
