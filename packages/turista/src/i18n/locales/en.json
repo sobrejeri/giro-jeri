@@ -62,6 +62,14 @@
       "select": "Select",
       "close": "Close",
       "clearSearch": "Clear search"
+    },
+    "list": {
+      "tabTransfers": "Transfers",
+      "bannerLine1": "Your car is safe.",
+      "bannerLine2": "You in {{city}}.",
+      "bannerSubtitle": "Find where to park and enjoy your trip.",
+      "heading": "Parking for your trip",
+      "seeOptions": "See options"
     }
   },
   "nav": {

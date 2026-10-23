@@ -62,6 +62,14 @@
       "select": "Selecionar",
       "close": "Fechar",
       "clearSearch": "Limpar busca"
+    },
+    "list": {
+      "tabTransfers": "Translados",
+      "bannerLine1": "Seu carro seguro.",
+      "bannerLine2": "Você em {{city}}.",
+      "bannerSubtitle": "Encontre onde estacionar e aproveite a viagem.",
+      "heading": "Estacionamentos para sua viagem",
+      "seeOptions": "Ver opções"
     }
   },
   "nav": {
