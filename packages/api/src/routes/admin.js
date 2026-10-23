@@ -942,6 +942,92 @@ router.post('/payouts/backfill', requireAdmin, async (req, res, next) => {
 // consulta SQL manual, e adivinhar custou várias rodadas.
 //
 // Só leitura. Devolve fatos, não opinião.
+// ── GET /api/admin/diagnostico/go-live ─────────────────
+// "Pronto para o ar?": confere, no servidor (Render), o que está configurado
+// e o que falta para operar ao vivo — sem expor NENHUM valor (só liga/desliga).
+// Cobre: segredos/credenciais (pagamento, e-mail, maps, push, WhatsApp),
+// migrações críticas (prova o schema) e conteúdo mínimo (serviços/operadores).
+router.get('/diagnostico/go-live', requireAdmin, async (_req, res, next) => {
+  try {
+    const env = process.env
+    const has = (...keys) => keys.every((k) => !!String(env[k] || '').trim())
+    const checagens = []
+    // grupo: 'credencial' | 'migracao' | 'conteudo'; sev: 'critico' | 'importante' | 'opcional'
+    const add = (grupo, item, ok, sev, detalhe) => checagens.push({ grupo, item, ok, sev, detalhe })
+
+    // ── Credenciais / configuração (env no Render) ──
+    const mpToken = env.MERCADO_PAGO_ACCESS_TOKEN || env.MP_ACCESS_TOKEN || ''
+    const mpProd  = !!mpToken && !mpToken.startsWith('TEST-')
+    add('credencial', 'Mercado Pago (cobrança)', mpProd, 'critico',
+      mpProd ? 'produção' : (mpToken ? 'MODO TESTE — dinheiro fictício' : 'não configurado'))
+    add('credencial', 'Webhook do Mercado Pago', has('MERCADO_PAGO_WEBHOOK_SECRET'), 'critico',
+      has('MERCADO_PAGO_WEBHOOK_SECRET') ? 'assinatura configurada' : 'sem assinatura do webhook')
+    add('credencial', 'Segredos de segurança (OTP/cadastro)', has('OTP_PEPPER', 'SIGNUP_TOKEN_SECRET'), 'critico',
+      has('OTP_PEPPER', 'SIGNUP_TOKEN_SECRET') ? 'definidos' : 'faltam OTP_PEPPER / SIGNUP_TOKEN_SECRET')
+    add('credencial', 'Banco de dados (Supabase)', has('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'), 'critico',
+      has('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY') ? 'conectado' : 'não configurado')
+    add('credencial', 'E-mail (Brevo ou Resend)', !!(env.BREVO_API_KEY || env.RESEND_API_KEY) && has('EMAIL_FROM'), 'importante',
+      (env.BREVO_API_KEY || env.RESEND_API_KEY) ? (has('EMAIL_FROM') ? 'configurado' : 'falta EMAIL_FROM') : 'sem provedor de e-mail')
+    add('credencial', 'Google Maps (endereços dos translados)', has('GOOGLE_MAPS_API_KEY'), 'importante',
+      has('GOOGLE_MAPS_API_KEY') ? 'configurado' : 'autocomplete de endereço não funciona sem ela')
+    add('credencial', 'Notificações push (VAPID)', has('VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'), 'importante',
+      has('VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT') ? 'configurado' : 'faltam chaves VAPID')
+    add('credencial', 'WhatsApp (Z-API)', has('ZAPI_INSTANCE_ID', 'ZAPI_INSTANCE_TOKEN', 'ZAPI_CLIENT_TOKEN'), 'importante',
+      has('ZAPI_INSTANCE_ID', 'ZAPI_INSTANCE_TOKEN', 'ZAPI_CLIENT_TOKEN') ? 'configurado' : 'faltam credenciais Z-API')
+    add('credencial', 'Geoapify (Descubra a Vila)', has('GEOAPIFY_API_KEY'), 'opcional',
+      has('GEOAPIFY_API_KEY') ? 'configurado' : 'opcional — só o diretório de lugares')
+
+    // ── Migrações críticas (prova o schema real) ──
+    const colExists = async (table, col) => {
+      try {
+        const { error } = await supabase.from(table).select(col).limit(1)
+        if (error && (error.code === '42703' || error.code === '42P01' || /does not exist|schema cache|not find/i.test(error.message || ''))) return false
+        return true
+      } catch { return false }
+    }
+    const tableExists = async (table) => {
+      try {
+        const { error } = await supabase.from(table).select('id', { head: true, count: 'exact' }).limit(1)
+        if (error && (error.code === '42P01' || /does not exist|schema cache|not find/i.test(error.message || ''))) return false
+        return true
+      } catch { return false }
+    }
+    add('migracao', 'Afiliados (055)',                    await colExists('users', 'affiliate_code'),     'importante', 'tabela/colunas do programa de afiliados')
+    add('migracao', 'Chave PIX do afiliado (056)',        await colExists('users', 'affiliate_pix_key'),  'importante', 'cadastro de PIX para o repasse')
+    add('migracao', 'Vagas por tipo no estacionamento (120)', await colExists('parking_tariffs', 'capacity'),        'importante', 'capacidade por tipo de veículo')
+    add('migracao', 'Alta temporada do estacionamento (121)', await tableExists('parking_season_rules'),             'importante', 'regras de temporada/feriado')
+    add('migracao', 'Embarque fixo do passeio (124)',     await colExists('tours', 'meeting_latitude'),   'importante', 'ponto de embarque do helicóptero')
+    add('migracao', 'Passeio personalizado (125)',        await tableExists('tour_quotes'),               'opcional',   'só se for ligar a cotação de passeio')
+
+    // ── Conteúdo / operação mínima ──
+    const contar = async (table, filtros = {}) => {
+      try {
+        let q = supabase.from(table).select('id', { count: 'exact', head: true })
+        for (const [k, v] of Object.entries(filtros)) q = q.eq(k, v)
+        const { count, error } = await q
+        return error ? null : (count ?? 0)
+      } catch { return null }
+    }
+    const passeios = await contar('tours', { is_active: true })
+    const rotas    = await contar('transfer_routes')
+    const estac    = await contar('parking_lots', { is_active: true })
+    const opers    = await contar('users', { user_type: 'operator', is_active: true })
+    add('conteudo', 'Passeios ativos',        (passeios || 0) > 0, 'critico',    `${passeios ?? '—'} cadastrado(s)`)
+    add('conteudo', 'Rotas de translado',     (rotas || 0) > 0,    'importante', `${rotas ?? '—'} cadastrada(s)`)
+    add('conteudo', 'Estacionamentos ativos', (estac || 0) > 0,    'opcional',   `${estac ?? '—'} ativo(s)`)
+    add('conteudo', 'Operadores ativos',      (opers || 0) > 0,    'critico',    `${opers ?? '—'} ativo(s)`)
+
+    const criticosPendentes = checagens.filter((c) => c.sev === 'critico' && !c.ok).length
+    const importantesPendentes = checagens.filter((c) => c.sev === 'importante' && !c.ok).length
+    res.json({
+      ambiente: env.NODE_ENV || 'development',
+      pronto: criticosPendentes === 0,
+      resumo: { criticos_pendentes: criticosPendentes, importantes_pendentes: importantesPendentes },
+      checagens,
+    })
+  } catch (err) { next(err); }
+})
+
 router.get('/diagnostico/repasses', requireAdmin, async (_req, res, next) => {
   try {
     const out = { checagens: [], conclusao: null };

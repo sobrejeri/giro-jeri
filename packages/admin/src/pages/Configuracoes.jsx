@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Settings, RotateCcw, CreditCard, Landmark, SplitSquareHorizontal,
   Eye, EyeOff, CheckCircle, Pencil, Image as ImageIcon, Upload, Trash2, Route,
-  MessageCircle, Send, XCircle, MapPin,
+  MessageCircle, Send, XCircle, MapPin, Rocket,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -242,6 +242,9 @@ function TabSistema({ settings, qc }) {
 
   return (
     <div className="space-y-5">
+      {/* Diagnóstico "Pronto para o ar?" — primeiro item, visão de go-live */}
+      <GoLiveDiag />
+
       <div className="bg-blue-900/20 border border-blue-800/30 rounded-xl p-4 text-sm">
         <p className="font-semibold text-blue-400 mb-1">Configurações do sistema</p>
         <p className="text-gray-500 text-xs">
@@ -1439,6 +1442,89 @@ function WhatsappDiag() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── Diagnóstico "Pronto para o ar?" ───────────────────────
+// Lê do servidor (Render) o que está configurado e o que falta para operar ao
+// vivo. Vermelho = crítico · amarelo = importante · cinza = opcional.
+function GoLiveDiag() {
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['go-live-diag'],
+    queryFn:  () => api.diagnosticoGoLive(),
+  })
+  const grupos = [
+    { id: 'credencial', label: 'Credenciais e configuração' },
+    { id: 'migracao',   label: 'Migrações do banco' },
+    { id: 'conteudo',   label: 'Conteúdo e operação' },
+  ]
+  const corPendente = (c) => c.sev === 'critico' ? 'text-red-400' : c.sev === 'importante' ? 'text-amber-400' : 'text-gray-500'
+  const pronto      = data?.pronto
+  const criticos    = data?.resumo?.criticos_pendentes ?? 0
+  const importantes = data?.resumo?.importantes_pendentes ?? 0
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <Rocket size={16} className="text-brand" />
+            <h2 className="text-sm font-semibold text-gray-200">Pronto para o ar?</h2>
+          </div>
+          <button type="button" onClick={() => refetch()} disabled={isFetching}
+            className="text-[11px] text-gray-400 hover:text-gray-200 flex items-center gap-1 disabled:opacity-50">
+            <RotateCcw size={12} className={isFetching ? 'animate-spin' : ''} /> Reverificar
+          </button>
+        </div>
+      </CardHeader>
+      <CardBody>
+        {isLoading ? (
+          <p className="text-xs text-gray-500">Verificando o ambiente…</p>
+        ) : (
+          <div className="space-y-4">
+            {/* Veredito */}
+            <div className={`rounded-lg border p-3 ${pronto ? 'border-green-800 bg-green-900/20' : 'border-red-800 bg-red-900/20'}`}>
+              <div className="flex items-center gap-2">
+                {pronto ? <CheckCircle size={16} className="text-green-400" /> : <XCircle size={16} className="text-red-400" />}
+                <span className={`text-sm font-semibold ${pronto ? 'text-green-300' : 'text-red-300'}`}>
+                  {pronto ? 'Tudo que é crítico está pronto 🚀' : `${criticos} item(ns) crítico(s) pendente(s)`}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-400">
+                Ambiente: <b className="text-gray-300">{data?.ambiente}</b>.{' '}
+                {importantes > 0 ? `${importantes} item(ns) importante(s) a resolver. ` : 'Nenhum importante pendente. '}
+                🔴 crítico · 🟡 importante · ⚪ opcional.
+              </p>
+            </div>
+            {/* Checagens por grupo */}
+            {grupos.map((g) => {
+              const itens = (data?.checagens || []).filter((c) => c.grupo === g.id)
+              if (!itens.length) return null
+              return (
+                <div key={g.id} className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{g.label}</p>
+                  {itens.map((c, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs">
+                      {c.ok
+                        ? <CheckCircle size={14} className="text-green-400 shrink-0 mt-0.5" />
+                        : <XCircle size={14} className={`${corPendente(c)} shrink-0 mt-0.5`} />}
+                      <div className="min-w-0 leading-snug">
+                        <span className="text-gray-300">{c.item}</span>
+                        {!c.ok && c.sev === 'opcional' && <span className="text-gray-500"> (opcional)</span>}
+                        {c.detalhe && <span className="text-gray-500"> — {c.detalhe}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+            <p className="text-[11px] text-gray-500">
+              Lê direto do servidor, sem expor nenhum valor. Mudou algo no Render/Supabase? Toque em "Reverificar".
+            </p>
           </div>
         )}
       </CardBody>

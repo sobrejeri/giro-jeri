@@ -169,6 +169,7 @@ export const api = {
   backfillPayouts:     (body = {})                     => request('/api/admin/payouts/backfill', { method: 'POST', body }),
   // Por que a tela de repasses está vazia. Só leitura.
   diagnosticoRepasses: ()                              => request('/api/admin/diagnostico/repasses'),
+  diagnosticoGoLive:   ()                              => request('/api/admin/diagnostico/go-live'),
   getOperatorVehicles: (operatorId)                    => request(`/api/admin/operators/${operatorId}/vehicles`),
   setOperatorVehicle:  (operatorId, vehicleId, body)   => request(`/api/admin/operators/${operatorId}/vehicles/${vehicleId}`, { method: 'PUT', body }),
   // Modais operados pelo operador (076): o corte grosso do roteamento.
