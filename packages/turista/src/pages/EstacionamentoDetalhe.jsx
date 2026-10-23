@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, Calendar, Clock, Car, Umbrella, Sun, MapPin, Info, ShoppingCart, ParkingSquare } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { format, startOfDay } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { ptBR, enUS, es as esLocale } from 'date-fns/locale'
 import { api } from '../lib/api'
 import { useCart } from '../contexts/CartContext'
 import DateSheet from '../components/DateSheet'
@@ -21,6 +22,9 @@ export default function EstacionamentoDetalhe() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { upsertItem } = useCart()
+  const { t, i18n } = useTranslation()
+  // Locale do date-fns conforme o idioma atual (datas de entrada/saída).
+  const dfLocale = { pt: ptBR, en: enUS, es: esLocale }[String(i18n.language || 'pt').slice(0, 2)] || ptBR
 
   const { data: lot, isLoading } = useQuery({
     queryKey: ['parking-lot', id],
@@ -137,11 +141,11 @@ export default function EstacionamentoDetalhe() {
 
   function adicionar() {
     setErro('')
-    if (!periodoOk) { setErro('Escolha entrada e saída (a saída deve ser depois da entrada).'); return }
-    if (!quotes) { setErro('Aguarde a cotação ou revise o período.'); return }
-    if (totalVagas < 1) { setErro('Escolha ao menos um veículo.'); return }
-    if (!placasOk) { setErro('Informe a placa de cada veículo.'); return }
-    if (!vagasOk) { setErro(`Sem vagas suficientes para este período (disponível: ${disponivel}).`); return }
+    if (!periodoOk) { setErro(t('estacionamentoPg.errPeriod')); return }
+    if (!quotes) { setErro(t('estacionamentoPg.errQuote')); return }
+    if (totalVagas < 1) { setErro(t('estacionamentoPg.errVehicle')); return }
+    if (!placasOk) { setErro(t('estacionamentoPg.errPlates')); return }
+    if (!vagasOk) { setErro(t('estacionamentoPg.errNoSpots', { count: disponivel })); return }
 
     // Expande a seleção em uma lista de veículos (1 vaga por veículo).
     const vehiclesList = []
@@ -177,8 +181,8 @@ export default function EstacionamentoDetalhe() {
     navigate('/carrinho')
   }
 
-  if (isLoading) return <p className="p-6 text-center text-gray-400 text-sm">Carregando…</p>
-  if (!lot) return <p className="p-6 text-center text-gray-400 text-sm">Estacionamento não encontrado.</p>
+  if (isLoading) return <p className="p-6 text-center text-gray-400 text-sm">{t('estacionamentoPg.loading')}</p>
+  if (!lot) return <p className="p-6 text-center text-gray-400 text-sm">{t('estacionamentoPg.notFound')}</p>
 
   return (
     <div className="pb-44">
@@ -213,11 +217,11 @@ export default function EstacionamentoDetalhe() {
           <p className="text-[13px] text-gray-500 flex items-center gap-1 mt-0.5"><MapPin size={13} className="text-brand" /> {lot.region_name || 'Jericoacoara'}</p>
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-              {coberto ? <Umbrella size={11} /> : <Sun size={11} />} {coberto ? 'Coberto' : 'Descoberto'}
+              {coberto ? <Umbrella size={11} /> : <Sun size={11} />} {coberto ? t('estacionamentoPg.covered') : t('estacionamentoPg.uncovered')}
             </span>
             {(() => {
               const oh = lot.opening_hours || {}
-              const texto = oh.is_24h === false && oh.open && oh.close ? `${oh.open}–${oh.close}` : '24 horas'
+              const texto = oh.is_24h === false && oh.open && oh.close ? `${oh.open}–${oh.close}` : t('estacionamentoPg.hours24')
               return (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
                   <Clock size={11} /> {texto}
@@ -250,18 +254,18 @@ export default function EstacionamentoDetalhe() {
 
         {/* Período */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-          <p className="text-[13px] font-bold text-gray-900">Planeje sua estadia</p>
+          <p className="text-[13px] font-bold text-gray-900">{t('estacionamentoPg.planStay')}</p>
           <div className="grid grid-cols-2 gap-2">
-            <label className="text-[11px] font-semibold text-gray-500">Entrada
+            <label className="text-[11px] font-semibold text-gray-500">{t('estacionamentoPg.entry')}
               <button type="button" onClick={() => setSheet('entrada')}
                 className="w-full flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1 text-left active:bg-gray-50">
                 <Calendar size={14} className="text-brand shrink-0" />
                 <span className={`flex-1 min-w-0 text-[13px] truncate ${entradaD ? 'text-gray-900' : 'text-gray-400'}`}>
-                  {entradaD ? format(new Date(entradaD + 'T00:00:00'), "d 'de' MMM 'de' yyyy", { locale: ptBR }) : 'Escolher'}
+                  {entradaD ? format(new Date(entradaD + 'T00:00:00'), 'PP', { locale: dfLocale }) : t('estacionamentoPg.choose')}
                 </span>
               </button>
             </label>
-            <label className="text-[11px] font-semibold text-gray-500">Horário
+            <label className="text-[11px] font-semibold text-gray-500">{t('estacionamentoPg.time')}
               <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1">
                 <Clock size={14} className="text-brand shrink-0" />
                 <select value={entradaH} onChange={(e) => setEntradaH(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none">
@@ -269,16 +273,16 @@ export default function EstacionamentoDetalhe() {
                 </select>
               </div>
             </label>
-            <label className="text-[11px] font-semibold text-gray-500">Saída
+            <label className="text-[11px] font-semibold text-gray-500">{t('estacionamentoPg.exit')}
               <button type="button" onClick={() => setSheet('saida')}
                 className="w-full flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1 text-left active:bg-gray-50">
                 <Calendar size={14} className="text-brand shrink-0" />
                 <span className={`flex-1 min-w-0 text-[13px] truncate ${saidaD ? 'text-gray-900' : 'text-gray-400'}`}>
-                  {saidaD ? format(new Date(saidaD + 'T00:00:00'), "d 'de' MMM 'de' yyyy", { locale: ptBR }) : 'Escolher'}
+                  {saidaD ? format(new Date(saidaD + 'T00:00:00'), 'PP', { locale: dfLocale }) : t('estacionamentoPg.choose')}
                 </span>
               </button>
             </label>
-            <label className="text-[11px] font-semibold text-gray-500">Horário
+            <label className="text-[11px] font-semibold text-gray-500">{t('estacionamentoPg.time')}
               <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 h-10 mt-1">
                 <Clock size={14} className="text-brand shrink-0" />
                 <select value={saidaH} onChange={(e) => setSaidaH(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none">
@@ -289,7 +293,7 @@ export default function EstacionamentoDetalhe() {
           </div>
           {!h24 && lot?.opening_hours?.open && (
             <p className="text-[11px] text-amber-600 flex items-center gap-1.5">
-              <Clock size={12} /> Atende das {lot.opening_hours.open} às {lot.opening_hours.close} — só esses horários ficam disponíveis.
+              <Clock size={12} /> {t('estacionamentoPg.hoursNote', { open: lot.opening_hours.open, close: lot.opening_hours.close })}
             </p>
           )}
         </div>
@@ -298,25 +302,25 @@ export default function EstacionamentoDetalhe() {
         {tarifas.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-[13px] font-bold text-gray-900">Veículos</p>
-              {totalVagas > 0 && <span className="text-[11px] font-semibold text-brand">{totalVagas} vaga(s)</span>}
+              <p className="text-[13px] font-bold text-gray-900">{t('estacionamentoPg.vehicles')}</p>
+              {totalVagas > 0 && <span className="text-[11px] font-semibold text-brand">{t('estacionamentoPg.spots', { count: totalVagas })}</span>}
             </div>
 
-            {tarifas.map((t) => {
-              const q = qtys[t.vehicle_type] || 0
+            {tarifas.map((tar) => {
+              const q = qtys[tar.vehicle_type] || 0
               return (
-                <div key={t.vehicle_type} className="space-y-2">
+                <div key={tar.vehicle_type} className="space-y-2">
                   {/* Linha do tipo: nome/preço + stepper de quantidade */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[13px] font-semibold text-gray-800 capitalize">
-                      <Car size={15} className="text-brand" /> {t.vehicle_type}
-                      <span className="text-[12px] font-normal text-gray-500">· {fmt(t.price_per_unit)}/diária</span>
+                      <Car size={15} className="text-brand" /> {tar.vehicle_type}
+                      <span className="text-[12px] font-normal text-gray-500">· {t('estacionamentoPg.perDay', { price: fmt(tar.price_per_unit) })}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => mudarQtd(t.vehicle_type, q - 1)} disabled={q <= 0}
+                      <button type="button" onClick={() => mudarQtd(tar.vehicle_type, q - 1)} disabled={q <= 0}
                         className="w-8 h-8 rounded-full border border-gray-200 text-gray-700 font-bold text-lg leading-none flex items-center justify-center disabled:opacity-40 active:scale-95">−</button>
                       <span className="w-5 text-center text-[14px] font-bold text-gray-900">{q}</span>
-                      <button type="button" onClick={() => mudarQtd(t.vehicle_type, q + 1)}
+                      <button type="button" onClick={() => mudarQtd(tar.vehicle_type, q + 1)}
                         className="w-8 h-8 rounded-full border border-brand text-brand font-bold text-lg leading-none flex items-center justify-center active:scale-95">+</button>
                     </div>
                   </div>
@@ -325,11 +329,11 @@ export default function EstacionamentoDetalhe() {
                     <div className="space-y-2 pl-1">
                       {Array.from({ length: q }).map((_, i) => (
                         <div key={i} className="flex items-center gap-2">
-                          <span className="text-[11px] text-gray-400 w-16 shrink-0 capitalize">{t.vehicle_type} {i + 1}</span>
+                          <span className="text-[11px] text-gray-400 w-16 shrink-0 capitalize">{tar.vehicle_type} {i + 1}</span>
                           <input
-                            value={(plates[t.vehicle_type] || [])[i] || ''}
-                            onChange={(e) => mudarPlaca(t.vehicle_type, i, e.target.value)}
-                            placeholder="Placa (ex.: ABC1D23)"
+                            value={(plates[tar.vehicle_type] || [])[i] || ''}
+                            onChange={(e) => mudarPlaca(tar.vehicle_type, i, e.target.value)}
+                            placeholder={t('estacionamentoPg.platePlaceholder')}
                             maxLength={12}
                             className="flex-1 border border-gray-200 rounded-lg px-3 h-10 text-[13px] uppercase tracking-wide outline-none focus:border-brand"
                           />
@@ -341,7 +345,7 @@ export default function EstacionamentoDetalhe() {
               )
             })}
 
-            <p className="text-[11px] text-gray-400 flex items-center gap-1"><Info size={11} /> Cada diária corresponde a 24 horas · a placa de cada veículo é obrigatória.</p>
+            <p className="text-[11px] text-gray-400 flex items-center gap-1"><Info size={11} /> {t('estacionamentoPg.dailyNote')}</p>
           </div>
         )}
 
@@ -349,16 +353,16 @@ export default function EstacionamentoDetalhe() {
         {periodoOk && quotes && (
           disponivel != null && disponivel <= 0 ? (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-[13px] text-red-700 font-semibold flex items-center gap-2">
-              <Sun size={15} className="shrink-0" /> Esgotado para esse período — escolha outras datas.
+              <Sun size={15} className="shrink-0" /> {t('estacionamentoPg.soldOut')}
             </div>
           ) : disponivel != null && totalVagas > disponivel ? (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[13px] text-amber-700 font-semibold flex items-center gap-2">
-              <Info size={15} className="shrink-0" /> Só há {disponivel} vaga(s) nesse período — reduza a quantidade.
+              <Info size={15} className="shrink-0" /> {t('estacionamentoPg.onlyNSpots', { count: disponivel })}
             </div>
           ) : (
             <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 text-[12px] text-emerald-700 font-semibold flex items-center gap-2">
               <ParkingSquare size={14} className="shrink-0" />
-              {Number(disponivel) > 0 ? `${disponivel} vaga(s) disponível(is) nesse período` : 'Vagas disponíveis nesse período'}
+              {Number(disponivel) > 0 ? t('estacionamentoPg.nSpotsAvailable', { count: disponivel }) : t('estacionamentoPg.spotsAvailable')}
             </div>
           )
         )}
@@ -367,12 +371,12 @@ export default function EstacionamentoDetalhe() {
         {periodoOk && quotes && totalVagas > 0 && (
           <div className="bg-brand/5 border border-brand/20 rounded-2xl p-4 flex items-center justify-between">
             <div>
-              <p className="text-[13px] font-bold text-gray-900">{totalVagas} veículo(s) × {diarias} diária(s)</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">Você só paga após o estacionamento aceitar.</p>
-              {totalSurcharge > 0 && <p className="text-[11px] font-semibold text-amber-600 mt-0.5">Inclui {fmt(totalSurcharge)} de alta temporada/feriado</p>}
+              <p className="text-[13px] font-bold text-gray-900">{t('estacionamentoPg.summary', { vehicles: totalVagas, days: diarias })}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">{t('estacionamentoPg.payAfterAccept')}</p>
+              {totalSurcharge > 0 && <p className="text-[11px] font-semibold text-amber-600 mt-0.5">{t('estacionamentoPg.surchargeNote', { amount: fmt(totalSurcharge) })}</p>}
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-gray-400">Total</p>
+              <p className="text-[10px] text-gray-400">{t('estacionamentoPg.total')}</p>
               <p className="text-[18px] font-extrabold text-brand">{fmt(totalGeral)}</p>
             </div>
           </div>
@@ -385,22 +389,22 @@ export default function EstacionamentoDetalhe() {
       {(() => {
         const pronto = periodoOk && !!quotes && totalVagas >= 1 && placasOk && vagasOk
         const faltam = []
-        if (!entradaD || !saidaD) faltam.push('período')
-        else if (!periodoOk) faltam.push('saída depois da entrada')
-        if (totalVagas < 1) faltam.push('veículo')
-        else if (!placasOk) faltam.push('placa de cada veículo')
-        else if (!vagasOk) faltam.push('reduzir a quantidade (sem vaga)')
+        if (!entradaD || !saidaD) faltam.push(t('estacionamentoPg.missing.period'))
+        else if (!periodoOk) faltam.push(t('estacionamentoPg.missing.exitAfterEntry'))
+        if (totalVagas < 1) faltam.push(t('estacionamentoPg.missing.vehicle'))
+        else if (!placasOk) faltam.push(t('estacionamentoPg.missing.plates'))
+        else if (!vagasOk) faltam.push(t('estacionamentoPg.missing.reduce'))
         return (
           <div className="fixed inset-x-0 bottom-[68px] px-4 pointer-events-none">
             <div className="max-w-[430px] mx-auto pointer-events-auto">
               {!pronto && faltam.length > 0 && (
                 <p className="text-[11px] text-amber-600 font-semibold text-center mb-1.5 bg-white/90 rounded-lg py-1">
-                  Falta: {faltam.join(' · ')}
+                  {t('estacionamentoPg.missingPrefix', { items: faltam.join(' · ') })}
                 </p>
               )}
               <button onClick={adicionar} disabled={!pronto}
                 className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-transform shadow-lg shadow-brand/30 disabled:opacity-50 disabled:active:scale-100">
-                <ShoppingCart size={18} /> {pronto ? `Adicionar ao carrinho · ${fmt(totalGeral)}` : 'Adicionar ao carrinho'}
+                <ShoppingCart size={18} /> {pronto ? t('estacionamentoPg.addToCartPrice', { price: fmt(totalGeral) }) : t('estacionamentoPg.addToCart')}
               </button>
             </div>
           </div>
