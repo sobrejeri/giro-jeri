@@ -5,8 +5,9 @@ import {
   MapPin, ParkingSquare, Umbrella, Sun, Search, X, Clock, Car, ChevronRight,
   ShieldCheck, Info, Compass, Calendar,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { format, startOfDay } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { ptBR, enUS, es as esLocale } from 'date-fns/locale'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useCart } from '../contexts/CartContext'
@@ -21,10 +22,11 @@ function hojeJeri() {
 
 /* ── Card de estacionamento (coluna esquerda) ─────────────────── */
 function LotCard({ lot, active, onSelect }) {
+  const { t } = useTranslation()
   const foto = Array.isArray(lot.photos) ? lot.photos[0] : null
   const oh = lot.opening_hours || {}
   const coberto = oh.coberto
-  const horario = oh.is_24h === false && oh.open && oh.close ? `${oh.open}–${oh.close}` : '24 horas'
+  const horario = oh.is_24h === false && oh.open && oh.close ? `${oh.open}–${oh.close}` : t('estacionamentoPg.hours24')
   return (
     <div
       onClick={() => onSelect(lot)}
@@ -44,16 +46,16 @@ function LotCard({ lot, active, onSelect }) {
         <p className="text-[12px] text-gray-500 flex items-center gap-1 mt-1"><MapPin size={12} className="text-brand" /> {lot.region_name || 'Jericoacoara'}</p>
         <div className="flex items-center gap-1.5 mt-2">
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-            {coberto ? <Umbrella size={11} /> : <Sun size={11} />} {coberto ? 'Coberto' : 'Descoberto'}
+            {coberto ? <Umbrella size={11} /> : <Sun size={11} />} {coberto ? t('estacionamentoPg.covered') : t('estacionamentoPg.uncovered')}
           </span>
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
             <Clock size={11} /> {horario}
           </span>
         </div>
         <div className="mt-auto pt-3 flex items-center justify-between">
-          <span className="text-[12px] text-gray-500 flex items-center gap-1"><ParkingSquare size={13} /> Consultar diária</span>
+          <span className="text-[12px] text-gray-500 flex items-center gap-1"><ParkingSquare size={13} /> {t('estacionamentoPg.desktop.consultDaily')}</span>
           <span className={`text-[13px] font-bold flex items-center gap-1 ${active ? 'text-brand' : 'text-gray-500 group-hover:text-brand'}`}>
-            {active ? 'Selecionado' : 'Selecionar'} <ChevronRight size={15} />
+            {active ? t('estacionamentoPg.desktop.selected') : t('estacionamentoPg.desktop.select')} <ChevronRight size={15} />
           </span>
         </div>
       </div>
@@ -65,6 +67,8 @@ function LotCard({ lot, active, onSelect }) {
 function Configurador({ lotId, onClose }) {
   const navigate = useNavigate()
   const { upsertItem } = useCart()
+  const { t, i18n } = useTranslation()
+  const dfLocale = { pt: ptBR, en: enUS, es: esLocale }[String(i18n.language || 'pt').slice(0, 2)] || ptBR
 
   const { data: lot } = useQuery({ queryKey: ['parking-lot', lotId], queryFn: () => api.parkingLot(lotId), enabled: !!lotId })
 
@@ -157,11 +161,11 @@ function Configurador({ lotId, onClose }) {
 
   function adicionar() {
     setErro('')
-    if (!periodoOk) { setErro('Escolha entrada e saída (a saída deve ser depois da entrada).'); return }
-    if (!quotes) { setErro('Aguarde a cotação ou revise o período.'); return }
-    if (totalVagas < 1) { setErro('Escolha ao menos um veículo.'); return }
-    if (!placasOk) { setErro('Informe a placa de cada veículo.'); return }
-    if (!vagasOk) { setErro(`Sem vagas suficientes para este período (disponível: ${disponivel}).`); return }
+    if (!periodoOk) { setErro(t('estacionamentoPg.errPeriod')); return }
+    if (!quotes) { setErro(t('estacionamentoPg.errQuote')); return }
+    if (totalVagas < 1) { setErro(t('estacionamentoPg.errVehicle')); return }
+    if (!placasOk) { setErro(t('estacionamentoPg.errPlates')); return }
+    if (!vagasOk) { setErro(t('estacionamentoPg.errNoSpots', { count: disponivel })); return }
 
     const vehiclesList = []
     for (const t of selecionados) {
@@ -210,20 +214,20 @@ function Configurador({ lotId, onClose }) {
           <p className="text-[17px] font-extrabold text-gray-900 leading-snug">{lot.name}</p>
           <p className="text-[12px] text-gray-500 flex items-center gap-1 mt-0.5"><MapPin size={12} className="text-brand" /> {lot.region_name || 'Jericoacoara'}</p>
         </div>
-        <button onClick={onClose} className="shrink-0 text-gray-400 hover:text-gray-600" aria-label="Fechar"><X size={18} /></button>
+        <button onClick={onClose} className="shrink-0 text-gray-400 hover:text-gray-600" aria-label={t('estacionamentoPg.desktop.close')}><X size={18} /></button>
       </div>
 
       {/* Período */}
       <div className="grid grid-cols-2 gap-2 mt-4">
-        <label className="text-[11px] font-semibold text-gray-500">Entrada
+        <label className="text-[11px] font-semibold text-gray-500">{t('estacionamentoPg.entry')}
           <button type="button" onClick={() => setSheet('entrada')} className={`${campoSel} w-full text-left`}>
             <Calendar size={14} className="text-brand shrink-0" />
             <span className={`flex-1 min-w-0 text-[13px] truncate ${entradaD ? 'text-gray-900' : 'text-gray-400'}`}>
-              {entradaD ? format(new Date(entradaD + 'T00:00:00'), "d 'de' MMM 'de' yyyy", { locale: ptBR }) : 'Escolher'}
+              {entradaD ? format(new Date(entradaD + 'T00:00:00'), 'PP', { locale: dfLocale }) : t('estacionamentoPg.choose')}
             </span>
           </button>
         </label>
-        <label className="text-[11px] font-semibold text-gray-500">Horário
+        <label className="text-[11px] font-semibold text-gray-500">{t('estacionamentoPg.time')}
           <div className={campoSel}>
             <Clock size={14} className="text-brand shrink-0" />
             <select value={entradaH} onChange={(e) => setEntradaH(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none">
@@ -231,15 +235,15 @@ function Configurador({ lotId, onClose }) {
             </select>
           </div>
         </label>
-        <label className="text-[11px] font-semibold text-gray-500">Saída
+        <label className="text-[11px] font-semibold text-gray-500">{t('estacionamentoPg.exit')}
           <button type="button" onClick={() => setSheet('saida')} className={`${campoSel} w-full text-left`}>
             <Calendar size={14} className="text-brand shrink-0" />
             <span className={`flex-1 min-w-0 text-[13px] truncate ${saidaD ? 'text-gray-900' : 'text-gray-400'}`}>
-              {saidaD ? format(new Date(saidaD + 'T00:00:00'), "d 'de' MMM 'de' yyyy", { locale: ptBR }) : 'Escolher'}
+              {saidaD ? format(new Date(saidaD + 'T00:00:00'), 'PP', { locale: dfLocale }) : t('estacionamentoPg.choose')}
             </span>
           </button>
         </label>
-        <label className="text-[11px] font-semibold text-gray-500">Horário
+        <label className="text-[11px] font-semibold text-gray-500">{t('estacionamentoPg.time')}
           <div className={campoSel}>
             <Clock size={14} className="text-brand shrink-0" />
             <select value={saidaH} onChange={(e) => setSaidaH(e.target.value)} className="flex-1 min-w-0 text-[13px] bg-transparent outline-none">
@@ -250,7 +254,7 @@ function Configurador({ lotId, onClose }) {
       </div>
       {!h24 && lot?.opening_hours?.open && (
         <p className="text-[11px] text-amber-600 flex items-center gap-1.5 mt-2">
-          <Clock size={12} /> Atende das {lot.opening_hours.open} às {lot.opening_hours.close}.
+          <Clock size={12} /> {t('estacionamentoPg.hoursNoteShort', { open: lot.opening_hours.open, close: lot.opening_hours.close })}
         </p>
       )}
 
@@ -258,23 +262,23 @@ function Configurador({ lotId, onClose }) {
       {tarifas.length > 0 && (
         <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-bold text-gray-900">Veículos</p>
-            {totalVagas > 0 && <span className="text-[11px] font-semibold text-brand">{totalVagas} vaga(s)</span>}
+            <p className="text-[13px] font-bold text-gray-900">{t('estacionamentoPg.vehicles')}</p>
+            {totalVagas > 0 && <span className="text-[11px] font-semibold text-brand">{t('estacionamentoPg.spots', { count: totalVagas })}</span>}
           </div>
-          {tarifas.map((t) => {
-            const q = qtys[t.vehicle_type] || 0
+          {tarifas.map((tar) => {
+            const q = qtys[tar.vehicle_type] || 0
             return (
-              <div key={t.vehicle_type} className="space-y-2">
+              <div key={tar.vehicle_type} className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[13px] font-semibold text-gray-800 capitalize">
-                    <Car size={15} className="text-brand" /> {t.vehicle_type}
-                    <span className="text-[12px] font-normal text-gray-500">· {fmt(t.price_per_unit)}/diária</span>
+                    <Car size={15} className="text-brand" /> {tar.vehicle_type}
+                    <span className="text-[12px] font-normal text-gray-500">· {t('estacionamentoPg.perDay', { price: fmt(tar.price_per_unit) })}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => mudarQtd(t.vehicle_type, q - 1)} disabled={q <= 0}
+                    <button type="button" onClick={() => mudarQtd(tar.vehicle_type, q - 1)} disabled={q <= 0}
                       className="w-8 h-8 rounded-full border border-gray-200 text-gray-700 font-bold text-lg leading-none flex items-center justify-center disabled:opacity-40 hover:bg-gray-50">−</button>
                     <span className="w-5 text-center text-[14px] font-bold text-gray-900">{q}</span>
-                    <button type="button" onClick={() => mudarQtd(t.vehicle_type, q + 1)}
+                    <button type="button" onClick={() => mudarQtd(tar.vehicle_type, q + 1)}
                       className="w-8 h-8 rounded-full border border-brand text-brand font-bold text-lg leading-none flex items-center justify-center hover:bg-brand/5">+</button>
                   </div>
                 </div>
@@ -282,11 +286,11 @@ function Configurador({ lotId, onClose }) {
                   <div className="space-y-2 pl-1">
                     {Array.from({ length: q }).map((_, i) => (
                       <div key={i} className="flex items-center gap-2">
-                        <span className="text-[11px] text-gray-400 w-16 shrink-0 capitalize">{t.vehicle_type} {i + 1}</span>
+                        <span className="text-[11px] text-gray-400 w-16 shrink-0 capitalize">{tar.vehicle_type} {i + 1}</span>
                         <input
-                          value={(plates[t.vehicle_type] || [])[i] || ''}
-                          onChange={(e) => mudarPlaca(t.vehicle_type, i, e.target.value)}
-                          placeholder="Placa (ex.: ABC1D23)" maxLength={12}
+                          value={(plates[tar.vehicle_type] || [])[i] || ''}
+                          onChange={(e) => mudarPlaca(tar.vehicle_type, i, e.target.value)}
+                          placeholder={t('estacionamentoPg.platePlaceholder')} maxLength={12}
                           className="flex-1 border border-gray-200 rounded-lg px-3 h-10 text-[13px] uppercase tracking-wide outline-none focus:border-brand"
                         />
                       </div>
@@ -296,18 +300,18 @@ function Configurador({ lotId, onClose }) {
               </div>
             )
           })}
-          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Info size={11} /> Cada diária = 24 horas · placa obrigatória por veículo.</p>
+          <p className="text-[11px] text-gray-400 flex items-center gap-1"><Info size={11} /> {t('estacionamentoPg.dailyNoteShort')}</p>
         </div>
       )}
 
       {/* Disponibilidade */}
       {periodoOk && quotes && (
         disponivel != null && disponivel <= 0 ? (
-          <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3 text-[13px] text-red-700 font-semibold flex items-center gap-2"><Sun size={15} className="shrink-0" /> Esgotado nesse período.</div>
+          <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3 text-[13px] text-red-700 font-semibold flex items-center gap-2"><Sun size={15} className="shrink-0" /> {t('estacionamentoPg.soldOutShort')}</div>
         ) : disponivel != null && totalVagas > disponivel ? (
-          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-[13px] text-amber-700 font-semibold flex items-center gap-2"><Info size={15} className="shrink-0" /> Só há {disponivel} vaga(s) — reduza a quantidade.</div>
+          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-[13px] text-amber-700 font-semibold flex items-center gap-2"><Info size={15} className="shrink-0" /> {t('estacionamentoPg.onlyNSpots', { count: disponivel })}</div>
         ) : (
-          <div className="mt-3 bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-[12px] text-emerald-700 font-semibold flex items-center gap-2"><ParkingSquare size={14} className="shrink-0" /> {Number(disponivel) > 0 ? `${disponivel} vaga(s) disponível(is)` : 'Vagas disponíveis'}</div>
+          <div className="mt-3 bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-[12px] text-emerald-700 font-semibold flex items-center gap-2"><ParkingSquare size={14} className="shrink-0" /> {Number(disponivel) > 0 ? t('estacionamentoPg.nSpotsAvailable', { count: disponivel }) : t('estacionamentoPg.spotsAvailable')}</div>
         )
       )}
 
@@ -315,8 +319,8 @@ function Configurador({ lotId, onClose }) {
       {periodoOk && quotes && totalVagas > 0 && (
         <div className="border-t border-gray-100 mt-4 pt-3 flex items-end justify-between">
           <div>
-            <p className="text-[13px] font-bold text-gray-900">{totalVagas} veículo(s) × {diarias} diária(s)</p>
-            <p className="text-[11px] text-gray-500">Você só paga após o aceite.</p>
+            <p className="text-[13px] font-bold text-gray-900">{t('estacionamentoPg.summary', { vehicles: totalVagas, days: diarias })}</p>
+            <p className="text-[11px] text-gray-500">{t('estacionamentoPg.payAfterAcceptShort')}</p>
           </div>
           <p className="text-[24px] font-extrabold text-brand">{fmt(totalGeral)}</p>
         </div>
@@ -328,10 +332,10 @@ function Configurador({ lotId, onClose }) {
         className={`mt-4 w-full py-3.5 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all ${
           pronto ? 'bg-brand text-white hover:bg-brand-600 active:scale-[0.98] shadow-md shadow-brand/20' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
         }`}>
-        {pronto ? <>Adicionar ao carrinho · {fmt(totalGeral)}</> : 'Adicionar ao carrinho'}
+        {pronto ? <>{t('estacionamentoPg.addToCartPrice', { price: fmt(totalGeral) })}</> : t('estacionamentoPg.addToCart')}
       </button>
       <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[12px] text-gray-400">
-        <ShieldCheck size={14} className="text-emerald-500 shrink-0" /> Você só paga após o estacionamento aceitar.
+        <ShieldCheck size={14} className="text-emerald-500 shrink-0" /> {t('estacionamentoPg.payAfterAccept')}
       </p>
 
       {sheet && (
@@ -355,6 +359,7 @@ function Configurador({ lotId, onClose }) {
 
 /* ── Página desktop ────────────────────────────────────────────── */
 export default function EstacionamentoDesktop() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { region } = useRegion()
   const [busca, setBusca] = useState('')
@@ -375,20 +380,20 @@ export default function EstacionamentoDesktop() {
   return (
     <div className="max-w-[1520px] mx-auto px-10 xl:px-16 py-8">
       <nav className="flex items-center gap-1.5 text-[13px] text-gray-400 mb-1.5">
-        <button onClick={() => navigate('/passeios')} className="hover:text-gray-600">Passeios</button>
+        <button onClick={() => navigate('/passeios')} className="hover:text-gray-600">{t('estacionamentoPg.desktop.breadcrumbTours')}</button>
         <ChevronRight size={13} className="text-gray-300" />
-        <span className="text-gray-500 font-medium">Vagas</span>
+        <span className="text-gray-500 font-medium">{t('estacionamentoPg.desktop.spotsCrumb')}</span>
       </nav>
-      <h1 className="text-[28px] font-extrabold text-gray-900 leading-tight">Estacionamentos em {region?.name || 'Jericoacoara'}</h1>
-      <p className="text-[13px] text-gray-500 mt-1">Seu carro seguro enquanto você aproveita a viagem.</p>
+      <h1 className="text-[28px] font-extrabold text-gray-900 leading-tight">{t('estacionamentoPg.desktop.title', { region: region?.name || 'Jericoacoara' })}</h1>
+      <p className="text-[13px] text-gray-500 mt-1">{t('estacionamentoPg.desktop.subtitle')}</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_420px] gap-6 mt-6 items-start">
         {/* ESQUERDA: catálogo */}
         <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-baseline justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Escolha o estacionamento</h2>
-              <p className="text-[13px] text-gray-500 mt-0.5">Depois defina o período e os veículos ao lado.</p>
+              <h2 className="text-lg font-bold text-gray-900">{t('estacionamentoPg.desktop.chooseLot')}</h2>
+              <p className="text-[13px] text-gray-500 mt-0.5">{t('estacionamentoPg.desktop.chooseLotHint')}</p>
             </div>
           </div>
 
@@ -397,17 +402,17 @@ export default function EstacionamentoDesktop() {
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar estacionamento…"
+              placeholder={t('estacionamentoPg.desktop.searchPlaceholder')}
               className="w-full pl-10 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-800 placeholder-gray-400 outline-none focus:border-brand focus:bg-white transition-colors"
             />
             {busca && (
-              <button onClick={() => setBusca('')} aria-label="Limpar busca" className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} className="text-gray-400" /></button>
+              <button onClick={() => setBusca('')} aria-label={t('estacionamentoPg.desktop.clearSearch')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} className="text-gray-400" /></button>
             )}
           </div>
 
           {!isLoading && (
             <p className="text-[13px] text-gray-500 mt-4 mb-3">
-              <span className="font-bold text-gray-900">{lots.length}</span> {lots.length === 1 ? 'estacionamento' : 'estacionamentos'} · {region?.name || 'Jericoacoara'}
+              <span className="font-bold text-gray-900">{lots.length}</span> {lots.length === 1 ? t('estacionamentoPg.desktop.countOne') : t('estacionamentoPg.desktop.countOther')} · {region?.name || 'Jericoacoara'}
             </p>
           )}
 
@@ -417,7 +422,7 @@ export default function EstacionamentoDesktop() {
             </div>
           ) : lots.length === 0 ? (
             <p className="text-gray-400 py-16 text-center border border-dashed border-gray-200 rounded-2xl mt-2">
-              Nenhum estacionamento disponível nesta região ainda.
+              {t('estacionamentoPg.desktop.empty')}
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -434,14 +439,14 @@ export default function EstacionamentoDesktop() {
             <Configurador lotId={selectedId} onClose={() => setSelectedId(null)} />
           ) : (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <p className="text-[18px] font-bold text-gray-900">Sua reserva</p>
-              <p className="text-[13px] text-gray-500 mb-4">Escolha um estacionamento para começar.</p>
+              <p className="text-[18px] font-bold text-gray-900">{t('estacionamentoPg.desktop.yourBooking')}</p>
+              <p className="text-[13px] text-gray-500 mb-4">{t('estacionamentoPg.desktop.pickToStart')}</p>
               <div className="py-12 text-center">
                 <div className="w-14 h-14 rounded-2xl bg-brand/10 flex items-center justify-center mx-auto mb-3">
                   <ParkingSquare size={26} className="text-brand" />
                 </div>
                 <p className="text-[13px] text-gray-500 max-w-[240px] mx-auto leading-relaxed">
-                  Selecione um estacionamento à esquerda para definir período, veículos e placas.
+                  {t('estacionamentoPg.desktop.emptyHint')}
                 </p>
               </div>
             </div>

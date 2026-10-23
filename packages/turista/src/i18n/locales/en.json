@@ -38,7 +38,31 @@
     "errQuote": "Wait for the quote or review the period.",
     "errVehicle": "Choose at least one vehicle.",
     "errPlates": "Enter each vehicle's plate.",
-    "errNoSpots": "Not enough spots for this period (available: {{count}})."
+    "errNoSpots": "Not enough spots for this period (available: {{count}}).",
+    "hoursNoteShort": "Open from {{open}} to {{close}}.",
+    "dailyNoteShort": "Each day = 24 hours · plate required per vehicle.",
+    "soldOutShort": "Sold out for this period.",
+    "payAfterAcceptShort": "You only pay after acceptance.",
+    "desktop": {
+      "breadcrumbTours": "Tours",
+      "spotsCrumb": "Parking",
+      "title": "Parking in {{region}}",
+      "subtitle": "Your car safe while you enjoy the trip.",
+      "chooseLot": "Choose the parking",
+      "chooseLotHint": "Then set the period and vehicles on the side.",
+      "searchPlaceholder": "Search parking…",
+      "countOne": "parking lot",
+      "countOther": "parking lots",
+      "empty": "No parking available in this region yet.",
+      "yourBooking": "Your booking",
+      "pickToStart": "Choose a parking to start.",
+      "emptyHint": "Select a parking on the left to set period, vehicles and plates.",
+      "consultDaily": "Check daily rate",
+      "selected": "Selected",
+      "select": "Select",
+      "close": "Close",
+      "clearSearch": "Clear search"
+    }
   },
   "nav": {
     "home": "Home",

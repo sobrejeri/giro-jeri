@@ -38,7 +38,31 @@
     "errQuote": "Espera la cotización o revisa el período.",
     "errVehicle": "Elige al menos un vehículo.",
     "errPlates": "Ingresa la placa de cada vehículo.",
-    "errNoSpots": "No hay plazas suficientes para este período (disponible: {{count}})."
+    "errNoSpots": "No hay plazas suficientes para este período (disponible: {{count}}).",
+    "hoursNoteShort": "Abierto de {{open}} a {{close}}.",
+    "dailyNoteShort": "Cada diaria = 24 horas · placa obligatoria por vehículo.",
+    "soldOutShort": "Agotado en ese período.",
+    "payAfterAcceptShort": "Solo pagas tras la aceptación.",
+    "desktop": {
+      "breadcrumbTours": "Paseos",
+      "spotsCrumb": "Plazas",
+      "title": "Estacionamientos en {{region}}",
+      "subtitle": "Tu coche seguro mientras disfrutas el viaje.",
+      "chooseLot": "Elige el estacionamiento",
+      "chooseLotHint": "Luego define el período y los vehículos al lado.",
+      "searchPlaceholder": "Buscar estacionamiento…",
+      "countOne": "estacionamiento",
+      "countOther": "estacionamientos",
+      "empty": "Aún no hay estacionamientos disponibles en esta región.",
+      "yourBooking": "Tu reserva",
+      "pickToStart": "Elige un estacionamiento para empezar.",
+      "emptyHint": "Selecciona un estacionamiento a la izquierda para definir período, vehículos y placas.",
+      "consultDaily": "Consultar diaria",
+      "selected": "Seleccionado",
+      "select": "Seleccionar",
+      "close": "Cerrar",
+      "clearSearch": "Limpiar búsqueda"
+    }
   },
   "nav": {
     "home": "Inicio",
