@@ -363,6 +363,55 @@ export async function notifyOperatorsNewQuote(supabase, quote) {
   await sendToMany(operators.map((op) => op.phone), message)
 }
 
+// Roteiro em texto (ponto de partida + paradas) para as mensagens de passeio.
+function roteiroTexto(quote) {
+  const paradas = Array.isArray(quote?.stops) ? quote.stops.map((s) => s?.name).filter(Boolean) : []
+  return [quote?.origin_place_name, ...paradas].filter(Boolean).join(' → ')
+}
+
+// WhatsApp pras operadores — nova cotação de PASSEIO personalizado. Como o
+// translado livre, a coop precisa abrir e enviar o PREÇO (não só aceitar).
+export async function notifyOperatorsNewTourQuote(supabase, quote) {
+  if (!isWhatsappEnabled() || !quote) return { skipped: true }
+  // Passeio personalizado é de rua (buggy/4x4) — mesmo corte do translado livre.
+  const { eligibleOperatorsForModal } = await import('./fleet.js')
+  const operators = await eligibleOperatorsForModal(supabase, MODAL_DA_COTACAO)
+  if (!operators?.length) return { skipped: true }
+  const rota = roteiroTexto(quote)
+  const data = quote.service_date
+    ? new Date(quote.service_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : 'a definir'
+  const hora = quote.service_time ? ` ${String(quote.service_time).slice(0, 5)}` : ''
+  const message =
+    `*TURIVA* · Nova cotação de passeio 💸\n` +
+    `\n` +
+    `Passeio personalizado${rota ? `\n${rota}` : ''}\n` +
+    `🗓 ${data}${hora}\n` +
+    (quote.vehicle_type ? `🚗 ${quote.vehicle_type}\n` : '') +
+    `👥 ${quote.people_count || 1} passageiro(s)\n` +
+    `\n` +
+    `Defina o valor para enviar ao cliente.\n` +
+    `👉 Responder cotação: ${linkCoopRides()}`
+  await sendToMany(operators.map((op) => op.phone), message)
+}
+
+// Cotação de passeio precificada → cliente vê o valor e decide (botão clicável).
+export async function notifyClientTourQuoteReady(supabase, quote) {
+  if (!isWhatsappEnabled() || !quote) return { skipped: true }
+  const phone = await userPhone(supabase, quote.user_id)
+  if (!phone) return { skipped: true }
+  const rota = roteiroTexto(quote)
+  const message =
+    `*TURIVA* · Cotação de passeio pronta 💸\n` +
+    `\n` +
+    `Seu passeio personalizado foi precificado!\n` +
+    `${rota ? `${rota}\n` : ''}` +
+    `💰 *${fmtBRL(quote.quoted_price)}*\n` +
+    `\n` +
+    `Aceite e pague para confirmar (válido por tempo limitado).`
+  await sendButtonLink(phone, message, 'Ver cotação', linkMyBookings())
+}
+
 /**
  * WhatsApp para o(s) admin(s) — solicitação que ninguém aceitou em 24h.
  * Chamado de forma lazy pelo /api/operator/bookings ao detectar expiradas
