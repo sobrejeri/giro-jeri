@@ -1065,6 +1065,7 @@
     }
   },
   "bookingDetailPg": {
+    "chat": { "open": "Hablar con el operador" },
     "cancelDialog": {
       "title": "¿Cancelar la reserva?",
       "reservationLabel": "Reserva",

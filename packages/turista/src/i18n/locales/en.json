@@ -1065,6 +1065,7 @@
     }
   },
   "bookingDetailPg": {
+    "chat": { "open": "Contact the operator" },
     "cancelDialog": {
       "title": "Cancel booking?",
       "reservationLabel": "Booking",
