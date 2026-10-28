@@ -950,8 +950,10 @@ export default function Catalogo() {
               </div>
             )}
             <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
-              {rotasVisiveis.map((r) => (
-                <div key={r.id} className={`flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60 ${r.is_active === false ? 'opacity-60' : ''}`}>
+              {rotasVisiveis.map((r) => {
+                const inativa = r.is_active === false
+                return (
+                <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                   {/* EXATAMENTE a mesma miniatura da lista de passeios (mesmo
                       tamanho, mesmo cinza no vazio) — pedido do dono para as
                       duas listas se lerem do mesmo jeito. O `title` fica como
@@ -961,31 +963,42 @@ export default function Catalogo() {
                       src={r.cover_image_url}
                       alt=""
                       loading="lazy"
-                      className="w-10 h-10 rounded-lg object-cover shrink-0"
+                      className={`w-10 h-10 rounded-lg object-cover shrink-0 ${inativa ? 'opacity-50' : ''}`}
                     />
                   ) : (
                     <div title="Sem foto de capa" className="w-10 h-10 rounded-lg bg-gray-700 shrink-0" />
                   )}
-                  <div className="flex-1 min-w-0">
+                  <div className={`flex-1 min-w-0 ${inativa ? 'opacity-60' : ''}`}>
                     <p className="text-sm font-medium text-gray-200">{r.origin_name} → {r.destination_name}</p>
                     <p className="text-xs text-gray-500">{r.transfers?.name}</p>
                   </div>
-                  {r.is_active === false && <Badge value="false" />}
-                  <span className="text-sm font-bold text-brand">
+                  <span className={`text-sm font-bold text-brand ${inativa ? 'opacity-60' : ''}`}>
                     {Number(r.default_price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
+                  {/* Liga/desliga a rota na vitrine — botão SEMPRE visível, 1 clique.
+                      (Antes ficava escondido no menu ⋮ e era difícil de achar para
+                      reativar.) */}
+                  <button
+                    type="button"
+                    onClick={() => toggleRouteMut.mutate({ id: r.id, is_active: inativa })}
+                    disabled={toggleRouteMut.isPending}
+                    title={inativa ? 'Rota inativa — clique para ativar' : 'Rota ativa — clique para desativar'}
+                    className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full border shrink-0 transition-colors disabled:opacity-50 ${
+                      inativa
+                        ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-emerald-900/30 hover:text-emerald-300 hover:border-emerald-700'
+                        : 'bg-emerald-900/25 text-emerald-300 border-emerald-800/60 hover:bg-gray-700 hover:text-gray-300 hover:border-gray-500'
+                    }`}
+                  >
+                    {inativa ? <><EyeOff size={11} /> Inativa</> : <><Eye size={11} /> Ativa</>}
+                  </button>
                   <MenuAcoes
                     onEdit={() => openEditRoute(r)}
-                    extras={[{
-                      label: r.is_active === false ? 'Ativar' : 'Desativar',
-                      icon:  r.is_active === false ? <Eye size={13} /> : <EyeOff size={13} />,
-                      onClick: () => toggleRouteMut.mutate({ id: r.id, is_active: r.is_active === false }),
-                    }]}
                     onDelete={() => { if (confirm('Apagar esta rota?\n\nNão tem como desfazer. Rota com reservas é recusada — nesse caso, desative.')) deleteRouteMut.mutate(r.id) }}
                     deleteLabel="Apagar"
                   />
                 </div>
-              ))}
+                )
+              })}
               {routes.length === 0 && <CardBody><p className="text-sm text-gray-600">Nenhuma rota</p></CardBody>}
             </div>
           </Secao>
