@@ -813,7 +813,7 @@ export default function Tours() {
           title={cat.nome}
           subtitle={t('toursPg.categorySection.subtitle')}
         />
-        <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 scrollbar-hide snap-x">
+        <div className="flex gap-3 overflow-x-auto -mr-4 pr-4 pb-2 scrollbar-hide snap-x">
           {cat.passeios.map((tour) => (
             <TourCard
               key={tour.id}
@@ -926,7 +926,7 @@ export default function Tours() {
 
         {/* ── Pastilhas de filtro ───────────────────────────── */}
         {chips.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mr-4 pr-4">
             {chips.map((c) => (
               <FilterChip
                 key={c.id}
@@ -966,7 +966,7 @@ export default function Tours() {
             onVerTodos={chip !== '__all' || searchTerm ? () => { setChip('__all'); setSearchTerm('') } : undefined}
           />
           {toursLoading ? (
-            <div className="flex gap-3 -mx-4 px-4">
+            <div className="flex gap-3 -mr-4 pr-4">
               {[0, 1].map((i) => (
                 <div key={i} className="shrink-0 w-[44%] min-w-[166px] h-[268px] rounded-[22px] bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)] animate-pulse" />
               ))}
@@ -976,7 +976,7 @@ export default function Tours() {
               {searchTerm.trim() || chip !== '__all' ? t('toursPg.noResults') : t('toursPg.traditional.empty')}
             </p>
           ) : (
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 scrollbar-hide snap-x">
+            <div className="flex gap-3 overflow-x-auto -mr-4 pr-4 pb-2 scrollbar-hide snap-x">
               {tradTours.map((tour) => (
                 <TourCard
                   key={tour.id}

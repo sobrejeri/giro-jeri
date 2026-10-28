@@ -1114,7 +1114,7 @@ export default function Transfers() {
           {/* Filtro por local de saída — só faz sentido com mais de uma saída
               e fora da busca por texto (que já recorta tudo). */}
           {!busca && originOptions.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2.5" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-2 overflow-x-auto -mr-4 pr-4 pb-2.5" style={{ scrollbarWidth: 'none' }}>
               <button
                 onClick={() => setRouteOrigin('')}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${
@@ -1164,7 +1164,7 @@ export default function Transfers() {
               ))}
             </div>
           ) : (
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-3 overflow-x-auto -mr-4 pr-4 pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
               {routesShown.map((r, i) => (
                 <PresetCard
                   key={r.id}
@@ -1195,7 +1195,7 @@ export default function Transfers() {
                 Exclusivo
               </span>
             </div>
-            <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
+            <div className="flex gap-3 overflow-x-auto -mr-4 pr-4 pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
               {cat.rotas.map((r) => (
                 <ExclusiveCard
                   key={r.id}
