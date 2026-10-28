@@ -2402,7 +2402,7 @@ router.get('/payouts/fila', requireAdmin, async (req, res, next) => {
     const SELECT = `
       id, booking_code, service_type, service_date,
       total_amount, status_commercial, status_operational, completed_at,
-      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type ),
+      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type, user_type, profile_photo_url ),
       booking_payouts ( id, kind, amount, status, payee_user_id, paid_at ),
       payments ( id, gateway_name, amount_gross, status, paid_at, split_operator_id )
     `;
@@ -2519,7 +2519,7 @@ router.post('/payouts/liberar', requireAdmin, async (req, res, next) => {
     const SELECT = `
       id, booking_code, service_type, service_date,
       total_amount, status_commercial, status_operational, completed_at,
-      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type ),
+      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type, user_type, profile_photo_url ),
       booking_payouts ( id, kind, amount, status, payee_user_id, paid_at ),
       payments ( id, gateway_name, amount_gross, status, paid_at, split_operator_id )
     `;

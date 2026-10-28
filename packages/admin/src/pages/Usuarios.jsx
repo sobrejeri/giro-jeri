@@ -9,6 +9,7 @@ import {
 import { format, parseISO } from 'date-fns'
 import { api } from '../lib/api'
 import Badge from '../components/ui/Badge'
+import UserIdentity from '../components/UserIdentity'
 import MenuAcoes from '../components/ui/MenuAcoes'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
@@ -364,12 +365,13 @@ export default function Usuarios() {
           {users.map((u) => (
             <div key={u.id} className="p-3 rounded-xl bg-gray-900/40 border border-gray-700/60 flex items-center gap-3">
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-200 truncate">{u.full_name || '—'}</p>
-                <p className="text-xs text-gray-500 truncate">
-                  {u.user_type === 'operator' && u.document_number
+                <UserIdentity
+                  name={u.full_name} userType={u.user_type} photo={u.profile_photo_url}
+                  size={36} nameClass="text-gray-200" showLabel={false}
+                  subtitle={u.user_type === 'operator' && u.document_number
                     ? `${String(u.document_number).replace(/\D/g, '').length === 11 ? 'CPF' : 'CNPJ'}: ${u.document_number}`
                     : u.email || u.phone || '—'}
-                </p>
+                />
                 <div className="flex items-center gap-1.5 mt-1">
                   <Badge value={u.user_type} />
                   {u.user_type === 'operator' && (
@@ -407,12 +409,13 @@ export default function Usuarios() {
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-gray-750 transition-colors">
                   <td className="px-5 py-3">
-                    <p className="font-medium text-gray-200">{u.full_name || '—'}</p>
-                    <p className="text-xs text-gray-500">
-                      {u.user_type === 'operator' && u.document_number
+                    <UserIdentity
+                      name={u.full_name} userType={u.user_type} photo={u.profile_photo_url}
+                      size={38} nameClass="text-gray-200" showLabel={false}
+                      subtitle={u.user_type === 'operator' && u.document_number
                         ? `${String(u.document_number).replace(/\D/g, '').length === 11 ? 'CPF' : 'CNPJ'}: ${u.document_number}`
                         : u.email || u.phone || '—'}
-                    </p>
+                    />
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-1.5">

@@ -73,6 +73,8 @@ export function montarLinhaFila(b) {
     completed_at:    b.completed_at,          // UTC — a UI exibe em America/Fortaleza
     operador:        b.operator ? {
       id: b.operator.id, nome: b.operator.full_name,
+      user_type: b.operator.user_type || null,
+      photo:     b.operator.profile_photo_url || null,
       // Para onde o admin manda o PIX manual. Só vem quando o SELECT trouxe (a
       // fila traz; os indicadores não — e aí fica null, sem quebrar nada).
       pix_key: b.operator.pix_key || null, pix_key_type: b.operator.pix_key_type || null,

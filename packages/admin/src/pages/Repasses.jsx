@@ -7,6 +7,7 @@ import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Card, { CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
+import UserIdentity from '../components/UserIdentity'
 
 const fmtBRL = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const fmtDia = (iso) => (iso ? format(new Date(`${String(iso).slice(0, 10)}T12:00:00`), 'dd/MM/yyyy') : '—')
@@ -303,7 +304,7 @@ function FilaLiberacao() {
                 <p className="text-[11px] text-gray-500 mt-0.5">
                   {r.service_type === 'transfer' ? 'Transfer' : 'Passeio'} · {gwLabel(r.gateway)} · {fmtDataHora(r.completed_at)}
                 </p>
-                <p className="text-sm text-gray-300 mt-1">{r.operador?.nome || '—'}</p>
+                <div className="mt-1"><UserIdentity name={r.operador?.nome} userType={r.operador?.user_type} photo={r.operador?.photo} size={24} nameClass="text-gray-300" /></div>
                 {r.elegivel_liberar && <div className="mt-0.5"><ChavePix chave={r.operador?.pix_key} tipo={r.operador?.pix_key_type} /></div>}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs">
                   <span className="text-gray-500">Pago <span className="text-gray-300">{fmtR$(r.valor_pago)}</span></span>
@@ -360,8 +361,8 @@ function FilaLiberacao() {
                     <span className="font-mono text-gray-200">{r.booking_code}</span>
                     <span className="block text-[11px] text-gray-500">{r.service_type === 'transfer' ? 'Transfer' : 'Passeio'}</span>
                   </td>
-                  <td className="px-3 py-2 text-gray-300">
-                    {r.operador?.nome || '—'}
+                  <td className="px-3 py-2">
+                    <UserIdentity name={r.operador?.nome} userType={r.operador?.user_type} photo={r.operador?.photo} size={24} nameClass="text-gray-300" />
                     {/* Para onde mandar o PIX manual — só aparece nos prontos. */}
                     {r.elegivel_liberar && (
                       <span className="block mt-0.5"><ChavePix chave={r.operador?.pix_key} tipo={r.operador?.pix_key_type} /></span>

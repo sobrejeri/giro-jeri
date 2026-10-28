@@ -30,7 +30,7 @@ function Avatar({ name, photo, isAdmin, size }) {
   )
 }
 
-export default function UserIdentity({ name, userType, photo, size = 32, subtitle = null, nameClass = 'text-gray-100' }) {
+export default function UserIdentity({ name, userType, photo, size = 32, subtitle = null, nameClass = 'text-gray-100', showLabel = true }) {
   const isAdmin = userType === 'admin'
   return (
     <div className="flex items-center gap-2.5 min-w-0">
@@ -40,7 +40,9 @@ export default function UserIdentity({ name, userType, photo, size = 32, subtitl
           <span className={`truncate font-medium ${nameClass}`}>{name || '—'}</span>
           {isAdmin && <BadgeCheck size={Math.max(14, Math.round(size * 0.5))} className="text-sky-400 shrink-0" aria-label="Administrador verificado" />}
         </div>
-        {isAdmin
+        {/* showLabel=false onde já existe uma coluna/badge de tipo (ex.: Usuários):
+            aí o selo azul fica, mas o rótulo "Administrador" dá lugar ao subtitle. */}
+        {(isAdmin && showLabel)
           ? <span className="block text-[11px] text-sky-400 font-medium">Administrador</span>
           : subtitle ? <span className="block text-[11px] text-gray-500 truncate">{subtitle}</span> : null}
       </div>
