@@ -87,14 +87,26 @@ function refreshOnce() {
 async function request(path, options = {}, isRetry = false) {
   if (!isRetry && tokenExpiringSoon()) await refreshOnce()
   const token = getToken()
-  const res = await fetch(`${BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...options,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  })
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      ...options,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    })
+  } catch {
+    // fetch() só lança por falha de REDE (offline, DNS, servidor inalcançável),
+    // nunca por status HTTP. Traduz o "Failed to fetch" cru numa mensagem clara,
+    // para o usuário saber que é a internet dele — não um erro da plataforma.
+    throw new Error(
+      navigator.onLine === false
+        ? 'Você está sem internet. Verifique sua conexão e tente novamente.'
+        : 'Falha ao conectar ao servidor. Verifique sua internet e tente novamente.',
+    )
+  }
 
   if (res.status === 401) {
     if (!isRetry) {
