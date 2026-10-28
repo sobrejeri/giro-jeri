@@ -14,6 +14,15 @@ import Card, { CardHeader, CardBody } from '../components/ui/Card'
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+// Eixo Y legível em qualquer magnitude: abaixo de mil mostra o valor real
+// (R$122), senão "k"/"M". Antes `(v/1000).toFixed(0)` zerava tudo em "0k".
+const fmtEixo = (v) => {
+  const n = Number(v) || 0, a = Math.abs(n)
+  if (a >= 1e6) return `R$ ${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M`
+  if (a >= 1e3) return `R$ ${(n / 1e3).toFixed(1).replace(/\.0$/, '')}k`
+  return `R$ ${Math.round(n)}`
+}
+
 const PERIODS = [
   { value: 'day',   label: 'Hoje'      },
   { value: 'week',  label: 'Semana'    },
@@ -171,6 +180,20 @@ export default function Financeiro() {
             <p className="mt-3 text-[11px] text-gray-500">
               Inclui passeios e estacionamento. Taxa de gateway estimada pela tarifa de tabela de cada método (PIX, débito, crédito); o estacionamento não tem taxa de gateway no razão.
             </p>
+            {/* Gráfico por gateway: bruto × líquido (após taxa) de cada meio. */}
+            <div className="mt-4 h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={summary.by_gateway} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={fmtEixo} width={64} />
+                  <Tooltip formatter={(v, n) => [fmt(v), n]} contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 12, fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="bruto"   name="Bruto"   fill="#FF6A00" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="liquido" name="Líquido" fill="#34d399" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardBody>
         </Card>
       )}
@@ -262,7 +285,7 @@ export default function Financeiro() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false}
-                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  tickFormatter={fmtEixo} />
                 <Tooltip content={<TooltipDark />} />
                 <Area type="monotone" dataKey="bruto"   name="Bruto"   stroke="#FF6A00" strokeWidth={2} fill="url(#gBruto)"   dot={false} />
                 <Area type="monotone" dataKey="liquido" name="Líquido" stroke="#34d399" strokeWidth={2} fill="url(#gLiquido)" dot={false} />
@@ -309,7 +332,7 @@ export default function Financeiro() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#4b5563' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: '#4b5563' }} axisLine={false} tickLine={false}
-                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                    tickFormatter={fmtEixo} />
                   <Tooltip content={<TooltipDark />} />
                   <Bar dataKey="bruto"   name="Bruto"   fill="#FF6A00" opacity={0.8} radius={[3,3,0,0]} />
                   <Bar dataKey="liquido" name="Líquido" fill="#34d399" opacity={0.7} radius={[3,3,0,0]} />

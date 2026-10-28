@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Legend,
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -14,6 +15,15 @@ import RepassesMotoristas from '../components/RepassesMotoristas'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+// Eixo Y legível em qualquer magnitude: abaixo de mil mostra o valor real
+// (R$122), senão "k"/"M". Antes `(v/1000).toFixed(0)` zerava tudo em "R$ 0k".
+const fmtEixo = (v) => {
+  const n = Number(v) || 0, a = Math.abs(n)
+  if (a >= 1e6) return `R$ ${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M`
+  if (a >= 1e3) return `R$ ${(n / 1e3).toFixed(1).replace(/\.0$/, '')}k`
+  return `R$ ${Math.round(n)}`
+}
 
 const PERIODS = [
   { value: 'day',   label: 'Hoje'      },
@@ -110,7 +120,7 @@ export default function Financeiro() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard icon={DollarSign}    label="Bruto"          value={fmt(summary?.bruto)}          color="text-gray-700" />
-        <KpiCard icon={TrendingUp}    label="Líquido"        value={fmt(summary?.liquido)}         color="text-green-600" />
+        <KpiCard icon={TrendingUp}    label="Você recebe"    value={fmt((summary?.liquido || 0) - (summary?.comissoes_plataforma || 0))} color="text-green-600" />
         <KpiCard icon={CreditCard}    label="Taxas Gateway"  value={fmt(summary?.taxas)}           color="text-orange-600" />
         <KpiCard icon={AlertCircle}   label="Não creditado"  value={fmt(summary?.nao_creditado)}   color="text-amber-600" />
       </div>
@@ -136,6 +146,20 @@ export default function Financeiro() {
               ))}
             </div>
             <p className="mt-3 text-[11px] text-gray-400">Inclui passeios e o seu estacionamento. Taxa estimada pela tarifa de cada método.</p>
+            {/* Gráfico por gateway: bruto × líquido (após taxa) de cada meio. */}
+            <div className="mt-4 h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={summary.by_gateway} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={fmtEixo} width={64} />
+                  <Tooltip formatter={(v, n) => [fmt(v), n]} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="bruto"   name="Bruto"   fill="#FF6A00" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="liquido" name="Líquido" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardBody>
         </Card>
       )}
@@ -169,7 +193,7 @@ export default function Financeiro() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false}
-                  tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`} />
+                  tickFormatter={fmtEixo} />
                 <Tooltip content={<CustomTooltip />} />
                 <Area
                   type="monotone"
