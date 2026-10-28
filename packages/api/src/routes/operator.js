@@ -11,6 +11,7 @@ import dayjs      from 'dayjs';
 import { supabase } from '../supabase.js';
 import { authenticate, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
+import { jaCreditado } from '../services/settlement.js';
 import {
   notifyAdminExpiredBooking, notifyClientBookingAccepted,
   notifyClientRideStarted, notifyClientRideCompleted, notifyClientReviewRequest,
@@ -2011,16 +2012,6 @@ function sumByType(rows, entryType, direction) {
     .filter((r) => r.entry_type === entryType && r.direction === direction)
     .reduce((s, r) => s + Number(r.amount), 0);
 }
-// `entryType` opcional: cada reserva paga grava DUAS linhas de inflow — bruto
-// (booking_gross) e líquido (booking_net), duas visões do mesmo dinheiro. Somar
-// todo inflow pendente contava as duas e dobrava; filtrar por 'booking_gross'
-// conta o bruto uma vez só.
-function sumByStatus(rows, direction, status, entryType) {
-  return rows
-    .filter((r) => r.direction === direction && r.financial_status === status && (!entryType || r.entry_type === entryType))
-    .reduce((s, r) => s + Number(r.amount), 0);
-}
-
 // IDs das reservas dessa operador. Retorna [] se ela ainda não tem nenhuma.
 async function operatorBookingIds(operatorId) {
   const { data, error } = await supabase
@@ -2206,7 +2197,7 @@ router.get('/financial', async (req, res, next) => {
 
     const { data, error } = await supabase
       .from('financial_ledger')
-      .select('entry_type, amount, direction, financial_status, payments(gateway_name)')
+      .select('entry_type, amount, direction, financial_status, payments(gateway_name, payment_method, paid_at)')
       .in('booking_id', bookingIds)
       .gte('created_at', starts[period] || starts.month);
     if (error) throw error;
@@ -2214,9 +2205,16 @@ router.get('/financial', async (req, res, next) => {
     const bruto     = sumByType(data, 'booking_gross',        'inflow');
     const taxas     = sumByType(data, 'gateway_fee',          'outflow');
     const liquido   = sumByType(data, 'booking_net',          'inflow');
-    // Bruto pendente de liquidação (conta só booking_gross: senão soma bruto +
-    // líquido da mesma venda e dobra).
-    const naoCredit = sumByStatus(data, 'inflow', 'pending', 'booking_gross');
+    // "Não creditado" = o que ainda NÃO caiu na conta, pela DATA DE LIQUIDAÇÃO
+    // de cada pagamento (PIX e Mercado Pago no 1º dia útil, cartão no 2º). Usa o
+    // LÍQUIDO (booking_net, já sem a taxa do gateway) — o que de fato será
+    // depositado. Antes somava o que estava 'pending' no razão.
+    const naoCredit = Math.round((data || [])
+      .filter((r) => r.entry_type === 'booking_net' && r.direction === 'inflow'
+        && !jaCreditado({ gatewayName:   r.payments?.gateway_name,
+                          paymentMethod: r.payments?.payment_method,
+                          paidAt:        r.payments?.paid_at }))
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0) * 100) / 100;
     const comissoes = sumByType(data, 'commission_platform',  'outflow');
     const repasses  = sumByType(data, 'payout_operator',      'outflow');
 

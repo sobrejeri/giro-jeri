@@ -10,6 +10,7 @@ import {
 } from '../services/couponBroadcast.js';
 import { authenticate, requireAdmin, requireOperator } from '../middleware/auth.js';
 import { notifyUser } from '../services/notify.js';
+import { jaCreditado } from '../services/settlement.js';
 import { notifyDispatchOS } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
 import crypto from 'node:crypto';
@@ -1145,7 +1146,7 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
 
     let query = supabase
       .from('financial_ledger')
-      .select('entry_type, amount, direction, financial_status, effective_date, payments(gateway_name)')
+      .select('entry_type, amount, direction, financial_status, effective_date, payments(gateway_name, payment_method, paid_at)')
       .gte('created_at', starts[period] || starts.month);
 
     if (region_id) query = query.eq('region_id', region_id);
@@ -1156,10 +1157,17 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
     const bruto       = sum(data, 'booking_gross',   'inflow');
     const taxas       = sum(data, 'gateway_fee',      'outflow');
     const liquido     = sum(data, 'booking_net',      'inflow');
-    // "Não creditado" = receita BRUTA que entrou mas ainda não foi liquidada
-    // pelo gateway (status 'pending'). Conta só booking_gross: sem o filtro,
-    // somava bruto + líquido da mesma venda e dobrava (ex.: R$100 + R$97,36).
-    const naoCredit   = sumByStatus(data, 'inflow',   'pending', 'booking_gross');
+    // "Não creditado" = o que ainda NÃO caiu na conta, pela DATA DE LIQUIDAÇÃO
+    // de cada pagamento (PIX e Mercado Pago no 1º dia útil, cartão no 2º). Usa o
+    // LÍQUIDO (booking_net, já sem a taxa do gateway): é exatamente o que será
+    // depositado. Antes somava o que estava 'pending' no razão — status que
+    // nunca virava liquidado, então a conta travava no bruto inteiro.
+    const naoCredit = Math.round((data || [])
+      .filter((r) => r.entry_type === 'booking_net' && r.direction === 'inflow'
+        && !jaCreditado({ gatewayName:   r.payments?.gateway_name,
+                          paymentMethod: r.payments?.payment_method,
+                          paidAt:        r.payments?.paid_at }))
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0) * 100) / 100;
     const comissoes   = sum(data, 'commission_platform', 'outflow');
     const repassesOut = sum(data, 'payout_operator',  'outflow');
 
@@ -3630,16 +3638,6 @@ function sum(rows, entryType, direction) {
     .filter(r => r.entry_type === entryType && r.direction === direction)
     .reduce((s, r) => s + Number(r.amount), 0);
 }
-// `entryType` opcional: cada reserva paga grava DUAS linhas de inflow — o bruto
-// (booking_gross) e o líquido (booking_net), que são duas VISÕES do mesmo
-// dinheiro. Somar todo inflow pendente (sem filtrar o tipo) contava os dois e
-// dobrava o valor. Filtrando por 'booking_gross' conta o bruto uma única vez.
-function sumByStatus(rows, direction, status, entryType) {
-  return rows
-    .filter(r => r.direction === direction && r.financial_status === status && (!entryType || r.entry_type === entryType))
-    .reduce((s, r) => s + Number(r.amount), 0);
-}
-
 // ── GET /api/admin/payments/audit ─────────────────────
 // Auditoria de uma tentativa de pagamento: junta o que o banco tem com o que o
 // Mercado Pago diz, e responde as perguntas que se faz depois de uma recusa —
