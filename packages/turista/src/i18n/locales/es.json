@@ -1,4 +1,9 @@
 {
+  "errors": {
+    "offline": "Estás sin internet. Revisa tu conexión e inténtalo de nuevo.",
+    "connectionFailed": "No se pudo conectar al servidor. Revisa tu internet e inténtalo de nuevo.",
+    "offlineBanner": "Estás sin internet. Algunas acciones pueden fallar hasta que vuelva la conexión."
+  },
   "estacionamentoPg": {
     "loading": "Cargando…",
     "notFound": "Estacionamiento no encontrado.",

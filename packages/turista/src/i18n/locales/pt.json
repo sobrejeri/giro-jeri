@@ -1,4 +1,9 @@
 {
+  "errors": {
+    "offline": "Você está sem internet. Verifique sua conexão e tente novamente.",
+    "connectionFailed": "Falha ao conectar ao servidor. Verifique sua internet e tente novamente.",
+    "offlineBanner": "Você está sem internet. Algumas ações podem falhar até a conexão voltar."
+  },
   "estacionamentoPg": {
     "loading": "Carregando…",
     "notFound": "Estacionamento não encontrado.",
