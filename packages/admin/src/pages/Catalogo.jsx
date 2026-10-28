@@ -17,6 +17,19 @@ import MenuAcoes from '../components/ui/MenuAcoes'
 const catsDoPasseio = (t) => (t.category_ids?.length ? t.category_ids : (t.category_id ? [t.category_id] : []))
 const temCategoria  = (t, id) => catsDoPasseio(t).includes(id)
 
+// Ordena uma lista com ATIVOS primeiro e inativos por último; dentro de cada
+// grupo, ordem alfabética pelo rótulo escolhido (pt-BR, sem diferenciar acento
+// nem maiúsculas). Usado em rotas, passeios e veículos para a mesma "fila":
+// ao reativar, o item sobe; ao desativar, cai para o fim.
+function ordenarAtivoAlfabetico(lista, rotulo) {
+  return lista.slice().sort((a, b) => {
+    const aAtivo = a.is_active !== false
+    const bAtivo = b.is_active !== false
+    if (aAtivo !== bAtivo) return aAtivo ? -1 : 1
+    return String(rotulo(a) ?? '').localeCompare(String(rotulo(b) ?? ''), 'pt-BR', { sensitivity: 'base' })
+  })
+}
+
 const CUTOFF_TIME_OPTIONS = (() => {
   const opts = []
   for (let h = 6; h <= 22; h++) {
@@ -322,18 +335,11 @@ export default function Catalogo() {
   // nem estão na tela.
   const rotasComFoto  = rotasDoTipo.filter((r) => r.cover_image_url).length
   const rotasSemFoto  = rotasDoTipo.length - rotasComFoto
-  // Ordem da vitrine do admin: ATIVAS primeiro, inativas por último e, dentro de
-  // cada grupo, ordem alfabética (origem → destino). Assim, ao reativar, a rota
-  // "sobe" sozinha para a frente da fila; ao desativar, cai para o fim.
-  const rotasVisiveis = (soSemFoto ? rotasDoTipo.filter((r) => !r.cover_image_url) : rotasDoTipo)
-    .slice()
-    .sort((a, b) => {
-      const aAtiva = a.is_active !== false
-      const bAtiva = b.is_active !== false
-      if (aAtiva !== bAtiva) return aAtiva ? -1 : 1
-      return `${a.origin_name} → ${a.destination_name}`
-        .localeCompare(`${b.origin_name} → ${b.destination_name}`, 'pt-BR', { sensitivity: 'base' })
-    })
+  // ATIVAS primeiro, inativas por último, alfabético (origem → destino).
+  const rotasVisiveis = ordenarAtivoAlfabetico(
+    soSemFoto ? rotasDoTipo.filter((r) => !r.cover_image_url) : rotasDoTipo,
+    (r) => `${r.origin_name} → ${r.destination_name}`,
+  )
   const { data: vehicles = [], isLoading: l4 } = useQuery({
     queryKey: ['vehicles'],
     queryFn:  () => api.getVehicles(),
@@ -372,10 +378,13 @@ export default function Catalogo() {
 
   const byRegion = (item) => !filterRegion || (item.region_ids || []).includes(filterRegion)
   const filteredTours     = tours.filter(byRegion)
-  const passeiosVisiveis =
+  // ATIVOS primeiro, inativos por último, alfabético pelo nome do passeio.
+  const passeiosVisiveis = ordenarAtivoAlfabetico(
     catPasseio === 'todos' ? filteredTours
       : catPasseio === '__sem' ? filteredTours.filter((t) => catsDoPasseio(t).length === 0)
-      : filteredTours.filter((t) => temCategoria(t, catPasseio))
+      : filteredTours.filter((t) => temCategoria(t, catPasseio)),
+    (t) => t.name,
+  )
   const filteredTransfers = transfers.filter(byRegion)
   const filteredVehicles  = vehicles.filter(byRegion)
 
@@ -1093,7 +1102,9 @@ export default function Catalogo() {
                 const ordem   = modais.map((m) => m.slug)
                 const porSlug = new Map()
                 const grupos  = []
-                for (const v of filteredVehicles) {
+                // ATIVOS primeiro, inativos por último, alfabético pelo nome —
+                // dentro de cada grupo de modal (a ordem dos grupos não muda).
+                for (const v of ordenarAtivoAlfabetico(filteredVehicles, (x) => x.name)) {
                   const slug = v.modal || '__outros'
                   if (!porSlug.has(slug)) {
                     const g = { slug, nome: v.modal ? nomeDoModal(v.modal) : 'Outros', veiculos: [] }
