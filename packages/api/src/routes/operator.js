@@ -2229,14 +2229,15 @@ router.get('/financial', async (req, res, next) => {
       return s;
     };
     const byGwRaw = {};
-    const bump = (g) => (byGwRaw[g] ||= { bruto: 0, taxas: 0, liquido: 0 });
+    const bump = (g) => (byGwRaw[g] ||= { bruto: 0, taxas: 0, liquido: 0, comissao: 0 });
     for (const row of (data || [])) {
-      if (!['booking_gross', 'gateway_fee', 'booking_net'].includes(row.entry_type)) continue;
+      if (!['booking_gross', 'gateway_fee', 'booking_net', 'commission_platform'].includes(row.entry_type)) continue;
       const slot = bump(canonGw(row.payments?.gateway_name));
       const amt = Number(row.amount) || 0;
       if (row.entry_type === 'booking_gross') slot.bruto   += amt;
       else if (row.entry_type === 'gateway_fee') slot.taxas += amt;
       else if (row.entry_type === 'booking_net') slot.liquido += amt;
+      else if (row.entry_type === 'commission_platform') slot.comissao += amt;
     }
     try {
       const { data: lots } = await supabase.from('parking_lots').select('id').eq('owner_user_id', req.user.id);
@@ -2246,14 +2247,21 @@ router.get('/financial', async (req, res, next) => {
         const pkGw = await parkingFinanceiroPorGateway({ from: starts[period] || starts.month, lotIds });
         for (const [g, v] of Object.entries(pkGw)) {
           const slot = bump(canonGw(g));
-          slot.bruto   += v.brutoC / 100;
-          slot.liquido += v.brutoC / 100;
+          slot.bruto    += v.brutoC / 100;
+          slot.liquido  += v.brutoC / 100;   // estacionamento não tem taxa de gateway
+          slot.comissao += v.comissaoC / 100; // comissão da plataforma sobre o estacionamento
         }
       }
     } catch (e) { console.error('[operator/financial] estacionamento por gateway falhou (ignorado):', e?.message); }
 
+    // `voce_recebe` = o que CAI NA CONTA do operador por gateway: líquido (já sem
+    // a taxa de gateway) MENOS a comissão da plataforma. É o repasse real.
     const by_gateway = Object.entries(byGwRaw)
-      .map(([gateway, v]) => ({ gateway, label: GW_LABELS[gateway] || gateway, bruto: round2(v.bruto), taxas: round2(v.taxas), liquido: round2(v.liquido) }))
+      .map(([gateway, v]) => ({
+        gateway, label: GW_LABELS[gateway] || gateway,
+        bruto: round2(v.bruto), taxas: round2(v.taxas), liquido: round2(v.liquido),
+        comissao: round2(v.comissao), voce_recebe: round2(v.liquido - v.comissao),
+      }))
       .sort((a, b) => b.bruto - a.bruto);
 
     res.json({

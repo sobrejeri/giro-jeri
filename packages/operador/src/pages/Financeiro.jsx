@@ -176,13 +176,15 @@ export default function Financeiro() {
                   <dl className="space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-gray-500">Bruto</span><span className="text-gray-800 font-semibold">{fmt(g.bruto)}</span></div>
                     <div className="flex justify-between"><span className="text-gray-500">(-) Taxa gateway</span><span className="text-red-500">- {fmt(g.taxas)}</span></div>
-                    <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-600">Líquido</span><span className="text-green-600 font-bold">{fmt(g.liquido)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">(-) Comissão Turiva</span><span className="text-red-500">- {fmt(g.comissao)}</span></div>
+                    <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-600 font-medium">Você recebe</span><span className="text-green-600 font-bold">{fmt(g.voce_recebe)}</span></div>
                   </dl>
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[11px] text-gray-400">Inclui passeios e o seu estacionamento. Taxa estimada pela tarifa de cada método.</p>
-            {/* Gráfico por gateway: bruto × líquido (após taxa) de cada meio. */}
+            <p className="mt-3 text-[11px] text-gray-400">Inclui passeios e o seu estacionamento. "Você recebe" já desconta a taxa de gateway e a comissão da plataforma — é o que cai na sua conta.</p>
+            {/* Gráfico por gateway: bruto × o que o operador RECEBE (após taxa de
+                gateway E comissão da plataforma) de cada meio. */}
             <div className="mt-4 h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={summary.by_gateway} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
@@ -191,8 +193,8 @@ export default function Financeiro() {
                   <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={fmtEixo} width={64} />
                   <Tooltip formatter={(v, n) => [fmt(v), n]} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="bruto"   name="Bruto"   fill="#FF6A00" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="liquido" name="Líquido" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="bruto"       name="Bruto"       fill="#FF6A00" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="voce_recebe" name="Você recebe" fill="#22c55e" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
