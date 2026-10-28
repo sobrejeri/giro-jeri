@@ -322,7 +322,18 @@ export default function Catalogo() {
   // nem estão na tela.
   const rotasComFoto  = rotasDoTipo.filter((r) => r.cover_image_url).length
   const rotasSemFoto  = rotasDoTipo.length - rotasComFoto
-  const rotasVisiveis = soSemFoto ? rotasDoTipo.filter((r) => !r.cover_image_url) : rotasDoTipo
+  // Ordem da vitrine do admin: ATIVAS primeiro, inativas por último e, dentro de
+  // cada grupo, ordem alfabética (origem → destino). Assim, ao reativar, a rota
+  // "sobe" sozinha para a frente da fila; ao desativar, cai para o fim.
+  const rotasVisiveis = (soSemFoto ? rotasDoTipo.filter((r) => !r.cover_image_url) : rotasDoTipo)
+    .slice()
+    .sort((a, b) => {
+      const aAtiva = a.is_active !== false
+      const bAtiva = b.is_active !== false
+      if (aAtiva !== bAtiva) return aAtiva ? -1 : 1
+      return `${a.origin_name} → ${a.destination_name}`
+        .localeCompare(`${b.origin_name} → ${b.destination_name}`, 'pt-BR', { sensitivity: 'base' })
+    })
   const { data: vehicles = [], isLoading: l4 } = useQuery({
     queryKey: ['vehicles'],
     queryFn:  () => api.getVehicles(),
