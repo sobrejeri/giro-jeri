@@ -315,6 +315,11 @@ export default function TransfersDesktop() {
 
   const matched   = rotaEscolhida
   const unitPrice = matched ? Number(matched.default_price) : null
+  // Descrição do trecho selecionado: a da ROTA quando existe, senão a da
+  // categoria — mesmo critério da ficha mobile.
+  const matchedDesc = matched
+    ? (matched.description || matched.transfers?.full_description || matched.transfers?.short_description)
+    : null
 
   // Antecedência mínima (America/Fortaleza): bloqueia datas E horários
   // anteriores a "agora + N horas". Padrão 4h; a rota pode definir a sua
@@ -618,6 +623,13 @@ export default function TransfersDesktop() {
                   <ArrowUpDown size={15} />
                 </button>
               </div>
+
+              {/* Descrição do trecho (rota, com fallback na categoria) */}
+              {matchedDesc && (
+                <p className="mt-3 border-t border-gray-100 pt-3 text-[13px] text-gray-600 leading-relaxed whitespace-pre-line">
+                  {matchedDesc}
+                </p>
+              )}
 
               {/* Data | Horário */}
               <div className="grid grid-cols-2 gap-3 mt-3">
