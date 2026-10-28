@@ -813,18 +813,27 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   })
 
-  const { data: daily = [], isLoading: l2 } = useQuery({
+  const { data: dailyResp, isLoading: l2 } = useQuery({
     queryKey: ['financial-daily-30'],
     queryFn:  () => api.getFinancialDaily({ days: 30 }),
   })
 
   if (l1 || l2) return <PageSpinner />
 
-  const chartData = daily.map((d) => ({
+  // /financial-daily passou a devolver { series, gateways } (ganho do Turiva por
+  // gateway). Somamos os gateways por dia para o total do dia. As guardas evitam
+  // o crash "o.map is not a function" na janela entre o deploy do front e o da
+  // API (quando a resposta ainda é o array antigo) e com a resposta nova.
+  const dailySeries   = Array.isArray(dailyResp?.series)   ? dailyResp.series
+                      : Array.isArray(dailyResp)           ? dailyResp : []
+  const dailyGateways = Array.isArray(dailyResp?.gateways) ? dailyResp.gateways : []
+  const chartData = dailySeries.map((d) => ({
     date: (() => {
       try { return format(parseISO(d.date), 'd MMM', { locale: ptBR }) } catch { return d.date }
     })(),
-    total: Number(d.total),
+    total: dailyGateways.length
+      ? dailyGateways.reduce((s, g) => s + (Number(d[g.key]) || 0), 0)
+      : (Number(d.total) || Number(d.ganho) || 0),
   }))
 
   return (
@@ -898,8 +907,8 @@ export default function Dashboard() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-300">Faturamento — últimos 30 dias</h2>
-            <span className="text-xs text-gray-600">Receita bruta</span>
+            <h2 className="text-sm font-semibold text-gray-300">Ganho do Turiva — últimos 30 dias</h2>
+            <span className="text-xs text-gray-600">O que fica para a plataforma</span>
           </div>
         </CardHeader>
         <CardBody>
@@ -916,7 +925,7 @@ export default function Dashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} tickFormatter={(v) => { const n = Number(v) || 0; return Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : `${Math.round(n)}` }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Area type="monotone" dataKey="total" stroke="#FF6A00" strokeWidth={2} fill="url(#gradBrand)" dot={false} activeDot={{ r: 4, fill: '#FF6A00' }} />
               </AreaChart>
