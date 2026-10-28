@@ -305,7 +305,7 @@ function TransferSheet({ route, onClose, onAdd }) {
   const { dragRef, sheetStyle, backdropStyle } = useSheetSwipe(onClose)
   if (!route) return null
   const exclusivo = route.transfers?.is_exclusive
-  const desc = route.transfers?.full_description || route.transfers?.short_description
+  const desc = route.description || route.transfers?.full_description || route.transfers?.short_description
   return createPortal(
     <>
       <div className="fixed inset-0 bg-black/45 z-[70]" style={backdropStyle} onClick={onClose} />

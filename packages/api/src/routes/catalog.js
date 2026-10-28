@@ -30,7 +30,7 @@ const ROUTE_COLS = [
   'transfer_id', 'origin_name', 'destination_name',
   'origin_latitude', 'origin_longitude', 'destination_latitude', 'destination_longitude',
   'default_price', 'extra_stop_price', 'night_fee', 'is_active', 'is_featured',
-  'cover_image_url',
+  'cover_image_url', 'description',
 ]
 
 // Colunas graváveis de transfers (serviço-pai)
@@ -685,8 +685,18 @@ router.post('/transfer-routes', requireAdmin, async (req, res, next) => {
   try {
     const body = pick(req.body, ROUTE_COLS);
     if (body.default_price != null) body.default_price = Number(body.default_price);
-    const { data, error } = await req.supabase
-      .from('transfer_routes').insert(body).select().single();
+    // Salva tolerando coluna ausente (ex.: `description` antes da migração 126):
+    // remove SÓ a coluna que o banco não conhece e tenta de novo.
+    let payload = { ...body };
+    let data, error;
+    for (let i = 0; i < 8; i++) {
+      ({ data, error } = await req.supabase
+        .from('transfer_routes').insert(payload).select().single());
+      if (!error) break;
+      const faltante = colunaFaltante(error);
+      if (faltante && faltante in payload) { delete payload[faltante]; continue; }
+      break;
+    }
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -696,8 +706,19 @@ router.put('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   try {
     const body = pick(req.body, ROUTE_COLS);
     if (body.default_price != null) body.default_price = Number(body.default_price);
-    const { data, error } = await req.supabase
-      .from('transfer_routes').update(body).eq('id', req.params.id).select().maybeSingle();
+    // Tolera coluna ausente (ex.: `description` antes da migração 126): tira SÓ
+    // a que falta e tenta de novo, para o save funcionar mesmo com a migração
+    // atrasada em relação ao deploy.
+    let payload = { ...body };
+    let data, error;
+    for (let i = 0; i < 8; i++) {
+      ({ data, error } = await req.supabase
+        .from('transfer_routes').update(payload).eq('id', req.params.id).select().maybeSingle());
+      if (!error) break;
+      const faltante = colunaFaltante(error);
+      if (faltante && faltante in payload) { delete payload[faltante]; continue; }
+      break;
+    }
     if (error) return res.status(400).json({ error: error.message });
     if (!data)  return res.status(404).json({ error: 'Rota não encontrada' });
     res.json(data);

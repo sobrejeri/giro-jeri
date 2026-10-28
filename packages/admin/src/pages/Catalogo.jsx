@@ -125,7 +125,7 @@ const TRANSFER_EMPTY = {
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '', region_ids: [],
 }
-const ROUTE_EMPTY   = { transfer_id: '', origin_name: '', destination_name: '', default_price: '', cover_image_url: '', is_active: true, is_featured: false }
+const ROUTE_EMPTY   = { transfer_id: '', origin_name: '', destination_name: '', default_price: '', cover_image_url: '', description: '', is_active: true, is_featured: false }
 // Categoria de PASSEIO — o equivalente ao que `transfers` faz nos translados:
 // agrupa e, marcada, vira carrossel próprio no app. Só o essencial para criar:
 // nome, descrição, ordem e as duas caixas.
@@ -1780,6 +1780,13 @@ export default function Catalogo() {
           <Input label="Destino" value={routeForm.destination_name || ''} onChange={(e) => setRouteForm({ ...routeForm, destination_name: e.target.value })} required />
           <Input label="Preço padrão (R$)" type="number" min={0} step={0.01}
             value={routeForm.default_price || ''} onChange={(e) => setRouteForm({ ...routeForm, default_price: e.target.value })} required />
+          <Textarea
+            label="Descrição da rota"
+            rows={3}
+            value={routeForm.description || ''}
+            onChange={(e) => setRouteForm({ ...routeForm, description: e.target.value })}
+            placeholder="Texto próprio deste trecho (opcional). Em branco, o app usa a descrição da categoria."
+          />
           <label className="flex items-start gap-2 cursor-pointer">
             <input
               type="checkbox"
