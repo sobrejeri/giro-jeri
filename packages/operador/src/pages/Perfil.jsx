@@ -6,6 +6,7 @@ import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Input, { Select } from '../components/ui/Input'
 import Button from '../components/ui/Button'
+import UserIdentity from '../components/UserIdentity'
 
 // ── Meu link de vendas (venda direta, sem fila) ────────────────
 // Reservas feitas por este link nascem atribuídas ao operador e já vão
@@ -601,12 +602,22 @@ export default function Perfil() {
 
   const currentPhoto = photoPreview || profile?.profile_photo_url
   const initials     = (form.full_name || profile?.full_name || 'O')[0].toUpperCase()
+  const isAdmin      = profile?.user_type === 'admin'
   const docMeta      = DOC_TYPES.find((d) => d.value === form.document_type) || DOC_TYPES[0]
   const isPJ         = form.document_type === 'cnpj'
   const kyc          = form.recipient_kyc || DEFAULT_KYC
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
+
+      {/* Cabeçalho de identidade — quando é admin, aparece com a logo do Turiva,
+          selo azul de verificado e "Administrador", para ser visto como
+          administrador da plataforma (e não um operador comum). */}
+      <Card>
+        <CardBody>
+          <UserIdentity name={profile?.full_name} userType={profile?.user_type} photo={currentPhoto} size={56} subtitle={profile?.email} />
+        </CardBody>
+      </Card>
 
       {/* Link de vendas direto */}
       <MeuLink slug={profile?.partner_slug} />
@@ -632,7 +643,11 @@ export default function Perfil() {
                   onClick={() => fileRef.current?.click()}
                   className="w-20 h-20 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center cursor-pointer ring-2 ring-white shadow-sm"
                 >
-                  {currentPhoto ? (
+                  {isAdmin ? (
+                    <div className="w-full h-full bg-black flex items-center justify-center">
+                      <span className="font-giro font-bold text-white text-2xl leading-none">T</span>
+                    </div>
+                  ) : currentPhoto ? (
                     <img src={currentPhoto} alt="Foto" className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-2xl font-bold text-brand">{initials}</span>

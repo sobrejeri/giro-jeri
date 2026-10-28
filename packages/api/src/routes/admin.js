@@ -2188,7 +2188,7 @@ router.get('/operator-performance', requireAdmin, async (req, res, next) => {
       .select(`
         operator_id, service_type, total_amount,
         status_commercial, status_operational,
-        operator:users!bookings_operator_id_fkey ( id, full_name )
+        operator:users!bookings_operator_id_fkey ( id, full_name, user_type, profile_photo_url )
       `)
       .not('operator_id', 'is', null)
       .neq('status_commercial', 'cancelled')
@@ -2207,6 +2207,8 @@ router.get('/operator-performance', requireAdmin, async (req, res, next) => {
         map.set(id, {
           operator_id: id,
           name:        b.operator?.full_name || '—',
+          user_type:   b.operator?.user_type || null,
+          photo:       b.operator?.profile_photo_url || null,
           revenue:     0, tours: 0, transfers: 0, total: 0, completed: 0,
         });
       }
@@ -3508,12 +3510,12 @@ router.get('/financial-bookings', requireAdmin, async (req, res, next) => {
       else if (r.entry_type === 'gateway_fee'         && r.direction === 'outflow') row.gateway  += amt;
     }
 
-    // Nome do operador: um SELECT por id, depois um mapa.
+    // Operador (nome, tipo e foto) num SELECT por id, depois um mapa.
     const opIds = [...new Set([...rows.values()].map((r) => r.operator_id).filter(Boolean))];
-    const nomeOp = new Map();
+    const opById = new Map();
     if (opIds.length) {
-      const { data: us } = await supabase.from('users').select('id, full_name').in('id', opIds);
-      for (const u of us || []) nomeOp.set(u.id, u.full_name);
+      const { data: us } = await supabase.from('users').select('id, full_name, user_type, profile_photo_url').in('id', opIds);
+      for (const u of us || []) opById.set(u.id, u);
     }
 
     // Afiliados por reserva (tabela `commissions`, canceladas fora). Reduz o
@@ -3536,17 +3538,22 @@ router.get('/financial-bookings', requireAdmin, async (req, res, next) => {
     const round2 = (v) => Math.round(v * 100) / 100;
     const METODO = { pix: 'PIX', credit_card: 'Crédito', debit_card: 'Débito' };
     const list = [...rows.values()]
-      .map((r) => ({
-        booking_id:      r.booking_id,
-        booking_code:    r.booking_code,
-        operador:        nomeOp.get(r.operator_id) || '—',
-        service_type:    r.service_type,
-        forma_pagamento: METODO[r.forma_pagamento] || r.forma_pagamento || '—',
-        data:            r.paid_at || r.created_at,
-        bruto:           round2(r.bruto),
-        comissao:        round2(r.comissao),
-        turiva:          round2(r.comissao - r.gateway - r.afiliado),
-      }))
+      .map((r) => {
+        const op = opById.get(r.operator_id);
+        return {
+          booking_id:         r.booking_id,
+          booking_code:       r.booking_code,
+          operador:           op?.full_name || '—',
+          operador_user_type: op?.user_type || null,
+          operador_photo:     op?.profile_photo_url || null,
+          service_type:       r.service_type,
+          forma_pagamento:    METODO[r.forma_pagamento] || r.forma_pagamento || '—',
+          data:               r.paid_at || r.created_at,
+          bruto:              round2(r.bruto),
+          comissao:           round2(r.comissao),
+          turiva:             round2(r.comissao - r.gateway - r.afiliado),
+        };
+      })
       .sort((a, b) => b.turiva - a.turiva || b.bruto - a.bruto);
 
     res.json(list);

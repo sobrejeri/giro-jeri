@@ -16,6 +16,7 @@ import {
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import UserIdentity from '../components/UserIdentity'
 import Modal from '../components/ui/Modal'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -688,8 +689,8 @@ function RankingOperadores() {
                     <td className="py-2.5 pl-1">
                       <span className={`w-5 h-5 inline-flex items-center justify-center rounded-full text-[11px] font-bold ${RANK[i] || 'bg-gray-800 text-gray-500'}`}>{i + 1}</span>
                     </td>
-                    <td className="py-2.5 pr-2 min-w-[140px]">
-                      <p className="font-semibold text-gray-200 truncate max-w-[170px]">{o.name}</p>
+                    <td className="py-2.5 pr-2 min-w-[180px]">
+                      <UserIdentity name={o.name} userType={o.user_type} photo={o.photo} size={30} nameClass="text-gray-200" />
                       <div className="mt-1 h-1 rounded-full bg-gray-800 overflow-hidden w-28">
                         <div className="h-full bg-gradient-to-r from-brand to-amber-400" style={{ width: `${Math.max(3, ((Number(o[sortBy]) || 0) / maxVal) * 100)}%` }} />
                       </div>

@@ -9,6 +9,7 @@ import { TrendingUp, DollarSign, CreditCard, Users } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import UserIdentity from '../components/UserIdentity'
 
 const fmt = (v) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -295,7 +296,7 @@ export default function Financeiro() {
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <span className="inline-block px-2 py-0.5 rounded-md bg-gray-800 text-gray-300 text-xs">{b.forma_pagamento}</span>
                       </td>
-                      <td className="py-2.5 px-3 text-gray-200">{b.operador}</td>
+                      <td className="py-2.5 px-3"><UserIdentity name={b.operador} userType={b.operador_user_type} photo={b.operador_photo} size={26} nameClass="text-gray-200" /></td>
                       <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{fmt(b.bruto)}</td>
                       <td className="py-2.5 px-3 text-right text-brand tabular-nums">{fmt(b.comissao)}</td>
                       <td className="py-2.5 pl-3 text-right text-green-400 font-semibold tabular-nums">{fmt(b.turiva)}</td>

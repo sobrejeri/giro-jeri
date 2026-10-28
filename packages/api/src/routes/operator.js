@@ -70,7 +70,7 @@ function mapSituacaoRecebedor(status) {
 
 const PROFILE_FIELDS = `
   id, full_name, username, email, phone, document_type, document_number, birth_date,
-  profile_photo_url, address, cep, partner_slug,
+  user_type, profile_photo_url, address, cep, partner_slug,
   pix_key_type, pix_key,
   bank_name, bank_agency, bank_account_number, bank_account_type, bank_document,
   gateway_recipient_id
@@ -2276,10 +2276,11 @@ router.get('/financial', async (req, res, next) => {
 });
 
 // ── GET /api/operator/financial-daily ───────────────────
-// Série diária do faturamento bruto QUEBRADA POR GATEWAY (uma série por gateway),
-// para separar os recebimentos por gateway no gráfico. Mesma lógica do painel do
-// admin, filtrada ao operador: reservas DESTE operador + o estacionamento dos
-// lotes dele. → { series: [{ date, <gateway>: valor, … }], gateways: [{ key, label, total }] }.
+// Série diária do FATURAMENTO LÍQUIDO do operador (o que ele recebe na conta)
+// QUEBRADA POR GATEWAY — uma série por gateway, para separar os recebimentos.
+// Líquido = payout_operator (bruto − taxa de gateway − comissão da plataforma).
+// Filtrada ao operador: reservas DESTE operador + o estacionamento dos lotes dele.
+// → { series: [{ date, <gateway>: valor, … }], gateways: [{ key, label, total }] }.
 router.get('/financial-daily', async (req, res, next) => {
   try {
     const days  = Number(req.query.days || 30);
@@ -2292,8 +2293,8 @@ router.get('/financial-daily', async (req, res, next) => {
       .from('financial_ledger')
       .select('amount, effective_date, payments ( gateway_name )')
       .in('booking_id', bookingIds)
-      .eq('entry_type', 'booking_gross')
-      .eq('direction', 'inflow')
+      .eq('entry_type', 'payout_operator')
+      .eq('direction', 'outflow')
       .gte('effective_date', since)
       .order('effective_date');
     if (error) throw error;
@@ -2306,7 +2307,7 @@ router.get('/financial-daily', async (req, res, next) => {
       return s;
     };
 
-    // byDay[dia][gateway] = faturamento bruto naquele dia, naquele gateway.
+    // byDay[dia][gateway] = líquido do operador naquele dia, naquele gateway.
     const byDay = {};
     const gwTotal = {};
     const add = (d, gw, v) => {
@@ -2328,7 +2329,8 @@ router.get('/financial-daily', async (req, res, next) => {
         const { parkingDiarioPorGateway } = await import('../services/parking/financial.js');
         const pk = await parkingDiarioPorGateway({ since, lotIds });
         for (const [d, porGw] of Object.entries(pk)) {
-          for (const [g, v] of Object.entries(porGw)) add(d, canonGw(g), v.brutoC / 100);
+          // Líquido do operador no estacionamento = bruto − comissão da plataforma.
+          for (const [g, v] of Object.entries(porGw)) add(d, canonGw(g), (v.brutoC - v.comissaoC) / 100);
         }
       }
     } catch (e) {

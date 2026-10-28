@@ -202,12 +202,12 @@ export default function Financeiro() {
         </Card>
       )}
 
-      {/* Gráfico: faturamento bruto por dia, UMA LINHA POR GATEWAY, para separar
-          os recebimentos por gateway (Pagar.me verde, Mercado Pago azul…). */}
+      {/* Gráfico: faturamento LÍQUIDO (o que o operador recebe) por dia, UMA LINHA
+          POR GATEWAY, para separar os recebimentos (Pagar.me verde, MP azul…). */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">Faturamento por dia · por gateway</h2>
+            <h2 className="text-sm font-semibold text-gray-700">Faturamento líquido por dia · por gateway</h2>
             {summary?.margem_percent !== undefined && (
               <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
                 Margem {summary.margem_percent}%
@@ -244,7 +244,7 @@ export default function Financeiro() {
           )}
           {gateways.length > 0 && (
             <p className="mt-3 text-[11px] text-gray-400">
-              Uma linha por gateway de recebimento (passeios + o seu estacionamento). É o faturamento bruto que entra por cada meio.
+              Uma linha por gateway de recebimento (passeios + o seu estacionamento). É o faturamento líquido — o que você recebe, já sem a taxa de gateway e a comissão da plataforma — por cada meio.
             </p>
           )}
         </CardBody>
