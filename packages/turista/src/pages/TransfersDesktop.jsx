@@ -44,6 +44,9 @@ function dayLabel(iso, t) {
 // título, subtítulo e preço no corpo branco embaixo (não sobre a foto).
 function RouteCard({ route, bg, active, onSelect }) {
   const { t } = useTranslation()
+  // Prévia da descrição no card, igual aos passeios: a da ROTA quando existe,
+  // senão a da categoria.
+  const desc = route.description || route.transfers?.full_description || route.transfers?.short_description
   return (
     <button
       onClick={onSelect}
@@ -76,6 +79,9 @@ function RouteCard({ route, bg, active, onSelect }) {
         <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
           <Car size={11} /> {t('transfersPg.privateTransfer', 'Transfer privativo')}
         </p>
+        {desc && (
+          <p className="text-[12px] text-gray-500 leading-snug mt-1.5 line-clamp-2">{desc}</p>
+        )}
         <div className="flex items-end justify-between mt-3 pt-3 border-t border-gray-50">
           <div>
             <p className="text-[10px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>

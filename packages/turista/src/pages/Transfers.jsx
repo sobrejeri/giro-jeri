@@ -212,6 +212,9 @@ function FavToggle({ isFav, onFav }) {
 function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggleCart, isFav, onFav }) {
   const { t } = useTranslation()
   const img = route.cover_image_url
+  // Prévia da descrição no card, igual aos passeios: a da ROTA quando existe,
+  // senão a da categoria.
+  const desc = route.description || route.transfers?.full_description || route.transfers?.short_description
   // Mesmo visual dos cartões de passeio: capa 4:3, coração e + sobre a foto, e
   // título/preço embaixo (em vez do texto sobre a imagem).
   return (
@@ -237,6 +240,9 @@ function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggl
         <div className="flex items-center gap-1 mt-1.5 text-[11.5px] text-gray-600">
           <Users size={11} className="text-brand" /> {t('transfersPg.upTo4')}
         </div>
+        {desc && (
+          <p className="text-[11.5px] text-gray-500 leading-snug mt-1.5 line-clamp-2">{desc}</p>
+        )}
         <div className="mt-auto pt-2.5 border-t border-gray-100">
           <p className="h-[12px] text-[10px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
           <p className="whitespace-nowrap text-[16px] font-extrabold text-brand leading-none mt-1">
@@ -257,6 +263,7 @@ function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggl
  */
 function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, onFav }) {
   const img = route.cover_image_url
+  const desc = route.description || route.transfers?.full_description || route.transfers?.short_description
   return (
     <div
       onClick={onSelect}
@@ -284,6 +291,9 @@ function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, o
         <div className="flex items-center gap-1 mt-1.5 text-[11.5px] text-gray-600">
           <Plane size={11} className="text-brand" /> até 3 pax
         </div>
+        {desc && (
+          <p className="text-[11.5px] text-gray-500 leading-snug mt-1.5 line-clamp-2">{desc}</p>
+        )}
         <div className="mt-auto pt-2.5 border-t border-gray-100">
           <p className="h-[12px] text-[10px] text-gray-400 leading-none">por voo</p>
           <p className="whitespace-nowrap text-[16px] font-extrabold text-brand leading-none mt-1">
