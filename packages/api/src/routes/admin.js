@@ -3355,51 +3355,157 @@ router.get('/financial-daily', requireAdmin, async (req, res, next) => {
     const { days = 30 } = req.query;
     const since = dayjs().subtract(Number(days), 'day').format('YYYY-MM-DD');
 
-    // Lançamentos antigos podem ter effective_date NULL — nesse caso vale
-    // a data de criação (senão o gráfico ignora a linha e fica "Sem dados").
-    // Bruto E líquido, os dois do razão. O líquido vinha sendo calculado na
-    // TELA como `bruto * 0,93` — 7% chutados, enquanto a comissão real é
-    // configurável por operador e a taxa do gateway varia por meio de
-    // pagamento. `booking_net` já é o valor certo, gravado no fechamento.
+    // GANHO DO TURIVA por dia — a fatia que fica para a plataforma, dia a dia:
+    //   comissão da plataforma (passeio) + comissão do estacionamento
+    //   − taxa de gateway − comissão de afiliados.
+    // É o mesmo `resultado_plataforma` do /financial, só que quebrado por dia. O
+    // gráfico mostra SÓ o que o Turiva retém — não o faturamento bruto (que
+    // confundia: a maior parte é repasse ao operador, não ganho nosso).
+    // Lançamentos antigos podem ter effective_date NULL — nesse caso vale a data
+    // de criação (senão o gráfico ignora a linha e fica "Sem dados").
     const { data, error } = await supabase
       .from('financial_ledger')
       .select('amount, entry_type, effective_date, created_at')
-      .in('entry_type', ['booking_gross', 'booking_net'])
-      .eq('direction', 'inflow')
+      .in('entry_type', ['commission_platform', 'gateway_fee'])
+      .eq('direction', 'outflow')
       .or(`effective_date.gte.${since},and(effective_date.is.null,created_at.gte.${since})`)
       .order('created_at');
 
     if (error) throw error;
 
-    // Agrupa por dia
+    // byDay[dia] = ganho acumulado do Turiva naquele dia.
     const byDay = {};
+    const add = (d, v) => { if (d) byDay[d] = (byDay[d] || 0) + v; };
+
     for (const row of data || []) {
       const d = (row.effective_date || row.created_at || '').slice(0, 10);
-      if (!d) continue;
-      if (!byDay[d]) byDay[d] = { total: 0, net: null };
-      if (row.entry_type === 'booking_gross') byDay[d].total += Number(row.amount);
-      else byDay[d].net = (byDay[d].net || 0) + Number(row.amount);
+      const amt = Number(row.amount) || 0;
+      // Comissão SOMA (entra para o Turiva); taxa de gateway SUBTRAI.
+      if (row.entry_type === 'commission_platform') add(d, amt);
+      else if (row.entry_type === 'gateway_fee')     add(d, -amt);
     }
 
-    // Estacionamento: soma a receita de vaga (total) e a comissão da plataforma
-    // (net) por dia. Best-effort — se falhar, o gráfico segue sem ele.
+    // Comissão de afiliados (tabela `commissions`, fora do razão): SUBTRAI do
+    // ganho. Canceladas ficam de fora — reserva cancelada não gera repasse.
+    try {
+      const { data: afRows } = await supabase
+        .from('commissions')
+        .select('commission_amount, created_at')
+        .not('affiliate_id', 'is', null)
+        .neq('payout_status', 'cancelled')
+        .gte('created_at', since);
+      for (const r of afRows || []) {
+        add((r.created_at || '').slice(0, 10), -(Number(r.commission_amount) || 0));
+      }
+    } catch (e) {
+      console.error('[financial-daily] afiliados falhou (ignorado):', e?.message);
+    }
+
+    // Estacionamento: a comissão da plataforma (comissaoC) entra no ganho por
+    // dia. Best-effort — se falhar, o gráfico segue sem ele.
     try {
       const { parkingFaturamentoDiario } = await import('../services/parking/financial.js');
       const pk = await parkingFaturamentoDiario({ since });
-      for (const [d, v] of Object.entries(pk)) {
-        if (!byDay[d]) byDay[d] = { total: 0, net: null };
-        byDay[d].total += v.brutoC / 100;
-        byDay[d].net = (byDay[d].net || 0) + v.comissaoC / 100;
-      }
+      for (const [d, v] of Object.entries(pk)) add(d, v.comissaoC / 100);
     } catch (e) {
       console.error('[financial-daily] estacionamento falhou (ignorado):', e?.message);
     }
 
     const series = Object.entries(byDay)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, v]) => ({ date, total: v.total, net: v.net }));
+      .map(([date, ganho]) => ({ date, ganho: Math.round(ganho * 100) / 100 }));
 
     res.json(series);
+  } catch (err) { next(err); }
+});
+
+// ── GET /api/admin/financial-bookings ──────────────────
+// Planilha por RESERVA: cada linha é uma reserva que passou pela plataforma no
+// período, com o bruto pago pelo cliente, a comissão e o que FICA PARA O TURIVA
+// (comissão − taxa de gateway − afiliados daquela reserva). É o detalhamento que
+// fecha com o "Ganho do Turiva". O estacionamento NÃO entra aqui — não é uma
+// reserva com operador —, só no ganho total do topo.
+router.get('/financial-bookings', requireAdmin, async (req, res, next) => {
+  try {
+    const { period = 'month' } = req.query;
+    const starts = {
+      day:   dayjs().startOf('day').toISOString(),
+      week:  dayjs().startOf('week').toISOString(),
+      month: dayjs().startOf('month').toISOString(),
+      year:  dayjs().startOf('year').toISOString(),
+    };
+    const start = starts[period] || starts.month;
+
+    // Embed simples de bookings (comprovadamente ok). O nome do operador vem
+    // num SELECT à parte para evitar embed aninhado users←bookings←ledger.
+    const { data, error } = await supabase
+      .from('financial_ledger')
+      .select('booking_id, entry_type, amount, direction, created_at, bookings ( booking_code, operator_id, service_type, created_at )')
+      .in('entry_type', ['booking_gross', 'commission_platform', 'gateway_fee'])
+      .gte('created_at', start)
+      .limit(20000);
+    if (error) throw error;
+
+    const rows = new Map(); // booking_id → acumulado da reserva
+    for (const r of data || []) {
+      const bid = r.booking_id;
+      if (!bid) continue;
+      if (!rows.has(bid)) {
+        rows.set(bid, {
+          booking_id:   bid,
+          booking_code: r.bookings?.booking_code || '—',
+          operator_id:  r.bookings?.operator_id || null,
+          service_type: r.bookings?.service_type || null,
+          created_at:   r.bookings?.created_at || r.created_at,
+          bruto: 0, comissao: 0, gateway: 0, afiliado: 0,
+        });
+      }
+      const row = rows.get(bid);
+      const amt = Number(r.amount) || 0;
+      if (r.entry_type === 'booking_gross'            && r.direction === 'inflow')  row.bruto    += amt;
+      else if (r.entry_type === 'commission_platform' && r.direction === 'outflow') row.comissao += amt;
+      else if (r.entry_type === 'gateway_fee'         && r.direction === 'outflow') row.gateway  += amt;
+    }
+
+    // Nome do operador: um SELECT por id, depois um mapa.
+    const opIds = [...new Set([...rows.values()].map((r) => r.operator_id).filter(Boolean))];
+    const nomeOp = new Map();
+    if (opIds.length) {
+      const { data: us } = await supabase.from('users').select('id, full_name').in('id', opIds);
+      for (const u of us || []) nomeOp.set(u.id, u.full_name);
+    }
+
+    // Afiliados por reserva (tabela `commissions`, canceladas fora). Reduz o
+    // que fica para o Turiva naquela reserva.
+    try {
+      const { data: afRows } = await supabase
+        .from('commissions')
+        .select('booking_id, commission_amount')
+        .not('affiliate_id', 'is', null)
+        .neq('payout_status', 'cancelled')
+        .gte('created_at', start);
+      for (const a of afRows || []) {
+        const row = rows.get(a.booking_id);
+        if (row) row.afiliado += Number(a.commission_amount) || 0;
+      }
+    } catch (e) {
+      console.error('[financial-bookings] afiliados falhou (ignorado):', e?.message);
+    }
+
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const list = [...rows.values()]
+      .map((r) => ({
+        booking_id:   r.booking_id,
+        booking_code: r.booking_code,
+        operador:     nomeOp.get(r.operator_id) || '—',
+        service_type: r.service_type,
+        bruto:        round2(r.bruto),
+        comissao:     round2(r.comissao),
+        turiva:       round2(r.comissao - r.gateway - r.afiliado),
+      }))
+      .sort((a, b) => b.turiva - a.turiva || b.bruto - a.bruto);
+
+    res.json(list);
   } catch (err) { next(err); }
 });
 

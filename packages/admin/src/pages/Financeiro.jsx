@@ -2,11 +2,10 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Legend,
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { TrendingUp, DollarSign, CreditCard, AlertCircle, ArrowDownLeft } from 'lucide-react'
+import { TrendingUp, DollarSign, CreditCard, Users } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
@@ -105,19 +104,27 @@ export default function Financeiro() {
     queryFn:  () => api.getFinancialDaily({ days: DAYS_BY_PERIOD[period] }),
   })
 
+  // Planilha por reserva (bruto / comissão / o que fica para o Turiva).
+  const { data: bookings = [], isLoading: l3 } = useQuery({
+    queryKey: ['financial-bookings', period],
+    queryFn:  () => api.getFinancialBookings({ period }),
+  })
+  const totBruto    = bookings.reduce((s, b) => s + Number(b.bruto    || 0), 0)
+  const totComissao = bookings.reduce((s, b) => s + Number(b.comissao || 0), 0)
+  const totTuriva   = bookings.reduce((s, b) => s + Number(b.turiva   || 0), 0)
+
+  // Só o GANHO DO TURIVA por dia (a fatia da plataforma). O endpoint já entrega
+  // comissão − gateway − afiliados consolidado em `ganho`; a tela não recalcula
+  // nada. Antes plotava bruto e "líquido" — dinheiro que em sua maior parte é do
+  // OPERADOR, não do Turiva — e isso confundia quem só quer ver o que fica aqui.
   const chartData = daily.map((d) => ({
     date: (() => {
       try { return format(parseISO(d.date), 'd MMM', { locale: ptBR }) } catch { return d.date }
     })(),
-    bruto: Number(d.total),
-    // O líquido vem do razão (`booking_net`). Era `bruto * 0,93` calculado
-    // aqui — 7% chutados, enquanto a comissão real é configurável por
-    // operador e a taxa do gateway varia. Sem lançamento líquido no dia, a
-    // série fica sem ponto em vez de inventar um.
-    liquido: d.net == null ? null : Number(d.net),
+    ganho: Number(d.ganho),
   }))
 
-  if (l1 || l2) return <PageSpinner />
+  if (l1 || l2 || l3) return <PageSpinner />
 
   return (
     <div className="space-y-5">
@@ -136,8 +143,10 @@ export default function Financeiro() {
         ))}
       </div>
 
-      {/* HERÓI: o que FICA para a plataforma — a métrica que mais importa.
-          O bruto e as deduções viram contexto, nos cards menores abaixo. */}
+      {/* HERÓI: o GANHO DO TURIVA — a fatia que fica para a plataforma, já sem a
+          taxa de gateway e os afiliados. É a única métrica em destaque; o resto
+          da tela só explica como se chega nela. Bruto e repasse ao operador
+          saíram de vez: não são dinheiro do Turiva e só confundiam a leitura. */}
       <Card className="p-5 border border-green-500/20 bg-green-500/5">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-3">
@@ -145,14 +154,14 @@ export default function Financeiro() {
               <TrendingUp size={20} />
             </div>
             <div>
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Fica para a plataforma</p>
+              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Ganho do Turiva</p>
               <p className="text-[32px] leading-none font-extrabold text-green-400 mt-1.5">
                 {summary?.dados_incompletos ? '—' : fmt(summary?.resultado_plataforma)}
               </p>
               <p className="text-[12px] text-gray-500 mt-1.5">
                 {summary?.dados_incompletos
-                  ? 'Período anterior ao registro de comissões — resultado indisponível.'
-                  : `Resultado líquido da plataforma, de ${fmt(summary?.bruto)} recebidos.`}
+                  ? 'Período anterior ao registro de comissões — ganho indisponível.'
+                  : 'Sua fatia: a comissão já descontadas a taxa de gateway e a comissão de afiliados.'}
               </p>
             </div>
           </div>
@@ -164,65 +173,134 @@ export default function Financeiro() {
         </div>
       </Card>
 
-      {/* Métricas de apoio (contexto do resultado acima) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={DollarSign}    label="Bruto recebido"     value={fmt(summary?.bruto)}         color="text-brand"      />
-        <KpiCard icon={ArrowDownLeft} label="Repasse operadores" value={fmt(summary?.repasses)}      color="text-sky-400"    />
-        <KpiCard icon={CreditCard}    label="Taxas gateway"      value={fmt(summary?.taxas)}         color="text-orange-400" />
-        <KpiCard icon={AlertCircle}   label="Não creditado"      value={fmt(summary?.nao_creditado)} color="text-amber-400"  />
+      {/* Como se chega no ganho: a comissão (entra) menos as duas deduções que
+          saem. São exatamente as linhas do "Detalhamento" abaixo, em destaque. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard icon={DollarSign} label="Comissão (sua fatia)" value={fmt(summary?.comissoes_plataforma)} color="text-brand"      />
+        <KpiCard icon={CreditCard} label="(-) Taxa de gateway"  value={fmt(summary?.taxas)}                color="text-orange-400" />
+        <KpiCard icon={Users}      label="(-) Afiliados"        value={fmt(summary?.comissoes_afiliados)}  color="text-sky-400"    />
       </div>
 
-      {/* Receita por gateway (MP vs Pagar.me) */}
-      {Array.isArray(summary?.by_gateway) && summary.by_gateway.length > 0 && (
-        <Card>
-          <CardHeader><h2 className="text-sm font-semibold text-gray-300">Receita por gateway</h2></CardHeader>
-          <CardBody>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {summary.by_gateway.map((g) => (
-                <div key={g.gateway} className="rounded-xl border border-gray-700/50 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-gray-200">{g.label}</span>
-                    <span className="text-[11px] text-gray-500 uppercase tracking-wide">{g.gateway}</span>
-                  </div>
-                  <dl className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Bruto</span>
-                      <span className="text-gray-100 font-semibold">{fmt(g.bruto)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">(-) Taxa gateway</span>
-                      <span className="text-red-400">- {fmt(g.taxas)}</span>
-                    </div>
-                    <div className="flex justify-between border-t border-gray-700/50 pt-2">
-                      <span className="text-gray-400">Líquido</span>
-                      <span className="text-green-400 font-bold">{fmt(g.liquido)}</span>
-                    </div>
-                  </dl>
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 text-[11px] text-gray-500">
-              Inclui passeios e estacionamento. Taxa de gateway estimada pela tarifa de tabela de cada método (PIX, débito, crédito); o estacionamento não tem taxa de gateway no razão.
-            </p>
-            {/* Gráfico por gateway: bruto × líquido (após taxa) de cada meio. */}
-            <div className="mt-4 h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={summary.by_gateway} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={fmtEixo} width={64} />
-                  <Tooltip formatter={(v, n) => [fmt(v), n]} contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 12, fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="bruto"   name="Bruto"   fill="#FF6A00" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="liquido" name="Líquido" fill="#34d399" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardBody>
-        </Card>
-      )}
+      {/* Gráfico: o ganho do Turiva dia a dia (o que o usuário pediu para ver). */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-300">Ganho do Turiva por dia</h2>
+            {summary?.margem_percent != null && (
+              <span className="text-xs font-medium text-green-400 bg-green-900/30 px-2 py-1 rounded-full">
+                Margem {summary.margem_percent}%
+              </span>
+            )}
+          </div>
+        </CardHeader>
+        <CardBody>
+          {chartData.length === 0 ? (
+            <div className="h-52 flex items-center justify-center text-gray-600 text-sm">Sem dados</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gGanho" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#34d399" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#34d399" stopOpacity={0}    />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false}
+                  tickFormatter={fmtEixo} />
+                <Tooltip content={<TooltipDark />} />
+                <Area type="monotone" dataKey="ganho" name="Ganho do Turiva" stroke="#34d399" strokeWidth={2} fill="url(#gGanho)" dot={false} activeDot={{ r: 4, fill: '#34d399' }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </CardBody>
+      </Card>
 
-      {/* Conciliação da taxa real da Pagar.me (payables) */}
+      {/* Planilha por RESERVA — o detalhe que o usuário pediu, no modelo do
+          ranking do dashboard: cada reserva com bruto, comissão e o que fica
+          para o Turiva, fácil de acompanhar linha a linha. */}
+      <Card>
+        <CardHeader>
+          <div>
+            <h2 className="text-sm font-semibold text-gray-300">Reservas — detalhamento</h2>
+            <p className="text-[12px] text-gray-500 mt-0.5">Cada reserva do período: do bruto pago pelo cliente ao que fica para o Turiva.</p>
+          </div>
+        </CardHeader>
+        <CardBody>
+          {bookings.length === 0 ? (
+            <div className="h-24 flex items-center justify-center text-gray-600 text-sm">Nenhuma reserva no período</div>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full text-sm min-w-[520px]">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-700/50">
+                    <th className="text-left font-medium py-2 pr-3">Reserva</th>
+                    <th className="text-left font-medium py-2 px-3">Operador</th>
+                    <th className="text-right font-medium py-2 px-3">Bruto</th>
+                    <th className="text-right font-medium py-2 px-3">Comissão</th>
+                    <th className="text-right font-medium py-2 pl-3">Turiva</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookings.map((b) => (
+                    <tr key={b.booking_id} className="border-b border-gray-800 last:border-0">
+                      <td className="py-2.5 pr-3 font-mono text-xs text-gray-400 whitespace-nowrap">{b.booking_code}</td>
+                      <td className="py-2.5 px-3 text-gray-200">{b.operador}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{fmt(b.bruto)}</td>
+                      <td className="py-2.5 px-3 text-right text-brand tabular-nums">{fmt(b.comissao)}</td>
+                      <td className="py-2.5 pl-3 text-right text-green-400 font-semibold tabular-nums">{fmt(b.turiva)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-700 font-bold">
+                    <td className="py-2.5 pr-3 text-gray-400" colSpan={2}>
+                      Total · {bookings.length} reserva{bookings.length !== 1 ? 's' : ''}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-gray-200 tabular-nums">{fmt(totBruto)}</td>
+                    <td className="py-2.5 px-3 text-right text-brand tabular-nums">{fmt(totComissao)}</td>
+                    <td className="py-2.5 pl-3 text-right text-green-400 tabular-nums">{fmt(totTuriva)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+          <p className="mt-3 text-[11px] text-gray-600">
+            "Turiva" = comissão da reserva menos a taxa de gateway e os afiliados dela. O estacionamento entra no ganho total do topo, mas não aparece aqui por não ser uma reserva com operador.
+          </p>
+        </CardBody>
+      </Card>
+
+      {/* Detalhamento = o P&L do Turiva: comissão − gateway − afiliados = ganho.
+          Só dinheiro do Turiva; o repasse ao operador NÃO entra nesta conta. */}
+      <Card>
+        <CardHeader><h2 className="text-sm font-semibold text-gray-300">Como se chega no ganho do Turiva</h2></CardHeader>
+        <CardBody>
+          <dl className="space-y-3">
+            {[
+              { label: 'Comissão (sua fatia)',      value: summary?.comissoes_plataforma,            cls: 'text-gray-100 font-bold' },
+              { label: '(-) Taxas de gateway',      value: `- ${fmt(summary?.taxas)}`,               cls: 'text-red-400'  },
+              { label: '(-) Comissão de afiliados', value: `- ${fmt(summary?.comissoes_afiliados)}`, cls: 'text-red-400'  },
+              { label: '= Ganho do Turiva',
+                value: summary?.dados_incompletos ? '—' : summary?.resultado_plataforma,
+                cls: 'text-green-400 font-bold text-base' },
+            ].map((r) => (
+              <div key={r.label} className="flex justify-between text-sm border-b border-gray-700/50 pb-3 last:border-0 last:pb-0">
+                <span className="text-gray-500">{r.label}</span>
+                <span className={r.cls}>{typeof r.value === 'number' ? fmt(r.value) : r.value}</span>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-3 text-[11px] text-gray-600">
+            O faturamento bruto e o repasse aos operadores ficam fora: não são receita do Turiva. Inclui passeios e a comissão do estacionamento.
+          </p>
+        </CardBody>
+      </Card>
+
+      {/* Ferramenta de manutenção: concilia a taxa real da Pagar.me (payables)
+          contra o razão — mexe na "Taxa de gateway" e, logo, no ganho. Fica no
+          rodapé porque é operação pontual, não um número de leitura diária. */}
       <Card>
         <CardHeader><h2 className="text-sm font-semibold text-gray-300">Conciliar taxa real — Pagar.me</h2></CardHeader>
         <CardBody>
@@ -277,93 +355,6 @@ export default function Financeiro() {
           )}
         </CardBody>
       </Card>
-
-      {/* Gráfico área */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-300">Faturamento</h2>
-            {summary?.margem_percent != null && (
-              <span className="text-xs font-medium text-green-400 bg-green-900/30 px-2 py-1 rounded-full">
-                Margem {summary.margem_percent}%
-              </span>
-            )}
-          </div>
-        </CardHeader>
-        <CardBody>
-          {chartData.length === 0 ? (
-            <div className="h-52 flex items-center justify-center text-gray-600 text-sm">Sem dados</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gBruto" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#FF6A00" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#FF6A00" stopOpacity={0}   />
-                  </linearGradient>
-                  <linearGradient id="gLiquido" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#34d399" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#34d399" stopOpacity={0}    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false}
-                  tickFormatter={fmtEixo} />
-                <Tooltip content={<TooltipDark />} />
-                <Area type="monotone" dataKey="bruto"   name="Bruto"   stroke="#FF6A00" strokeWidth={2} fill="url(#gBruto)"   dot={false} />
-                <Area type="monotone" dataKey="liquido" name="Líquido" stroke="#34d399" strokeWidth={2} fill="url(#gLiquido)" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </CardBody>
-      </Card>
-
-      {/* Breakdown detalhado */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader><h2 className="text-sm font-semibold text-gray-300">Detalhamento</h2></CardHeader>
-          <CardBody>
-            <dl className="space-y-3">
-              {[
-                { label: 'Receita bruta',              value: summary?.bruto,                           cls: 'text-gray-100 font-bold' },
-                { label: '(-) Repasse aos operadores', value: `- ${fmt(summary?.repasses)}`,            cls: 'text-red-400'  },
-                { label: '(-) Taxas de gateway',       value: `- ${fmt(summary?.taxas)}`,               cls: 'text-red-400'  },
-                { label: '(-) Comissão de afiliados',  value: `- ${fmt(summary?.comissoes_afiliados)}`, cls: 'text-red-400'  },
-                { label: '= Fica para a plataforma',
-                  value: summary?.dados_incompletos ? '—' : summary?.resultado_plataforma,
-                  cls: 'text-green-400 font-bold text-base' },
-              ].map((r) => (
-                <div key={r.label} className="flex justify-between text-sm border-b border-gray-700/50 pb-3 last:border-0 last:pb-0">
-                  <span className="text-gray-500">{r.label}</span>
-                  <span className={r.cls}>{typeof r.value === 'number' ? fmt(r.value) : r.value}</span>
-                </div>
-              ))}
-            </dl>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader><h2 className="text-sm font-semibold text-gray-300">Composição</h2></CardHeader>
-          <CardBody>
-            {chartData.length === 0 ? (
-              <div className="h-40 flex items-center justify-center text-gray-600 text-sm">Sem dados</div>
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={chartData.slice(-14)} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#4b5563' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: '#4b5563' }} axisLine={false} tickLine={false}
-                    tickFormatter={fmtEixo} />
-                  <Tooltip content={<TooltipDark />} />
-                  <Bar dataKey="bruto"   name="Bruto"   fill="#FF6A00" opacity={0.8} radius={[3,3,0,0]} />
-                  <Bar dataKey="liquido" name="Líquido" fill="#34d399" opacity={0.7} radius={[3,3,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardBody>
-        </Card>
-      </div>
     </div>
   )
 }
