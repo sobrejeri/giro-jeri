@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -20,6 +20,24 @@ const fmtEixo = (v) => {
   if (a >= 1e6) return `R$ ${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M`
   if (a >= 1e3) return `R$ ${(n / 1e3).toFixed(1).replace(/\.0$/, '')}k`
   return `R$ ${Math.round(n)}`
+}
+
+// Cores por gateway (pedido do negócio: Pagar.me VERDE, Mercado Pago AZUL).
+// Chaves canônicas iguais às do backend (/financial-daily → gateways[].key).
+const GW_META = {
+  pagarme:      { label: 'Pagar.me',     color: '#34d399' }, // verde
+  mercado_pago: { label: 'Mercado Pago', color: '#38bdf8' }, // azul
+  manual:       { label: 'Manual',       color: '#a78bfa' }, // roxo
+  outros:       { label: 'Outros',       color: '#fbbf24' }, // âmbar
+}
+const GW_FALLBACK = ['#f472b6', '#22d3ee', '#a3e635', '#fb923c'] // extras p/ gateways novos
+const gwColor = (key, i = 0) => GW_META[key]?.color || GW_FALLBACK[i % GW_FALLBACK.length]
+const gwLabel = (key, fallback) => GW_META[key]?.label || fallback || key
+
+// Data curta (dd/MM) para a planilha de reservas. ISO vazio → "—".
+const fmtData = (iso) => {
+  if (!iso) return '—'
+  try { return format(parseISO(iso), 'dd/MM', { locale: ptBR }) } catch { return '—' }
 }
 
 const PERIODS = [
@@ -50,14 +68,23 @@ function KpiCard({ icon: Icon, label, value, subValue, subLabel, color = 'text-g
 
 const TooltipDark = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
+  // Esconde as séries zeradas do dia (gateway sem recebimento) para não poluir;
+  // com mais de uma série, mostra o total do dia embaixo.
+  const shown = payload.filter((p) => Number(p.value))
+  const total = payload.reduce((s, p) => s + (Number(p.value) || 0), 0)
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-xl px-4 py-3 text-sm">
       <p className="text-gray-400 mb-1">{label}</p>
-      {payload.map((p) => (
+      {(shown.length ? shown : payload).map((p) => (
         <p key={p.name} style={{ color: p.color }} className="font-semibold">
           {p.name}: {fmt(p.value)}
         </p>
       ))}
+      {payload.length > 1 && (
+        <p className="text-gray-100 font-bold mt-1 pt-1 border-t border-gray-700/70">
+          Total: {fmt(total)}
+        </p>
+      )}
     </div>
   )
 }
@@ -99,10 +126,14 @@ export default function Financeiro() {
     queryFn:  () => api.getFinancial({ period }),
   })
 
-  const { data: daily = [], isLoading: l2 } = useQuery({
+  const { data: dailyResp, isLoading: l2 } = useQuery({
     queryKey: ['financial-daily', DAYS_BY_PERIOD[period]],
     queryFn:  () => api.getFinancialDaily({ days: DAYS_BY_PERIOD[period] }),
   })
+  // A API devolve { series, gateways }. As guardas mantêm a tela de pé na janela
+  // entre o deploy do front e o da API (a resposta antiga era um array simples).
+  const series   = Array.isArray(dailyResp?.series)   ? dailyResp.series   : []
+  const gateways = Array.isArray(dailyResp?.gateways) ? dailyResp.gateways : []
 
   // Planilha por reserva (bruto / comissão / o que fica para o Turiva).
   const { data: bookings = [], isLoading: l3 } = useQuery({
@@ -113,19 +144,18 @@ export default function Financeiro() {
   const totComissao = bookings.reduce((s, b) => s + Number(b.comissao || 0), 0)
   const totTuriva   = bookings.reduce((s, b) => s + Number(b.turiva   || 0), 0)
 
-  // Só o GANHO DO TURIVA por dia (a fatia da plataforma). O endpoint já entrega
-  // comissão − gateway − afiliados consolidado em `ganho`; a tela não recalcula
-  // nada. Antes plotava bruto e "líquido" — dinheiro que em sua maior parte é do
-  // OPERADOR, não do Turiva — e isso confundia quem só quer ver o que fica aqui.
-  const chartData = daily.map((d) => ({
-    date: (() => {
-      try { return format(parseISO(d.date), 'd MMM', { locale: ptBR }) } catch { return d.date }
-    })(),
-    // `|| 0` protege contra uma resposta antiga da API (antes do deploy do novo
-    // /financial-daily) que não traz `ganho` — sem isso o ponto viraria NaN e a
-    // área sumia. Depois do deploy, `ganho` vem certo e o `|| 0` é inócuo.
-    ganho: Number(d.ganho) || 0,
-  }))
+  // GANHO DO TURIVA por dia, UMA SÉRIE POR GATEWAY (Pagar.me verde, MP azul…),
+  // para separar os recebimentos por gateway. Cada ponto: a data formatada + o
+  // valor de cada gateway (0 onde não houve, para as linhas não terem buracos).
+  const chartData = series.map((d) => {
+    const o = {
+      date: (() => {
+        try { return format(parseISO(d.date), 'd MMM', { locale: ptBR }) } catch { return d.date }
+      })(),
+    }
+    for (const g of gateways) o[g.key] = Number(d[g.key]) || 0
+    return o
+  })
 
   if (l1 || l2 || l3) return <PageSpinner />
 
@@ -184,11 +214,12 @@ export default function Financeiro() {
         <KpiCard icon={Users}      label="(-) Afiliados"        value={fmt(summary?.comissoes_afiliados)}  color="text-sky-400"    />
       </div>
 
-      {/* Gráfico: o ganho do Turiva dia a dia (o que o usuário pediu para ver). */}
+      {/* Gráfico: o ganho do Turiva dia a dia, UMA LINHA POR GATEWAY (Pagar.me
+          verde, Mercado Pago azul…), para separar os recebimentos por gateway. */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-300">Ganho do Turiva por dia</h2>
+            <h2 className="text-sm font-semibold text-gray-300">Ganho do Turiva por dia · por gateway</h2>
             {summary?.margem_percent != null && (
               <span className="text-xs font-medium text-green-400 bg-green-900/30 px-2 py-1 rounded-full">
                 Margem {summary.margem_percent}%
@@ -197,27 +228,34 @@ export default function Financeiro() {
           </div>
         </CardHeader>
         <CardBody>
-          {chartData.length === 0 ? (
+          {chartData.length === 0 || gateways.length === 0 ? (
             <div className="h-52 flex items-center justify-center text-gray-600 text-sm">Sem dados</div>
           ) : (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gGanho" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#34d399" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#34d399" stopOpacity={0}    />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false}
                   tickFormatter={fmtEixo} />
                 <Tooltip content={<TooltipDark />} />
-                {/* Dots visíveis: com poucas reservas o período tem 1–2 pontos;
-                    sem dot, um ponto isolado não desenha nada (parecia "zerado"). */}
-                <Area type="monotone" dataKey="ganho" name="Ganho do Turiva" stroke="#34d399" strokeWidth={2} fill="url(#gGanho)" dot={{ r: 3, fill: '#34d399', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#34d399' }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {/* Uma Area por gateway. Dots visíveis porque com poucas reservas
+                    cada série tem 1–2 pontos; sem dot um ponto isolado some. */}
+                {gateways.map((g, i) => {
+                  const c = gwColor(g.key, i)
+                  return (
+                    <Area key={g.key} type="monotone" dataKey={g.key} name={gwLabel(g.key, g.label)}
+                      stroke={c} strokeWidth={2} fill={c} fillOpacity={0.12}
+                      dot={{ r: 3, fill: c, strokeWidth: 0 }} activeDot={{ r: 5, fill: c }} />
+                  )
+                })}
               </AreaChart>
             </ResponsiveContainer>
+          )}
+          {gateways.length > 0 && (
+            <p className="mt-3 text-[11px] text-gray-600">
+              Uma linha por gateway de recebimento. Cada linha é o ganho do Turiva (comissão − taxa de gateway − afiliados) das reservas pagas por aquele gateway.
+            </p>
           )}
         </CardBody>
       </Card>
@@ -237,10 +275,12 @@ export default function Financeiro() {
             <div className="h-24 flex items-center justify-center text-gray-600 text-sm">Nenhuma reserva no período</div>
           ) : (
             <div className="overflow-x-auto -mx-1">
-              <table className="w-full text-sm min-w-[520px]">
+              <table className="w-full text-sm min-w-[680px]">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-700/50">
                     <th className="text-left font-medium py-2 pr-3">Reserva</th>
+                    <th className="text-left font-medium py-2 px-3">Data</th>
+                    <th className="text-left font-medium py-2 px-3">Pagamento</th>
                     <th className="text-left font-medium py-2 px-3">Operador</th>
                     <th className="text-right font-medium py-2 px-3">Bruto</th>
                     <th className="text-right font-medium py-2 px-3">Comissão</th>
@@ -251,6 +291,10 @@ export default function Financeiro() {
                   {bookings.map((b) => (
                     <tr key={b.booking_id} className="border-b border-gray-800 last:border-0">
                       <td className="py-2.5 pr-3 font-mono text-xs text-gray-400 whitespace-nowrap">{b.booking_code}</td>
+                      <td className="py-2.5 px-3 text-gray-300 whitespace-nowrap tabular-nums">{fmtData(b.data)}</td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="inline-block px-2 py-0.5 rounded-md bg-gray-800 text-gray-300 text-xs">{b.forma_pagamento}</span>
+                      </td>
                       <td className="py-2.5 px-3 text-gray-200">{b.operador}</td>
                       <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{fmt(b.bruto)}</td>
                       <td className="py-2.5 px-3 text-right text-brand tabular-nums">{fmt(b.comissao)}</td>
@@ -260,7 +304,7 @@ export default function Financeiro() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-gray-700 font-bold">
-                    <td className="py-2.5 pr-3 text-gray-400" colSpan={2}>
+                    <td className="py-2.5 pr-3 text-gray-400" colSpan={4}>
                       Total · {bookings.length} reserva{bookings.length !== 1 ? 's' : ''}
                     </td>
                     <td className="py-2.5 px-3 text-right text-gray-200 tabular-nums">{fmt(totBruto)}</td>

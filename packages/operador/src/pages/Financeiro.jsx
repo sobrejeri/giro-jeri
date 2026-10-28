@@ -25,6 +25,19 @@ const fmtEixo = (v) => {
   return `R$ ${Math.round(n)}`
 }
 
+// Cores por gateway (pedido do negócio: Pagar.me VERDE, Mercado Pago AZUL).
+// Tons mais escuros que no admin porque aqui o tema é claro (fundo branco).
+// Chaves canônicas iguais às do backend (/financial-daily → gateways[].key).
+const GW_META = {
+  pagarme:      { label: 'Pagar.me',     color: '#16a34a' }, // verde
+  mercado_pago: { label: 'Mercado Pago', color: '#2563eb' }, // azul
+  manual:       { label: 'Manual',       color: '#7c3aed' }, // roxo
+  outros:       { label: 'Outros',       color: '#d97706' }, // âmbar
+}
+const GW_FALLBACK = ['#db2777', '#0891b2', '#65a30d', '#ea580c'] // extras p/ gateways novos
+const gwColor = (key, i = 0) => GW_META[key]?.color || GW_FALLBACK[i % GW_FALLBACK.length]
+const gwLabel = (key, fallback) => GW_META[key]?.label || fallback || key
+
 const PERIODS = [
   { value: 'day',   label: 'Hoje'      },
   { value: 'week',  label: 'Semana'    },
@@ -50,10 +63,23 @@ function KpiCard({ icon: Icon, label, value, color = 'text-gray-700' }) {
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
+  // Esconde as séries zeradas do dia (gateway sem recebimento); com mais de uma
+  // série, mostra o total do dia embaixo.
+  const shown = payload.filter((p) => Number(p.value))
+  const total = payload.reduce((s, p) => s + (Number(p.value) || 0), 0)
   return (
     <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3 text-sm">
       <p className="font-semibold text-gray-700 mb-1">{label}</p>
-      <p className="text-brand font-bold">{fmt(payload[0]?.value)}</p>
+      {(shown.length ? shown : payload).map((p) => (
+        <p key={p.name} style={{ color: p.color }} className="font-semibold">
+          {p.name}: {fmt(p.value)}
+        </p>
+      ))}
+      {payload.length > 1 && (
+        <p className="text-gray-800 font-bold mt-1 pt-1 border-t border-gray-100">
+          Total: {fmt(total)}
+        </p>
+      )}
     </div>
   )
 }
@@ -67,17 +93,27 @@ export default function Financeiro() {
     queryFn:  () => api.getFinancial({ period }),
   })
 
-  const { data: daily = [], isLoading: loadDaily } = useQuery({
+  const { data: dailyResp, isLoading: loadDaily } = useQuery({
     queryKey: ['financial-daily', period],
     queryFn:  () => api.getFinancialDaily({ days: DAYS_BY_PERIOD[period] }),
   })
+  // A API devolve { series, gateways }. As guardas mantêm a tela de pé na janela
+  // entre o deploy do front e o da API (a resposta antiga era um array simples).
+  const series   = Array.isArray(dailyResp?.series)   ? dailyResp.series   : []
+  const gateways = Array.isArray(dailyResp?.gateways) ? dailyResp.gateways : []
 
-  const chartData = daily.map((d) => ({
-    date: (() => {
-      try { return format(parseISO(d.date), 'd MMM', { locale: ptBR }) } catch { return d.date }
-    })(),
-    total: Number(d.total),
-  }))
+  // Faturamento bruto por dia, UMA SÉRIE POR GATEWAY (Pagar.me verde, MP azul…),
+  // para separar os recebimentos. Cada ponto: a data formatada + o valor de cada
+  // gateway (0 onde não houve, para as linhas não terem buracos).
+  const chartData = series.map((d) => {
+    const o = {
+      date: (() => {
+        try { return format(parseISO(d.date), 'd MMM', { locale: ptBR }) } catch { return d.date }
+      })(),
+    }
+    for (const g of gateways) o[g.key] = Number(d[g.key]) || 0
+    return o
+  })
 
   return (
     <div className="space-y-5">
@@ -164,11 +200,12 @@ export default function Financeiro() {
         </Card>
       )}
 
-      {/* Gráfico */}
+      {/* Gráfico: faturamento bruto por dia, UMA LINHA POR GATEWAY, para separar
+          os recebimentos por gateway (Pagar.me verde, Mercado Pago azul…). */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">Faturamento Bruto</h2>
+            <h2 className="text-sm font-semibold text-gray-700">Faturamento por dia · por gateway</h2>
             {summary?.margem_percent !== undefined && (
               <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
                 Margem {summary.margem_percent}%
@@ -177,35 +214,36 @@ export default function Financeiro() {
           </div>
         </CardHeader>
         <CardBody>
-          {chartData.length === 0 ? (
+          {chartData.length === 0 || gateways.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-gray-300 text-sm">
               Sem dados para este período
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorBrand" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#FF6A00" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#FF6A00" stopOpacity={0}    />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false}
                   tickFormatter={fmtEixo} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#FF6A00"
-                  strokeWidth={2}
-                  fill="url(#colorBrand)"
-                  dot={false}
-                  activeDot={{ r: 4, fill: '#FF6A00' }}
-                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {/* Uma Area por gateway. Dots visíveis porque com poucas reservas
+                    cada série tem 1–2 pontos; sem dot um ponto isolado some. */}
+                {gateways.map((g, i) => {
+                  const c = gwColor(g.key, i)
+                  return (
+                    <Area key={g.key} type="monotone" dataKey={g.key} name={gwLabel(g.key, g.label)}
+                      stroke={c} strokeWidth={2} fill={c} fillOpacity={0.1}
+                      dot={{ r: 3, fill: c, strokeWidth: 0 }} activeDot={{ r: 5, fill: c }} />
+                  )
+                })}
               </AreaChart>
             </ResponsiveContainer>
+          )}
+          {gateways.length > 0 && (
+            <p className="mt-3 text-[11px] text-gray-400">
+              Uma linha por gateway de recebimento (passeios + o seu estacionamento). É o faturamento bruto que entra por cada meio.
+            </p>
           )}
         </CardBody>
       </Card>

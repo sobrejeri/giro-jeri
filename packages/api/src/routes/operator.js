@@ -2268,18 +2268,21 @@ router.get('/financial', async (req, res, next) => {
 });
 
 // ── GET /api/operator/financial-daily ───────────────────
-// Série diária do faturamento bruto (para o gráfico do painel).
+// Série diária do faturamento bruto QUEBRADA POR GATEWAY (uma série por gateway),
+// para separar os recebimentos por gateway no gráfico. Mesma lógica do painel do
+// admin, filtrada ao operador: reservas DESTE operador + o estacionamento dos
+// lotes dele. → { series: [{ date, <gateway>: valor, … }], gateways: [{ key, label, total }] }.
 router.get('/financial-daily', async (req, res, next) => {
   try {
     const days  = Number(req.query.days || 30);
     const since = dayjs().subtract(days, 'day').format('YYYY-MM-DD');
 
     const bookingIds = await operatorBookingIds(req.user.id);
-    if (bookingIds.length === 0) return res.json([]);
+    if (bookingIds.length === 0) return res.json({ series: [], gateways: [] });
 
     const { data, error } = await supabase
       .from('financial_ledger')
-      .select('amount, effective_date')
+      .select('amount, effective_date, payments ( gateway_name )')
       .in('booking_id', bookingIds)
       .eq('entry_type', 'booking_gross')
       .eq('direction', 'inflow')
@@ -2287,17 +2290,57 @@ router.get('/financial-daily', async (req, res, next) => {
       .order('effective_date');
     if (error) throw error;
 
+    const GW_LABELS = { mercado_pago: 'Mercado Pago', pagarme: 'Pagar.me', manual: 'Manual', outros: 'Outros' };
+    const canonGw = (g) => {
+      const s = String(g || 'outros').toLowerCase();
+      if (s === 'mercadopago' || s === 'mercado_pago' || s === 'mp') return 'mercado_pago';
+      if (s === 'pagarme' || s === 'pagar_me') return 'pagarme';
+      return s;
+    };
+
+    // byDay[dia][gateway] = faturamento bruto naquele dia, naquele gateway.
     const byDay = {};
+    const gwTotal = {};
+    const add = (d, gw, v) => {
+      if (!d) return;
+      (byDay[d] ||= {});
+      byDay[d][gw] = (byDay[d][gw] || 0) + v;
+      gwTotal[gw] = (gwTotal[gw] || 0) + v;
+    };
+
     for (const row of data || []) {
-      const d = row.effective_date?.slice(0, 10) || '';
-      if (!d) continue;
-      byDay[d] = (byDay[d] || 0) + Number(row.amount);
+      add(row.effective_date?.slice(0, 10) || '', canonGw(row.payments?.gateway_name), Number(row.amount) || 0);
     }
-    res.json(
-      Object.entries(byDay)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, total]) => ({ date, total })),
-    );
+
+    // Estacionamento (bruto) dos lotes do operador, por dia e gateway. Best-effort.
+    try {
+      const { data: lots } = await supabase.from('parking_lots').select('id').eq('owner_user_id', req.user.id);
+      const lotIds = (lots || []).map((l) => l.id);
+      if (lotIds.length) {
+        const { parkingDiarioPorGateway } = await import('../services/parking/financial.js');
+        const pk = await parkingDiarioPorGateway({ since, lotIds });
+        for (const [d, porGw] of Object.entries(pk)) {
+          for (const [g, v] of Object.entries(porGw)) add(d, canonGw(g), v.brutoC / 100);
+        }
+      }
+    } catch (e) {
+      console.error('[operator/financial-daily] estacionamento falhou (ignorado):', e?.message);
+    }
+
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const gwKeys = Object.keys(gwTotal);
+    const series = Object.entries(byDay)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, porGw]) => {
+        const o = { date };
+        for (const k of gwKeys) o[k] = round2(porGw[k] || 0);
+        return o;
+      });
+    const gateways = gwKeys
+      .map((k) => ({ key: k, label: GW_LABELS[k] || k, total: round2(gwTotal[k] || 0) }))
+      .sort((a, b) => b.total - a.total);
+
+    res.json({ series, gateways });
   } catch (err) { next(err); }
 });
 

@@ -90,3 +90,35 @@ export async function parkingFaturamentoDiario({ since } = {}) {
   }
   return porDia
 }
+
+// Série diária do estacionamento QUEBRADA POR GATEWAY, para separar os
+// recebimentos/ganho por gateway nos gráficos do Financeiro. Junta o dia e o
+// gateway de parking_payments com o bruto/comissão snapshot da reserva (mesma
+// conta de parkingFinanceiroPorGateway). `lotIds` filtra aos lotes de um dono
+// (operador); sem ele, todos. → { 'YYYY-MM-DD': { '<gateway>': { brutoC, comissaoC } } }.
+export async function parkingDiarioPorGateway({ since, lotIds = null } = {}) {
+  let q = supabase.from('parking_payments')
+    .select('gateway, amount, created_at, parking_reservations!inner(total_amount, commission_pct, payment_status, lot_id)')
+    .eq('status', 'approved')
+  if (since) q = q.gte('created_at', since)
+  const { data, error } = await q
+  if (error) throw error
+
+  const lotSet = Array.isArray(lotIds) ? new Set(lotIds) : null
+  const porDia = {}
+  for (const p of data || []) {
+    const r = p.parking_reservations
+    if (!r || r.payment_status !== 'paid') continue
+    if (lotSet && !lotSet.has(r.lot_id)) continue // só os lotes pedidos (operador)
+    const dia = String(p.created_at || '').slice(0, 10)
+    if (!dia) continue
+    const g = String(p.gateway || 'outros')
+    const b = centavos(p.amount ?? r.total_amount)
+    const c = Math.round(b * Number(r.commission_pct || 0) / 100)
+    porDia[dia] ||= {}
+    porDia[dia][g] ||= { brutoC: 0, comissaoC: 0 }
+    porDia[dia][g].brutoC    += b
+    porDia[dia][g].comissaoC += c
+  }
+  return porDia
+}
