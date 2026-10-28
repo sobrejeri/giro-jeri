@@ -1,36 +1,61 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { WifiOff } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
-// Aviso global de conexão. Fixo no topo enquanto o navegador reporta que está
-// offline, para o cliente saber NA HORA que o problema é a internet dele — e não
-// achar que a plataforma quebrou. Reage aos eventos online/offline do navegador.
+/**
+ * Aviso de "sem conexão".
+ *
+ * Sem isto, offline o app apenas falha em silêncio (listas vazias, botões que
+ * não respondem) e o usuário acha que quebrou. Aqui ele entende o que houve —
+ * e ao voltar a rede as telas em uso se atualizam sozinhas.
+ *
+ * `navigator.onLine` só garante o negativo (false = offline de verdade);
+ * true pode aparecer mesmo sem internet real, então tratamos apenas o caso
+ * negativo, que é o confiável.
+ */
 export default function OfflineBanner() {
   const { t } = useTranslation()
-  const [offline, setOffline] = useState(
-    typeof navigator !== 'undefined' && navigator.onLine === false,
-  )
+  const qc = useQueryClient()
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine === false)
+  const [reconnected, setReconnected] = useState(false)
 
   useEffect(() => {
-    const up   = () => setOffline(false)
-    const down = () => setOffline(true)
-    window.addEventListener('online', up)
-    window.addEventListener('offline', down)
-    return () => {
-      window.removeEventListener('online', up)
-      window.removeEventListener('offline', down)
+    function goOffline() { setOffline(true); setReconnected(false) }
+    function goOnline() {
+      setOffline(false)
+      setReconnected(true)
+      // Voltou a rede: revalida o que está na tela, sem o usuário precisar
+      // puxar para atualizar.
+      qc.refetchQueries({ type: 'active' }).catch(() => {})
+      setTimeout(() => setReconnected(false), 2500)
     }
-  }, [])
+    window.addEventListener('offline', goOffline)
+    window.addEventListener('online',  goOnline)
+    return () => {
+      window.removeEventListener('offline', goOffline)
+      window.removeEventListener('online',  goOnline)
+    }
+  }, [qc])
 
-  if (!offline) return null
+  if (!offline && !reconnected) return null
 
   return (
     <div
-      role="alert"
-      className="fixed top-0 inset-x-0 z-[100] bg-amber-500 text-amber-950 text-sm font-semibold px-4 py-2 flex items-center justify-center gap-2 shadow-md"
+      role="status"
+      aria-live="polite"
+      className={`sticky top-0 z-40 px-4 py-2 flex items-center justify-center gap-2 text-white transition-colors ${
+        offline ? 'bg-gray-800' : 'bg-emerald-600'
+      }`}
     >
-      <WifiOff size={16} className="shrink-0" />
-      {t('errors.offlineBanner')}
+      {offline ? (
+        <>
+          <WifiOff size={14} className="shrink-0" />
+          <p className="text-[12px] font-semibold">{t('errors.offlineBanner')}</p>
+        </>
+      ) : (
+        <p className="text-[12px] font-semibold">{t('errors.reconnected')}</p>
+      )}
     </div>
   )
 }

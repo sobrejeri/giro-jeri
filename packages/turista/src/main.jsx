@@ -6,7 +6,6 @@ import ErroNaTela from './components/ErroNaTela'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import App from './App'
 import UpdatePrompt from './components/UpdatePrompt'
-import OfflineBanner from './components/OfflineBanner'
 import { AuthProvider } from './contexts/AuthContext'
 import { RegionProvider } from './contexts/RegionContext'
 import { FavoritesProvider } from './contexts/FavoritesContext'
@@ -28,7 +27,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <CartProvider>
                 <App />
                 <UpdatePrompt />
-                <OfflineBanner />
               </CartProvider>
             </FavoritesProvider>
           </AuthProvider>

@@ -2,7 +2,8 @@
   "errors": {
     "offline": "You're offline. Check your connection and try again.",
     "connectionFailed": "Couldn't reach the server. Check your internet and try again.",
-    "offlineBanner": "You're offline. Some actions may fail until the connection is back."
+    "offlineBanner": "No connection — you can browse, but you can't book right now.",
+    "reconnected": "Connection restored ✓"
   },
   "estacionamentoPg": {
     "loading": "Loading…",

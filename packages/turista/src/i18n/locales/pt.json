@@ -2,7 +2,8 @@
   "errors": {
     "offline": "Você está sem internet. Verifique sua conexão e tente novamente.",
     "connectionFailed": "Falha ao conectar ao servidor. Verifique sua internet e tente novamente.",
-    "offlineBanner": "Você está sem internet. Algumas ações podem falhar até a conexão voltar."
+    "offlineBanner": "Sem conexão — você pode navegar, mas não dá para reservar agora.",
+    "reconnected": "Conexão restabelecida ✓"
   },
   "estacionamentoPg": {
     "loading": "Carregando…",
