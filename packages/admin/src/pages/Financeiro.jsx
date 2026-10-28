@@ -121,7 +121,10 @@ export default function Financeiro() {
     date: (() => {
       try { return format(parseISO(d.date), 'd MMM', { locale: ptBR }) } catch { return d.date }
     })(),
-    ganho: Number(d.ganho),
+    // `|| 0` protege contra uma resposta antiga da API (antes do deploy do novo
+    // /financial-daily) que não traz `ganho` — sem isso o ponto viraria NaN e a
+    // área sumia. Depois do deploy, `ganho` vem certo e o `|| 0` é inócuo.
+    ganho: Number(d.ganho) || 0,
   }))
 
   if (l1 || l2 || l3) return <PageSpinner />
@@ -210,7 +213,9 @@ export default function Financeiro() {
                 <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false}
                   tickFormatter={fmtEixo} />
                 <Tooltip content={<TooltipDark />} />
-                <Area type="monotone" dataKey="ganho" name="Ganho do Turiva" stroke="#34d399" strokeWidth={2} fill="url(#gGanho)" dot={false} activeDot={{ r: 4, fill: '#34d399' }} />
+                {/* Dots visíveis: com poucas reservas o período tem 1–2 pontos;
+                    sem dot, um ponto isolado não desenha nada (parecia "zerado"). */}
+                <Area type="monotone" dataKey="ganho" name="Ganho do Turiva" stroke="#34d399" strokeWidth={2} fill="url(#gGanho)" dot={{ r: 3, fill: '#34d399', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#34d399' }} />
               </AreaChart>
             </ResponsiveContainer>
           )}
