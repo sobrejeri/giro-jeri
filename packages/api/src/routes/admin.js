@@ -1210,38 +1210,47 @@ router.get('/financial', requireAdmin, async (req, res, next) => {
       return s;
     };
     const byGwRaw = {};
-    const bump = (g) => (byGwRaw[g] ||= { bruto: 0, taxas: 0, liquido: 0 });
+    const bump = (g) => (byGwRaw[g] ||= { bruto: 0, taxas: 0, liquido: 0, operador: 0, comissao: 0 });
 
-    // Passeios/transfers: do razão (bruto/taxa/líquido por pagamento).
+    // Passeios/transfers: do razão por pagamento. commission_platform e
+    // payout_operator também carregam payment_id → gateway, então entram no
+    // recorte (comissão da plataforma e repasse ao operador por gateway).
     for (const row of (data || [])) {
-      if (!['booking_gross', 'gateway_fee', 'booking_net'].includes(row.entry_type)) continue;
+      if (!['booking_gross', 'gateway_fee', 'booking_net', 'commission_platform', 'payout_operator'].includes(row.entry_type)) continue;
       const g = canonGw(row.payments?.gateway_name);
       const slot = bump(g);
       const amt = Number(row.amount) || 0;
       if (row.entry_type === 'booking_gross') slot.bruto   += amt;
       else if (row.entry_type === 'gateway_fee') slot.taxas += amt;
       else if (row.entry_type === 'booking_net') slot.liquido += amt;
+      else if (row.entry_type === 'commission_platform') slot.comissao += amt;
+      else if (row.entry_type === 'payout_operator')     slot.operador += amt;
     }
 
-    // Estacionamento: soma o bruto/líquido por gateway (sem taxa de gateway no
-    // nosso razão). Best-effort — se falhar, o recorte segue só com passeios.
+    // Estacionamento: bruto/líquido por gateway (sem taxa de gateway no razão); a
+    // comissão fica para a plataforma e o restante (bruto − comissão) é o repasse
+    // ao dono do lote. Best-effort — se falhar, segue só com passeios.
     try {
       const { parkingFinanceiroPorGateway } = await import('../services/parking/financial.js');
       const pkGw = await parkingFinanceiroPorGateway({ from: starts[period] || starts.month });
       for (const [g, v] of Object.entries(pkGw)) {
         const slot = bump(canonGw(g));
-        slot.bruto   += v.brutoC / 100;
-        slot.liquido += v.brutoC / 100; // sem taxa de gateway → líquido = bruto
+        slot.bruto    += v.brutoC / 100;
+        slot.liquido  += v.brutoC / 100; // sem taxa de gateway → líquido = bruto
+        slot.comissao += v.comissaoC / 100;
+        slot.operador += (v.brutoC - v.comissaoC) / 100;
       }
     } catch (e) { console.error('[financial] estacionamento por gateway falhou (ignorado):', e?.message); }
 
     const by_gateway = Object.entries(byGwRaw)
       .map(([gateway, v]) => ({
         gateway,
-        label:   GW_LABELS[gateway] || gateway,
-        bruto:   round2(v.bruto),
-        taxas:   round2(v.taxas),
-        liquido: round2(v.liquido),
+        label:    GW_LABELS[gateway] || gateway,
+        bruto:    round2(v.bruto),
+        taxas:    round2(v.taxas),
+        liquido:  round2(v.liquido),
+        operador: round2(v.operador),   // repasse ao operador por gateway
+        comissao: round2(v.comissao),   // o que fica para a plataforma por gateway
       }))
       .sort((a, b) => b.bruto - a.bruto);
 
