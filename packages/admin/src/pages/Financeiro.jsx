@@ -136,16 +136,40 @@ export default function Financeiro() {
         ))}
       </div>
 
-      {/* KPIs */}
+      {/* HERÓI: o que FICA para a plataforma — a métrica que mais importa.
+          O bruto e as deduções viram contexto, nos cards menores abaixo. */}
+      <Card className="p-5 border border-green-500/20 bg-green-500/5">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-green-500/15 flex items-center justify-center text-green-400 shrink-0">
+              <TrendingUp size={20} />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Fica para a plataforma</p>
+              <p className="text-[32px] leading-none font-extrabold text-green-400 mt-1.5">
+                {summary?.dados_incompletos ? '—' : fmt(summary?.resultado_plataforma)}
+              </p>
+              <p className="text-[12px] text-gray-500 mt-1.5">
+                {summary?.dados_incompletos
+                  ? 'Período anterior ao registro de comissões — resultado indisponível.'
+                  : `Resultado líquido da plataforma, de ${fmt(summary?.bruto)} recebidos.`}
+              </p>
+            </div>
+          </div>
+          {summary?.margem_percent != null && (
+            <span className="text-sm font-bold text-green-400 bg-green-500/10 px-3 py-1.5 rounded-full">
+              Margem {summary.margem_percent}%
+            </span>
+          )}
+        </div>
+      </Card>
+
+      {/* Métricas de apoio (contexto do resultado acima) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={DollarSign}   label="Bruto"               value={fmt(summary?.bruto)}                color="text-brand"      />
-        <KpiCard icon={TrendingUp}   label="Resultado plataforma"
-          value={summary?.dados_incompletos ? '—' : fmt(summary?.resultado_plataforma)}
-          subLabel={summary?.dados_incompletos ? 'Sem dados de comissão neste período' : undefined}
-          subValue={summary?.dados_incompletos ? 'período anterior ao registro de comissões' : undefined}
-          color="text-green-400"  />
-        <KpiCard icon={CreditCard}   label="Taxas gateway"       value={fmt(summary?.taxas)}                color="text-orange-400" />
-        <KpiCard icon={AlertCircle}  label="Não creditado"       value={fmt(summary?.nao_creditado)}        color="text-amber-400"  />
+        <KpiCard icon={DollarSign}    label="Bruto recebido"     value={fmt(summary?.bruto)}         color="text-brand"      />
+        <KpiCard icon={ArrowDownLeft} label="Repasse operadores" value={fmt(summary?.repasses)}      color="text-sky-400"    />
+        <KpiCard icon={CreditCard}    label="Taxas gateway"      value={fmt(summary?.taxas)}         color="text-orange-400" />
+        <KpiCard icon={AlertCircle}   label="Não creditado"      value={fmt(summary?.nao_creditado)} color="text-amber-400"  />
       </div>
 
       {/* Receita por gateway (MP vs Pagar.me) */}
@@ -302,15 +326,13 @@ export default function Financeiro() {
           <CardBody>
             <dl className="space-y-3">
               {[
-                { label: 'Receita Bruta',            value: summary?.bruto,                            cls: 'text-gray-100 font-bold' },
-                { label: '(-) Repasse operadores', value: `- ${fmt(summary?.repasses)}`,             cls: 'text-red-400'  },
-                { label: '(-) Taxa gateway',         value: `- ${fmt(summary?.taxas)}`,                cls: 'text-red-400'  },
-                { label: '(-) Comissão afiliados',   value: `- ${fmt(summary?.comissoes_afiliados)}`,  cls: 'text-red-400'  },
-                { label: '= Resultado plataforma',
+                { label: 'Receita bruta',              value: summary?.bruto,                           cls: 'text-gray-100 font-bold' },
+                { label: '(-) Repasse aos operadores', value: `- ${fmt(summary?.repasses)}`,            cls: 'text-red-400'  },
+                { label: '(-) Taxas de gateway',       value: `- ${fmt(summary?.taxas)}`,               cls: 'text-red-400'  },
+                { label: '(-) Comissão de afiliados',  value: `- ${fmt(summary?.comissoes_afiliados)}`, cls: 'text-red-400'  },
+                { label: '= Fica para a plataforma',
                   value: summary?.dados_incompletos ? '—' : summary?.resultado_plataforma,
                   cls: 'text-green-400 font-bold text-base' },
-                { label: 'Comissão plataforma (bruta)', value: summary?.comissoes_plataforma,          cls: 'text-gray-400'  },
-                { label: 'A creditar',               value: summary?.nao_creditado,                    cls: 'text-amber-400'  },
               ].map((r) => (
                 <div key={r.label} className="flex justify-between text-sm border-b border-gray-700/50 pb-3 last:border-0 last:pb-0">
                   <span className="text-gray-500">{r.label}</span>
