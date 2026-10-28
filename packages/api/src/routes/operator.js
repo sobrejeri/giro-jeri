@@ -2303,4 +2303,105 @@ router.get('/financial-daily', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Repasses ao motorista (migration 066) ──────────────────────────────────
+// O operador faz o despacho e paga o executor por fora; aqui ele controla o que
+// já pagou e o que ainda deve. Escopo: só os despachos de reservas DESTE
+// operador (bookings.operator_id = req.user.id). Espelha o painel do admin, que
+// a partir de agora é só supervisão (leitura).
+router.get('/driver-payouts', async (req, res, next) => {
+  try {
+    const { status, from, to } = req.query;
+    let query = supabase
+      .from('operational_assignments')
+      .select(`id, booking_id, driver_name, driver_phone, real_vehicle_text,
+               driver_payout_amount, driver_payout_status, driver_paid_at,
+               driver_payout_notes, assignment_status, created_at,
+               bookings!inner ( booking_code, service_type, service_date, service_time,
+                          total_amount, status_commercial, status_operational, completed_at,
+                          origin_text, destination_text, operator_id )`)
+      .eq('bookings.operator_id', req.user.id)
+      .not('driver_name', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(300);
+    if (status) query = query.eq('driver_payout_status', status);
+
+    let { data: rows, error } = await query;
+    // Migration 066 pendente: devolve lista vazia em vez de derrubar a tela.
+    if (error?.code === '42703') {
+      return res.json({ rows: [], totals: { pending: 0, paid: 0, count: 0 }, migration_pending: true });
+    }
+    if (error) throw error;
+
+    // Filtro por data DO SERVIÇO (não do despacho) — é como se fecha o período.
+    rows = (rows || []).filter((r) => {
+      const d = r.bookings?.service_date;
+      if (from && (!d || d < from)) return false;
+      if (to   && (!d || d > to))   return false;
+      return true;
+    });
+
+    const totals = rows.reduce((acc, r) => {
+      const v = Number(r.driver_payout_amount) || 0;
+      if (r.driver_payout_status === 'paid')    acc.paid    += v;
+      if (r.driver_payout_status === 'pending') acc.pending += v;
+      return acc;
+    }, { pending: 0, paid: 0, count: rows.length });
+    totals.pending = Math.round(totals.pending * 100) / 100;
+    totals.paid    = Math.round(totals.paid    * 100) / 100;
+
+    res.json({ rows, totals });
+  } catch (err) { next(err); }
+});
+
+router.patch('/driver-payouts/:id', async (req, res, next) => {
+  try {
+    const { amount, status, notes } = req.body || {};
+    // Dono + estado da reserva numa consulta: só mexe no repasse de uma reserva
+    // DESTE operador, e a baixa exige reserva concluída.
+    const { data: asg, error: eAsg } = await supabase
+      .from('operational_assignments')
+      .select('id, bookings!inner ( operator_id, status_operational )')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (eAsg?.code === '42703') {
+      return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 066 no banco.' });
+    }
+    if (eAsg) throw eAsg;
+    if (!asg || asg.bookings?.operator_id !== req.user.id) {
+      return res.status(404).json({ error: 'Repasse não encontrado' });
+    }
+
+    const patch = { updated_at: new Date().toISOString() };
+    if (amount !== undefined && amount !== null && amount !== '') {
+      const v = Number(amount);
+      if (!Number.isFinite(v) || v < 0) return res.status(400).json({ error: 'Valor do repasse inválido.' });
+      patch.driver_payout_amount = Math.round(v * 100) / 100;
+    }
+    if (notes !== undefined) patch.driver_payout_notes = notes || null;
+    if (status !== undefined) {
+      if (!['pending', 'paid', 'cancelled'].includes(status)) {
+        return res.status(400).json({ error: 'Status inválido.' });
+      }
+      if (status === 'paid' && asg.bookings?.status_operational !== 'completed') {
+        return res.status(409).json({ error: 'Só é possível dar baixa no repasse do motorista depois que a reserva estiver concluída.' });
+      }
+      patch.driver_payout_status = status;
+      patch.driver_paid_at = status === 'paid' ? new Date().toISOString() : null;
+    }
+
+    const { data, error } = await supabase
+      .from('operational_assignments')
+      .update(patch)
+      .eq('id', req.params.id)
+      .select('id, driver_payout_amount, driver_payout_status, driver_paid_at, driver_payout_notes')
+      .maybeSingle();
+    if (error?.code === '42703') {
+      return res.status(400).json({ error: 'Recurso indisponível: aplique a migration 066 no banco.' });
+    }
+    if (error) return res.status(400).json({ error: error.message });
+    if (!data)  return res.status(404).json({ error: 'Repasse não encontrado' });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
 export default router;

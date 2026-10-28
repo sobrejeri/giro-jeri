@@ -884,10 +884,6 @@ function RepassesMotorista() {
   const [status, setStatus] = useState('pending')
   const [from, setFrom]     = useState('')
   const [to, setTo]         = useState('')
-  const [editando, setEditando] = useState(null)   // id da linha em edição
-  const [valor, setValor]       = useState('')
-  const [obs, setObs]           = useState('')
-  const qc = useQueryClient()
 
   const params = {
     ...(status === 'all' ? {} : { status }),
@@ -899,25 +895,10 @@ function RepassesMotorista() {
     queryFn:  () => api.getDriverPayouts(params),
   })
 
-  const salvar = useMutation({
-    mutationFn: ({ id, body }) => api.updateDriverPayout(id, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-driver-payouts'] })
-      setEditando(null); setValor(''); setObs('')
-    },
-    onError: (err) => alert(err?.message || 'Não foi possível salvar o repasse.'),
-  })
-
   if (isLoading) return <PageSpinner />
 
   const rows   = data?.rows   || []
   const totals = data?.totals || { pending: 0, paid: 0, count: 0 }
-
-  function abrirEdicao(r) {
-    setEditando(r.id)
-    setValor(r.driver_payout_amount != null ? String(r.driver_payout_amount) : '')
-    setObs(r.driver_payout_notes || '')
-  }
 
   return (
     <div className="space-y-5">
@@ -929,7 +910,7 @@ function RepassesMotorista() {
         <div>
           <h1 className="text-xl font-bold text-white">Repasses aos motoristas</h1>
           <p className="text-sm text-gray-400">
-            Pagamento feito fora da plataforma — aqui você controla o que já pagou e o que ainda deve.
+            Visão de supervisão (todos os operadores). Quem define o valor e dá baixa é o próprio operador, no painel dele — aqui é só acompanhamento.
           </p>
         </div>
       </div>
@@ -999,10 +980,7 @@ function RepassesMotorista() {
         <div className="space-y-3">
           {rows.map((r) => {
             const b = r.bookings || {}
-            const emEdicao = editando === r.id
             const pago = r.driver_payout_status === 'paid'
-            // Repasse só depois da reserva concluída (mesma regra do servidor).
-            const concluida = b.status_operational === 'completed'
             return (
               <Card key={r.id}>
                 <CardBody>
@@ -1050,80 +1028,14 @@ function RepassesMotorista() {
                       )}
                     </div>
 
-                    {/* Valor + ações */}
+                    {/* Valor (somente leitura — o operador é quem controla) */}
                     <div className="shrink-0 text-right">
-                      {emEdicao ? (
-                        <div className="flex flex-col items-end gap-2 w-[220px]">
-                          <input
-                            type="number" min={0} step="0.01" autoFocus
-                            value={valor} onChange={(e) => setValor(e.target.value)}
-                            placeholder="Valor do repasse"
-                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-right text-white"
-                          />
-                          <input
-                            value={obs} onChange={(e) => setObs(e.target.value)}
-                            placeholder="PIX, dinheiro, observação…"
-                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => { setEditando(null); setValor(''); setObs('') }}
-                              className="text-xs text-gray-400 hover:text-gray-200 px-2"
-                            >
-                              Cancelar
-                            </button>
-                            <Button
-                              onClick={() => salvar.mutate({ id: r.id, body: { amount: valor, notes: obs } })}
-                              disabled={salvar.isPending}
-                            >
-                              {salvar.isPending ? 'Salvando…' : 'Salvar'}
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-[11px] text-gray-500">Repasse</p>
-                          <p className={`text-xl font-extrabold ${
-                            r.driver_payout_amount != null ? 'text-white' : 'text-gray-600'
-                          }`}>
-                            {r.driver_payout_amount != null ? fmtBRL(r.driver_payout_amount) : 'a definir'}
-                          </p>
-                          <div className="flex items-center justify-end gap-2 mt-2">
-                            <button
-                              onClick={() => abrirEdicao(r)}
-                              className="text-xs text-gray-400 hover:text-gray-200 underline"
-                            >
-                              {r.driver_payout_amount != null ? 'editar' : 'definir valor'}
-                            </button>
-                            {pago ? (
-                              <Button
-                                variant="secondary"
-                                onClick={() => salvar.mutate({ id: r.id, body: { status: 'pending' } })}
-                                disabled={salvar.isPending}
-                              >
-                                <Undo2 size={14} /> Desfazer
-                              </Button>
-                            ) : (
-                              <Button
-                                onClick={() => salvar.mutate({ id: r.id, body: { status: 'paid' } })}
-                                // Só dá baixa com valor definido E reserva concluída.
-                                disabled={salvar.isPending || r.driver_payout_amount == null || !concluida}
-                                title={
-                                  !concluida ? 'A reserva ainda não foi concluída — o repasse libera após a conclusão'
-                                  : r.driver_payout_amount == null ? 'Defina o valor antes de dar baixa' : ''
-                                }
-                              >
-                                <Check size={14} /> Marcar pago
-                              </Button>
-                            )}
-                          </div>
-                          {!pago && !concluida && (
-                            <p className="text-[11px] text-amber-400/90 mt-1.5 max-w-[220px]">
-                              Aguardando a reserva ser concluída para liberar o repasse.
-                            </p>
-                          )}
-                        </>
-                      )}
+                      <p className="text-[11px] text-gray-500">Repasse</p>
+                      <p className={`text-xl font-extrabold ${
+                        r.driver_payout_amount != null ? 'text-white' : 'text-gray-600'
+                      }`}>
+                        {r.driver_payout_amount != null ? fmtBRL(r.driver_payout_amount) : 'a definir'}
+                      </p>
                     </div>
                   </div>
                 </CardBody>

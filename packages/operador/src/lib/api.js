@@ -178,6 +178,10 @@ export const api = {
   // Os repasses DESTE operador — o que ele ganha, sem o razão da plataforma.
   getMeusRecebimentos: (params = {}) => request(`/api/operator/meus-recebimentos?${new URLSearchParams(params)}`),
 
+  // Repasses ao motorista (o operador paga o executor por fora da plataforma).
+  getDriverPayouts:   (params = {}) => request(`/api/operator/driver-payouts?${new URLSearchParams(params)}`),
+  updateDriverPayout: (id, body)    => request(`/api/operator/driver-payouts/${id}`, { method: 'PATCH', body }),
+
   // Regiões
   getRegions: () => request('/api/regions'),
 
