@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Route, ImagePlus, X, Car, Users, ChevronDown, MapPin } from 'lucide-react'
+import { Plus, Route, ImagePlus, X, Car, Users, ChevronDown, MapPin, Eye, EyeOff } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
@@ -446,6 +446,12 @@ export default function Catalogo() {
     mutationFn: (id) => api.deleteTransferRoute(id),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-routes'] }),
     onError:    (err) => alert(err?.message || 'Não foi possível apagar a rota.'),
+  })
+  // Liga/desliga a rota na vitrine sem abrir o editor — só alterna is_active.
+  const toggleRouteMut = useMutation({
+    mutationFn: ({ id, is_active }) => api.updateTransferRoute(id, { is_active }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['admin-routes'] }),
+    onError:    (err) => alert(err?.message || 'Não foi possível alterar o status da rota.'),
   })
 
   /* ── Vehicle mutations ───────────────────────────────────── */
@@ -945,7 +951,7 @@ export default function Catalogo() {
             )}
             <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
               {rotasVisiveis.map((r) => (
-                <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
+                <div key={r.id} className={`flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60 ${r.is_active === false ? 'opacity-60' : ''}`}>
                   {/* EXATAMENTE a mesma miniatura da lista de passeios (mesmo
                       tamanho, mesmo cinza no vazio) — pedido do dono para as
                       duas listas se lerem do mesmo jeito. O `title` fica como
@@ -964,11 +970,17 @@ export default function Catalogo() {
                     <p className="text-sm font-medium text-gray-200">{r.origin_name} → {r.destination_name}</p>
                     <p className="text-xs text-gray-500">{r.transfers?.name}</p>
                   </div>
+                  {r.is_active === false && <Badge value="false" />}
                   <span className="text-sm font-bold text-brand">
                     {Number(r.default_price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
                   <MenuAcoes
                     onEdit={() => openEditRoute(r)}
+                    extras={[{
+                      label: r.is_active === false ? 'Ativar' : 'Desativar',
+                      icon:  r.is_active === false ? <Eye size={13} /> : <EyeOff size={13} />,
+                      onClick: () => toggleRouteMut.mutate({ id: r.id, is_active: r.is_active === false }),
+                    }]}
                     onDelete={() => { if (confirm('Apagar esta rota?\n\nNão tem como desfazer. Rota com reservas é recusada — nesse caso, desative.')) deleteRouteMut.mutate(r.id) }}
                     deleteLabel="Apagar"
                   />
@@ -1778,6 +1790,18 @@ export default function Catalogo() {
             <span className="text-sm text-gray-300">
               Destaque na home
               <span className="block text-[11px] text-gray-500">Aparece no carrossel "Serviços em destaque" do app.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-brand mt-0.5"
+              checked={routeForm.is_active !== false}
+              onChange={(e) => setRouteForm({ ...routeForm, is_active: e.target.checked })}
+            />
+            <span className="text-sm text-gray-300">
+              Rota ativa
+              <span className="block text-[11px] text-gray-500">Desmarque para tirar a rota da vitrine do app sem apagá-la.</span>
             </span>
           </label>
           <Button type="submit" className="w-full" disabled={routeMut.isPending}>
