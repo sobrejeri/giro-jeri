@@ -1113,8 +1113,11 @@ async function advanceBookingIfComboComplete(bookingId) {
 // Janela de 24h:
 //  • user_type='operator' → vê APENAS solicitações com
 //    acceptance_expires_at > NOW() (dentro do prazo de aceite das coops).
-//  • user_type='admin'    → vê APENAS solicitações expiradas
-//    (acceptance_expires_at < NOW()) — as que ninguém da coop pegou em 24h.
+//  • user_type='admin'    → vê TODAS: as do prazo e as expiradas (que o card
+//    marca "Prazo esgotado"). Antes via só as expiradas, e o admin que opera
+//    pelo app não tinha como aceitar um pedido novo — o cliente ficava sem a
+//    opção de pagar. O aceite do admin já não tinha a trava do prazo, e as
+//    pernas (fetchPendingLegs) já mostravam tudo para ele.
 // Sem a migration 037 (coluna 42703), todo mundo vê tudo como antes.
 router.get('/bookings', async (req, res, next) => {
   try {
@@ -1173,16 +1176,17 @@ router.get('/bookings', async (req, res, next) => {
     const nowMs = Date.now();
     const all   = reqRes.data || [];
     // exp NULL → tratado como "dentro da janela" (visível pra coop): nunca
-    // some por engano. Coop vê dentro do prazo; admin vê só as expiradas.
+    // some por engano. Coop vê dentro do prazo; admin vê todas.
     const within  = all.filter((b) => !b.acceptance_expires_at || new Date(b.acceptance_expires_at).getTime() > nowMs);
     const expired = all.filter((b) =>  b.acceptance_expires_at && new Date(b.acceptance_expires_at).getTime() <= nowMs);
-    let acceptanceRows = isAdmin ? expired : within;
+    let acceptanceRows = isAdmin ? all : within;
 
     // Janela de prioridade da lojinha (migration 102): dentro da janela, o
     // pedido só aparece para o operador preferido; passados os ~45s, entra na
     // fila de todos. Colunas ausentes (sem migration) → campo undefined → sem
-    // efeito. Admin não é filtrado (só vê expiradas, muito depois da janela).
-    if (!isAdmin) {
+    // efeito. Vale também para o admin, que agora vê os pedidos novos: a
+    // promessa dos 45s exclusivos é do operador da lojinha.
+    {
       const nowP = Date.now();
       acceptanceRows = acceptanceRows.filter((b) => {
         if (!b.priority_until || !b.preferred_operator_id) return true;

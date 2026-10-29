@@ -35,6 +35,9 @@ const STATUS = {
   // Antes do pagamento a corrida não é despachável — este selo deixa isso
   // explícito na linha, no lugar de "Atribuído" (que sugeria pronta para sair).
   awaiting_payment:  { label: 'Aguardando pagamento', pct: 15, dot: 'bg-amber-500', chip: 'bg-amber-50 text-amber-600', bar: '#f59e0b' },
+  // Ninguém aceitou ainda. Só o admin vê estas aqui (ele vê todas as reservas);
+  // para o operador, elas ficam em "Novas".
+  awaiting_acceptance: { label: 'Aguardando aceite', pct: 8, dot: 'bg-blue-500', chip: 'bg-blue-50 text-blue-600', bar: '#3b82f6' },
   new:               { label: 'Novo',         pct: 12,  dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-600',     bar: '#3b82f6' },
   awaiting_dispatch: { label: 'Ag. Despacho', pct: 28,  dot: 'bg-amber-500',  chip: 'bg-amber-50 text-amber-600',   bar: '#f59e0b' },
   confirmed:         { label: 'Confirmado',   pct: 42,  dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-600',     bar: '#14b8a6' },
@@ -73,7 +76,12 @@ const estaPago = (b) => b?.status_commercial === 'paid'
 
 // O selo da linha: sem pagamento (e não cancelada), é "Aguardando pagamento",
 // não o estado operacional — que só passa a valer depois que a corrida é paga.
+const aguardaAceite = (b) => b?.status_commercial === 'awaiting_acceptance' && b?.status_operational !== 'cancelled'
 function seloDe(b) {
+  // Antes de "Aguardando pagamento" vem o aceite: chamar de pagamento uma
+  // reserva que ninguém aceitou escondia que faltava o aceite — e, sem ele, o
+  // cliente nem tem a opção de pagar.
+  if (aguardaAceite(b)) return STATUS.awaiting_acceptance
   if (!estaPago(b) && b?.status_operational !== 'cancelled') return STATUS.awaiting_payment
   return STATUS[andamentoDe(b)] || STATUS.new
 }
@@ -155,7 +163,7 @@ function StatCard({ icon: Icon, iconBg, value, label, pct, ringColor, trend }) {
 }
 
 // ── Linha da tabela ────────────────────────────────────
-function BookingRow({ b, onAssign, onStart, onComplete, starting = false, operador, comboSize = 0 }) {
+function BookingRow({ b, onAssign, onStart, onComplete, onAceitar, starting = false, operador, comboSize = 0 }) {
   const pago     = estaPago(b)
   const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
@@ -251,6 +259,15 @@ function BookingRow({ b, onAssign, onStart, onComplete, starting = false, operad
           pagamento"/"Cancelada"). */}
       <td className="py-3 pl-3 pr-5">
         <div className="flex items-center justify-end gap-1">
+          {aguardaAceite(b) && onAceitar && (
+            <button
+              onClick={() => onAceitar(b)}
+              className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-brand hover:bg-brand/90 transition-colors"
+              title="Aceitar na aba Novas"
+            >
+              <CheckCircle2 size={13} /> Aceitar
+            </button>
+          )}
           {pago && !cancelInfo(b).cancelada && (
             <>
               {dispatched && (
@@ -305,7 +322,7 @@ function BookingRow({ b, onAssign, onStart, onComplete, starting = false, operad
 }
 
 // ── Card mobile (mesma info da linha da tabela) ────────
-function BookingCardMobile({ b, onAssign, onStart, onComplete, starting = false, operador, comboSize = 0 }) {
+function BookingCardMobile({ b, onAssign, onStart, onComplete, onAceitar, starting = false, operador, comboSize = 0 }) {
   const pago     = estaPago(b)
   const st       = seloDe(b)
   const name     = b.users?.full_name || '—'
@@ -361,6 +378,14 @@ function BookingCardMobile({ b, onAssign, onStart, onComplete, starting = false,
 
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <span className="text-[13px] font-extrabold text-gray-800">{fmt(b.total_amount)}</span>
+        {aguardaAceite(b) && onAceitar && (
+          <button
+            onClick={() => onAceitar(b)}
+            className="flex items-center gap-1 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 text-white bg-brand hover:bg-brand/90 transition-colors"
+          >
+            <CheckCircle2 size={13} /> Aceitar
+          </button>
+        )}
         {/* Sem pagamento/cancelada NÃO repete o status aqui — o selo no topo do
             card já informa. Só mostramos AÇÕES quando há o que fazer. */}
         {pago && !cancelInfo(b).cancelada && (
@@ -425,6 +450,9 @@ export default function Dashboard() {
   const [tab, setTab]          = useState(searchParams.get('tab') === 'novas' ? 'novas' : 'active')
   const [search, setSearch]    = useState('')
   const [page, setPage]        = useState(1)
+  // "Aceitar" num card da lista (o admin vê também as que ninguém aceitou): o
+  // aceite de verdade fica na aba Novas, com prazo, valor e confirmação.
+  const abrirNovas = () => { setTab('novas'); setPage(1) }
   const [showMore, setShowMore] = useState(false) // painel "Mais filtros"
 
   const [assignModal, setAssign]           = useState(null)
@@ -850,13 +878,13 @@ export default function Dashboard() {
               </div>
               <div className="divide-y divide-gray-100">
                 {u.items.map((b) => (
-                  <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={0} />
+                  <BookingCardMobile key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} onAceitar={abrirNovas} starting={startMut.isPending} operador={operador} comboSize={0} />
                 ))}
               </div>
             </div>
           ) : (
             <div key={u.b.id} className="rounded-2xl border border-gray-100 bg-white overflow-hidden shadow-sm">
-              <BookingCardMobile b={u.b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={0} />
+              <BookingCardMobile b={u.b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} onAceitar={abrirNovas} starting={startMut.isPending} operador={operador} comboSize={0} />
             </div>
           ))}
           {pageItems.length === 0 && (
@@ -891,11 +919,11 @@ export default function Dashboard() {
                     </span>
                   </td>
                 </tr>
-                {u.items.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={0} />)}
+                {u.items.map((b) => <BookingRow key={b.id} b={b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} onAceitar={abrirNovas} starting={startMut.isPending} operador={operador} comboSize={0} />)}
               </tbody>
             ) : (
               <tbody key={u.b.id}>
-                <BookingRow b={u.b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} starting={startMut.isPending} operador={operador} comboSize={0} />
+                <BookingRow b={u.b} onAssign={setAssign} onStart={(bk) => setConfirmStart(bk)} onComplete={(bk) => setConfirmComplete(bk)} onAceitar={abrirNovas} starting={startMut.isPending} operador={operador} comboSize={0} />
               </tbody>
             ))}
           </table>
