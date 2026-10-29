@@ -420,12 +420,25 @@ function fmtDate(d) {
   try { return format(new Date(d + 'T12:00:00'), "d MMM", { locale: ptBR }) } catch { return d }
 }
 
+// Cotação é de passeio personalizado (roteiro origem → paradas) ou de translado
+// (origem → destino). O rótulo e a rota mudam conforme o tipo.
+const quoteIsTour = (q) => q?._kind === 'tour'
+function quoteRouteText(q) {
+  if (quoteIsTour(q)) {
+    const stops = Array.isArray(q.stops) ? q.stops.map((s) => s?.name).filter(Boolean) : []
+    return [q.origin_place_name, ...stops].join(' → ')
+  }
+  return `${q.origin_place_name} → ${q.destination_place_name}`
+}
+
 /* ── Quote Detail Dialog ────────────────────────────────────── */
 function QuoteDetailDialog({ quote, onClose }) {
   const badge = QUOTE_BADGE[quote.status] || QUOTE_BADGE.pending_quote
+  const isTour = quoteIsTour(quote)
   const rows = [
-    ['Origem',      quote.origin_place_name],
-    ['Destino',     quote.destination_place_name],
+    ...(isTour
+      ? [['Roteiro', quoteRouteText(quote)], ...(quote.vehicle_type ? [['Veículo', quote.vehicle_type]] : [])]
+      : [['Origem', quote.origin_place_name], ['Destino', quote.destination_place_name]]),
     ['Data',        fmtDate(quote.service_date)],
     ['Horário',     quote.service_time ? quote.service_time.slice(0, 5) : '—'],
     ['Passageiros', String(quote.people_count || 1)],
@@ -439,7 +452,7 @@ function QuoteDetailDialog({ quote, onClose }) {
         <div className="flex items-center justify-between mb-4 gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <Car size={16} className="text-brand shrink-0" />
-            <h3 className="font-bold text-gray-900 truncate">Translado personalizado</h3>
+            <h3 className="font-bold text-gray-900 truncate">{isTour ? 'Passeio personalizado' : 'Translado personalizado'}</h3>
           </div>
           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${badge.bg} ${badge.text}`}>{badge.label}</span>
         </div>
@@ -472,9 +485,10 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
   const idx   = gi(quote.id)
   const [from, to] = GRADIENTS[idx]
 
+  const isTour   = quoteIsTour(quote)
   const dateStr  = fmtDate(quote.service_date)
   const timeStr  = quote.service_time ? quote.service_time.slice(0, 5) : '—'
-  const route    = `${quote.origin_place_name} → ${quote.destination_place_name}`
+  const route    = quoteRouteText(quote)
   const hasPrice = quote.quoted_price != null
 
   return (
@@ -489,7 +503,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
         {/* categoria */}
         <div className="absolute top-3 left-3">
           <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-            <Car size={10} /> Translado personalizado
+            <Car size={10} /> {isTour ? 'Passeio personalizado' : 'Translado personalizado'}
           </span>
         </div>
 
@@ -554,7 +568,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
         <div className="mt-auto flex items-center justify-between gap-3 pt-0.5">
           <div>
             <p className="text-[10px] text-gray-400 leading-none">
-              {quote.status === 'accepted' ? 'Total a pagar' : 'Valor da corrida'}
+              {quote.status === 'accepted' ? 'Total a pagar' : (isTour ? 'Valor do passeio' : 'Valor da corrida')}
             </p>
             <p className="text-[15px] font-bold text-gray-900 leading-none mt-0.5">
               {hasPrice ? fmt(quote.quoted_price) : 'A definir'}
@@ -952,18 +966,28 @@ export default function Bookings() {
     queryFn:  () => api.getMyBookings(),
   })
 
+  // Atualiza enquanto houver cotação aguardando preço/proposta, para o cliente
+  // ver a oferta do operador sem precisar atualizar a tela.
+  const quoteRefetch = (query) => {
+    const list = Array.isArray(query.state.data) ? query.state.data : []
+    return list.some(qq => qq.status === 'pending_quote' || qq.status === 'quoted') ? 12000 : false
+  }
   const { data: quotesData, isLoading: quotesLoading } = useQuery({
     queryKey: ['my-quotes'],
     queryFn:  () => api.getMyQuotes(),
-    // Atualiza enquanto houver cotação aguardando preço/proposta, para o cliente
-    // ver a oferta do operador sem precisar atualizar a tela.
-    refetchInterval: (query) => {
-      const list = Array.isArray(query.state.data) ? query.state.data : []
-      return list.some(qq => qq.status === 'pending_quote' || qq.status === 'quoted') ? 12000 : false
-    },
+    refetchInterval: quoteRefetch,
+  })
+  // Cotações de passeio personalizado — mesmo fluxo, entram na mesma lista.
+  const { data: tourQuotesData } = useQuery({
+    queryKey: ['my-tour-quotes'],
+    queryFn:  () => api.getMyTourQuotes(),
+    refetchInterval: quoteRefetch,
   })
 
-  const quotes = Array.isArray(quotesData) ? quotesData : []
+  const quotes = [
+    ...(Array.isArray(quotesData) ? quotesData : []).map((q) => ({ ...q, _kind: 'transfer' })),
+    ...(Array.isArray(tourQuotesData) ? tourQuotesData : []).map((q) => ({ ...q, _kind: 'tour' })),
+  ]
 
   // Reservas que EU já avaliei — some o botão "Avaliar" / vira "Avaliado".
   const { data: myReviews } = useQuery({
@@ -1023,13 +1047,15 @@ export default function Bookings() {
   async function handleAcceptQuote(quote) {
     setQuoteActing(quote.id)
     try {
-      const result = await api.acceptQuote(quote.id)
+      const isTour = quoteIsTour(quote)
+      const result = await (isTour ? api.acceptTourQuote(quote.id) : api.acceptQuote(quote.id))
+      const routeText = quoteRouteText(quote)
       // A cotação aceita já criou a reserva (atribuída ao operador que cotou) —
       // paga direto via existing_booking_id, sem reentrar na fila de solicitação.
       navigate('/checkout/pagamento', {
         state: {
-          service_name:        `${quote.origin_place_name} → ${quote.destination_place_name}`,
-          service_type:        'transfer',
+          service_name:        routeText,
+          service_type:        isTour ? 'tour' : 'transfer',
           booking_mode:        'private',
           service_date:        fmtDate(quote.service_date),
           service_date_iso:    quote.service_date,
@@ -1037,7 +1063,7 @@ export default function Bookings() {
           people_count:        quote.people_count,
           total_price:         result.quoted_price,
           origin_text:         quote.origin_place_name,
-          destination_text:    quote.destination_place_name,
+          destination_text:    isTour ? routeText : quote.destination_place_name,
           existing_booking_id: result.booking_id,
         },
       })
@@ -1048,11 +1074,14 @@ export default function Bookings() {
     }
   }
 
-  async function handleRejectQuote(quoteId) {
-    setQuoteActing(quoteId)
+  async function handleRejectQuote(quote) {
+    const q = typeof quote === 'object' ? quote : { id: quote }
+    setQuoteActing(q.id)
     try {
-      await api.rejectQuote(quoteId, { rejection_reason: 'Recusado pelo cliente' })
+      await (quoteIsTour(q) ? api.rejectTourQuote(q.id, { rejection_reason: 'Recusado pelo cliente' })
+                            : api.rejectQuote(q.id, { rejection_reason: 'Recusado pelo cliente' }))
       queryClient.invalidateQueries({ queryKey: ['my-quotes'] })
+      queryClient.invalidateQueries({ queryKey: ['my-tour-quotes'] })
     } catch (err) {
       alert(err.message || 'Erro ao recusar cotação')
     } finally {
@@ -1061,11 +1090,13 @@ export default function Bookings() {
   }
 
   async function handleCancelQuote(quote) {
-    if (!confirm('Cancelar esta solicitação de translado personalizado?')) return
+    const isTour = quoteIsTour(quote)
+    if (!confirm(`Cancelar esta solicitação de ${isTour ? 'passeio' : 'translado'} personalizado?`)) return
     setQuoteActing(quote.id)
     try {
-      await api.cancelQuote(quote.id)
+      await (isTour ? api.cancelTourQuote(quote.id) : api.cancelQuote(quote.id))
       queryClient.invalidateQueries({ queryKey: ['my-quotes'] })
+      queryClient.invalidateQueries({ queryKey: ['my-tour-quotes'] })
     } catch (err) {
       alert(err.message || 'Erro ao cancelar a solicitação')
     } finally {
@@ -1122,10 +1153,12 @@ export default function Bookings() {
 
   // Retoma o pagamento de uma cotação já aceita (sem reaceitar)
   function handlePayQuote(quote) {
+    const isTour = quoteIsTour(quote)
+    const routeText = quoteRouteText(quote)
     navigate('/checkout/pagamento', {
       state: {
-        service_name:        `${quote.origin_place_name} → ${quote.destination_place_name}`,
-        service_type:        'transfer',
+        service_name:        routeText,
+        service_type:        isTour ? 'tour' : 'transfer',
         booking_mode:        'private',
         service_date:        fmtDate(quote.service_date),
         service_date_iso:    quote.service_date,
@@ -1133,7 +1166,7 @@ export default function Bookings() {
         people_count:        quote.people_count,
         total_price:         quote.quoted_price,
         origin_text:         quote.origin_place_name,
-        destination_text:    quote.destination_place_name,
+        destination_text:    isTour ? routeText : quote.destination_place_name,
         existing_booking_id: quote.booking_id,
       },
     })
@@ -1149,7 +1182,7 @@ export default function Bookings() {
     let list = quotes.filter(qq => qq.status !== 'paid' && !bookedServiceIds.has(qq.id))
     if (tab === 'ativos')     list = list.filter(qq => QUOTE_ACTIVE.includes(qq.status))
     if (tab === 'cancelados') list = list.filter(qq => ['cancelled', 'rejected', 'expired'].includes(qq.status))
-    if (q) list = list.filter(qq => `${qq.origin_place_name || ''} ${qq.destination_place_name || ''}`.toLowerCase().includes(q))
+    if (q) list = list.filter(qq => quoteRouteText(qq).toLowerCase().includes(q))
     return list
   })()
 

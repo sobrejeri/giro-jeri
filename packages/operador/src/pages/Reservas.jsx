@@ -562,9 +562,13 @@ function MyGroupSheet({ bookings, onClose, onConfirm, onRequestInfo, onStart, on
 
 // ── Card de cotação (rota personalizada) ──────────────────
 function QuoteRequestCard({ quote, onQuote }) {
+  const isTour = quote._kind === 'tour'
   const name   = quote.client_name || quote.users?.full_name || quote.user_name || 'Cliente'
   const origin = quote.origin_place_name || quote.origin_description || '—'
   const dest   = quote.destination_place_name || quote.destination_description || '—'
+  // Passeio personalizado: o roteiro é origem → paradas (sem destino único).
+  const stops  = Array.isArray(quote.stops) ? quote.stops.map((s) => s?.name).filter(Boolean) : []
+  const routeText = isTour ? [origin, ...stops].join(' → ') : `${origin} → ${dest}`
   const notes  = quote.special_notes || quote.client_notes
   const ppl    = quote.people_count || quote.passengers
   const isQuoted = quote.status === 'quoted'
@@ -582,9 +586,21 @@ function QuoteRequestCard({ quote, onQuote }) {
       </div>
 
       <div className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">Transfer</span>
-          <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Translado personalizado</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {isTour ? (
+            <>
+              <span className="bg-emerald-100 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded-full">Passeio</span>
+              <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Passeio personalizado</span>
+              {quote.vehicle_type && (
+                <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"><Car size={11} /> {quote.vehicle_type}</span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">Transfer</span>
+              <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Translado personalizado</span>
+            </>
+          )}
         </div>
 
         <div className="bg-gray-50 rounded-xl px-3 py-2">
@@ -595,7 +611,7 @@ function QuoteRequestCard({ quote, onQuote }) {
         <div className="space-y-1.5">
           <div className="flex items-start gap-2 text-[13px] text-gray-700">
             <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
-            <span>{origin} → {dest}</span>
+            <span>{routeText}</span>
           </div>
           <div className="flex items-center gap-4 text-[13px] text-gray-700">
             <span className="flex items-center gap-1.5">
@@ -632,7 +648,7 @@ function QuoteRequestCard({ quote, onQuote }) {
               onClick={() => onQuote(quote)}
               className="w-full flex items-center justify-center gap-2 bg-brand text-white font-bold py-3 rounded-xl text-[14px] active:scale-95 transition-all shadow-md shadow-brand/30"
             >
-              <DollarSign size={16} /> Enviar valor da corrida
+              <DollarSign size={16} /> {isTour ? 'Enviar valor do passeio' : 'Enviar valor da corrida'}
             </button>
           )}
         </div>
@@ -714,6 +730,13 @@ export default function Reservas({ soNovas = false }) {
     queryKey: ['quotes-history'],
     queryFn:  () => api.getQuotesHistory(),
   })
+  // Cotações de PASSEIO personalizado — a view v_tour_quotes_dashboard já traz
+  // pendentes (pending_quote) E as já cotadas (quoted) num só endpoint.
+  const { data: tourQuotesRaw } = useQuery({
+    queryKey:        ['tour-quotes-pending'],
+    queryFn:         () => api.getPendingTourQuotes(),
+    refetchInterval: 20000,
+  })
 
   const pending = data?.pending || []
   const mine    = data?.mine    || []
@@ -736,16 +759,31 @@ export default function Reservas({ soNovas = false }) {
   // accepted...). Aqui mantemos só as que o operador ainda precisa cotar —
   // senão as já respondidas/aceitas reaparecem com o botão (duplicando e dando
   // erro "já respondida"). As 'quoted' vêm da seção de histórico abaixo.
-  const pendingQuotes = (Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || []))
-    .filter((q) => q.status === 'pending_quote')
-  const quotedQuotes  = (Array.isArray(quotesHistoryRaw) ? quotesHistoryRaw : (quotesHistoryRaw?.data || []))
-    .filter((q) => q.status === 'quoted')
+  // Translados (rota personalizada) + passeios personalizados entram juntos na
+  // mesma lista de cotações — cada item marcado com _kind para o card/modal
+  // saberem como mostrar o roteiro e qual API chamar ao precificar.
+  const tourQuotesArr = (Array.isArray(tourQuotesRaw) ? tourQuotesRaw : (tourQuotesRaw?.data || []))
+    .map((q) => ({ ...q, _kind: 'tour' }))
+  const pendingQuotes = [
+    ...(Array.isArray(pendingQuotesRaw) ? pendingQuotesRaw : (pendingQuotesRaw?.data || []))
+      .filter((q) => q.status === 'pending_quote')
+      .map((q) => ({ ...q, _kind: 'transfer' })),
+    ...tourQuotesArr.filter((q) => q.status === 'pending_quote'),
+  ]
+  const quotedQuotes  = [
+    ...(Array.isArray(quotesHistoryRaw) ? quotesHistoryRaw : (quotesHistoryRaw?.data || []))
+      .filter((q) => q.status === 'quoted')
+      .map((q) => ({ ...q, _kind: 'transfer' })),
+    ...tourQuotesArr.filter((q) => q.status === 'quoted'),
+  ]
 
   const setQuoteMut = useMutation({
-    mutationFn: ({ id, quoted_price, quote_notes }) =>
-      api.setQuotePrice(id, { quoted_price: Number(quoted_price), quote_notes }),
+    // Passeio personalizado usa /tour-quotes; translado usa /transfers/quotes.
+    mutationFn: ({ id, quoted_price, quote_notes, kind }) =>
+      (kind === 'tour' ? api.setTourQuotePrice : api.setQuotePrice)(id, { quoted_price: Number(quoted_price), quote_notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotes-pending'] })
+      queryClient.invalidateQueries({ queryKey: ['tour-quotes-pending'] })
       setQuoteModal(null); setPrice(''); setNotes('')
       setToast({ message: 'Cotação enviada ao cliente!', type: 'success' })
     },
@@ -757,7 +795,7 @@ export default function Reservas({ soNovas = false }) {
   function submitQuote(e) {
     e.preventDefault()
     if (!price || isNaN(Number(price)) || Number(price) <= 0) return
-    setQuoteMut.mutate({ id: quoteModal.id, quoted_price: price, quote_notes: notes })
+    setQuoteMut.mutate({ id: quoteModal.id, quoted_price: price, quote_notes: notes, kind: quoteModal._kind })
   }
 
   async function handleAccept(item) {
@@ -1108,7 +1146,7 @@ export default function Reservas({ soNovas = false }) {
           <div className="text-center py-16 text-gray-400">
             <DollarSign size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium">Nenhuma cotação no momento</p>
-            <p className="text-xs mt-1">Pedidos de translado personalizado aparecerão aqui</p>
+            <p className="text-xs mt-1">Pedidos de translado ou passeio personalizado aparecerão aqui</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -1198,7 +1236,7 @@ export default function Reservas({ soNovas = false }) {
       )}
 
       {/* Modal: definir valor da cotação */}
-      <Modal open={!!quoteModal} onClose={() => setQuoteModal(null)} title="Definir valor da corrida" size="sm">
+      <Modal open={!!quoteModal} onClose={() => setQuoteModal(null)} title={quoteModal?._kind === 'tour' ? 'Definir valor do passeio' : 'Definir valor da corrida'} size="sm">
         {quoteModal && (
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
@@ -1206,7 +1244,9 @@ export default function Reservas({ soNovas = false }) {
                 {quoteModal.client_name || quoteModal.users?.full_name || quoteModal.user_name || 'Cliente'}
               </p>
               <p className="text-gray-500">
-                {(quoteModal.origin_place_name || quoteModal.origin_description)} → {(quoteModal.destination_place_name || quoteModal.destination_description)}
+                {quoteModal._kind === 'tour'
+                  ? [quoteModal.origin_place_name, ...(Array.isArray(quoteModal.stops) ? quoteModal.stops.map((s) => s?.name).filter(Boolean) : [])].join(' → ')
+                  : `${(quoteModal.origin_place_name || quoteModal.origin_description)} → ${(quoteModal.destination_place_name || quoteModal.destination_description)}`}
               </p>
               <p className="text-gray-500">
                 {quoteModal.service_date}{quoteModal.service_time ? ` ${quoteModal.service_time.slice(0, 5)}` : ''} · {quoteModal.people_count || quoteModal.passengers} pax
@@ -1215,7 +1255,7 @@ export default function Reservas({ soNovas = false }) {
 
             <form onSubmit={submitQuote} className="space-y-3">
               <Input
-                label="Valor da corrida (R$)"
+                label={quoteModal._kind === 'tour' ? 'Valor do passeio (R$)' : 'Valor da corrida (R$)'}
                 type="number"
                 min="1"
                 step="0.01"

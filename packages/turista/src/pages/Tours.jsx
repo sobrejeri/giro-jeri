@@ -913,6 +913,21 @@ export default function Tours() {
           </button>
         </div>
 
+        {/* ── Montar meu passeio (cotação sob medida) ─────────────────── */}
+        <button
+          onClick={() => navigate('/passeio-personalizado')}
+          className="w-full flex items-center gap-3 bg-gradient-to-r from-brand/10 to-brand/5 border border-brand/20 rounded-2xl px-4 py-3 text-left active:scale-[0.99] transition-transform"
+        >
+          <div className="w-9 h-9 rounded-xl bg-brand/15 flex items-center justify-center shrink-0">
+            <Sparkles size={16} className="text-brand" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-bold text-gray-900 leading-tight">Montar meu passeio</p>
+            <p className="text-[11px] text-gray-500 leading-tight mt-0.5">Monte o roteiro e receba um valor sob medida da cooperativa.</p>
+          </div>
+          <ChevronRight size={18} className="text-brand shrink-0" />
+        </button>
+
         {/* Saída, data e pessoas saíram DESTA tela.
             A vitrine só apresenta os passeios; quem cobra os dados da reserva é
             o carrinho, onde os três já são obrigatórios para poder solicitar

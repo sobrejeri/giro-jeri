@@ -18,6 +18,7 @@ import PerfilOperador  from './pages/PerfilOperador'
 import Tours           from './pages/Tours'
 import TourDetail      from './pages/TourDetail'
 import Transfers       from './pages/Transfers'
+import PasseioPersonalizado from './pages/PasseioPersonalizado'
 import Estacionamento        from './pages/Estacionamento'
 import EstacionamentoDetalhe from './pages/EstacionamentoDetalhe'
 import EstacionamentoPagamento from './pages/EstacionamentoPagamento'
@@ -149,6 +150,7 @@ export default function App() {
         <Route path="turiva"              element={<PerfilPublico />} />
         <Route path="op/:id"              element={<PerfilOperador />} />
         <Route path="passeios"            element={<Tours />} />
+        <Route path="passeio-personalizado" element={<PasseioPersonalizado />} />
         <Route path="passeios/:id"        element={<TourDetail />} />
         <Route path="transfers"           element={<Transfers />} />
         <Route path="estacionamento"      element={<Estacionamento />} />

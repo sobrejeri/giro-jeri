@@ -163,6 +163,9 @@ export const api = {
   getPendingQuotes: ()         => request('/api/transfers/quotes/pending'),
   getQuotesHistory: ()         => request('/api/transfers/quotes/history'),
   setQuotePrice:   (id, body) => request(`/api/transfers/quotes/${id}/quote`, { method: 'PATCH', body }),
+  // Cotações de PASSEIO personalizado (mesma lógica; a view já traz pending+quoted)
+  getPendingTourQuotes: ()        => request('/api/tour-quotes/pending'),
+  setTourQuotePrice:   (id, body) => request(`/api/tour-quotes/${id}/quote`, { method: 'PATCH', body }),
 
   // Veículos
   getVehicles:   (params = {}) => request(`/api/vehicles?${new URLSearchParams(params)}`),

@@ -269,6 +269,12 @@ export const api = {
   acceptQuote:        (id)          => request(`/api/transfers/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote:        (id, body)    => request(`/api/transfers/quotes/${id}/reject`, { method: 'POST', body }),
   cancelQuote:        (id)          => request(`/api/transfers/quotes/${id}/cancel`, { method: 'POST' }),
+  // Passeio personalizado (cotação) — mesmo fluxo do translado personalizado.
+  requestTourQuote:   (body)        => request('/api/tour-quotes',           { method: 'POST', body }),
+  getMyTourQuotes:    ()            => request('/api/tour-quotes'),
+  acceptTourQuote:    (id)          => request(`/api/tour-quotes/${id}/accept`, { method: 'POST' }),
+  rejectTourQuote:    (id, body)    => request(`/api/tour-quotes/${id}/reject`, { method: 'POST', body }),
+  cancelTourQuote:    (id)          => request(`/api/tour-quotes/${id}/cancel`, { method: 'POST' }),
   placesAutocomplete: (q)           => request(`/api/transfers/places/autocomplete?q=${encodeURIComponent(q)}`),
   placeDetails:       (placeId)     => request(`/api/transfers/places/details?place_id=${encodeURIComponent(placeId)}`),
 
