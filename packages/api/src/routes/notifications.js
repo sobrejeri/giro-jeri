@@ -4,6 +4,7 @@ import { authenticate, requireAdmin } from '../middleware/auth.js'
 import { isWhatsappEnabled, sendTestMessage, sendTestLocation } from '../services/whatsapp.js'
 import { sendPushToUser, isConfigured as pushConfigured } from '../services/webpush.js'
 import { notifyUser, getTemplate, DEFAULT_TEMPLATES } from '../services/notify.js'
+import { ADMIN_ONLY_KEYS } from '../services/notificationKeys.js'
 
 const router = Router()
 
@@ -39,10 +40,8 @@ router.post('/wa-test-location', authenticate, requireAdmin, async (req, res) =>
 })
 
 // ── GET /api/notifications — minhas notificações + total não lidas ──
-// Avisos internos (só fazem sentido no PWA do admin). Nos apps de
-// turista/operador eles são escondidos da central mesmo que o usuário tenha
-// os dois papéis na mesma conta.
-const ADMIN_ONLY_KEYS = ['admin_new_user', 'admin_payment_approved', 'admin_payment_rejected', 'admin_reset_request']
+// Avisos internos (ADMIN_ONLY_KEYS) só aparecem no PWA do admin. A lista é a
+// mesma usada no número do ícone do app (webpush.js) — as duas contas batem.
 function filtrarPorApp(items, app) {
   if (app === 'turista' || app === 'operador') {
     return items.filter((n) => !ADMIN_ONLY_KEYS.includes(n.template_key))

@@ -14,6 +14,7 @@ const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const auth          = read('../src/routes/auth.js')
 const notify        = read('../src/services/notify.js')
 const notifications = read('../src/routes/notifications.js')
+const notificationKeys = read('../src/services/notificationKeys.js')
 const turistaAuth   = read('../../turista/src/pages/Auth.jsx')
 const operadorLogin = read('../../operador/src/pages/Login.jsx')
 const operadorApi   = read('../../operador/src/lib/api.js')
@@ -56,8 +57,10 @@ test('dashboard do admin lista as solicitações pendentes', () => {
 
 test('template admin_reset_request existe e é exclusivo do app admin', () => {
   assert.match(notify, /admin_reset_request:\s*\{ enabled: true/, 'template cadastrado em notify.js')
-  assert.match(notifications, /ADMIN_ONLY_KEYS = \[[^\]]*'admin_reset_request'/,
+  // A lista mora num módulo só, usado pelo sininho e pelo número no ícone.
+  assert.match(notificationKeys, /ADMIN_ONLY_KEYS = \[[^\]]*'admin_reset_request'/,
     'aviso só aparece no sininho do admin, não no turista/operador')
+  assert.match(notifications, /import \{ ADMIN_ONLY_KEYS \} from '\.\.\/services\/notificationKeys\.js'/)
 })
 
 test('turista: tela de forgot menciona @usuário', () => {

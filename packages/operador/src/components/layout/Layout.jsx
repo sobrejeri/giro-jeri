@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import NovaSolicitacaoPopup from '../NovaSolicitacaoPopup'
 import PushPrompt from '../PushPrompt'
+import SeloDoApp from '../SeloDoApp'
 
 export default function Layout() {
   const [navOpen, setNavOpen] = useState(false)
@@ -21,6 +22,8 @@ export default function Layout() {
       <NovaSolicitacaoPopup />
       {/* Convite para ativar notificações no celular. */}
       <PushPrompt />
+      {/* Número de não lidas no ícone do app instalado. */}
+      <SeloDoApp />
     </div>
   )
 }

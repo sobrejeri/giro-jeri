@@ -40,6 +40,7 @@ import AffiliateLink   from './pages/AffiliateLink'
 import Affiliate       from './pages/Affiliate'
 import Explore         from './pages/Explore'
 import { destinoSeguro } from './lib/destinoSeguro'
+import SeloDoApp from './components/SeloDoApp'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -122,6 +123,7 @@ export default function App() {
     <>
     <SpaRedirectHandler />
     <MarketingTracker />
+    <SeloDoApp />
     <Routes>
       {/* Auth — full screen, sem layout */}
       <Route path="/c/:slug"  element={<PartnerLink />} />

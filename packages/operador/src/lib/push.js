@@ -69,11 +69,26 @@ export async function enablePush() {
   }
 }
 
+// Número no ícone do app instalado (Badging API): as notificações sem ler, o
+// mesmo número do sininho. iPhone (iOS 16.4+, app na Tela de Início, com as
+// notificações permitidas) e Chrome/Edge no computador mostram; no Android a
+// bolinha vem do próprio sistema, pela notificação. Sem suporte, não faz nada.
+// Com o app fechado, quem atualiza é o service worker, pelo push.
+export function definirSeloDoApp(n) {
+  try {
+    if (typeof navigator === 'undefined' || !('setAppBadge' in navigator)) return
+    const p = n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()
+    if (p?.catch) p.catch(() => {})
+  } catch { /* sem permissão / sem suporte */ }
+}
+
 // Remove a inscrição DESTE aparelho no servidor (chamado no logout). Sem isso, o
 // servidor continua mandando push mesmo com o app deslogado (a entrega é no
 // nível do SO). Mantém a inscrição do navegador viva para re-login silencioso
 // via syncPush(). Nunca lança.
 export async function disablePush() {
+  // Saiu da conta: o número no ícone não pode ficar mostrando as dela.
+  definirSeloDoApp(0)
   try {
     if (!pushSupported()) return
     const reg = await navigator.serviceWorker.getRegistration()

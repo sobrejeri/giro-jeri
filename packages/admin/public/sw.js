@@ -66,6 +66,18 @@ self.addEventListener('fetch', (event) => {
   }
 })
 
+// Número no ícone do app (Badging API): o servidor manda no push quantas
+// notificações estão sem ler — o mesmo número do sininho. iPhone (iOS 16.4+,
+// app na Tela de Início) e Chrome/Edge no computador mostram; onde não há
+// suporte, não faz nada. Com o app aberto, quem mantém o número é o próprio app.
+function atualizarSelo(n) {
+  try {
+    const nav = self.navigator
+    if (typeof n !== 'number' || !nav || !('setAppBadge' in nav)) return Promise.resolve()
+    return (n > 0 ? nav.setAppBadge(n) : nav.clearAppBadge()).catch(() => {})
+  } catch (_) { return Promise.resolve() }
+}
+
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch (_) {}
@@ -76,7 +88,10 @@ self.addEventListener('push', (event) => {
     data:    { url: self.registration.scope + 'reservas' },
     vibrate: [80, 40, 80],
   }
-  event.waitUntil(self.registration.showNotification(title, options))
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(title, options),
+    atualizarSelo(data.badge),
+  ]))
 })
 
 self.addEventListener('notificationclick', (event) => {

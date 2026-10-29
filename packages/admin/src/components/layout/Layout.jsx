@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import SeloDoApp from '../SeloDoApp'
 
 export default function Layout() {
   const [navOpen, setNavOpen] = useState(false)
@@ -18,6 +19,8 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+      {/* Número de não lidas no ícone do app instalado. */}
+      <SeloDoApp />
     </div>
   )
 }
