@@ -562,10 +562,11 @@ function AcompanhamentoOperacional() {
                       <p className="text-[11px] text-gray-500 truncate">
                         {b.users?.full_name || 'Cliente'} · {fmtDateShort(b.service_date)}{b.service_time ? ` ${String(b.service_time).slice(0, 5)}` : ''} · {b.people_count || 1}p
                       </p>
-                      <p className="text-[11px] text-gray-500 truncate flex items-center gap-1">
-                        <Briefcase size={10} />
-                        {b.operator?.full_name || <span className="text-gray-600 italic">sem operador</span>}
-                      </p>
+                      {b.operator?.full_name ? (
+                        <div className="mt-0.5"><UserIdentity name={b.operator.full_name} userType={b.operator.user_type} photo={b.operator.profile_photo_url} size={20} nameClass="text-gray-400" /></div>
+                      ) : (
+                        <p className="text-[11px] text-gray-600 italic flex items-center gap-1 mt-0.5"><Briefcase size={10} /> sem operador</p>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold ${st.chip} ${st.text}`}>

@@ -1400,7 +1400,7 @@ router.get('/operational', requireOperator, async (req, res, next) => {
     let byId = new Map();
     if (userIds.length > 0) {
       const { data: users, error: uErr } = await supabase
-        .from('users').select('id, full_name, phone').in('id', userIds);
+        .from('users').select('id, full_name, phone, user_type, profile_photo_url').in('id', userIds);
       if (uErr) throw uErr;
       byId = new Map((users || []).map((u) => [u.id, u]));
     }
