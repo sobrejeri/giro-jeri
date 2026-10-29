@@ -2254,13 +2254,14 @@ router.get('/financial', async (req, res, next) => {
       }
     } catch (e) { console.error('[operator/financial] estacionamento por gateway falhou (ignorado):', e?.message); }
 
-    // `voce_recebe` = o que CAI NA CONTA do operador por gateway: líquido (já sem
-    // a taxa de gateway) MENOS a comissão da plataforma. É o repasse real.
+    // `voce_recebe` = o que CAI NA CONTA do operador por gateway = bruto MENOS a
+    // comissão da plataforma (payout_operator). A TAXA DE GATEWAY não sai do
+    // repasse do operador — é a PLATAFORMA que a absorve.
     const by_gateway = Object.entries(byGwRaw)
       .map(([gateway, v]) => ({
         gateway, label: GW_LABELS[gateway] || gateway,
         bruto: round2(v.bruto), taxas: round2(v.taxas), liquido: round2(v.liquido),
-        comissao: round2(v.comissao), voce_recebe: round2(v.liquido - v.comissao),
+        comissao: round2(v.comissao), voce_recebe: round2(v.bruto - v.comissao),
       }))
       .sort((a, b) => b.bruto - a.bruto);
 

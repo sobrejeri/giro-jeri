@@ -156,7 +156,7 @@ export default function Financeiro() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard icon={DollarSign}    label="Bruto"          value={fmt(summary?.bruto)}          color="text-gray-700" />
-        <KpiCard icon={TrendingUp}    label="Você recebe"    value={fmt((summary?.liquido || 0) - (summary?.comissoes_plataforma || 0))} color="text-green-600" />
+        <KpiCard icon={TrendingUp}    label="Você recebe"    value={fmt((summary?.bruto || 0) - (summary?.comissoes_plataforma || 0))} color="text-green-600" />
         <KpiCard icon={CreditCard}    label="Taxas Gateway"  value={fmt(summary?.taxas)}           color="text-orange-600" />
         <KpiCard icon={AlertCircle}   label="Não creditado"  value={fmt(summary?.nao_creditado)}   color="text-amber-600" />
       </div>
@@ -175,14 +175,13 @@ export default function Financeiro() {
                   </div>
                   <dl className="space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-gray-500">Bruto</span><span className="text-gray-800 font-semibold">{fmt(g.bruto)}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">(-) Taxa gateway</span><span className="text-red-500">- {fmt(g.taxas)}</span></div>
                     <div className="flex justify-between"><span className="text-gray-500">(-) Comissão Turiva</span><span className="text-red-500">- {fmt(g.comissao)}</span></div>
                     <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-600 font-medium">Você recebe</span><span className="text-green-600 font-bold">{fmt(g.voce_recebe)}</span></div>
                   </dl>
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[11px] text-gray-400">Inclui passeios e o seu estacionamento. "Você recebe" já desconta a taxa de gateway e a comissão da plataforma — é o que cai na sua conta.</p>
+            <p className="mt-3 text-[11px] text-gray-400">Inclui passeios e o seu estacionamento. "Você recebe" = o bruto menos a comissão da plataforma — é o que cai na sua conta. A taxa de gateway é paga pela plataforma, não sai do seu repasse.</p>
             {/* Gráfico por gateway: bruto × o que o operador RECEBE (após taxa de
                 gateway E comissão da plataforma) de cada meio. */}
             <div className="mt-4 h-56">
@@ -244,7 +243,7 @@ export default function Financeiro() {
           )}
           {gateways.length > 0 && (
             <p className="mt-3 text-[11px] text-gray-400">
-              Uma linha por gateway de recebimento (passeios + o seu estacionamento). É o faturamento líquido — o que você recebe, já sem a taxa de gateway e a comissão da plataforma — por cada meio.
+              Uma linha por gateway de recebimento (passeios + o seu estacionamento). É o que você recebe (bruto menos a comissão da plataforma) por cada meio. A taxa de gateway é paga pela plataforma.
             </p>
           )}
         </CardBody>
