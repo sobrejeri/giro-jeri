@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { PlaceInput, suggestVehicles, VehicleRow, shortPlace } from './Transfers'
 import { pontosDaRegiao } from '../lib/pontosTuristicos'
+import { useLocaisProximos } from '../lib/locaisProximos'
 import { isHighSeasonIso } from '../lib/season'
 import { horasDeAntecedencia, primeiroReservavel, HORAS_PADRAO_TRANSFER } from '../lib/antecedencia'
 import { useCart } from '../contexts/CartContext'
@@ -115,6 +116,9 @@ export default function TransfersDesktop() {
   const autoAppliedRef = useRef(null)
 
   const [mode, setMode] = useState('rota')
+  // Lugares perto da localização escolhida, para a ORIGEM do personalizado
+  // (só busca quando a aba personalizada está aberta).
+  const proximos = useLocaisProximos({ ativo: mode === 'custom' })
 
   /* ── Rota definida ── */
   const [origin, setOrigin] = useState(navState?.origin || '')
@@ -806,13 +810,13 @@ export default function TransfersDesktop() {
                 <div>
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.pickup')}</label>
                   <div className="mt-1">
-                    <PlaceInput value={customOrigin} onChange={setCustomOrigin} onPick={setCustomOriginMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="bg-brand" featured={pontos} />
+                    <PlaceInput value={customOrigin} onChange={setCustomOrigin} onPick={setCustomOriginMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="bg-brand" sugestoes={{ tipo: 'proximos', ...proximos }} />
                   </div>
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.destination')}</label>
                   <div className="mt-1">
-                    <PlaceInput value={customDest} onChange={setCustomDest} onPick={setCustomDestMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="border-2 border-gray-400 bg-transparent" featured={pontos} />
+                    <PlaceInput value={customDest} onChange={setCustomDest} onPick={setCustomDestMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="border-2 border-gray-400 bg-transparent" sugestoes={{ tipo: 'pontos', itens: pontos }} />
                   </div>
                 </div>
               </div>

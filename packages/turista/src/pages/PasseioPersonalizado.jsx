@@ -18,6 +18,7 @@ import DateSheet from '../components/DateSheet'
 import { api } from '../lib/api'
 import { somenteTransporte } from '../lib/transporte'
 import { pontosDaRegiao } from '../lib/pontosTuristicos'
+import { useLocaisProximos } from '../lib/locaisProximos'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 
@@ -33,7 +34,10 @@ export default function PasseioPersonalizado() {
   const navigate = useNavigate()
   const { token } = useAuth()
   const { region } = useRegion()
-  const pontos = pontosDaRegiao(region) // atalhos de pontos turísticos na busca
+  // Atalhos ao tocar na busca: partida → lugares perto da localização escolhida
+  // (pousadas, mercados, praças…); paradas → os pontos turísticos.
+  const pontos   = pontosDaRegiao(region)
+  const proximos = useLocaisProximos()
 
   // Cada parada tem um id ESTÁVEL: a chave do React acompanha a parada (e o
   // estado interno do PlaceInput, como a lista aberta) mesmo ao remover outra.
@@ -70,13 +74,15 @@ export default function PasseioPersonalizado() {
     }
   }, [date]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Veículos CADASTRADOS na plataforma para a região: ativos, liberados para
-  // passeio e que de fato transportam gente (serviço adicional, como guia, fica
-  // de fora — mesmo critério do resto do app).
+  // Veículos CADASTRADOS na plataforma — o catálogo inteiro, não só o da
+  // região: as regiões são municípios (Jijoca, Cruz…) e cada veículo fica
+  // cadastrado num só, então quem estava em Cruz via a lista vazia (e o pedido
+  // vai para todas as cooperativas de qualquer forma). Só ativos, liberados
+  // para passeio e que transportam gente (guia e serviços ficam de fora —
+  // mesmo critério do resto do app); um card por nome.
   const { data: veiculosData, isLoading: veiculosLoading } = useQuery({
-    queryKey: ['vehicles', 'tour-custom', region?.id],
-    queryFn:  () => api.getVehicles({ region_id: region.id, is_active: 'true' }),
-    enabled:  !!region?.id,
+    queryKey:  ['vehicles', 'tour-custom'],
+    queryFn:   () => api.getVehicles({ is_active: 'true' }),
     staleTime: 5 * 60_000,
   })
   const veiculos = useMemo(() => {
@@ -92,7 +98,7 @@ export default function PasseioPersonalizado() {
     })
   }, [veiculosData])
 
-  // Trocou de região e o veículo escolhido não existe mais na lista → limpa.
+  // O catálogo mudou e o veículo escolhido saiu da lista → limpa a escolha.
   useEffect(() => {
     if (veiculoSel && !veiculos.some((v) => v.id === veiculoSel.id)) setVeiculoSel(null)
   }, [veiculos]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -191,7 +197,8 @@ export default function PasseioPersonalizado() {
                   <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Ponto de partida</label>
                   <div className="mt-1">
                     <PlaceInput value={origin} onChange={setOrigin} onPick={setOriginMeta}
-                      placeholder="Onde o passeio começa?" dotClass="bg-brand" featured={pontos} />
+                      placeholder="Onde o passeio começa?" dotClass="bg-brand"
+                      sugestoes={{ tipo: 'proximos', ...proximos }} />
                   </div>
                 </div>
 
@@ -216,7 +223,7 @@ export default function PasseioPersonalizado() {
                         onPick={(meta) => setStopMeta(s.id, meta)}
                         placeholder="Para onde quer ir?"
                         dotClass="border-2 border-gray-400 bg-transparent"
-                        featured={pontos} />
+                        sugestoes={{ tipo: 'pontos', itens: pontos }} />
                     </div>
                   </div>
                 ))}

@@ -29,6 +29,15 @@ const CATEGORY_MAP = {
   compras:     ['commercial.gift_and_souvenir', 'commercial.outdoor_and_sport', 'commercial.art', 'commercial.books'],
 };
 
+// Categorias pedidas SÓ sob demanda (?category=...), nunca na consulta "todas":
+// se um ID daqui não existir no Geoapify, a recusa (400) derruba só esta
+// consulta — o diretório "Descubra a Vila" não é afetado. Praça, no OSM do
+// Brasil, costuma vir marcada como parque. Usada nas sugestões de "lugares
+// próximos" do ponto de partida (passeio/translado personalizados).
+const EXTRA_CATEGORY_MAP = {
+  praca: ['leisure.park'],
+};
+
 // Subconjunto comprovadamente válido — usado como fallback se a lista completa
 // for recusada por algum ID de categoria que o Geoapify não reconheça.
 const SAFE_CATS = [
@@ -85,9 +94,10 @@ export async function fetchNearby({ lat, lon, radius = 8000, category }) {
   const key = process.env.GEOAPIFY_API_KEY;
   if (!key) return { enabled: false, results: [] };
 
+  const extra = category ? EXTRA_CATEGORY_MAP[category] : null;
   const cats = category && CATEGORY_MAP[category]
     ? CATEGORY_MAP[category]
-    : Object.values(CATEGORY_MAP).flat();
+    : extra || Object.values(CATEGORY_MAP).flat();
 
   // Arredonda coordenadas (~110m) para estabilizar o cache
   const rLat = Number(lat).toFixed(3);
@@ -106,6 +116,12 @@ export async function fetchNearby({ lat, lon, radius = 8000, category }) {
     if (err.status === 400 && !category) {
       console.warn('[geoapify] lista completa recusada, usando SAFE_CATS:', err.message);
       feats = await pedir(SAFE_CATS, { rLat, rLon, radius, key });
+    } else if (extra) {
+      // Categoria extra recusada/indisponível: guarda o "vazio" no cache para
+      // não repetir a chamada (e gastar a cota grátis) a cada pedido.
+      console.warn(`[geoapify] categoria extra "${category}" indisponível:`, err.message);
+      cache.set(cacheKey, { at: Date.now(), data: [] });
+      return { enabled: true, results: [] };
     } else {
       throw err;
     }
@@ -117,7 +133,9 @@ export async function fetchNearby({ lat, lon, radius = 8000, category }) {
     const p   = f.properties || {};
     const name = p.name || p.address_line1;
     if (!name) continue;
-    const cat = ourCategory(p.categories, name);
+    // Categoria extra: tudo o que veio dela é dela (não passa pelo ourCategory,
+    // que descartaria lazer sem cara de kite).
+    const cat = extra ? category : ourCategory(p.categories, name);
     if (!cat) continue;
     const dedupeKey = name.toLowerCase().trim();
     if (seen.has(dedupeKey)) continue;
@@ -145,6 +163,10 @@ export async function fetchNearby({ lat, lon, radius = 8000, category }) {
       price_range: null,
       is_featured: false,
       distance:    p.distance ?? null,
+      // Coordenadas do lugar: viram o pin de embarque quando o turista escolhe
+      // um "lugar próximo" como ponto de partida.
+      lat:         p.lat ?? null,
+      lon:         p.lon ?? null,
     });
   }
 

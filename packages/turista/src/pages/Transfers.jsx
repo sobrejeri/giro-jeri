@@ -16,12 +16,13 @@ import { api }         from '../lib/api'
 import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import { filtrarPontos, normalizarLugar, pontosDaRegiao } from '../lib/pontosTuristicos'
+import { useLocaisProximos } from '../lib/locaisProximos'
 import TransfersDesktop from './TransfersDesktop'
 import NotificationBell from '../components/NotificationBell'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
-  Plane, Compass, ShoppingCart, Heart, ParkingSquare,
+  Plane, Compass, ShoppingCart, Heart, ParkingSquare, LocateFixed,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -77,17 +78,30 @@ async function resolvePlaceDetails(placeId) {
   } catch { return null }
 }
 
-// `featured` (opcional): atalhos curados — os pontos turísticos da região
-// (lib/pontosTuristicos). Campo vazio mostra todos; digitando, só os que batem,
-// sempre ANTES da busca externa e sem repetir o mesmo nome nela. Não vai nos
-// campos de embarque (pousada/endereço), onde ponto turístico não cabe.
-export function PlaceInput({ value, onChange, onPick, placeholder, dotClass, featured }) {
+// `sugestoes` (opcional): atalhos que aparecem ao TOCAR no campo, antes da busca
+// externa e sem repetir nomes dela. Campo vazio mostra a lista; digitando, filtra.
+//   { tipo: 'pontos',   itens: ['Pedra Furada', …] }  → pontos turísticos, só o
+//     nome (lib/pontosTuristicos — sem coordenada inventada)
+//   { tipo: 'proximos', itens, carregando }            → lugares perto da
+//     localização escolhida (lib/locaisProximos), com a coordenada real
+// Não vai nos campos de embarque do carrinho/translado (pousada/endereço).
+const TIPOS_SUGESTAO = {
+  pontos:   { titulo: ['transfersPg.touristSpots', 'Pontos turísticos'], Icone: Compass,     max: Infinity },
+  proximos: { titulo: ['transfersPg.nearbyPlaces', 'Lugares próximos'],  Icone: LocateFixed, max: 15 },
+}
+
+export function PlaceInput({ value, onChange, onPick, placeholder, dotClass, sugestoes }) {
   const { t } = useTranslation()
   const [open, setOpen]  = useState(false)
   const wrapRef          = useRef(null)
   const { results, loading } = usePlaceSuggestions(open ? value : '')
-  const destaques    = open && featured?.length ? filtrarPontos(featured, value) : []
-  const jaDestacados = new Set(destaques.map(normalizarLugar))
+  const tipo      = TIPOS_SUGESTAO[sugestoes?.tipo] || null
+  const itens     = (sugestoes?.itens || []).map((s) => (typeof s === 'string' ? { id: s, label: s } : s))
+  const destaques = open && tipo
+    ? filtrarPontos(itens, value, (s) => `${s.label} ${s.sublabel || ''}`).slice(0, tipo.max)
+    : []
+  const carregandoSugestoes = !!(open && tipo && sugestoes?.carregando && !value && !destaques.length)
+  const jaDestacados = new Set(destaques.map((s) => normalizarLugar(s.label)))
   const externos     = jaDestacados.size ? results.filter((r) => !jaDestacados.has(normalizarLugar(r.label))) : results
 
   useEffect(() => {
@@ -112,11 +126,12 @@ export function PlaceInput({ value, onChange, onPick, placeholder, dotClass, fea
     onPick({ place_id: r._source === 'google' ? r.id : null, label: r.label, address, lat, lon })
   }
 
-  // Ponto curado vai só com o nome (ver lib/pontosTuristicos: sem coordenada inventada).
-  function pickDestaque(nome) {
-    onChange(nome)
+  // Atalho escolhido: ponto turístico vai só com o nome; lugar próximo leva a
+  // coordenada real do diretório (vira o pin de embarque).
+  function pickDestaque(s) {
+    onChange(s.label)
     setOpen(false)
-    onPick?.({ place_id: null, label: nome, address: nome, lat: null, lon: null })
+    onPick?.({ place_id: null, label: s.label, address: s.address || s.label, lat: s.lat ?? null, lon: s.lon ?? null })
   }
 
   return (
@@ -140,22 +155,31 @@ export function PlaceInput({ value, onChange, onPick, placeholder, dotClass, fea
             : <Search size={13} className="text-gray-400 shrink-0" />}
       </div>
 
-      {open && (destaques.length > 0 || externos.length > 0) && (
+      {open && (destaques.length > 0 || externos.length > 0 || carregandoSugestoes) && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-y-auto max-h-[46vh]">
-          {destaques.length > 0 && (
+          {(destaques.length > 0 || carregandoSugestoes) && (
             <p className="px-3 pt-2.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">
-              {t('transfersPg.touristSpots', 'Pontos turísticos')}
+              {t(...tipo.titulo)}
             </p>
           )}
-          {destaques.map((nome) => (
-            <button key={`ponto-${nome}`} type="button" onClick={() => pickDestaque(nome)}
+          {carregandoSugestoes && (
+            <div className="flex items-center gap-2 px-3 py-2.5 text-[12px] text-gray-400">
+              <Loader2 size={13} className="animate-spin shrink-0" />
+              {t('transfersPg.nearbyLoading', 'Buscando lugares próximos…')}
+            </div>
+          )}
+          {destaques.map((s) => (
+            <button key={`sug-${s.id}`} type="button" onClick={() => pickDestaque(s)}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0"
             >
-              <Compass size={13} className="text-brand shrink-0" />
-              <p className="text-[12px] text-gray-800 font-medium leading-snug truncate">{nome}</p>
+              <tipo.Icone size={13} className="text-brand shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[12px] text-gray-800 font-medium leading-snug truncate">{s.label}</p>
+                {s.sublabel && <p className="text-[10px] text-gray-400 leading-snug truncate">{s.sublabel}</p>}
+              </div>
             </button>
           ))}
-          {destaques.length > 0 && externos.length > 0 && (
+          {(destaques.length > 0 || carregandoSugestoes) && externos.length > 0 && (
             <p className="px-3 pt-2.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">
               {t('transfersPg.otherPlaces', 'Outros lugares')}
             </p>
@@ -533,6 +557,9 @@ export default function Transfers() {
 
   // mode: 'rota' | 'custom'
   const [mode, setMode] = useState('rota')
+  // Lugares perto da localização escolhida, para a ORIGEM do personalizado
+  // (só busca quando a aba personalizada está aberta).
+  const proximos = useLocaisProximos({ ativo: mode === 'custom' })
   const [sheetRoute, setSheetRoute] = useState(null)  // rota aberta na folha de detalhe
   const [showSearch, setShowSearch] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -1021,7 +1048,7 @@ export default function Transfers() {
                         onPick={setCustomOriginMeta}
                         placeholder={t('transfersPg.placeSearchPlaceholder')}
                         dotClass="bg-brand"
-                        featured={pontos}
+                        sugestoes={{ tipo: 'proximos', ...proximos }}
                       />
                     </div>
                   </div>
@@ -1034,7 +1061,7 @@ export default function Transfers() {
                         onPick={setCustomDestMeta}
                         placeholder={t('transfersPg.placeSearchPlaceholder')}
                         dotClass="border-2 border-gray-400 bg-transparent"
-                        featured={pontos}
+                        sugestoes={{ tipo: 'pontos', itens: pontos }}
                       />
                     </div>
                   </div>
