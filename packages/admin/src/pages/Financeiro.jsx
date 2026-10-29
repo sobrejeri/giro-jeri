@@ -279,7 +279,7 @@ export default function Financeiro() {
                     <div className="flex justify-between"><span className="text-gray-500">Bruto</span><span className="text-gray-100 font-semibold">{fmt(g.bruto)}</span></div>
                     <div className="flex justify-between"><span className="text-gray-500">(-) Taxa gateway</span><span className="text-red-400">- {fmt(g.taxas)}</span></div>
                     <div className="flex justify-between"><span className="text-gray-500">(-) Valor operador</span><span className="text-red-400">- {fmt(g.operador)}</span></div>
-                    <div className="flex justify-between border-t border-gray-700/50 pt-2"><span className="text-gray-400 font-medium">Comissão Turiva</span><span className="text-green-400 font-bold">{fmt(g.comissao)}</span></div>
+                    <div className="flex justify-between border-t border-gray-700/50 pt-2"><span className="text-gray-400 font-medium">Comissão Turiva</span><span className="text-green-400 font-bold">{fmt(g.comissao - g.taxas)}</span></div>
                   </dl>
                 </div>
               ))}
