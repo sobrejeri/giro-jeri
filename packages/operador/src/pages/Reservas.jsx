@@ -592,7 +592,10 @@ function QuoteRequestCard({ quote, onQuote }) {
               <span className="bg-emerald-100 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded-full">Passeio</span>
               <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Passeio personalizado</span>
               {quote.vehicle_type && (
-                <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"><Car size={11} /> {quote.vehicle_type}</span>
+                // Pode vir longo ("2× Buggy + 1× Quadriciclo"): quebra linha em vez de estourar o card.
+                <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-lg flex items-center gap-1 max-w-full">
+                  <Car size={11} className="shrink-0" /> <span className="min-w-0">{quote.vehicle_type}</span>
+                </span>
               )}
             </>
           ) : (
@@ -1251,6 +1254,10 @@ export default function Reservas({ soNovas = false }) {
               <p className="text-gray-500">
                 {quoteModal.service_date}{quoteModal.service_time ? ` ${quoteModal.service_time.slice(0, 5)}` : ''} · {quoteModal.people_count || quoteModal.passengers} pax
               </p>
+              {/* Passeio: os veículos pedidos entram no preço — mostra aqui também. */}
+              {quoteModal._kind === 'tour' && quoteModal.vehicle_type && (
+                <p className="text-gray-500">Veículos: <span className="font-medium text-gray-700">{quoteModal.vehicle_type}</span></p>
+              )}
             </div>
 
             <form onSubmit={submitQuote} className="space-y-3">

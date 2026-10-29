@@ -30,23 +30,43 @@ function proximoHorario() {
   return format(d, 'HH:mm')
 }
 
-// Card de um veículo do catálogo: foto (ou ícone), nome e capacidade.
-function VeiculoCard({ v, ativo, onClick }) {
+// Foto do veículo do catálogo (ou o ícone, se não tiver foto).
+function FotoVeiculo({ v, className = 'w-10 h-10 rounded-lg', icone = 16 }) {
+  return v.image_url
+    ? <img src={v.image_url} alt="" className={`${className} object-cover shrink-0 bg-gray-100`} />
+    : <span className={`${className} bg-gray-100 flex items-center justify-center shrink-0`}><Car size={icone} className="text-gray-400" /></span>
+}
+
+// Linha de um veículo com quantidade — mesmo padrão dos translados: "+" quando
+// está fora; "− N +" quando escolhido (dá para pedir 2 buggies, por exemplo).
+function VeiculoLinha({ v, qty, onMais, onMenos }) {
   const cap = Number(v.seat_capacity) || 0
   return (
-    <button type="button" onClick={onClick} aria-pressed={ativo}
-      className={`w-full flex items-center gap-2 p-2 rounded-xl border text-left transition-all active:scale-[0.98] ${
-        ativo ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
-      }`}>
-      {v.image_url
-        ? <img src={v.image_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-gray-100" />
-        : <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0"><Car size={16} className="text-gray-400" /></div>}
+    <div className={`flex items-center gap-2.5 p-2 rounded-xl border transition-all ${qty > 0 ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'}`}>
+      <FotoVeiculo v={v} />
       <div className="min-w-0 flex-1">
-        <p className={`text-[12px] font-bold leading-tight truncate ${ativo ? 'text-brand' : 'text-gray-900'}`}>{v.name}</p>
-        {cap > 0 && <p className="text-[10px] text-gray-400 leading-tight mt-0.5">até {cap} {cap === 1 ? 'pessoa' : 'pessoas'}</p>}
+        <p className={`text-[13px] font-bold leading-tight truncate ${qty > 0 ? 'text-brand' : 'text-gray-900'}`}>{v.name}</p>
+        {cap > 0 && <p className="text-[11px] text-gray-400 leading-tight mt-0.5">até {cap} {cap === 1 ? 'pessoa' : 'pessoas'}</p>}
       </div>
-      {ativo && <Check size={14} className="text-brand shrink-0" />}
-    </button>
+      {qty === 0 ? (
+        <button type="button" onClick={onMais} aria-label={`Adicionar ${v.name}`}
+          className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform shrink-0">
+          <Plus size={14} className="text-white" />
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 shrink-0">
+          <button type="button" onClick={onMenos} aria-label={`Tirar um ${v.name}`}
+            className="w-7 h-7 rounded-full border border-gray-200 bg-white flex items-center justify-center active:scale-95 transition-transform">
+            <Minus size={11} className="text-gray-600" />
+          </button>
+          <span className="text-[14px] font-bold text-gray-900 w-4 text-center tabular-nums">{qty}</span>
+          <button type="button" onClick={onMais} aria-label={`Adicionar mais um ${v.name}`}
+            className="w-7 h-7 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform">
+            <Plus size={11} className="text-white" />
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -67,8 +87,8 @@ export default function PasseioPersonalizado() {
   const [origin, setOrigin] = useState('')
   const [originMeta, setOriginMeta] = useState(null)
   const [stops, setStops] = useState(() => [novaParada()])
-  const [veiculoSel, setVeiculoSel] = useState(null)   // veículo do catálogo
-  const [verVeiculos, setVerVeiculos] = useState(false) // grade de veículos aberta ("Ver tudo")
+  const [qtdVeiculos, setQtdVeiculos] = useState({})   // id do veículo → quantidade
+  const [verVeiculos, setVerVeiculos] = useState(false) // lista de veículos aberta ("Ver tudo")
   const [vehicleText, setVehicleText] = useState('')   // só se a região não tiver catálogo
   const [date, setDate] = useState(startOfDay(new Date()))
   const [time, setTime] = useState('08:00')
@@ -119,12 +139,25 @@ export default function PasseioPersonalizado() {
     })
   }, [veiculosData])
 
-  // O catálogo mudou e o veículo escolhido saiu da lista → limpa a escolha.
+  // O catálogo mudou e algum veículo escolhido saiu da lista → tira da escolha.
   useEffect(() => {
-    if (veiculoSel && !veiculos.some((v) => v.id === veiculoSel.id)) setVeiculoSel(null)
-  }, [veiculos]) // eslint-disable-line react-hooks/exhaustive-deps
+    setQtdVeiculos((m) => {
+      const ids = new Set(veiculos.map((v) => v.id))
+      const limpo = Object.fromEntries(Object.entries(m).filter(([id]) => ids.has(id)))
+      return Object.keys(limpo).length === Object.keys(m).length ? m : limpo
+    })
+  }, [veiculos])
 
-  const capacidadeSel = Number(veiculoSel?.seat_capacity) || 0
+  // Escolha atual (na ordem do catálogo) e quantos lugares ela soma.
+  const escolhidos     = veiculos.filter((v) => (qtdVeiculos[v.id] || 0) > 0).map((v) => ({ ...v, qty: qtdVeiculos[v.id] }))
+  const totalVeiculos  = escolhidos.reduce((s, v) => s + v.qty, 0)
+  const lugares        = escolhidos.reduce((s, v) => s + v.qty * (Number(v.seat_capacity) || 0), 0)
+  const faltamLugares  = Math.max(0, people - lugares)
+  const mudarQtd = (id, delta) => setQtdVeiculos((m) => {
+    const n = Math.max(0, Math.min(20, (m[id] || 0) + delta))
+    const { [id]: _antigo, ...resto } = m
+    return n > 0 ? { ...resto, [id]: n } : resto
+  })
   const canSubmit = origin.trim().length >= 2 && !!time && !!region?.id
 
   // O PlaceInput chama onChange(texto) e, em seguida, onPick(null) a CADA tecla
@@ -138,7 +171,7 @@ export default function PasseioPersonalizado() {
 
   function resetForm() {
     setOrigin(''); setOriginMeta(null); setStops([novaParada()])
-    setVeiculoSel(null); setVerVeiculos(false); setVehicleText(''); setPeople(2); setNotes('')
+    setQtdVeiculos({}); setVerVeiculos(false); setVehicleText(''); setPeople(2); setNotes('')
     setSuccess(false); setError('')
   }
 
@@ -146,6 +179,18 @@ export default function PasseioPersonalizado() {
     if (!token) { navigate('/login', { state: { from: '/passeio-personalizado' } }); return }
     if (!canSubmit) return
     setLoading(true); setError('')
+    // Veículos para a cooperativa: "2× Buggy + 1× Quadriciclo". O campo aceita
+    // até 80 caracteres; se a lista não couber, vai um resumo curto nele e a
+    // lista completa segue nas observações (nada se perde).
+    const listaVeiculos = escolhidos.map((v) => `${v.qty}× ${v.name}`).join(' + ')
+    const cabe = listaVeiculos.length <= 80
+    const vehicleType = escolhidos.length
+      ? (cabe ? listaVeiculos : `${totalVeiculos} veículos (ver observações)`)
+      : (vehicleText.trim() || undefined)
+    const observacoes = [
+      escolhidos.length && !cabe ? `Veículos: ${listaVeiculos}` : null,
+      notes.trim() || null,
+    ].filter(Boolean).join(' · ') || undefined
     try {
       await api.requestTourQuote({
         region_id:         region.id,
@@ -155,11 +200,11 @@ export default function PasseioPersonalizado() {
         stops: stops
           .filter((s) => s.name.trim())
           .map((s) => ({ name: s.name.trim(), lat: s.meta?.lat ?? null, lng: s.meta?.lon ?? null })),
-        vehicle_type:  veiculoSel?.name || vehicleText.trim() || undefined,
+        vehicle_type:  vehicleType,
         service_date:  format(date, 'yyyy-MM-dd'),
         service_time:  time,
         people_count:  people,
-        special_notes: notes.trim() || undefined,
+        special_notes: observacoes,
       })
       setSuccess(true)
     } catch (err) {
@@ -256,11 +301,13 @@ export default function PasseioPersonalizado() {
               </div>
             </section>
 
-            {/* Veículo — catálogo da plataforma */}
+            {/* Veículos — catálogo da plataforma, com quantidade */}
             <section className="bg-white rounded-2xl border border-gray-100">
               <div className="flex items-baseline justify-between px-4 pt-3 pb-2">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Veículo desejado</p>
-                <span className="text-[10px] text-gray-400">opcional</span>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Veículos desejados</p>
+                {escolhidos.length > 0
+                  ? <button type="button" onClick={() => setQtdVeiculos({})} className="text-[11px] font-semibold text-red-400">limpar</button>
+                  : <span className="text-[10px] text-gray-400">opcional</span>}
               </div>
               <div className="px-4 pb-4 space-y-2.5">
                 {veiculosLoading ? (
@@ -269,52 +316,49 @@ export default function PasseioPersonalizado() {
                   </div>
                 ) : veiculos.length > 0 ? (
                   verVeiculos ? (
+                    // Aberto: um veículo por linha, com quantidade. Não fecha a
+                    // cada toque (dá para montar "2 buggies + 1 quadriciclo");
+                    // fecha em "Concluir".
                     <>
-                      <div className="grid grid-cols-2 gap-2">
-                        {veiculos.map((v) => {
-                          const ativo = veiculoSel?.id === v.id
-                          // Escolheu → fecha a grade e mostra só a escolha (o
-                          // formulário volta a ficar curto); tocar no escolhido desmarca.
-                          return (
-                            <VeiculoCard key={v.id} v={v} ativo={ativo}
-                              onClick={() => {
-                                if (ativo) { setVeiculoSel(null); return }
-                                setVeiculoSel(v)
-                                setVerVeiculos(false)
-                              }} />
-                          )
-                        })}
+                      <div className="space-y-2">
+                        {veiculos.map((v) => (
+                          <VeiculoLinha key={v.id} v={v} qty={qtdVeiculos[v.id] || 0}
+                            onMais={() => mudarQtd(v.id, 1)} onMenos={() => mudarQtd(v.id, -1)} />
+                        ))}
                       </div>
                       <button type="button" onClick={() => setVerVeiculos(false)} aria-expanded
-                        className="w-full flex items-center justify-center gap-1 text-[12px] font-semibold text-gray-500 py-1.5">
-                        Ver menos <ChevronUp size={14} />
+                        className={`w-full flex items-center justify-center gap-1 rounded-xl py-2.5 text-[13px] font-bold transition-transform active:scale-[0.98] ${
+                          escolhidos.length ? 'bg-brand text-white' : 'text-gray-500'
+                        }`}>
+                        {escolhidos.length
+                          ? <><Check size={15} /> Concluir · {totalVeiculos} {totalVeiculos === 1 ? 'veículo' : 'veículos'}</>
+                          : <>Ver menos <ChevronUp size={14} /></>}
                       </button>
                     </>
                   ) : (
-                    // Recolhido (padrão): só a escolha atual, se houver, e o "Ver tudo".
+                    // Recolhido (padrão): o resumo da escolha, se houver, e o "Ver tudo".
                     <>
-                      {veiculoSel && (
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 min-w-0">
-                            <VeiculoCard v={veiculoSel} ativo onClick={() => setVerVeiculos(true)} />
-                          </div>
-                          <button type="button" onClick={() => setVeiculoSel(null)} aria-label="Remover veículo escolhido"
-                            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 active:scale-95 transition-transform">
-                            <X size={14} className="text-gray-500" />
-                          </button>
-                        </div>
+                      {escolhidos.length > 0 && (
+                        <button type="button" onClick={() => setVerVeiculos(true)}
+                          className="w-full text-left rounded-xl border border-brand bg-brand/5 p-2 space-y-1.5 active:scale-[0.99] transition-transform">
+                          {escolhidos.map((v) => (
+                            <span key={v.id} className="flex items-center gap-2.5">
+                              <FotoVeiculo v={v} className="w-8 h-8 rounded-lg" icone={14} />
+                              <span className="flex-1 min-w-0 text-[13px] font-bold text-brand truncate">{v.qty}× {v.name}</span>
+                            </span>
+                          ))}
+                        </button>
                       )}
                       <button type="button" onClick={() => setVerVeiculos(true)} aria-expanded={false}
                         className="w-full flex items-center gap-2.5 border border-gray-200 rounded-xl px-3 py-2 active:scale-[0.98] transition-transform">
                         <span className="flex -space-x-2 shrink-0" aria-hidden>
-                          {veiculos.slice(0, 4).map((v) => (v.image_url
-                            ? <img key={v.id} src={v.image_url} alt="" className="w-7 h-7 rounded-full object-cover bg-gray-100 ring-2 ring-white" />
-                            : <span key={v.id} className="w-7 h-7 rounded-full bg-gray-100 ring-2 ring-white flex items-center justify-center"><Car size={12} className="text-gray-400" /></span>
+                          {veiculos.slice(0, 4).map((v) => (
+                            <FotoVeiculo key={v.id} v={v} className="w-7 h-7 rounded-full ring-2 ring-white" icone={12} />
                           ))}
                         </span>
                         <span className="flex-1 min-w-0 text-left">
                           <span className="block text-[13px] font-semibold text-gray-800 leading-tight truncate">
-                            {veiculoSel ? 'Trocar veículo' : 'Escolher veículo'}
+                            {escolhidos.length ? 'Alterar veículos' : 'Escolher veículos'}
                           </span>
                           <span className="block text-[11px] font-bold text-brand leading-tight mt-0.5">
                             Ver tudo ({veiculos.length})
@@ -326,16 +370,21 @@ export default function PasseioPersonalizado() {
                   )
                 ) : (
                   // Catálogo sem veículo de passeio cadastrado: o cliente descreve.
-                  <input value={vehicleText} onChange={(e) => setVehicleText(e.target.value)}
+                  <input value={vehicleText} onChange={(e) => setVehicleText(e.target.value)} maxLength={80}
                     placeholder="Descreva o veículo (ex.: buggy, 4x4)"
                     className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400" />
                 )}
 
-                {capacidadeSel > 0 && people > capacidadeSel && (
-                  <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2 leading-relaxed">
-                    Para {people} pessoas serão necessários {Math.ceil(people / capacidadeSel)} veículos — a cooperativa considera isso no valor.
+                {/* Lugares da escolha × pessoas do grupo */}
+                {escolhidos.length > 0 && lugares > 0 && (faltamLugares === 0 ? (
+                  <p className="text-[11px] text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                    <Check size={12} className="shrink-0" /> {lugares} lugares para {people} {people === 1 ? 'pessoa' : 'pessoas'}
                   </p>
-                )}
+                ) : (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2 leading-relaxed">
+                    {faltamLugares === 1 ? 'Falta 1 lugar' : `Faltam ${faltamLugares} lugares`} para {people} pessoas — adicione mais um veículo, ou a cooperativa ajusta no valor.
+                  </p>
+                ))}
               </div>
             </section>
 

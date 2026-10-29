@@ -437,7 +437,7 @@ function QuoteDetailDialog({ quote, onClose }) {
   const isTour = quoteIsTour(quote)
   const rows = [
     ...(isTour
-      ? [['Roteiro', quoteRouteText(quote)], ...(quote.vehicle_type ? [['Veículo', quote.vehicle_type]] : [])]
+      ? [['Roteiro', quoteRouteText(quote)], ...(quote.vehicle_type ? [['Veículos', quote.vehicle_type]] : [])]
       : [['Origem', quote.origin_place_name], ['Destino', quote.destination_place_name]]),
     ['Data',        fmtDate(quote.service_date)],
     ['Horário',     quote.service_time ? quote.service_time.slice(0, 5) : '—'],
