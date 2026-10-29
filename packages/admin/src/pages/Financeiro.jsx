@@ -303,46 +303,75 @@ export default function Financeiro() {
           {bookings.length === 0 ? (
             <div className="h-24 flex items-center justify-center text-gray-600 text-sm">Nenhuma reserva no período</div>
           ) : (
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full text-sm min-w-[680px]">
-                <thead>
-                  <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-700/50">
-                    <th className="text-left font-medium py-2 pr-3">Reserva</th>
-                    <th className="text-left font-medium py-2 px-3">Data</th>
-                    <th className="text-left font-medium py-2 px-3">Pagamento</th>
-                    <th className="text-left font-medium py-2 px-3">Operador</th>
-                    <th className="text-right font-medium py-2 px-3">Bruto</th>
-                    <th className="text-right font-medium py-2 px-3">Comissão</th>
-                    <th className="text-right font-medium py-2 pl-3">Turiva</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookings.map((b) => (
-                    <tr key={b.booking_id} className="border-b border-gray-800 last:border-0">
-                      <td className="py-2.5 pr-3 font-mono text-xs text-gray-400 whitespace-nowrap">{b.booking_code}</td>
-                      <td className="py-2.5 px-3 text-gray-300 whitespace-nowrap tabular-nums">{fmtData(b.data)}</td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className="inline-block px-2 py-0.5 rounded-md bg-gray-800 text-gray-300 text-xs">{b.forma_pagamento}</span>
-                      </td>
-                      <td className="py-2.5 px-3"><UserIdentity name={b.operador} userType={b.operador_user_type} photo={b.operador_photo} size={26} nameClass="text-gray-200" /></td>
-                      <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{fmt(b.bruto)}</td>
-                      <td className="py-2.5 px-3 text-right text-brand tabular-nums">{fmt(b.comissao)}</td>
-                      <td className="py-2.5 pl-3 text-right text-green-400 font-semibold tabular-nums">{fmt(b.turiva)}</td>
+            <>
+              {/* Mobile (PWA): cards — a planilha com colunas fica para o desktop. */}
+              <div className="md:hidden space-y-2">
+                {bookings.map((b) => (
+                  <div key={b.booking_id} className="rounded-xl border border-gray-800 bg-gray-900/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs text-gray-400">{b.booking_code}</span>
+                      <span className="text-[11px] text-gray-500">{fmtData(b.data)} · {b.forma_pagamento}</span>
+                    </div>
+                    <div className="mt-1.5"><UserIdentity name={b.operador} userType={b.operador_user_type} photo={b.operador_photo} size={24} nameClass="text-gray-200" /></div>
+                    <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+                      <div><dt className="text-[10px] uppercase tracking-wide text-gray-600">Bruto</dt><dd className="text-sm text-gray-300 tabular-nums">{fmt(b.bruto)}</dd></div>
+                      <div><dt className="text-[10px] uppercase tracking-wide text-gray-600">Comissão</dt><dd className="text-sm text-brand tabular-nums">{fmt(b.comissao)}</dd></div>
+                      <div><dt className="text-[10px] uppercase tracking-wide text-gray-600">Turiva</dt><dd className="text-sm text-green-400 font-semibold tabular-nums">{fmt(b.turiva)}</dd></div>
+                    </dl>
+                  </div>
+                ))}
+                <div className="rounded-xl border-2 border-gray-700 bg-gray-900/60 p-3">
+                  <p className="text-xs font-bold text-gray-400 mb-1.5">Total · {bookings.length} reserva{bookings.length !== 1 ? 's' : ''}</p>
+                  <dl className="grid grid-cols-3 gap-2 text-center">
+                    <div><dt className="text-[10px] uppercase tracking-wide text-gray-600">Bruto</dt><dd className="text-sm font-bold text-gray-200 tabular-nums">{fmt(totBruto)}</dd></div>
+                    <div><dt className="text-[10px] uppercase tracking-wide text-gray-600">Comissão</dt><dd className="text-sm font-bold text-brand tabular-nums">{fmt(totComissao)}</dd></div>
+                    <div><dt className="text-[10px] uppercase tracking-wide text-gray-600">Turiva</dt><dd className="text-sm font-bold text-green-400 tabular-nums">{fmt(totTuriva)}</dd></div>
+                  </dl>
+                </div>
+              </div>
+
+              {/* Desktop: planilha com colunas alinhadas + linha de total. */}
+              <div className="hidden md:block overflow-x-auto -mx-1">
+                <table className="w-full text-sm min-w-[680px]">
+                  <thead>
+                    <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-700/50">
+                      <th className="text-left font-medium py-2 pr-3">Reserva</th>
+                      <th className="text-left font-medium py-2 px-3">Data</th>
+                      <th className="text-left font-medium py-2 px-3">Pagamento</th>
+                      <th className="text-left font-medium py-2 px-3">Operador</th>
+                      <th className="text-right font-medium py-2 px-3">Bruto</th>
+                      <th className="text-right font-medium py-2 px-3">Comissão</th>
+                      <th className="text-right font-medium py-2 pl-3">Turiva</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-gray-700 font-bold">
-                    <td className="py-2.5 pr-3 text-gray-400" colSpan={4}>
-                      Total · {bookings.length} reserva{bookings.length !== 1 ? 's' : ''}
-                    </td>
-                    <td className="py-2.5 px-3 text-right text-gray-200 tabular-nums">{fmt(totBruto)}</td>
-                    <td className="py-2.5 px-3 text-right text-brand tabular-nums">{fmt(totComissao)}</td>
-                    <td className="py-2.5 pl-3 text-right text-green-400 tabular-nums">{fmt(totTuriva)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {bookings.map((b) => (
+                      <tr key={b.booking_id} className="border-b border-gray-800 last:border-0">
+                        <td className="py-2.5 pr-3 font-mono text-xs text-gray-400 whitespace-nowrap">{b.booking_code}</td>
+                        <td className="py-2.5 px-3 text-gray-300 whitespace-nowrap tabular-nums">{fmtData(b.data)}</td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-gray-800 text-gray-300 text-xs">{b.forma_pagamento}</span>
+                        </td>
+                        <td className="py-2.5 px-3"><UserIdentity name={b.operador} userType={b.operador_user_type} photo={b.operador_photo} size={26} nameClass="text-gray-200" /></td>
+                        <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{fmt(b.bruto)}</td>
+                        <td className="py-2.5 px-3 text-right text-brand tabular-nums">{fmt(b.comissao)}</td>
+                        <td className="py-2.5 pl-3 text-right text-green-400 font-semibold tabular-nums">{fmt(b.turiva)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-700 font-bold">
+                      <td className="py-2.5 pr-3 text-gray-400" colSpan={4}>
+                        Total · {bookings.length} reserva{bookings.length !== 1 ? 's' : ''}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-gray-200 tabular-nums">{fmt(totBruto)}</td>
+                      <td className="py-2.5 px-3 text-right text-brand tabular-nums">{fmt(totComissao)}</td>
+                      <td className="py-2.5 pl-3 text-right text-green-400 tabular-nums">{fmt(totTuriva)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
           )}
           <p className="mt-3 text-[11px] text-gray-600">
             "Turiva" = comissão da reserva menos a taxa de gateway e os afiliados dela. O estacionamento entra no ganho total do topo, mas não aparece aqui por não ser uma reserva com operador.
