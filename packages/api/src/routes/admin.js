@@ -496,33 +496,48 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res, next) =>
       }
     } else {
       // Turista/admin: o login é por E-MAIL. Resolve a conta de auth pelo e-mail
-      // do PERFIL e CRIA o login se não existir — é o que destrava quem se
-      // cadastrou pelo Google e ficou sem senha quando o login Google saiu (ou
-      // qualquer perfil sem conta de auth / com auth_id pendurado).
+      // do PERFIL. Se NÃO houver conta com esse e-mail mas o perfil já tem uma
+      // conta vinculada (ex.: era OPERADOR e o login ficou com o e-mail sintético
+      // <doc>@op.girojeri.app ao trocar o tipo), converte o e-mail dessa conta de
+      // volta para o real — em vez de CRIAR outra (createUser daria "e-mail já
+      // registrado"). Se o e-mail já pertence a OUTRA conta, reusa essa conta.
       const profileEmail = String(target.email || '').trim().toLowerCase();
       if (!profileEmail && !authId) {
         return res.status(400).json({ error: 'Este usuário não tem e-mail no perfil nem login vinculado. Preencha o e-mail antes de definir a senha.' });
       }
       if (profileEmail) {
-        let authUser = null;
-        try {
-          const { data: list } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-          authUser = (list?.users || []).find((u) => String(u.email || '').toLowerCase() === profileEmail) || null;
-        } catch { /* listagem indisponível → cai no auth_id atual */ }
+        const acharPorEmail = async () => {
+          try {
+            const { data: list } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+            return (list?.users || []).find((u) => String(u.email || '').toLowerCase() === profileEmail) || null;
+          } catch { return null; }
+        };
+        let authUser = await acharPorEmail();
 
         if (authUser) {
           authId = authUser.id;
-          if (target.auth_id !== authUser.id) {
-            await supabase.from('users').update({ auth_id: authUser.id }).eq('id', req.params.id);
+        } else if (target.auth_id) {
+          // Converte o e-mail da conta vinculada para o e-mail real do perfil.
+          const { error: convErr } = await supabase.auth.admin.updateUserById(
+            target.auth_id, { email: profileEmail, email_confirm: true },
+          );
+          if (convErr) {
+            // E-mail já usado por outra conta de auth → reusa essa conta.
+            const dono = await acharPorEmail();
+            if (!dono) return res.status(400).json({ error: convErr.message });
+            authId = dono.id;
+          } else {
+            authId = target.auth_id;
           }
         } else {
-          // Nenhuma conta de auth com o e-mail do perfil → cria o login por
-          // e-mail + senha (email já confirmado) e vincula ao perfil.
+          // Sem conta de auth nenhuma → cria o login por e-mail + senha.
           const { data: created, error: cErr } = await supabase.auth.admin.createUser({
             email: profileEmail, password: new_password, email_confirm: true,
           });
           if (cErr) return res.status(400).json({ error: cErr.message });
           authId = created.user.id;
+        }
+        if (authId && target.auth_id !== authId) {
           await supabase.from('users').update({ auth_id: authId }).eq('id', req.params.id);
         }
       }
@@ -734,6 +749,32 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
     const { data, error } = upd;
 
     if (error || !data) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    // Se o TIPO mudou, o IDENTIFICADOR DE LOGIN muda junto: operador/agência loga
+    // pelo documento (e-mail sintético <doc>@op.girojeri.app) e admin/turista pelo
+    // e-mail real. Antes, trocar o tipo só mexia no perfil e deixava o e-mail da
+    // conta de auth defasado — aí o login parava de funcionar (ex.: operador→admin
+    // ficava com o e-mail sintético e não entrava pelo e-mail real). Reconcilia
+    // aqui (best-effort). A conversão de senha segue pelo reset-password.
+    if ('user_type' in updates && data.auth_id) {
+      try {
+        const ehOperador = data.user_type === 'operator' || data.user_type === 'agency';
+        const docDigits  = String(data.document_number || '').replace(/\D/g, '');
+        const alvoEmail  = ehOperador
+          ? (docDigits ? `${docDigits}@op.girojeri.app` : null)
+          : (String(data.email || '').trim().toLowerCase() || null);
+        if (alvoEmail) {
+          const { data: authInfo } = await supabase.auth.admin.getUserById(data.auth_id);
+          const emailAtual = String(authInfo?.user?.email || '').toLowerCase();
+          if (emailAtual && emailAtual !== alvoEmail) {
+            const { error: convErr } = await supabase.auth.admin.updateUserById(data.auth_id, { email: alvoEmail, email_confirm: true });
+            if (convErr) console.error('[users PATCH] e-mail de login defasado — ajuste pela Redefinir Senha:', convErr.message);
+          }
+        }
+      } catch (e) {
+        console.error('[users PATCH] reconciliação de e-mail de login falhou (ignorado):', e?.message);
+      }
+    }
 
     await supabase.from('audit_logs').insert({
       user_id:         req.user.id,
