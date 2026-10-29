@@ -108,21 +108,25 @@ export default function Cupons() {
             </div>
           </CardBody>
         ) : (
-          <>
-            {/* Celular: cards (a tabela fica para o PC, logo abaixo). */}
-            <div className="md:hidden p-3 space-y-2">
-              {coupons.map((c) => (
-                <div key={c.id} className="p-3 rounded-xl bg-gray-900/40 border border-gray-700/60 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-mono font-bold text-brand truncate">
-                      {c.code}
-                      {c.applicable_service_type && <span className="ml-2 text-xs text-gray-500 font-sans font-normal">({c.applicable_service_type})</span>}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {fmtDiscount(c)} · {c.times_used ?? 0}{c.usage_limit_total ? `/${c.usage_limit_total}` : '/∞'} usos
-                      {c.valid_until ? ` · até ${format(parseISO(c.valid_until), 'dd/MM/yyyy')}` : ''}
-                    </p>
+          /* Lista em cards (mesma organização das demais telas): ícone, código
+             + desconto/usos/validade e, à direita, status e ações. Mobile e
+             desktop usam o mesmo card. */
+          <div className="divide-y divide-gray-800">
+            {coupons.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-gray-800/30 transition-colors">
+                <div className="w-9 h-9 rounded-lg bg-brand/10 text-brand flex items-center justify-center shrink-0">
+                  <Ticket size={16} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono font-bold text-brand truncate">{c.code}</span>
+                    {c.applicable_service_type && <span className="text-[10px] text-gray-500">({c.applicable_service_type})</span>}
                   </div>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    {fmtDiscount(c)} de desconto · {c.times_used ?? 0}{c.usage_limit_total ? `/${c.usage_limit_total}` : '/∞'} usos{c.valid_until ? ` · até ${format(parseISO(c.valid_until), 'dd/MM/yyyy')}` : ''}
+                  </p>
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
                   <Badge value={String(c.is_active)} />
                   <MenuAcoes
                     onEdit={() => openEdit(c)}
@@ -131,69 +135,9 @@ export default function Cupons() {
                     deleteLabel="Desativar"
                   />
                 </div>
-              ))}
-            </div>
-            {/* PC: tabela compacta. */}
-            <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Código</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Desconto</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Usos</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Validade</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="px-5 py-3 w-20" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {coupons.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-750">
-                    <td className="px-5 py-3">
-                      <span className="font-mono font-bold text-brand">{c.code}</span>
-                      {c.applicable_service_type && (
-                        <span className="ml-2 text-xs text-gray-500">({c.applicable_service_type})</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 font-semibold text-gray-200">{fmtDiscount(c)}</td>
-                    <td className="px-5 py-3 text-gray-400 text-xs">
-                      {c.times_used ?? 0}{c.usage_limit_total ? ` / ${c.usage_limit_total}` : ' / ∞'}
-                    </td>
-                    <td className="px-5 py-3 text-xs text-gray-500">
-                      {c.valid_until ? format(parseISO(c.valid_until), 'dd/MM/yyyy') : '—'}
-                    </td>
-                    <td className="px-5 py-3"><Badge value={String(c.is_active)} /></td>
-                    <td className="px-5 py-3">
-                      <div className="flex gap-1 justify-end">
-                        {/* Só cupom ativo pode ser divulgado: enviar oferta
-                            desligada para a base inteira gera cliente batendo
-                            num código que não funciona. */}
-                        {c.is_active && (
-                          <button
-                            onClick={() => setDivulgar(c)}
-                            title="Divulgar no WhatsApp"
-                            className="p-1.5 text-gray-600 hover:text-emerald-400 hover:bg-emerald-900/20 rounded-lg"
-                          >
-                            <Send size={13} />
-                          </button>
-                        )}
-                        <button onClick={() => openEdit(c)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg">
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={() => confirm('Desativar cupom?') && deleteMut.mutate(c.id)}
-                          className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
 

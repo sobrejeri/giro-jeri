@@ -360,26 +360,28 @@ export default function Usuarios() {
 
       {/* Lista */}
       <Card>
-        {/* Celular: cards (a tabela fica para o PC, logo abaixo). */}
-        <div className="md:hidden p-3 space-y-2">
+        {/* Lista em cards (mesma organização das demais telas): avatar + nome
+            (selo quando é admin), tipo e data embaixo, e à direita status +
+            ações. Mobile e desktop usam o mesmo card. */}
+        <div className="divide-y divide-gray-800">
           {users.map((u) => (
-            <div key={u.id} className="p-3 rounded-xl bg-gray-900/40 border border-gray-700/60 flex items-center gap-3">
+            <div key={u.id} className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-gray-800/30 transition-colors">
               <div className="flex-1 min-w-0">
                 <UserIdentity
                   name={u.full_name} userType={u.user_type} photo={u.profile_photo_url}
-                  size={36} nameClass="text-gray-200" showLabel={false}
+                  size={38} nameClass="text-gray-200" showLabel={false}
                   subtitle={u.user_type === 'operator' && u.document_number
                     ? `${String(u.document_number).replace(/\D/g, '').length === 11 ? 'CPF' : 'CNPJ'}: ${u.document_number}`
                     : u.email || u.phone || '—'}
                 />
-                <div className="flex items-center gap-1.5 mt-1">
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   <Badge value={u.user_type} />
                   {u.user_type === 'operator' && (
                     u.gateway_recipient_id
                       ? <CheckCircle2 size={12} className="text-green-400" title="Recebimento ativo" />
                       : <AlertCircle size={12} className="text-amber-400" title="Recebimento não configurado" />
                   )}
-                  {u.created_at && <span className="text-[11px] text-gray-600">· {format(parseISO(u.created_at), 'dd/MM/yyyy')}</span>}
+                  {u.created_at && <span className="text-[11px] text-gray-600">· Desde {format(parseISO(u.created_at), 'dd/MM/yyyy')}</span>}
                 </div>
               </div>
               <Badge value={String(u.is_active)} />
@@ -392,86 +394,6 @@ export default function Usuarios() {
             </div>
           ))}
           {users.length === 0 && <p className="text-center text-gray-600 text-sm py-10">Nenhum resultado</p>}
-        </div>
-        {/* PC: tabela compacta. */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-700">
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Usuário</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Cadastro</th>
-                <th className="px-5 py-3 w-12" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {users.map((u) => (
-                <tr key={u.id} className="hover:bg-gray-750 transition-colors">
-                  <td className="px-5 py-3">
-                    <UserIdentity
-                      name={u.full_name} userType={u.user_type} photo={u.profile_photo_url}
-                      size={38} nameClass="text-gray-200" showLabel={false}
-                      subtitle={u.user_type === 'operator' && u.document_number
-                        ? `${String(u.document_number).replace(/\D/g, '').length === 11 ? 'CPF' : 'CNPJ'}: ${u.document_number}`
-                        : u.email || u.phone || '—'}
-                    />
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <Badge value={u.user_type} />
-                      {u.user_type === 'operator' && (
-                        u.gateway_recipient_id
-                          ? <CheckCircle2 size={13} className="text-green-400" title="Recebimento ativo" />
-                          : <AlertCircle  size={13} className="text-amber-400" title="Recebimento não configurado" />
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3"><Badge value={String(u.is_active)} /></td>
-                  <td className="px-5 py-3 text-xs text-gray-500">
-                    {u.created_at ? format(parseISO(u.created_at), 'dd/MM/yyyy') : '—'}
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-0.5">
-                      <button
-                        onClick={() => openEdit(u)}
-                        className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-700 rounded-lg transition-colors"
-                        title="Editar usuário"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      {/* Desativar é a ação do dia a dia: bloqueia o acesso na
-                          hora e mantém o histórico. Fica antes de apagar, e é a
-                          única que serve para conta com movimento. */}
-                      <button
-                        onClick={() => alternarAtivo(u)}
-                        disabled={ativarMut.isPending}
-                        className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${
-                          u.is_active
-                            ? 'text-gray-600 hover:text-amber-400 hover:bg-gray-700'
-                            : 'text-emerald-500 hover:text-emerald-400 hover:bg-gray-700'
-                        }`}
-                        title={u.is_active ? 'Desativar (bloqueia o acesso)' : 'Reativar'}
-                      >
-                        {u.is_active ? <Ban size={14} /> : <CheckCircle2 size={14} />}
-                      </button>
-                      <button
-                        onClick={() => apagar(u)}
-                        disabled={apagarMut.isPending || u.id === meuId}
-                        className="p-1.5 text-gray-700 hover:text-red-400 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-30 disabled:hover:text-gray-700"
-                        title={u.id === meuId ? 'Você não pode apagar a sua própria conta' : 'Apagar definitivamente'}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-600 text-sm">Nenhum resultado</td></tr>
-              )}
-            </tbody>
-          </table>
         </div>
 
         {/* Pagination */}
