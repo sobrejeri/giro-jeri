@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare, Home, Wallet, Settings, ImagePlus } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { usePendencias } from '../../lib/pendencias'
 
 // Menu do operador de ESTACIONAMENTO (segmento parking) — espelha o mockup.
 const NAV_PARKING = [
@@ -40,6 +41,9 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
   const ehParking = isAdmin ? adminPanel === 'parking' : user?.operator_segment === 'parking'
   const segmento = ehParking ? 'parking' : 'tours'
   const nav = ehParking ? NAV_PARKING : NAV.filter((i) => i.seg === 'both' || i.seg === segmento)
+  // Bolinha vermelha em cada painel com solicitação pendente — inclusive no que
+  // não está aberto, para o admin saber que tem algo esperando do outro lado.
+  const pendencias = usePendencias({ ativo: isAdmin })
 
   function trocarPainel(mode) {
     if (mode === adminPanel) return
@@ -80,17 +84,26 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
           <div className="px-3 pt-3">
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1 px-1">Painel (admin)</p>
             <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-              {[['tours', 'Passeios'], ['parking', 'Estacionamento']].map(([m, label]) => (
-                <button
-                  key={m}
-                  onClick={() => trocarPainel(m)}
-                  className={`flex-1 text-xs font-medium px-2 py-1.5 rounded-md transition-colors ${
-                    adminPanel === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+              {[['tours', 'Passeios'], ['parking', 'Estacionamento']].map(([m, label]) => {
+                const n = pendencias[m]
+                return (
+                  <button
+                    key={m}
+                    onClick={() => trocarPainel(m)}
+                    aria-label={n > 0 ? `${label} — ${n} ${n === 1 ? 'pendente' : 'pendentes'}` : label}
+                    className={`flex-1 text-xs font-medium px-2 py-1.5 rounded-md transition-colors ${
+                      adminPanel === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <span className="relative inline-block">
+                      {label}
+                      {n > 0 && (
+                        <span data-pendente className="absolute -top-0.5 -right-2 w-2 h-2 rounded-full bg-red-500" aria-hidden />
+                      )}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}

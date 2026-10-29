@@ -10,6 +10,7 @@ import {
   CheckCircle2, TrendingUp, TrendingDown, Star, AlertCircle, XCircle, Package, Play,
 } from 'lucide-react'
 import { api } from '../lib/api'
+import { pendenciasPasseios } from '../lib/pendencias'
 import { downloadOrderPDF } from '../lib/orderPDF'
 import SendOsButton from '../components/SendOsButton'
 import DespacharModal from '../components/DespacharModal'
@@ -474,9 +475,13 @@ export default function Dashboard() {
     queryFn:         () => api.getPendingQuotes(),
     refetchInterval: 30_000,
   })
-  const novasCount = (obData?.pending?.length || 0)
-    + (Array.isArray(quotesPendRaw) ? quotesPendRaw : (quotesPendRaw?.data || []))
-        .filter((q) => q.status === 'pending_quote').length
+  // Passeio personalizado também espera valor — a aba "Novas" já mostra.
+  const { data: tourQuotesPendRaw } = useQuery({
+    queryKey:        ['tour-quotes-pending'],
+    queryFn:         () => api.getPendingTourQuotes(),
+    refetchInterval: 30_000,
+  })
+  const novasCount = pendenciasPasseios({ bookings: obData, transferQuotes: quotesPendRaw, tourQuotes: tourQuotesPendRaw })
 
   const operador = profile ? {
     full_name:         profile.full_name,
