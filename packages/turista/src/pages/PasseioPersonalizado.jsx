@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { format, startOfDay, isToday, isSameDay, addDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
-  ChevronLeft, Calendar, Clock, Users, Plus, Minus, X,
+  ChevronLeft, ChevronDown, ChevronUp, Calendar, Clock, Users, Plus, Minus, X,
   Zap, Info, CheckCircle2, Car, Loader2, Send, Check,
 } from 'lucide-react'
 import { PlaceInput } from './Transfers'
@@ -28,6 +28,26 @@ function proximoHorario() {
   const d = new Date()
   d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0)
   return format(d, 'HH:mm')
+}
+
+// Card de um veículo do catálogo: foto (ou ícone), nome e capacidade.
+function VeiculoCard({ v, ativo, onClick }) {
+  const cap = Number(v.seat_capacity) || 0
+  return (
+    <button type="button" onClick={onClick} aria-pressed={ativo}
+      className={`w-full flex items-center gap-2 p-2 rounded-xl border text-left transition-all active:scale-[0.98] ${
+        ativo ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
+      }`}>
+      {v.image_url
+        ? <img src={v.image_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-gray-100" />
+        : <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0"><Car size={16} className="text-gray-400" /></div>}
+      <div className="min-w-0 flex-1">
+        <p className={`text-[12px] font-bold leading-tight truncate ${ativo ? 'text-brand' : 'text-gray-900'}`}>{v.name}</p>
+        {cap > 0 && <p className="text-[10px] text-gray-400 leading-tight mt-0.5">até {cap} {cap === 1 ? 'pessoa' : 'pessoas'}</p>}
+      </div>
+      {ativo && <Check size={14} className="text-brand shrink-0" />}
+    </button>
+  )
 }
 
 export default function PasseioPersonalizado() {
@@ -48,6 +68,7 @@ export default function PasseioPersonalizado() {
   const [originMeta, setOriginMeta] = useState(null)
   const [stops, setStops] = useState(() => [novaParada()])
   const [veiculoSel, setVeiculoSel] = useState(null)   // veículo do catálogo
+  const [verVeiculos, setVerVeiculos] = useState(false) // grade de veículos aberta ("Ver tudo")
   const [vehicleText, setVehicleText] = useState('')   // só se a região não tiver catálogo
   const [date, setDate] = useState(startOfDay(new Date()))
   const [time, setTime] = useState('08:00')
@@ -117,7 +138,7 @@ export default function PasseioPersonalizado() {
 
   function resetForm() {
     setOrigin(''); setOriginMeta(null); setStops([novaParada()])
-    setVeiculoSel(null); setVehicleText(''); setPeople(2); setNotes('')
+    setVeiculoSel(null); setVerVeiculos(false); setVehicleText(''); setPeople(2); setNotes('')
     setSuccess(false); setError('')
   }
 
@@ -247,30 +268,64 @@ export default function PasseioPersonalizado() {
                     <Loader2 size={13} className="animate-spin" /> Carregando veículos…
                   </div>
                 ) : veiculos.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {veiculos.map((v) => {
-                      const ativo = veiculoSel?.id === v.id
-                      const cap = Number(v.seat_capacity) || 0
-                      return (
-                        <button key={v.id} type="button" onClick={() => setVeiculoSel(ativo ? null : v)}
-                          aria-pressed={ativo}
-                          className={`flex items-center gap-2 p-2 rounded-xl border text-left transition-all active:scale-[0.98] ${
-                            ativo ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
-                          }`}>
-                          {v.image_url
-                            ? <img src={v.image_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-gray-100" />
-                            : <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0"><Car size={16} className="text-gray-400" /></div>}
-                          <div className="min-w-0 flex-1">
-                            <p className={`text-[12px] font-bold leading-tight truncate ${ativo ? 'text-brand' : 'text-gray-900'}`}>{v.name}</p>
-                            {cap > 0 && <p className="text-[10px] text-gray-400 leading-tight mt-0.5">até {cap} {cap === 1 ? 'pessoa' : 'pessoas'}</p>}
+                  verVeiculos ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        {veiculos.map((v) => {
+                          const ativo = veiculoSel?.id === v.id
+                          // Escolheu → fecha a grade e mostra só a escolha (o
+                          // formulário volta a ficar curto); tocar no escolhido desmarca.
+                          return (
+                            <VeiculoCard key={v.id} v={v} ativo={ativo}
+                              onClick={() => {
+                                if (ativo) { setVeiculoSel(null); return }
+                                setVeiculoSel(v)
+                                setVerVeiculos(false)
+                              }} />
+                          )
+                        })}
+                      </div>
+                      <button type="button" onClick={() => setVerVeiculos(false)} aria-expanded
+                        className="w-full flex items-center justify-center gap-1 text-[12px] font-semibold text-gray-500 py-1.5">
+                        Ver menos <ChevronUp size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    // Recolhido (padrão): só a escolha atual, se houver, e o "Ver tudo".
+                    <>
+                      {veiculoSel && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <VeiculoCard v={veiculoSel} ativo onClick={() => setVerVeiculos(true)} />
                           </div>
-                          {ativo && <Check size={14} className="text-brand shrink-0" />}
-                        </button>
-                      )
-                    })}
-                  </div>
+                          <button type="button" onClick={() => setVeiculoSel(null)} aria-label="Remover veículo escolhido"
+                            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 active:scale-95 transition-transform">
+                            <X size={14} className="text-gray-500" />
+                          </button>
+                        </div>
+                      )}
+                      <button type="button" onClick={() => setVerVeiculos(true)} aria-expanded={false}
+                        className="w-full flex items-center gap-2.5 border border-gray-200 rounded-xl px-3 py-2 active:scale-[0.98] transition-transform">
+                        <span className="flex -space-x-2 shrink-0" aria-hidden>
+                          {veiculos.slice(0, 4).map((v) => (v.image_url
+                            ? <img key={v.id} src={v.image_url} alt="" className="w-7 h-7 rounded-full object-cover bg-gray-100 ring-2 ring-white" />
+                            : <span key={v.id} className="w-7 h-7 rounded-full bg-gray-100 ring-2 ring-white flex items-center justify-center"><Car size={12} className="text-gray-400" /></span>
+                          ))}
+                        </span>
+                        <span className="flex-1 min-w-0 text-left">
+                          <span className="block text-[13px] font-semibold text-gray-800 leading-tight truncate">
+                            {veiculoSel ? 'Trocar veículo' : 'Escolher veículo'}
+                          </span>
+                          <span className="block text-[11px] font-bold text-brand leading-tight mt-0.5">
+                            Ver tudo ({veiculos.length})
+                          </span>
+                        </span>
+                        <ChevronDown size={16} className="text-brand shrink-0" />
+                      </button>
+                    </>
+                  )
                 ) : (
-                  // Região sem veículo de passeio cadastrado: o cliente descreve.
+                  // Catálogo sem veículo de passeio cadastrado: o cliente descreve.
                   <input value={vehicleText} onChange={(e) => setVehicleText(e.target.value)}
                     placeholder="Descreva o veículo (ex.: buggy, 4x4)"
                     className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400" />
