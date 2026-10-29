@@ -26,13 +26,14 @@ function PrivateRoute({ children }) {
   return children
 }
 
-// Tela inicial conforme o segmento do operador: estacionamento abre direto no
-// seu painel; os demais (e admin) continuam nas Operações.
+// Tela inicial: operador de estacionamento abre no painel dele; os demais nas
+// Operações. O ADMIN abre conforme o painel que escolheu (padrão: passeios).
 function HomeRedirect() {
-  const { user } = useAuth()
-  const destino = user?.user_type !== 'admin' && user?.operator_segment === 'parking'
-    ? '/estacionamento' : '/dashboard'
-  return <Navigate to={destino} replace />
+  const { user, adminPanel } = useAuth()
+  const ehParking = user?.user_type === 'admin'
+    ? adminPanel === 'parking'
+    : user?.operator_segment === 'parking'
+  return <Navigate to={ehParking ? '/estacionamento' : '/dashboard'} replace />
 }
 
 // Deep link direto (WhatsApp): 404.html salva o caminho em sessionStorage e

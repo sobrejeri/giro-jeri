@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare, Home, Wallet, Settings, ImagePlus } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -30,12 +30,23 @@ const NAV = [
 ]
 
 export default function Sidebar({ open = false, onClose = () => {} }) {
-  const { user, logout } = useAuth()
+  const { user, logout, adminPanel, setAdminPanel } = useAuth()
+  const navigate = useNavigate()
   const isAdmin = user?.user_type === 'admin'
-  const ehParking = !isAdmin && user?.operator_segment === 'parking'
+  // Admin escolhe qual painel operar (passeios/translados ou estacionamento) —
+  // tem acesso a tudo. Antes o filtro tinha "isAdmin || ...", então o admin via
+  // TODOS os menus de uma vez, inclusive o estacionamento de outro parceiro.
+  // Operador comum segue o seu operator_segment, como antes.
+  const ehParking = isAdmin ? adminPanel === 'parking' : user?.operator_segment === 'parking'
   const segmento = ehParking ? 'parking' : 'tours'
-  // Operador de estacionamento: menu dedicado (seções como itens). Demais: menu padrão.
-  const nav = ehParking ? NAV_PARKING : NAV.filter((i) => isAdmin || i.seg === 'both' || i.seg === segmento)
+  const nav = ehParking ? NAV_PARKING : NAV.filter((i) => i.seg === 'both' || i.seg === segmento)
+
+  function trocarPainel(mode) {
+    if (mode === adminPanel) return
+    setAdminPanel(mode)
+    navigate(mode === 'parking' ? '/estacionamento' : '/dashboard')
+    onClose()
+  }
 
   return (
     <>
@@ -62,6 +73,27 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
             <X size={20} />
           </button>
         </div>
+
+        {/* Admin: escolhe qual painel operar (tem acesso a tudo). Operador comum
+            não vê isto — segue direto o seu segmento. */}
+        {isAdmin && (
+          <div className="px-3 pt-3">
+            <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1 px-1">Painel (admin)</p>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+              {[['tours', 'Passeios'], ['parking', 'Estacionamento']].map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => trocarPainel(m)}
+                  className={`flex-1 text-xs font-medium px-2 py-1.5 rounded-md transition-colors ${
+                    adminPanel === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">

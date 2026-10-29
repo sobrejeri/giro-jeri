@@ -6,9 +6,10 @@ const AuthContext = createContext(null)
 // (sobrejeri.github.io/<subpath>) e localStorage é por origem, não por path —
 // sem prefixo, logar num app sobrescrevia a sessão dos outros.
 const STORAGE = {
-  token:   'giro_coop_token',
-  refresh: 'giro_coop_refresh',
-  user:    'giro_coop_user',
+  token:      'giro_coop_token',
+  refresh:    'giro_coop_refresh',
+  user:       'giro_coop_user',
+  adminPanel: 'giro_coop_admin_panel',
 }
 
 export function AuthProvider({ children }) {
@@ -17,6 +18,19 @@ export function AuthProvider({ children }) {
   })
   const [token, setToken]     = useState(() => localStorage.getItem(STORAGE.token)   || null)
   const [refresh, setRefresh] = useState(() => localStorage.getItem(STORAGE.refresh) || null)
+
+  // Painel escolhido pelo ADMIN dentro do app do operador: 'tours' (passeios e
+  // translados) ou 'parking' (estacionamento). Como o admin tem acesso a tudo,
+  // ele escolhe qual operar — sem isso via todos os menus de uma vez, inclusive
+  // o estacionamento de outro parceiro. Operador comum ignora (segue o segment).
+  const [adminPanel, setAdminPanelState] = useState(() => {
+    try { return localStorage.getItem(STORAGE.adminPanel) || 'tours' } catch { return 'tours' }
+  })
+  const setAdminPanel = useCallback((mode) => {
+    const m = mode === 'parking' ? 'parking' : 'tours'
+    setAdminPanelState(m)
+    try { localStorage.setItem(STORAGE.adminPanel, m) } catch { /* ignore */ }
+  }, [])
 
   // Ao abrir com sessão ativa, re-hidrata o perfil (/me) para pegar campos que o
   // login pode não ter trazido — ex.: operator_segment, que define o menu.
@@ -70,11 +84,12 @@ export function AuthProvider({ children }) {
     setUser(null)
     setToken(null)
     setRefresh(null)
+    setAdminPanelState('tours')
     Object.values(STORAGE).forEach((k) => localStorage.removeItem(k))
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, token, refresh, login, logout, updateTokens }}>
+    <AuthContext.Provider value={{ user, token, refresh, login, logout, updateTokens, adminPanel, setAdminPanel }}>
       {children}
     </AuthContext.Provider>
   )
