@@ -28,9 +28,29 @@ function buildVehiclePayload(body = {}) {
   num('latitude'); num('longitude'); num('service_radius_km');
   bool('is_private_allowed'); bool('is_shared_allowed');
   bool('is_transfer_allowed'); bool('is_tour_allowed'); bool('is_active');
+  // `is_transport` (089): false = serviço adicional (guia, ingresso), que não
+  // leva gente e acompanha qualquer passeio. Fora daqui, o switch do admin
+  // seria descartado em silêncio, como já aconteceu com `modal`.
+  bool('is_transport');
   if (Array.isArray(body.region_ids)) out.region_ids = body.region_ids;
 
   return out;
+}
+
+// Banco sem a 089: a coluna não existe e o PostgREST recusa o corpo inteiro.
+// Salva o resto em vez de travar o cadastro por causa de um campo novo.
+const semColuna = (error, coluna) =>
+  !!error && (error.code === '42703' || error.code === 'PGRST204')
+  && String(error.message || '').includes(coluna);
+
+async function gravarVeiculo(executar, payload) {
+  let r = await executar(payload);
+  if (semColuna(r.error, 'is_transport')) {
+    console.warn('[vehicles] is_transport ausente (migration 089 pendente); salvando sem ela');
+    const { is_transport: _t, ...resto } = payload;
+    r = await executar(resto);
+  }
+  return r;
 }
 
 // GET /api/vehicles — lista veículos (público)
@@ -55,8 +75,10 @@ router.get('/', async (req, res, next) => {
 // POST /api/vehicles — cria veículo (operador/admin)
 router.post('/', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await req.supabase
-      .from('vehicles').insert(buildVehiclePayload(req.body)).select().single();
+    const { data, error } = await gravarVeiculo(
+      (payload) => req.supabase.from('vehicles').insert(payload).select().single(),
+      buildVehiclePayload(req.body),
+    );
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { next(err); }
@@ -65,9 +87,11 @@ router.post('/', authenticate, requireAdmin, async (req, res, next) => {
 // PUT /api/vehicles/:id — atualiza veículo (operador/admin)
 router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { data, error } = await req.supabase
-      .from('vehicles').update(buildVehiclePayload(req.body))
-      .eq('id', req.params.id).select().maybeSingle();
+    const { data, error } = await gravarVeiculo(
+      (payload) => req.supabase.from('vehicles').update(payload)
+        .eq('id', req.params.id).select().maybeSingle(),
+      buildVehiclePayload(req.body),
+    );
     if (error) throw error; // erro real do banco → mensagem clara via errorHandler
     if (!data) return res.status(404).json({ error: 'Veículo não encontrado' });
     res.json(data);

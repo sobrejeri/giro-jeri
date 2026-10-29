@@ -120,9 +120,13 @@ export async function requiredVehiclesByBooking(supabase, bookings) {
       .eq('is_active', true)
       .in('service_id', serviceIds);
 
+    // Serviço adicional com preço no passeio (o guia) não é exigido de quem
+    // atende: no compartilhado ninguém o escolheu, e o operador que desligou o
+    // guia deixaria de receber um pedido que não pede guia.
+    const servicos = await servicoVehicleIds(supabase, (rules || []).map((r) => r.vehicle_id));
     const byService = new Map();
     for (const r of rules || []) {
-      if (!r.vehicle_id) continue;
+      if (!r.vehicle_id || servicos.has(r.vehicle_id)) continue;
       if (!byService.has(r.service_id)) byService.set(r.service_id, new Set());
       byService.get(r.service_id).add(r.vehicle_id);
     }
@@ -134,6 +138,20 @@ export async function requiredVehiclesByBooking(supabase, bookings) {
 
   // Set → array
   return new Map([...result].map(([k, v]) => [k, [...v]]));
+}
+
+// Dos veículos informados, quais são SERVIÇO ADICIONAL (is_transport = false,
+// migration 089). Sem a coluna, nenhum — tudo é transporte, como antes.
+async function servicoVehicleIds(supabase, vehicleIds) {
+  const ids = [...new Set((vehicleIds || []).filter(Boolean))];
+  if (ids.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('vehicles').select('id').eq('is_transport', false).in('id', ids);
+  if (error) {
+    if (error.code !== '42703') console.error('[fleet] leitura de is_transport falhou:', error.message);
+    return new Set();
+  }
+  return new Set((data || []).map((v) => v.id));
 }
 
 // Dos veículos informados, quais são RESTRITOS (opt-in). Tolera a coluna
@@ -174,10 +192,17 @@ export async function modalIdByVehicle(supabase, vehicleIds) {
   const ids = [...new Set((vehicleIds || []).filter(Boolean))];
   if (ids.length === 0) return out;
   try {
-    const { data: veics, error } = await supabase
-      .from('vehicles').select('id, modal').in('id', ids);
+    let { data: veics, error } = await supabase
+      .from('vehicles').select('id, modal, is_transport').in('id', ids);
+    if (error?.code === '42703' && /is_transport/.test(error.message || '')) {   // 089 pendente
+      ({ data: veics, error } = await supabase.from('vehicles').select('id, modal').in('id', ids));
+    }
     if (error) throw error;
-    const slugs = [...new Set((veics || []).map((v) => v.modal).filter(Boolean))];
+    // Serviço adicional (guia) não tem meio: acompanha passeio de qualquer
+    // modal. Contar o modal dele faria "voo + guia" virar COMBO, e o pedido
+    // iria para o operador universal em vez de quem voa.
+    veics = (veics || []).filter((v) => v.is_transport !== false);
+    const slugs = [...new Set(veics.map((v) => v.modal).filter(Boolean))];
     if (slugs.length === 0) return out;
 
     const { data: modais, error: e2 } = await supabase

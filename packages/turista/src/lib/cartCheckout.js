@@ -1,3 +1,13 @@
+// Resumo do que foi escolhido: "2x Buggy + Guia turístico". Serviço adicional
+// (o guia, `servico: true`) é um só por passeio — sem o "1x" de veículo — e vem
+// depois do transporte, seja qual for a ordem em que foi escolhido.
+export function resumoDosVeiculos(vehicles = []) {
+  const escolhidos = (vehicles || []).filter((v) => v.qty > 0)
+  return [...escolhidos.filter((v) => !v.servico), ...escolhidos.filter((v) => v.servico)]
+    .map((v) => (v.servico ? v.name : `${v.qty}x ${v.name}`))
+    .join(' + ')
+}
+
 // Converte um rascunho do carrinho flutuante (CartContext) para o formato de
 // state que a tela de Resumo da reserva (/checkout/resumo) espera. Usado pelo
 // fluxo "Solicitar tudo": cada item do carrinho passa pela MESMA tela de
@@ -23,7 +33,7 @@ export function checkoutStateFor(item) {
       : {}),
     destination_text: isTransfer ? (item.dest || null) : null,
     vehicles,
-    vehicle_name:     (item.vehicles || []).map((v) => `${v.qty}x ${v.name}`).join(' + '),
+    vehicle_name:     resumoDosVeiculos(item.vehicles),
     ...(isTransfer ? { transfer_unit_price: Number(item.vehicles?.[0]?.price) || 0 } : {}),
     total_price:      Number(item.total) || 0,
     breakdown:        { 'Veículos selecionados': Number(item.total) || 0 },
@@ -51,7 +61,9 @@ export function itemMissing(item) {
   // no veículo que o operador já opera. Exigir veículo aqui deixaria o
   // item eternamente incompleto.
   const compartilhado = item.kind !== 'transfer' && item.mode === 'shared'
-  const chosen = (item.vehicles || []).filter((v) => v.qty > 0)
+  // Serviço adicional (guia) não é veículo: não supre o "escolha um veículo"
+  // nem soma lugar.
+  const chosen = (item.vehicles || []).filter((v) => v.qty > 0 && !v.servico)
   if (compartilhado) { /* sem veículo */ }
   else if (!chosen.length) miss.push('veículo')
   else if (chosen.every((v) => Number(v.cap) > 0)) {

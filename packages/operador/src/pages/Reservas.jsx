@@ -1258,6 +1258,11 @@ export default function Reservas({ soNovas = false }) {
               {quoteModal._kind === 'tour' && quoteModal.vehicle_type && (
                 <p className="text-gray-500">Veículos: <span className="font-medium text-gray-700">{quoteModal.vehicle_type}</span></p>
               )}
+              {/* Observações do cliente — inclusive "Serviços: Guia turístico",
+                  que também entra no valor. */}
+              {quoteModal._kind === 'tour' && quoteModal.special_notes && (
+                <p className="text-gray-500 whitespace-pre-line">Observações: <span className="font-medium text-gray-700">{quoteModal.special_notes}</span></p>
+              )}
             </div>
 
             <form onSubmit={submitQuote} className="space-y-3">

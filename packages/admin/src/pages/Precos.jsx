@@ -505,7 +505,17 @@ export default function Precos() {
                               <span className="shrink-0 px-1 py-0.5 rounded bg-gray-700 text-gray-300 text-[9px] font-medium">inativo</span>
                             )}
                           </div>
-                          <p className="text-[11px] text-gray-500 truncate">Até {v.seat_capacity} pax · {rowCount}/{visibleTours.length}</p>
+                          {/* Serviço adicional (guia) não tem lugares; o que
+                              importa é o preço padrão, que vale nos passeios
+                              sem célula própria. */}
+                          <p className="text-[11px] text-gray-500 truncate">
+                            {v.is_transport === false
+                              ? (() => {
+                                  const padrao = rules.find((r) => r.vehicle_id === v.id && !r.service_id && !r.region_id && r.is_active)
+                                  return padrao ? `Serviço · demais passeios ${fmt(padrao.base_price)}` : `Serviço · ${rowCount}/${visibleTours.length}`
+                                })()
+                              : `Até ${v.seat_capacity} pax · ${rowCount}/${visibleTours.length}`}
+                          </p>
                         </div>
                       </div>
                     </td>

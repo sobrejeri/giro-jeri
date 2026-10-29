@@ -11,12 +11,12 @@ import { format, startOfDay, isToday, isSameDay, addDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   ChevronLeft, ChevronDown, ChevronUp, Calendar, Clock, Users, Plus, Minus, X,
-  Zap, Info, CheckCircle2, Car, Loader2, Send, Check,
+  Zap, Info, CheckCircle2, Car, Loader2, Send, Check, UserRound,
 } from 'lucide-react'
 import { PlaceInput } from './Transfers'
 import DateSheet from '../components/DateSheet'
 import { api } from '../lib/api'
-import { somenteTransporte } from '../lib/transporte'
+import { somenteTransporte, somenteServicos } from '../lib/transporte'
 import { pontosDaRegiao } from '../lib/pontosTuristicos'
 import { useLocaisProximos } from '../lib/locaisProximos'
 import { useAuth } from '../contexts/AuthContext'
@@ -31,10 +31,21 @@ function proximoHorario() {
 }
 
 // Foto do veículo do catálogo (ou o ícone, se não tiver foto).
-function FotoVeiculo({ v, className = 'w-10 h-10 rounded-lg', icone = 16 }) {
+function FotoVeiculo({ v, className = 'w-10 h-10 rounded-lg', icone = 16, Icone = Car }) {
   return v.image_url
     ? <img src={v.image_url} alt="" className={`${className} object-cover shrink-0 bg-gray-100`} />
-    : <span className={`${className} bg-gray-100 flex items-center justify-center shrink-0`}><Car size={icone} className="text-gray-400" /></span>
+    : <span className={`${className} bg-gray-100 flex items-center justify-center shrink-0`}><Icone size={icone} className="text-gray-400" /></span>
+}
+
+// Um card por nome — o catálogo pode repetir o mesmo cadastro.
+function umPorNome(lista) {
+  const vistos = new Set()
+  return lista.filter((v) => {
+    const k = String(v.name || '').trim().toLowerCase()
+    if (!k || vistos.has(k)) return false
+    vistos.add(k)
+    return true
+  })
 }
 
 // Linha de um veículo com quantidade — mesmo padrão dos translados: "+" quando
@@ -89,6 +100,7 @@ export default function PasseioPersonalizado() {
   const [stops, setStops] = useState(() => [novaParada()])
   const [qtdVeiculos, setQtdVeiculos] = useState({})   // id do veículo → quantidade
   const [verVeiculos, setVerVeiculos] = useState(false) // lista de veículos aberta ("Ver tudo")
+  const [servicosOn, setServicosOn] = useState({})     // id do serviço (guia) → incluído
   const [vehicleText, setVehicleText] = useState('')   // só se a região não tiver catálogo
   const [date, setDate] = useState(startOfDay(new Date()))
   const [time, setTime] = useState('08:00')
@@ -118,35 +130,39 @@ export default function PasseioPersonalizado() {
   // Veículos CADASTRADOS na plataforma — o catálogo inteiro, não só o da
   // região: as regiões são municípios (Jijoca, Cruz…) e cada veículo fica
   // cadastrado num só, então quem estava em Cruz via a lista vazia (e o pedido
-  // vai para todas as cooperativas de qualquer forma). Só ativos, liberados
-  // para passeio e que transportam gente (guia e serviços ficam de fora —
-  // mesmo critério do resto do app); um card por nome.
+  // vai para todas as cooperativas de qualquer forma). Só ativos e liberados
+  // para passeio; quem transporta gente vai para "Veículos" e o serviço
+  // adicional (guia), para a seção dele — mesmo critério do resto do app.
   const { data: veiculosData, isLoading: veiculosLoading } = useQuery({
     queryKey:  ['vehicles', 'tour-custom'],
     queryFn:   () => api.getVehicles({ is_active: 'true' }),
     staleTime: 5 * 60_000,
   })
-  const veiculos = useMemo(() => {
-    const lista = somenteTransporte(Array.isArray(veiculosData) ? veiculosData : (veiculosData?.data || []))
-      .filter((v) => v.is_tour_allowed !== false && v.is_active !== false)
-    // Um card por nome — o catálogo pode repetir o mesmo veículo.
-    const vistos = new Set()
-    return lista.filter((v) => {
-      const k = String(v.name || '').trim().toLowerCase()
-      if (!k || vistos.has(k)) return false
-      vistos.add(k)
-      return true
-    })
-  }, [veiculosData])
+  const catalogo = useMemo(
+    () => (Array.isArray(veiculosData) ? veiculosData : (veiculosData?.data || []))
+      .filter((v) => v.is_tour_allowed !== false && v.is_active !== false),
+    [veiculosData],
+  )
+  const veiculos = useMemo(() => umPorNome(somenteTransporte(catalogo)), [catalogo])
+  // Serviço adicional (o guia): não leva gente, então fica fora da conta de
+  // lugares e entra à parte — acompanha qualquer passeio.
+  const servicos = useMemo(() => umPorNome(somenteServicos(catalogo)), [catalogo])
 
-  // O catálogo mudou e algum veículo escolhido saiu da lista → tira da escolha.
+  // O catálogo mudou e algum veículo/serviço escolhido saiu da lista → tira da escolha.
   useEffect(() => {
-    setQtdVeiculos((m) => {
-      const ids = new Set(veiculos.map((v) => v.id))
+    const manter = (lista) => (m) => {
+      const ids = new Set(lista.map((v) => v.id))
       const limpo = Object.fromEntries(Object.entries(m).filter(([id]) => ids.has(id)))
       return Object.keys(limpo).length === Object.keys(m).length ? m : limpo
-    })
-  }, [veiculos])
+    }
+    setQtdVeiculos(manter(veiculos))
+    setServicosOn(manter(servicos))
+  }, [veiculos, servicos])
+  const servicosEscolhidos = servicos.filter((s) => servicosOn[s.id])
+  const alternarServico = (id) => setServicosOn((m) => {
+    const { [id]: ligado, ...resto } = m
+    return ligado ? resto : { ...resto, [id]: true }
+  })
 
   // Escolha atual (na ordem do catálogo) e quantos lugares ela soma.
   const escolhidos     = veiculos.filter((v) => (qtdVeiculos[v.id] || 0) > 0).map((v) => ({ ...v, qty: qtdVeiculos[v.id] }))
@@ -171,7 +187,7 @@ export default function PasseioPersonalizado() {
 
   function resetForm() {
     setOrigin(''); setOriginMeta(null); setStops([novaParada()])
-    setQtdVeiculos({}); setVerVeiculos(false); setVehicleText(''); setPeople(2); setNotes('')
+    setQtdVeiculos({}); setVerVeiculos(false); setServicosOn({}); setVehicleText(''); setPeople(2); setNotes('')
     setSuccess(false); setError('')
   }
 
@@ -187,8 +203,11 @@ export default function PasseioPersonalizado() {
     const vehicleType = escolhidos.length
       ? (cabe ? listaVeiculos : `${totalVeiculos} veículos (ver observações)`)
       : (vehicleText.trim() || undefined)
+    // Serviços (o guia) vão nas observações: o pedido não tem campo próprio, e
+    // é ali que a cooperativa lê o que precisa entrar no valor.
     const observacoes = [
       escolhidos.length && !cabe ? `Veículos: ${listaVeiculos}` : null,
+      servicosEscolhidos.length ? `Serviços: ${servicosEscolhidos.map((s) => s.name).join(' + ')}` : null,
       notes.trim() || null,
     ].filter(Boolean).join(' · ') || undefined
     try {
@@ -387,6 +406,42 @@ export default function PasseioPersonalizado() {
                 ))}
               </div>
             </section>
+
+            {/* Serviços adicionais (o guia): não é veículo — não conta lugar e
+                vale para qualquer roteiro. Liga/desliga; a linha toda é o botão. */}
+            {servicos.length > 0 && (
+              <section className="bg-white rounded-2xl border border-gray-100">
+                <div className="flex items-baseline justify-between px-4 pt-3 pb-2">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Serviços adicionais</p>
+                  <span className="text-[10px] text-gray-400">opcional</span>
+                </div>
+                <div className="px-4 pb-4 space-y-2">
+                  {servicos.map((s) => {
+                    const on = !!servicosOn[s.id]
+                    return (
+                      <button key={s.id} type="button" onClick={() => alternarServico(s.id)} aria-pressed={on}
+                        className={`w-full flex items-center gap-2.5 p-2 rounded-xl border text-left transition-all active:scale-[0.99] ${
+                          on ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
+                        }`}>
+                        <FotoVeiculo v={s} Icone={UserRound} />
+                        <span className="min-w-0 flex-1">
+                          <span className={`block text-[13px] font-bold leading-tight truncate ${on ? 'text-brand' : 'text-gray-900'}`}>{s.name}</span>
+                          <span className="block text-[11px] text-gray-400 leading-snug mt-0.5 line-clamp-2">
+                            {s.description?.trim() || 'Acompanha o grupo durante o passeio'}
+                          </span>
+                        </span>
+                        <span className={`shrink-0 inline-flex items-center gap-1 text-[11.5px] font-bold px-3 py-1.5 rounded-lg ${
+                          on ? 'bg-brand text-white' : 'border border-brand text-brand'
+                        }`}>
+                          {on ? <Check size={12} /> : <Plus size={12} />}
+                          {on ? 'Incluído' : 'Adicionar'}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
 
             {/* Data & Horário */}
             <section className="bg-white rounded-2xl border border-gray-100">

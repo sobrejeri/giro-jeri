@@ -286,7 +286,12 @@ router.get('/routes/:id/vehicles', async (req, res, next) => {
 
     const COLS = `id, name, vehicle_type, seat_capacity, luggage_capacity,
                   image_url, description, display_order, is_active, is_transfer_allowed`;
-    let { data: rules, error } = await montarRegras(`${COLS}, modal`);
+    // is_transport (089) vai junto para o app tirar serviço adicional (guia) da
+    // lista: translado é só transporte.
+    let { data: rules, error } = await montarRegras(`${COLS}, modal, is_transport`);
+    if (error?.code === '42703') {
+      ({ data: rules, error } = await montarRegras(`${COLS}, modal`));
+    }
     if (error?.code === '42703') {   // vehicles.modal ausente (073 pendente)
       console.warn('[transfers] vehicles.modal ausente; seguindo sem o filtro de modal:', error.message);
       ({ data: rules, error } = await montarRegras(COLS));
@@ -295,7 +300,7 @@ router.get('/routes/:id/vehicles', async (req, res, next) => {
 
     // O modal também recorta a MATRIZ: uma regra criada por engano (buggy num
     // trecho aéreo) não deve virar oferta só porque alguém a cadastrou.
-    const comRegra = (rules || []).filter((r) => r.vehicles && mesmoModal(r.vehicles));
+    const comRegra = (rules || []).filter((r) => r.vehicles && mesmoModal(r.vehicles) && r.vehicles.is_transport !== false);
     if (comRegra.length > 0) {
       const map = new Map();
       for (const r of comRegra) {
@@ -323,6 +328,7 @@ router.get('/routes/:id/vehicles', async (req, res, next) => {
       if (req.query.region_id) q = q.eq('region_id', req.query.region_id);
       if (comModal && modalDaRota) q = q.eq('modal', modalDaRota);
       if (comOptIn) q = q.eq('requires_opt_in', false);
+      if (comTransporte) q = q.eq('is_transport', true);
       return q.order('display_order');
     };
 

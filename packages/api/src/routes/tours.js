@@ -227,9 +227,11 @@ router.get('/:id/vehicles', async (req, res, next) => {
     // Tenta com as duas colunas opcionais e vai soltando a que o banco ainda
     // não tem. is_transport (089) diz se o cadastro é transporte ou serviço
     // adicional; sem ela o app trata tudo como transporte, como fazia antes.
+    let comServicos = true;
     let { data, error } = await montarRegras(`${COLS}, modal, is_transport`);
     if (error?.code === '42703') {
       console.warn('[tours] coluna opcional de vehicles ausente; tentando sem is_transport:', error.message);
+      comServicos = false;
       ({ data, error } = await montarRegras(`${COLS}, modal`));
     }
     if (error?.code === '42703') {   // vehicles.modal ausente (073 pendente)
@@ -238,8 +240,10 @@ router.get('/:id/vehicles', async (req, res, next) => {
     }
     if (error) throw error;
     // `mesmoModal` recorta a matriz: regra cadastrada por engano (um buggy num
-    // voo panorâmico) não vira oferta só por existir.
-    const all = (data || []).filter((r) => r.vehicles && mesmoModal(r.vehicles));
+    // voo panorâmico) não vira oferta só por existir. Serviço adicional (o
+    // guia) não tem meio de transporte — acompanha passeio de qualquer modal.
+    const ehServico = (v) => v?.is_transport === false;
+    const all = (data || []).filter((r) => r.vehicles && (ehServico(r.vehicles) || mesmoModal(r.vehicles)));
 
     // "Matriz = app 1:1" por região: usa só as regras da(s) região(ões) do
     // passeio (ou globais, sem região). Assim uma regra criada sob OUTRA região
@@ -256,6 +260,41 @@ router.get('/:id/vehicles', async (req, res, next) => {
     for (const r of use.slice().sort((a, b) => rank(a) - rank(b))) {
       if (!map.has(r.vehicles.id)) {
         map.set(r.vehicles.id, { ...r.vehicles, base_price: r.base_price });
+      }
+    }
+
+    // Serviço adicional vale para QUALQUER passeio: além da regra do passeio,
+    // entra pela regra GERAL (service_id nulo), o preço que o admin define no
+    // cadastro do serviço. O motor de preço já lê essa regra
+    // (calculatePrivateTour: específica antes da geral) — faltava a vitrine
+    // oferecer. Veículo de transporte continua só pela matriz, sem exceção.
+    if (comServicos) {
+      const { data: gerais, error: eGerais } = await supabase
+        .from('vehicle_pricing_rules')
+        .select(`base_price, region_id, vehicles!inner ( ${COLS}, is_transport )`)
+        .eq('service_type', 'tour')
+        .is('service_id', null)
+        .eq('is_active', true)
+        .eq('vehicles.is_active', true)
+        .eq('vehicles.is_tour_allowed', true)
+        .eq('vehicles.is_transport', false);
+      if (eGerais) {
+        console.warn('[tours] regra geral de serviço adicional indisponível:', eGerais.message);
+      } else if (gerais?.length) {
+        // Célula DESLIGADA na matriz deste passeio = "aqui não tem guia". Sem
+        // isto a regra geral passaria por cima da escolha do admin.
+        const { data: desligadas } = await supabase
+          .from('vehicle_pricing_rules')
+          .select('vehicle_id')
+          .eq('service_type', 'tour')
+          .eq('service_id', req.params.id)
+          .eq('is_active', false);
+        const bloqueados = new Set((desligadas || []).map((r) => r.vehicle_id));
+        const daRegiao = (r) => r.region_id == null || !tourRegions.length || tourRegions.includes(r.region_id);
+        for (const r of gerais.filter((x) => x.vehicles && daRegiao(x)).sort((a, b) => rank(a) - rank(b))) {
+          if (bloqueados.has(r.vehicles.id)) continue;
+          if (!map.has(r.vehicles.id)) map.set(r.vehicles.id, { ...r.vehicles, base_price: r.base_price });
+        }
       }
     }
 

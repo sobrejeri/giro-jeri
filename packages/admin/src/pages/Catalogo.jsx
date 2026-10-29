@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Route, ImagePlus, X, Car, Users, ChevronDown, MapPin, Eye, EyeOff } from 'lucide-react'
+import { Plus, Route, ImagePlus, X, Car, Users, ChevronDown, MapPin, Eye, EyeOff, ToggleLeft, ToggleRight, UserRound } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
@@ -152,10 +152,18 @@ const VEHICLE_EMPTY = {
   seat_capacity: 4, luggage_capacity: 4,
   is_private_allowed: true, is_shared_allowed: false,
   is_transfer_allowed: false, is_tour_allowed: true,
-  is_active: true,
+  is_active: true, is_transport: true,
   latitude: null, longitude: null, service_radius_km: null,
   region_ids: [],
 }
+
+// Serviço adicional (guia, ingresso…): mesmo cadastro do veículo, mas não leva
+// gente (is_transport = false, migration 089). O preço PADRÃO dele é uma regra
+// do Motor de Preços sem passeio (service_id nulo) — vale em qualquer passeio, e
+// a matriz continua podendo ajustar um passeio específico.
+const ehServico = (v) => v?.is_transport === false
+const regraPadraoDe = (rules, vehicleId) =>
+  (rules || []).find((r) => r.vehicle_id === vehicleId && !r.service_id && !r.region_id) || null
 
 // Modal (migrations 073 e 074). O segundo eixo da frota: cruzado com "serve
 // para passeio / para transfer", dá as combinações reais do negócio — passeio
@@ -289,6 +297,7 @@ export default function Catalogo() {
   const [routeForm, setRouteForm]   = useState({})
   const [vehicleModal, setVehicleModal] = useState(null)
   const [vehicleForm, setVehicleForm]   = useState({})
+  const [precoServico, setPrecoServico] = useState('')   // preço padrão do serviço adicional
   const [imageFile, setImageFile]   = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [soSemFoto, setSoSemFoto]                = useState(false)
@@ -343,6 +352,12 @@ export default function Catalogo() {
   const { data: vehicles = [], isLoading: l4 } = useQuery({
     queryKey: ['vehicles'],
     queryFn:  () => api.getVehicles(),
+  })
+  // Mesma consulta (e chave) do Motor de Preços: daqui sai o preço padrão de
+  // cada serviço adicional.
+  const { data: pricingRules = [] } = useQuery({
+    queryKey: ['pricing-rules'],
+    queryFn:  () => api.getPricingRules(),
   })
 
   // Modais de operação. Cadastráveis (075); a API já devolve os três padrões
@@ -476,11 +491,30 @@ export default function Catalogo() {
 
   /* ── Vehicle mutations ───────────────────────────────────── */
   const vehicleMut = useMutation({
-    mutationFn: (body) =>
-      vehicleModal?.isNew
-        ? api.createVehicle(body)
-        : api.updateVehicle(vehicleModal.id, body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicles'] }); setVehicleModal(null) },
+    mutationFn: async ({ body, preco }) => {
+      const salvo = vehicleModal?.isNew
+        ? await api.createVehicle(body)
+        : await api.updateVehicle(vehicleModal.id, body)
+      const id = salvo?.id || vehicleModal?.id
+      if (ehServico(body) && id) {
+        // Preço padrão = regra geral do Motor de Preços. Vazio remove a regra:
+        // o serviço passa a aparecer só nos passeios com preço na matriz.
+        const atual = regraPadraoDe(pricingRules, id)
+        const valor = Number(String(preco).replace(',', '.'))
+        if (valor > 0) {
+          if (atual) await api.updatePricingRule(atual.id, { base_price: valor, is_active: true })
+          else await api.createPricingRule({ vehicle_id: id, service_id: null, region_id: null, base_price: valor })
+        } else if (atual) {
+          await api.deletePricingRule(atual.id)
+        }
+      }
+      return salvo
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['vehicles'] })
+      qc.invalidateQueries({ queryKey: ['pricing-rules'] })
+      setVehicleModal(null)
+    },
     onError:   (err) => alert(`Erro ao salvar veículo: ${err.message}`),
   })
   const deleteVehicleMut = useMutation({
@@ -566,11 +600,14 @@ export default function Catalogo() {
 
   function openNewVehicle() {
     setVehicleForm(VEHICLE_EMPTY)
+    setPrecoServico('')
     setVehicleImageFile(null); setVehicleImagePreview(null)
     setVehicleModal({ isNew: true })
   }
   function openEditVehicle(v) {
     setVehicleForm({ ...v, region_ids: v.region_ids || [] })
+    const padrao = regraPadraoDe(pricingRules, v.id)
+    setPrecoServico(padrao?.is_active ? String(padrao.base_price) : '')
     setVehicleImageFile(null); setVehicleImagePreview(v.image_url || null)
     setVehicleModal(v)
   }
@@ -662,12 +699,19 @@ export default function Catalogo() {
 
     // Remove campos que não são colunas da tabela (joins, metadados auto)
     const { regions: _r, id: _id, created_at: _ca, updated_at: _ua, ...cleanForm } = vehicleForm
+    const servico = ehServico(vehicleForm)
     let body = {
       ...cleanForm,
-      seat_capacity:    Number(vehicleForm.seat_capacity),
-      luggage_capacity: Number(vehicleForm.luggage_capacity) || 0,
+      is_transport:     !servico,
+      // Serviço não tem lugares, mas a coluna é NOT NULL CHECK > 0 — fica 1 e
+      // o app não o soma na capacidade (is_transport = false).
+      seat_capacity:    servico ? (Number(vehicleForm.seat_capacity) || 1) : Number(vehicleForm.seat_capacity),
+      luggage_capacity: servico ? 0 : (Number(vehicleForm.luggage_capacity) || 0),
       region_id:        regionId,
       region_ids:       vehicleForm.region_ids || [],
+      // Serviço acompanha passeio privativo; translado e vaga compartilhada
+      // são só transporte.
+      ...(servico ? { is_transfer_allowed: false, is_shared_allowed: false } : {}),
     }
     if (vehicleModal?.isNew) {
       body.slug = slugify(vehicleForm.name)
@@ -682,7 +726,7 @@ export default function Catalogo() {
       }
       setUploading(false)
     }
-    vehicleMut.mutate(body)
+    vehicleMut.mutate({ body, preco: precoServico })
   }
 
   function CidadesSelector({ value, onChange }) {
@@ -1105,17 +1149,17 @@ export default function Catalogo() {
                 // ATIVOS primeiro, inativos por último, alfabético pelo nome —
                 // dentro de cada grupo de modal (a ordem dos grupos não muda).
                 for (const v of ordenarAtivoAlfabetico(filteredVehicles, (x) => x.name)) {
-                  const slug = v.modal || '__outros'
+                  // Serviço adicional não tem modal: grupo próprio, no fim.
+                  const slug = ehServico(v) ? '__servicos' : (v.modal || '__outros')
                   if (!porSlug.has(slug)) {
-                    const g = { slug, nome: v.modal ? nomeDoModal(v.modal) : 'Outros', veiculos: [] }
+                    const nome = slug === '__servicos' ? 'Serviços adicionais' : v.modal ? nomeDoModal(v.modal) : 'Outros'
+                    const g = { slug, nome, veiculos: [] }
                     porSlug.set(slug, g); grupos.push(g)
                   }
                   porSlug.get(slug).veiculos.push(v)
                 }
-                grupos.sort((a, b) => {
-                  const ia = ordem.indexOf(a.slug), ib = ordem.indexOf(b.slug)
-                  return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
-                })
+                const posicao = (slug) => slug === '__servicos' ? 1000 : (ordem.indexOf(slug) === -1 ? 999 : ordem.indexOf(slug))
+                grupos.sort((a, b) => posicao(a.slug) - posicao(b.slug))
                 return grupos.map((grupo) => (
                   <div key={grupo.slug}>
                     <div className="px-4 pt-3 pb-0.5 flex items-center gap-2">
@@ -1130,12 +1174,24 @@ export default function Catalogo() {
                             <img src={v.image_url} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center shrink-0">
-                              <Car size={16} className="text-gray-500" />
+                              {ehServico(v)
+                                ? <UserRound size={16} className="text-gray-500" />
+                                : <Car size={16} className="text-gray-500" />}
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-200">{v.name}</p>
                             {/* Meta neutra (uma paleta só); o modal já é o título do grupo. */}
+                            {ehServico(v) ? (
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {(() => {
+                                  const padrao = regraPadraoDe(pricingRules, v.id)
+                                  return padrao?.is_active
+                                    ? <>Em qualquer passeio · <span className="text-gray-300">{Number(padrao.base_price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></>
+                                    : 'Só nos passeios com preço no Motor de Preços'
+                                })()}
+                              </div>
+                            ) : (
                             <div className="flex items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500 flex-wrap mt-0.5">
                               <span className="text-gray-300">{VEHICLE_TYPES.find((t) => t.value === v.vehicle_type)?.label || v.vehicle_type}</span>
                               <span className="text-gray-600">·</span>
@@ -1147,6 +1203,7 @@ export default function Catalogo() {
                                 </>
                               )}
                             </div>
+                            )}
                             {v.region_ids?.length > 0 && <div className="mt-0.5"><RegionTags ids={v.region_ids} /></div>}
                           </div>
                           <Badge value={String(v.is_active)} />
@@ -1890,6 +1947,43 @@ export default function Catalogo() {
             required
           />
 
+          {/* O guia não leva gente: fora da conta de lugares e oferecido em
+              qualquer passeio, à parte da lista de veículos. */}
+          <button
+            type="button"
+            onClick={() => setVehicleForm({ ...vehicleForm, is_transport: ehServico(vehicleForm) })}
+            className={`w-full flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 border text-left transition-colors ${
+              ehServico(vehicleForm) ? 'bg-brand/10 border-brand/40' : 'bg-gray-800/50 border-transparent'
+            }`}
+          >
+            <span className="min-w-0">
+              <span className="block text-sm text-gray-200">Serviço adicional (guia, ingresso…)</span>
+              <span className="block text-[11px] text-gray-500 mt-0.5">
+                Não transporta pessoas: não conta lugar e pode ser incluído em qualquer passeio.
+              </span>
+            </span>
+            {ehServico(vehicleForm)
+              ? <ToggleRight size={22} className="text-brand shrink-0" />
+              : <ToggleLeft  size={22} className="text-gray-600 shrink-0" />}
+          </button>
+
+          {ehServico(vehicleForm) && (
+            <div>
+              <Input
+                label="Preço por passeio (R$)"
+                type="number" min={0} step={0.01}
+                placeholder="ex: 150,00"
+                value={precoServico}
+                onChange={(e) => setPrecoServico(e.target.value)}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Vale para qualquer passeio. Para um valor diferente num passeio, ajuste a célula dele no Motor de Preços.
+                Em branco, o serviço só aparece nos passeios com preço na matriz.
+              </p>
+            </div>
+          )}
+
+          {!ehServico(vehicleForm) && (
           <Select
             label="Tipo de veículo"
             value={vehicleForm.vehicle_type || 'buggy'}
@@ -1899,9 +1993,11 @@ export default function Catalogo() {
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </Select>
+          )}
 
           {/* É este campo que impede o buggy de aparecer num voo — e o
               helicóptero num translado de estrada. */}
+          {!ehServico(vehicleForm) && (
           <div>
             <Select
               label="Modal"
@@ -1919,6 +2015,7 @@ export default function Catalogo() {
               O veículo só é oferecido em serviços do mesmo modal.
             </p>
           </div>
+          )}
 
           <Textarea
             label="Descrição"
@@ -1927,6 +2024,7 @@ export default function Catalogo() {
             onChange={(e) => setVehicleForm({ ...vehicleForm, description: e.target.value })}
           />
 
+          {!ehServico(vehicleForm) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Capacidade (pax)"
@@ -1942,15 +2040,19 @@ export default function Catalogo() {
               onChange={(e) => setVehicleForm({ ...vehicleForm, luggage_capacity: e.target.value })}
             />
           </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-gray-400">Disponível para</p>
-            {[
-              { key: 'is_tour_allowed',     label: 'Passeios privativos' },
-              { key: 'is_shared_allowed',   label: 'Passeios compartilhados' },
-              { key: 'is_transfer_allowed', label: 'Transfer' },
-              { key: 'is_private_allowed',  label: 'Contratação privada' },
-            ].map(({ key, label }) => (
+            {(ehServico(vehicleForm)
+              ? [{ key: 'is_tour_allowed', label: 'Passeios privativos' }]
+              : [
+                  { key: 'is_tour_allowed',     label: 'Passeios privativos' },
+                  { key: 'is_shared_allowed',   label: 'Passeios compartilhados' },
+                  { key: 'is_transfer_allowed', label: 'Transfer' },
+                  { key: 'is_private_allowed',  label: 'Contratação privada' },
+                ]
+            ).map(({ key, label }) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"

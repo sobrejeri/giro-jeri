@@ -6,13 +6,14 @@ import { useTranslation } from 'react-i18next'
 import {
   ShoppingCart, Trash2, Calendar, Clock, Users, Car, MapPin, Pencil,
   CheckCircle2, AlertTriangle, Loader2, Send, X, Plus, Minus, ChevronRight, ChevronLeft, ChevronDown, Sparkles,
+  Check, UserRound,
 } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { duracao } from '../lib/formato'
 import { lerOferta } from '../lib/oferta'
-import { itemMissing, requestPayloadFor } from '../lib/cartCheckout'
+import { itemMissing, requestPayloadFor, resumoDosVeiculos } from '../lib/cartCheckout'
 import { getPartner as getPartnerAttribution } from '../lib/partner'
 import { getPreferredOp } from '../lib/preferredOp'
 import { getAffiliate as getAffiliateAttribution } from '../lib/affiliate'
@@ -171,6 +172,51 @@ function ModoCard({ item, onChange }) {
   )
 }
 
+/* ── Serviços adicionais (o guia) ───────────────────────────────
+   Não é veículo: fica fora da conta de lugares e não supre a escolha do
+   transporte. Liga ou desliga, um por passeio, com o preço do passeio. */
+function ServicosAdicionais({ lista, escolhido, onToggle }) {
+  const { t } = useTranslation()
+  if (!lista.length) return null
+  return (
+    <div>
+      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+        {t('cartPg.editSheet.servicesLabel')}{' '}
+        <span className="normal-case font-semibold text-gray-400">· {t('cartPg.editSheet.servicesOptional')}</span>
+      </p>
+      <div className="mt-1 space-y-2">
+        {lista.map((s) => {
+          const on = escolhido(s.id)
+          return (
+            <div key={s.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border transition-colors ${
+              on ? 'border-brand bg-brand/5' : 'border-gray-100 bg-white'
+            }`}>
+              {s.image_url
+                ? <img src={s.image_url} alt="" className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white" />
+                : <UserRound size={15} className={`shrink-0 ${on ? 'text-brand' : 'text-gray-400'}`} />}
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-gray-800 truncate">{s.name}</p>
+                <p className="text-[11px] text-gray-400">{t('cartPg.editSheet.servicePerTour', { price: fmt(s.price) })}</p>
+              </div>
+              <button
+                onClick={() => onToggle(s)}
+                aria-pressed={on}
+                aria-label={t(on ? 'cartPg.editSheet.serviceRemoveAria' : 'cartPg.editSheet.serviceAddAria', { name: s.name })}
+                className={`shrink-0 inline-flex items-center gap-1 text-[11.5px] font-bold px-3 py-1.5 rounded-lg active:scale-95 transition-transform ${
+                  on ? 'bg-brand text-white' : 'border border-brand text-brand bg-white'
+                }`}
+              >
+                {on ? <Check size={12} /> : <Plus size={12} />}
+                {t(on ? 'cartPg.editSheet.serviceAdded' : 'cartPg.editSheet.serviceAdd')}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /* ── Edição de um item (bottom sheet) ───────────────────────────
    Obrigatórios: data, horário, pessoas, veículo(s) e (passeio) local de
    saída. Aumentou pessoas → precisa de capacidade: o Salvar só ativa quando
@@ -198,7 +244,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
   // escolha: rascunho sem veículo já abre com a lista aberta, senão o turista
   // via só um link discreto e não sabia onde escolher.
   const [showExtras, setShowExtras] = useState(
-    () => (item.vehicles || []).filter((v) => v.qty > 0).length === 0,
+    () => (item.vehicles || []).filter((v) => v.qty > 0 && !v.servico).length === 0,
   )
 
   // Capacidades/preços reais vêm da API — rascunhos antigos podem não ter a
@@ -247,7 +293,15 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
   // recuo: a própria API já devolve a frota comum quando a rota não tem regra
   // (tirando os veículos restritos, como o helicóptero). Cair na lista geral
   // aqui traria o problema de volta.
-  const needAll = !isTransfer && tvFetched && (tourVehiclesData || []).length === 0
+  // Serviço adicional (o guia, is_transport = false) vem na mesma lista do
+  // passeio, mas não é transporte: um passeio só com o guia na matriz ainda
+  // está "sem veículo" e usa a lista geral, como antes.
+  // (memo: entra nas dependências de `available`, que dispara a hidratação)
+  const transporteDoPasseio = useMemo(
+    () => (tourVehiclesData || []).filter((v) => v.is_transport !== false),
+    [tourVehiclesData],
+  )
+  const needAll = !isTransfer && tvFetched && transporteDoPasseio.length === 0
   const { data: allVehiclesData } = useQuery({
     queryKey: ['cart-edit-all-vehicles'],
     queryFn:  () => api.getVehicles({ is_active: 'true' }),
@@ -266,17 +320,26 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
       const daRota = Array.isArray(routeVehiclesData) ? routeVehiclesData : (routeVehiclesData?.vehicles || [])
       // Preço continua sendo o da ROTA, não o do veículo: no transfer cada
       // veículo escolhido custa o valor do trecho. Só a LISTA mudou.
+      // Translado é só transporte: guia nunca entra aqui.
       return daRota
-        .filter((v) => v.is_transfer_allowed !== false && v.is_active !== false)
+        .filter((v) => v.is_transfer_allowed !== false && v.is_active !== false && v.is_transport !== false)
         .map((v) => ({ id: v.id, name: v.name, price: unitPrice, cap: v.seat_capacity || null, image_url: v.image_url || null }))
     }
-    const list = (tourVehiclesData || []).length ? tourVehiclesData : all
-    return list
+    // Serviço só com o preço do passeio (matriz ou preço padrão do serviço): na
+    // lista geral não há preço, e ele sairia por R$ 0.
+    const transporte = transporteDoPasseio.length ? transporteDoPasseio : all.filter((v) => v.is_transport !== false)
+    const servicos = (tourVehiclesData || []).filter((v) => v.is_transport === false)
+    return [...transporte, ...servicos]
       .filter((v) => v.is_tour_allowed !== false && v.is_private_allowed !== false && v.is_active !== false)
-      .map((v) => ({ id: v.id, name: v.name, price: Number(v.base_price) || 0, cap: v.seat_capacity || null, image_url: v.image_url || null }))
-  }, [isTransfer, tourVehiclesData, routeVehiclesData, allVehiclesData, unitPrice])
+      .map((v) => {
+        const servico = v.is_transport === false
+        return { id: v.id, name: v.name, price: Number(v.base_price) || 0, cap: servico ? null : (v.seat_capacity || null), image_url: v.image_url || null, servico }
+      })
+  }, [isTransfer, tourVehiclesData, transporteDoPasseio, routeVehiclesData, allVehiclesData, unitPrice])
 
-  // Preenche capacidade/preço que faltarem nos veículos já escolhidos
+  // Preenche capacidade/preço que faltarem nos veículos já escolhidos. Também
+  // reconhece o guia escolhido como veículo num rascunho antigo: vira serviço
+  // (sem lugar, um por passeio).
   useEffect(() => {
     if (!available.length) return
     setVehicles((prev) => prev.map((v) => {
@@ -284,9 +347,11 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
       if (!src) return v
       return {
         ...v,
-        cap:   Number(v.cap)   > 0 ? v.cap   : src.cap,
+        servico: src.servico,
+        cap:   src.servico ? null : (Number(v.cap) > 0 ? v.cap : src.cap),
         price: Number(v.price) > 0 ? v.price : src.price,
         image_url: v.image_url || src.image_url || null,
+        ...(src.servico && v.qty > 1 ? { qty: 1 } : {}),
       }
     }))
   }, [available])
@@ -299,15 +364,25 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
     else if (mode === 'shared' && !allowsShared && allowsPrivate) setMode('private')
   }, [isTransfer, tourInfo, allowsPrivate, allowsShared, mode])
 
-  const extras = available.filter((a) => !vehicles.some((v) => v.id === a.id))
+  // Transporte e serviço adicional andam na mesma lista (vão juntos para a
+  // reserva e para o preço), mas só o transporte conta lugar e "veículo".
+  const transportes = vehicles.filter((v) => !v.servico)
+  const extras = available.filter((a) => !a.servico && !vehicles.some((v) => v.id === a.id))
+  const servicosDisponiveis = available.filter((a) => a.servico)
+  // Serviço já escolhido que saiu da oferta continua à vista, para poder sair.
+  const servicosLista = [
+    ...servicosDisponiveis,
+    ...vehicles.filter((v) => v.servico && !servicosDisponiveis.some((a) => a.id === v.id)),
+  ]
+  const servicoEscolhido = (id) => vehicles.some((v) => v.id === id && v.qty > 0)
 
   // Compartilhado cobra por pessoa; privativo soma os veículos escolhidos.
   const precoPorPessoa = Number(tourInfo?.shared_price_per_person ?? item.shared_price_per_person) || 0
   const totalVeiculos = vehicles.reduce((s, v) => s + (Number(v.price) || 0) * (v.qty || 0), 0)
   const subtotal = compartilhado ? precoPorPessoa * people : totalVeiculos
-  const qtyTotal = vehicles.reduce((s, v) => s + (v.qty || 0), 0)
-  const capsKnown = vehicles.length > 0 && vehicles.every((v) => Number(v.cap) > 0)
-  const capacity  = capsKnown ? vehicles.reduce((s, v) => s + (Number(v.cap) || 0) * (v.qty || 0), 0) : null
+  const qtyTotal = transportes.reduce((s, v) => s + (v.qty || 0), 0)
+  const capsKnown = transportes.length > 0 && transportes.every((v) => Number(v.cap) > 0)
+  const capacity  = capsKnown ? transportes.reduce((s, v) => s + (Number(v.cap) || 0) * (v.qty || 0), 0) : null
   const capacityOk = compartilhado || !capsKnown || capacity >= people
 
   // Sugestão quando falta lugar: o menor veículo que cobre o déficit
@@ -315,11 +390,11 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
   const suggestion = useMemo(() => {
     if (capacityOk || !capsKnown) return null
     const deficit = people - capacity
-    const pool = [...vehicles, ...extras].filter((v) => Number(v.cap) > 0)
+    const pool = [...transportes, ...extras].filter((v) => Number(v.cap) > 0)
     if (!pool.length) return null
     const fits = pool.filter((v) => v.cap >= deficit).sort((a, b) => a.cap - b.cap)
     return fits[0] || pool.sort((a, b) => b.cap - a.cap)[0]
-  }, [capacityOk, capsKnown, people, capacity, vehicles, extras])
+  }, [capacityOk, capsKnown, people, capacity, transportes, extras])
 
   function addVehicle(a) {
     setVehicles((prev) => {
@@ -327,6 +402,14 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
       if (i >= 0) return prev.map((v, j) => j === i ? { ...v, qty: (v.qty || 0) + 1 } : v)
       return [...prev, { id: a.id, name: a.name, qty: 1, price: a.price, cap: a.cap, image_url: a.image_url || null }]
     })
+  }
+
+  // Serviço adicional: liga/desliga, um por passeio.
+  function toggleServico(s) {
+    setVehicles((prev) => (prev.some((v) => v.id === s.id && v.qty > 0)
+      ? prev.filter((v) => v.id !== s.id)
+      : [...prev.filter((v) => v.id !== s.id),
+         { id: s.id, name: s.name, qty: 1, price: s.price, cap: null, image_url: s.image_url || null, servico: true }]))
   }
 
   // Alta temporada (cor no calendário) — mesmas regras das telas de seleção.
@@ -602,7 +685,9 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
                   <div>
                     <label className={LBL}>{t('cartPg.editSheet.vehiclesLabel')} <Ok on={qtyTotal >= 1 && capacityOk} /></label>
                     <div className="mt-1 space-y-2">
-                      {vehicles.map((v, i) => (
+                      {/* Índice da lista inteira (o bump usa); o guia sai daqui
+                          e aparece em "Serviços adicionais". */}
+                      {vehicles.map((v, i) => v.servico ? null : (
                         <div key={v.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
                           {v.image_url
                             ? <img src={v.image_url} alt="" className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white" />
@@ -647,7 +732,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
                         )}
                       </div>
                     )}
-                    {available.length === 0 && vehicles.length === 0 && (
+                    {!available.some((a) => !a.servico) && transportes.length === 0 && (
                       <p className="mt-2 text-[12px] text-gray-500 leading-snug">
                         {(isTransfer ? !rvFetched : !tvFetched)
                           ? t('cartPg.editSheet.vehiclesLoading')
@@ -660,7 +745,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
                           className="inline-flex items-center gap-1 text-[12px] font-bold text-brand active:scale-95 transition-transform">
                           <Plus size={13} /> {showExtras
                             ? t('cartPg.editSheet.hideOtherVehicles')
-                            : (vehicles.length === 0 ? 'Escolher veículo' : t('cartPg.editSheet.addOtherVehicle'))}
+                            : (transportes.length === 0 ? 'Escolher veículo' : t('cartPg.editSheet.addOtherVehicle'))}
                         </button>
                         {showExtras && (
                           <div className="mt-2 space-y-2">
@@ -686,6 +771,10 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
                       </div>
                     )}
                   </div>
+                )}
+
+                {!compartilhado && (
+                  <ServicosAdicionais lista={servicosLista} escolhido={servicoEscolhido} onToggle={toggleServico} />
                 )}
 
                 <button
@@ -859,7 +948,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
           <div>
             <label className={LBL}>{t('cartPg.editSheet.vehiclesLabel')} <Ok on={qtyTotal >= 1 && capacityOk} /></label>
             <div className="mt-1 space-y-2">
-              {vehicles.map((v, i) => (
+              {vehicles.map((v, i) => v.servico ? null : (
                 <div key={v.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
                   {v.image_url
                     ? <img src={v.image_url} alt="" className="w-8 h-8 rounded-lg object-contain shrink-0 bg-white" />
@@ -908,7 +997,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
             {/* A frota agora vem da rota/passeio, então "lista vazia" virou um
                 desfecho possível — e sem aviso o cliente ficaria olhando um
                 campo obrigatório sem nenhuma opção e sem saber por quê. */}
-            {available.length === 0 && vehicles.length === 0 && (
+            {!available.some((a) => !a.servico) && transportes.length === 0 && (
               <p className="mt-2 text-[12px] text-gray-500 leading-snug">
                 {(isTransfer ? !rvFetched : !tvFetched)
                   ? t('cartPg.editSheet.vehiclesLoading')
@@ -922,7 +1011,7 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
                   className="inline-flex items-center gap-1 text-[12px] font-bold text-brand active:scale-95 transition-transform">
                   <Plus size={13} /> {showExtras
                     ? t('cartPg.editSheet.hideOtherVehicles')
-                    : (vehicles.length === 0 ? 'Escolher veículo' : t('cartPg.editSheet.addOtherVehicle'))}
+                    : (transportes.length === 0 ? 'Escolher veículo' : t('cartPg.editSheet.addOtherVehicle'))}
                 </button>
                 {showExtras && (
                   <div className="mt-2 space-y-2">
@@ -949,6 +1038,10 @@ function EditSheet({ item, onSave, onClose, inline = false, focus = null }) {
             )}
           </div>
           ))}
+
+          {(!focus || focus === 'vehicle') && !compartilhado && (
+            <ServicosAdicionais lista={servicosLista} escolhido={servicoEscolhido} onToggle={toggleServico} />
+          )}
         </div>
 
         <div className={inline ? 'px-3 py-3 mt-2 border-t border-gray-100 space-y-2' : 'px-5 py-4 border-t border-gray-100 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2 shrink-0'}>
@@ -1443,7 +1536,7 @@ export default function CartPage() {
                     )}
                     {item.vehicles?.length > 0 && (
                       <p className="text-[11.5px] text-gray-600 mt-1 truncate">
-                        {item.vehicles.filter((v) => v.qty > 0).map((v) => `${v.qty}x ${v.name}`).join(' + ')}
+                        {resumoDosVeiculos(item.vehicles)}
                       </p>
                     )}
                     <div className="flex items-center justify-between gap-2 mt-1">
