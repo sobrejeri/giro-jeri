@@ -232,8 +232,10 @@ router.get('/reservations', authenticate, async (req, res, next) => {
 // Lots do PARCEIRO (para selecionar no balcão de entrada/retirada).
 router.get('/partner/lots', authenticate, async (req, res, next) => {
   try {
-    let q = supabase.from('parking_lots').select('id, name, capacity, is_active').order('name')
-    if (!ehAdmin(req.user)) q = q.eq('owner_user_id', req.user.id)
+    // Só os lots do próprio usuário (inclusive admin) — as telas de parceiro
+    // nunca listam estacionamento de outro operador.
+    const q = supabase.from('parking_lots').select('id, name, capacity, is_active').order('name')
+      .eq('owner_user_id', req.user.id)
     const { data, error } = await q
     if (error) throw error
     res.json({ data: data || [] })
@@ -246,12 +248,10 @@ router.get('/partner/lots', authenticate, async (req, res, next) => {
 // nunca no navegador. NÃO transfere dinheiro — é só apuração/relatório.
 router.get('/partner/financial', authenticate, async (req, res, next) => {
   try {
-    let lotIds = null
-    if (!ehAdmin(req.user)) {
-      const { data: lots } = await supabase.from('parking_lots').select('id').eq('owner_user_id', req.user.id)
-      lotIds = (lots || []).map((l) => l.id)
-      if (lotIds.length === 0) return res.json({ resumo: { bruto: 0, comissao: 0, liquido: 0, qtd: 0 }, por_lot: [], periodo: {} })
-    }
+    // Financeiro do parceiro = SÓ os lots do próprio usuário (inclusive admin).
+    const { data: lots } = await supabase.from('parking_lots').select('id').eq('owner_user_id', req.user.id)
+    const lotIds = (lots || []).map((l) => l.id)
+    if (lotIds.length === 0) return res.json({ resumo: { bruto: 0, comissao: 0, liquido: 0, qtd: 0 }, por_lot: [], periodo: {} })
     const from = req.query.from ? new Date(req.query.from).toISOString() : null
     const to   = req.query.to   ? new Date(req.query.to).toISOString()   : null
 
@@ -311,12 +311,11 @@ router.get('/partner/financial', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// Resolve os lots do parceiro (ou todos, se admin).
+// Resolve os lots que o usuário é DONO. As telas do parceiro (app do operador)
+// são sempre "o que é MEU": mesmo admin vê só os próprios lots aqui — nunca os
+// de outro operador. A supervisão de TODOS os estacionamentos é do Painel Admin
+// (/parking/admin/*), não destas telas de parceiro.
 async function lotsDoParceiro(user) {
-  if (ehAdmin(user)) {
-    const { data } = await supabase.from('parking_lots').select('id, name, capacity')
-    return data || []
-  }
   const { data } = await supabase.from('parking_lots').select('id, name, capacity').eq('owner_user_id', user.id)
   return data || []
 }
@@ -485,10 +484,12 @@ router.post('/partner/stays/:id/exit', authenticate, async (req, res, next) => {
 router.get('/partner/my-lots', authenticate, async (req, res, next) => {
   try {
     const sel = (cols) => {
-      let q = supabase.from('parking_lots')
+      // "Meu local" é sempre o(s) estacionamento(s) do PRÓPRIO usuário — mesmo
+      // admin edita só os seus aqui; os demais ficam no Painel Admin.
+      const q = supabase.from('parking_lots')
         .select(`*, parking_tariffs(${cols})`)
         .order('created_at', { ascending: false })
-      if (!ehAdmin(req.user)) q = q.eq('owner_user_id', req.user.id)
+        .eq('owner_user_id', req.user.id)
       return q
     }
     let { data, error } = await sel('id, vehicle_type, price_per_unit, hours_per_unit, min_units, is_active, capacity')
@@ -652,12 +653,11 @@ router.patch('/partner/season-rules/:id', authenticate, async (req, res, next) =
 // Fila do PARCEIRO: solicitações dos lots que ele é dono (admin vê todos).
 router.get('/partner/reservations', authenticate, async (req, res, next) => {
   try {
-    let lotIds = null
-    if (!ehAdmin(req.user)) {
-      const { data: lots } = await supabase.from('parking_lots').select('id').eq('owner_user_id', req.user.id)
-      lotIds = (lots || []).map((l) => l.id)
-      if (lotIds.length === 0) return res.json({ data: [] })
-    }
+    // Fila/reservas do parceiro = SÓ os lots do próprio usuário (inclusive admin):
+    // o app do operador nunca mostra solicitações de estacionamento de outro dono.
+    const { data: lots } = await supabase.from('parking_lots').select('id').eq('owner_user_id', req.user.id)
+    const lotIds = (lots || []).map((l) => l.id)
+    if (lotIds.length === 0) return res.json({ data: [] })
     const COLS = 'id, code, lot_id, user_id, vehicle_type, plate, start_at, end_at, units, total_amount, commission_pct, status, payment_status, accepted_at, entered_at, completed_at, acceptance_expires_at, payment_deadline_at, created_at'
     const mk = (withJoin) => {
       let q = supabase.from('parking_reservations')

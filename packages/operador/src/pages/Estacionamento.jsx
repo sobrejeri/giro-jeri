@@ -305,6 +305,8 @@ function Secao({ title, icon: Icon, hint, children, defaultOpen = false }) {
 // tarifas. Comissão/prazos/reembolso são da plataforma (só leitura).
 function MeuEstacionamento({ notify }) {
   const qc = useQueryClient()
+  const { user } = useAuth()
+  const ehAdmin = user?.user_type === 'admin'
   const { data, isLoading } = useQuery({ queryKey: ['parking-my-lots'], queryFn: () => api.parkingMyLots() })
   const lots = data?.data || []
   if (isLoading) return <PageSpinner />
@@ -312,7 +314,12 @@ function MeuEstacionamento({ notify }) {
     <div className="py-16 text-center text-gray-400">
       <ParkingSquare size={36} className="mx-auto mb-2 text-gray-200" />
       <p className="text-sm">Nenhum estacionamento vinculado à sua conta.</p>
-      <p className="text-[12px] mt-1">Peça ao administrador para criar/vincular seu estabelecimento.</p>
+      {ehAdmin ? (
+        <p className="text-[12px] mt-1">Estas telas mostram só o que é seu. A gestão de todos os
+          estacionamentos fica no <span className="font-semibold">Painel Admin → Estacionamentos</span>.</p>
+      ) : (
+        <p className="text-[12px] mt-1">Peça ao administrador para criar/vincular seu estabelecimento.</p>
+      )}
     </div>
   )
   return (
