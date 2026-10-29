@@ -968,6 +968,8 @@
     "routeSection": "Rota",
     "pickup": "Embarque",
     "placeSearchPlaceholder": "Buscar endereço, hotel, ponto...",
+    "touristSpots": "Pontos turísticos",
+    "otherPlaces": "Outros lugares",
     "destination": "Destino",
     "dateTimeSection": "Data & Horário",
     "dateLabel": "Data",

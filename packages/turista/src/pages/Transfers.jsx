@@ -15,6 +15,7 @@ import DateSheet from '../components/DateSheet'
 import { api }         from '../lib/api'
 import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
+import { filtrarPontos, normalizarLugar, pontosDaRegiao } from '../lib/pontosTuristicos'
 import TransfersDesktop from './TransfersDesktop'
 import NotificationBell from '../components/NotificationBell'
 import {
@@ -76,10 +77,18 @@ async function resolvePlaceDetails(placeId) {
   } catch { return null }
 }
 
-export function PlaceInput({ value, onChange, onPick, placeholder, dotClass }) {
+// `featured` (opcional): atalhos curados — os pontos turísticos da região
+// (lib/pontosTuristicos). Campo vazio mostra todos; digitando, só os que batem,
+// sempre ANTES da busca externa e sem repetir o mesmo nome nela. Não vai nos
+// campos de embarque (pousada/endereço), onde ponto turístico não cabe.
+export function PlaceInput({ value, onChange, onPick, placeholder, dotClass, featured }) {
+  const { t } = useTranslation()
   const [open, setOpen]  = useState(false)
   const wrapRef          = useRef(null)
   const { results, loading } = usePlaceSuggestions(open ? value : '')
+  const destaques    = open && featured?.length ? filtrarPontos(featured, value) : []
+  const jaDestacados = new Set(destaques.map(normalizarLugar))
+  const externos     = jaDestacados.size ? results.filter((r) => !jaDestacados.has(normalizarLugar(r.label))) : results
 
   useEffect(() => {
     function handleClick(e) {
@@ -103,6 +112,13 @@ export function PlaceInput({ value, onChange, onPick, placeholder, dotClass }) {
     onPick({ place_id: r._source === 'google' ? r.id : null, label: r.label, address, lat, lon })
   }
 
+  // Ponto curado vai só com o nome (ver lib/pontosTuristicos: sem coordenada inventada).
+  function pickDestaque(nome) {
+    onChange(nome)
+    setOpen(false)
+    onPick?.({ place_id: null, label: nome, address: nome, lat: null, lon: null })
+  }
+
   return (
     <div ref={wrapRef} className="relative">
       <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
@@ -124,9 +140,27 @@ export function PlaceInput({ value, onChange, onPick, placeholder, dotClass }) {
             : <Search size={13} className="text-gray-400 shrink-0" />}
       </div>
 
-      {open && results.length > 0 && (
+      {open && (destaques.length > 0 || externos.length > 0) && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-y-auto max-h-[46vh]">
-          {results.map(r => (
+          {destaques.length > 0 && (
+            <p className="px-3 pt-2.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+              {t('transfersPg.touristSpots', 'Pontos turísticos')}
+            </p>
+          )}
+          {destaques.map((nome) => (
+            <button key={`ponto-${nome}`} type="button" onClick={() => pickDestaque(nome)}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0"
+            >
+              <Compass size={13} className="text-brand shrink-0" />
+              <p className="text-[12px] text-gray-800 font-medium leading-snug truncate">{nome}</p>
+            </button>
+          ))}
+          {destaques.length > 0 && externos.length > 0 && (
+            <p className="px-3 pt-2.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+              {t('transfersPg.otherPlaces', 'Outros lugares')}
+            </p>
+          )}
+          {externos.map(r => (
             <button key={r.id} onClick={() => handlePick(r)}
               className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0"
             >
@@ -467,6 +501,7 @@ export default function Transfers() {
   const { upsertItem: saveCartItem, items: savedCartItems, removeItem: dropCartItem, count: cartCount } = useCart()
   const { token } = useAuth()
   const { region, userCoords, getServiceQuery } = useRegion()
+  const pontos = pontosDaRegiao(region) // atalhos de pontos turísticos (translado personalizado)
   const { favs, toggleFav } = useFavorites()
 
   // Marcar rotas direto da vitrine, várias de uma vez. Entra como rascunho —
@@ -986,6 +1021,7 @@ export default function Transfers() {
                         onPick={setCustomOriginMeta}
                         placeholder={t('transfersPg.placeSearchPlaceholder')}
                         dotClass="bg-brand"
+                        featured={pontos}
                       />
                     </div>
                   </div>
@@ -998,6 +1034,7 @@ export default function Transfers() {
                         onPick={setCustomDestMeta}
                         placeholder={t('transfersPg.placeSearchPlaceholder')}
                         dotClass="border-2 border-gray-400 bg-transparent"
+                        featured={pontos}
                       />
                     </div>
                   </div>

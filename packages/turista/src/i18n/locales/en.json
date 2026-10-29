@@ -968,6 +968,8 @@
     "routeSection": "Route",
     "pickup": "Pickup",
     "placeSearchPlaceholder": "Search address, hotel, place...",
+    "touristSpots": "Tourist spots",
+    "otherPlaces": "Other places",
     "destination": "Destination",
     "dateTimeSection": "Date & Time",
     "dateLabel": "Date",

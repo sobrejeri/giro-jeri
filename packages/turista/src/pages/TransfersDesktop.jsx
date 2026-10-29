@@ -11,6 +11,7 @@ import {
   Search, MapPin, ArrowUpDown,
 } from 'lucide-react'
 import { PlaceInput, suggestVehicles, VehicleRow, shortPlace } from './Transfers'
+import { pontosDaRegiao } from '../lib/pontosTuristicos'
 import { isHighSeasonIso } from '../lib/season'
 import { horasDeAntecedencia, primeiroReservavel, HORAS_PADRAO_TRANSFER } from '../lib/antecedencia'
 import { useCart } from '../contexts/CartContext'
@@ -106,6 +107,7 @@ export default function TransfersDesktop() {
   const { token } = useAuth()
   const { upsertItem: saveCartItem } = useCart()
   const { region } = useRegion()
+  const pontos = pontosDaRegiao(region) // atalhos de pontos turísticos (translado personalizado)
   // Busca da home pode chegar com rota/data/pessoas pré-selecionadas
   const { state: navState } = useLocation()
   // Última sugestão auto-aplicada — permite seguir atualizações da sugestão
@@ -804,13 +806,13 @@ export default function TransfersDesktop() {
                 <div>
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.pickup')}</label>
                   <div className="mt-1">
-                    <PlaceInput value={customOrigin} onChange={setCustomOrigin} onPick={setCustomOriginMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="bg-brand" />
+                    <PlaceInput value={customOrigin} onChange={setCustomOrigin} onPick={setCustomOriginMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="bg-brand" featured={pontos} />
                   </div>
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">{t('transfersPg.destination')}</label>
                   <div className="mt-1">
-                    <PlaceInput value={customDest} onChange={setCustomDest} onPick={setCustomDestMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="border-2 border-gray-400 bg-transparent" />
+                    <PlaceInput value={customDest} onChange={setCustomDest} onPick={setCustomDestMeta} placeholder={t('transfersPg.placeSearchPlaceholder')} dotClass="border-2 border-gray-400 bg-transparent" featured={pontos} />
                   </div>
                 </div>
               </div>

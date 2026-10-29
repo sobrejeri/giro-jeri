@@ -17,6 +17,7 @@ import { PlaceInput } from './Transfers'
 import DateSheet from '../components/DateSheet'
 import { api } from '../lib/api'
 import { somenteTransporte } from '../lib/transporte'
+import { pontosDaRegiao } from '../lib/pontosTuristicos'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 
@@ -32,6 +33,7 @@ export default function PasseioPersonalizado() {
   const navigate = useNavigate()
   const { token } = useAuth()
   const { region } = useRegion()
+  const pontos = pontosDaRegiao(region) // atalhos de pontos turísticos na busca
 
   // Cada parada tem um id ESTÁVEL: a chave do React acompanha a parada (e o
   // estado interno do PlaceInput, como a lista aberta) mesmo ao remover outra.
@@ -189,7 +191,7 @@ export default function PasseioPersonalizado() {
                   <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Ponto de partida</label>
                   <div className="mt-1">
                     <PlaceInput value={origin} onChange={setOrigin} onPick={setOriginMeta}
-                      placeholder="Onde o passeio começa?" dotClass="bg-brand" />
+                      placeholder="Onde o passeio começa?" dotClass="bg-brand" featured={pontos} />
                   </div>
                 </div>
 
@@ -213,7 +215,8 @@ export default function PasseioPersonalizado() {
                         onChange={(v) => setStopName(s.id, v)}
                         onPick={(meta) => setStopMeta(s.id, meta)}
                         placeholder="Para onde quer ir?"
-                        dotClass="border-2 border-gray-400 bg-transparent" />
+                        dotClass="border-2 border-gray-400 bg-transparent"
+                        featured={pontos} />
                     </div>
                   </div>
                 ))}
