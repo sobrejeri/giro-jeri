@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Send, Bell, Save } from 'lucide-react'
+import { Send, Bell, Save, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
@@ -31,40 +31,62 @@ const AUDIENCES = [
 function TemplateCard({ tpl }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({ enabled: tpl.enabled, title: tpl.title, body: tpl.body })
+  // Recolhida por padrão: mostra só o nome e o liga/desliga; o conteúdo
+  // (título/mensagem) aparece ao clicar para expandir. Cada card é independente.
+  const [aberto, setAberto] = useState(false)
   useEffect(() => { setForm({ enabled: tpl.enabled, title: tpl.title, body: tpl.body }) }, [tpl.key])
 
   const meta = TEMPLATE_LABELS[tpl.key] || { label: tpl.key, hint: '' }
   const mut = useMutation({
-    mutationFn: () => api.saveNotifTemplate(tpl.key, form),
+    mutationFn: (payload) => api.saveNotifTemplate(tpl.key, payload || form),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['notif-templates'] }),
   })
+
+  // Liga/desliga salva na hora — assim funciona mesmo com o card recolhido.
+  function toggleAtiva(enabled) {
+    const next = { ...form, enabled }
+    setForm(next)
+    mut.mutate(next)
+  }
 
   return (
     <Card>
       <CardBody className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="font-semibold text-gray-100">{meta.label}</p>
-            <p className="text-xs text-gray-500">{meta.hint}</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setAberto((v) => !v)}
+            className="flex items-center gap-2 min-w-0 flex-1 text-left group"
+            aria-expanded={aberto}
+          >
+            <ChevronRight size={16} className={`text-gray-500 shrink-0 transition-transform group-hover:text-gray-300 ${aberto ? 'rotate-90' : ''}`} />
+            <span className="min-w-0">
+              <span className="block font-semibold text-gray-100 truncate">{meta.label}</span>
+              <span className="block text-xs text-gray-500 truncate">{meta.hint}</span>
+            </span>
+          </button>
           <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
             <input type="checkbox" checked={form.enabled}
-              onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+              onChange={(e) => toggleAtiva(e.target.checked)}
               className="w-4 h-4 accent-orange-500" />
             <span className="text-sm text-gray-300">{form.enabled ? 'Ativa' : 'Desativada'}</span>
           </label>
         </div>
-        <Input label="Título" value={form.title} maxLength={120}
-          onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <Textarea label="Mensagem" rows={2} value={form.body} maxLength={400}
-          onChange={(e) => setForm({ ...form, body: e.target.value })} />
-        <div className="flex items-center gap-3">
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-            <Save size={16} /> {mut.isPending ? 'Salvando…' : 'Salvar'}
-          </Button>
-          {mut.isSuccess && <span className="text-xs text-emerald-400">Salvo!</span>}
-          {mut.isError && <span className="text-xs text-red-400">Erro ao salvar</span>}
-        </div>
+        {aberto && (
+          <>
+            <Input label="Título" value={form.title} maxLength={120}
+              onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <Textarea label="Mensagem" rows={2} value={form.body} maxLength={400}
+              onChange={(e) => setForm({ ...form, body: e.target.value })} />
+            <div className="flex items-center gap-3">
+              <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
+                <Save size={16} /> {mut.isPending ? 'Salvando…' : 'Salvar'}
+              </Button>
+              {mut.isSuccess && <span className="text-xs text-emerald-400">Salvo!</span>}
+              {mut.isError && <span className="text-xs text-red-400">Erro ao salvar</span>}
+            </div>
+          </>
+        )}
       </CardBody>
     </Card>
   )
