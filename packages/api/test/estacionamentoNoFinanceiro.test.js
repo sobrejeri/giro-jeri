@@ -31,8 +31,10 @@ test('Dashboard (/stats) soma o estacionamento à receita bruta e líquida', () 
 })
 
 test('gráfico diário (/financial-daily) inclui o estacionamento', () => {
-  assert.match(admin, /parkingFaturamentoDiario\(\{ since \}\)/)
-  assert.match(admin, /byDay\[d\]\.total \+= v\.brutoC \/ 100/)
+  // Desde o gráfico por gateway (938c433): a comissão da vaga entra por dia E
+  // por gateway, na mesma série do ganho da plataforma.
+  assert.match(admin, /parkingDiarioPorGateway\(\{ since \}\)/)
+  assert.match(admin, /add\(d, canonGw\(g\), v\.comissaoC \/ 100\)/)
 })
 
 test('Financeiro (/financial): bruto += vaga, repasse += líquido, resultado += comissão', () => {

@@ -30,7 +30,9 @@ test('turista/admin: resolve a conta de auth pelo e-mail do perfil', () => {
     'normaliza o e-mail do perfil')
   assert.match(reset, /String\(u\.email \|\| ''\)\.toLowerCase\(\) === profileEmail/,
     'procura o usuário de auth com esse e-mail')
-  assert.match(reset, /update\(\{ auth_id: authUser\.id \}\)/, 'repara o vínculo auth_id quando acha')
+  assert.match(reset, /if \(authUser\) \{\s*authId = authUser\.id;/, 'achou a conta pelo e-mail → usa ela')
+  assert.match(reset, /if \(authId && target\.auth_id !== authId\) \{\s*await supabase\.from\('users'\)\.update\(\{ auth_id: authId \}\)/,
+    'repara o vínculo auth_id quando acha')
 })
 
 test('cria o login por e-mail+senha quando não existe (caso ex-Google)', () => {

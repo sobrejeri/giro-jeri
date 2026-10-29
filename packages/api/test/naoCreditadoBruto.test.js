@@ -1,11 +1,13 @@
-// "Não creditado" = receita BRUTA pendente de liquidação pelo gateway.
+// "Não creditado" no painel do admin e do operador.
 //
 // Cada reserva paga grava DUAS linhas de inflow no financial_ledger: booking_gross
 // (bruto) e booking_net (líquido) — duas visões do MESMO dinheiro. Somar todo
 // inflow pendente sem filtrar o tipo contava as duas e DOBRAVA o valor
 // (ex.: R$100 bruto + R$97,36 líquido = R$197,36, maior que o próprio bruto).
-// O "não creditado" passa a contar só booking_gross. Asserção de fonte + prova
-// funcional do filtro. Vale para o painel do admin e o do operador.
+// Primeiro o filtro passou a contar só booking_gross; depois (236dfa6) o "não
+// creditado" virou o LÍQUIDO ainda não liquidado, pela data de liquidação de cada
+// pagamento (services/settlement.js) — o status 'pending' do razão nunca virava
+// liquidado e travava a conta no bruto inteiro. Segue contando UM tipo só.
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -15,18 +17,25 @@ const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const admin    = read('../src/routes/admin.js')
 const operator = read('../src/routes/operator.js')
 
-test('admin e operador contam só o bruto pendente (booking_gross)', () => {
-  assert.match(admin, /sumByStatus\(data, 'inflow',\s+'pending', 'booking_gross'\)/,
-    'admin: não creditado filtra booking_gross')
-  assert.match(operator, /sumByStatus\(data, 'inflow', 'pending', 'booking_gross'\)/,
-    'operador: não creditado filtra booking_gross')
+test('admin e operador contam só o líquido ainda não liquidado (booking_net)', () => {
+  for (const [nome, src] of [['admin', admin], ['operador', operator]]) {
+    assert.match(src, /import \{ jaCreditado \} from '\.\.\/services\/settlement\.js'/, `${nome}: usa a data de liquidação`)
+    assert.match(src, /r\.entry_type === 'booking_net' && r\.direction === 'inflow'\s+&& !jaCreditado\(/,
+      `${nome}: não creditado = booking_net ainda não liquidado (um tipo só, não dobra)`)
+  }
 })
 
-test('o helper sumByStatus aceita o filtro opcional por entry_type', () => {
-  for (const src of [admin, operator]) {
-    assert.match(src, /function sumByStatus\(rows, direction, status, entryType\)/, 'assinatura com entryType')
-    assert.match(src, /\(!entryType \|\| r\.entry_type === entryType\)/, 'filtra pelo tipo quando informado')
-  }
+test('liquidação: PIX/Mercado Pago no 1º dia útil, cartão no 2º', async () => {
+  const { jaCreditado, somaDiasUteis } = await import('../src/services/settlement.js')
+  // Sexta → segunda (1 útil) e terça (2 úteis).
+  assert.equal(somaDiasUteis('2026-10-30', 1), '2026-11-02')
+  assert.equal(somaDiasUteis('2026-10-30', 2), '2026-11-03')
+  const pagoSexta = '2026-10-30T15:00:00Z'
+  assert.equal(jaCreditado({ gatewayName: 'pagarme', paymentMethod: 'pix', paidAt: pagoSexta }, '2026-11-02'), true)
+  assert.equal(jaCreditado({ gatewayName: 'pagarme', paymentMethod: 'credit_card', paidAt: pagoSexta }, '2026-11-02'), false)
+  assert.equal(jaCreditado({ gatewayName: 'pagarme', paymentMethod: 'credit_card', paidAt: pagoSexta }, '2026-11-03'), true)
+  assert.equal(jaCreditado({ gatewayName: 'mercado_pago', paymentMethod: 'credit_card', paidAt: pagoSexta }, '2026-11-02'), true)
+  assert.equal(jaCreditado({ gatewayName: 'pagarme', paymentMethod: 'pix', paidAt: null }), false, 'sem data → ainda não creditado')
 })
 
 test('prova funcional: bruto+líquido pendentes não dobram mais', () => {
