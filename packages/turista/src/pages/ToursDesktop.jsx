@@ -14,7 +14,7 @@ import DesktopDatePicker from '../components/DesktopDatePicker'
 import { duracao } from '../lib/formato'
 import {
   Star, Clock, Users, Heart, Minus, Plus, Zap, Search, X,
-  Check, MapPin, Car, ShieldCheck, Bus, Compass, ChevronRight,
+  Check, MapPin, Car, ShieldCheck, Bus, Compass, ChevronRight, Sparkles,
 } from 'lucide-react'
 
 const fmtPrice = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
@@ -410,10 +410,28 @@ export default function ToursDesktop() {
         <ChevronRight size={13} className="text-gray-300" />
         <span className="text-gray-500 font-medium">{t('toursPg.breadcrumbTours')}</span>
       </nav>
-      <h1 className="text-[28px] font-extrabold text-gray-900 leading-tight">
-        {t('toursPg.page.title', { region: region?.name || 'Jericoacoara' })}
-      </h1>
-      <p className="text-[13px] text-gray-500 mt-1">{t('toursPg.page.subtitle')}</p>
+      <div className="flex items-end justify-between gap-6">
+        <div className="min-w-0">
+          <h1 className="text-[28px] font-extrabold text-gray-900 leading-tight">
+            {t('toursPg.page.title', { region: region?.name || 'Jericoacoara' })}
+          </h1>
+          <p className="text-[13px] text-gray-500 mt-1">{t('toursPg.page.subtitle')}</p>
+        </div>
+        {/* Montar meu passeio (cotação sob medida) — mesmo CTA da vitrine mobile */}
+        <button
+          onClick={() => navigate('/passeio-personalizado')}
+          className="shrink-0 flex items-center gap-3 bg-gradient-to-r from-brand/10 to-brand/5 border border-brand/20 rounded-2xl pl-3 pr-4 py-2.5 text-left hover:border-brand/40 active:scale-[0.99] transition-all"
+        >
+          <div className="w-9 h-9 rounded-xl bg-brand/15 flex items-center justify-center shrink-0">
+            <Sparkles size={16} className="text-brand" />
+          </div>
+          <div>
+            <p className="text-[13px] font-bold text-gray-900 leading-tight">Montar meu passeio</p>
+            <p className="text-[11px] text-gray-500 leading-tight mt-0.5">Monte o roteiro e receba um valor sob medida.</p>
+          </div>
+          <ChevronRight size={18} className="text-brand shrink-0" />
+        </button>
+      </div>
 
       {/* ── Duas colunas: lista à esquerda, detalhes à direita ── */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_420px] gap-6 mt-6 items-start">

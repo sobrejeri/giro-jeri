@@ -4,32 +4,45 @@
 // roteiro (embarque + paradas) + veículo + data/hora/pessoas SEM preço e envia.
 // A cooperativa precifica (app do operador), o cliente aceita e paga em
 // "Minhas reservas", e a cotação vira uma reserva normal (service_type='tour').
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { format, startOfDay, isToday, isSameDay, addDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   ChevronLeft, Calendar, Clock, Users, Plus, Minus, X,
-  Zap, Info, CheckCircle2, MapPin, Car, Loader2,
+  Zap, Info, CheckCircle2, Car, Loader2, Send, Check,
 } from 'lucide-react'
 import { PlaceInput } from './Transfers'
 import DateSheet from '../components/DateSheet'
 import { api } from '../lib/api'
+import { somenteTransporte } from '../lib/transporte'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 
-const VEICULOS = ['Buggy', '4x4', 'Lancha', 'Carro', 'Van']
+// Próximo horário "redondo" (de 30 em 30 min) a partir de agora — usado quando
+// a data é hoje e o horário escolhido já passou.
+function proximoHorario() {
+  const d = new Date()
+  d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0)
+  return format(d, 'HH:mm')
+}
 
 export default function PasseioPersonalizado() {
   const navigate = useNavigate()
   const { token } = useAuth()
   const { region } = useRegion()
 
+  // Cada parada tem um id ESTÁVEL: a chave do React acompanha a parada (e o
+  // estado interno do PlaceInput, como a lista aberta) mesmo ao remover outra.
+  const nextId = useRef(1)
+  function novaParada() { return { id: nextId.current++, name: '', meta: null } }
+
   const [origin, setOrigin] = useState('')
   const [originMeta, setOriginMeta] = useState(null)
-  // paradas: [{ name, meta }]
-  const [stops, setStops] = useState([{ name: '', meta: null }])
-  const [vehicle, setVehicle] = useState('')
+  const [stops, setStops] = useState(() => [novaParada()])
+  const [veiculoSel, setVeiculoSel] = useState(null)   // veículo do catálogo
+  const [vehicleText, setVehicleText] = useState('')   // só se a região não tiver catálogo
   const [date, setDate] = useState(startOfDay(new Date()))
   const [time, setTime] = useState('08:00')
   const [people, setPeople] = useState(2)
@@ -46,17 +59,58 @@ export default function PasseioPersonalizado() {
     : isSameDay(date, addDays(minDate, 1)) ? 'Amanhã'
     : format(date, 'd MMM', { locale: ptBR })
 
+  // Data = hoje e o horário já passou (ex.: abriu a tela às 10h com 08:00
+  // pré-selecionado) → avança para o próximo horário válido, senão a API
+  // recusa com "o horário já passou".
+  useEffect(() => {
+    if (isSameDay(date, startOfDay(new Date())) && time && time < format(new Date(), 'HH:mm')) {
+      setTime(proximoHorario())
+    }
+  }, [date]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Veículos CADASTRADOS na plataforma para a região: ativos, liberados para
+  // passeio e que de fato transportam gente (serviço adicional, como guia, fica
+  // de fora — mesmo critério do resto do app).
+  const { data: veiculosData, isLoading: veiculosLoading } = useQuery({
+    queryKey: ['vehicles', 'tour-custom', region?.id],
+    queryFn:  () => api.getVehicles({ region_id: region.id, is_active: 'true' }),
+    enabled:  !!region?.id,
+    staleTime: 5 * 60_000,
+  })
+  const veiculos = useMemo(() => {
+    const lista = somenteTransporte(Array.isArray(veiculosData) ? veiculosData : (veiculosData?.data || []))
+      .filter((v) => v.is_tour_allowed !== false && v.is_active !== false)
+    // Um card por nome — o catálogo pode repetir o mesmo veículo.
+    const vistos = new Set()
+    return lista.filter((v) => {
+      const k = String(v.name || '').trim().toLowerCase()
+      if (!k || vistos.has(k)) return false
+      vistos.add(k)
+      return true
+    })
+  }, [veiculosData])
+
+  // Trocou de região e o veículo escolhido não existe mais na lista → limpa.
+  useEffect(() => {
+    if (veiculoSel && !veiculos.some((v) => v.id === veiculoSel.id)) setVeiculoSel(null)
+  }, [veiculos]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const capacidadeSel = Number(veiculoSel?.seat_capacity) || 0
   const canSubmit = origin.trim().length >= 2 && !!time && !!region?.id
 
-  function setStop(i, name, meta) {
-    setStops((arr) => arr.map((s, idx) => idx === i ? { name, meta: meta !== undefined ? meta : s.meta } : s))
-  }
-  function addStop()   { setStops((arr) => [...arr, { name: '', meta: null }]) }
-  function removeStop(i) { setStops((arr) => arr.filter((_, idx) => idx !== i)) }
+  // O PlaceInput chama onChange(texto) e, em seguida, onPick(null) a CADA tecla
+  // (o texto mudou → o lugar escolhido antes deixa de valer). Por isso nome e
+  // lugar têm setters separados e funcionais: um nunca sobrescreve o outro com
+  // um valor antigo.
+  const setStopName = (id, name) => setStops((arr) => arr.map((s) => (s.id === id ? { ...s, name } : s)))
+  const setStopMeta = (id, meta) => setStops((arr) => arr.map((s) => (s.id === id ? { ...s, meta } : s)))
+  const addStop     = () => setStops((arr) => [...arr, novaParada()])
+  const removeStop  = (id) => setStops((arr) => (arr.length > 1 ? arr.filter((s) => s.id !== id) : [novaParada()]))
 
   function resetForm() {
-    setOrigin(''); setOriginMeta(null); setStops([{ name: '', meta: null }])
-    setVehicle(''); setPeople(2); setNotes(''); setSuccess(false); setError('')
+    setOrigin(''); setOriginMeta(null); setStops([novaParada()])
+    setVeiculoSel(null); setVehicleText(''); setPeople(2); setNotes('')
+    setSuccess(false); setError('')
   }
 
   async function handleSubmit() {
@@ -72,7 +126,7 @@ export default function PasseioPersonalizado() {
         stops: stops
           .filter((s) => s.name.trim())
           .map((s) => ({ name: s.name.trim(), lat: s.meta?.lat ?? null, lng: s.meta?.lon ?? null })),
-        vehicle_type:  vehicle.trim() || undefined,
+        vehicle_type:  veiculoSel?.name || vehicleText.trim() || undefined,
         service_date:  format(date, 'yyyy-MM-dd'),
         service_time:  time,
         people_count:  people,
@@ -140,49 +194,83 @@ export default function PasseioPersonalizado() {
                 </div>
 
                 {stops.map((s, i) => (
-                  <div key={i}>
-                    <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide flex items-center justify-between">
+                  <div key={s.id}>
+                    {/* div, NÃO <label>: um label sem `for` rotula o primeiro
+                        controle dentro dele — tocar em "Parada N" acionava o
+                        botão remover e apagava a parada. */}
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide flex items-center justify-between">
                       <span>Parada {i + 1}</span>
                       {(stops.length > 1 || s.name) && (
-                        <button onClick={() => removeStop(i)} className="text-red-400 flex items-center gap-0.5 normal-case tracking-normal font-medium">
+                        <button type="button" onClick={() => removeStop(s.id)}
+                          aria-label={`Remover parada ${i + 1}`}
+                          className="text-red-400 flex items-center gap-0.5 normal-case tracking-normal font-medium">
                           <X size={11} /> remover
                         </button>
                       )}
-                    </label>
+                    </div>
                     <div className="mt-1">
                       <PlaceInput value={s.name}
-                        onChange={(v) => setStop(i, v, undefined)}
-                        onPick={(meta) => setStop(i, s.name, meta)}
+                        onChange={(v) => setStopName(s.id, v)}
+                        onPick={(meta) => setStopMeta(s.id, meta)}
                         placeholder="Para onde quer ir?"
                         dotClass="border-2 border-gray-400 bg-transparent" />
                     </div>
                   </div>
                 ))}
 
-                <button onClick={addStop}
+                <button type="button" onClick={addStop}
                   className="w-full flex items-center justify-center gap-1.5 text-[13px] font-semibold text-brand border border-dashed border-brand/40 rounded-xl py-2.5 active:scale-95 transition-transform">
                   <Plus size={14} /> Adicionar parada
                 </button>
               </div>
             </section>
 
-            {/* Veículo */}
+            {/* Veículo — catálogo da plataforma */}
             <section className="bg-white rounded-2xl border border-gray-100">
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Veículo desejado</p>
+              <div className="flex items-baseline justify-between px-4 pt-3 pb-2">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Veículo desejado</p>
+                <span className="text-[10px] text-gray-400">opcional</span>
+              </div>
               <div className="px-4 pb-4 space-y-2.5">
-                <div className="flex flex-wrap gap-2">
-                  {VEICULOS.map((v) => (
-                    <button key={v} onClick={() => setVehicle(v)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all ${
-                        vehicle === v ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 bg-white'
-                      }`}>
-                      <Car size={12} /> {v}
-                    </button>
-                  ))}
-                </div>
-                <input value={vehicle} onChange={(e) => setVehicle(e.target.value)}
-                  placeholder="Ou escreva o tipo (opcional)"
-                  className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400" />
+                {veiculosLoading ? (
+                  <div className="flex items-center gap-2 text-[12px] text-gray-400 py-2">
+                    <Loader2 size={13} className="animate-spin" /> Carregando veículos…
+                  </div>
+                ) : veiculos.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {veiculos.map((v) => {
+                      const ativo = veiculoSel?.id === v.id
+                      const cap = Number(v.seat_capacity) || 0
+                      return (
+                        <button key={v.id} type="button" onClick={() => setVeiculoSel(ativo ? null : v)}
+                          aria-pressed={ativo}
+                          className={`flex items-center gap-2 p-2 rounded-xl border text-left transition-all active:scale-[0.98] ${
+                            ativo ? 'border-brand bg-brand/5' : 'border-gray-200 bg-white'
+                          }`}>
+                          {v.image_url
+                            ? <img src={v.image_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-gray-100" />
+                            : <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0"><Car size={16} className="text-gray-400" /></div>}
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-[12px] font-bold leading-tight truncate ${ativo ? 'text-brand' : 'text-gray-900'}`}>{v.name}</p>
+                            {cap > 0 && <p className="text-[10px] text-gray-400 leading-tight mt-0.5">até {cap} {cap === 1 ? 'pessoa' : 'pessoas'}</p>}
+                          </div>
+                          {ativo && <Check size={14} className="text-brand shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  // Região sem veículo de passeio cadastrado: o cliente descreve.
+                  <input value={vehicleText} onChange={(e) => setVehicleText(e.target.value)}
+                    placeholder="Descreva o veículo (ex.: buggy, 4x4)"
+                    className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400" />
+                )}
+
+                {capacidadeSel > 0 && people > capacidadeSel && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2 leading-relaxed">
+                    Para {people} pessoas serão necessários {Math.ceil(people / capacidadeSel)} veículos — a cooperativa considera isso no valor.
+                  </p>
+                )}
               </div>
             </section>
 
@@ -190,7 +278,7 @@ export default function PasseioPersonalizado() {
             <section className="bg-white rounded-2xl border border-gray-100">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Data e horário</p>
               <div className="flex gap-2 px-4 pb-4">
-                <button onClick={() => setShowDate(true)}
+                <button type="button" onClick={() => setShowDate(true)}
                   className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform">
                   <Calendar size={13} className="text-brand" />
                   <div className="text-left">
@@ -198,7 +286,7 @@ export default function PasseioPersonalizado() {
                     <p className="text-[12px] font-semibold text-gray-800 mt-0.5">{dateLabel}</p>
                   </div>
                 </button>
-                <button onClick={() => timeRef.current?.showPicker?.() || timeRef.current?.focus()}
+                <button type="button" onClick={() => timeRef.current?.showPicker?.() || timeRef.current?.focus()}
                   className="flex-1 flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 active:scale-95 transition-transform relative">
                   <Clock size={13} className="text-brand" />
                   <div className="text-left flex-1">
@@ -221,12 +309,12 @@ export default function PasseioPersonalizado() {
                   <p className="text-[13px] font-bold text-gray-900">{people} {people === 1 ? 'pessoa' : 'pessoas'}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setPeople((p) => Math.max(1, p - 1))}
+                  <button type="button" onClick={() => setPeople((p) => Math.max(1, p - 1))}
                     className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center active:scale-95 transition-transform">
                     <Minus size={12} className="text-gray-600" />
                   </button>
                   <span className="text-[15px] font-bold text-gray-900 w-5 text-center tabular-nums">{people}</span>
-                  <button onClick={() => setPeople((p) => Math.min(50, p + 1))}
+                  <button type="button" onClick={() => setPeople((p) => Math.min(50, p + 1))}
                     className="w-8 h-8 rounded-full bg-brand flex items-center justify-center active:scale-95 transition-transform">
                     <Plus size={12} className="text-white" />
                   </button>
@@ -244,11 +332,6 @@ export default function PasseioPersonalizado() {
               </div>
             </section>
 
-            {!region?.id && (
-              <p className="text-[12px] text-amber-600 bg-amber-50 rounded-xl px-4 py-2.5">
-                Selecione uma região no topo do app para pedir a cotação.
-              </p>
-            )}
             {error && (
               <p className="text-[12px] text-red-500 bg-red-50 rounded-xl px-4 py-2.5">{error}</p>
             )}
@@ -259,6 +342,25 @@ export default function PasseioPersonalizado() {
                 O preço é definido pela cooperativa. Você recebe o valor em “Minhas reservas” e só paga se aceitar.
               </p>
             </div>
+
+            {/* Ação no FIM do formulário (não fixa): uma barra presa embaixo
+                ficava atrás do menu inferior e disputava espaço com os botões
+                flutuantes ("Código", carrinho). O pb-28 da página garante que
+                ela role acima deles. */}
+            <div className="pt-1 space-y-1.5">
+              <button type="button" onClick={handleSubmit} disabled={loading || !canSubmit}
+                className={`w-full flex items-center justify-center gap-2 font-bold py-3.5 rounded-2xl text-[15px] transition-all ${
+                  canSubmit ? 'bg-brand text-white active:scale-[0.98] shadow-md shadow-brand/20' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}>
+                {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={16} />}
+                {loading ? 'Enviando…' : 'Pedir cotação do passeio'}
+              </button>
+              {!canSubmit && !loading && (
+                <p className="text-[11px] text-gray-400 text-center">
+                  {!region?.id ? 'Selecione uma região no topo do app.' : 'Informe o ponto de partida para pedir a cotação.'}
+                </p>
+              )}
+            </div>
           </>
         )}
 
@@ -267,19 +369,6 @@ export default function PasseioPersonalizado() {
             minDate={minDate} seasons={[]} highSeasonMonths={new Set()} />
         )}
       </div>
-
-      {/* Barra fixa de ação */}
-      {!success && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3 z-40 lg:max-w-3xl lg:mx-auto lg:left-1/2 lg:-translate-x-1/2 lg:rounded-t-2xl">
-          <button onClick={canSubmit ? handleSubmit : undefined} disabled={loading || !canSubmit}
-            className={`w-full flex items-center justify-center gap-2 font-bold py-3.5 rounded-2xl text-[15px] transition-all ${
-              canSubmit ? 'bg-brand text-white active:scale-[0.98] shadow-md shadow-brand/20' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}>
-            {loading ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={16} />}
-            {loading ? 'Enviando…' : 'Pedir cotação do passeio'}
-          </button>
-        </div>
-      )}
     </div>
   )
 }
