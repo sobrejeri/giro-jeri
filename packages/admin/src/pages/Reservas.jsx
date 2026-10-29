@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
-import { Search, ChevronLeft, ChevronRight, CalendarDays, Radio, Check, X, CheckCircle2, Package } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, CalendarDays, Radio, Check, X, CheckCircle2, Package, Car, MapPin } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card from '../components/ui/Card'
@@ -225,39 +225,49 @@ export default function Reservas() {
     return ordem.map((u) => u.type === 'combo' ? { ...u, items: grupos.get(u.gid) } : u)
   })()
 
-  // Corpo de um card de reserva (reutilizado em avulso e dentro do combo).
+  // Card de reserva no MESMO estilo do "Acompanhamento operacional": ícone do
+  // tipo (passeio/transfer), serviço + código, uma linha de contexto (cliente ·
+  // data · pax · modo) e, à direita, o status comercial, o valor e as ações.
+  // Reutilizado avulso e dentro de um combo; serve mobile e desktop.
   const CardReserva = ({ b, dentroDeCombo = false }) => (
-    <div className="p-4 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs font-bold text-brand">{b.booking_code}</span>
-        <Badge value={b.status_commercial} />
+    <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-gray-800/30 transition-colors">
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${b.service_type === 'transfer' ? 'bg-teal-900/40 text-teal-300' : 'bg-orange-900/40 text-brand'}`}>
+        {b.service_type === 'transfer' ? <Car size={16} /> : <MapPin size={16} />}
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-medium text-gray-200 text-sm truncate">{b.users?.full_name || '—'}</p>
-          <p className="text-xs text-gray-500 truncate">{b.users?.phone || b.users?.email || '—'}</p>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-semibold text-gray-200 truncate">
+            {b.service_name || (b.service_type === 'tour' ? 'Passeio' : 'Transfer')}
+          </p>
+          <span className="text-[10px] font-mono text-gray-500 shrink-0">{b.booking_code}</span>
+          {!dentroDeCombo && b.combo && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400">Combo {b.combo_total}</span>
+          )}
+          {b.modal && b.modal !== 'terrestre' && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 capitalize">{b.modal}</span>
+          )}
         </div>
-        <p className="font-semibold text-gray-200 text-sm shrink-0">{fmt(b.total_amount)}</p>
+        <p className="text-[11px] text-gray-500 truncate">
+          {b.users?.full_name || 'Cliente'} · {b.service_date ? format(parseISO(b.service_date), 'dd/MM/yyyy') : '—'}{b.service_time ? ` ${b.service_time.slice(0, 5)}` : ''} · {b.people_count || 1}p · {b.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'}
+        </p>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          {b.payment_method && <FormaPagamento metodo={b.payment_method} confirmado={b.payment_confirmed} />}
+          {b.category_name && <span className="text-[11px] text-gray-400 truncate">{b.category_name}</span>}
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
-        {b.payment_method && (
-          <FormaPagamento metodo={b.payment_method} confirmado={b.payment_confirmed} />
-        )}
-        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${b.service_type === 'tour' ? 'bg-blue-900/40 text-blue-400' : 'bg-purple-900/40 text-purple-400'}`}>
-          {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
-        </span>
-        {!dentroDeCombo && b.combo && (
-          <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400">
-            Combo {b.combo_total}
-          </span>
-        )}
-        {b.category_name && <span className="text-gray-400">{b.category_name}</span>}
-        <span>{b.people_count} pax</span>
-        <span>· {b.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'}</span>
-        <span className="ml-auto">
-          {b.service_date ? format(parseISO(b.service_date), 'dd/MM/yyyy') : '—'}
-          {b.service_time ? ` ${b.service_time.slice(0, 5)}` : ''}
-        </span>
+      <div className="shrink-0 flex flex-col items-end gap-1">
+        <Badge value={b.status_commercial} />
+        <p className="text-sm font-semibold text-gray-200">{fmt(b.total_amount)}</p>
+        <div className="flex items-center gap-0.5">
+          <button onClick={() => setRoteando(b)} title="Quem recebeu esta solicitação, e por quê" className="p-1 text-gray-600 hover:text-brand transition-colors">
+            <Radio size={14} />
+          </button>
+          {b.status_operational === 'in_progress' && (
+            <button onClick={() => concluirSemPin(b)} disabled={forceComplete.isPending} title="Concluir sem o PIN (exceção — cliente sem acesso ao código)" className="p-1 text-gray-600 hover:text-emerald-500 transition-colors disabled:opacity-50">
+              <CheckCircle2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -352,132 +362,29 @@ export default function Reservas() {
         </div>
       </Card>
 
-      {/* Lista (cards no mobile) */}
+      {/* Lista — mesma organização do "Acompanhamento operacional": cards com
+          ícone do tipo, serviço, contexto e, à direita, status/valor/ações.
+          Mobile e desktop usam o MESMO card; combos ficam agrupados. */}
       <Card>
-        <div className="md:hidden p-3 space-y-3">
+        <div className="divide-y divide-gray-800">
           {mobileUnits.map((u) => u.type === 'combo' ? (
-            <div key={`g-${u.gid}`} className="rounded-xl border border-amber-500/30 bg-gray-900/40 overflow-hidden">
-              <div className="bg-amber-900/30 px-4 py-2 flex items-center gap-1.5 border-b border-amber-500/20">
+            <div key={`g-${u.gid}`}>
+              <div className="bg-amber-900/20 px-4 py-2 flex items-center gap-1.5 border-l-2 border-amber-500/50">
                 <Package size={13} className="text-amber-400" />
                 <span className="text-[11px] font-bold text-amber-400">
                   Combo #{comboShort(u.gid)} · {u.items[0]?.combo_total || u.items.length} serviços
                 </span>
               </div>
-              <div className="divide-y divide-gray-800">
+              <div className="divide-y divide-gray-800/60 border-l-2 border-amber-500/30">
                 {u.items.map((b) => <CardReserva key={b.id} b={b} dentroDeCombo />)}
               </div>
             </div>
           ) : (
-            <div key={u.b.id} className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
-              <CardReserva b={u.b} />
-            </div>
+            <CardReserva key={u.b.id} b={u.b} />
           ))}
           {bookings.length === 0 && (
             <p className="px-5 py-12 text-center text-gray-600 text-sm">Nenhuma reserva encontrada.</p>
           )}
-        </div>
-
-        {/* Tabela (desktop) */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-700">
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Código</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cliente</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Serviço</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Data</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Valor</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Recebimento</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {bookings.map((b) => (
-                <tr key={b.id} className="hover:bg-gray-750 transition-colors">
-                  <td className="px-5 py-3">
-                    <span className="font-mono text-xs font-bold text-brand">{b.booking_code}</span>
-                    <p className="text-xs text-gray-600 mt-0.5">{b.booking_mode === 'private' ? 'Privativo' : 'Compartilhado'}</p>
-                  </td>
-                  <td className="px-5 py-3">
-                    <p className="font-medium text-gray-200 text-sm">{b.users?.full_name || '—'}</p>
-                    <p className="text-xs text-gray-500">{b.users?.phone || b.users?.email || '—'}</p>
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${b.service_type === 'tour' ? 'bg-blue-900/40 text-blue-400' : 'bg-purple-900/40 text-purple-400'}`}>
-                        {b.service_type === 'tour' ? 'Passeio' : 'Transfer'}
-                      </span>
-                      {/* COMBO = reserva criada junto com outras no mesmo
-                          carrinho. Muda a operação: cancelar ou remarcar uma
-                          mexe no pedido inteiro do cliente. */}
-                      {b.combo ? (
-                        <span
-                          className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400"
-                          title={`Pedido combinado — ${b.combo_total} serviços comprados juntos`}
-                        >
-                          Combo {b.combo_total}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-500">
-                          Solo
-                        </span>
-                      )}
-                      {b.modal && b.modal !== 'terrestre' && (
-                        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 capitalize">
-                          {b.modal}
-                        </span>
-                      )}
-                    </div>
-                    {b.service_name && (
-                      <p className="text-xs text-gray-300 mt-1 max-w-56 truncate" title={b.service_name}>
-                        {b.service_name}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {b.category_name ? `${b.category_name} · ` : ''}{b.people_count} pax
-                    </p>
-                  </td>
-                  <td className="px-5 py-3 text-xs text-gray-400">
-                    {b.service_date ? format(parseISO(b.service_date), 'dd/MM/yyyy') : '—'}
-                    {b.service_time && <p className="text-gray-600">{b.service_time.slice(0, 5)}</p>}
-                  </td>
-                  <td className="px-5 py-3 font-semibold text-gray-200">{fmt(b.total_amount)}</td>
-                  <td className="px-5 py-3">
-                    <FormaPagamento metodo={b.payment_method} confirmado={b.payment_confirmed} />
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      <Badge value={b.status_commercial} />
-                      <button
-                        onClick={() => setRoteando(b)}
-                        title="Quem recebeu esta solicitação, e por quê"
-                        className="p-1 text-gray-600 hover:text-brand transition-colors"
-                      >
-                        <Radio size={14} />
-                      </button>
-                      {b.status_operational === 'in_progress' && (
-                        <button
-                          onClick={() => concluirSemPin(b)}
-                          disabled={forceComplete.isPending}
-                          title="Concluir sem o PIN (exceção — cliente sem acesso ao código)"
-                          className="p-1 text-gray-600 hover:text-emerald-500 transition-colors disabled:opacity-50"
-                        >
-                          <CheckCircle2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {bookings.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-gray-600 text-sm">
-                    Nenhuma reserva encontrada.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
 
         {pages > 1 && (
