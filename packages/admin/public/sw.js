@@ -1,6 +1,70 @@
-/* Giro Jeri Admin — Service Worker (Web Push) */
+/* Giro Jeri Admin — Service Worker (PWA + Web Push)
+   v2: antes era só push, então o navegador podia servir um index.html antigo
+   apontando para um bundle que mudou de hash — o app abria numa versão velha
+   (ex.: no iPhone/PWA, uma tela sem a atualização). Agora o HTML é
+   REDE-PRIMEIRO (sempre pega o deploy novo quando online) e os assets são
+   cache-primeiro (abre offline). Junto com a auto-atualização no main.jsx,
+   novos deploys aplicam sozinhos. */
+const VERSION     = 'adm-v2'
+const SHELL_CACHE = `turiva-adm-shell-${VERSION}`
+const ASSET_CACHE = `turiva-adm-assets-${VERSION}`
+const KEEP        = [SHELL_CACHE, ASSET_CACHE]
+
 self.addEventListener('install', () => self.skipWaiting())
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const names = await caches.keys()
+    await Promise.all(names.map((n) => (KEEP.includes(n) ? null : caches.delete(n))))
+    await self.clients.claim()
+  })())
+})
+
+function isCacheableAsset(url, req) {
+  if (url.origin !== self.location.origin) return false
+  if (url.pathname.endsWith('/sw.js')) return false
+  if (['script', 'style', 'image', 'font'].includes(req.destination)) return true
+  return /\/assets\/|\.(?:js|css|woff2?|png|jpe?g|svg|webp|ico|webmanifest)$/i.test(url.pathname)
+}
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request
+  if (req.method !== 'GET') return
+  const url = new URL(req.url)
+
+  // HTML (navegação): rede primeiro (no-store), cache como rede de segurança.
+  if (req.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const res = await fetch(req, { cache: 'no-store' })
+        const copy = res.clone()
+        caches.open(SHELL_CACHE).then((c) => c.put('shell', copy)).catch(() => {})
+        return res
+      } catch (_) {
+        const cached = await caches.open(SHELL_CACHE).then((c) => c.match('shell'))
+        return cached || Response.error()
+      }
+    })())
+    return
+  }
+
+  // Assets (com hash no nome → imutáveis): cache primeiro, atualiza em 2º plano.
+  if (isCacheableAsset(url, req)) {
+    event.respondWith((async () => {
+      const cache  = await caches.open(ASSET_CACHE)
+      const cached = await cache.match(req)
+      if (cached) {
+        fetch(req).then((res) => { if (res && res.ok) cache.put(req, res.clone()) }).catch(() => {})
+        return cached
+      }
+      try {
+        const res = await fetch(req)
+        if (res && res.ok) cache.put(req, res.clone()).catch(() => {})
+        return res
+      } catch (_) { return Response.error() }
+    })())
+  }
+})
 
 self.addEventListener('push', (event) => {
   let data = {}
