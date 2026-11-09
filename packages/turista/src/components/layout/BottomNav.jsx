@@ -5,10 +5,12 @@ import { User, Sparkles, Store, Plus, CalendarCheck, Megaphone } from 'lucide-re
 import { useAuth } from '../../contexts/AuthContext'
 import { api } from '../../lib/api'
 import { resolveStatusReserva } from '../../lib/statusReserva'
+import { readToursVisualPreview } from '../../lib/toursVisualPreview'
 
 export default function BottomNav() {
   const navigate     = useNavigate()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
+  const turivaVisualPreview = pathname === '/passeios' && readToursVisualPreview(search).isNew
   const { t }        = useTranslation()
   const { user }     = useAuth()
 
@@ -71,7 +73,7 @@ export default function BottomNav() {
         aria-label={t('nav.events')}
         aria-current={descubraAtivo ? 'page' : undefined}
         className={`-mt-7 w-14 h-14 rounded-full flex items-center justify-center ring-4 ring-white shadow-lg active:scale-95 transition-all ${
-          descubraAtivo
+          (descubraAtivo || turivaVisualPreview)
             ? 'bg-brand text-white shadow-brand/40'
             : 'bg-white text-brand border border-brand/25 shadow-brand/15'
         }`}
