@@ -951,7 +951,7 @@ export default function Tours({ visual2026 = false }) {
 
         {/* ── Pastilhas de filtro ───────────────────────────── */}
         {chips.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mr-4 pr-4">
+          <div className="t2026-filters flex gap-2 overflow-x-auto scrollbar-hide -mr-4 pr-4">
             {chips.map((c) => (
               <FilterChip
                 key={c.id}
@@ -968,13 +968,13 @@ export default function Tours({ visual2026 = false }) {
             Só aparece com foto real (do admin ou de um passeio da região):
             sem imagem seria uma caixa colorida fingindo ser fotografia. */}
         {bannerFoto && (
-          <PromoBanner
+          <div className="t2026-promo"><PromoBanner
             foto={bannerFoto}
             badge={t('toursPg.banner.badge')}
             titulo={t('toursPg.banner.title')}
             destaque={t('toursPg.banner.highlight', { region: nomeRegiao })}
             onCta={() => { setChip('__all'); setSearchTerm('') }}
-          />
+          /></div>
         )}
 
         {/* ── Passeios tradicionais (carrinho/combo) ─────────
@@ -982,7 +982,7 @@ export default function Tours({ visual2026 = false }) {
             categoria na tela: a mensagem de vazio só faz sentido quando a
             tela está mesmo vazia. */}
         {(tradTours.length > 0 || emCategorias.length === 0 || toursLoading) && (
-        <section>
+        <section className="t2026-favorites">
           <SectionHeader
             icon={Flame}
             title={t('toursPg.favorites.title')}
