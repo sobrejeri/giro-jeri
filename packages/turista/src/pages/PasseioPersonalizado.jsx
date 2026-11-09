@@ -15,9 +15,10 @@ import {
 } from 'lucide-react'
 import { PlaceInput } from './Transfers'
 import DateSheet from '../components/DateSheet'
+import SeletorDeParada from '../components/SeletorDeParada'
 import { api } from '../lib/api'
 import { somenteTransporte, somenteServicos } from '../lib/transporte'
-import { pontosDaRegiao } from '../lib/pontosTuristicos'
+import { pontosDaRegiao, normalizarLugar } from '../lib/pontosTuristicos'
 import { useLocaisProximos } from '../lib/locaisProximos'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
@@ -85,15 +86,27 @@ export default function PasseioPersonalizado() {
   const navigate = useNavigate()
   const { token } = useAuth()
   const { region } = useRegion()
-  // Atalhos ao tocar na busca: partida → lugares perto da localização escolhida
-  // (pousadas, mercados, praças…); paradas → os pontos turísticos.
-  const pontos   = pontosDaRegiao(region)
+  // Partida: busca de lugar, com os lugares perto da localização escolhida
+  // (pousadas, mercados, praças…) — é onde o cliente está.
   const proximos = useLocaisProximos()
 
-  // Cada parada tem um id ESTÁVEL: a chave do React acompanha a parada (e o
-  // estado interno do PlaceInput, como a lista aberta) mesmo ao remover outra.
+  // Paradas: a LISTA DO ADMIN (Catálogo → Paradas), não uma busca de mapa — o
+  // admin controla para onde os roteiros vão. Fora dela, "Outro destino".
+  // Sem a migração 127 (ou sem a API), vale a lista que o app já tinha.
+  const { data: paradasData, isLoading: paradasLoading, isError: paradasErro } = useQuery({
+    queryKey:  ['tour-stops', region?.id || null],
+    queryFn:   () => api.getTourStops(region?.id ? { region_id: region.id } : {}),
+    staleTime: 5 * 60_000,
+  })
+  const opcoesParadas = useMemo(() => {
+    if (paradasErro || paradasData?.indisponivel) return pontosDaRegiao(region).map((name) => ({ id: null, name }))
+    return paradasData?.data || []
+  }, [paradasData, paradasErro, region])
+
+  // Cada parada tem um id ESTÁVEL: a chave do React acompanha a parada mesmo
+  // ao remover outra. stopId = parada da lista; outro = destino escrito.
   const nextId = useRef(1)
-  function novaParada() { return { id: nextId.current++, name: '', meta: null } }
+  function novaParada() { return { id: nextId.current++, name: '', stopId: null, outro: false } }
 
   const [origin, setOrigin] = useState('')
   const [originMeta, setOriginMeta] = useState(null)
@@ -176,12 +189,8 @@ export default function PasseioPersonalizado() {
   })
   const canSubmit = origin.trim().length >= 2 && !!time && !!region?.id
 
-  // O PlaceInput chama onChange(texto) e, em seguida, onPick(null) a CADA tecla
-  // (o texto mudou → o lugar escolhido antes deixa de valer). Por isso nome e
-  // lugar têm setters separados e funcionais: um nunca sobrescreve o outro com
-  // um valor antigo.
-  const setStopName = (id, name) => setStops((arr) => arr.map((s) => (s.id === id ? { ...s, name } : s)))
-  const setStopMeta = (id, meta) => setStops((arr) => arr.map((s) => (s.id === id ? { ...s, meta } : s)))
+  // Setter funcional: nunca sobrescreve uma parada com um valor antigo.
+  const setStop     = (id, patch) => setStops((arr) => arr.map((s) => (s.id === id ? { ...s, ...patch } : s)))
   const addStop     = () => setStops((arr) => [...arr, novaParada()])
   const removeStop  = (id) => setStops((arr) => (arr.length > 1 ? arr.filter((s) => s.id !== id) : [novaParada()]))
 
@@ -216,9 +225,15 @@ export default function PasseioPersonalizado() {
         origin_place_name: origin.trim(),
         origin_latitude:   originMeta?.lat ?? undefined,
         origin_longitude:  originMeta?.lon ?? undefined,
+        // Da lista: leva o id da parada. "Outro destino": marcado para a
+        // cooperativa avaliar.
         stops: stops
           .filter((s) => s.name.trim())
-          .map((s) => ({ name: s.name.trim(), lat: s.meta?.lat ?? null, lng: s.meta?.lon ?? null })),
+          .map((s) => ({
+            name: s.name.trim(), lat: null, lng: null,
+            ...(s.stopId ? { stop_id: s.stopId } : {}),
+            ...(s.outro ? { outro: true } : {}),
+          })),
         vehicle_type:  vehicleType,
         service_date:  format(date, 'yyyy-MM-dd'),
         service_time:  time,
@@ -303,12 +318,13 @@ export default function PasseioPersonalizado() {
                       )}
                     </div>
                     <div className="mt-1">
-                      <PlaceInput value={s.name}
-                        onChange={(v) => setStopName(s.id, v)}
-                        onPick={(meta) => setStopMeta(s.id, meta)}
-                        placeholder="Para onde quer ir?"
-                        dotClass="border-2 border-gray-400 bg-transparent"
-                        sugestoes={{ tipo: 'pontos', itens: pontos }} />
+                      <SeletorDeParada
+                        valor={s}
+                        rotulo={`Parada ${i + 1}`}
+                        opcoes={opcoesParadas}
+                        carregando={paradasLoading}
+                        usadas={new Set(stops.filter((o) => o.id !== s.id && o.name && !o.outro).map((o) => normalizarLugar(o.name)))}
+                        onChange={(patch) => setStop(s.id, patch)} />
                     </div>
                   </div>
                 ))}

@@ -271,6 +271,8 @@ export const api = {
   cancelQuote:        (id)          => request(`/api/transfers/quotes/${id}/cancel`, { method: 'POST' }),
   // Passeio personalizado (cotação) — mesmo fluxo do translado personalizado.
   requestTourQuote:   (body)        => request('/api/tour-quotes',           { method: 'POST', body }),
+  // Paradas do "Montar meu passeio" (lista do admin, migração 127).
+  getTourStops:       (params = {}) => request(`/api/tour-stops?${new URLSearchParams(params)}`),
   getMyTourQuotes:    ()            => request('/api/tour-quotes'),
   acceptTourQuote:    (id)          => request(`/api/tour-quotes/${id}/accept`, { method: 'POST' }),
   rejectTourQuote:    (id, body)    => request(`/api/tour-quotes/${id}/reject`, { method: 'POST', body }),

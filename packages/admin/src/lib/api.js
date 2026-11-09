@@ -213,6 +213,11 @@ export const api = {
   createModal:      (body)      => request('/api/catalog/modals', { method: 'POST', body }),
   updateModal:      (id, body)  => request(`/api/catalog/modals/${id}`, { method: 'PUT', body }),
   deleteModal:      (id)        => request(`/api/catalog/modals/${id}`, { method: 'DELETE' }),
+  // Paradas do "Montar meu passeio" (Catálogo → Paradas, migração 127).
+  getTourStopsAdmin: ()         => request('/api/tour-stops/admin'),
+  createTourStop:    (body)     => request('/api/tour-stops', { method: 'POST', body }),
+  updateTourStop:    (id, body) => request(`/api/tour-stops/${id}`, { method: 'PUT', body }),
+  deleteTourStop:    (id)       => request(`/api/tour-stops/${id}`, { method: 'DELETE' }),
   getCategories:    ()          => request('/api/catalog/categories'),
   createCategory:   (body)      => request('/api/catalog/categories', { method: 'POST', body }),
   updateCategory:   (id, body)  => request(`/api/catalog/categories/${id}`, { method: 'PUT', body }),

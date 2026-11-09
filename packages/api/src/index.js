@@ -13,6 +13,7 @@ import osRoutes       from './routes/os.js';
 import toursRoutes    from './routes/tours.js';
 import transfersRoutes from './routes/transfers.js';
 import tourQuotesRoutes from './routes/tourQuotes.js';
+import tourStopsRoutes from './routes/tourStops.js';
 import bookingsRoutes from './routes/bookings.js';
 import paymentsRoutes from './routes/payments.js';
 import adminRoutes    from './routes/admin.js';
@@ -190,6 +191,7 @@ app.use('/api/auth/otp',  otpRoutes);
 app.use('/api/tours',     toursRoutes);
 app.use('/api/transfers', transfersRoutes);
 app.use('/api/tour-quotes', tourQuotesRoutes);
+app.use('/api/tour-stops', tourStopsRoutes);   // paradas do Montar meu passeio (lista do admin)
 app.use('/api/bookings',  bookingsRoutes);
 app.use('/api/payments',  paymentsRoutes);
 app.use('/api/regions',   regionsRouter);

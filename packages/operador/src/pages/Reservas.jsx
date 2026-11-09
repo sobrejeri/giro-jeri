@@ -561,13 +561,18 @@ function MyGroupSheet({ bookings, onClose, onConfirm, onRequestInfo, onStart, on
 }
 
 // ── Card de cotação (rota personalizada) ──────────────────
+// Parada do passeio personalizado: a da lista do admin vai pelo nome; a que o
+// cliente escreveu ("Outro destino") vem marcada — é ela que pede avaliação.
+const nomeDaParada = (s) => (s?.outro ? `${s.name} (outro destino)` : s?.name)
+const temOutroDestino = (q) => Array.isArray(q?.stops) && q.stops.some((s) => s?.outro && s?.name)
+
 function QuoteRequestCard({ quote, onQuote }) {
   const isTour = quote._kind === 'tour'
   const name   = quote.client_name || quote.users?.full_name || quote.user_name || 'Cliente'
   const origin = quote.origin_place_name || quote.origin_description || '—'
   const dest   = quote.destination_place_name || quote.destination_description || '—'
   // Passeio personalizado: o roteiro é origem → paradas (sem destino único).
-  const stops  = Array.isArray(quote.stops) ? quote.stops.map((s) => s?.name).filter(Boolean) : []
+  const stops  = Array.isArray(quote.stops) ? quote.stops.filter((s) => s?.name).map(nomeDaParada) : []
   const routeText = isTour ? [origin, ...stops].join(' → ') : `${origin} → ${dest}`
   const notes  = quote.special_notes || quote.client_notes
   const ppl    = quote.people_count || quote.passengers
@@ -591,6 +596,9 @@ function QuoteRequestCard({ quote, onQuote }) {
             <>
               <span className="bg-emerald-100 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded-full">Passeio</span>
               <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Passeio personalizado</span>
+              {temOutroDestino(quote) && (
+                <span className="bg-amber-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full">Destino fora da lista</span>
+              )}
               {quote.vehicle_type && (
                 // Pode vir longo ("2× Buggy + 1× Quadriciclo"): quebra linha em vez de estourar o card.
                 <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-lg flex items-center gap-1 max-w-full">
@@ -1248,7 +1256,7 @@ export default function Reservas({ soNovas = false }) {
               </p>
               <p className="text-gray-500">
                 {quoteModal._kind === 'tour'
-                  ? [quoteModal.origin_place_name, ...(Array.isArray(quoteModal.stops) ? quoteModal.stops.map((s) => s?.name).filter(Boolean) : [])].join(' → ')
+                  ? [quoteModal.origin_place_name, ...(Array.isArray(quoteModal.stops) ? quoteModal.stops.filter((s) => s?.name).map(nomeDaParada) : [])].join(' → ')
                   : `${(quoteModal.origin_place_name || quoteModal.origin_description)} → ${(quoteModal.destination_place_name || quoteModal.destination_description)}`}
               </p>
               <p className="text-gray-500">

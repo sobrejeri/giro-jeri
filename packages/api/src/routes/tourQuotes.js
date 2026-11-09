@@ -17,12 +17,15 @@ import dayjs from 'dayjs'
 
 const router = Router()
 
-// Paradas do roteiro: nome obrigatório; coordenadas opcionais (quando o cliente
-// escolhe um lugar do mapa).
+// Paradas do roteiro: nome obrigatório; coordenadas opcionais. Vêm da lista do
+// admin (stop_id, migração 127) ou de "Outro destino" (outro: true) — o que o
+// cliente escreveu, para a cooperativa avaliar ao montar o valor.
 const stopSchema = z.object({
-  name: z.string().min(1).max(300),
-  lat:  z.number().optional().nullable(),
-  lng:  z.number().optional().nullable(),
+  name:    z.string().trim().min(1).max(300),
+  lat:     z.number().optional().nullable(),
+  lng:     z.number().optional().nullable(),
+  stop_id: z.string().uuid().optional().nullable(),
+  outro:   z.boolean().optional(),
 })
 
 const createSchema = z.object({
@@ -40,8 +43,12 @@ const createSchema = z.object({
 
 // Roteiro em texto (ponto de partida → paradas) para notificações e para o
 // destination_text da reserva (o motorista/operador vê para onde é o passeio).
-function roteiroTexto(q) {
-  const paradas = Array.isArray(q?.stops) ? q.stops.map((s) => s?.name).filter(Boolean) : []
+// `marcarOutro`: no aviso à cooperativa, o destino escrito pelo cliente (fora da
+// lista do admin) vem marcado — é ele que pede avaliação.
+function roteiroTexto(q, { marcarOutro = false } = {}) {
+  const paradas = Array.isArray(q?.stops)
+    ? q.stops.filter((s) => s?.name).map((s) => (marcarOutro && s.outro ? `${s.name} (outro destino)` : s.name))
+    : []
   return [q?.origin_place_name, ...paradas].filter(Boolean).join(' → ')
 }
 
@@ -75,7 +82,7 @@ router.post('/', authenticate, async (req, res, next) => {
       fleetModalSlug: 'terrestre',
       templateKey:    'new_transfer_quote',
       title:          'Nova cotação de passeio',
-      body:           `${req.user.full_name} pediu um passeio personalizado: ${roteiroTexto(data)} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
+      body:           `${req.user.full_name} pediu um passeio personalizado: ${roteiroTexto(data, { marcarOutro: true })} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
     })
     // WhatsApp pras operadores (fire-and-forget).
     notifyOperatorsNewTourQuote(supabase, data).catch((err) =>

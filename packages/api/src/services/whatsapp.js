@@ -364,8 +364,12 @@ export async function notifyOperatorsNewQuote(supabase, quote) {
 }
 
 // Roteiro em texto (ponto de partida + paradas) para as mensagens de passeio.
-function roteiroTexto(quote) {
-  const paradas = Array.isArray(quote?.stops) ? quote.stops.map((s) => s?.name).filter(Boolean) : []
+// `marcarOutro`: para a cooperativa, o destino escrito pelo cliente (fora da
+// lista do admin) vem marcado — é ele que pede avaliação.
+function roteiroTexto(quote, { marcarOutro = false } = {}) {
+  const paradas = Array.isArray(quote?.stops)
+    ? quote.stops.filter((s) => s?.name).map((s) => (marcarOutro && s.outro ? `${s.name} (outro destino)` : s.name))
+    : []
   return [quote?.origin_place_name, ...paradas].filter(Boolean).join(' → ')
 }
 
@@ -377,7 +381,7 @@ export async function notifyOperatorsNewTourQuote(supabase, quote) {
   const { eligibleOperatorsForModal } = await import('./fleet.js')
   const operators = await eligibleOperatorsForModal(supabase, MODAL_DA_COTACAO)
   if (!operators?.length) return { skipped: true }
-  const rota = roteiroTexto(quote)
+  const rota = roteiroTexto(quote, { marcarOutro: true })
   const data = quote.service_date
     ? new Date(quote.service_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : 'a definir'

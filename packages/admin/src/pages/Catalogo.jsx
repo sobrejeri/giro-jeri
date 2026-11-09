@@ -9,6 +9,7 @@ import Input, { Select, Textarea } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import MenuAcoes from '../components/ui/MenuAcoes'
+import ParadasPasseio from '../components/ParadasPasseio'
 
 // Horários pré-definidos para o limite de solicitação (30 em 30 min, 06h–22h).
 // Categorias de um passeio: o array da 083 quando existe, senão a categoria
@@ -222,6 +223,8 @@ const TABS = [
   { key: 'tours',    label: 'Passeios'  },
   { key: 'transfers', label: 'Transfers' },
   { key: 'vehicles', label: 'Veículos'  },
+  // Lista de paradas do "Montar meu passeio" (o cliente escolhe nela).
+  { key: 'paradas',  label: 'Paradas'   },
 ]
 
 // ─── Apresentação do catálogo (redesign) ─────────────────────
@@ -792,8 +795,9 @@ export default function Catalogo() {
       </div>
 
       {/* Filtro por município — uma linha só, rolável na horizontal (em vez de
-          quebrar em 3-4 linhas e empurrar a lista para baixo). */}
-      {allRegions.length > 0 && (
+          quebrar em 3-4 linhas e empurrar a lista para baixo). As paradas têm
+          os municípios no próprio cadastro, então o filtro não vale lá. */}
+      {allRegions.length > 0 && tab !== 'paradas' && (
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin -mx-1 px-1">
           <button
             onClick={() => setFilterRegion(null)}
@@ -1070,6 +1074,8 @@ export default function Catalogo() {
       )}
 
       {/* ── Veículos ───────────────────────────────────────────── */}
+      {tab === 'paradas' && <ParadasPasseio />}
+
       {tab === 'vehicles' && (
         <>
         <ResumoTab itens={[
