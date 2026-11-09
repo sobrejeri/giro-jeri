@@ -409,11 +409,11 @@ function DatePickerSheet({ value, onChange, onClose, minDate, seasons, highSeaso
 }
 
 /* ── Main ───────────────────────────────────────────────────── */
-export default function Tours() {
+export default function Tours({ visual2026 = false }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { state: locationState } = useLocation()
-  const { region, userCoords, getServiceQuery } = useRegion()
+  const { region, userCoords, getServiceQuery, openPicker } = useRegion()
 
   const { items: savedCartItems, upsertItem: saveCartItem, removeItem: dropCartItem, count: cartCount } = useCart()
 
@@ -834,10 +834,10 @@ export default function Tours() {
 
   return (
     <>
-    <div className="lg:hidden min-h-screen pb-4">
+    <div className={`lg:hidden min-h-screen pb-4 ${visual2026 ? 'turiva-tours-visual2026' : ''}`}>
 
       {/* ── Header ──────────────────────────────────────────── */}
-      <div className="px-4 pt-5 pb-3 lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
+      <div className="t2026-header px-4 pt-5 pb-3 lg:max-w-6xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
         <div className="relative flex items-center min-h-[44px] justify-start">
           {/* Cabeçalho de marca — igual para turista e operador. A Lojinha é
               uma aba do menu, então não leva seta de voltar. */}
@@ -889,10 +889,20 @@ export default function Tours() {
         )}
       </div>
 
-      <div className="px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
+      {visual2026 && (
+        <button type="button" onClick={openPicker}
+          className="t2026-location mx-4 -mt-5 relative z-10 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 text-left shadow-md"
+          aria-label="Trocar a cidade de saída">
+          <MapPin size={19} className="shrink-0 text-brand" />
+          <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">Saindo de: <strong className="ml-1 text-[15px] text-gray-900">{nomeRegiao}</strong></span>
+          <ChevronRight size={18} className="shrink-0 text-gray-500" />
+        </button>
+      )}
+
+      <div className="t2026-content px-4 pt-4 space-y-4 lg:max-w-6xl lg:mx-auto">
 
         {/* ── Alternador Passeios | Translados (mesma lojinha) ───────── */}
-        <div className="flex bg-gray-100 rounded-2xl p-1">
+        <div className="t2026-tabs flex bg-gray-100 rounded-2xl p-1">
           <button
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold bg-white text-brand shadow-sm"
             aria-current="page"
@@ -916,7 +926,7 @@ export default function Tours() {
         {/* ── Montar meu passeio (cotação sob medida) ─────────────────── */}
         <button
           onClick={() => navigate('/passeio-personalizado')}
-          className="w-full flex items-center gap-3 bg-gradient-to-r from-brand/10 to-brand/5 border border-brand/20 rounded-2xl px-4 py-3 text-left active:scale-[0.99] transition-transform"
+          className="t2026-compose w-full flex items-center gap-3 bg-gradient-to-r from-brand/10 to-brand/5 border border-brand/20 rounded-2xl px-4 py-3 text-left active:scale-[0.99] transition-transform"
         >
           <div className="w-9 h-9 rounded-xl bg-brand/15 flex items-center justify-center shrink-0">
             <Sparkles size={16} className="text-brand" />
@@ -941,7 +951,7 @@ export default function Tours() {
 
         {/* ── Pastilhas de filtro ───────────────────────────── */}
         {chips.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mr-4 pr-4">
+          <div className="t2026-filters flex gap-2 overflow-x-auto scrollbar-hide -mr-4 pr-4">
             {chips.map((c) => (
               <FilterChip
                 key={c.id}
@@ -958,13 +968,13 @@ export default function Tours() {
             Só aparece com foto real (do admin ou de um passeio da região):
             sem imagem seria uma caixa colorida fingindo ser fotografia. */}
         {bannerFoto && (
-          <PromoBanner
+          <div className="t2026-promo"><PromoBanner
             foto={bannerFoto}
             badge={t('toursPg.banner.badge')}
             titulo={t('toursPg.banner.title')}
             destaque={t('toursPg.banner.highlight', { region: nomeRegiao })}
             onCta={() => { setChip('__all'); setSearchTerm('') }}
-          />
+          /></div>
         )}
 
         {/* ── Passeios tradicionais (carrinho/combo) ─────────
@@ -972,7 +982,7 @@ export default function Tours() {
             categoria na tela: a mensagem de vazio só faz sentido quando a
             tela está mesmo vazia. */}
         {(tradTours.length > 0 || emCategorias.length === 0 || toursLoading) && (
-        <section>
+        <section className="t2026-favorites">
           <SectionHeader
             icon={Flame}
             title={t('toursPg.favorites.title')}

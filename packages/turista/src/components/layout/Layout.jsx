@@ -16,6 +16,7 @@ import InboxChat from '../InboxChat'
 import AvisoCodigoConclusao from '../AvisoCodigoConclusao'
 import { useAuth } from '../../contexts/AuthContext'
 import { getPartner, clearPartner } from '../../lib/partner'
+import { readToursVisualPreview } from '../../lib/toursVisualPreview'
 
 // Selo de venda direta: enquanto ativo, toda solicitação vai atribuída à
 // operador do link (sem fila). O X remove a atribuição.
@@ -48,8 +49,9 @@ export default function Layout() {
   // "Bate-papo" abre esta caixa global por evento, de qualquer tela.
   const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
   // Barra de localização só onde a região manda no conteúdo (loja/vitrine).
-  const { pathname } = useLocation()
-  const mostraRegiao = pathname === '/' || pathname.startsWith('/passeios') || pathname.startsWith('/transfers')
+  const { pathname, search } = useLocation()
+  const previewNovaLojinha = pathname === '/passeios' && readToursVisualPreview(search).isNew
+  const mostraRegiao = (pathname === '/' || pathname.startsWith('/passeios') || pathname.startsWith('/transfers')) && !previewNovaLojinha
   async function handleRefresh() {
     // Revalida tudo o que estiver em uso na tela atual.
     await qc.refetchQueries({ type: 'active' })
