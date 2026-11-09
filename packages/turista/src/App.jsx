@@ -15,7 +15,7 @@ import Home            from './pages/Home'
 import Feed            from './pages/Feed'
 import PerfilPublico   from './pages/PerfilPublico'
 import PerfilOperador  from './pages/PerfilOperador'
-import Tours           from './pages/Tours'
+import ToursVisualSwitcher from './pages/ToursVisualSwitcher'
 import TourDetail      from './pages/TourDetail'
 import Transfers       from './pages/Transfers'
 import PasseioPersonalizado from './pages/PasseioPersonalizado'
@@ -151,7 +151,7 @@ export default function App() {
         <Route path="eventos"             element={<Feed />} />
         <Route path="turiva"              element={<PerfilPublico />} />
         <Route path="op/:id"              element={<PerfilOperador />} />
-        <Route path="passeios"            element={<Tours />} />
+        <Route path="passeios"            element={<ToursVisualSwitcher />} />
         <Route path="passeio-personalizado" element={<PasseioPersonalizado />} />
         <Route path="passeios/:id"        element={<TourDetail />} />
         <Route path="transfers"           element={<Transfers />} />
