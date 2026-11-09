@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, RotateCcw, X } from 'lucide-react'
 import Tours from './Tours'
+import './ToursVisual2026.css'
 import {
   clearToursVisualPreview,
   readToursVisualPreview,
