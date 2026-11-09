@@ -1,0 +1,240 @@
+/*
+ * Turiva — Lojinha 2026, visual experimental.
+ * Tudo é isolado sob .turiva-tours-visual2026; nenhuma regra muda o site
+ * público, o checkout, os valores, a lista de reservas ou os outros usuários.
+ * A versão original é o próprio componente Tours, sem esta classe.
+ */
+@media (max-width: 1023px) {
+  .turiva-tours-visual2026 {
+    min-height: 100dvh;
+    padding-bottom: 106px;
+    background: #fffdfa;
+    color: #18233a;
+  }
+  .turiva-tours-visual2026 .t2026-header {
+    position: relative;
+    z-index: 0;
+    overflow: hidden;
+    margin: 0;
+    padding: 29px 16px 61px;
+    background:
+      radial-gradient(ellipse 90% 65% at 90% 0%, rgba(255,177,48,.52),transparent 64%),
+      linear-gradient(122deg,#e84303 0%,#ff6400 58%,#ff8d11 100%);
+    box-shadow: 0 12px 28px rgba(248,102,22,.12);
+  }
+  .turiva-tours-visual2026 .t2026-header::after {
+    position: absolute;
+    z-index: -1;
+    right: -18%;
+    bottom: -68px;
+    width: 150%;
+    height: 105px;
+    border-radius: 50%;
+    background: rgba(255,191,65,.23);
+    transform: rotate(-6deg);
+    content: '';
+    pointer-events: none;
+  }
+  .turiva-tours-visual2026 .t2026-header > .relative {
+    min-height: 60px;
+    gap: 6px;
+  }
+  .turiva-tours-visual2026 .t2026-header > .relative > .flex:first-child {
+    gap: 10px;
+    max-width: calc(100% - 132px);
+  }
+  .turiva-tours-visual2026 .t2026-header img {
+    height: 52px;
+    width: 52px;
+    padding: 5px;
+    border-radius: 17px;
+    background-color: #fff;
+    object-fit: contain;
+    box-shadow: 0 5px 15px rgba(117,34,8,.16);
+  }
+  .turiva-tours-visual2026 .t2026-header .font-giro {
+    font-size: 23px;
+    font-weight: 800;
+    letter-spacing: 0;
+    color: white;
+  }
+  .turiva-tours-visual2026 .t2026-header .font-giro + p {
+    margin-top: 5px;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: rgba(255,255,255,.96);
+  }
+  .turiva-tours-visual2026 .t2026-header .absolute.right-0 {
+    gap: 5px;
+    right: 0;
+  }
+  .turiva-tours-visual2026 .t2026-header .absolute.right-0 > button,
+  .turiva-tours-visual2026 .t2026-header .absolute.right-0 > div > button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 36px;
+    width: 36px;
+    border-radius: 50%;
+    background: white;
+    color: #233049;
+    box-shadow: 0 4px 11px rgba(136,53,14,.14);
+  }
+  .turiva-tours-visual2026 .t2026-header .absolute.right-0 svg {
+    color: #233049;
+  }
+  .turiva-tours-visual2026 .t2026-location {
+    min-height: 53px;
+    border: 1px solid rgba(240,229,217,.8);
+    border-radius: 19px;
+    background: white;
+    box-shadow: 0 7px 18px rgba(52,58,70,.13);
+  }
+  .turiva-tours-visual2026 .t2026-content {
+    display: flex;
+    flex-direction: column;
+    gap: 21px;
+    padding-top: 22px;
+  }
+  .turiva-tours-visual2026 .t2026-content > * {
+    order: 10;
+    margin-top: 0 !important;
+  }
+  .turiva-tours-visual2026 .t2026-tabs {
+    order: 1;
+    gap: 3px;
+    padding: 7px;
+    min-height: 58px;
+    border: 1px solid #f5f1ec;
+    border-radius: 21px;
+    background: #f3f4f6;
+    box-shadow: 0 5px 17px rgba(22,34,57,.08);
+  }
+  .turiva-tours-visual2026 .t2026-tabs > button {
+    min-width: 0;
+    gap: 5px;
+    padding: 12px 2px;
+    font-size: 12.5px;
+    border-radius: 15px;
+    white-space: nowrap;
+  }
+  .turiva-tours-visual2026 .t2026-tabs > button:first-child {
+    color: white;
+    background: linear-gradient(112deg,#ff8e11,#fb5600);
+    box-shadow: 0 5px 10px rgba(244,104,16,.26);
+  }
+  .turiva-tours-visual2026 .t2026-compose {
+    order: 2;
+    gap: 14px;
+    padding: 17px 14px;
+    border: 1px solid #ffd2aa;
+    border-radius: 21px;
+    background: linear-gradient(110deg,#fff0dd 0%,#fff8f1 57%,#ffe9d9 100%);
+    box-shadow: 0 5px 13px rgba(156,89,30,.06);
+  }
+  .turiva-tours-visual2026 .t2026-compose > div:first-child {
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+    background: linear-gradient(140deg,#ffe3c6,#ffc78f);
+  }
+  .turiva-tours-visual2026 .t2026-compose > div:first-child svg {
+    height: 24px;
+    width: 24px;
+  }
+  .turiva-tours-visual2026 .t2026-compose > div:nth-child(2) > p:first-child {
+    font-size: 15.5px;
+    font-weight: 800;
+    color: #18243c;
+  }
+  .turiva-tours-visual2026 .t2026-compose > div:nth-child(2) > p:nth-child(2) {
+    margin-top: 5px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .turiva-tours-visual2026 .t2026-compose > svg:last-child {
+    height: 27px;
+    width: 27px;
+    padding: 5px;
+    border-radius: 50%;
+    background: #ff6a00;
+    color: white;
+    box-sizing: content-box;
+  }
+  .turiva-tours-visual2026 .t2026-promo {
+    order: 3;
+  }
+  .turiva-tours-visual2026 .t2026-promo > button {
+    overflow: hidden;
+    border-radius: 26px;
+    box-shadow: 0 9px 23px rgba(36,71,101,.13);
+  }
+  .turiva-tours-visual2026 .t2026-promo > button > div {
+    min-height: 178px;
+  }
+  .turiva-tours-visual2026 .t2026-promo > button > div > div:last-child {
+    padding: 17px 19px;
+  }
+  .turiva-tours-visual2026 .t2026-promo > button > div > div:last-child > span:first-child {
+    padding: 7px 11px;
+    font-size: 9.5px;
+  }
+  .turiva-tours-visual2026 .t2026-promo p {
+    margin-top: 10px;
+    max-width: 64%;
+    font-size: 22px;
+    line-height: 1.15;
+  }
+  .turiva-tours-visual2026 .t2026-promo .font-giro {
+    margin-top: 4px;
+    max-width: 71%;
+    font-size: 21px;
+    font-family: inherit;
+    font-weight: 800;
+  }
+  .turiva-tours-visual2026 .t2026-filters {
+    order: 4;
+    gap: 7px;
+  }
+  .turiva-tours-visual2026 .t2026-favorites {
+    order: 5;
+  }
+  .turiva-tours-visual2026 .t2026-favorites h2 {
+    font-size: 21px;
+    font-weight: 800;
+    letter-spacing: -.5px;
+    color: #1a2540;
+  }
+  .turiva-tours-visual2026 .t2026-favorites h2 + p {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .turiva-tours-visual2026 .t2026-favorites .snap-start {
+    width: 47%;
+    min-width: 172px;
+    max-width: 230px;
+    border: 1px solid #f0eeeb;
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026 .t2026-favorites .snap-start > div:first-child {
+    aspect-ratio: 1.23;
+  }
+  .turiva-tours-visual2026 .t2026-favorites .snap-start > div:nth-child(2) {
+    padding: 13px 12px;
+  }
+  .turiva-tours-visual2026 .t2026-favorites .snap-start .text-brand {
+    color: #ff6200;
+  }
+  .turiva-tours-visual2026 .t2026-favorites .snap-start > div:nth-child(2) button span {
+    font-size: 15px;
+  }
+  @media (max-width: 359px) {
+    .turiva-tours-visual2026 .t2026-header .font-giro {font-size: 19px;}
+    .turiva-tours-visual2026 .t2026-header img {width: 45px; height: 45px;}
+    .turiva-tours-visual2026 .t2026-header .absolute.right-0 {gap: 3px;}
+    .turiva-tours-visual2026 .t2026-header .absolute.right-0 > button,
+    .turiva-tours-visual2026 .t2026-header .absolute.right-0 > div > button {height: 31px;width:31px;}
+    .turiva-tours-visual2026 .t2026-tabs > button {font-size:11px;}
+  }
+}
