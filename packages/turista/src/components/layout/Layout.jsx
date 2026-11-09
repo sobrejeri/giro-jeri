@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { X, Store } from 'lucide-react'
 import TopNav from './TopNav'
@@ -8,6 +8,7 @@ import RegionPicker from '../RegionPicker'
 import CartFab from '../CartFab'
 import PullToRefresh from '../PullToRefresh'
 import { getPartner, clearPartner } from '../../lib/partner'
+import { readHomeVisualPreview } from '../../lib/homeVisualPreview'
 
 // Selo de venda direta: enquanto ativo, toda solicitação vai atribuída à
 // cooperativa do link (sem fila). O X remove a atribuição.
@@ -35,6 +36,9 @@ function PartnerBadge() {
 
 export default function Layout() {
   const qc = useQueryClient()
+  const { pathname, search } = useLocation()
+  const newMobileHome = pathname === '/' && readHomeVisualPreview(search).isNew
+
   async function handleRefresh() {
     // Revalida tudo o que estiver em uso na tela atual.
     await qc.refetchQueries({ type: 'active' })
@@ -53,8 +57,8 @@ export default function Layout() {
         </div>
       </div>
 
-      <CartFab />
-      <BottomNav />
+      {!newMobileHome && <CartFab />}
+      {!newMobileHome && <BottomNav />}
       <RegionPicker />
     </div>
   )
