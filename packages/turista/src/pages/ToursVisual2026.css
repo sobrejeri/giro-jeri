@@ -287,6 +287,84 @@
   .turiva-tours-visual2026 .t2026-feed-main article + article {
     margin-top: 18px;
   }
+  /* Minhas reservas: cabeçalho laranja com título e contagem em branco; as
+     abas num cartão branco que atravessa a borda do cabeçalho (como o
+     "Saindo de"), com a ativa em laranja; cards no padrão da Lojinha. */
+  .turiva-tours-visual2026 .t2026-bookings-header {
+    position: relative;
+    top: auto;
+    z-index: 1;
+    margin-bottom: 34px;
+    padding: 26px 16px 0;
+    background:
+      radial-gradient(ellipse 90% 65% at 90% 0%, rgba(255,177,48,.52),transparent 64%),
+      linear-gradient(122deg,#e84303 0%,#ff6400 58%,#ff8d11 100%);
+    box-shadow: 0 12px 28px rgba(248,102,22,.12);
+  }
+  .turiva-tours-visual2026 .t2026-bookings-header h1 {
+    font-size: 23px;
+    font-weight: 800;
+    letter-spacing: 0;
+    color: white;
+  }
+  .turiva-tours-visual2026 .t2026-bookings-header > div:first-child button {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: white;
+    color: #233049;
+    box-shadow: 0 4px 11px rgba(136,53,14,.14);
+  }
+  .turiva-tours-visual2026 .t2026-bookings-header > div:first-child button svg {
+    color: #233049;
+  }
+  .turiva-tours-visual2026 .t2026-bookings-header > p {
+    padding-bottom: 16px;
+    color: rgba(255,255,255,.92);
+  }
+  .turiva-tours-visual2026 .t2026-bookings-header > p .text-brand {
+    color: white;
+  }
+  .turiva-tours-visual2026 .t2026-bookings-tabs {
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid rgba(240,229,217,.8);
+    border-radius: 19px;
+    background: white;
+    box-shadow: 0 7px 18px rgba(52,58,70,.13);
+    transform: translateY(28px);
+    margin-top: -28px;
+  }
+  .turiva-tours-visual2026 .t2026-bookings-tabs > button {
+    padding: 10px 0;
+    border-radius: 14px;
+    font-size: 11.5px;
+    letter-spacing: -.1px;
+    white-space: nowrap;
+  }
+  .turiva-tours-visual2026 .t2026-bookings-tabs > button > span:not(.absolute) {
+    margin-left: 3px;
+    padding: 2px 5px;
+  }
+  .turiva-tours-visual2026 .t2026-bookings-tabs > button.text-brand {
+    color: white;
+    background: linear-gradient(112deg,#ff8e11,#fb5600);
+    box-shadow: 0 5px 10px rgba(244,104,16,.26);
+  }
+  .turiva-tours-visual2026 .t2026-bookings-tabs > button > span.absolute {
+    display: none;
+  }
+  .turiva-tours-visual2026 .t2026-bookings-tabs > button.text-brand > span.bg-brand {
+    background: rgba(255,255,255,.28);
+  }
+  .turiva-tours-visual2026 .t2026-bookings-list > * {
+    border-color: #f0eeeb;
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026 .t2026-bookings-list > * + * {
+    margin-top: 16px;
+  }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;
     gap: 14px;

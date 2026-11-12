@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import './ToursVisual2026.css'
 
 /* ── Status helpers ─────────────────────────────────────────── */
 // A regra vive em lib/statusReserva.js e é COMPARTILHADA com o detalhe da
@@ -1218,9 +1219,11 @@ export default function Bookings() {
   ].sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
 
   return (
-    <div className="min-h-full pb-4">
+    // `turiva-tours-visual2026 t2026-bookings`: visual novo, só no celular (as
+    // regras ficam num @media; o PC continua como estava).
+    <div className="min-h-full pb-4 turiva-tours-visual2026 t2026-bookings">
       {/* Header */}
-      <header className="bg-white px-4 pt-5 pb-0 sticky top-0 lg:top-[57px] z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)] lg:max-w-5xl lg:mx-auto">
+      <header className="t2026-bookings-header bg-white px-4 pt-5 pb-0 sticky top-0 lg:top-[57px] z-40 shadow-[0_1px_0_rgba(0,0,0,0.06)] lg:max-w-5xl lg:mx-auto">
         <div className="relative flex items-center justify-center min-h-[32px] mb-1">
           <button
             onClick={() => navigate(-1)}
@@ -1259,7 +1262,7 @@ export default function Bookings() {
         )}
 
         {/* Tabs */}
-        <div className="flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <div className="t2026-bookings-tabs flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {TABS.map((t) => {
             const count  = t.id !== 'todos' ? counts[t.id] : null
             const active = tab === t.id
@@ -1301,7 +1304,7 @@ export default function Bookings() {
             </p>
           </div>
         ) : (
-          <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 space-y-3">
+          <div className="t2026-bookings-list lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 space-y-3">
             {listItems.map((it) => it.kind === 'quote' ? (
               <QuoteCard
                 key={it.id}
