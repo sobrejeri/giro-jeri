@@ -12,6 +12,7 @@ import VerifiedBadge from '../components/VerifiedBadge'
 import Stories from '../components/Stories'
 import LiveAvatarStories from '../components/LiveAvatarStories'
 import ProfilePostsFeed from '../components/ProfilePostsFeed'
+import './ToursVisual2026.css'
 import {
   User, Mail, LogOut, ChevronLeft, ChevronRight, CalendarCheck, Megaphone,
   Camera, Pencil, Check, X, Heart, Star,
@@ -121,17 +122,17 @@ function PontosCard({ token }) {
   }, [token])
   const saldo = data?.saldo || 0
   return (
-    <div className="rounded-2xl p-4 bg-gradient-to-br from-brand to-orange-400 text-white shadow-sm">
+    <div className="t2026-points rounded-2xl p-4 bg-gradient-to-br from-brand to-orange-400 text-white shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[12px] font-semibold text-white/90">⭐ Pontos Turiva</p>
-          <p className="text-[26px] font-extrabold leading-tight mt-0.5">{saldo.toLocaleString('pt-BR')}</p>
-          <p className="text-[11px] text-white/85 mt-0.5">Ganhe 1 ponto a cada R$ 1 em reservas pagas.</p>
+          <p className="t2026-points-label text-[12px] font-semibold text-white/90">⭐ Pontos Turiva</p>
+          <p className="t2026-points-value text-[26px] font-extrabold leading-tight mt-0.5">{saldo.toLocaleString('pt-BR')}</p>
+          <p className="t2026-points-hint text-[11px] text-white/85 mt-0.5">Ganhe 1 ponto a cada R$ 1 em reservas pagas.</p>
         </div>
-        <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl">🎁</div>
+        <div className="t2026-points-gift w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl">🎁</div>
       </div>
       {data?.itens?.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-white/20 space-y-1">
+        <div className="t2026-points-history mt-3 pt-3 border-t border-white/20 space-y-1">
           {data.itens.slice(0, 3).map((i) => (
             <div key={i.id} className="flex items-center justify-between text-[11.5px] text-white/90">
               <span className="truncate pr-2">{i.description || (i.points >= 0 ? 'Pontos ganhos' : 'Resgate')}</span>
@@ -545,9 +546,10 @@ export default function Profile() {
 
   return (
     <>
-    <div className="lg:hidden min-h-full pb-4">
+    <div className="lg:hidden min-h-full pb-4 turiva-tours-visual2026 t2026-profile">
+      {/* `turiva-tours-visual2026 t2026-profile`: visual novo da Lojinha (celular). */}
 
-      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-[57px] z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
+      <header className="t2026-profile-header bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-[57px] z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:max-w-lg lg:mx-auto">
         <div className="relative flex items-center justify-center min-h-[32px]">
           <button
             onClick={() => navigate(-1)}
@@ -560,7 +562,7 @@ export default function Profile() {
         </div>
       </header>
 
-      <main className="px-4 pt-4 space-y-3 max-w-lg mx-auto">
+      <main className="t2026-profile-main px-4 pt-4 space-y-3 max-w-lg mx-auto">
 
         {token && user ? (
           <>

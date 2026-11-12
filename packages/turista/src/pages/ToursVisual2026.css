@@ -365,6 +365,73 @@
   .turiva-tours-visual2026 .t2026-bookings-list > * + * {
     margin-top: 16px;
   }
+  /* Perfil: cabeçalho laranja com o título em branco; o 1º cartão (pontos,
+     agora branco com o número em laranja) atravessa a borda do cabeçalho,
+     como o "Saindo de"; os demais cards no padrão da Lojinha. */
+  .turiva-tours-visual2026 .t2026-profile-header {
+    position: relative;
+    top: auto;
+    z-index: 0;
+    padding: 26px 16px 50px;
+    background:
+      radial-gradient(ellipse 90% 65% at 90% 0%, rgba(255,177,48,.52),transparent 64%),
+      linear-gradient(122deg,#e84303 0%,#ff6400 58%,#ff8d11 100%);
+    box-shadow: 0 12px 28px rgba(248,102,22,.12);
+  }
+  .turiva-tours-visual2026 .t2026-profile-header h1 {
+    font-size: 23px;
+    font-weight: 800;
+    letter-spacing: 0;
+    color: white;
+  }
+  .turiva-tours-visual2026 .t2026-profile-header button {
+    width: 36px;
+    height: 36px;
+    background: white;
+    box-shadow: 0 4px 11px rgba(136,53,14,.14);
+  }
+  .turiva-tours-visual2026 .t2026-profile-main {
+    padding-top: 0;
+  }
+  .turiva-tours-visual2026 .t2026-profile-main > :first-child {
+    position: relative;
+    z-index: 1;
+    margin-top: -32px;
+  }
+  .turiva-tours-visual2026 .t2026-profile-main > div,
+  .turiva-tours-visual2026 .t2026-profile-main > button {
+    border: 1px solid #f0eeeb;
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026 .t2026-profile-main > * + * {
+    margin-top: 16px;
+  }
+  .turiva-tours-visual2026 .t2026-points {
+    padding: 18px;
+    border-color: rgba(240,229,217,.8);
+    background: white;
+    color: #18233a;
+  }
+  .turiva-tours-visual2026 .t2026-points-label {
+    color: #4b5563;
+  }
+  .turiva-tours-visual2026 .t2026-points-value {
+    color: #ff6200;
+  }
+  .turiva-tours-visual2026 .t2026-points-hint {
+    color: #6b7280;
+  }
+  .turiva-tours-visual2026 .t2026-points-gift {
+    border-radius: 18px;
+    background: linear-gradient(140deg,#ffe3c6,#ffc78f);
+  }
+  .turiva-tours-visual2026 .t2026-points-history {
+    border-color: #f0eeeb;
+  }
+  .turiva-tours-visual2026 .t2026-points-history > div {
+    color: #4b5563;
+  }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;
     gap: 14px;
