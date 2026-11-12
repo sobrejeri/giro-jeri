@@ -50,8 +50,10 @@ export default function Layout() {
   const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
   // Barra de localização só onde a região manda no conteúdo (loja/vitrine).
   const { pathname, search } = useLocation()
-  const previewNovaLojinha = pathname === '/passeios' && readToursVisualPreview(search).isNew
-  const mostraRegiao = (pathname === '/' || pathname.startsWith('/passeios') || pathname.startsWith('/transfers')) && !previewNovaLojinha
+  // No celular o visual novo da Lojinha traz a região no próprio cabeçalho
+  // laranja; no PC (que não tem esse cabeçalho) a faixa "Saindo de" continua.
+  const lojinhaNova = pathname === '/passeios' && readToursVisualPreview(search).isNew
+  const mostraRegiao = pathname === '/' || pathname.startsWith('/passeios') || pathname.startsWith('/transfers')
   async function handleRefresh() {
     // Revalida tudo o que estiver em uso na tela atual.
     await qc.refetchQueries({ type: 'active' })
@@ -81,7 +83,7 @@ export default function Layout() {
         <OfflineBanner />
         <PartnerBadge />
         <InstallBar />
-        {mostraRegiao && <RegionBar />}
+        {mostraRegiao && (lojinhaNova ? <div className="hidden lg:block"><RegionBar /></div> : <RegionBar />)}
         <div className="pb-[68px] lg:pb-0">
           <SwipeTabs>
             <PullToRefresh onRefresh={handleRefresh}>
