@@ -770,6 +770,74 @@
   .t2026-tour-sheet .t2026-tour-add {
     border-radius: 16px;
   }
+  /* Favoritos: cabeçalho laranja que rola com a página (voltar e título em
+     branco, contagem embaixo); a grade sobe sobre a borda dele, nos mesmos
+     cartões dos favoritos da Lojinha. */
+  .turiva-tours-visual2026 .t2026-fav-header {
+    position: relative;
+    top: auto;
+    z-index: 0;
+    overflow: hidden;
+    padding: 12px 0 46px;
+    border-bottom: 0;
+    background:
+      radial-gradient(ellipse 90% 65% at 90% 0%, rgba(255,177,48,.52),transparent 64%),
+      linear-gradient(122deg,#e84303 0%,#ff6400 58%,#ff8d11 100%);
+    box-shadow: 0 12px 28px rgba(248,102,22,.12);
+  }
+  .turiva-tours-visual2026 .t2026-fav-header::after {
+    position: absolute;
+    z-index: -1;
+    right: -18%;
+    bottom: -68px;
+    width: 150%;
+    height: 105px;
+    border-radius: 50%;
+    background: rgba(255,191,65,.23);
+    transform: rotate(-6deg);
+    content: '';
+    pointer-events: none;
+  }
+  .turiva-tours-visual2026 .t2026-fav-header button {
+    background: white;
+    box-shadow: 0 4px 11px rgba(136,53,14,.14);
+  }
+  .turiva-tours-visual2026 .t2026-fav-header h1 {
+    font-size: 23px;
+    font-weight: 800;
+    color: white;
+  }
+  .turiva-tours-visual2026 .t2026-fav-sub {
+    display: block;
+    margin-top: -4px;
+    text-align: center;
+    font-size: 12.5px;
+    color: rgba(255,255,255,.92);
+  }
+  .turiva-tours-visual2026 .t2026-fav-list {
+    position: relative;
+    z-index: 1;
+    margin-top: -32px;
+    padding-top: 0;
+  }
+  .turiva-tours-visual2026 .t2026-fav-count {
+    display: none;
+  }
+  .turiva-tours-visual2026 .t2026-fav-grid > .snap-start {
+    border: 1px solid #f0eeeb;
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026 .t2026-fav-grid > .snap-start > div:nth-child(2) {
+    padding: 13px 12px;
+  }
+  .turiva-tours-visual2026 .t2026-fav-grid .text-brand {
+    color: #ff6200;
+  }
+  .turiva-tours-visual2026 .t2026-fav-cta {
+    background: linear-gradient(112deg,#ff8e11,#fb5600);
+    box-shadow: 0 6px 14px rgba(244,104,16,.26);
+  }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;
     gap: 14px;
