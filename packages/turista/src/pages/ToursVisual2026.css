@@ -468,6 +468,128 @@
   .turiva-tours-visual2026 .t2026-points-history > div {
     color: #4b5563;
   }
+  /* Afiliado: o painel de comissões (ou o convite, antes de ativar) vira o
+     cabeçalho laranja de ponta a ponta; o 1º bloco depois dele atravessa a
+     borda, como o "Saindo de"; os demais cards no padrão da Lojinha.
+     Seletores com .t2026-affiliate dobrado para vencer o space-y do Tailwind. */
+  .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-hero,
+  .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-panel {
+    z-index: 0;
+    margin: -20px -16px 0;
+    padding: 26px 18px 54px;
+    border-radius: 0;
+    background:
+      radial-gradient(ellipse 90% 65% at 90% 0%, rgba(255,177,48,.52),transparent 64%),
+      linear-gradient(122deg,#e84303 0%,#ff6400 58%,#ff8d11 100%);
+    box-shadow: 0 12px 28px rgba(248,102,22,.12);
+  }
+  .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-hero::after,
+  .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-panel::after {
+    position: absolute;
+    z-index: -1;
+    right: -18%;
+    bottom: -68px;
+    width: 150%;
+    height: 105px;
+    border-radius: 50%;
+    background: rgba(255,191,65,.23);
+    transform: rotate(-6deg);
+    content: '';
+    pointer-events: none;
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-hero > p:first-of-type {
+    font-size: 21px;
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-hero > p:last-of-type {
+    color: rgba(255,255,255,.94);
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-month {
+    padding: 4px 10px;
+    border: 1px solid rgba(255,255,255,.38);
+    border-radius: 999px;
+    background: rgba(255,255,255,.18);
+  }
+  .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-body > .t2026-affiliate-grid,
+  .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-body > .t2026-affiliate-activate {
+    position: relative;
+    z-index: 1;
+    margin-top: -34px;
+  }
+  .turiva-tours-visual2026.t2026-affiliate .bg-white.rounded-2xl {
+    border-color: #f0eeeb;
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-stats > .bg-white.rounded-2xl {
+    border-radius: 18px;
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-activate {
+    padding: 10px;
+    border: 1px solid rgba(240,229,217,.8);
+    border-radius: 22px;
+    background: white;
+    box-shadow: 0 7px 18px rgba(52,58,70,.13);
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-activate > button,
+  .turiva-tours-visual2026 .t2026-pix-save {
+    background: linear-gradient(112deg,#ff8e11,#fb5600);
+    box-shadow: 0 6px 14px rgba(244,104,16,.26);
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-activate > button {
+    border-radius: 16px;
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-share {
+    box-shadow: 0 6px 14px rgba(37,211,102,.26);
+  }
+  /* Tipo da chave PIX como as abas da Lojinha: trilho cinza, ativa no degradê. */
+  .turiva-tours-visual2026 .t2026-pix-types {
+    gap: 3px;
+    padding: 4px;
+    border-radius: 14px;
+    background: #f3f4f6;
+  }
+  .turiva-tours-visual2026 .t2026-pix-types > button {
+    border-radius: 10px;
+    background: transparent;
+  }
+  .turiva-tours-visual2026 .t2026-pix-types > button.bg-brand {
+    background: linear-gradient(112deg,#ff8e11,#fb5600);
+    box-shadow: 0 4px 9px rgba(244,104,16,.24);
+  }
+  /* "Como funciona": números em círculos laranja no lugar de "1." "2." */
+  .turiva-tours-visual2026 .t2026-affiliate-how ol {
+    list-style: none;
+    counter-reset: passo;
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-how li {
+    position: relative;
+    padding-left: 30px;
+    counter-increment: passo;
+  }
+  .turiva-tours-visual2026 .t2026-affiliate-how li::before {
+    position: absolute;
+    top: 1px;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 21px;
+    height: 21px;
+    border-radius: 50%;
+    background: #fff1e6;
+    color: #ff6200;
+    font-size: 11px;
+    font-weight: 800;
+    content: counter(passo);
+  }
+  /* Tablet: a coluna tem 430px; o cabeçalho arredonda embaixo para não
+     parecer cortado. */
+  @media (min-width: 431px) {
+    .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-hero,
+    .turiva-tours-visual2026.t2026-affiliate .t2026-affiliate-panel {
+      border-radius: 0 0 28px 28px;
+    }
+  }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;
     gap: 14px;

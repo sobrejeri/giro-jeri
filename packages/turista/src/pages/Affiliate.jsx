@@ -9,6 +9,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { format, subDays, subMonths, isSameMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import './ToursVisual2026.css'
 
 const fmtBRL = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 const fmtShort = (v) => Number(v) >= 1000
@@ -40,7 +41,7 @@ function PixCard({ pixKey, pixType, hasPending, onSaved }) {
   const typeLabel = PIX_TYPES.find((pt) => pt.id === (pixType || type))?.label || ''
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+    <div className="t2026-affiliate-pix bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <KeyRound size={14} className="text-brand" />
         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide flex-1">{t('affiliatePg.pixLabel')}</p>
@@ -65,7 +66,7 @@ function PixCard({ pixKey, pixType, hasPending, onSaved }) {
         </div>
       ) : (
         <>
-          <div className="flex gap-1.5">
+          <div className="t2026-pix-types flex gap-1.5">
             {PIX_TYPES.map((pt) => (
               <button key={pt.id} onClick={() => { setType(pt.id); setErr('') }}
                 className={`flex-1 py-1.5 rounded-lg text-[11.5px] font-bold transition-colors ${
@@ -91,7 +92,7 @@ function PixCard({ pixKey, pixType, hasPending, onSaved }) {
             <button
               onClick={() => save.mutate()}
               disabled={!key.trim() || save.isPending}
-              className="flex-1 bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform disabled:opacity-50"
+              className="t2026-pix-save flex-1 bg-brand text-white font-bold rounded-xl py-2.5 text-[13px] active:scale-[0.98] transition-transform disabled:opacity-50"
             >
               {save.isPending ? t('affiliatePg.saving') : t('affiliatePg.saveKey')}
             </button>
@@ -262,12 +263,14 @@ export default function Affiliate() {
   }
 
   return (
-    <div className="min-h-screen pb-4">
-      {/* Sem cabeçalho: Afiliado é uma aba do menu e a tela já começa no painel. */}
-      <div className="px-4 pt-5 space-y-4 max-w-[430px] mx-auto lg:max-w-5xl lg:space-y-6">
+    <div className="min-h-screen pb-4 turiva-tours-visual2026 t2026-affiliate">
+      {/* Sem cabeçalho: Afiliado é uma aba do menu e a tela já começa no painel.
+          No celular (visual novo da Lojinha) o painel — ou o convite, antes de
+          ativar — vira o cabeçalho laranja; o PC continua igual. */}
+      <div className="t2026-affiliate-body px-4 pt-5 space-y-4 max-w-[430px] mx-auto lg:max-w-5xl lg:space-y-6">
         {/* Hero (marketing — some quando o painel assume) */}
         {(!code || isLoading) && (
-        <div className="bg-gradient-to-br from-brand to-amber-400 rounded-3xl p-5 text-white relative overflow-hidden lg:max-w-lg lg:mx-auto">
+        <div className="t2026-affiliate-hero bg-gradient-to-br from-brand to-amber-400 rounded-3xl p-5 text-white relative overflow-hidden lg:max-w-lg lg:mx-auto">
           <Sparkles size={72} className="absolute -right-3 -top-3 text-white/15" />
           <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center mb-3">
             <Megaphone size={20} className="text-white" />
@@ -283,7 +286,7 @@ export default function Affiliate() {
           <div className="flex justify-center py-10"><Loader2 size={22} className="text-brand animate-spin" /></div>
         ) : !code ? (
           /* Ainda não ativou */
-          <div className="space-y-2 lg:max-w-lg lg:mx-auto">
+          <div className="t2026-affiliate-activate space-y-2 lg:max-w-lg lg:mx-auto">
             <button
               onClick={() => activate.mutate()}
               disabled={activate.isPending}
@@ -304,7 +307,7 @@ export default function Affiliate() {
         ) : (
           <>
             {/* ── Painel do afiliado ───────────────────────── */}
-            <div className="bg-gradient-to-br from-brand to-amber-400 rounded-3xl p-5 text-white relative overflow-hidden -mt-1">
+            <div className="t2026-affiliate-panel bg-gradient-to-br from-brand to-amber-400 rounded-3xl p-5 text-white relative overflow-hidden -mt-1">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wide text-white/85">{t('affiliatePg.commissions15Days')}</p>
@@ -314,7 +317,7 @@ export default function Affiliate() {
               </div>
               <div className="flex gap-2 mt-3">
                 {monthChips.map((m) => (
-                  <span key={m.label} className="bg-black/25 rounded-lg px-2.5 py-1 text-[11px] font-semibold capitalize">
+                  <span key={m.label} className="t2026-affiliate-month bg-black/25 rounded-lg px-2.5 py-1 text-[11px] font-semibold capitalize">
                     {m.label}: <span className="font-extrabold">{fmtBRL(m.total)}</span>
                   </span>
                 ))}
@@ -324,10 +327,10 @@ export default function Affiliate() {
             {/* Desktop: 2 colunas lado a lado; no mobile os dois blocos
                 empilham na MESMA ordem de antes (esquerda = 3 primeiros,
                 direita = 3 últimos), então a versão mobile fica idêntica. */}
-            <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+            <div className="t2026-affiliate-grid space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
             {/* Coluna esquerda: visão geral, gráfico e link */}
             <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="t2026-affiliate-stats grid grid-cols-3 gap-2.5">
               <div className="bg-white rounded-2xl border border-gray-100 px-3 py-3 text-center">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{t('affiliatePg.referrals')}</p>
                 <p className="text-[16px] font-extrabold text-gray-900 mt-0.5">{earning.length}</p>
@@ -379,7 +382,7 @@ export default function Affiliate() {
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
                 target="_blank" rel="noreferrer"
-                className="w-full bg-[#25D366] text-white font-bold rounded-2xl py-3.5 text-[14px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+                className="t2026-affiliate-share w-full bg-[#25D366] text-white font-bold rounded-2xl py-3.5 text-[14px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
               >
                 <Share2 size={15} /> {t('affiliatePg.shareWhatsapp')}
               </a>
@@ -461,7 +464,7 @@ export default function Affiliate() {
         )}
 
         {/* Como funciona */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 lg:max-w-2xl lg:mx-auto">
+        <div className="t2026-affiliate-how bg-white rounded-2xl border border-gray-100 p-4 lg:max-w-2xl lg:mx-auto">
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">{t('affiliatePg.howItWorks')}</p>
           <ol className="space-y-2 text-[12.5px] text-gray-600 leading-relaxed list-decimal list-inside">
             <li>{t('affiliatePg.step1')}</li>
