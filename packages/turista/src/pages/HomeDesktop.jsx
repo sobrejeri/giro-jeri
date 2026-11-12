@@ -383,8 +383,25 @@ export default function HomeDesktop() {
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-sky-300 via-cyan-200 to-amber-100" />
           )}
-          {/* Clareia a esquerda (texto escuro legível) e funde a base no fundo areia */}
-          <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/55 to-white/10" />
+          {/* Clareia a esquerda (texto escuro legível) e funde a base no fundo
+              areia. O véu era 55% no meio — exatamente onde fica o título —, e
+              com um banner que já traz texto ou é muito movimentado o título
+              ficava ilegível. Agora a coluna do texto fica quase opaca e a
+              foto aparece inteira da busca para a direita. */}
+          {/* Desfoque só na coluna do texto (a máscara o apaga rumo à direita):
+              letras e detalhes da foto viravam "fantasmas" atrás do título. */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+              maskImage: 'linear-gradient(90deg, #000 0%, #000 46%, transparent 68%)',
+              WebkitMaskImage: 'linear-gradient(90deg, #000 0%, #000 46%, transparent 68%)',
+            }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{ background: 'linear-gradient(90deg, rgba(255,253,250,.97) 0%, rgba(255,253,250,.93) 36%, rgba(255,253,250,.7) 50%, rgba(255,253,250,.16) 66%, rgba(255,253,250,0) 78%)' }}
+          />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-fundo to-transparent" />
         </div>
 
@@ -470,8 +487,9 @@ export default function HomeDesktop() {
               </button>
             </div>
 
-            {/* Campos */}
-            <div className="grid grid-cols-3 gap-2.5 mt-3">
+            {/* Campos. Colunas desiguais: com três iguais o "Saindo de" cortava
+                "Jijoca de Jeric…" (e no translado a origem e o destino). */}
+            <div className={`grid gap-2.5 mt-3 ${tab === 'transfers' ? 'grid-cols-[1.2fr_1.2fr_1fr]' : 'grid-cols-[1.45fr_1fr_1fr]'}`}>
               {/* 1ª coluna: Saindo de (região no passeio, origem no transfer) */}
               {tab === 'transfers' ? (
                 <div className="min-w-0 flex flex-col gap-0.5 px-3 py-2.5 rounded-xl border border-gray-200 focus-within:border-brand transition-colors">
@@ -546,10 +564,8 @@ export default function HomeDesktop() {
           </div>
         </div>
 
-        {/* Legenda do lugar */}
-        <div className="absolute bottom-4 right-6 z-10 hidden lg:flex items-center gap-1.5 text-white text-[12px] font-medium bg-black/25 backdrop-blur-sm rounded-full px-3 py-1.5">
-          <MapPin size={13} /> {placeName}
-        </div>
+        {/* (A legenda com o nome do lugar no canto da foto saiu: o nome já
+            está no menu, no título e no "Saindo de" da busca.) */}
       </section>
 
       {/* ── SEU PRÓXIMO PASSEIO COMEÇA AQUI ─────────────────── */}
@@ -656,6 +672,28 @@ export default function HomeDesktop() {
                 onClick={() => navigate('/transfers', { state: { origin: r.origin_name, dest: r.destination_name } })}
               />
             ))}
+            {/* Fecha a última fileira: com 1 ou 2 cartões sobrando, um cartão
+                ficava sozinho num canto da grade de 3. O convite ocupa o resto
+                da fileira e leva ao catálogo completo. */}
+            {(() => {
+              const sobra = (gridRest.length + featuredRoutes.length) % 3
+              if (!sobra) return null
+              return (
+                <Link
+                  to="/passeios"
+                  className={`${sobra === 1 ? 'col-span-2' : ''} group relative overflow-hidden rounded-2xl border border-dashed border-brand/35 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-7 flex flex-col justify-center hover:border-brand/60 transition-colors`}
+                >
+                  <span className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center">
+                    <Compass size={20} className="text-brand" />
+                  </span>
+                  <p className="mt-4 text-[20px] font-extrabold text-gray-900 leading-tight">{t('homePg.moreToursTitle', { place: placeShort })}</p>
+                  <p className="mt-1.5 text-[13px] text-gray-500 max-w-[380px]">{t('homePg.moreToursText')}</p>
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-bold text-brand group-hover:gap-2 transition-all">
+                    {t('homePg.viewAllToursLink')} <ArrowRight size={16} />
+                  </span>
+                </Link>
+              )
+            })()}
           </div>
         )}
       </section>

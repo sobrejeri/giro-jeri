@@ -53,7 +53,9 @@ export default function Layout() {
   // No celular o visual novo (Lojinha e Translados) traz a região no próprio
   // cabeçalho laranja; no PC (que não tem esse cabeçalho) a faixa continua.
   const lojinhaNova = (pathname === '/passeios' && readToursVisualPreview(search).isNew) || pathname === '/transfers'
-  const mostraRegiao = pathname === '/' || pathname.startsWith('/passeios') || pathname.startsWith('/transfers')
+  // A home (/) só existe no PC (no celular ela leva a /passeios) e lá a região
+  // já aparece no menu e no "Saindo de" da busca — a faixa repetia o nome.
+  const mostraRegiao = pathname.startsWith('/passeios') || pathname.startsWith('/transfers')
   async function handleRefresh() {
     // Revalida tudo o que estiver em uso na tela atual.
     await qc.refetchQueries({ type: 'active' })

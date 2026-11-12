@@ -59,21 +59,26 @@ export default function InstallBar() {
 
   return (
     <>
-      <div className="sticky top-0 z-40 bg-brand text-white px-4 py-2 flex items-center gap-2">
-        <Download size={15} className="shrink-0" />
-        <button onClick={instalar} className="flex-1 min-w-0 text-left flex items-center gap-1">
-          <span className="text-[12px] font-semibold truncate">
-            Instale o app para acompanhar sua corrida em tempo real
-          </span>
-          <ChevronRight size={14} className="shrink-0 opacity-90" />
-        </button>
-        <button
-          onClick={fechar}
-          aria-label="Fechar"
-          className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center active:scale-95 shrink-0"
-        >
-          <X size={12} />
-        </button>
+      {/* No PC: não gruda no topo (o menu, que também gruda, a cobria ao
+          rolar) e o conteúdo alinha com a largura da página em vez de ir de
+          uma borda à outra da tela. No celular fica como era. */}
+      <div className="sticky top-0 z-40 bg-brand text-white lg:static">
+        <div className="px-4 py-2 flex items-center gap-2 lg:max-w-[1520px] lg:mx-auto lg:px-10 xl:px-16">
+          <Download size={15} className="shrink-0" />
+          <button onClick={instalar} className="flex-1 min-w-0 text-left flex items-center gap-1 lg:flex-none">
+            <span className="text-[12px] font-semibold truncate lg:text-[13px]">
+              Instale o app para acompanhar sua corrida em tempo real
+            </span>
+            <ChevronRight size={14} className="shrink-0 opacity-90" />
+          </button>
+          <button
+            onClick={fechar}
+            aria-label="Fechar"
+            className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center active:scale-95 shrink-0 lg:ml-auto"
+          >
+            <X size={12} />
+          </button>
+        </div>
       </div>
 
       {/* Guia de instalação no iPhone/iPad */}

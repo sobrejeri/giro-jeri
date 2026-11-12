@@ -761,6 +761,8 @@
     "featuredServicesSubtitle": "Hand-picked tours and transfers.",
     "viewAllTours": "View all tours",
     "comingSoonTours": "New tours coming soon.",
+    "moreToursTitle": "More tours in {{place}}",
+    "moreToursText": "See the full catalog and plan your trip.",
     "transferBannerTitle": "Arrive in {{place}}",
     "transferBannerSubtitle": "with peace of mind",
     "transferBannerDesc": "Private transfers departing from Fortaleza, Cruz Airport, Jijoca, Preá, Parnaíba and Barreirinhas.",
