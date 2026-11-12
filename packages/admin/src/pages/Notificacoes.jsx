@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Send, Bell, Save, ChevronRight } from 'lucide-react'
+import { Send, Bell, Save, ChevronRight, ChevronDown, History } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Input, { Textarea, Select } from '../components/ui/Input'
-import Card, { CardBody } from '../components/ui/Card'
+import Card from '../components/ui/Card'
 
 const TEMPLATE_LABELS = {
   welcome:       { label: 'Boas-vindas', hint: 'Enviada quando o usuário cria a conta.' },
@@ -28,6 +28,45 @@ const AUDIENCES = [
   { value: 'no_booking',  label: 'Sem reserva' },
 ]
 
+// Seção que recolhe e expande. Recolhidas, as três seções da tela cabem numa
+// olhada só, cada uma com um resumo; o aparelho lembra como o admin deixou cada
+// uma (é só conveniência: sem armazenamento, apenas começa recolhida).
+function Secao({ id, icone: Icone, titulo, resumo, children }) {
+  const chave = `admin_envios_secao_${id}`
+  const [aberta, setAberta] = useState(() => {
+    try { return localStorage.getItem(chave) === '1' } catch { return false }
+  })
+  function alternar() {
+    const nova = !aberta
+    setAberta(nova)
+    try { localStorage.setItem(chave, nova ? '1' : '0') } catch { /* sem armazenamento: só não lembra */ }
+  }
+  return (
+    <Card>
+      <button
+        type="button"
+        onClick={alternar}
+        aria-expanded={aberta}
+        aria-controls={`secao-${id}`}
+        className="w-full flex items-center gap-3 px-4 sm:px-5 py-4 min-h-11 text-left rounded-xl hover:bg-gray-700/30 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+      >
+        <Icone size={16} className="text-orange-400 shrink-0" />
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold text-gray-100">{titulo}</span>
+          {resumo && <span className="block text-xs text-gray-500 truncate">{resumo}</span>}
+        </span>
+        <span className="hidden sm:inline text-xs text-gray-500 shrink-0">{aberta ? 'Recolher' : 'Expandir'}</span>
+        <ChevronDown size={18} className={`text-gray-400 shrink-0 transition-transform ${aberta ? 'rotate-180' : ''}`} />
+      </button>
+      {aberta && (
+        <div id={`secao-${id}`} className="px-4 sm:px-5 pt-4 pb-5 space-y-3 border-t border-gray-700/60">
+          {children}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function TemplateCard({ tpl }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({ enabled: tpl.enabled, title: tpl.title, body: tpl.body })
@@ -49,9 +88,11 @@ function TemplateCard({ tpl }) {
     mut.mutate(next)
   }
 
+  // Linha leve (não um cartão): fica dentro da seção "Automáticas", e um
+  // cartão dentro de outro dobrava a margem e cortava os nomes no celular.
   return (
-    <Card>
-      <CardBody className="space-y-3">
+    <div className="rounded-xl border border-gray-700/70 bg-gray-900/40">
+      <div className="px-3 sm:px-4 py-3 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
@@ -61,7 +102,7 @@ function TemplateCard({ tpl }) {
           >
             <ChevronRight size={16} className={`text-gray-500 shrink-0 transition-transform group-hover:text-gray-300 ${aberto ? 'rotate-90' : ''}`} />
             <span className="min-w-0">
-              <span className="block font-semibold text-gray-100 truncate">{meta.label}</span>
+              <span className="block font-semibold text-gray-100 leading-snug">{meta.label}</span>
               <span className="block text-xs text-gray-500 truncate">{meta.hint}</span>
             </span>
           </button>
@@ -87,8 +128,8 @@ function TemplateCard({ tpl }) {
             </div>
           </>
         )}
-      </CardBody>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -131,17 +172,20 @@ export default function Notificacoes() {
 
   if (isLoading) return <PageSpinner />
 
+  const listaHistorico = history || []
+  const ultimoEnvio = listaHistorico.reduce((max, h) => (h.created_at > max ? h.created_at : max), '')
+  const listaAutomaticas = templates || []
+  const ativas = listaAutomaticas.filter((tpl) => tpl.enabled).length
+
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-4 max-w-3xl">
       <div>
         <h2 className="text-lg font-semibold text-gray-100">Envios e automações</h2>
         <p className="text-sm text-gray-500">Envie avisos manuais e configure as mensagens automáticas.</p>
       </div>
 
       {/* Envio manual */}
-      <Card>
-        <CardBody className="space-y-3">
-          <p className="font-semibold text-gray-100 flex items-center gap-2"><Send size={16} className="text-orange-400" /> Envio manual</p>
+      <Secao id="manual" icone={Send} titulo="Envio manual" resumo="Avise turistas, operadores ou admins agora.">
           <Input label="Título" value={msg.title} maxLength={120}
             onChange={(e) => setMsg({ ...msg, title: e.target.value })} />
           <Textarea label="Mensagem" rows={3} value={msg.body} maxLength={400}
@@ -174,16 +218,14 @@ export default function Notificacoes() {
             {result && <span className="text-xs text-gray-300">{result}</span>}
           </div>
           <p className="text-[11px] text-gray-500">Só chega no aparelho de quem ativou as notificações; todos veem na central (sininho).</p>
-        </CardBody>
-      </Card>
+      </Secao>
 
       {/* Histórico de envios manuais */}
-      {(history || []).length > 0 && (
-        <Card>
-          <CardBody className="space-y-2">
-            <p className="font-semibold text-gray-100">Últimos envios</p>
-            <div className="divide-y divide-gray-800">
-              {history.map((h) => (
+      {listaHistorico.length > 0 && (
+        <Secao id="historico" icone={History} titulo="Últimos envios"
+          resumo={`${listaHistorico.length} envio${listaHistorico.length !== 1 ? 's' : ''}${ultimoEnvio ? ` · último em ${new Date(ultimoEnvio).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}`}>
+            <div className="divide-y divide-gray-700/60 -mt-2">
+              {listaHistorico.map((h) => (
                 <div key={h.id} className="py-2 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm text-gray-200 font-medium truncate">{h.title}</p>
@@ -196,17 +238,14 @@ export default function Notificacoes() {
                 </div>
               ))}
             </div>
-          </CardBody>
-        </Card>
+        </Secao>
       )}
 
       {/* Automáticas */}
-      <div>
-        <p className="font-semibold text-gray-100 flex items-center gap-2 mb-3"><Bell size={16} className="text-orange-400" /> Automáticas</p>
-        <div className="space-y-3">
-          {(templates || []).map((tpl) => <TemplateCard key={tpl.key} tpl={tpl} />)}
-        </div>
-      </div>
+      <Secao id="automaticas" icone={Bell} titulo="Automáticas"
+        resumo={`${listaAutomaticas.length} mensage${listaAutomaticas.length !== 1 ? 'ns' : 'm'} · ${ativas} ativa${ativas !== 1 ? 's' : ''}`}>
+        {listaAutomaticas.map((tpl) => <TemplateCard key={tpl.key} tpl={tpl} />)}
+      </Secao>
     </div>
   )
 }
