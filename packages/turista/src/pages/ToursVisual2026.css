@@ -174,6 +174,45 @@
   .turiva-tours-visual2026 .t2026-routes .snap-start .text-brand {
     color: #ff6200;
   }
+  /* Vagas (estacionamento): banner, busca, título e cards no padrão. */
+  .turiva-tours-visual2026 .t2026-parking-banner {
+    min-height: 168px;
+    border-radius: 26px;
+    box-shadow: 0 9px 23px rgba(36,71,101,.13);
+  }
+  .turiva-tours-visual2026 .t2026-parking-banner h1 {
+    font-size: 22px;
+    line-height: 1.15;
+  }
+  .turiva-tours-visual2026 .t2026-search {
+    height: 50px;
+    border-radius: 18px;
+    box-shadow: 0 5px 15px rgba(22,34,57,.06);
+  }
+  .turiva-tours-visual2026 .t2026-search:not(:focus-within) {
+    border-color: #f0eeeb;
+  }
+  .turiva-tours-visual2026 .t2026-section-title {
+    align-items: flex-start;
+  }
+  .turiva-tours-visual2026 .t2026-section-title > svg {
+    margin-top: 5px;
+  }
+  .turiva-tours-visual2026 .t2026-section-title h2 {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -.5px;
+    line-height: 1.25;
+    color: #1a2540;
+  }
+  .turiva-tours-visual2026 .t2026-lots > button {
+    border: 1px solid #f0eeeb;
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026 .t2026-lots .text-brand {
+    color: #ff6200;
+  }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;
     gap: 14px;

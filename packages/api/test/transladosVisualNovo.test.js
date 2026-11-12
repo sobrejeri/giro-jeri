@@ -47,8 +47,9 @@ test('no celular a faixa "Saindo de" sai (o cartão a substitui); no PC continua
 
 test('barra inferior: Lojinha acesa em Translados e Descubra em laranja, como na Lojinha', () => {
   const nav = ler('../../turista/src/components/layout/BottomNav.jsx')
-  assert.match(nav, /label: 'Lojinha', tambem: \['\/transfers'\]/)
-  assert.match(nav, /<Aba to="\/passeios" icon=\{Store\} label="Lojinha" tambem=\{\['\/transfers'\]\} \/>/)
+  // A lista pode crescer com as outras abas da Lojinha (ex.: Vagas).
+  assert.match(nav, /label: 'Lojinha', tambem: \[[^\]]*'\/transfers'[^\]]*\]/)
+  assert.match(nav, /<Aba to="\/passeios" icon=\{Store\} label="Lojinha" tambem=\{\[[^\]]*'\/transfers'[^\]]*\]\} \/>/)
   assert.match(nav, /tambem\.some\(\(p\) => pathname\.startsWith\(p\)\)/)
-  assert.match(nav, /\|\| pathname === '\/transfers'\n/)
+  assert.match(nav, /const turivaVisualPreview = [^\n]*\n?[^\n]*pathname === '\/transfers'/)
 })

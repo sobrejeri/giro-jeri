@@ -1,11 +1,14 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search, Compass, Car, Clock } from 'lucide-react'
+import { MapPin, ChevronRight, ParkingSquare, Umbrella, Sun, Search, Compass, Car, Clock, ShoppingCart } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
+import { useCart } from '../contexts/CartContext'
+import NotificationBell from '../components/NotificationBell'
 import EstacionamentoDesktop from './EstacionamentoDesktop'
+import './ToursVisual2026.css'
 
 // Primeiro nome da cidade/região (sem sufixos) para o banner.
 function nomeCidade(region) {
@@ -19,8 +22,10 @@ function nomeCidade(region) {
 export default function Estacionamento() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { region } = useRegion()
+  const { region, openPicker } = useRegion()
+  const { count: cartCount } = useCart()
   const [busca, setBusca] = useState('')
+  const buscaRef = useRef(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['parking-lots', region?.id || 'all'],
@@ -48,9 +53,55 @@ export default function Estacionamento() {
 
   return (
     <>
-    <div className="px-4 pb-10 pt-3 space-y-4 lg:hidden">
+    <div className="lg:hidden min-h-screen pb-16 turiva-tours-visual2026">
+      {/* Cabeçalho laranja da Lojinha (visual novo): Vagas é uma aba dela. */}
+      <div className="t2026-header px-4 pt-5 pb-3">
+        <div className="relative flex items-center min-h-[44px] justify-start">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src={(import.meta.env.BASE_URL || '/') + 'logo-icon.jpeg'} alt="" className="w-10 h-10 rounded-2xl shrink-0" />
+            <div className="min-w-0 leading-none">
+              <p className="font-giro font-bold text-[19px] text-gray-900 tracking-[0.02em] leading-none">TURIVA</p>
+              <p className="text-[11.5px] text-gray-500 leading-none mt-1">Passeios &amp; Transfers</p>
+            </div>
+          </div>
+          <div className="absolute right-0 flex items-center gap-2">
+            {/* A busca de Vagas já fica visível na página: a lupa leva até ela. */}
+            <button
+              onClick={() => { buscaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); buscaRef.current?.focus({ preventScroll: true }) }}
+              className="w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform"
+              aria-label={t('estacionamentoPg.desktop.searchPlaceholder')}
+            >
+              <Search size={16} />
+            </button>
+            <NotificationBell />
+            <button
+              onClick={() => navigate('/carrinho')}
+              className="relative w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform"
+              aria-label="Carrinho"
+            >
+              <ShoppingCart size={16} />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Cidade sobre o cabeçalho, como na Lojinha e em Translados. */}
+      <button type="button" onClick={openPicker}
+        className="t2026-location mx-4 -mt-5 relative z-10 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 text-left shadow-md"
+        aria-label="Trocar a cidade de saída">
+        <MapPin size={19} className="shrink-0 text-brand" />
+        <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">Saindo de: <strong className="ml-1 text-[15px] text-gray-900">{region?.name || 'Jericoacoara'}</strong></span>
+        <ChevronRight size={18} className="shrink-0 text-gray-500" />
+      </button>
+
+      <div className="t2026-content px-4 pt-4 pb-10 space-y-4">
       {/* Alternador Passeios | Translados | Vagas (mesma lojinha) */}
-      <div className="flex bg-gray-100 rounded-2xl p-1">
+      <div className="t2026-tabs flex bg-gray-100 rounded-2xl p-1">
         <button onClick={() => navigate('/passeios')}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform">
           <Compass size={15} /> {t('estacionamentoPg.desktop.breadcrumbTours')}
@@ -65,7 +116,7 @@ export default function Estacionamento() {
       </div>
 
       {/* Banner — carrossel das fotos (crossfade a cada 20s) + degradê; cidade conforme a região */}
-      <div className="relative rounded-2xl overflow-hidden text-white p-5 shadow-sm min-h-[128px] flex flex-col justify-center">
+      <div className="t2026-parking-banner relative rounded-2xl overflow-hidden text-white p-5 shadow-sm min-h-[128px] flex flex-col justify-center">
         {fotos.map((f, i) => (
           <img
             key={f + i}
@@ -91,9 +142,10 @@ export default function Estacionamento() {
       </div>
 
       {/* Busca */}
-      <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 h-11 bg-white focus-within:border-brand">
+      <div className="t2026-search flex items-center gap-2 border border-gray-200 rounded-xl px-3 h-11 bg-white focus-within:border-brand">
         <Search size={16} className="text-gray-400 shrink-0" />
         <input
+          ref={buscaRef}
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder={t('estacionamentoPg.desktop.searchPlaceholder')}
@@ -101,7 +153,7 @@ export default function Estacionamento() {
         />
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="t2026-section-title flex items-center gap-2">
         <ParkingSquare size={18} className="text-brand" />
         <h2 className="text-[17px] font-extrabold text-gray-900">{t('estacionamentoPg.list.heading')}</h2>
       </div>
@@ -114,7 +166,7 @@ export default function Estacionamento() {
           <p className="text-sm">{t('estacionamentoPg.desktop.empty')}</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="t2026-lots space-y-3">
           {lots.map((lot) => {
             const foto = Array.isArray(lot.photos) ? lot.photos[0] : null
             const coberto = lot.opening_hours?.coberto // flag opcional de cadastro
@@ -150,6 +202,7 @@ export default function Estacionamento() {
           })}
         </div>
       )}
+      </div>
     </div>
 
     {/* Desktop/PC */}

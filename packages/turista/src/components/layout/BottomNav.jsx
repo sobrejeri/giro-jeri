@@ -10,8 +10,9 @@ import { readToursVisualPreview } from '../../lib/toursVisualPreview'
 export default function BottomNav() {
   const navigate     = useNavigate()
   const { pathname, search } = useLocation()
-  // Visual novo da Lojinha (e de Translados, aba dela): Descubra em laranja.
-  const turivaVisualPreview = (pathname === '/passeios' && readToursVisualPreview(search).isNew) || pathname === '/transfers'
+  // Visual novo da Lojinha (e de Translados e Vagas, abas dela): Descubra em laranja.
+  const turivaVisualPreview = (pathname === '/passeios' && readToursVisualPreview(search).isNew)
+    || pathname === '/transfers' || pathname === '/estacionamento'
   const { t }        = useTranslation()
   const { user }     = useAuth()
 
@@ -109,7 +110,7 @@ export default function BottomNav() {
     return (
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100 lg:hidden">
         <div className="flex items-end justify-around px-2 pt-1.5 pb-2">
-          <Aba to="/passeios" icon={Store} label="Lojinha" tambem={['/transfers']} />
+          <Aba to="/passeios" icon={Store} label="Lojinha" tambem={['/transfers', '/estacionamento']} />
           <Aba to="/eventos" icon={Sparkles} label={t('nav.events')} />
 
           {FabPublicar}
@@ -125,8 +126,8 @@ export default function BottomNav() {
   // Mesmo estilo do criador (Descubra central em destaque), mas o turista não
   // publica — o botão do meio abre a Descubra, não o compositor de "Publicar".
   const LADO_ESQ = [
-    // Translados é uma aba DENTRO da Lojinha: a Lojinha continua acesa.
-    { to: '/passeios',  icon: Store,     label: 'Lojinha', tambem: ['/transfers'] },
+    // Translados e Vagas são abas DENTRO da Lojinha: a Lojinha continua acesa.
+    { to: '/passeios',  icon: Store,     label: 'Lojinha', tambem: ['/transfers', '/estacionamento'] },
     { to: '/afiliado',  icon: Megaphone, label: 'Afiliado' },
   ]
   const LADO_DIR = [
