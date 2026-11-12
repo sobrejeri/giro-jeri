@@ -10,6 +10,7 @@ import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
 import NotificationBell from '../components/NotificationBell'
+import HeaderLanguagePicker from '../components/HeaderLanguagePicker'
 import { draftFromTour } from '../lib/cartDraft'
 import { useSheetSwipe } from '../lib/useSheetSwipe'
 import { highSeasonMonthSet, isHighSeasonIso } from '../lib/season'
@@ -875,6 +876,8 @@ export default function Tours({ visual2026 = false }) {
             </button>
           </div>
         </div>
+        {/* Idioma logo abaixo da lupa / sino / carrinho (só no visual novo). */}
+        {visual2026 && <HeaderLanguagePicker />}
         {showSearch && (
           <div className="mt-2 relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -892,9 +895,9 @@ export default function Tours({ visual2026 = false }) {
       {visual2026 && (
         <button type="button" onClick={openPicker}
           className="t2026-location mx-4 -mt-5 relative z-10 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 text-left shadow-md"
-          aria-label="Trocar a cidade de saída">
+          aria-label={t('homePg.changeLeavingFrom')}>
           <MapPin size={19} className="shrink-0 text-brand" />
-          <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">Saindo de: <strong className="ml-1 text-[15px] text-gray-900">{nomeRegiao}</strong></span>
+          <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">{t('homePg.leavingFrom')}: <strong className="ml-1 text-[15px] text-gray-900">{nomeRegiao}</strong></span>
           <ChevronRight size={18} className="shrink-0 text-gray-500" />
         </button>
       )}
@@ -907,19 +910,19 @@ export default function Tours({ visual2026 = false }) {
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold bg-white text-brand shadow-sm"
             aria-current="page"
           >
-            <Compass size={15} /> Passeios
+            <Compass size={15} /> {t('estacionamentoPg.desktop.breadcrumbTours')}
           </button>
           <button
             onClick={() => navigate('/transfers')}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
           >
-            <Car size={15} /> Translados
+            <Car size={15} /> {t('estacionamentoPg.list.tabTransfers')}
           </button>
           <button
             onClick={() => navigate('/estacionamento')}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
           >
-            <ParkingSquare size={15} /> Vagas
+            <ParkingSquare size={15} /> {t('estacionamentoPg.desktop.spotsCrumb')}
           </button>
         </div>
 

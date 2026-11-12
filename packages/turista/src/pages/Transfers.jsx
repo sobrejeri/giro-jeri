@@ -21,6 +21,7 @@ import TransfersDesktop from './TransfersDesktop'
 import FilterChip from '../components/tours/FilterChip'
 import './ToursVisual2026.css'
 import NotificationBell from '../components/NotificationBell'
+import HeaderLanguagePicker from '../components/HeaderLanguagePicker'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
@@ -924,7 +925,7 @@ export default function Transfers() {
             <button
               onClick={() => navigate('/carrinho')}
               className="relative w-8 h-8 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform"
-              aria-label="Carrinho"
+              aria-label={t('toursPg.cartAria')}
             >
               <ShoppingCart size={15} />
               {cartCount > 0 && (
@@ -935,6 +936,8 @@ export default function Transfers() {
             </button>
           </div>
         </div>
+        {/* Idioma logo abaixo da lupa / sino / carrinho, como na Lojinha. */}
+        <HeaderLanguagePicker />
 
         {showSearch && (
           <form
@@ -963,9 +966,9 @@ export default function Transfers() {
           "Saindo de" no celular). */}
       <button type="button" onClick={openPicker}
         className="t2026-location mx-4 -mt-5 relative z-10 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 text-left shadow-md"
-        aria-label="Trocar a cidade de saída">
+        aria-label={t('homePg.changeLeavingFrom')}>
         <MapPin size={19} className="shrink-0 text-brand" />
-        <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">Saindo de: <strong className="ml-1 text-[15px] text-gray-900">{region?.name || 'Jericoacoara'}</strong></span>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">{t('homePg.leavingFrom')}: <strong className="ml-1 text-[15px] text-gray-900">{region?.name || 'Jericoacoara'}</strong></span>
         <ChevronRight size={18} className="shrink-0 text-gray-500" />
       </button>
 
@@ -976,19 +979,19 @@ export default function Transfers() {
             onClick={() => navigate('/passeios')}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
           >
-            <Compass size={15} /> Passeios
+            <Compass size={15} /> {t('estacionamentoPg.desktop.breadcrumbTours')}
           </button>
           <button
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold bg-white text-brand shadow-sm"
             aria-current="page"
           >
-            <Car size={15} /> Translados
+            <Car size={15} /> {t('estacionamentoPg.list.tabTransfers')}
           </button>
           <button
             onClick={() => navigate('/estacionamento')}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
           >
-            <ParkingSquare size={15} /> Vagas
+            <ParkingSquare size={15} /> {t('estacionamentoPg.desktop.spotsCrumb')}
           </button>
         </div>
 

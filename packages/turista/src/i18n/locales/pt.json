@@ -737,6 +737,7 @@
     "privateFromLabel": "Privativo a partir de",
     "loadingRoutes": "Carregando rotas…",
     "leavingFrom": "Saindo de",
+    "changeLeavingFrom": "Trocar a cidade de saída",
     "whereTo": "Para onde?",
     "chooseTour": "Escolha o passeio",
     "selectDestination": "Selecione o destino",

@@ -16,7 +16,8 @@
     z-index: 0;
     overflow: hidden;
     margin: 0;
-    padding: 29px 16px 61px;
+    /* Embaixo 50px (eram 61): a linha de idiomas ocupa parte desse espaço. */
+    padding: 29px 16px 50px;
     background:
       radial-gradient(ellipse 90% 65% at 90% 0%, rgba(255,177,48,.52),transparent 64%),
       linear-gradient(122deg,#e84303 0%,#ff6400 58%,#ff8d11 100%);
@@ -85,6 +86,41 @@
   }
   .turiva-tours-visual2026 .t2026-header .absolute.right-0 svg {
     color: #233049;
+  }
+  /* Idioma abaixo da lupa / sino / carrinho: bandeira + sigla, uma pastilha
+     debaixo de cada botão (mesma largura e espaço), a ativa em branco. */
+  .turiva-tours-visual2026 .t2026-langs {
+    display: grid;
+    grid-template-columns: repeat(3, 36px);
+    column-gap: 5px;
+    width: max-content;
+    margin: -3px 0 0 auto;
+  }
+  .turiva-tours-visual2026 .t2026-langs > button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,.4);
+    border-radius: 999px;
+    background: rgba(255,255,255,.16);
+    color: white;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: .01em;
+    line-height: 1;
+  }
+  .turiva-tours-visual2026 .t2026-langs > button > span {
+    font-size: 13px;
+    line-height: 1;
+  }
+  .turiva-tours-visual2026 .t2026-langs > button[aria-pressed="true"] {
+    border-color: white;
+    background: white;
+    color: #e65100;
+    box-shadow: 0 3px 8px rgba(136,53,14,.18);
   }
   .turiva-tours-visual2026 .t2026-location {
     min-height: 53px;
@@ -544,6 +580,10 @@
     .turiva-tours-visual2026 .t2026-header .absolute.right-0 {gap: 3px;}
     .turiva-tours-visual2026 .t2026-header .absolute.right-0 > button,
     .turiva-tours-visual2026 .t2026-header .absolute.right-0 > div > button {height: 31px;width:31px;}
+    /* Pastilhas de idioma acompanham os botões menores (31px, 3px de espaço). */
+    .turiva-tours-visual2026 .t2026-langs {grid-template-columns: repeat(3, 31px); column-gap: 3px;}
+    .turiva-tours-visual2026 .t2026-langs > button {height: 22px; gap: 1px; font-size: 9.5px; letter-spacing: 0;}
+    .turiva-tours-visual2026 .t2026-langs > button > span {font-size: 11.5px;}
     .turiva-tours-visual2026 .t2026-tabs > button {font-size:11px;}
   }
 }

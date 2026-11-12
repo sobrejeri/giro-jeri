@@ -27,7 +27,8 @@ test('a aba ativa é a da tela atual (não mais "a primeira")', () => {
   assert.doesNotMatch(css, /\.t2026-tabs > button:first-child/)
   const abas = transfers.split('t2026-tabs')[1].split('t2026-mode')[0]
   const atual = abas.match(/aria-current="page"[\s\S]*?<\/button>/)?.[0] ?? ''
-  assert.match(atual, /Translados/, 'em Translados quem fica laranja é Translados')
+  // O rótulo agora vem do i18n (Translados / Transfers / Traslados).
+  assert.match(atual, /Translados|t\('estacionamentoPg\.list\.tabTransfers'\)/, 'em Translados quem fica laranja é Translados')
 })
 
 test('o ícone do "Translado personalizado" não encolhe até virar um ponto', () => {

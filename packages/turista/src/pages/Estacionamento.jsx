@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useCart } from '../contexts/CartContext'
 import NotificationBell from '../components/NotificationBell'
+import HeaderLanguagePicker from '../components/HeaderLanguagePicker'
 import EstacionamentoDesktop from './EstacionamentoDesktop'
 import './ToursVisual2026.css'
 
@@ -77,7 +78,7 @@ export default function Estacionamento() {
             <button
               onClick={() => navigate('/carrinho')}
               className="relative w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 transition-transform"
-              aria-label="Carrinho"
+              aria-label={t('toursPg.cartAria')}
             >
               <ShoppingCart size={16} />
               {cartCount > 0 && (
@@ -88,14 +89,16 @@ export default function Estacionamento() {
             </button>
           </div>
         </div>
+        {/* Idioma logo abaixo da lupa / sino / carrinho, como na Lojinha. */}
+        <HeaderLanguagePicker />
       </div>
 
       {/* Cidade sobre o cabeçalho, como na Lojinha e em Translados. */}
       <button type="button" onClick={openPicker}
         className="t2026-location mx-4 -mt-5 relative z-10 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 text-left shadow-md"
-        aria-label="Trocar a cidade de saída">
+        aria-label={t('homePg.changeLeavingFrom')}>
         <MapPin size={19} className="shrink-0 text-brand" />
-        <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">Saindo de: <strong className="ml-1 text-[15px] text-gray-900">{region?.name || 'Jericoacoara'}</strong></span>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">{t('homePg.leavingFrom')}: <strong className="ml-1 text-[15px] text-gray-900">{region?.name || 'Jericoacoara'}</strong></span>
         <ChevronRight size={18} className="shrink-0 text-gray-500" />
       </button>
 
