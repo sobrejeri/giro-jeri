@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import AreaNavigation from './AreaNavigation'
 import SeloDoApp from '../SeloDoApp'
 
 export default function Layout() {
@@ -16,6 +17,7 @@ export default function Layout() {
           className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 scrollbar-thin"
           style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
         >
+          <AreaNavigation />
           <Outlet />
         </main>
       </div>
