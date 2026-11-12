@@ -167,6 +167,9 @@ export default function Reservas() {
   const [dateFrom, setDateFrom]   = useState('')
   const [dateTo, setDateTo]       = useState('')
   const [roteando, setRoteando]   = useState(null)
+  // Celular: o período fica recolhido atrás de um botão (as duas datas
+  // empilhadas ocupavam metade da tela). Abre sozinho se já houver data.
+  const [verPeriodo, setVerPeriodo] = useState(false)
 
   // Uma requisição por tecla fazia respostas chegarem fora de ordem e repintar
   // a lista com o resultado de uma busca anterior. Espera a pausa.
@@ -259,8 +262,10 @@ export default function Reservas() {
         <Badge value={b.status_commercial} />
         <p className="text-sm font-semibold text-gray-200">{fmt(b.total_amount)}</p>
         <div className="flex items-center gap-0.5">
-          <button onClick={() => setRoteando(b)} title="Quem recebeu esta solicitação, e por quê" className="p-1 text-gray-600 hover:text-brand transition-colors">
-            <Radio size={14} />
+          {/* Antes era só o ícone (sem nome, sem hover no celular). */}
+          <button onClick={() => setRoteando(b)} title="Quem recebeu esta solicitação, e por quê"
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] text-gray-500 hover:text-brand hover:bg-gray-700/40 transition-colors">
+            <Radio size={13} /> Roteamento
           </button>
           {b.status_operational === 'in_progress' && (
             <button onClick={() => concluirSemPin(b)} disabled={forceComplete.isPending} title="Concluir sem o PIN (exceção — cliente sem acesso ao código)" className="p-1 text-gray-600 hover:text-emerald-500 transition-colors disabled:opacity-50">
@@ -308,23 +313,24 @@ export default function Reservas() {
         </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-          {/* Busca */}
-          <div className="relative w-full lg:flex-1 lg:min-w-52">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-              placeholder="Buscar por código…"
-              className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-brand"
-            />
-          </div>
-
-          {/* Status + Tipo: 2 colunas no mobile, automático no desktop */}
-          <div className="grid grid-cols-2 gap-3 lg:flex lg:gap-3">
+          {/* Busca + tipo na MESMA linha (no celular, antes, eram duas linhas
+              e o seletor cortava o texto: "Todos os tipo"). */}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 lg:flex lg:flex-1 lg:min-w-52 lg:gap-3">
+            <div className="relative min-w-0 lg:flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                placeholder="Buscar código…"
+                aria-label="Buscar por código"
+                className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-brand"
+              />
+            </div>
             <select
               value={typeFilter}
               onChange={(e) => { setType(e.target.value); setPage(1) }}
-              className="w-full lg:w-auto h-10 pl-3 pr-8 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
+              aria-label="Tipo de serviço"
+              className="h-10 pl-3 pr-8 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
             >
               <option value="">Todos os tipos</option>
               <option value="tour">Passeios</option>
@@ -332,18 +338,36 @@ export default function Reservas() {
             </select>
           </div>
 
-          {/* Período — no mobile as duas datas EMPILHAM (cada uma na sua linha,
-              largura total, com rótulo De/Até). O iOS Safari não encolhe
-              <input type=date> lado a lado nem com min-w-0, então uma data por
-              linha é a única forma garantida de não transbordar. No desktop
-              (lg) volta a ficar inline, com "até" no meio. */}
-          <div className="w-full lg:w-auto grid grid-cols-1 gap-2 lg:flex lg:items-center lg:gap-2">
+          {/* Celular: "Período" abre e fecha (mostra o intervalo escolhido).
+              No PC as datas ficam sempre à vista, na mesma linha. */}
+          <div className="flex items-center justify-between gap-3 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setVerPeriodo((v) => !v)}
+              aria-expanded={verPeriodo || !!(dateFrom || dateTo)}
+              aria-controls="periodo-reservas"
+              className="inline-flex items-center gap-2 h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300"
+            >
+              <CalendarDays size={15} className="text-gray-500" />
+              {dateFrom || dateTo
+                ? `${dateFrom ? format(parseISO(dateFrom), 'dd/MM') : '…'} – ${dateTo ? format(parseISO(dateTo), 'dd/MM') : '…'}`
+                : 'Período: qualquer data'}
+              <ChevronRight size={14} className={`text-gray-500 transition-transform ${verPeriodo || dateFrom || dateTo ? 'rotate-90' : ''}`} />
+            </button>
+            <span className="text-sm text-gray-500">{total} reservas</span>
+          </div>
+
+          {/* Período — no celular as duas datas EMPILHAM (uma por linha, com
+              rótulo De/Até): o iOS Safari não encolhe <input type=date> lado a
+              lado nem com min-w-0. No PC (lg) ficam em linha, com "até". */}
+          <div id="periodo-reservas" className={`${verPeriodo || dateFrom || dateTo ? 'grid' : 'hidden'} w-full grid-cols-1 gap-2 lg:flex lg:w-auto lg:items-center lg:gap-2`}>
             <CalendarDays size={15} className="hidden lg:block text-gray-500 flex-shrink-0" />
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-gray-400 w-7 shrink-0 lg:hidden">De</span>
               <input
                 type="date" value={dateFrom}
                 onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                aria-label="Data inicial"
                 className="flex-1 min-w-0 lg:w-40 lg:flex-none h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
               />
             </div>
@@ -353,12 +377,19 @@ export default function Reservas() {
               <input
                 type="date" value={dateTo}
                 onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                aria-label="Data final"
                 className="flex-1 min-w-0 lg:w-40 lg:flex-none h-10 px-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 focus:outline-none focus:border-brand"
               />
             </div>
+            {(dateFrom || dateTo) && (
+              <button type="button" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1) }}
+                className="justify-self-start text-xs text-gray-500 hover:text-gray-300 underline lg:ml-1">
+                limpar datas
+              </button>
+            )}
           </div>
 
-          <span className="text-sm text-gray-500 lg:ml-auto lg:self-center">{total} reservas</span>
+          <span className="hidden lg:inline text-sm text-gray-500 lg:ml-auto lg:self-center">{total} reservas</span>
         </div>
       </Card>
 
@@ -366,7 +397,7 @@ export default function Reservas() {
           ícone do tipo, serviço, contexto e, à direita, status/valor/ações.
           Mobile e desktop usam o MESMO card; combos ficam agrupados. */}
       <Card>
-        <div className="divide-y divide-gray-800">
+        <div className="divide-y divide-gray-700">
           {mobileUnits.map((u) => u.type === 'combo' ? (
             <div key={`g-${u.gid}`}>
               <div className="bg-amber-900/20 px-4 py-2 flex items-center gap-1.5 border-l-2 border-amber-500/50">
@@ -375,7 +406,7 @@ export default function Reservas() {
                   Combo #{comboShort(u.gid)} · {u.items[0]?.combo_total || u.items.length} serviços
                 </span>
               </div>
-              <div className="divide-y divide-gray-800/60 border-l-2 border-amber-500/30">
+              <div className="divide-y divide-gray-700/60 border-l-2 border-amber-500/30">
                 {u.items.map((b) => <CardReserva key={b.id} b={b} dentroDeCombo />)}
               </div>
             </div>

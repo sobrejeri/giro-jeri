@@ -8,6 +8,7 @@ import Modal from '../components/ui/Modal'
 import Input, { Select } from '../components/ui/Input'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import MenuAcoes from '../components/ui/MenuAcoes'
+import BotaoInfo from '../components/ui/BotaoInfo'
 
 const MONTHS = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -87,6 +88,9 @@ const fmtDateBR = (iso) => {
 }
 
 export default function Temporada() {
+  // Explicações recolhidas atrás do ⓘ (antes ficavam sempre abertas).
+  const [infoTemporada, setInfoTemporada] = useState(false)
+  const [infoFeriados, setInfoFeriados]   = useState(false)
   const [modal, setModal] = useState(null)
   const [form, setForm]   = useState(EMPTY)
   const qc = useQueryClient()
@@ -183,11 +187,20 @@ export default function Temporada() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={openNew}><Plus size={16} /> Nova Regra</Button>
+      {/* ── Alta temporada ── */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-gray-200">Alta temporada</h2>
+          <p className="text-xs text-gray-500">Acréscimo automático nos meses escolhidos, todo ano.</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <BotaoInfo aberto={infoTemporada} onClick={() => setInfoTemporada((v) => !v)} controla="info-temporada" rotulo="Como funciona a alta temporada" />
+          <Button onClick={openNew}><Plus size={16} /> Nova Regra</Button>
+        </div>
       </div>
 
-      <div className="bg-brand/10 border border-brand/20 rounded-xl p-4 text-sm">
+      {infoTemporada && (
+      <div id="info-temporada" className="bg-brand/10 border border-brand/20 rounded-xl p-4 text-sm">
         <p className="font-semibold text-brand mb-1">Como funciona</p>
         <p className="text-gray-400 text-xs leading-relaxed">
           Durante a alta temporada, o preço é acrescido automaticamente pelo percentual configurado.
@@ -205,6 +218,7 @@ export default function Temporada() {
           </li>
         </ul>
       </div>
+      )}
 
       {seasons.length === 0 ? (
         <Card>
@@ -287,21 +301,28 @@ export default function Temporada() {
       </Modal>
 
       {/* ── Feriados e datas especiais ── */}
-      <div className="flex items-center justify-between pt-4">
-        <div>
+      <div className="flex items-start justify-between gap-3 pt-4">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-gray-200">Feriados e datas especiais</h2>
-          <p className="text-xs text-gray-500">
-            Dias específicos (feriados, datas comemorativas) com acréscimo próprio.
-            {/* A data é EXATA, com ano — de propósito, senão um feriado de 2026
-                cobraria em 2027 também. Só que isso é fácil de esquecer, e o
-                calendário simplesmente para de ter acréscimo, em silêncio. */}
-            {' '}Cada data vale só no ano indicado — <strong className="text-gray-400">Carnaval,
-            Páscoa, Corpus Christi, Dia das Mães e dos Pais mudam todo ano</strong> e precisam ser
-            recadastrados.
-          </p>
+          {/* A data é EXATA, com ano — de propósito, senão um feriado de 2026
+              cobraria em 2027 também. Por isso o aviso curto fica sempre à
+              vista; o detalhe abre no ⓘ. */}
+          <p className="text-xs text-gray-500">Acréscimo em dias específicos — vale só no ano cadastrado.</p>
         </div>
-        <Button onClick={openNewHoliday}><Plus size={16} /> Nova Data</Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <BotaoInfo aberto={infoFeriados} onClick={() => setInfoFeriados((v) => !v)} controla="info-feriados" rotulo="Como funcionam os feriados" />
+          <Button onClick={openNewHoliday}><Plus size={16} /> Nova Data</Button>
+        </div>
       </div>
+
+      {infoFeriados && (
+        <div id="info-feriados" className="bg-brand/10 border border-brand/20 rounded-xl p-4 text-xs text-gray-400 leading-relaxed">
+          Dias específicos (feriados, datas comemorativas) com acréscimo próprio. Cada data vale só no ano
+          indicado — <strong className="text-gray-300">Carnaval, Páscoa, Corpus Christi, Dia das Mães e dos Pais
+          mudam todo ano</strong> e precisam ser recadastrados. Se a data também estiver numa regra de alta
+          temporada, vale o percentual da data (os dois nunca somam).
+        </div>
+      )}
 
       {holidays.length === 0 ? (
         <Card><CardBody>

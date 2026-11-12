@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Wallet, Check, Undo2, Car, Phone, Calendar, Copy, UserCheck, AlertTriangle, ShieldCheck } from 'lucide-react'
+import { Wallet, Check, Undo2, Car, Phone, Calendar, Copy, UserCheck, AlertTriangle, ShieldCheck, Search } from 'lucide-react'
 import { format } from 'date-fns'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -65,7 +65,7 @@ export default function Repasses() {
   const [aba, setAba] = useState('fila')
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
         <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
           {[['fila', 'Fila de liberação'], ['conciliacao', 'Conciliação'], ['operadores', 'Operadores'], ['motoristas', 'Motoristas']].map(([id, label]) => (
             <button key={id} onClick={() => setAba(id)}
@@ -123,12 +123,16 @@ function SituacaoTag({ r }) {
       title={r.motivo_bloqueio || ''}>{label}</span>
   )
 }
-function CardInd({ titulo, qtd, valor, destaque }) {
+// Cartão de indicador, mais baixo: número e valor na mesma linha. O que pede
+// ação ("Prontos para liberar") vem primeiro e ocupa a linha toda no celular.
+function CardInd({ titulo, qtd, valor, destaque, className = '' }) {
   return (
-    <div className={`rounded-xl border p-3 ${destaque ? 'border-brand/40 bg-brand/5' : 'border-gray-800 bg-gray-900/40'}`}>
+    <div className={`rounded-xl border px-3 py-2 ${destaque ? 'border-brand/40 bg-brand/5' : 'border-gray-800 bg-gray-900/40'} ${className}`}>
       <p className="text-[11px] text-gray-500 leading-tight">{titulo}</p>
-      <p className="text-lg font-bold text-gray-100">{qtd ?? '—'}</p>
-      {valor != null && <p className="text-[11px] text-gray-400">{fmtR$(valor)}</p>}
+      <p className="flex items-baseline gap-2">
+        <span className={`text-lg font-bold ${destaque ? 'text-brand' : 'text-gray-100'}`}>{qtd ?? '—'}</span>
+        {valor != null && <span className="text-[11px] text-gray-400">{fmtR$(valor)}</span>}
+      </p>
     </div>
   )
 }
@@ -212,9 +216,9 @@ function FilaLiberacao() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <CardInd titulo="Prontos para liberar" qtd={ind.data?.pronto_para_liberar?.qtd} valor={ind.data?.pronto_para_liberar?.valor} destaque className="col-span-2 md:col-span-1" />
         <CardInd titulo="Aguardando conclusão" qtd={ind.data?.aguardando_conclusao?.qtd} />
-        <CardInd titulo="Prontos para liberar" qtd={ind.data?.pronto_para_liberar?.qtd} valor={ind.data?.pronto_para_liberar?.valor} destaque />
         <CardInd titulo="Repassados"           qtd={ind.data?.repassados?.qtd}          valor={ind.data?.repassados?.valor} />
         <CardInd titulo="Conciliação"          qtd={ind.data?.conciliacao?.qtd} />
         <CardInd titulo="Bloqueados"           qtd={ind.data?.bloqueados?.qtd} />
@@ -257,19 +261,27 @@ function FilaLiberacao() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1) }} placeholder="Código da reserva"
-          className="rounded-lg bg-gray-800 border border-gray-700 px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-brand" />
-        <label className="text-xs text-gray-500">Conclusão de
-          <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPage(1) }}
-            className="ml-1 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-sm text-gray-200" /></label>
-        <label className="text-xs text-gray-500">até
-          <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPage(1) }}
-            className="ml-1 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1 text-sm text-gray-200" /></label>
-        <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+      {/* Filtros num bloco: código, datas com rótulos alinhados e a caixa de
+          conciliação. Antes eram itens soltos que quebravam linha onde dava. */}
+      <div className="rounded-xl border border-gray-800 bg-gray-900/40 p-3 space-y-2.5 md:space-y-0 md:flex md:flex-wrap md:items-center md:gap-3">
+        <div className="relative md:w-56">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1) }} placeholder="Código da reserva"
+            aria-label="Código da reserva"
+            className="w-full h-10 rounded-lg bg-gray-800 border border-gray-700 pl-8 pr-3 text-sm text-gray-200 outline-none focus:border-brand" />
+        </div>
+        <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2 md:flex md:items-center">
+          <span className="text-xs text-gray-500">Concluídas</span>
+          <input type="date" value={de} onChange={(e) => { setDe(e.target.value); setPage(1) }} aria-label="Concluídas a partir de"
+            className="w-full min-w-0 h-10 rounded-lg bg-gray-800 border border-gray-700 px-2 text-sm text-gray-200 md:w-40" />
+          <span className="text-xs text-gray-500 md:px-0">até</span>
+          <input type="date" value={ate} onChange={(e) => { setAte(e.target.value); setPage(1) }} aria-label="Concluídas até"
+            className="w-full min-w-0 h-10 rounded-lg bg-gray-800 border border-gray-700 px-2 text-sm text-gray-200 md:w-40" />
+        </div>
+        <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer min-h-10">
           <input type="checkbox" checked={conciliacao} onChange={(e) => { setConciliacao(e.target.checked); setPage(1) }}
-            className="accent-brand" />
-          Conciliação (sem data de conclusão)
+            className="accent-brand w-4 h-4" />
+          Só conciliação (sem data de conclusão)
         </label>
       </div>
 
@@ -469,7 +481,7 @@ function Conciliacao() {
                 </span>
                 <span className="text-xs text-gray-500">{g.qtd} reserva(s){g.total_valor ? ` · ${fmtR$(g.total_valor)}` : ''}</span>
               </div>
-              <ul className="mt-2 divide-y divide-gray-800">
+              <ul className="mt-2 divide-y divide-gray-700">
                 {g.itens.map((it) => (
                   <li key={it.booking_id} className="py-2 flex items-start justify-between gap-3 flex-wrap">
                     <div className="min-w-0">
@@ -792,7 +804,7 @@ function RepassesOperadores() {
               </div>
 
               {expandido && (
-                <div className="mt-3 pt-3 border-t border-gray-800 divide-y divide-gray-800">
+                <div className="mt-3 pt-3 border-t border-gray-700 divide-y divide-gray-700">
                   {itens.map((p) => (
                     <div key={p.id} className="flex items-center gap-3 py-2.5 flex-wrap">
                       <div className="flex-1 min-w-0">

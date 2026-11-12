@@ -686,7 +686,7 @@ function RankingOperadores() {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-gray-700">
                 {sorted.map((o, i) => (
                   <tr key={o.operator_id} className="hover:bg-gray-800/40">
                     <td className="py-2.5 pl-1">

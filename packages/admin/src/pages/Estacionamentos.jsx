@@ -178,7 +178,7 @@ function RepassesAdmin() {
       {isLoading ? <p className="text-gray-400 text-sm">Carregando…</p> : parceiros.length === 0 ? (
         <p className="text-gray-400 text-sm py-10 text-center">Sem repasses no período.</p>
       ) : (
-        <div className="bg-gray-800 rounded-2xl border border-gray-700 divide-y divide-gray-800">
+        <div className="bg-gray-800 rounded-2xl border border-gray-700 divide-y divide-gray-700">
           {parceiros.map((p) => (
             <div key={p.owner_user_id} className="flex items-center justify-between px-4 py-3">
               <div>

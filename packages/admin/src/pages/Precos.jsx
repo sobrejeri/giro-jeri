@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Trash2, Tag, Car, ToggleLeft, ToggleRight, Sun, Plus, Search, Download } from 'lucide-react'
+import { Trash2, Tag, Car, ToggleLeft, ToggleRight, Sun, Plus, Search, Download, SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { api } from '../lib/api'
 import { baixarXlsx } from '../lib/xlsx'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -44,6 +44,9 @@ export default function Precos() {
   const [catId, setCatId]       = useState('')  // '' = todas · '__sem' = sem categoria
   const [statusTour, setStatusTour] = useState('ativos')  // 'ativos' | 'inativos' | 'todos'
   const [statusVeic, setStatusVeic] = useState('ativos')  // idem, para os veículos (linhas)
+  // Filtros (status de passeios/veículos e categoria) num painel que abre e
+  // fecha — eram três fileiras de botões soltas acima da grade.
+  const [verFiltros, setVerFiltros] = useState(false)
   const qc = useQueryClient()
 
   const { data: rules = [],    isLoading: l1 } = useQuery({ queryKey: ['pricing-rules'], queryFn: () => api.getPricingRules() })
@@ -333,9 +336,9 @@ export default function Precos() {
         )}
       </div>
 
-      {/* Toolbar: busca · região · estatísticas */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
+      {/* Busca · região · planilha */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px]">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             value={search}
@@ -348,7 +351,8 @@ export default function Precos() {
           <select
             value={isGlobal ? GLOBAL_REGION : (effectiveRegion || '')}
             onChange={(e) => setRegionId(e.target.value)}
-            className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-brand/60"
+            aria-label="Região"
+            className="min-w-0 max-w-[60%] sm:max-w-none bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-brand/60"
           >
             {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             <option value={GLOBAL_REGION}>🌐 Todas as regiões (global)</option>
@@ -357,96 +361,128 @@ export default function Precos() {
         <button
           onClick={exportar}
           title="Baixar a grade à vista em .xlsx"
-          className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 hover:text-gray-100 hover:border-brand/60 transition-colors"
+          aria-label="Baixar a grade à vista em .xlsx"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 hover:text-gray-100 hover:border-brand/60 transition-colors"
         >
           <Download size={14} />
           <span className="hidden sm:inline">Baixar .xlsx</span>
         </button>
-        <div className="flex items-center gap-2 text-[11px]">
-          <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300">Configurados: <strong className="text-gray-100">{configured}</strong>/{totalCombos}</span>
-          <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300">Ativos: <strong className="text-green-400">{activeRules.length}</strong></span>
-          <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300">Médio: <strong className="text-brand">{fmt(avgPrice)}</strong></span>
+      </div>
+
+      {/* Resumo da grade: números e cobertura num cartão só */}
+      <div className="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-gray-400">
+          <span>Configurados <strong className="text-gray-100">{configured}</strong>/{totalCombos}</span>
+          <span>Ativos <strong className="text-green-400">{activeRules.length}</strong></span>
+          <span>Médio <strong className="text-brand">{fmt(avgPrice)}</strong></span>
+        </div>
+        <div className="flex items-center gap-3 mt-2">
+          <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-brand to-amber-400" style={{ width: `${coveragePct}%` }} />
+          </div>
+          <span className="text-[11px] text-gray-500 shrink-0">
+            {coveragePct}% {filtrando ? 'deste recorte preenchido' : 'da grade preenchida'}
+          </span>
         </div>
       </div>
 
-      {/* Filtros de status: passeios (colunas) e veículos (linhas) */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500 shrink-0">Passeios:</span>
-          <div className="inline-flex rounded-full border border-gray-700 overflow-hidden">
-            {[
-              { id: 'ativos',   label: 'Ativos',   n: nAtivos },
-              { id: 'inativos', label: 'Inativos', n: nInativos },
-              { id: 'todos',    label: 'Todos',    n: tours.length },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => { setStatusTour(opt.id); setCatId('') }}
-                className={`px-3 py-1.5 font-medium transition-colors ${
-                  statusTour === opt.id ? 'bg-brand text-white' : 'bg-gray-900 text-gray-300 hover:text-gray-100'
-                }`}
-              >
-                {opt.label} <span className={statusTour === opt.id ? 'text-white/70' : 'text-gray-500'}>{opt.n}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500 shrink-0">Veículos:</span>
-          <div className="inline-flex rounded-full border border-gray-700 overflow-hidden">
-            {[
-              { id: 'ativos',   label: 'Ativos',   n: nVeicAtivos },
-              { id: 'inativos', label: 'Inativos', n: nVeicInativos },
-              { id: 'todos',    label: 'Todos',    n: veicBase.length },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => setStatusVeic(opt.id)}
-                className={`px-3 py-1.5 font-medium transition-colors ${
-                  statusVeic === opt.id ? 'bg-brand text-white' : 'bg-gray-900 text-gray-300 hover:text-gray-100'
-                }`}
-              >
-                {opt.label} <span className={statusVeic === opt.id ? 'text-white/70' : 'text-gray-500'}>{opt.n}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Filtro por categoria — só aparece se houver categoria cadastrada */}
-      {categorias.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-          <button
-            onClick={() => setCatId('')}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
-              catId === '' ? 'bg-brand text-white border-brand' : 'bg-gray-900 text-gray-300 border-gray-700 hover:border-gray-600'
-            }`}
-          >
-            Todas <span className={catId === '' ? 'text-white/70' : 'text-gray-500'}>{eligibleTours.length}</span>
-          </button>
-          {categorias.map((c) => (
+      {/* Filtros: recolhidos, com o que está valendo no próprio botão */}
+      {(() => {
+        const rot = { ativos: 'ativos', inativos: 'inativos', todos: 'todos' }
+        const catNome = catId ? (categorias.find((c) => c.id === catId)?.name || 'categoria') : 'todas as categorias'
+        const resumo = `Passeios ${rot[statusTour]} · Veículos ${rot[statusVeic]} · ${catNome}`
+        const ligados = (statusTour !== 'ativos') + (statusVeic !== 'ativos') + (catId !== '')
+        return (
+          <div>
             <button
-              key={c.id}
-              onClick={() => setCatId((v) => (v === c.id ? '' : c.id))}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
-                catId === c.id ? 'bg-brand text-white border-brand' : 'bg-gray-900 text-gray-300 border-gray-700 hover:border-gray-600'
-              }`}
+              type="button"
+              onClick={() => setVerFiltros((v) => !v)}
+              aria-expanded={verFiltros}
+              aria-controls="filtros-precos"
+              className="w-full sm:w-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-300 hover:border-gray-600 transition-colors"
             >
-              {c.name} <span className={catId === c.id ? 'text-white/70' : 'text-gray-500'}>{c.count}</span>
+              <SlidersHorizontal size={15} className="text-gray-500 shrink-0" />
+              <span className="font-medium text-gray-200">Filtros</span>
+              {ligados > 0 && <span className="text-[11px] font-semibold px-1.5 rounded bg-brand text-white">{ligados}</span>}
+              <span className="text-xs text-gray-500 truncate min-w-0 flex-1 text-left">{resumo}</span>
+              <ChevronDown size={15} className={`text-gray-500 shrink-0 transition-transform ${verFiltros ? 'rotate-180' : ''}`} />
             </button>
-          ))}
-        </div>
-      )}
+            {verFiltros && (
+              <div id="filtros-precos" className="mt-2 rounded-xl border border-gray-800 bg-gray-900/40 p-3 space-y-3">
+              {/* Filtros de status: passeios (colunas) e veículos (linhas) */}
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 text-[12px]">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 shrink-0 w-16">Passeios</span>
+                  <div className="inline-flex rounded-full border border-gray-700 overflow-hidden">
+                    {[
+                      { id: 'ativos',   label: 'Ativos',   n: nAtivos },
+                      { id: 'inativos', label: 'Inativos', n: nInativos },
+                      { id: 'todos',    label: 'Todos',    n: tours.length },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        onClick={() => { setStatusTour(opt.id); setCatId('') }}
+                        className={`px-3 py-1.5 font-medium transition-colors ${
+                          statusTour === opt.id ? 'bg-brand text-white' : 'bg-gray-900 text-gray-300 hover:text-gray-100'
+                        }`}
+                      >
+                        {opt.label} <span className={statusTour === opt.id ? 'text-white/70' : 'text-gray-500'}>{opt.n}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 shrink-0 w-16">Veículos</span>
+                  <div className="inline-flex rounded-full border border-gray-700 overflow-hidden">
+                    {[
+                      { id: 'ativos',   label: 'Ativos',   n: nVeicAtivos },
+                      { id: 'inativos', label: 'Inativos', n: nVeicInativos },
+                      { id: 'todos',    label: 'Todos',    n: veicBase.length },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setStatusVeic(opt.id)}
+                        className={`px-3 py-1.5 font-medium transition-colors ${
+                          statusVeic === opt.id ? 'bg-brand text-white' : 'bg-gray-900 text-gray-300 hover:text-gray-100'
+                        }`}
+                      >
+                        {opt.label} <span className={statusVeic === opt.id ? 'text-white/70' : 'text-gray-500'}>{opt.n}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-      {/* Barra de cobertura */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-brand to-amber-400" style={{ width: `${coveragePct}%` }} />
-        </div>
-        <span className="text-[11px] text-gray-500 shrink-0">
-          {coveragePct}% {filtrando ? 'deste recorte preenchido' : 'da grade preenchida'}
-        </span>
-      </div>
+              {/* Filtro por categoria — só aparece se houver categoria cadastrada */}
+              {categorias.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+                  <button
+                    onClick={() => setCatId('')}
+                    className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+                      catId === '' ? 'bg-brand text-white border-brand' : 'bg-gray-900 text-gray-300 border-gray-700 hover:border-gray-600'
+                    }`}
+                  >
+                    Todas <span className={catId === '' ? 'text-white/70' : 'text-gray-500'}>{eligibleTours.length}</span>
+                  </button>
+                  {categorias.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setCatId((v) => (v === c.id ? '' : c.id))}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+                        catId === c.id ? 'bg-brand text-white border-brand' : 'bg-gray-900 text-gray-300 border-gray-700 hover:border-gray-600'
+                      }`}
+                    >
+                      {c.name} <span className={catId === c.id ? 'text-white/70' : 'text-gray-500'}>{c.count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <Card>
         <div className="overflow-auto max-h-[70vh] rounded-2xl">

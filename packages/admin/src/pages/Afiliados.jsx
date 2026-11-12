@@ -185,7 +185,7 @@ export default function Afiliados() {
                   <th className="px-4 py-3 font-semibold text-right">Ação</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-gray-700">
                 {rows.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-800/40">
                     <td className="px-4 py-3">

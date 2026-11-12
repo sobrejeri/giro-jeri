@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Settings, RotateCcw, CreditCard, Landmark, SplitSquareHorizontal,
   Eye, EyeOff, CheckCircle, Pencil, Image as ImageIcon, Upload, Trash2, Route,
-  MessageCircle, Send, XCircle, MapPin, Rocket,
+  MessageCircle, Send, XCircle, MapPin, Rocket, ChevronDown, Search,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Input, { Select } from '../components/ui/Input'
+import BotaoInfo from '../components/ui/BotaoInfo'
 
 // ── Sistema tab ───────────────────────────────────────────
 const DISPLAY_TYPES = {
@@ -41,6 +42,42 @@ const SETTING_LABELS = {
   google_maps_api_key_public: 'Google Maps API Key (pública)',
   quote_urgent_threshold_hours: 'Limiar de cotação urgente (h)',
   transfer_max_luggage:       'Máx. bagagens por transfer',
+  affiliate_commission_percent: 'Comissão de afiliados (%)',
+  booking_deposit_percent:      'Entrada para reserva com depósito (%)',
+  booking_legs_engine_enabled:  'Motor de trechos (pedido dividido)',
+  leg_payment_window_minutes:   'Prazo de pagamento por trecho (min)',
+  cancellation_hours_tour:      'Cancelamento grátis de passeio (h antes)',
+  tourism_tax_per_person:       'Taxa de turismo por pessoa (R$)',
+  platform_name:                'Nome da plataforma',
+}
+
+// Chaves editadas na aba Aparência (banner da home): ficam fora da lista do
+// Sistema, senão apareciam em dois lugares, uma delas como configuração crua.
+const APARENCIA_KEYS = new Set(['home_banner_image_url', 'home_banner_title', 'home_banner_subtitle'])
+
+// Grupos da aba Sistema, na ordem em que aparecem. A lista era corrida, com
+// dezenas de chaves técnicas misturadas; agora cada parâmetro cai num assunto
+// pelo nome (chave nova sem regra vai para "Outros", nunca some).
+const GRUPOS_SISTEMA = [
+  { id: 'reservas',   titulo: 'Reservas e cancelamento' },
+  { id: 'translados', titulo: 'Translados' },
+  { id: 'comissoes',  titulo: 'Comissões e taxas' },
+  { id: 'pagamentos', titulo: 'Pagamentos (avançado)' },
+  { id: 'contato',    titulo: 'Contato e avisos' },
+  { id: 'app',        titulo: 'App, região e moeda' },
+  { id: 'testes',     titulo: 'Recursos em teste' },
+  { id: 'outros',     titulo: 'Outros' },
+]
+function grupoDoParametro(chave) {
+  const k = String(chave || '')
+  if (/(_enabled$|engine|beta|experimental|^zzz_)/.test(k)) return 'testes'
+  if (/^(booking_|cancellation_|max_people|quote_|leg_)/.test(k)) return 'reservas'
+  if (/^transfer_/.test(k)) return 'translados'
+  if (/^payment_/.test(k)) return 'pagamentos'
+  if (/(fee|commission|tax|split)/.test(k)) return 'comissoes'
+  if (/(whatsapp|email|phone|support|notif)/.test(k)) return 'contato'
+  if (/^(app_|maintenance|default_|timezone|currency|platform_|google_)/.test(k)) return 'app'
+  return 'outros'
 }
 
 const PAYMENT_KEYS = new Set([
@@ -227,6 +264,9 @@ function MaskedInput({ label, value, onChange, placeholder, className = '' }) {
 function TabSistema({ settings, qc }) {
   const [editing, setEditing] = useState({})
   const [saved, setSaved]     = useState(null)
+  const [busca, setBusca]     = useState('')
+  const [abertos, setAbertos] = useState(() => new Set())
+  const [info, setInfo]       = useState(false)
 
   const saveMut = useMutation({
     mutationFn: ({ key, value }) => api.updateSetting(key, { setting_value: value }),
@@ -238,72 +278,145 @@ function TabSistema({ settings, qc }) {
     },
   })
 
-  const filtered = settings.filter((s) => !PAYMENT_KEYS.has(s.setting_key))
+  const filtered = settings.filter((s) => !PAYMENT_KEYS.has(s.setting_key) && !APARENCIA_KEYS.has(s.setting_key))
+  const q = busca.trim().toLocaleLowerCase('pt-BR')
+  const visiveis = q
+    ? filtered.filter((s) => [s.setting_key, SETTING_LABELS[s.setting_key], s.description]
+        .some((t) => String(t || '').toLocaleLowerCase('pt-BR').includes(q)))
+    : filtered
+  const grupos = GRUPOS_SISTEMA
+    .map((g) => ({ ...g, itens: visiveis.filter((s) => grupoDoParametro(s.setting_key) === g.id) }))
+    .filter((g) => g.itens.length > 0)
+  const alternar = (id) => setAbertos((atual) => {
+    const n = new Set(atual)
+    if (n.has(id)) n.delete(id); else n.add(id)
+    return n
+  })
+
+  function linha(s) {
+    const isEditing = s.setting_key in editing
+    const isSaved   = saved === s.setting_key
+    const label     = SETTING_LABELS[s.setting_key] || s.setting_key
+    return (
+      <div key={s.setting_key} className="px-4 sm:px-5 py-3.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-medium text-gray-200">{label}</p>
+          <span className="text-[11px] text-gray-500 bg-gray-900 px-1.5 rounded">
+            {DISPLAY_TYPES[s.value_type] || s.value_type}
+          </span>
+        </div>
+        {/* Com nome legível, a chave técnica fica pequena embaixo (é ela que
+            aparece na Auditoria e no suporte). */}
+        {SETTING_LABELS[s.setting_key] && (
+          <p className="text-[11px] font-mono text-gray-600">{s.setting_key}</p>
+        )}
+        {s.description && (
+          <p className="text-xs text-gray-500 mt-1">{s.description}</p>
+        )}
+        <div className="mt-2">
+          {isEditing ? (
+            <div className="flex items-center gap-2">
+              <input
+                value={editing[s.setting_key]}
+                onChange={(e) => setEditing((prev) => ({ ...prev, [s.setting_key]: e.target.value }))}
+                aria-label={label}
+                className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-gray-600 bg-gray-900 text-sm text-gray-100 focus:outline-none focus:border-brand"
+              />
+              <Button size="sm" onClick={() => saveMut.mutate({ key: s.setting_key, value: editing[s.setting_key] })} disabled={saveMut.isPending} aria-label="Salvar">
+                <Save size={13} />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditing((prev) => { const n = { ...prev }; delete n[s.setting_key]; return n })} aria-label="Cancelar">
+                <RotateCcw size={13} />
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditing((prev) => ({ ...prev, [s.setting_key]: s.setting_value }))}
+              title="Tocar para editar"
+              className={`font-mono text-sm px-2 py-0.5 rounded transition-colors
+                ${isSaved ? 'bg-green-900/30 text-green-400' : 'bg-gray-900 text-brand hover:bg-gray-950'}`}
+            >
+              {isSaved ? 'Salvo!' : (s.setting_value || '(vazio)')}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
       {/* Diagnóstico "Pronto para o ar?" — primeiro item, visão de go-live */}
       <GoLiveDiag />
 
-      <div className="bg-blue-900/20 border border-blue-800/30 rounded-xl p-4 text-sm">
-        <p className="font-semibold text-blue-400 mb-1">Configurações do sistema</p>
-        <p className="text-gray-500 text-xs">
-          Controla prazos, moeda, fuso horário e limites globais da plataforma.
-          Edite com cuidado — algumas afetam cálculos de preço e prazos.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-gray-200">Parâmetros do sistema</h2>
+          <p className="text-xs text-gray-500">{filtered.length} parâmetros, agrupados por assunto. Toque no valor para editar.</p>
+        </div>
+        <BotaoInfo aberto={info} onClick={() => setInfo((v) => !v)} controla="info-sistema" rotulo="Sobre os parâmetros do sistema" />
       </div>
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-gray-300">{filtered.length} configurações</h2>
-        </CardHeader>
-        <div className="divide-y divide-gray-800">
-          {filtered.map((s) => {
-            const isEditing = s.setting_key in editing
-            const isSaved   = saved === s.setting_key
-            const label     = SETTING_LABELS[s.setting_key] || s.setting_key
-
-            return (
-              <div key={s.setting_key} className="flex items-start gap-4 px-5 py-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-sm font-medium text-gray-200">{label}</p>
-                    <span className="text-xs text-gray-600 bg-gray-800 px-1.5 rounded">
-                      {DISPLAY_TYPES[s.value_type] || s.value_type}
-                    </span>
-                  </div>
-                  {s.description && (
-                    <p className="text-xs text-gray-600 mb-2">{s.description}</p>
-                  )}
-                  {isEditing ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={editing[s.setting_key]}
-                        onChange={(e) => setEditing((prev) => ({ ...prev, [s.setting_key]: e.target.value }))}
-                        className="flex-1 h-8 px-2 rounded-lg border border-gray-600 bg-gray-900 text-sm text-gray-100 focus:outline-none focus:border-brand"
-                      />
-                      <Button size="sm" onClick={() => saveMut.mutate({ key: s.setting_key, value: editing[s.setting_key] })} disabled={saveMut.isPending}>
-                        <Save size={13} />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditing((prev) => { const n = { ...prev }; delete n[s.setting_key]; return n })}>
-                        <RotateCcw size={13} />
-                      </Button>
-                    </div>
-                  ) : (
-                    <code
-                      onClick={() => setEditing((prev) => ({ ...prev, [s.setting_key]: s.setting_value }))}
-                      className={`text-sm cursor-pointer px-2 py-0.5 rounded transition-colors
-                        ${isSaved ? 'bg-green-900/30 text-green-400' : 'bg-gray-900 text-brand hover:bg-gray-800'}`}
-                    >
-                      {isSaved ? 'Salvo!' : (s.setting_value || '(vazio)')}
-                    </code>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+      {info && (
+        <div id="info-sistema" className="bg-blue-900/20 border border-blue-800/30 rounded-xl p-4 text-xs text-gray-400 leading-relaxed space-y-1.5">
+          <p>
+            Controlam prazos, moeda, fuso horário e limites globais da plataforma. Edite com cuidado —
+            alguns afetam cálculos de preço e prazos.
+          </p>
+          <p>
+            Isto não é a Auditoria: aqui ficam os <strong className="text-gray-300">valores atuais</strong>. O histórico
+            de quem mudou o quê fica em <strong className="text-gray-300">Configurações › Auditoria</strong>.
+            Pagamentos e o banner da página inicial têm abas próprias.
+          </p>
         </div>
-      </Card>
+      )}
+
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar parâmetro (nome ou descrição)…"
+          aria-label="Buscar parâmetro"
+          className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-brand"
+        />
+      </div>
+
+      {grupos.length === 0 && (
+        <p className="text-sm text-gray-500 text-center py-6">Nenhum parâmetro encontrado para “{busca}”.</p>
+      )}
+
+      <div className="space-y-3">
+        {grupos.map((g) => {
+          // Com busca, os grupos com resultado abrem sozinhos.
+          const aberto = q ? true : abertos.has(g.id)
+          return (
+            <Card key={g.id}>
+              <button
+                type="button"
+                onClick={() => alternar(g.id)}
+                aria-expanded={aberto}
+                aria-controls={`grupo-${g.id}`}
+                className="w-full flex items-center gap-3 px-4 sm:px-5 py-3.5 min-h-11 text-left rounded-xl hover:bg-gray-700/30 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+              >
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-semibold text-gray-100">{g.titulo}</span>
+                  <span className="block text-xs text-gray-500">
+                    {g.itens.length} parâmetro{g.itens.length !== 1 ? 's' : ''}
+                  </span>
+                </span>
+                <ChevronDown size={18} className={`text-gray-400 shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+              </button>
+              {aberto && (
+                <div id={`grupo-${g.id}`} className="divide-y divide-gray-700 border-t border-gray-700/60">
+                  {g.itens.map(linha)}
+                </div>
+              )}
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1865,7 +1978,9 @@ function ServicosStandalone({ qc }) {
 }
 
 const TABS = [
-  { id: 'sistema',    label: 'Sistema',    icon: Settings },
+  // "Parâmetros" (e não "Sistema"): a aba da área já se chama Sistema e o
+  // nome repetido nos dois níveis confundia.
+  { id: 'sistema',    label: 'Parâmetros', icon: Settings },
   { id: 'aparencia',  label: 'Aparência',  icon: ImageIcon },
   { id: 'pagamentos', label: 'Pagamentos', icon: CreditCard },
 ]

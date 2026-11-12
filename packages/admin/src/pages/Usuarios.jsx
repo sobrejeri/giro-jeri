@@ -308,7 +308,7 @@ export default function Usuarios() {
         {/* Abas por tipo. Substituem o seletor "Todos os tipos", que passava
             despercebido: aqui a divisão fica visível e cada aba já mostra
             quantos existem — sem precisar filtrar para descobrir. */}
-        <div className="flex flex-wrap gap-1 mb-3 bg-gray-900/60 p-1 rounded-xl w-fit">
+        <div className="flex gap-1 mb-3 bg-gray-900/60 p-1 rounded-xl w-fit max-w-full overflow-x-auto scrollbar-hide">
           {ABAS.map(({ id, label }) => {
             const n = id === '' ? counts.todos : counts[id]
             const ativa = typeFilter === id
@@ -316,7 +316,7 @@ export default function Usuarios() {
               <button
                 key={id || 'todos'}
                 onClick={() => { setType(id); setPage(1) }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                   ativa ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
@@ -363,7 +363,7 @@ export default function Usuarios() {
         {/* Lista em cards (mesma organização das demais telas): avatar + nome
             (selo quando é admin), tipo e data embaixo, e à direita status +
             ações. Mobile e desktop usam o mesmo card. */}
-        <div className="divide-y divide-gray-800">
+        <div className="divide-y divide-gray-700">
           {users.map((u) => (
             <div key={u.id} className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-gray-800/30 transition-colors">
               <div className="flex-1 min-w-0">
@@ -431,7 +431,7 @@ export default function Usuarios() {
                   <th className="px-5 py-2 w-24" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-gray-700">
                 {orphans.map((o) => (
                   <tr key={o.auth_id} className="hover:bg-gray-750 transition-colors">
                     <td className="px-5 py-2 text-gray-300">{o.email || o.phone || '—'}</td>
@@ -476,7 +476,7 @@ export default function Usuarios() {
                   <th className="px-5 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Problema</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-gray-700">
                 {unlinked.map((u) => (
                   <tr key={u.id} className="hover:bg-gray-750 transition-colors">
                     <td className="px-5 py-2 text-gray-300">{u.full_name || '—'}</td>
@@ -1181,7 +1181,7 @@ function FleetManagerModal({ open, operatorId, operatorName, onClose }) {
         ) : filtered.length === 0 ? (
           <p className="text-sm text-gray-500 py-8 text-center">{fleetCopy.empty}</p>
         ) : (
-          <div className="max-h-[60vh] overflow-y-auto divide-y divide-gray-800">
+          <div className="max-h-[60vh] overflow-y-auto divide-y divide-gray-700">
             {filtered.map((v) => {
               const pending    = toggleMut.isPending && toggleMut.variables?.vehicleId === v.vehicle_id
               const isReleased = v.is_active !== false

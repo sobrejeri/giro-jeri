@@ -111,7 +111,7 @@ export default function Cupons() {
           /* Lista em cards (mesma organização das demais telas): ícone, código
              + desconto/usos/validade e, à direita, status e ações. Mobile e
              desktop usam o mesmo card. */
-          <div className="divide-y divide-gray-800">
+          <div className="divide-y divide-gray-700">
             {coupons.map((c) => (
               <div key={c.id} className="flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-gray-800/30 transition-colors">
                 <div className="w-9 h-9 rounded-lg bg-brand/10 text-brand flex items-center justify-center shrink-0">
