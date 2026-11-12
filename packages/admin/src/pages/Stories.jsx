@@ -334,7 +334,7 @@ export default function Stories({ embedded = false }) {
       <div className="flex items-center gap-3">
         {!embedded && (
           <div>
-            <h1 className="text-lg font-semibold text-gray-100">Destaques</h1>
+            <h2 className="text-lg font-semibold text-gray-100">Destaques</h2>
             <p className="text-sm text-gray-500">
               Tópicos exibidos na home do turista, estilo Destaques do Instagram.
             </p>

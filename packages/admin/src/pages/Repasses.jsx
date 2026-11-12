@@ -909,7 +909,7 @@ function RepassesMotorista() {
           <Wallet size={20} className="text-brand" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">Repasses aos motoristas</h1>
+          <h2 className="text-xl font-bold text-white">Repasses aos motoristas</h2>
           <p className="text-sm text-gray-400">
             Visão de supervisão (todos os operadores). Quem define o valor e dá baixa é o próprio operador, no painel dele — aqui é só acompanhamento.
           </p>

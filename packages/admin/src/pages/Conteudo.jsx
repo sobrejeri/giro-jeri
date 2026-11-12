@@ -17,7 +17,7 @@ export default function Conteudo() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold text-gray-100">Conteúdo</h1>
+        <h2 className="text-lg font-semibold text-gray-100">Publicações</h2>
         <p className="text-sm text-gray-500">Destaques, stories, eventos e promoções exibidos no app do turista.</p>
       </div>
 

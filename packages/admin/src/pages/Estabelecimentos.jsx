@@ -220,7 +220,7 @@ export default function Estabelecimentos() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-gray-100">Estabelecimentos</h1>
+          <h2 className="text-lg font-semibold text-gray-100">Estabelecimentos</h2>
           <p className="text-sm text-gray-500">Diretório exibido na aba “Descubra a Vila”. Marque “Destaque” para anunciar no topo.</p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">

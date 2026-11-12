@@ -43,7 +43,7 @@ export default function Estacionamentos() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-100 flex items-center gap-2"><ParkingSquare size={22} className="text-brand" /> Estacionamentos</h1>
+        <h2 className="text-xl font-bold text-gray-100 flex items-center gap-2"><ParkingSquare size={22} className="text-brand" /> Estacionamentos</h2>
         {aba === 'catalogo' && (
           <button onClick={() => setEdit({ ...LOT_VAZIO })}
             className="flex items-center gap-2 bg-brand text-white font-semibold rounded-xl px-4 py-2.5 text-sm active:scale-95">

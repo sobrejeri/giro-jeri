@@ -41,3 +41,13 @@ export const matchesLink = (link, pathname) =>
 
 export const getArea = (pathname) => AREAS.find(area =>
   area.links.some(link => matchesLink(link, pathname)))
+
+// Telas fora das áreas (acessadas pelo cabeçalho/rodapé do menu).
+const OUTRAS_TELAS = { '/perfil': 'Meu perfil' }
+
+// Título do cabeçalho: o nome da ÁREA, igual ao do menu lateral. As
+// ferramentas da área aparecem como abas logo abaixo (AreaNavigation) — antes
+// o cabeçalho tinha uma lista de títulos própria ("Motor de Preços", "Gestão
+// de Usuários"…) que não batia com o menu.
+export const getTitle = (pathname) =>
+  getArea(pathname)?.label || OUTRAS_TELAS[pathname.replace(/\/$/, '')] || 'Admin'

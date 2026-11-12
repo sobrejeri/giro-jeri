@@ -133,7 +133,7 @@ export default function Feed({ embedded = false }) {
       <div className="flex items-center gap-3">
         {!embedded && (
           <div>
-            <h1 className="text-lg font-semibold text-gray-100">Eventos & Promoções</h1>
+            <h2 className="text-lg font-semibold text-gray-100">Eventos & Promoções</h2>
             <p className="text-sm text-gray-500">Aparecem na aba “Descubra a Vila” do app do turista.</p>
           </div>
         )}

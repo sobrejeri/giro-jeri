@@ -2,35 +2,13 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { Menu } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
-
-const TITLES = {
-  '/dashboard':        'Visão geral',
-  '/usuarios':         'Gestão de Usuários',
-  '/catalogo':         'Catálogo',
-  '/precos':           'Motor de Preços',
-  '/regioes':          'Regiões',
-  '/cupons':           'Cupons',
-  '/afiliados':        'Afiliados',
-  '/temporada':        'Alta Temporada',
-  '/financeiro':       'Financeiro',
-  '/repasses':         'Repasses aos Motoristas',
-  '/auditoria':        'Auditoria',
-  '/configuracoes':    'Configurações',
-  '/reservas':         'Reservas',
-  '/conteudo':         'Publicações',
-  '/notificacoes':     'Envios e automações',
-  '/marketing':        'Rastreamento e anúncios',
-  '/perfil':           'Meu Perfil',
-  '/feed':             'Feed & Eventos',
-  '/stories':          'Stories & Destaques',
-  '/estabelecimentos': 'Estabelecimentos',
-  '/estacionamentos':  'Estacionamentos',
-}
+import { getTitle } from './navigation'
 
 export default function Header({ onMenu = () => {} }) {
   const { pathname } = useLocation()
   const { user }     = useAuth()
-  const title        = TITLES[pathname] || 'Admin'
+  // Nome da área, igual ao do menu; a ferramenta aparece nas abas abaixo.
+  const title        = getTitle(pathname)
 
   return (
     <header

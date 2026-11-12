@@ -19,4 +19,8 @@
     background: #374151;
     border-radius: 9999px;
   }
+  /* Faixas que rolam para o lado (abas): sem a barra de rolagem visível.
+     Já era usada em Reservas, mas só existia no app do turista. */
+  .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
 }

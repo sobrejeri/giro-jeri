@@ -134,7 +134,7 @@ export default function Notificacoes() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-lg font-semibold text-gray-100">Notificações</h1>
+        <h2 className="text-lg font-semibold text-gray-100">Envios e automações</h2>
         <p className="text-sm text-gray-500">Envie avisos manuais e configure as mensagens automáticas.</p>
       </div>
 

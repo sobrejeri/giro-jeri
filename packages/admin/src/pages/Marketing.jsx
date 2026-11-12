@@ -79,7 +79,7 @@ export default function Marketing() {
           <Target size={20} className="text-brand" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-gray-100">Marketing</h1>
+          <h2 className="text-xl font-bold text-gray-100">Rastreamento e anúncios</h2>
           <p className="text-sm text-gray-400">Pixels de rastreamento e catálogo para anúncios no Instagram, Facebook e Google.</p>
         </div>
       </div>
