@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
 import { duracao } from '../lib/formato'
+import { dificuldade } from '../lib/dificuldade'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
@@ -147,12 +148,15 @@ function VehicleCard({ vehicle, qty, onAdd, onRemove }) {
    logo abaixo. Antes o toque só marcava o cartão e a ação ficava numa barra no
    rodapé, longe do que tinha acabado de ser tocado.
    Veículos, data e horário não aparecem aqui: são definidos no carrinho. */
-function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
+function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose, visual2026 = false }) {
   const { t } = useTranslation()
   const { dragRef, sheetStyle, backdropStyle } = useSheetSwipe(onClose)
   if (!tour) return null
 
   const durLabel = duracao(tour.duration_hours)
+  // Mesma etiqueta do cartão (Fácil / Moderado / Difícil, com a bolinha de cor);
+  // antes a folha mostrava o texto cru do banco, ex.: "easy".
+  const dif = dificuldade(tour.difficulty_level, t)
   const cap = Number(tour.max_people) || null
   const compartilhado = mode === 'shared' && tour.shared_price_per_person
   const preco = compartilhado ? Number(tour.shared_price_per_person) : Number(tour.from_price) || null
@@ -162,13 +166,13 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
     <>
       <div className="fixed inset-0 bg-black/45 z-[70]" style={backdropStyle} onClick={onClose} />
       <div
-        className="fixed bottom-0 left-0 right-0 mx-auto w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[88dvh] flex flex-col shadow-2xl"
+        className={`${visual2026 ? 't2026-tour-sheet ' : ''}fixed bottom-0 left-0 right-0 mx-auto w-full max-w-[430px] bg-white rounded-t-3xl z-[70] max-h-[88dvh] flex flex-col shadow-2xl`}
         style={sheetStyle}
       >
         <div ref={dragRef} className="relative shrink-0" style={{ touchAction: 'none' }}>
           {/* Grabber: arraste a imagem para baixo para fechar. */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1.5 rounded-full bg-white/70 z-10" />
-          <div className="h-[168px] bg-gradient-to-br from-orange-400 to-amber-300 rounded-t-3xl overflow-hidden">
+          <div className="t2026-tour-cover h-[168px] bg-gradient-to-br from-orange-400 to-amber-300 rounded-t-3xl overflow-hidden">
             {tour.cover_image_url && (
               <img src={tour.cover_image_url} alt="" className="w-full h-full object-cover" />
             )}
@@ -184,16 +188,19 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
         </div>
 
         <div className="overflow-y-auto px-5 pt-4 pb-4 flex-1">
-          <p className="text-[19px] font-extrabold text-gray-900 leading-tight">{tour.name}</p>
+          <p className="t2026-tour-title text-[19px] font-extrabold text-gray-900 leading-tight">{tour.name}</p>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+          <div className="t2026-tour-meta flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
             {durLabel && (
               <span className="inline-flex items-center gap-1 text-[12.5px] text-gray-600">
                 <Clock size={13} className="text-brand" /> {durLabel}
               </span>
             )}
-            {tour.difficulty_level && (
-              <span className="text-[12.5px] text-gray-600">{tour.difficulty_level}</span>
+            {dif && (
+              <span className={`inline-flex items-center gap-1.5 min-w-0 text-[12.5px] ${dif.texto}`}>
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dif.cor}`} />
+                <span className="truncate">{dif.label}</span>
+              </span>
             )}
             {cap && (
               <span className="inline-flex items-center gap-1 text-[12.5px] text-gray-600">
@@ -203,15 +210,19 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
           </div>
 
           {(tour.full_description || tour.short_description) && (
-            <p className="text-[13px] text-gray-600 leading-relaxed mt-3 whitespace-pre-line">
+            <p className="t2026-tour-desc text-[13px] text-gray-600 leading-relaxed mt-3 whitespace-pre-line">
               {tour.full_description || tour.short_description}
             </p>
           )}
 
           {/* Roteiro: o que está incluído e o que não está — para o cliente
-              conferir antes de mandar para o carrinho (buscado por id). */}
+              conferir antes de mandar para o carrinho (buscado por id).
+              O invólucro não tem estilo próprio: no visual novo vira um cartão
+              só (as duas listas separadas por um tracejado). */}
+          {(tour.includes_text || tour.excludes_text) && (
+          <div className="t2026-tour-roteiro">
           {tour.includes_text && (
-            <div className="mt-4">
+            <div className="t2026-tour-inc mt-4">
               <p className="text-[12.5px] font-bold text-gray-900 flex items-center gap-1.5">
                 <CheckCircle2 size={15} className="text-emerald-500" /> {t('tourDetailPg.included')}
               </p>
@@ -225,7 +236,7 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
             </div>
           )}
           {tour.excludes_text && (
-            <div className="mt-3">
+            <div className="t2026-tour-exc mt-3">
               <p className="text-[12.5px] font-bold text-gray-900 flex items-center gap-1.5">
                 <XCircle size={15} className="text-gray-400" /> {t('tourDetailPg.notIncluded')}
               </p>
@@ -238,6 +249,8 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
               </ul>
             </div>
           )}
+          </div>
+          )}
 
           {/* Pessoas: é o único dado que muda o preço mostrado aqui. O resto
               (veículos, data, horário, saída) fica para o carrinho. */}
@@ -245,7 +258,7 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
             <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">
               {t('toursPg.common.peopleWord')}
             </p>
-            <div className="mt-1.5 inline-flex items-center gap-3 bg-gray-50 rounded-2xl px-2 py-1.5">
+            <div className="t2026-tour-people mt-1.5 inline-flex items-center gap-3 bg-gray-50 rounded-2xl px-2 py-1.5">
               <button
                 onClick={() => onPeople(Math.max(1, people - 1))}
                 aria-label={t('a11y.lessPerson')}
@@ -266,7 +279,7 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
         </div>
 
         <div
-          className="shrink-0 border-t border-gray-100 px-5 pt-3 flex items-center gap-3"
+          className="t2026-tour-footer shrink-0 border-t border-gray-100 px-5 pt-3 flex items-center gap-3"
           style={{ paddingBottom: 'calc(1.75rem + env(safe-area-inset-bottom))' }}
         >
           <div className="min-w-0">
@@ -281,7 +294,7 @@ function TourSheet({ tour, mode, people, onPeople, inCart, onAdd, onClose }) {
           </div>
           <button
             onClick={onAdd}
-            className="flex-1 inline-flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
+            className="t2026-tour-add flex-1 inline-flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
           >
             {inCart ? <Check size={16} strokeWidth={3} /> : <ShoppingCart size={16} />}
             {compartilhado ? t('toursPg.actions.continue') : t('toursPg.actions.addToCart')}
@@ -1180,6 +1193,7 @@ export default function Tours({ visual2026 = false }) {
       {/* Folha do passeio: abre ao tocar num cartão. Substitui a antiga barra
           flutuante do modo privativo — a ação agora fica junto da informação. */}
       <TourSheet
+        visual2026={visual2026}
         tour={sheetTourFull}
         mode={mode}
         people={people}

@@ -690,6 +690,86 @@
     border-radius: 26px;
     box-shadow: 0 12px 34px rgba(28,43,59,.18);
   }
+  /* Detalhe do passeio: a folha que abre ao tocar num cartão da Lojinha. Vai
+     por portal para o body (fora do escopo da página) e só ganha a classe
+     t2026-tour-sheet no visual novo. Pastilhas de duração / dificuldade /
+     capacidade, incluído e não incluído num cartão só, seletor de pessoas e
+     botão no degradê da Lojinha. A foto mantém a altura: o seletor de pessoas
+     precisa continuar visível sem rolar a folha. */
+  .t2026-tour-sheet.fixed {
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
+    background: #fffdfa;
+  }
+  .t2026-tour-sheet .t2026-tour-cover {
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
+  }
+  .t2026-tour-sheet .t2026-tour-title {
+    font-size: 21px;
+    font-weight: 800;
+    color: #18233a;
+  }
+  .t2026-tour-sheet .t2026-tour-meta {
+    gap: 7px;
+    margin-top: 10px;
+  }
+  .t2026-tour-sheet .t2026-tour-meta > span {
+    padding: 4px 10px;
+    border: 1px solid #f0eeeb;
+    border-radius: 999px;
+    background: white;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4b5563;
+  }
+  .t2026-tour-sheet .t2026-tour-desc {
+    color: #4b5563;
+  }
+  /* Incluído e não incluído num cartão só, separados por um tracejado. */
+  .t2026-tour-sheet .t2026-tour-roteiro {
+    margin-top: 14px;
+    padding: 11px 13px;
+    border: 1px solid #f0eeeb;
+    border-radius: 18px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(28,43,59,.06);
+  }
+  .t2026-tour-sheet .t2026-tour-roteiro > .t2026-tour-inc {
+    margin-top: 0;
+  }
+  .t2026-tour-sheet .t2026-tour-roteiro > * + * {
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px dashed #e9e4de;
+  }
+  .t2026-tour-sheet .t2026-tour-roteiro ul {
+    margin-top: 5px;
+  }
+  .t2026-tour-sheet .t2026-tour-people {
+    gap: 14px;
+    padding: 5px;
+    border: 1px solid #f0eeeb;
+    border-radius: 999px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(28,43,59,.06);
+  }
+  .t2026-tour-sheet .t2026-tour-people > button:last-child,
+  .t2026-tour-sheet .t2026-tour-add {
+    background: linear-gradient(112deg,#ff8e11,#fb5600);
+    box-shadow: 0 6px 14px rgba(244,104,16,.26);
+  }
+  .t2026-tour-sheet .t2026-tour-footer {
+    border-top-color: #f0eeeb;
+    background: white;
+    box-shadow: 0 -8px 20px rgba(28,43,59,.06);
+  }
+  .t2026-tour-sheet .t2026-tour-footer .text-brand {
+    color: #ff6200;
+  }
+  .t2026-tour-sheet .t2026-tour-add {
+    border-radius: 16px;
+  }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;
     gap: 14px;

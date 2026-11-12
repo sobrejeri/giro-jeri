@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { precoDeEntrada } from '../../lib/precoCartao'
 import { duracao as fmtDuracao } from '../../lib/formato'
 import { useMoeda } from '../../lib/moeda'
+import { dificuldade } from '../../lib/dificuldade'
 
 /* ── Degradê de reserva para passeio sem foto ────────────────────────────── */
 const GRADS = [
@@ -18,27 +19,8 @@ const gradOf = (id = '') => {
 }
 
 /* ── Dificuldade ──────────────────────────────────────────────────────────
-   `difficulty_level` é texto livre no banco e foi preenchido à mão ao longo do
-   tempo — há registro em inglês, em português, com e sem acento. Por isso o
-   casamento é por prefixo normalizado, e o que não casar é exibido como veio
-   (em cinza) em vez de sumir: dado do admin não deve desaparecer da tela. */
-const semAcento = (s) =>
-  String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-
-function dificuldade(nivel, t) {
-  const n = semAcento(nivel)
-  if (!n) return null
-  if (n.startsWith('easy') || n.startsWith('facil') || n.startsWith('leve')) {
-    return { label: t('toursPg.difficulty.easy'), cor: 'bg-emerald-500', texto: 'text-gray-600' }
-  }
-  if (n.startsWith('mod') || n.startsWith('medi') || n.startsWith('inter')) {
-    return { label: t('toursPg.difficulty.moderate'), cor: 'bg-amber-500', texto: 'text-gray-600' }
-  }
-  if (n.startsWith('hard') || n.startsWith('dif') || n.startsWith('pesad') || n.startsWith('avanc')) {
-    return { label: t('toursPg.difficulty.hard'), cor: 'bg-rose-500', texto: 'text-gray-600' }
-  }
-  return { label: nivel, cor: 'bg-gray-400', texto: 'text-gray-500' }
-}
+   A regra (texto livre do banco → Fácil / Moderado / Difícil) mora em
+   lib/dificuldade.js e é a mesma da folha do passeio. */
 
 const fmtPreco = (v) => `R$ ${Number(v).toLocaleString('pt-BR')}`
 
