@@ -18,6 +18,7 @@ import {
   Search, Pencil, Plus,
   Wine, ShoppingCart, Pill, Scissors, Shirt, Wind, Volume2, VolumeX,
 } from 'lucide-react'
+import './ToursVisual2026.css'
 
 const JERI_CENTER = { lat: -2.7939, lon: -40.5137 }
 
@@ -1020,8 +1021,10 @@ export default function Feed() {
   }
 
   return (
-    <div className="min-h-full pb-4 lg:pb-10 bg-white">
-      <header className="bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-[57px] z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+    // `turiva-tours-visual2026 t2026-feed`: visual novo da Lojinha, só no celular
+    // (as regras ficam num @media; o PC continua como estava).
+    <div className="min-h-full pb-4 lg:pb-10 bg-white turiva-tours-visual2026 t2026-feed">
+      <header className="t2026-feed-header bg-white px-4 pt-5 pb-3 sticky top-0 lg:top-[57px] z-30 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="max-w-2xl mx-auto">
           <div className="relative flex items-center justify-center min-h-[32px]">
             {/* Descubra é uma aba do menu (turista e operador) — sem seta de voltar. */}
@@ -1043,7 +1046,7 @@ export default function Feed() {
       </header>
 
       {/* ── Stories 24h (perfis) no topo, estilo Instagram ───────────────── */}
-      <LiveStoriesRow className="lg:max-w-2xl lg:mx-auto" />
+      <LiveStoriesRow className="t2026-stories lg:max-w-2xl lg:mx-auto" />
 
       {/* ── Buscador — escondido por padrão; a lupa do topo mostra/esconde ─── */}
       {buscaAberta && (
@@ -1094,7 +1097,7 @@ export default function Feed() {
       {/* ── Filtros (cards) — abaixo do buscador ───────────────────────────── */}
       {/* Sem faixa branca: sobre o fundo de areia ela virava uma listra no meio
           da tela. As pastilhas ficam soltas, como na home. */}
-      <div className="mt-3">
+      <div className="t2026-feed-chips mt-3">
         <div className="max-w-2xl mx-auto px-4 py-2.5">
           <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
             {filtersAll.map(({ id, label, Icon }) => {
@@ -1115,7 +1118,7 @@ export default function Feed() {
         </div>
       </div>
 
-      <main className="max-w-2xl mx-auto px-4 pt-4 space-y-6">
+      <main className="t2026-feed-main max-w-2xl mx-auto px-4 pt-4 space-y-6">
         <>
           {content}
           {usingNearby && (

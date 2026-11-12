@@ -213,6 +213,77 @@
   .turiva-tours-visual2026 .t2026-lots .text-brand {
     color: #ff6200;
   }
+  /* Descubra (feed): cabeçalho laranja que rola com a página, stories num
+     cartão sobreposto, pastilhas e posts no padrão da Lojinha. */
+  .turiva-tours-visual2026 .t2026-feed-header {
+    position: relative;
+    top: auto;
+    z-index: 0;
+    overflow: hidden;
+    padding: 26px 16px 34px;
+    background:
+      radial-gradient(ellipse 90% 65% at 90% 0%, rgba(255,177,48,.52),transparent 64%),
+      linear-gradient(122deg,#e84303 0%,#ff6400 58%,#ff8d11 100%);
+    box-shadow: 0 12px 28px rgba(248,102,22,.12);
+  }
+  .turiva-tours-visual2026 .t2026-feed-header::after {
+    position: absolute;
+    z-index: -1;
+    right: -18%;
+    bottom: -68px;
+    width: 150%;
+    height: 105px;
+    border-radius: 50%;
+    background: rgba(255,191,65,.23);
+    transform: rotate(-6deg);
+    content: '';
+    pointer-events: none;
+  }
+  .turiva-tours-visual2026 .t2026-feed-header h1 {
+    font-size: 23px;
+    font-weight: 800;
+    letter-spacing: 0;
+    color: white;
+  }
+  .turiva-tours-visual2026 .t2026-feed-header button {
+    width: 36px;
+    height: 36px;
+    background: white;
+    color: #233049;
+    box-shadow: 0 4px 11px rgba(136,53,14,.14);
+  }
+  .turiva-tours-visual2026 .t2026-stories {
+    position: relative;
+    z-index: 1;
+    margin: -22px 16px 0;
+    border: 1px solid rgba(240,229,217,.8);
+    border-radius: 22px;
+    box-shadow: 0 7px 18px rgba(52,58,70,.13);
+  }
+  .turiva-tours-visual2026 .t2026-feed-chips button {
+    padding: 10px 16px;
+    font-size: 13px;
+    border: 1px solid transparent;
+    background: white;
+    color: #374151;
+    box-shadow: 0 2px 10px rgba(0,0,0,.05);
+  }
+  .turiva-tours-visual2026 .t2026-feed-chips button.bg-brand {
+    border-color: #ff6a00;
+    color: #ff6200;
+    box-shadow: 0 2px 10px rgba(255,101,0,.12);
+  }
+  .turiva-tours-visual2026 .t2026-feed-main article {
+    margin-left: 0;
+    margin-right: 0;
+    overflow: hidden;
+    border: 1px solid #f0eeeb;
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026 .t2026-feed-main article + article {
+    margin-top: 18px;
+  }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;
     gap: 14px;
