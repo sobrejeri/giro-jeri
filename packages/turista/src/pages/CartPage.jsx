@@ -23,6 +23,7 @@ import { ptBR } from 'date-fns/locale'
 import DateSheet from '../components/DateSheet'
 import RoteiroTrilha, { extrairParadas } from '../components/RoteiroTrilha'
 import { highSeasonMonthSet, acrescimoDoDia, rotuloDoDia } from '../lib/season'
+import './ToursVisual2026.css'
 
 const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR')}`
 const todayIso = () => format(new Date(), 'yyyy-MM-dd')
@@ -35,7 +36,7 @@ const base = import.meta.env.BASE_URL
 function CartHeader({ count, partnerName }) {
   const navigate = useNavigate()
   return (
-    <header className="relative overflow-hidden bg-gradient-to-b from-[#FFF3E6] to-white">
+    <header className="t2026-cart-header relative overflow-hidden bg-gradient-to-b from-[#FFF3E6] to-white">
       {/* Sol/brilho decorativo, discreto, à direita */}
       <div className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 rounded-full bg-gradient-to-br from-[#FFB067]/40 to-transparent blur-2xl" />
       <div className="relative px-4 pt-3 pb-2.5">
@@ -55,7 +56,7 @@ function CartHeader({ count, partnerName }) {
             </div>
           </div>
           {count > 0 && (
-            <span className="shrink-0 inline-flex items-center gap-1.5 bg-white shadow-sm rounded-full pl-2.5 pr-3 py-1">
+            <span className="t2026-cart-count shrink-0 inline-flex items-center gap-1.5 bg-white shadow-sm rounded-full pl-2.5 pr-3 py-1">
               <ShoppingCart size={13} className="text-brand" />
               <span className="text-[13px] font-extrabold text-gray-900">{count}</span>
               <span className="text-[11px] text-gray-500">{count === 1 ? 'serviço' : 'serviços'}</span>
@@ -1465,11 +1466,13 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ paddingBottom: footerH ? footerH + 16 : 160 }}>
+    <div className="min-h-screen turiva-tours-visual2026 t2026-cart" style={{ paddingBottom: footerH ? footerH + 16 : 160 }}>
+      {/* `turiva-tours-visual2026 t2026-cart`: visual novo da Lojinha (só no
+          celular — as regras ficam no @media do CSS; o PC não muda). */}
       <CartHeader count={items.length} partnerName={partnerName} />
 
       {list.length === 0 && !done ? (
-        <div className="px-6 pt-20 text-center">
+        <div className="t2026-cart-empty px-6 pt-20 text-center">
           <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
             <ShoppingCart size={26} className="text-gray-300" />
           </div>
@@ -1477,26 +1480,26 @@ export default function CartPage() {
           <p className="text-[12.5px] text-gray-400 mt-1">{t('cartPg.empty.subtitle')}</p>
           <button
             onClick={() => navigate('/passeios')}
-            className="mt-5 bg-brand text-white font-bold text-[13px] px-6 py-3 rounded-2xl active:scale-95 transition-transform"
+            className="t2026-cart-cta mt-5 bg-brand text-white font-bold text-[13px] px-6 py-3 rounded-2xl active:scale-95 transition-transform"
           >
             {t('cartPg.empty.cta')}
           </button>
         </div>
       ) : (
-        <div className="px-4 pt-4 space-y-3 lg:max-w-2xl lg:mx-auto">
+        <div className="t2026-cart-list px-4 pt-4 space-y-3 lg:max-w-2xl lg:mx-auto">
           {list.map((item) => {
             const miss = itemMissing(item)
             const st = results[item.id]
             const complete = miss.length === 0
             return (
-              <div key={item.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${st?.status === 'ok' ? 'border-emerald-200' : st?.status === 'error' ? 'border-red-200' : 'border-gray-100'}`}>
+              <div key={item.id} className={`t2026-cart-item bg-white rounded-2xl border shadow-sm overflow-hidden ${st?.status === 'ok' ? 'border-emerald-200' : st?.status === 'error' ? 'border-red-200' : 'border-gray-100'}`}>
                 {/* Toca no card → mostra/esconde a descrição do serviço */}
                 <div
                   onClick={() => setExpandedId((cur) => cur === item.id ? null : item.id)}
                   className="flex gap-3 p-3 cursor-pointer active:bg-gray-50/60 transition-colors"
                 >
                   {/* Foto */}
-                  <div className="w-[86px] h-[86px] rounded-xl overflow-hidden shrink-0 bg-gray-100">
+                  <div className="t2026-cart-thumb w-[86px] h-[86px] rounded-xl overflow-hidden shrink-0 bg-gray-100">
                     {item.cover_image_url ? (
                       <img src={item.cover_image_url} alt={item.name} className="w-full h-full object-cover" />
                     ) : (
@@ -1643,7 +1646,7 @@ export default function CartPage() {
                         </div>
                         <button
                           onClick={() => abrirEditor(item, null)}
-                          className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-[13px] font-bold px-3.5 py-3 rounded-2xl bg-brand text-white shadow-sm shadow-brand/20 active:scale-[0.98] transition-transform"
+                          className="t2026-cart-cta mt-2 w-full inline-flex items-center justify-center gap-1.5 text-[13px] font-bold px-3.5 py-3 rounded-2xl bg-brand text-white shadow-sm shadow-brand/20 active:scale-[0.98] transition-transform"
                         >
                           <Pencil size={13} /> Completar detalhes
                         </button>
@@ -1664,7 +1667,7 @@ export default function CartPage() {
           na hora de solicitar tira o cliente do fluxo em vez de ajudar.
           É um convite para DEPOIS de fechar, não parte do pedido. */}
       {items.length > 0 && !done && suggestedTours.length > 0 && (
-        <div className="mt-10 pt-6 border-t border-gray-200/70 lg:max-w-2xl lg:mx-auto">
+        <div className="t2026-cart-suggest mt-10 pt-6 border-t border-gray-200/70 lg:max-w-2xl lg:mx-auto">
           <div className="px-4 flex items-center gap-2">
             <Sparkles size={15} className="text-brand" />
             <p className="text-[14px] font-extrabold text-gray-900">{t('cartPg.suggestions.title')}</p>
@@ -1711,7 +1714,7 @@ export default function CartPage() {
       {(items.length > 0 || done) && createPortal(
         <div
           ref={footerRef}
-          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-3 pb-[max(10px,env(safe-area-inset-bottom))] z-30 pointer-events-none lg:max-w-2xl lg:px-0 lg:pb-5"
+          className="t2026-cart-footer fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-3 pb-[max(10px,env(safe-area-inset-bottom))] z-30 pointer-events-none lg:max-w-2xl lg:px-0 lg:pb-5"
         >
         <div className="pointer-events-auto bg-white rounded-3xl border border-gray-100 shadow-[0_10px_34px_rgba(0,0,0,0.16)] px-3.5 py-3 space-y-2">
           {done ? (
@@ -1723,7 +1726,7 @@ export default function CartPage() {
               </p>
               <button
                 onClick={() => navigate('/minhas-reservas')}
-                className="w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
+                className="t2026-cart-cta w-full bg-brand text-white font-bold rounded-2xl py-3.5 text-[14px] active:scale-[0.98] transition-transform"
               >
                 {t('cartPg.footer.trackOrders')}
               </button>
@@ -1801,7 +1804,7 @@ export default function CartPage() {
               <button
                 onClick={submitAll}
                 disabled={!allComplete || submitting}
-                className="w-full inline-flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
+                className="t2026-cart-cta w-full inline-flex items-center justify-center gap-2 bg-brand text-white font-bold rounded-2xl py-3 text-[14px] active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
               >
                 {submitting
                   ? <><Loader2 size={16} className="animate-spin" /> {t('cartPg.footer.sending')}</>

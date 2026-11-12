@@ -590,6 +590,106 @@
       border-radius: 0 0 28px 28px;
     }
   }
+  /* Carrinho: cabeçalho laranja da Lojinha (voltar, marca, nº de serviços e
+     "Meu carrinho" em branco); o 1º item atravessa a borda dele; cards,
+     sugestões e o resumo flutuante no padrão da Lojinha. */
+  .turiva-tours-visual2026 .t2026-cart-header {
+    z-index: 0;
+    background:
+      radial-gradient(ellipse 90% 65% at 90% 0%, rgba(255,177,48,.52),transparent 64%),
+      linear-gradient(122deg,#e84303 0%,#ff6400 58%,#ff8d11 100%);
+    box-shadow: 0 12px 28px rgba(248,102,22,.12);
+  }
+  .turiva-tours-visual2026 .t2026-cart-header::after {
+    position: absolute;
+    z-index: -1;
+    right: -18%;
+    bottom: -68px;
+    width: 150%;
+    height: 105px;
+    border-radius: 50%;
+    background: rgba(255,191,65,.23);
+    transform: rotate(-6deg);
+    content: '';
+    pointer-events: none;
+  }
+  .turiva-tours-visual2026 .t2026-cart-header > .pointer-events-none {
+    display: none;
+  }
+  .turiva-tours-visual2026 .t2026-cart-header > .relative {
+    padding: 22px 16px 54px;
+  }
+  .turiva-tours-visual2026 .t2026-cart-header button {
+    width: 36px;
+    height: 36px;
+    background: white;
+    box-shadow: 0 4px 11px rgba(136,53,14,.14);
+  }
+  .turiva-tours-visual2026 .t2026-cart-header img {
+    width: 42px;
+    height: 42px;
+    padding: 4px;
+    border-radius: 14px;
+    background: white;
+    object-fit: contain;
+    box-shadow: 0 5px 15px rgba(117,34,8,.16);
+  }
+  .turiva-tours-visual2026 .t2026-cart-header .font-giro {
+    color: white;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  .turiva-tours-visual2026 .t2026-cart-header p.font-giro {
+    font-size: 18px;
+  }
+  .turiva-tours-visual2026 .t2026-cart-header h1.font-giro {
+    font-size: 23px;
+  }
+  .turiva-tours-visual2026 .t2026-cart-header .font-giro + p {
+    color: rgba(255,255,255,.94);
+  }
+  .turiva-tours-visual2026 .t2026-cart-count {
+    box-shadow: 0 4px 11px rgba(136,53,14,.14);
+  }
+  .turiva-tours-visual2026 .t2026-cart-list {
+    position: relative;
+    z-index: 1;
+    margin-top: -32px;
+    padding-top: 0;
+  }
+  .turiva-tours-visual2026 .t2026-cart-item {
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026 .t2026-cart-item.border-gray-100 {
+    border-color: #f0eeeb;
+  }
+  .turiva-tours-visual2026 .t2026-cart-thumb {
+    border-radius: 16px;
+  }
+  .turiva-tours-visual2026 .t2026-cart-cta,
+  .t2026-cart-footer .t2026-cart-cta {
+    background: linear-gradient(112deg,#ff8e11,#fb5600);
+    box-shadow: 0 6px 14px rgba(244,104,16,.26);
+  }
+  .turiva-tours-visual2026 .t2026-cart-suggest {
+    border-top-color: #f0eeeb;
+  }
+  .turiva-tours-visual2026 .t2026-cart-suggest .overflow-x-auto {
+    padding-bottom: 14px;
+  }
+  .turiva-tours-visual2026 .t2026-cart-suggest .overflow-x-auto > button {
+    border-color: #f0eeeb;
+    border-radius: 18px;
+    box-shadow: 0 4px 12px rgba(28,43,59,.09);
+  }
+  /* O resumo vai por portal para o body (fora do escopo da página): o seletor
+     usa a própria classe dele. */
+  .t2026-cart-footer > div {
+    border-color: #f0eeeb;
+    border-radius: 26px;
+    box-shadow: 0 12px 34px rgba(28,43,59,.18);
+  }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;
     gap: 14px;
