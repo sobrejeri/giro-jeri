@@ -1,10 +1,10 @@
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { Menu } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 
 const TITLES = {
-  '/dashboard':        'Dashboard',
+  '/dashboard':        'Visão geral',
   '/usuarios':         'Gestão de Usuários',
   '/catalogo':         'Catálogo',
   '/precos':           'Motor de Preços',
@@ -17,6 +17,9 @@ const TITLES = {
   '/auditoria':        'Auditoria',
   '/configuracoes':    'Configurações',
   '/reservas':         'Reservas',
+  '/conteudo':         'Publicações',
+  '/notificacoes':     'Envios e automações',
+  '/marketing':        'Rastreamento e anúncios',
   '/perfil':           'Meu Perfil',
   '/feed':             'Feed & Eventos',
   '/stories':          'Stories & Destaques',
@@ -46,12 +49,12 @@ export default function Header({ onMenu = () => {} }) {
       </div>
       <div className="flex items-center gap-3 shrink-0">
         <NotificationBell bookingsPath="/reservas" dark />
-        <div className="flex items-center gap-2">
+        <Link to="/perfil" aria-label="Abrir meu perfil" className="flex items-center gap-2 min-h-11 rounded-lg px-2 hover:bg-gray-800">
           <div className="w-7 h-7 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-bold">
             {(user?.full_name?.trim() || 'A')[0].toUpperCase()}
           </div>
           <span className="text-sm text-gray-400 hidden sm:block">{user?.full_name}</span>
-        </div>
+        </Link>
       </div>
     </header>
   )

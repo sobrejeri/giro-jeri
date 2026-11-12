@@ -1,39 +1,12 @@
-import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard, Users, BookOpen, Tag, Globe, Ticket, Megaphone,
-  Sun, BarChart3, ScrollText, Settings, LogOut, CalendarCheck, UserCircle, X,
-  Newspaper, Store, Wallet, Bell, ParkingSquare, Target,
-} from 'lucide-react'
+import { NavLink, useLocation } from 'react-router-dom'
+import { LogOut, X } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-
-const NAV = [
-  { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard'    },
-  { separator: true, label: 'Gestão' },
-  { to: '/usuarios',     icon: Users,           label: 'Usuários'      },
-  { to: '/reservas',     icon: CalendarCheck,   label: 'Reservas'      },
-  { to: '/catalogo',     icon: BookOpen,        label: 'Catálogo'      },
-  { to: '/precos',       icon: Tag,             label: 'Motor de Preços'},
-  { to: '/regioes',      icon: Globe,           label: 'Regiões'       },
-  { separator: true, label: 'Conteúdo' },
-  { to: '/conteudo',        icon: Newspaper,    label: 'Conteúdo' },
-  { to: '/estabelecimentos', icon: Store,       label: 'Estabelecimentos' },
-  { to: '/estacionamentos', icon: ParkingSquare, label: 'Estacionamentos' },
-  { separator: true, label: 'Promoções' },
-  { to: '/cupons',       icon: Ticket,          label: 'Cupons'        },
-  { to: '/afiliados',    icon: Megaphone,       label: 'Afiliados'     },
-  { to: '/marketing',    icon: Target,          label: 'Marketing'     },
-  { to: '/temporada',    icon: Sun,             label: 'Alta Temporada' },
-  { to: '/notificacoes', icon: Bell,         label: 'Notificações'  },
-  { separator: true, label: 'Backoffice' },
-  { to: '/financeiro',   icon: BarChart3,       label: 'Financeiro'    },
-  { to: '/repasses',     icon: Wallet,          label: 'Repasses'      },
-  { to: '/auditoria',    icon: ScrollText,      label: 'Auditoria'     },
-  { to: '/configuracoes', icon: Settings,       label: 'Configurações' },
-  { to: '/perfil',        icon: UserCircle,     label: 'Meu Perfil'    },
-]
+import { AREAS, getArea } from './navigation'
 
 export default function Sidebar({ open = false, onClose = () => {} }) {
   const { user, logout } = useAuth()
+  const { pathname } = useLocation()
+  const activeArea = getArea(pathname)
 
   return (
     <>
@@ -65,31 +38,22 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-thin space-y-0.5">
-          {NAV.map((item, i) => {
-            if (item.separator) {
-              return (
-                <p key={i} className="px-3 pt-4 pb-1 text-xs font-semibold text-gray-600 uppercase tracking-widest">
-                  {item.label}
-                </p>
-              )
-            }
-            const Icon = item.icon
+        <nav aria-label="Áreas do administrador" className="flex-1 px-3 py-4 overflow-y-auto scrollbar-thin space-y-0.5">
+          {AREAS.map((area) => {
+            const Icon = area.icon
+            const active = activeArea === area
             return (
               <NavLink
-                key={item.to}
-                to={item.to}
+                key={area.label}
+                to={area.links[0].to}
                 onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-brand/20 text-brand'
-                      : 'text-gray-400 hover:bg-gray-800 hover:text-gray-100'
-                  }`
-                }
+                aria-current={active ? 'page' : undefined}
+                className={`flex items-center gap-3 px-3 min-h-11 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand ${
+                  active ? 'bg-brand/20 text-brand' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-100'
+                }`}
               >
-                <Icon size={17} />
-                {item.label}
+                <Icon size={17} className="shrink-0" />
+                {area.label}
               </NavLink>
             )
           })}
@@ -97,10 +61,10 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
 
         {/* User */}
         <div
-          className="px-3 py-4 border-t border-gray-800"
+          className="px-3 py-2 border-t border-gray-800"
           style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
         >
-          <div className="flex items-center gap-3 px-3 py-2 mb-1">
+          <NavLink to="/perfil" onClick={onClose} aria-label="Abrir meu perfil" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800">
             <div className="w-7 h-7 rounded-full bg-brand/20 overflow-hidden flex items-center justify-center text-brand text-xs font-bold flex-shrink-0">
               {user?.profile_photo_url
                 ? <img src={user.profile_photo_url} alt="" className="w-full h-full object-cover" />
@@ -108,9 +72,9 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-200 truncate">{user?.full_name || 'Admin'}</p>
-              <p className="text-xs text-gray-500 truncate">{user?.email || ''}</p>
+              <p className="text-xs text-gray-500">Meu perfil</p>
             </div>
-          </div>
+          </NavLink>
           <button
             onClick={logout}
             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
