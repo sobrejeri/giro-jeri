@@ -10,7 +10,8 @@ import { readToursVisualPreview } from '../../lib/toursVisualPreview'
 export default function BottomNav() {
   const navigate     = useNavigate()
   const { pathname, search } = useLocation()
-  const turivaVisualPreview = pathname === '/passeios' && readToursVisualPreview(search).isNew
+  // Visual novo da Lojinha (e de Translados, aba dela): Descubra em laranja.
+  const turivaVisualPreview = (pathname === '/passeios' && readToursVisualPreview(search).isNew) || pathname === '/transfers'
   const { t }        = useTranslation()
   const { user }     = useAuth()
 
@@ -34,8 +35,8 @@ export default function BottomNav() {
   // embaixo e o menu só roubava espaço numa tela que já é comprida.
   if (pathname === '/carrinho') return null
 
-  const Aba = ({ to, icon: Icon, label, exact, badge = 0 }) => {
-    const active = exact ? pathname === to : pathname.startsWith(to)
+  const Aba = ({ to, icon: Icon, label, exact, badge = 0, tambem = [] }) => {
+    const active = (exact ? pathname === to : pathname.startsWith(to)) || tambem.some((p) => pathname.startsWith(p))
     return (
       <button
         onClick={() => navigate(to)}
@@ -108,7 +109,7 @@ export default function BottomNav() {
     return (
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white z-50 border-t border-gray-100 lg:hidden">
         <div className="flex items-end justify-around px-2 pt-1.5 pb-2">
-          <Aba to="/passeios" icon={Store} label="Lojinha" />
+          <Aba to="/passeios" icon={Store} label="Lojinha" tambem={['/transfers']} />
           <Aba to="/eventos" icon={Sparkles} label={t('nav.events')} />
 
           {FabPublicar}
@@ -124,7 +125,8 @@ export default function BottomNav() {
   // Mesmo estilo do criador (Descubra central em destaque), mas o turista não
   // publica — o botão do meio abre a Descubra, não o compositor de "Publicar".
   const LADO_ESQ = [
-    { to: '/passeios',  icon: Store,     label: 'Lojinha' },
+    // Translados é uma aba DENTRO da Lojinha: a Lojinha continua acesa.
+    { to: '/passeios',  icon: Store,     label: 'Lojinha', tambem: ['/transfers'] },
     { to: '/afiliado',  icon: Megaphone, label: 'Afiliado' },
   ]
   const LADO_DIR = [

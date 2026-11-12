@@ -118,10 +118,61 @@
     border-radius: 15px;
     white-space: nowrap;
   }
-  .turiva-tours-visual2026 .t2026-tabs > button:first-child {
+  /* Aba ativa = a da tela atual (Passeios na Lojinha, Translados, Vagas). */
+  .turiva-tours-visual2026 .t2026-tabs > button[aria-current="page"] {
     color: white;
     background: linear-gradient(112deg,#ff8e11,#fb5600);
     box-shadow: 0 5px 10px rgba(244,104,16,.26);
+  }
+  /* Translados: Rota definida | Translado personalizado — segundo nível,
+     mais leve que as abas para não competir com elas. */
+  .turiva-tours-visual2026 .t2026-mode {
+    gap: 6px;
+    padding: 5px;
+    border: 1px solid #f5f1ec;
+    border-radius: 18px;
+    background: white;
+    box-shadow: 0 4px 14px rgba(22,34,57,.06);
+  }
+  .turiva-tours-visual2026 .t2026-mode > button {
+    min-width: 0;
+    padding: 10px 4px;
+    border: 1px solid transparent;
+    border-radius: 13px;
+    background: transparent;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: none;
+  }
+  .turiva-tours-visual2026 .t2026-mode > button svg {
+    flex-shrink: 0;
+  }
+  .turiva-tours-visual2026 .t2026-mode > button.bg-brand {
+    border-color: #ffd2aa;
+    background: linear-gradient(110deg,#fff0dd 0%,#fff8f1 100%);
+    color: #e85400;
+  }
+  .turiva-tours-visual2026 .t2026-mode > button:not(.bg-brand) {
+    color: #6b7280;
+  }
+  .turiva-tours-visual2026 .t2026-routes h2 {
+    font-size: 21px;
+    font-weight: 800;
+    letter-spacing: -.5px;
+    color: #1a2540;
+  }
+  .turiva-tours-visual2026 .t2026-routes .snap-start {
+    border: 1px solid #f0eeeb;
+    border-radius: 22px;
+    box-shadow: 0 8px 20px rgba(28,43,59,.11);
+  }
+  .turiva-tours-visual2026 .t2026-routes .snap-x > .snap-start {
+    width: 47%;
+    min-width: 172px;
+    max-width: 230px;
+  }
+  .turiva-tours-visual2026 .t2026-routes .snap-start .text-brand {
+    color: #ff6200;
   }
   .turiva-tours-visual2026 .t2026-compose {
     order: 2;

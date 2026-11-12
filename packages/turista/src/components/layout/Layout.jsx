@@ -50,9 +50,9 @@ export default function Layout() {
   const isCreator = user?.user_type === 'admin' || user?.user_type === 'operator'
   // Barra de localização só onde a região manda no conteúdo (loja/vitrine).
   const { pathname, search } = useLocation()
-  // No celular o visual novo da Lojinha traz a região no próprio cabeçalho
-  // laranja; no PC (que não tem esse cabeçalho) a faixa "Saindo de" continua.
-  const lojinhaNova = pathname === '/passeios' && readToursVisualPreview(search).isNew
+  // No celular o visual novo (Lojinha e Translados) traz a região no próprio
+  // cabeçalho laranja; no PC (que não tem esse cabeçalho) a faixa continua.
+  const lojinhaNova = (pathname === '/passeios' && readToursVisualPreview(search).isNew) || pathname === '/transfers'
   const mostraRegiao = pathname === '/' || pathname.startsWith('/passeios') || pathname.startsWith('/transfers')
   async function handleRefresh() {
     // Revalida tudo o que estiver em uso na tela atual.

@@ -18,11 +18,13 @@ import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import { filtrarPontos, normalizarLugar, pontosDaRegiao } from '../lib/pontosTuristicos'
 import { useLocaisProximos } from '../lib/locaisProximos'
 import TransfersDesktop from './TransfersDesktop'
+import FilterChip from '../components/tours/FilterChip'
+import './ToursVisual2026.css'
 import NotificationBell from '../components/NotificationBell'
 import {
   MapPin, Calendar, Clock, Users, ChevronDown,
   Minus, Plus, Car, X, Check, Info, Zap, Send, CheckCircle2, Route, Loader2, Search,
-  Plane, Compass, ShoppingCart, Heart, ParkingSquare, LocateFixed,
+  Plane, Compass, ShoppingCart, Heart, ParkingSquare, LocateFixed, ChevronRight,
 } from 'lucide-react'
 import {
   format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -524,7 +526,7 @@ export default function Transfers() {
   const { state: navState } = useLocation()
   const { upsertItem: saveCartItem, items: savedCartItems, removeItem: dropCartItem, count: cartCount } = useCart()
   const { token } = useAuth()
-  const { region, userCoords, getServiceQuery } = useRegion()
+  const { region, userCoords, getServiceQuery, openPicker } = useRegion()
   const pontos = pontosDaRegiao(region) // atalhos de pontos turísticos (translado personalizado)
   const { favs, toggleFav } = useFavorites()
 
@@ -897,10 +899,10 @@ export default function Transfers() {
 
   return (
     <>
-    <div className="lg:hidden min-h-screen pb-16">
-      {/* Header — para o criador, o mesmo cabeçalho de marca da Lojinha
-          (não muda ao alternar Passeios/Translados). */}
-      <div className="px-4 pt-5 pb-3 lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
+    <div className="lg:hidden min-h-screen pb-16 turiva-tours-visual2026">
+      {/* Header — o mesmo cabeçalho laranja da Lojinha (visual novo), para não
+          mudar de cara ao alternar Passeios / Translados / Vagas. */}
+      <div className="t2026-header px-4 pt-5 pb-3 lg:max-w-3xl lg:mx-auto lg:mt-4 lg:rounded-2xl">
         <div className="relative flex items-center min-h-[44px] justify-start">
           {/* Cabeçalho de marca — igual para turista e operador (mesmo da Lojinha). */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -955,9 +957,21 @@ export default function Transfers() {
             )}
           </form>
         )}
+      </div>
 
-        {/* Alternador Passeios | Translados (mesma lojinha) */}
-        <div className="flex bg-gray-100 rounded-2xl p-1 mt-3">
+      {/* Cidade de saída sobre o cabeçalho, como na Lojinha (substitui a faixa
+          "Saindo de" no celular). */}
+      <button type="button" onClick={openPicker}
+        className="t2026-location mx-4 -mt-5 relative z-10 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[18px] bg-white px-4 py-3 text-left shadow-md"
+        aria-label="Trocar a cidade de saída">
+        <MapPin size={19} className="shrink-0 text-brand" />
+        <span className="min-w-0 flex-1 truncate text-[13px] text-gray-500">Saindo de: <strong className="ml-1 text-[15px] text-gray-900">{region?.name || 'Jericoacoara'}</strong></span>
+        <ChevronRight size={18} className="shrink-0 text-gray-500" />
+      </button>
+
+      <div className="t2026-content px-4 pt-4 space-y-4">
+        {/* Alternador Passeios | Translados | Vagas (mesma lojinha) */}
+        <div className="t2026-tabs flex bg-gray-100 rounded-2xl p-1">
           <button
             onClick={() => navigate('/passeios')}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[13px] font-bold text-gray-500 active:scale-95 transition-transform"
@@ -979,7 +993,7 @@ export default function Transfers() {
         </div>
 
         {/* Mode toggle */}
-        <div className="flex gap-2 mt-3">
+        <div className="t2026-mode flex gap-2">
           <button
             onClick={() => setMode('rota')}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-bold transition-all ${
@@ -1160,11 +1174,12 @@ export default function Transfers() {
 
         {/* ROTAS POPULARES */}
         {routes.length > 0 && (
-        <div>
-          <div className="flex items-baseline justify-between mb-2">
-            <p className="text-[13px] font-bold text-gray-700">
+        <div className="t2026-routes">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="flex items-center gap-2">
+              <Route size={18} className="shrink-0 text-brand" />
               {busca ? 'Resultados' : routeOrigin ? `Saindo de ${shortPlace(routeOrigin)}` : t('transfersPg.popularRoutes')}
-            </p>
+            </h2>
             {!busca && routes.length > popularRoutes.length && !routeOrigin && (
               <button
                 onClick={() => setShowAllRoutes((v) => !v)}
@@ -1178,25 +1193,16 @@ export default function Transfers() {
           {/* Filtro por local de saída — só faz sentido com mais de uma saída
               e fora da busca por texto (que já recorta tudo). */}
           {!busca && originOptions.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto -mr-4 pr-4 pb-2.5" style={{ scrollbarWidth: 'none' }}>
-              <button
-                onClick={() => setRouteOrigin('')}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${
-                  routeOrigin === '' ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200'
-                }`}
-              >
-                Todas
-              </button>
+            <div className="flex gap-2 overflow-x-auto -mr-4 pr-4 pb-3" style={{ scrollbarWidth: 'none' }}>
+              {/* Mesmas pastilhas da Lojinha (contorno laranja na ativa). */}
+              <FilterChip label="Todas" ativo={routeOrigin === ''} onClick={() => setRouteOrigin('')} />
               {originOptions.map(({ name, count }) => (
-                <button
+                <FilterChip
                   key={name}
+                  label={<>{shortPlace(name)} <span className="text-gray-400">{count}</span></>}
+                  ativo={routeOrigin === name}
                   onClick={() => { setRouteOrigin((v) => (v === name ? '' : name)); setShowAllRoutes(false) }}
-                  className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${
-                    routeOrigin === name ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200'
-                  }`}
-                >
-                  {shortPlace(name)} <span className={routeOrigin === name ? 'text-white/70' : 'text-gray-400'}>{count}</span>
-                </button>
+                />
               ))}
             </div>
           )}
