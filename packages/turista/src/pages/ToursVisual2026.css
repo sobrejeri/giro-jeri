@@ -35,11 +35,14 @@
     content: '';
     pointer-events: none;
   }
-  .turiva-tours-visual2026 .t2026-header > .relative {
+  /* Só a linha da marca (1º filho). A caixa de busca que abre logo abaixo
+     também é .relative e, com altura mínima de 60px, deslocava a lupa para
+     fora do campo. */
+  .turiva-tours-visual2026 .t2026-header > .relative:first-child {
     min-height: 60px;
     gap: 6px;
   }
-  .turiva-tours-visual2026 .t2026-header > .relative > .flex:first-child {
+  .turiva-tours-visual2026 .t2026-header > .relative:first-child > .flex:first-child {
     gap: 10px;
     max-width: calc(100% - 132px);
   }

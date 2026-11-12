@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -22,6 +23,7 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
   const { token }  = useAuth()
   const [open, setOpen] = useState(false)
   const ref      = useRef(null)
+  const panelRef = useRef(null)
   const qc       = useQueryClient()
   const navigate = useNavigate()
 
@@ -55,7 +57,11 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
 
   useEffect(() => {
     if (!open) return
-    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    // O painel mora no <body> (portal): tocar nele não é "fora".
+    function onDown(e) {
+      if (ref.current?.contains(e.target) || panelRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
@@ -95,8 +101,12 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
         )}
       </button>
 
-      {open && (
+      {/* Portal no <body>: dentro do cabeçalho laranja (que tem camada própria,
+          z-index 0) o painel ficava POR TRÁS do cartão "Saindo de" e dos cards,
+          por maior que fosse o z-index dele. */}
+      {open && createPortal(
         <div
+          ref={panelRef}
           className="fixed w-[min(340px,calc(100vw-24px))] bg-white rounded-2xl shadow-2xl border border-gray-100 z-[200] overflow-hidden"
           style={{
             top: (ref.current?.getBoundingClientRect().bottom || 56) + 8,
@@ -156,7 +166,8 @@ export default function NotificationBell({ bookingsPath = '/minhas-reservas', da
               </p>
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
