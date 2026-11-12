@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -82,7 +82,7 @@ const BOOKING_EMPTY = {
 
 function KpiCard({ icon: Icon, label, value, sub, color = 'text-brand' }) {
   return (
-    <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+    <Card className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
       <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center bg-gray-900 ${color} flex-shrink-0`}>
         <Icon size={18} />
       </div>
@@ -363,15 +363,16 @@ const dataBR = (iso) => {
 }
 
 function AcompanhamentoOperacional() {
+  const [search, setSearch] = useState('')
   const [operatorId,  setOperatorId]  = useState('')
   const [serviceType, setServiceType] = useState('')   // '' | 'tour' | 'transfer'
   const [tourId,      setTourId]      = useState('')
   const [status,      setStatus]      = useState('')    // '' = todos
   // Período em vez de um dia só: quem acompanha a operação pergunta "como foi a
   // semana" e "o que vem pela frente", não só "o que tem no dia 01".
-  const [desde,       setDesde]       = useState('')
-  const [ate,         setAte]         = useState('')
-  const [periodo,     setPeriodo]     = useState('all')  // atalho ativo
+  const [desde,       setDesde]       = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [ate,         setAte]         = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [periodo,     setPeriodo]     = useState('hoje')  // atalho ativo
 
   const { data: operatorsData } = useQuery({
     queryKey: ['admin-operators'],
@@ -383,7 +384,8 @@ function AcompanhamentoOperacional() {
     queryKey: ['catalog-tours'],
     queryFn:  () => api.getTours(),
   })
-  const tourName = (id) => tours.find((t) => t.id === id)?.name
+  const tourList = Array.isArray(tours) ? tours : (tours?.data || [])
+  const tourName = (id) => tourList.find((t) => t.id === id)?.name
 
   const params = { date: 'all' }
   if (desde)       params.from          = desde
@@ -391,7 +393,7 @@ function AcompanhamentoOperacional() {
   if (operatorId)  params.operator_id   = operatorId
   if (serviceType) params.service_type  = serviceType
 
-  const { data: op, isLoading, isFetching } = useQuery({
+  const { data: op, isLoading, isFetching, isError } = useQuery({
     queryKey: ['admin-operational', params],
     queryFn:  () => api.getOperational(params),
     refetchInterval: 30_000,
@@ -407,6 +409,8 @@ function AcompanhamentoOperacional() {
   }, {})
 
   let list = status ? base.filter((b) => andamentoDe(b) === status) : base
+  const query = search.trim().toLocaleLowerCase('pt-BR')
+  if (query) list = list.filter(b => `${b.booking_code || ''} ${b.users?.full_name || ''}`.toLocaleLowerCase('pt-BR').includes(query))
   // Da solicitação mais NOVA para a mais antiga, de cima para baixo.
   //
   // Ordena por `created_at` — quando o pedido entrou —, não pela data do
@@ -427,7 +431,7 @@ function AcompanhamentoOperacional() {
 
   // Atalhos com o dia de HOJE como âncora. Sem eles, ver a semana exige digitar
   // duas datas — trabalho demais para a pergunta mais frequente do painel.
-  const iso = (d) => d.toISOString().slice(0, 10)
+  const iso = (d) => format(d, 'yyyy-MM-dd')
   const maisDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d) }
   const PERIODOS = [
     { id: 'all',      label: 'Tudo',        range: () => ['', ''] },
@@ -449,17 +453,30 @@ function AcompanhamentoOperacional() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <Filter size={15} className="text-brand" /> Acompanhamento operacional
+            <Filter size={15} className="text-brand" /> Reservas da operação
           </h2>
           {isFetching && <span className="text-[11px] text-gray-600">atualizando…</span>}
         </div>
       </CardHeader>
       <CardBody>
         <div className="space-y-4">
-          {/* Filtros */}
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+            <input aria-label="Buscar reserva ou cliente" placeholder="Buscar reserva ou cliente" value={search} onChange={e => setSearch(e.target.value)} className={`${selectCls} min-w-0 min-h-11`} />
+            <select aria-label="Período" value={periodo} onChange={e => aplicarPeriodo(PERIODOS.find(p => p.id === e.target.value))} className={`${selectCls} min-h-11`}>
+              <option value="" disabled>Personalizado</option>
+              {PERIODOS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+            <select aria-label="Status operacional" value={status} onChange={e => setStatus(e.target.value)} className={`${selectCls} min-h-11`}>
+              <option value="">Todos os status ({base.length})</option>
+              {OP_ORDER.map(st => <option key={st} value={st}>{OP_STATUS[st].label} ({counts[st]})</option>)}
+            </select>
+          </div>
+          <details className="rounded-lg border border-gray-700 p-3">
+            <summary className="cursor-pointer text-xs text-gray-300">Mais filtros{operatorId || serviceType || tourId ? ' · filtros ativos' : ''}</summary>
+            <div className="mt-3">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             <select value={operatorId} onChange={(e) => setOperatorId(e.target.value)} className={selectCls}>
-              <option value="">Todas os operadores</option>
+              <option value="">Todos os operadores</option>
               {operators.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
             </select>
             <select
@@ -478,7 +495,7 @@ function AcompanhamentoOperacional() {
               className={`${selectCls} col-span-2 lg:col-span-1 ${serviceType === 'transfer' ? 'opacity-40' : ''}`}
             >
               <option value="">Todos os passeios</option>
-              {tours.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {tourList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             <div className="col-span-2 lg:col-span-1 flex items-center gap-1.5 min-w-0">
               <input
@@ -501,56 +518,38 @@ function AcompanhamentoOperacional() {
             </div>
           </div>
 
-          {/* Atalhos de período */}
-          <div className="flex flex-wrap gap-1.5">
-            {PERIODOS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => aplicarPeriodo(p)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
-                  periodo === p.id ? 'bg-brand text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-            {(desde || ate) && (
-              <span className="px-2.5 py-1 text-[11px] text-gray-500">
-                {desde ? dataBR(desde) : 'início'} → {ate ? dataBR(ate) : 'sem fim'}
-              </span>
-            )}
-          </div>
-
-          {/* Chips de status (andamento) */}
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setStatus('')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${status === '' ? 'bg-brand text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >
-              Todos ({base.length})
-            </button>
-            {OP_ORDER.filter((s) => counts[s] > 0).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatus(status === s ? '' : s)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1.5 transition-colors ${status === s ? 'bg-brand text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${OP_STATUS[s].dot}`} /> {OP_STATUS[s].label} ({counts[s]})
-              </button>
-            ))}
-          </div>
+            </div>
+          </details>
 
           {/* Lista */}
-          {isLoading ? (
+          {isError ? <p role="alert" className="py-6 text-sm text-red-300">Não foi possível carregar as reservas. Tente novamente em instantes.</p> : isLoading ? (
             <div className="py-10 text-center text-gray-600 text-sm">Carregando…</div>
           ) : list.length === 0 ? (
             <div className="py-10 text-center text-gray-600 text-sm">Nenhuma atividade para os filtros selecionados.</div>
           ) : (
-            <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
-              {list.map((b) => {
+            <>
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-gray-400 border-b border-gray-700"><tr>
+                  {['Reserva / Cliente', 'Serviço', 'Data / Hora', 'Responsável', 'Status'].map(label => <th key={label} className="px-2 py-3 font-medium">{label}</th>)}
+                </tr></thead>
+                <tbody>{list.slice(0, 20).map(b => {
+                  const st = OP_STATUS[andamentoDe(b)] || OP_STATUS.new
+                  return <tr key={b.id} className="border-b border-gray-700/60">
+                    <td className="px-2 py-3"><p className="font-medium text-gray-200">{b.booking_code}</p><p className="text-xs text-gray-400">{b.users?.full_name || 'Cliente'}</p></td>
+                    <td className="px-2 py-3 text-gray-300">{serviceLabel(b)}</td>
+                    <td className="px-2 py-3 text-gray-400 whitespace-nowrap">{fmtDateShort(b.service_date)}<br />{String(b.service_time || '').slice(0, 5)}</td>
+                    <td className="px-2 py-3 text-gray-400">{b.operator?.full_name || 'Não atribuído'}</td>
+                    <td className="px-2 py-3"><span className={`inline-flex rounded-full px-2 py-1 text-xs ${st.chip} ${st.text}`}>{st.label}</span></td>
+                  </tr>
+                })}</tbody>
+              </table>
+            </div>
+            <div className="lg:hidden space-y-2">
+              {list.slice(0, 20).map((b) => {
                 const st = OP_STATUS[andamentoDe(b)] || OP_STATUS.new
                 return (
-                  <div key={b.id} className="flex items-center gap-3 bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-2.5">
+                  <div key={b.id} className="flex flex-wrap items-center gap-3 bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-2.5">
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${b.service_type === 'transfer' ? 'bg-teal-900/40 text-teal-300' : 'bg-orange-900/40 text-brand'}`}>
                       {b.service_type === 'transfer' ? <Car size={16} /> : <MapPin size={16} />}
                     </div>
@@ -578,7 +577,10 @@ function AcompanhamentoOperacional() {
                 )
               })}
             </div>
+            {list.length > 20 && <p className="text-xs text-gray-400">Mostrando 20 de {list.length} reservas.</p>}
+            </>
           )}
+          <Link to="/reservas" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand">Ver todas as reservas <ChevronRight size={16} /></Link>
         </div>
       </CardBody>
     </Card>
@@ -807,8 +809,9 @@ export default function Dashboard() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [showModal, setShowModal] = useState(false)
+  const [view, setView] = useState('operation')
 
-  const { data: stats, isLoading: l1 } = useQuery({
+  const { data: stats, isLoading: l1, isError: statsError } = useQuery({
     queryKey: ['admin-stats'],
     queryFn:  () => api.getStats(),
     refetchInterval: 60_000,
@@ -817,9 +820,11 @@ export default function Dashboard() {
   const { data: dailyResp, isLoading: l2 } = useQuery({
     queryKey: ['financial-daily-30'],
     queryFn:  () => api.getFinancialDaily({ days: 30 }),
+    enabled: view === 'reports',
   })
 
-  if (l1 || l2) return <PageSpinner />
+  if (l1) return <PageSpinner />
+  if (statsError) return <p role="alert" className="text-sm text-red-300">Não foi possível carregar o resumo da operação. Atualize a página para tentar novamente.</p>
 
   // /financial-daily passou a devolver { series, gateways } (ganho do Turiva por
   // gateway). Somamos os gateways por dia para o total do dia. As guardas evitam
@@ -839,48 +844,27 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header com botão de ação */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-bold text-gray-100">Dashboard</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Visão geral da operação</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-100">Sua operação hoje</h1>
+          <p className="text-sm text-gray-400 mt-1">Reservas, equipe e pendências em um só lugar.</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
-          <Plus size={15} /> Nova Reserva
-        </Button>
+        <Button onClick={() => setShowModal(true)}><Plus size={15} /> Nova reserva</Button>
       </div>
-
-      {/* Receita de hoje em destaque + atalho para o financeiro */}
-      <Card className="p-4 sm:p-5">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gray-900 flex items-center justify-center text-brand shrink-0">
-            <Wallet size={22} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-gray-500 font-medium">Receita hoje</p>
-            <p className="text-2xl font-extrabold text-brand leading-tight">{fmt(stats?.valor_bruto_hoje)}</p>
-            {stats?.valor_liquido_hoje != null && (
-              <p className="text-[11px] text-gray-500 mt-0.5">Líquido {fmt(stats.valor_liquido_hoje)} · Mês {fmt(stats?.valor_bruto_mes)}</p>
-            )}
-          </div>
-          <button
-            onClick={() => navigate('/financeiro')}
-            className="shrink-0 flex items-center gap-1 text-sm font-semibold text-gray-300 hover:text-brand transition-colors"
-          >
-            Ver financeiro <ChevronRight size={16} />
-          </button>
-        </div>
-      </Card>
-
-      {/* KPIs — grade 2×2 compacta.
-          "Ag. operador" é a fila que faltava: pedido esperando alguém aceitar. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={CalendarCheck} label="Reservas hoje"       value={stats?.reservas_hoje ?? '—'}      color="text-blue-400" />
-        <KpiCard icon={Hourglass}     label="Aguardando operador" value={stats?.aguardando_aceite ?? '—'}  color="text-purple-400" />
-        <KpiCard icon={Clock}         label="Aguardando pagamento" value={stats?.pendencias ?? '—'}        color="text-amber-400" />
-        <KpiCard icon={XCircle}       label="Cancelamentos hoje"  value={stats?.cancelamentos ?? '—'}      color="text-red-400" />
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <KpiCard icon={CalendarCheck} label="Reservas hoje" value={stats?.reservas_hoje ?? '—'} />
+        <KpiCard icon={Hourglass} label="Sem operador" value={stats?.aguardando_aceite ?? '—'} />
+        <KpiCard icon={Clock} label="Aguardando pagamento" value={stats?.pendencias ?? '—'} />
+        <KpiCard icon={Wallet} label="Receita hoje" value={stats?.valor_bruto_hoje != null ? fmt(stats.valor_bruto_hoje) : '—'} sub="Receita bruta" />
       </div>
-
+      <div role="group" aria-label="Visualização do painel" className="grid grid-cols-2 max-w-md gap-1 rounded-xl border border-gray-700 p-1 bg-gray-900">
+        {[['operation', 'Operação'], ['reports', 'Relatórios']].map(([id, label]) => <button key={id} onClick={() => setView(id)} aria-pressed={view === id} className={`min-h-11 rounded-lg text-sm font-medium ${view === id ? 'bg-brand/20 text-brand ring-1 ring-brand/60' : 'text-gray-400 hover:bg-gray-800'}`}>{label}</button>)}
+      </div>
+      {view === 'operation' && <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px] items-start">
+        <div className="min-w-0"><AcompanhamentoOperacional /></div>
+        <aside className="space-y-3" aria-label="Atenção necessária">
+          <h2 className="text-sm font-semibold text-gray-200">Atenção necessária</h2>
+          {(stats?.aguardando_aceite ?? 0) > 0 && <Link to="/reservas" className="flex items-center gap-2 p-4 rounded-xl border border-orange-500/30 bg-orange-900/10 text-sm text-orange-300"><Hourglass size={18} className="shrink-0" /><span>{stats.aguardando_aceite} reserva(s) sem operador</span><ChevronRight size={16} className="shrink-0" /></Link>}
       {/* Atalho: pendências de pagamento (some quando não há) */}
       {(stats?.pendencias ?? 0) > 0 && (
         <button
@@ -898,9 +882,12 @@ export default function Dashboard() {
       {/* Solicitações de redefinição de senha (some quando não há) */}
       <SolicitacoesResetSenha />
 
-      {/* Acompanhamento operacional — filtro por operador / passeio / transfer */}
-      <AcompanhamentoOperacional />
-
+          {(stats?.pendencias === 0 && stats?.aguardando_aceite === 0) && <p className="text-sm text-gray-400">Nenhuma pendência de pagamento ou de operador.</p>}
+          <Link to="/financeiro" className="inline-flex min-h-11 items-center text-sm text-brand">Ver financeiro <ChevronRight size={16} /></Link>
+        </aside>
+      </div>}
+      {view === 'reports' && <div className="space-y-4">
+      <KpiCard icon={XCircle} label="Cancelamentos hoje" value={stats?.cancelamentos ?? '—'} color="text-red-400" />
       {/* Ranking comparativo de operadores */}
       <RankingOperadores />
 
@@ -913,7 +900,7 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardBody>
-          {chartData.length === 0 ? (
+          {l2 ? <p className="py-10 text-center text-gray-400">Carregando relatório…</p> : chartData.length === 0 ? (
             <div className="h-52 flex items-center justify-center text-gray-600 text-sm">Sem dados</div>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
@@ -949,6 +936,8 @@ export default function Dashboard() {
           </p>
         </Card>
       </div>
+
+      </div>}
 
       <NovaReservaModal
         open={showModal}
