@@ -12,6 +12,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { supabase } from '../supabase.js';
 import { semVinculoNoBanco } from '../lib/vinculoEmpresa.js';
+import { colunaFaltante } from '../lib/colunaFaltante.js';
 import { montarBaixa, somarRepasses, STATUS_REPASSE } from '../services/repasseExecutor.js';
 
 const router = Router();
@@ -41,26 +42,31 @@ router.get('/executor-payouts', async (req, res, next) => {
     const from = DATA.test(String(req.query.from || '')) ? req.query.from : null;
     const to   = DATA.test(String(req.query.to || ''))   ? req.query.to   : null;
 
-    let q = supabase.from('operational_assignments')
-      .select(`id, booking_id, driver_name, driver_phone, driver_pix_key, driver_pix_key_type, real_vehicle_text,
-               driver_payout_amount, driver_payout_status, driver_paid_at, driver_payout_notes, created_at,
-               bookings!inner ( booking_code, service_type, service_date, service_time, total_amount,
-                                status_commercial, status_operational, origin_text, destination_text, operator_id )`)
-      .in('bookings.operator_id', ids)
-      .not('driver_name', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(500);
-    if (status) q = q.eq('driver_payout_status', status);
-    if (from) q = q.gte('bookings.service_date', from);
-    if (to)   q = q.lte('bookings.service_date', to);
-
-    const { data, error } = await q;
+    const consultar = (comPapel) => {
+      let q = supabase.from('operational_assignments')
+        .select(`id, booking_id, driver_name, driver_phone, driver_pix_key, driver_pix_key_type, real_vehicle_text,
+                 driver_payout_amount, driver_payout_status, driver_paid_at, driver_payout_notes, created_at,${comPapel ? ' executor_role,' : ''}
+                 bookings!inner ( booking_code, service_type, service_date, service_time, total_amount,
+                                  status_commercial, status_operational, origin_text, destination_text, operator_id )`)
+        .in('bookings.operator_id', ids)
+        .not('driver_name', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (status) q = q.eq('driver_payout_status', status);
+      if (from) q = q.gte('bookings.service_date', from);
+      if (to)   q = q.lte('bookings.service_date', to);
+      return q;
+    };
+    let { data, error } = await consultar(true);
+    // Papel do executor é da migração 132 — sem ela, lê sem a coluna.
+    if (colunaFaltante(error) === 'executor_role') ({ data, error } = await consultar(false));
     if (COLUNA_AUSENTE(error)) return res.json({ ...vazio, pendente: true });
     if (error) throw error;
 
     const rows = (data || []).map((a) => ({
       id: a.id, booking_id: a.booking_id,
       executor: a.driver_name, executor_phone: a.driver_phone || null,
+      executor_role: a.executor_role || 'driver',
       pix_key: a.driver_pix_key || null, pix_key_type: a.driver_pix_key_type || null,
       veiculo: a.real_vehicle_text || null,
       driver_payout_amount: a.driver_payout_amount, driver_payout_status: a.driver_payout_status,

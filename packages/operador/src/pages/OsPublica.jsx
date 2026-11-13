@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Download, FileText, AlertCircle, Loader2 } from 'lucide-react'
 import { downloadOrderPDF } from '../lib/orderPDF'
+import { papelExecutor } from '../lib/papelExecutor'
 
 // Página PÚBLICA da Ordem de Serviço, aberta pelo link enviado no WhatsApp do
 // cliente e do motorista. Não exige login — eles não têm conta. O acesso é
@@ -77,6 +78,7 @@ export default function OsPublica() {
           driver_name:       assignment?.driver_name       || '',
           driver_phone:      assignment?.driver_phone      || '',
           dispatch_notes:    assignment?.dispatch_notes    || '',
+          executor_role:     assignment?.executor_role     || 'driver',
         },
         operador,
       )
@@ -108,6 +110,7 @@ export default function OsPublica() {
   }
 
   const { booking, assignment, operador, vehicles } = data
+  const papel = papelExecutor(assignment?.executor_role)
   const veiculoCliente = (vehicles || [])
     .map((v) => `${v.quantity > 1 ? v.quantity + 'x ' : ''}${v.vehicle_name_snapshot || ''}`.trim())
     .filter(Boolean).join(' + ')
@@ -150,9 +153,9 @@ export default function OsPublica() {
 
         <div className="bg-white rounded-2xl shadow-sm p-5">
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Atendimento</p>
-          <Linha label="Veículo">{assignment?.real_vehicle_text}</Linha>
-          <Linha label="Motorista">{assignment?.driver_name}</Linha>
-          <Linha label="WhatsApp do motorista">{assignment?.driver_phone}</Linha>
+          <Linha label={papel.veiculo}>{assignment?.real_vehicle_text}</Linha>
+          <Linha label={papel.nome}>{assignment?.driver_name}</Linha>
+          <Linha label={`WhatsApp do ${papel.nome.toLowerCase()}`}>{assignment?.driver_phone}</Linha>
           <Linha label="Observações">{assignment?.dispatch_notes}</Linha>
           {!assignment?.real_vehicle_text && !assignment?.driver_name && (
             <p className="text-[12px] text-gray-400 py-2">Ainda não despachado.</p>

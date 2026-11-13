@@ -1755,3 +1755,12 @@ enxerga o trabalho do outro no próximo `git fetch`.
   baixa manual no que pagou a motorista/guia/tripulação. Mesmas colunas
   `operational_assignments.driver_payout_*` (066) que o operador usa em
   "Repasses aos motoristas" — fonte única; sem migração nova.
+
+- **2026-11-13 · Empresa 5/5 (despacho de guia e helicóptero)** —
+  `operational_assignments.executor_role` (`driver|guide|pilot`, migração
+  **132**). O despacho (`DespacharModal`) adapta os campos: guia não tem placa,
+  piloto informa a aeronave. Rótulos em `lib/papelExecutor.js` (API e operador)
+  alimentam WhatsApp ao cliente, OS pública e PDF. Sem a 132, o `/assign`
+  regrava SÓ sem o papel (não descarta PIX/documento). No turista, passeio com
+  embarque fixo (124) mostra o ponto e não pede "local de saída"
+  (`lib/embarqueFixo.js`).

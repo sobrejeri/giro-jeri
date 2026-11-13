@@ -9,18 +9,22 @@ import Input, { Textarea, Select } from './ui/Input'
 import Button from './ui/Button'
 import { orderPDFBase64 } from '../lib/orderPDF'
 import { TIPOS_PIX } from './ConfirmarExecutor'
+import { PAPEIS, papelExecutor, papelSugerido } from '../lib/papelExecutor'
 
 const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const FORM_VAZIO = {
+  executor_role: 'driver',
   real_vehicle_text: '', driver_name: '', dispatch_notes: '', driver_phone: '',
   driver_document: '', driver_pix_key: '', driver_pix_key_type: '', driver_payout_amount: '',
 }
 
 // Uma fonte só de verdade para habilitar o botão e para o submit.
+// Guia não tem veículo: placa/aeronave só é exigida de motorista e piloto.
 function podeDespachar(f) {
+  const precisaVeiculo = !!papelExecutor(f.executor_role).campoVeiculo
   return !!(
-    f.real_vehicle_text.trim() && f.driver_name.trim() && f.driver_phone.trim() &&
+    (!precisaVeiculo || f.real_vehicle_text.trim()) && f.driver_name.trim() && f.driver_phone.trim() &&
     f.driver_document.trim() && f.driver_pix_key.trim() && f.driver_pix_key_type.trim()
   )
 }
@@ -54,6 +58,8 @@ export default function DespacharModal({ booking, operador, onClose, onDone }) {
     const assign = booking.operational_assignments?.[0]
     setForm({
       ...FORM_VAZIO,
+      // Redespacho mantém o papel gravado; despacho novo sugere pelo serviço.
+      executor_role:        assign?.executor_role || papelSugerido(booking),
       real_vehicle_text:    assign?.real_vehicle_text    || '',
       driver_name:          assign?.driver_name          || '',
       dispatch_notes:       assign?.dispatch_notes       || '',
@@ -103,13 +109,15 @@ export default function DespacharModal({ booking, operador, onClose, onDone }) {
     if (!podeDespachar(form)) return
     // Combina veículo escolhido + placa digitada para a OS/PDF mostrarem os dois.
     const veic  = veiculoDaReserva(booking)
-    const placa = form.real_vehicle_text.trim()
+    const placa = papel.campoVeiculo ? form.real_vehicle_text.trim() : ''
     const real_vehicle_text = (veic && !placa.toLowerCase().includes(veic.toLowerCase()))
-      ? `${veic} · ${placa}` : placa
+      ? [veic, placa].filter(Boolean).join(' · ') : placa
     assignMut.mutate({ id: booking.id, ...form, real_vehicle_text })
   }
 
   const canDispatch = podeDespachar(form)
+  const papel = papelExecutor(form.executor_role)
+  const quem = papel.nome.toLowerCase()
 
   // Reset do reidratar entre reservas: se trocar de booking, some com o aviso.
   useEffect(() => { setConfirmandoSaida(false) }, [booking?.id])
@@ -167,7 +175,7 @@ export default function DespacharModal({ booking, operador, onClose, onDone }) {
               {(booking.pickup_place_name || booking.origin_text) && (
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-gray-500 shrink-0">Embarque</span>
-                  <span className="font-medium text-gray-800 text-right line-clamp-1">
+                  <span className="font-medium text-gray-800 text-right">
                     {booking.pickup_place_name || booking.origin_text}
                   </span>
                 </div>
@@ -188,9 +196,25 @@ export default function DespacharModal({ booking, operador, onClose, onDone }) {
           </div>
         )}
 
-        <Input label="Placa do veículo *" placeholder="Ex: GKR-1234"
-          value={form.real_vehicle_text} required
-          onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })} />
+        <div>
+          <p className="text-sm font-medium text-gray-700 mb-1.5">Quem vai executar</p>
+          <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-xl" role="group" aria-label="Quem vai executar">
+            {Object.values(PAPEIS).map((p) => (
+              <button key={p.id} type="button" aria-pressed={form.executor_role === p.id}
+                onClick={() => setForm({ ...form, executor_role: p.id })}
+                className={`px-2 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${
+                  form.executor_role === p.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                {p.nome}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {papel.campoVeiculo && (
+          <Input label={papel.campoVeiculo} placeholder={papel.exemploVeiculo}
+            value={form.real_vehicle_text} required
+            onChange={(e) => setForm({ ...form, real_vehicle_text: e.target.value })} />
+        )}
 
         {executores.length > 0 && (
           <div>
@@ -210,11 +234,11 @@ export default function DespacharModal({ booking, operador, onClose, onDone }) {
           </div>
         )}
 
-        <Input label="Nome do motorista *" placeholder="Ex: João da Silva"
+        <Input label={`Nome do ${quem} *`} placeholder={papel.exemploNome}
           value={form.driver_name} required
           onChange={(e) => setForm({ ...form, driver_name: e.target.value })} />
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp do motorista *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp do {quem} *</label>
           <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-brand/30 focus-within:border-brand bg-white">
             <MessageCircle size={14} className="text-green-500 shrink-0" />
             <input type="tel" placeholder="(88) 99999-9999" value={form.driver_phone} required
@@ -240,17 +264,17 @@ export default function DespacharModal({ booking, operador, onClose, onDone }) {
               {TIPOS_PIX.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </Select>
           </div>
-          <Input label="Valor do repasse ao motorista (opcional)" type="number" min={0} step="0.01"
+          <Input label={`Valor do repasse ao ${quem} (opcional)`} type="number" min={0} step="0.01"
             placeholder="Ex: 120,00 — pode definir depois"
             value={form.driver_payout_amount}
             onChange={(e) => setForm({ ...form, driver_payout_amount: e.target.value })} />
         </div>
 
-        <Textarea label="Observações para o motorista" rows={2} value={form.dispatch_notes}
+        <Textarea label={papel.obs} rows={2} value={form.dispatch_notes}
           onChange={(e) => setForm({ ...form, dispatch_notes: e.target.value })} />
 
         {!canDispatch && (
-          <p className="text-[11px] text-amber-600">Preencha placa, motorista, WhatsApp e os dados de repasse (CPF/CNPJ, chave PIX e tipo). Só as observações são opcionais.</p>
+          <p className="text-[11px] text-amber-600">Preencha {papel.campoVeiculo ? `${papel.id === 'pilot' ? 'aeronave' : 'placa'}, ` : ''}{quem}, WhatsApp e os dados de repasse (CPF/CNPJ, chave PIX e tipo). Só as observações são opcionais.</p>
         )}
         {errMsg && (
           <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{errMsg}</p>

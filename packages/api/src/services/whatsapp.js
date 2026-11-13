@@ -3,6 +3,8 @@
 // Sem credenciais configuradas, vira no-op silencioso — nunca
 // derruba o fluxo de cadastro/verificação.
 
+import { papelDe } from '../lib/papelExecutor.js';
+
 const ZAPI_BASE = process.env.ZAPI_BASE_URL || 'https://api.z-api.io';
 
 // URLs dos apps para os deep links das notificações. Defaults já apontam pra
@@ -586,6 +588,7 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
   const hora       = booking.service_time ? booking.service_time.slice(0, 5) : null
   const quando     = `${data}${hora ? ` às ${hora}` : ''}`
   const veiculo    = assignment?.real_vehicle_text || '—'
+  const papel      = papelDe(assignment)   // motorista, guia ou piloto (132)
   const motorista  = assignment?.driver_name || '—'
   const motoFone   = assignment?.driver_phone || ''
   const obs        = assignment?.dispatch_notes ? `\n📝 ${assignment.dispatch_notes}` : ''
@@ -601,8 +604,8 @@ export async function notifyDispatchOS(supabase, { booking, assignment }) {
       `📅 ${quando}\n` +
       (embarque ? `📍 Embarque: ${embarque}\n` : '') +
       (destino  ? `🏁 Destino: ${destino}\n` : '') +
-      `🚗 Veículo: ${veiculo}\n` +
-      `👤 Motorista: ${motorista}${motoFone ? ` — ${motoFone}` : ''}\n` +
+      (papel.veiculo ? `${papel.emoji} ${papel.veiculo}: ${veiculo}\n` : '') +
+      `👤 ${papel.nome}: ${motorista}${motoFone ? ` — ${motoFone}` : ''}\n` +
       `🔖 ${booking.booking_code}` + obs +
       (osUrl ? `\n\n📄 Ordem de Serviço: ${osUrl}` : '') +
       `\n\nQualquer dúvida, é só chamar. Boa viagem! 🌴`
@@ -715,7 +718,7 @@ export async function notifyClientRideStarted(supabase, booking) {
   const embarque = booking.origin_text || booking.pickup_place_name || ''
   const message =
     `*TURIVA* · A caminho! 🚗💨\n\n` +
-    `Seu ${tipo.toLowerCase()} (${booking.booking_code || '-'}) começou e o motorista já está a caminho` +
+    `Seu ${tipo.toLowerCase()} (${booking.booking_code || '-'}) começou e a equipe já está a caminho` +
     `${embarque ? ` do ponto de embarque: ${embarque}` : ''}.\n\n` +
     `Bom passeio! 🌴`
   await sendToMany([phone], message)

@@ -29,11 +29,19 @@ router.get('/:token', async (req, res, next) => {
     if (!booking) return res.status(404).json({ error: 'Ordem de serviço não encontrada.' });
 
     // Dados do despacho (veículo real, motorista, observações).
-    const { data: assignment } = await supabase
+    let { data: assignment, error: aErr } = await supabase
       .from('operational_assignments')
-      .select('real_vehicle_text, driver_name, driver_phone, dispatch_notes')
+      .select('real_vehicle_text, driver_name, driver_phone, dispatch_notes, executor_role')
       .eq('booking_id', booking.id)
       .maybeSingle();
+    // executor_role é da migração 132 — sem ela, todo executor é motorista.
+    if (aErr && (aErr.code === '42703' || aErr.code === 'PGRST204')) {
+      ({ data: assignment } = await supabase
+        .from('operational_assignments')
+        .select('real_vehicle_text, driver_name, driver_phone, dispatch_notes')
+        .eq('booking_id', booking.id)
+        .maybeSingle());
+    }
 
     // Cliente: só nome e telefone — é o que a OS exibe.
     const { data: cliente } = await supabase

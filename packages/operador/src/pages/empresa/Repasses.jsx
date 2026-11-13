@@ -9,6 +9,7 @@ import Card, { CardBody } from '../../components/ui/Card'
 import Input, { Textarea } from '../../components/ui/Input'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
+import { papelExecutor } from '../../lib/papelExecutor'
 
 const moeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const dia = (d) => { const [y, m, x] = String(d || '').slice(0, 10).split('-'); return y && m && x ? `${x}/${m}/${y}` : '—' }
@@ -110,7 +111,7 @@ export default function Repasses() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-gray-900 truncate">{r.executor}</p>
-                  <p className="text-sm text-gray-600 truncate">{[r.veiculo, r.executor_phone].filter(Boolean).join(' · ') || 'Executor do serviço'}</p>
+                  <p className="text-sm text-gray-600 truncate">{[papelExecutor(r.executor_role).nome, r.veiculo, r.executor_phone].filter(Boolean).join(' · ')}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`font-semibold ${semValor ? 'text-gray-400' : 'text-gray-900'}`}>{semValor ? 'Sem valor' : moeda(r.driver_payout_amount)}</p>

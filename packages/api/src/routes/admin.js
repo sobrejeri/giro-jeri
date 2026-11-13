@@ -15,6 +15,8 @@ import { notifyDispatchOS } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
 import crypto from 'node:crypto';
 import { empresaDoOperador, semVinculoNoBanco, MSG_MIGRACAO_EMPRESA } from '../lib/vinculoEmpresa.js';
+import { papelValido } from '../lib/papelExecutor.js';
+import { colunaFaltante } from '../lib/colunaFaltante.js';
 import { montarLinhaFila, conciliarReserva, ORDEM_CONCILIACAO } from '../services/payoutQueue.js';
 
 const router = Router();
@@ -1593,6 +1595,11 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
     // um executor salvo numa versão antiga): maiúsculo violava o CHECK → 500.
     if (payload.driver_pix_key_type) payload.driver_pix_key_type = String(payload.driver_pix_key_type).toLowerCase();
 
+    // Papel de quem executa (132): motorista, guia ou piloto. Só entra quando
+    // veio no corpo e é válido — redespacho antigo não rebaixa um piloto a
+    // motorista. Guia não tem veículo: o texto de placa não é exigido aqui.
+    if (papelValido(req.body?.executor_role)) payload.executor_role = req.body.executor_role;
+
     // Verifica se já existe um assignment para essa reserva. `.limit(1)` em vez
     // de `.maybeSingle()`: não há UNIQUE em booking_id, e duas linhas fariam o
     // maybeSingle estourar (500) em vez de escolher a mais recente.
@@ -1607,7 +1614,7 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
     // Colunas dos executores (migrations 081/082). Se ainda não existirem no
     // banco (migração pendente), o insert/update devolve 42703 — aí refazemos
     // sem esses campos, para o despacho não quebrar por causa do repasse.
-    const COLS_EXTRAS = ['driver_document', 'driver_pix_key', 'driver_pix_key_type', 'driver_payout_amount'];
+    const COLS_EXTRAS = ['driver_document', 'driver_pix_key', 'driver_pix_key_type', 'driver_payout_amount', 'executor_role'];
     const semExtras = (obj) => {
       const o = { ...obj };
       for (const c of COLS_EXTRAS) delete o[c];
@@ -1622,6 +1629,12 @@ router.post('/operational/:id/assign', requireOperator, async (req, res, next) =
     }
 
     let { data: result, error: gravaErr } = await gravar(payload);
+    // Migração 132 pendente: só o PAPEL sai — sem isto, a regra geral abaixo
+    // jogaria fora também a chave PIX e o documento do executor.
+    if (gravaErr && 'executor_role' in payload && colunaFaltante(gravaErr) === 'executor_role') {
+      delete payload.executor_role;
+      ({ data: result, error: gravaErr } = await gravar(payload));
+    }
     // Recuperáveis ligados aos campos de repasse (081): coluna ausente (42703),
     // violação de CHECK (23514, ex.: tipo de PIX) ou valor inválido (22P02).
     // Nesses casos o DESPACHO em si não pode falhar — regrava sem os extras e

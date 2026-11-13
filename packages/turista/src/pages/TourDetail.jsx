@@ -9,6 +9,7 @@ import { useRegion } from '../contexts/RegionContext'
 import { PageSpinner } from '../components/ui/Spinner'
 import Card from '../components/ui/Card'
 import OriginPicker from '../components/OriginPicker'
+import { temEmbarqueFixo } from '../lib/embarqueFixo'
 import TourReviews from '../components/TourReviews'
 import { useMoeda } from '../lib/moeda'
 import { setSEO } from '../lib/seo'
@@ -142,6 +143,18 @@ export default function TourDetail() {
     queryKey: ['tour', id],
     queryFn:  () => api.getTour(id),
   })
+
+  // Ponto de embarque FIXO (migração 124 — ex.: heliponto). O servidor já grava
+  // esse local na reserva, ignorando o que o cliente escolhe; a tela precisa
+  // dizer isso ANTES: mostra o ponto e não pede "local de saída".
+  const embarqueFixo = temEmbarqueFixo(tour)
+  useEffect(() => {
+    if (!embarqueFixo) return
+    setOrigin({
+      name: tour.meeting_point_name || t('tourDetailPg.fixedBoardingFallback'),
+      latitude: Number(tour.meeting_latitude), longitude: Number(tour.meeting_longitude),
+    })
+  }, [embarqueFixo, tour?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // SEO: título/descrição/OG + JSON-LD do passeio (indexação + prévia no Google).
   useEffect(() => {
@@ -437,7 +450,24 @@ export default function TourDetail() {
               </div>
             )}
 
-            {/* Origin */}
+            {/* Origin — ponto fixo do passeio (sem escolha) ou local do cliente */}
+            {embarqueFixo ? (
+              <div className="w-full flex items-start gap-3 rounded-xl px-3 py-2.5 border border-gray-200 bg-gray-50 text-left">
+                <MapPin size={15} className="text-brand shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-gray-400 leading-none">{t('tourDetailPg.fixedBoardingLabel')}</p>
+                  <p className="text-[13px] font-semibold mt-0.5 text-gray-800">{origin?.name}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{t('tourDetailPg.fixedBoardingHint')}</p>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${Number(tour.meeting_latitude)},${Number(tour.meeting_longitude)}`}
+                    target="_blank" rel="noreferrer"
+                    className="inline-block mt-1 text-[12px] font-semibold text-brand hover:underline"
+                  >
+                    {t('tourDetailPg.fixedBoardingMap')}
+                  </a>
+                </div>
+              </div>
+            ) : (
             <button
               onClick={() => setShowOriginPicker(true)}
               className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 border transition-colors text-left ${
@@ -454,6 +484,7 @@ export default function TourDetail() {
                 </p>
               </div>
             </button>
+            )}
 
             {/* People */}
             <div>

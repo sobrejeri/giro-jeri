@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { papelExecutor } from './papelExecutor'
 
 // ── Paleta ─────────────────────────────────────────────
 const BRAND  = [255, 106,  0]
@@ -224,12 +225,13 @@ export function generateOrderPDF(booking, form, operador = null) {
   y = HEADER_H + 7
 
   // ── 1. DADOS DO VEÍCULO / MOTORISTA ───────────────────
-  y = sectionTitle(doc, '1. DADOS DO VEÍCULO / MOTORISTA', M, y, CW)
+  const papel = papelExecutor(form.executor_role)
+  y = sectionTitle(doc, papel.secaoPdf, M, y, CW)
   y += 1
 
-  dataField(doc, 'VEÍCULO (MODELO / PLACA / COR):', vehicle, M, y, colW2)
+  dataField(doc, papel.veiculoPdf, vehicle, M, y, colW2)
   if (form.driver_name) {
-    dataField(doc, 'NOME DO MOTORISTA:', form.driver_name, COL + 2, y, colW2)
+    dataField(doc, `NOME DO ${papel.nome.toUpperCase()}:`, form.driver_name, COL + 2, y, colW2)
   }
   y += 11
 
@@ -629,8 +631,8 @@ function buildClientMessage(booking, form) {
     `📅 *Data:* ${dateStr} às ${timeStr}hs`,
     `👥 *Pessoas:* ${booking.people_count || '—'}`,
     `🚙 *Veículo:* ${vehicle}`,
-    form.driver_name  ? `👨‍✈️ *Motorista:* ${form.driver_name}`     : null,
-    form.driver_phone ? `📞 *Tel. motorista:* ${form.driver_phone}` : null,
+    form.driver_name  ? `👨‍✈️ *${papelExecutor(form.executor_role).nome}:* ${form.driver_name}`     : null,
+    form.driver_phone ? `📞 *Tel. ${papelExecutor(form.executor_role).nome.toLowerCase()}:* ${form.driver_phone}` : null,
     `📍 *Local de embarque:* ${origin}`,
     ``,
     `💰 *Valor:* ${fmtMoney(booking.total_amount)} ✅ PAGO`,
