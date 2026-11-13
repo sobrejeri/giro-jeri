@@ -2046,7 +2046,7 @@ router.post('/intent', authenticate, async (req, res, next) => {
       // cooperativa MANUALMENTE — decisão de negócio: concluir a venda vale mais
       // que recusar o cartão. Só a falta da API Key (barrada acima) impede a
       // cobrança; o resto vira cobrança sem split.
-      const divisao = await splitDoPagarme([booking], cfg)
+      const divisao = await splitDoPagarme(isGroup ? groupBookings : [booking], cfg)
       let splitCobranca = null
       let repasseManual = false
       if (divisao.erro) {
@@ -2129,6 +2129,13 @@ router.post('/intent', authenticate, async (req, res, next) => {
           success: true, status: 'in_process',
           payment_id: linha.id, booking_id: booking.id, booking_code: bookingCode, amount: chargedTotal,
         })
+      }
+
+      if (splitCobranca) {
+        const { error: splitError } = await supabase.from('payments')
+          .update({ split_operator_id: divisao.operatorId })
+          .eq('id', linha.id)
+        if (splitError) throw splitError
       }
 
       const checkout = await criarCheckoutCartao({
@@ -4195,6 +4202,26 @@ async function onGroupPaymentApproved(payment) {
       console.error('[ledger] grupo: falha ao lançar receita:', ledgerErr.message)
       await supabase.from('payments').update({ ledger_created: false }).eq('id', payment.id)
     }
+  }
+
+  // O carrinho usa um pagamento para várias reservas. Leia o split da
+  // cobrança original, inclusive para as reservas que não são sua âncora.
+  try {
+    if (await hasCompanyLinkedOperator(list.map(b => b.operator_id))) {
+      const { data: settledPayment, error } = await supabase.from('payments')
+        .select('split_operator_id').eq('id', payment.id).single()
+      if (error) throw error
+      if (!settledPayment.split_operator_id) {
+        const { gerarRepasses } = await import('../services/payouts.js')
+        for (const b of list) {
+          if (await hasCompanyLinkedOperator([b.operator_id])) {
+            await gerarRepasses(b, Number(b.total_amount))
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[payouts] repasse de empresa no grupo falhou:', error.message)
   }
 
   // 3) Contabilidade por perna + e-mail + notificações — por reserva.
