@@ -8,14 +8,17 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 
 const tela = fs.readFileSync(new URL('../../admin/src/pages/Notificacoes.jsx', import.meta.url), 'utf8')
+// O bloco recolhível passou a ser compartilhado com a aba Pagamentos.
+const bloco = fs.readFileSync(new URL('../../admin/src/components/ui/SecaoRecolhivel.jsx', import.meta.url), 'utf8')
 
 test('seção recolhível acessível, que lembra o estado no aparelho', () => {
-  assert.match(tela, /function Secao\(\{ id, icone: Icone, titulo, resumo, children \}\)/)
-  assert.match(tela, /aria-expanded=\{aberta\}/)
-  assert.match(tela, /aria-controls=\{`secao-\$\{id\}`\}/)
-  assert.match(tela, /const chave = `admin_envios_secao_\$\{id\}`/)
-  assert.match(tela, /try \{ return localStorage\.getItem\(chave\) === '1' \} catch \{ return false \}/, 'começa recolhida e não quebra sem armazenamento')
-  assert.match(tela, /\{aberta \? 'Recolher' : 'Expandir'\}/)
+  assert.match(tela, /const Secao = \(props\) => <SecaoRecolhivel grupo="envios" \{\.\.\.props\} \/>/)
+  assert.match(bloco, /aria-expanded=\{aberta\}/)
+  assert.match(bloco, /aria-controls=\{corpo\}/)
+  assert.match(bloco, /const chave = `admin_\$\{grupo\}_secao_\$\{id\}`/, 'mesma chave de antes para Envios: admin_envios_secao_<id>')
+  assert.match(bloco, /try \{ return localStorage\.getItem\(chave\) === '1' \} catch \{ return false \}/, 'começa recolhida e não quebra sem armazenamento')
+  assert.match(bloco, /\{aberta \? 'Recolher' : 'Expandir'\}/)
+  assert.match(bloco, /<div id=\{corpo\} hidden=\{!aberta\}/, 'recolhida só esconde: o que foi digitado não se perde')
 })
 
 test('as três seções usam o bloco recolhível, com resumo', () => {

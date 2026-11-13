@@ -6,7 +6,7 @@ import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Input, { Select, Textarea } from '../components/ui/Input'
-import Card, { CardHeader, CardBody } from '../components/ui/Card'
+import Card, { CardBody } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import MenuAcoes from '../components/ui/MenuAcoes'
 import ParadasPasseio from '../components/ParadasPasseio'
@@ -233,55 +233,82 @@ const TABS = [
 // municípios), seção recolhível e ações atrás de um menu "⋯".
 
 // Resumo em números por aba (ex.: "18 passeios · 15 ativos · 5 categorias").
+// Numa linha só também no celular: em 2×2 os quatro números ocupavam meia tela
+// antes da lista.
 function ResumoTab({ itens }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    <div className="grid grid-cols-4 gap-2">
       {itens.map((it) => (
-        <div key={it.label} className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5">
-          <p className={`text-lg font-bold leading-none ${it.alerta && it.value > 0 ? 'text-amber-400' : 'text-gray-100'}`}>{it.value}</p>
-          <p className="text-[11px] text-gray-500 mt-1">{it.label}</p>
+        <div key={it.label} className="min-w-0 bg-gray-800 border border-gray-700 rounded-xl px-2 py-2 sm:px-3 sm:py-2.5">
+          <p className={`text-base sm:text-lg font-bold leading-none ${it.alerta && it.value > 0 ? 'text-amber-400' : 'text-gray-100'}`}>{it.value}</p>
+          <p className="text-[11px] text-gray-500 mt-1 truncate">{it.label}</p>
         </div>
       ))}
     </div>
   )
 }
 
+// Rótulo do modo de preço da categoria de translado (o banco guarda o código).
+const MODO_PRECO = {
+  fixed_route:  'Rota tabelada',
+  by_vehicle:   'Por veículo',
+  by_distance:  'Por distância',
+  manual_quote: 'Cotação manual',
+}
+
 // Regiões colapsadas: até 2 aparecem inline; acima disso vira "N municípios"
 // com toque para expandir — resolve o "muro de regiões" que dominava o card.
-function RegionBadge({ names = [] }) {
+// `prefixo` (ex.: " · ") separa do texto anterior na mesma linha — sem ele o
+// município saía grudado ("Passeio de BuggyJijoca de Jericoacoara").
+function RegionBadge({ names = [], prefixo = '' }) {
   const [aberto, setAberto] = useState(false)
   if (!names.length) return null
-  if (names.length <= 2) return <span className="text-[11px] text-gray-500">{names.join(' · ')}</span>
+  if (names.length <= 2) return <span className="text-[11px] text-gray-500">{prefixo}{names.join(' · ')}</span>
   return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); setAberto((v) => !v) }}
-      className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 align-middle"
-    >
-      <MapPin size={11} />
-      {aberto ? names.join(' · ') : `${names.length} municípios`}
-      <ChevronDown size={11} className={`transition-transform ${aberto ? 'rotate-180' : ''}`} />
-    </button>
+    <>
+      {prefixo && <span className="text-[11px] text-gray-500">{prefixo}</span>}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setAberto((v) => !v) }}
+        className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 align-middle"
+      >
+        <MapPin size={11} />
+        {aberto ? names.join(' · ') : `${names.length} municípios`}
+        <ChevronDown size={11} className={`transition-transform ${aberto ? 'rotate-180' : ''}`} />
+      </button>
+    </>
+  )
+}
+
+// Fileira de filtros que rola para o lado. O degradê na borda direita avisa
+// que há mais opções — sem ele o último botão parecia cortado por engano.
+function FiltroRolavel({ children }) {
+  return (
+    <div className="relative">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 pr-6 scrollbar-thin">{children}</div>
+      <span aria-hidden="true" className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-gray-800 to-transparent" />
+    </div>
   )
 }
 
 // Seção recolhível (categorias/modais): deixa a lista de itens respirar. O botão
-// de ação (+ Novo) segue sempre visível no cabeçalho, mesmo recolhida.
+// de ação (+ Novo) segue sempre visível no cabeçalho, mesmo recolhida, e nunca
+// quebra em duas linhas (no celular, "Novo Modal" virava "Novo / Modal").
 function Secao({ title, count, action, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
     <Card>
-      <CardHeader>
+      <div className="px-4 sm:px-5 py-4 border-b border-gray-700">
         <div className="flex items-center justify-between gap-2">
-          <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-2 min-w-0">
+          <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex items-center gap-2 min-w-0">
             <ChevronDown size={16} className={`text-gray-500 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
             <h2 className="text-sm font-semibold text-gray-300 truncate">
               {title}{count != null ? ` (${count})` : ''}
             </h2>
           </button>
-          {action}
+          <div className="shrink-0 whitespace-nowrap">{action}</div>
         </div>
-      </CardHeader>
+      </div>
       {open && children}
     </Card>
   )
@@ -406,9 +433,9 @@ export default function Catalogo() {
   const filteredTransfers = transfers.filter(byRegion)
   const filteredVehicles  = vehicles.filter(byRegion)
 
-  function RegionTags({ ids }) {
+  function RegionTags({ ids, prefixo }) {
     const names = (ids || []).map((id) => allRegions.find((r) => r.id === id)?.name).filter(Boolean)
-    return <RegionBadge names={names} />
+    return <RegionBadge names={names} prefixo={prefixo} />
   }
 
   /* ── Tour mutations ──────────────────────────────────────── */
@@ -781,11 +808,12 @@ export default function Catalogo() {
 
   return (
     <div className="space-y-4">
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-fit">
+      {/* Tabs — no celular ocupam a largura toda, divididas por igual (antes
+          a barra passava da borda da tela e "Paradas" ficava cortado). */}
+      <div className="flex gap-1 bg-gray-800 p-1 rounded-xl w-full sm:w-fit overflow-x-auto scrollbar-hide">
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+          <button key={t.key} onClick={() => setTab(t.key)} aria-pressed={tab === t.key}
+            className={`flex-1 sm:flex-none whitespace-nowrap px-2.5 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               tab === t.key ? 'bg-gray-700 text-gray-100 shadow-sm' : 'text-gray-500 hover:text-gray-300'
             }`}
           >
@@ -874,8 +902,8 @@ export default function Catalogo() {
         >
           {/* Filtro por categoria — dentro da seção, numa linha rolável. */}
           {categoriasAtivas.length > 0 && (
-            <div className="px-5 pt-3">
-              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            <div className="px-4 sm:px-5 pt-3">
+              <FiltroRolavel>
                 {[{ id: 'todos', name: `Todos (${filteredTours.length})` },
                   ...categoriasAtivas.map((c) => ({
                     id: c.id,
@@ -895,7 +923,7 @@ export default function Catalogo() {
                     {op.name}
                   </button>
                 ))}
-              </div>
+              </FiltroRolavel>
             </div>
           )}
           <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
@@ -915,7 +943,7 @@ export default function Catalogo() {
                     {/* Nome da categoria direto na linha: sem isto só dava para
                         saber a que grupo o passeio pertence abrindo a edição. */}
                     {t.categories?.name && <span className="text-brand/70"> · {t.categories.name}</span>}
-                    <RegionTags ids={t.region_ids} />
+                    <RegionTags ids={t.region_ids} prefixo=" · " />
                   </p>
                 </div>
                 <Badge value={String(t.is_active)} />
@@ -959,7 +987,7 @@ export default function Catalogo() {
                 <div key={t.id} className="flex items-center gap-4 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200">{t.name}</p>
-                    <p className="text-xs text-gray-500">{t.pricing_mode}<RegionTags ids={t.region_ids} /></p>
+                    <p className="text-xs text-gray-500">{MODO_PRECO[t.pricing_mode] || t.pricing_mode}<RegionTags ids={t.region_ids} prefixo=" · " /></p>
                   </div>
                   <Badge value={String(t.is_active)} />
                   <MenuAcoes onEdit={() => openEditTransfer(t)} />
@@ -976,7 +1004,7 @@ export default function Catalogo() {
           >
             {/* Controles da lista (dentro da seção): status de foto e filtro por tipo. */}
             {(rotasDoTipo.length > 0 || transfers.length > 1) && (
-              <div className="px-5 pt-3 space-y-2">
+              <div className="px-4 sm:px-5 pt-3 space-y-2">
                 {rotasDoTipo.length > 0 && (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <span>{rotasComFoto} com foto{rotasSemFoto > 0 && <span className="text-amber-500/90"> · {rotasSemFoto} sem</span>}</span>
@@ -995,7 +1023,7 @@ export default function Catalogo() {
                   </div>
                 )}
                 {transfers.length > 1 && (
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                  <FiltroRolavel>
                     {[{ id: 'todos', name: `Todas (${routes.length})` },
                       ...transfers.map((tr) => ({
                         id: tr.id,
@@ -1013,7 +1041,7 @@ export default function Catalogo() {
                         {op.name}
                       </button>
                     ))}
-                  </div>
+                  </FiltroRolavel>
                 )}
               </div>
             )}
@@ -1021,7 +1049,7 @@ export default function Catalogo() {
               {rotasVisiveis.map((r) => {
                 const inativa = r.is_active === false
                 return (
-                <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
+                <div key={r.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-900/40 border border-gray-700/60">
                   {/* EXATAMENTE a mesma miniatura da lista de passeios (mesmo
                       tamanho, mesmo cinza no vazio) — pedido do dono para as
                       duas listas se lerem do mesmo jeito. O `title` fica como
@@ -1036,29 +1064,38 @@ export default function Catalogo() {
                   ) : (
                     <div title="Sem foto de capa" className="w-10 h-10 rounded-lg bg-gray-700 shrink-0" />
                   )}
-                  <div className={`flex-1 min-w-0 ${inativa ? 'opacity-60' : ''}`}>
-                    <p className="text-sm font-medium text-gray-200">{r.origin_name} → {r.destination_name}</p>
-                    <p className="text-xs text-gray-500">{r.transfers?.name}</p>
+                  {/* O nome da rota fica com a largura toda; preço e liga/desliga
+                      descem para uma linha própria. Antes os quatro dividiam a
+                      mesma linha e, no celular, o nome quebrava uma palavra por
+                      linha e o preço ficava por cima dele. */}
+                  <div className="flex-1 min-w-0">
+                    <div className={inativa ? 'opacity-60' : ''}>
+                      {/* Espaço inquebrável antes da seta: ela nunca abre linha sozinha. */}
+                      <p className="text-sm font-medium text-gray-200 leading-snug">{r.origin_name}{'\u00a0'}→ {r.destination_name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{r.transfers?.name}</p>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className={`text-sm font-bold text-brand ${inativa ? 'opacity-60' : ''}`}>
+                        {Number(r.default_price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                      {/* Liga/desliga a rota na vitrine — botão SEMPRE visível, 1 clique.
+                          (Antes ficava escondido no menu ⋮ e era difícil de achar para
+                          reativar.) */}
+                      <button
+                        type="button"
+                        onClick={() => toggleRouteMut.mutate({ id: r.id, is_active: inativa })}
+                        disabled={toggleRouteMut.isPending}
+                        title={inativa ? 'Rota inativa — clique para ativar' : 'Rota ativa — clique para desativar'}
+                        className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full border shrink-0 transition-colors disabled:opacity-50 ${
+                          inativa
+                            ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-emerald-900/30 hover:text-emerald-300 hover:border-emerald-700'
+                            : 'bg-emerald-900/25 text-emerald-300 border-emerald-800/60 hover:bg-gray-700 hover:text-gray-300 hover:border-gray-500'
+                        }`}
+                      >
+                        {inativa ? <><EyeOff size={11} /> Inativa</> : <><Eye size={11} /> Ativa</>}
+                      </button>
+                    </div>
                   </div>
-                  <span className={`text-sm font-bold text-brand ${inativa ? 'opacity-60' : ''}`}>
-                    {Number(r.default_price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </span>
-                  {/* Liga/desliga a rota na vitrine — botão SEMPRE visível, 1 clique.
-                      (Antes ficava escondido no menu ⋮ e era difícil de achar para
-                      reativar.) */}
-                  <button
-                    type="button"
-                    onClick={() => toggleRouteMut.mutate({ id: r.id, is_active: inativa })}
-                    disabled={toggleRouteMut.isPending}
-                    title={inativa ? 'Rota inativa — clique para ativar' : 'Rota ativa — clique para desativar'}
-                    className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full border shrink-0 transition-colors disabled:opacity-50 ${
-                      inativa
-                        ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-emerald-900/30 hover:text-emerald-300 hover:border-emerald-700'
-                        : 'bg-emerald-900/25 text-emerald-300 border-emerald-800/60 hover:bg-gray-700 hover:text-gray-300 hover:border-gray-500'
-                    }`}
-                  >
-                    {inativa ? <><EyeOff size={11} /> Inativa</> : <><Eye size={11} /> Ativa</>}
-                  </button>
                   <MenuAcoes
                     onEdit={() => openEditRoute(r)}
                     onDelete={() => { if (confirm('Apagar esta rota?\n\nNão tem como desfazer. Rota com reservas é recusada — nesse caso, desative.')) deleteRouteMut.mutate(r.id) }}
@@ -1170,7 +1207,8 @@ export default function Catalogo() {
                   <div key={grupo.slug}>
                     <div className="px-4 pt-3 pb-0.5 flex items-center gap-2">
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{grupo.nome}</span>
-                      <span className="h-px flex-1 bg-gray-800" />
+                      {/* gray-700: a linha gray-800 sumia no fundo do cartão. */}
+                      <span className="h-px flex-1 bg-gray-700" />
                       <span className="text-[11px] text-gray-600">{grupo.veiculos.length}</span>
                     </div>
                     <div className="p-3 grid grid-cols-1 lg:grid-cols-2 gap-2">

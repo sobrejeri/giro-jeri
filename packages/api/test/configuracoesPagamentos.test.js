@@ -6,10 +6,16 @@
 // logo acima do campo de chave do Pagar.me — e um Salvar único no fim.
 //
 // O que estes testes fixam não é estética. É a regra que já causou perda
-// silenciosa aqui: `saveSection` manda uma LISTA EXPLÍCITA de chaves, então
-// um campo editável que não esteja na lista do seu card é marcado na tela e
-// nunca gravado. Ao dividir um card em três, essa é exatamente a falha que a
-// divisão poderia introduzir.
+// silenciosa aqui: cada Salvar manda uma LISTA EXPLÍCITA de chaves (hoje em
+// CHAVES_PAGAMENTO, uma lista por seção), então um campo editável que não
+// esteja na lista da SUA seção é marcado na tela e nunca gravado. Ao dividir
+// ou reorganizar as seções, essa é exatamente a falha que a mudança poderia
+// introduzir.
+//
+// Depois a aba ganhou seções recolhíveis agrupadas por gateway (Checkout ·
+// Gateways · Recebimento e repasse · Outras integrações); o "split no ato",
+// que vale para os dois gateways, saiu do Mercado Pago para a Divisão de
+// recebimento.
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -21,22 +27,55 @@ const fonte = fs.readFileSync(
 // Recorta o componente da aba de pagamentos, até o começo do próximo. Os
 // comentários saem: as listas de Salvar são precedidas por explicações que
 // mencionam nomes de chaves, e elas virariam falso positivo.
-const tab = fonte
-  .slice(fonte.indexOf('function TabPagamentos'), fonte.indexOf('function SaveRow'))
-  .replace(/^\s*\/\/.*$/gm, '')
+const semComentarios = (t) => t.replace(/^\s*\/\/.*$/gm, '')
+const tab = semComentarios(fonte
+  .slice(fonte.indexOf('function TabPagamentos'), fonte.indexOf('function WhatsappDiag')))
 
-/** As chaves passadas a cada `saveSection([...], 'secao')`. */
-function listasDeSalvamento(texto) {
+/** As chaves que o Salvar de cada seção grava (CHAVES_PAGAMENTO). */
+function listasDeSalvamento() {
+  const bloco = semComentarios(fonte.slice(
+    fonte.indexOf('const CHAVES_PAGAMENTO'), fonte.indexOf('function GrupoPagamento')))
   const secoes = {}
-  for (const m of texto.matchAll(/saveSection\(\s*\[([\s\S]*?)\]\s*,\s*'([a-z]+)'/g)) {
-    secoes[m[2]] = [...m[1].matchAll(/'([a-z0-9_]+)'/g)].map((k) => k[1])
+  for (const m of bloco.matchAll(/^\s*([a-z]+):\s*\[([\s\S]*?)\]/gm)) {
+    secoes[m[1]] = [...m[2].matchAll(/'([a-z0-9_]+)'/g)].map((k) => k[1])
   }
   return secoes
 }
 
+/** O trecho de uma seção recolhível da aba: do id dela até a próxima seção. */
+function secao(id) {
+  const i = tab.indexOf(`id="${id}"`)
+  assert.ok(i !== -1, `seção ausente: ${id}`)
+  const fim = tab.indexOf('<SecaoRecolhivel', i)
+  return tab.slice(i, fim === -1 ? undefined : fim)
+}
+
+test('o Salvar de cada seção grava a lista DELA (CHAVES_PAGAMENTO)', () => {
+  assert.match(tab, /pairs: CHAVES_PAGAMENTO\[secao\]\.map\(\(k\) => \[k, form\[k\]\]\)/)
+  const secoes = listasDeSalvamento()
+  assert.deepEqual(Object.keys(secoes).sort(),
+    ['conta', 'divisao', 'formas', 'mercadopago', 'pagarme', 'roteamento'])
+  for (const id of Object.keys(secoes)) {
+    assert.match(secao(id), new RegExp(`salvarSecao\\('${id}'\\)`), `a seção ${id} salva a própria lista`)
+  }
+})
+
+test('cada campo fica na seção cujo Salvar o grava', () => {
+  // Campo numa seção e chave na lista de OUTRA: o usuário clica no Salvar que
+  // está à vista e a mudança não vai — o mesmo silêncio de antes.
+  const secoes = listasDeSalvamento()
+  const fora = []
+  for (const [id, chaves] of Object.entries(secoes)) {
+    for (const m of secao(id).matchAll(/\bset\('([a-z0-9_]+)'/g)) {
+      if (!chaves.includes(m[1])) fora.push(`${m[1]} (campo em ${id})`)
+    }
+  }
+  assert.deepEqual(fora, [], `campo salvo pelo botão de outra seção: ${fora.join(', ')}`)
+})
+
 test('todo campo editável está na lista de Salvar de algum card', () => {
   const editadas = new Set([...tab.matchAll(/\bset\('([a-z0-9_]+)'/g)].map((m) => m[1]))
-  const salvas   = new Set(Object.values(listasDeSalvamento(tab)).flat())
+  const salvas   = new Set(Object.values(listasDeSalvamento()).flat())
   const orfas    = [...editadas].filter((k) => !salvas.has(k))
   assert.deepEqual(orfas, [],
     `campo editável fora de toda lista de Salvar — a tela marcaria e nunca gravaria: ${orfas.join(', ')}`)
@@ -45,7 +84,7 @@ test('todo campo editável está na lista de Salvar de algum card', () => {
 test('nenhuma chave é salva por dois cards diferentes', () => {
   // Dois Salvar gravando a mesma chave é um sobrescrevendo o outro com o
   // valor que o usuário talvez nem tenha olhado naquele card.
-  const secoes = listasDeSalvamento(tab)
+  const secoes = listasDeSalvamento()
   const vistas = new Map()
   const duplicadas = []
   for (const [secao, chaves] of Object.entries(secoes)) {
@@ -64,7 +103,7 @@ test('cada chave de pagamento da allowlist tem campo na tela ou fica documentada
   // aconteceu com payment_pagarme_platform_recipient_id.
   const bloco = fonte.slice(fonte.indexOf('const PAYMENT_KEYS'), fonte.indexOf('// ── Payment tab constants'))
   const allowlist = [...bloco.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1])
-  const salvas = new Set(Object.values(listasDeSalvamento(tab)).flat())
+  const salvas = new Set(Object.values(listasDeSalvamento()).flat())
   const semTela = allowlist.filter((k) => !salvas.has(k))
   assert.deepEqual(semTela, [],
     `escondida da aba Sistema e sem campo em Pagamentos — só editável por SQL: ${semTela.join(', ')}`)
@@ -72,33 +111,30 @@ test('cada chave de pagamento da allowlist tem campo na tela ou fica documentada
 
 // ── A separação por integração ─────────────────────────────────────────────
 
-test('existe um card por integração, além do roteamento', () => {
+test('existe uma seção por gateway, além do roteamento', () => {
   for (const titulo of [
-    'Roteamento de cobrança',
-    'Integração — Mercado Pago',
-    'Integração — Pagar.me (Stone)',
+    'titulo="Roteamento de cobrança"',
+    'titulo="Mercado Pago"',
+    'titulo="Pagar.me (Stone)"',
   ]) {
-    assert.ok(tab.includes(titulo), `card ausente: ${titulo}`)
+    assert.ok(tab.includes(titulo), `seção ausente: ${titulo}`)
   }
+  assert.match(tab, /<GrupoPagamento titulo="Gateways">/, 'os gateways ficam agrupados')
 })
 
-test('a chave do Pagar.me não fica no card do Mercado Pago', () => {
-  const iMp   = tab.indexOf('Integração — Mercado Pago')
-  const iPg   = tab.indexOf('Integração — Pagar.me')
-  assert.ok(iMp !== -1 && iPg > iMp)
-  const cardMp = tab.slice(iMp, iPg)
-  assert.ok(!/payment_pagarme/.test(cardMp),
+test('a chave do Pagar.me não fica na seção do Mercado Pago', () => {
+  assert.ok(!/payment_pagarme/.test(secao('mercadopago')),
     'campo do Pagar.me sob o cabeçalho do Mercado Pago foi exatamente a confusão relatada')
 })
 
-test('a ajuda do Mercado Pago não aparece no card do Pagar.me', () => {
-  const cardPg = tab.slice(tab.indexOf('Integração — Pagar.me'), tab.indexOf("'pagarme',") + 40)
-  assert.ok(!/MERCADO_PAGO_ACCESS_TOKEN|Checkout Pro/.test(cardPg))
-  assert.ok(/PAGARME_API_KEY/.test(cardPg), 'a variável de ambiente certa precisa estar dita aqui')
+test('a ajuda do Mercado Pago não aparece na seção do Pagar.me', () => {
+  const pg = secao('pagarme')
+  assert.ok(!/MERCADO_PAGO_ACCESS_TOKEN|Checkout Pro/.test(pg))
+  assert.ok(/PAGARME_API_KEY/.test(pg), 'a variável de ambiente certa precisa estar dita aqui')
 })
 
 test('o recebedor da plataforma tem campo e é salvo com a chave do Pagar.me', () => {
-  const secoes = listasDeSalvamento(tab)
+  const secoes = listasDeSalvamento()
   assert.deepEqual(secoes.pagarme,
     ['payment_pagarme_api_key', 'payment_pagarme_public_key',
      'payment_pagarme_platform_recipient_id'])
@@ -107,11 +143,18 @@ test('o recebedor da plataforma tem campo e é salvo com a chave do Pagar.me', (
 })
 
 test('o roteamento não carrega credencial de adquirente nenhum', () => {
-  const card = tab.slice(tab.indexOf('Roteamento de cobrança'), tab.indexOf('Integração — Mercado Pago'))
+  const card = secao('roteamento')
   assert.ok(!/MaskedInput/.test(card),
-    'chave de API no card de roteamento é o que misturava tudo de novo')
+    'chave de API na seção de roteamento é o que misturava tudo de novo')
   assert.match(card, /payment_card_acquirers/, 'quem cobra o cartão é decisão de roteamento')
   assert.match(card, /payment_gateway_pix/,    'quem cobra o PIX também')
+})
+
+test('o split no ato (vale para os dois gateways) fica na Divisão de recebimento', () => {
+  assert.match(secao('divisao'), /set\('payment_split_single_operator'/)
+  assert.ok(!/payment_split_single_operator/.test(secao('mercadopago')),
+    'dentro do Mercado Pago, quem olhava o Pagar.me não achava a chave')
+  assert.ok(listasDeSalvamento().divisao.includes('payment_split_single_operator'))
 })
 
 // ── Alternar adquirente de cartão ──────────────────────────────────────────

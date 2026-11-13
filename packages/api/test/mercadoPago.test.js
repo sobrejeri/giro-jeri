@@ -485,8 +485,10 @@ test('toda configuração de pagamento editável é realmente salva', async () =
     [...jsx.matchAll(/\bset\(\s*'(payment_[a-z0-9_]+)'/g)].map((m) => m[1]))
   // …e o que cada Salvar manda para o servidor.
   const salvas = new Set(
-    [...jsx.matchAll(/saveSection\(\s*(?:\/\/[^\n]*\n\s*)*\[([\s\S]*?)\]/g)]
-      .flatMap((m) => [...m[1].matchAll(/'(payment_[a-z0-9_]+)'/g)].map((k) => k[1])))
+    // Cada Salvar grava a lista da sua seção em CHAVES_PAGAMENTO.
+    [...jsx.slice(jsx.indexOf('const CHAVES_PAGAMENTO'), jsx.indexOf('function GrupoPagamento'))
+      .replace(/^\s*\/\/.*$/gm, '')
+      .matchAll(/'(payment_[a-z0-9_]+)'/g)].map((k) => k[1]))
 
   assert.ok(editadas.size > 5, 'o teste precisa estar realmente lendo a tela')
   const esquecidas = [...editadas].filter((k) => !salvas.has(k))

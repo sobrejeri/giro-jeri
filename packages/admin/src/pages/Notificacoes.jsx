@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Send, Bell, Save, ChevronRight, ChevronDown, History } from 'lucide-react'
+import { Send, Bell, Save, ChevronRight, History } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import Input, { Textarea, Select } from '../components/ui/Input'
-import Card from '../components/ui/Card'
+import SecaoRecolhivel from '../components/ui/SecaoRecolhivel'
 
 const TEMPLATE_LABELS = {
   welcome:       { label: 'Boas-vindas', hint: 'Enviada quando o usuário cria a conta.' },
@@ -28,44 +28,10 @@ const AUDIENCES = [
   { value: 'no_booking',  label: 'Sem reserva' },
 ]
 
-// Seção que recolhe e expande. Recolhidas, as três seções da tela cabem numa
-// olhada só, cada uma com um resumo; o aparelho lembra como o admin deixou cada
-// uma (é só conveniência: sem armazenamento, apenas começa recolhida).
-function Secao({ id, icone: Icone, titulo, resumo, children }) {
-  const chave = `admin_envios_secao_${id}`
-  const [aberta, setAberta] = useState(() => {
-    try { return localStorage.getItem(chave) === '1' } catch { return false }
-  })
-  function alternar() {
-    const nova = !aberta
-    setAberta(nova)
-    try { localStorage.setItem(chave, nova ? '1' : '0') } catch { /* sem armazenamento: só não lembra */ }
-  }
-  return (
-    <Card>
-      <button
-        type="button"
-        onClick={alternar}
-        aria-expanded={aberta}
-        aria-controls={`secao-${id}`}
-        className="w-full flex items-center gap-3 px-4 sm:px-5 py-4 min-h-11 text-left rounded-xl hover:bg-gray-700/30 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
-      >
-        <Icone size={16} className="text-orange-400 shrink-0" />
-        <span className="flex-1 min-w-0">
-          <span className="block font-semibold text-gray-100">{titulo}</span>
-          {resumo && <span className="block text-xs text-gray-500 truncate">{resumo}</span>}
-        </span>
-        <span className="hidden sm:inline text-xs text-gray-500 shrink-0">{aberta ? 'Recolher' : 'Expandir'}</span>
-        <ChevronDown size={18} className={`text-gray-400 shrink-0 transition-transform ${aberta ? 'rotate-180' : ''}`} />
-      </button>
-      {aberta && (
-        <div id={`secao-${id}`} className="px-4 sm:px-5 pt-4 pb-5 space-y-3 border-t border-gray-700/60">
-          {children}
-        </div>
-      )}
-    </Card>
-  )
-}
+// Seções que recolhem e expandem (mesmo bloco da tela de Pagamentos).
+// Recolhidas, as três cabem numa olhada só, cada uma com um resumo; o aparelho
+// lembra como o admin deixou cada uma.
+const Secao = (props) => <SecaoRecolhivel grupo="envios" {...props} />
 
 function TemplateCard({ tpl }) {
   const qc = useQueryClient()

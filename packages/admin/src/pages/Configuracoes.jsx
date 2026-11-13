@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Settings, RotateCcw, CreditCard, Landmark, SplitSquareHorizontal,
   Eye, EyeOff, CheckCircle, Pencil, Image as ImageIcon, Upload, Trash2, Route,
-  MessageCircle, Send, XCircle, MapPin, Rocket, ChevronDown, Search,
+  MessageCircle, Send, XCircle, MapPin, Rocket, ChevronDown, Search, Users,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
@@ -11,6 +11,7 @@ import Button from '../components/ui/Button'
 import Card, { CardHeader, CardBody } from '../components/ui/Card'
 import Input, { Select } from '../components/ui/Input'
 import BotaoInfo from '../components/ui/BotaoInfo'
+import SecaoRecolhivel, { Selo } from '../components/ui/SecaoRecolhivel'
 
 // ── Sistema tab ───────────────────────────────────────────
 const DISPLAY_TYPES = {
@@ -111,8 +112,8 @@ const PAYMENT_KEYS = new Set([
 
 // ── Payment tab constants ─────────────────────────────────
 const GATEWAYS = [
-  { value: 'manual',       label: 'Manual (sem gateway)' },
-  { value: 'test',         label: 'Modo de Teste (aprova em 15s)' },
+  { value: 'manual',       label: 'Manual (sem gateway)', curto: 'Manual' },
+  { value: 'test',         label: 'Modo de Teste (aprova em 15s)', curto: 'Modo de teste' },
   // Faltava na lista, embora seja o gateway em uso. Sem a opção, o campo
   // aparecia EM BRANCO para quem já está no Mercado Pago — e quem tentasse
   // "corrigir" o branco escolheria outro gateway, desligando a cobrança de
@@ -210,6 +211,40 @@ const PAYMENT_DEFAULTS = {
 
 function settingsToMap(list) {
   return Object.fromEntries(list.map((s) => [s.setting_key, s.setting_value ?? '']))
+}
+
+// Chaves gravadas pelo "Salvar" de cada seção da aba Pagamentos. Cada chave
+// editável mora em UMA seção só — a do controle que a edita. O Salvar manda
+// esta lista explícita: chave fora dela é marcada na tela e nunca gravada.
+const CHAVES_PAGAMENTO = {
+  formas:      ['payment_method_pix', 'payment_method_credit', 'payment_method_debit', 'payment_max_installments'],
+  roteamento:  ['payment_gateway', 'payment_gateway_card', 'payment_gateway_pix',
+                'payment_gateway_env', 'payment_card_acquirers'],
+  mercadopago: ['payment_gateway_api_key', 'payment_gateway_webhook_secret',
+                'payment_card_flow', 'payment_mp_wallet_only', 'payment_card_form_inline'],
+  pagarme:     ['payment_pagarme_api_key', 'payment_pagarme_public_key',
+                'payment_pagarme_platform_recipient_id'],
+  // O split no ato vale para os DOIS gateways: mora na Divisão de recebimento,
+  // não dentro do Mercado Pago (onde ficava e quem olhava o Pagar.me não achava).
+  divisao:     ['payment_split_admin_pct', 'payment_split_single_operator'],
+  conta:       ['payment_admin_pix_key_type', 'payment_admin_pix_key',
+                'payment_admin_bank_name', 'payment_admin_bank_agency',
+                'payment_admin_bank_account', 'payment_admin_bank_account_type',
+                'payment_admin_bank_document'],
+}
+
+// Título de grupo da aba Pagamentos (Checkout, Gateways…), com uma linha fina
+// até a borda separando os assuntos.
+function GrupoPagamento({ titulo, children }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+        {titulo}
+        <span aria-hidden="true" className="h-px flex-1 bg-gray-800" />
+      </h2>
+      {children}
+    </section>
+  )
 }
 
 // Redimensiona/comprime uma imagem no cliente e devolve um data URL JPEG.
@@ -561,15 +596,20 @@ function clearOverride(op) {
     updateMut.mutate({ id: op.id, pct: null })
   }
 
+  // Resumo da seção recolhida: quantos operadores, quantos com percentual
+  // próprio e quantos ainda sem Mercado Pago (esses não aceitam corridas).
+  const proprios = operators.filter((op) => op.platform_split_pct != null).length
+  const semMP    = operators.filter((op) => !op.mp_user_id && !op.mp_payout_exempt).length
+  const resumo = isLoading ? 'Carregando operadores…' : [
+    `${operators.length} operador${operators.length === 1 ? '' : 'es'}`,
+    `${proprios} com percentual próprio`,
+    semMP > 0 && `${semMP} sem Mercado Pago`,
+  ].filter(Boolean).join(' · ')
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <SplitSquareHorizontal size={16} className="text-gray-500" />
-          <h2 className="text-sm font-semibold text-gray-200">Split por Operador</h2>
-        </div>
-      </CardHeader>
-      <CardBody>
+    <SecaoRecolhivel grupo="pagamentos" id="split-operador" icone={Users} corIcone="text-gray-400"
+      titulo="Split por operador" resumo={resumo}>
+      <div>
         <p className="text-xs text-gray-500 mb-4">
           Percentual da plataforma por operador. Quando não definido, usa o padrão global ({globalAdminPct}%).
         </p>
@@ -591,17 +631,19 @@ function clearOverride(op) {
                   key={op.id}
                   className="px-3 py-2.5 rounded-lg bg-gray-900 border border-gray-800"
                 >
-                  {/* Cabeçalho: nome à esquerda, percentuais à direita. O
-                      diagnóstico NÃO entra aqui — espremido nesta coluna, no
-                      celular ele quebrava uma palavra por linha. */}
-                  <div className="flex items-center gap-3">
+                  {/* Cabeçalho: nome à esquerda, percentuais à direita (no
+                      celular, percentuais embaixo do nome — lado a lado o nome
+                      virava "Coop Jeri ..." e as etiquetas quebravam letra a
+                      letra). O diagnóstico NÃO entra aqui — espremido nesta
+                      coluna, no celular ele quebrava uma palavra por linha. */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                   {/* Nome */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-200 truncate">{op.full_name}</p>
                     <p className="text-xs text-gray-600 truncate">{op.email || op.phone || '—'}</p>
                     {/* Sem Mercado Pago o operador não consegue aceitar corridas
                         (a não ser que esteja isento — operação própria). */}
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
                       {op.mp_payout_exempt ? (
                         <span className="text-[10px] font-semibold text-sky-400 bg-sky-900/30 px-1.5 py-0.5 rounded">
                           isento de MP · repasse manual
@@ -662,7 +704,7 @@ function clearOverride(op) {
                           <CheckCircle size={13} /> Salvo!
                         </span>
                       ) : (
-                        <div className="text-right">
+                        <div className="sm:text-right">
                           <p className="text-xs text-gray-400">
                             <span className="text-brand font-semibold">{adminPct}%</span>
                             {' '}admin ·{' '}
@@ -704,20 +746,43 @@ function clearOverride(op) {
             })}
           </div>
         )}
-      </CardBody>
-    </Card>
+      </div>
+    </SecaoRecolhivel>
   )
 }
 
 // ── Pagamentos tab ────────────────────────────────────────
+// Organizada por assunto e por gateway, cada seção recolhível com um resumo:
+// Checkout (formas e quem cobra cada meio) · Gateways (Mercado Pago, Pagar.me)
+// · Recebimento e repasse · Outras integrações.
 function TabPagamentos({ settings, qc }) {
-  const map = settingsToMap(settings)
-  const [form, setForm] = useState({ ...PAYMENT_DEFAULTS, ...map })
+  // O que está gravado no servidor — base do selo "não salvo" de cada seção.
+  const salvo = { ...PAYMENT_DEFAULTS, ...settingsToMap(settings) }
+  const [form, setForm] = useState(salvo)
   const [savedSection, setSavedSection] = useState(null)
 
+  // Quando as configurações voltam do servidor (depois de salvar uma seção),
+  // só o que NÃO foi editado acompanha o servidor. Antes o formulário inteiro
+  // era trocado: salvar uma seção apagava, sem aviso, o que estava digitado em
+  // outra — e com as seções recolhidas ninguém veria isso acontecer.
+  const salvoAnterior = useRef(salvo)
   useEffect(() => {
-    if (settings.length) setForm({ ...PAYMENT_DEFAULTS, ...settingsToMap(settings) })
+    if (!settings.length) return
+    const novo = { ...PAYMENT_DEFAULTS, ...settingsToMap(settings) }
+    const antes = salvoAnterior.current
+    setForm((f) => {
+      const r = { ...novo }
+      for (const k of Object.keys(f)) if (f[k] !== antes[k]) r[k] = f[k]
+      return r
+    })
+    salvoAnterior.current = novo
   }, [settings])
+
+  // Seção com alteração ainda não salva (selo âmbar no título, visível mesmo
+  // com a seção recolhida).
+  const naoSalvo = (secao) => CHAVES_PAGAMENTO[secao]
+    .some((k) => String(form[k] ?? '') !== String(salvo[k] ?? ''))
+  const seloNaoSalvo = (secao) => naoSalvo(secao) && <Selo cor="ambar">Não salvo</Selo>
 
   // Erro por seção, para a mensagem aparecer ao lado do botão que falhou.
   const [erroSecao, setErroSecao] = useState(null)   // { secao, mensagem }
@@ -762,11 +827,20 @@ function TabPagamentos({ settings, qc }) {
   // "Salvo!" só depois que o servidor confirmou. Marcar antes fazia uma falha
   // silenciosa parecer sucesso, e uma configuração de pagamento que não gravou
   // é exatamente o tipo de coisa que não pode mentir.
-  function saveSection(keys, section) {
+  function saveSection(secao) {
     setErroSecao(null)
     setSavedSection(null)
-    saveMut.mutate({ pairs: keys.map((k) => [k, form[k]]), secao: section })
+    saveMut.mutate({ pairs: CHAVES_PAGAMENTO[secao].map((k) => [k, form[k]]), secao })
   }
+  // Botão Salvar de uma seção, com o "Salvo!" e o erro só dela.
+  const salvarSecao = (secao) => (
+    <SaveRow
+      onSave={() => saveSection(secao)}
+      pending={saveMut.isPending}
+      saved={savedSection === secao}
+      erro={erroSecao?.secao === secao ? erroSecao.mensagem : null}
+    />
+  )
 
   // MESMA regra da API (acquirersDeCartao): lista vazia cai no adquirente
   // legado — `payment_gateway_card`, ou o padrão. Sem esse espelho, uma
@@ -799,18 +873,71 @@ function TabPagamentos({ settings, qc }) {
   const adminPct   = Number(form.payment_split_admin_pct) || 0
   const operatorPct = Math.max(0, 100 - adminPct)
 
-  return (
-    <div className="space-y-5 max-w-2xl">
+  // ── Resumos das seções recolhidas ─────────────────────────
+  const nomeGateway = (v) => {
+    const g = GATEWAYS.find((x) => x.value === v)
+    return g ? (g.curto || g.label) : (v || '—')
+  }
+  const gatewayPix = form.payment_gateway_pix || form.payment_gateway
+  const cartoes = ACQUIRERS_CARTAO.filter((a) => cartaoMarcado(a.value)).map((a) => a.label)
+  const parcelas = Number(form.payment_max_installments) || 1
+  const resumoFormas = [
+    form.payment_method_pix !== 'false' && 'PIX',
+    form.payment_method_credit !== 'false' && (parcelas > 1 ? `Crédito até ${parcelas}x` : 'Crédito à vista'),
+    form.payment_method_debit !== 'false' && 'Débito',
+  ].filter(Boolean).join(' · ')
+  const resumoRoteamento = [
+    `PIX: ${nomeGateway(gatewayPix)}`,
+    `Cartão: ${cartoes.length ? cartoes.join(' + ') : 'nenhum'}`,
+    form.payment_gateway_env === 'production' ? 'Produção' : 'Sandbox (testes)',
+  ].join(' · ')
+  const resumoMercadoPago = form.payment_card_flow === 'bricks'
+    ? 'Cartão digitado dentro do site'
+    : [
+        'Cartão na página do Mercado Pago',
+        form.payment_mp_wallet_only !== 'false' ? 'exige conta' : 'aceita convidado',
+        form.payment_card_form_inline !== 'false' && 'formulário no site também',
+      ].filter(Boolean).join(' · ')
+  const faltaPagarme = [
+    !form.payment_pagarme_api_key && 'Secret Key',
+    !form.payment_pagarme_public_key && 'chave pública',
+    !form.payment_pagarme_platform_recipient_id && 'recebedor da plataforma',
+  ].filter(Boolean)
+  const resumoPagarme = faltaPagarme.length
+    ? `Em branco: ${faltaPagarme.join(', ')}`
+    : 'Chaves e recebedor preenchidos'
+  const resumoDivisao = `Plataforma ${adminPct}% · operador ${operatorPct}% · split no ato ${
+    form.payment_split_single_operator === 'true' ? 'ligado' : 'desligado'}`
+  const tipoPix = PIX_TYPES.find((p) => p.value === form.payment_admin_pix_key_type)?.label || 'chave'
+  const resumoConta = [
+    form.payment_admin_pix_key ? `Chave PIX (${tipoPix}) cadastrada` : 'Sem chave PIX',
+    form.payment_admin_bank_name,
+  ].filter(Boolean).join(' · ')
 
+  // Para que cada gateway está sendo usado AGORA (pela tela, inclusive o que
+  // ainda não foi salvo — o selo "não salvo" do roteamento avisa).
+  function selosGateway(valor, cor, secao) {
+    const uso = [
+      form.payment_gateway === valor && 'Padrão',
+      gatewayPix === valor && 'PIX',
+      cartaoMarcado(valor) && 'Cartão',
+    ].filter(Boolean)
+    return (
+      <>
+        {uso.length ? uso.map((u) => <Selo key={u} cor={cor}>{u}</Selo>) : <Selo>Não usado</Selo>}
+        {seloNaoSalvo(secao)}
+      </>
+    )
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+
+      <GrupoPagamento titulo="Checkout">
       {/* Formas de pagamento */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <CreditCard size={16} className="text-gray-500" />
-            <h2 className="text-sm font-semibold text-gray-200">Formas de pagamento</h2>
-          </div>
-        </CardHeader>
-        <CardBody>
+      <SecaoRecolhivel grupo="pagamentos" id="formas" icone={CreditCard} corIcone="text-gray-400"
+        titulo="Formas de pagamento" selos={seloNaoSalvo('formas')} resumo={resumoFormas}>
+        <div>
           <p className="text-xs text-gray-500 mb-4">
             O que o cliente vê na hora de pagar. Desmarcar uma forma faz ela sumir
             do checkout na hora — vale para reservas novas e para as que já estão
@@ -876,35 +1003,21 @@ function TabPagamentos({ settings, qc }) {
             </div>
           )}
 
-          <SaveRow
-            onSave={() => saveSection(
-              ['payment_method_pix','payment_method_credit','payment_method_debit','payment_max_installments'],
-              'method',
-            )}
-            pending={saveMut.isPending}
-            saved={savedSection === 'method'}
-            erro={erroSecao?.secao === 'method' ? erroSecao.mensagem : null}
-          />
-        </CardBody>
-      </Card>
+          {salvarSecao('formas')}
+        </div>
+      </SecaoRecolhivel>
 
-      {/* ── 1. Roteamento: QUEM cobra cada meio ─────────────────────────────
-          Este card não configura integração nenhuma — ele só decide para onde
-          a cobrança vai. As credenciais de cada adquirente moram no card DELE,
-          abaixo. Antes tudo estava num card só chamado "Gateway de Pagamento",
-          com ajuda do Mercado Pago aparecendo sobre campos do Pagar.me. */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Route size={16} className="text-gray-500" />
-            <h2 className="text-sm font-semibold text-gray-200">Roteamento de cobrança</h2>
-          </div>
-        </CardHeader>
-        <CardBody>
+      {/* ── Roteamento: QUEM cobra cada meio ────────────────────────────────
+          Esta seção não configura integração nenhuma — ela só decide para onde
+          a cobrança vai. As credenciais de cada adquirente moram na seção DELE,
+          em Gateways. Antes tudo estava num card só chamado "Gateway de
+          Pagamento", com ajuda do Mercado Pago aparecendo sobre campos do Pagar.me. */}
+      <SecaoRecolhivel grupo="pagamentos" id="roteamento" icone={Route} corIcone="text-gray-400"
+        titulo="Roteamento de cobrança" selos={seloNaoSalvo('roteamento')} resumo={resumoRoteamento}>
           <div className="space-y-4">
             <p className="text-xs text-gray-500 leading-relaxed">
               Decide <b>qual adquirente</b> atende cada meio de pagamento. As chaves de
-              cada um ficam nos cards de integração abaixo.
+              cada um ficam na seção dele, em Gateways.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -944,7 +1057,7 @@ function TabPagamentos({ settings, qc }) {
                 e recusa o resto por risco; o Pagar.me atende quem não tem
                 conta nenhuma. Marcar os dois mostra as duas opções no
                 checkout e o cliente escolhe. */}
-            <div className="space-y-2 border-t border-gray-800 pt-4">
+            <div className="space-y-2 border-t border-gray-700 pt-4">
               <p className="text-xs font-semibold text-gray-300">Cartão (crédito e débito)</p>
               {ACQUIRERS_CARTAO.map((a) => (
                 <label key={a.value} className="flex items-start gap-3 cursor-pointer">
@@ -969,7 +1082,7 @@ function TabPagamentos({ settings, qc }) {
               )}
               {cartaoMarcado('pagarme') && !form.payment_pagarme_api_key && (
                 <p className="text-xs text-amber-500/80 leading-relaxed">
-                  Pagar.me marcado mas <b>sem API Key</b> no card do Pagar.me, abaixo.
+                  Pagar.me marcado mas <b>sem API Key</b> na seção do Pagar.me, em Gateways.
                   Enquanto ela faltar, o botão dele <b>não aparece</b> no checkout —
                   melhor sumir do que dar erro depois do clique.
                 </p>
@@ -982,39 +1095,24 @@ function TabPagamentos({ settings, qc }) {
               ) : null}
             </div>
 
-            <SaveRow
-              onSave={() => saveSection(
-                // Toda chave editada NESTE card precisa estar aqui: o Salvar
-                // manda uma lista explícita, e o que ficar de fora é marcado na
-                // tela e nunca gravado — o pior tipo de silêncio.
-                ['payment_gateway', 'payment_gateway_card', 'payment_gateway_pix',
-                 'payment_gateway_env', 'payment_card_acquirers'],
-                'roteamento',
-              )}
-              pending={saveMut.isPending}
-              saved={savedSection === 'roteamento'}
-              erro={erroSecao?.secao === 'roteamento' ? erroSecao.mensagem : null}
-            />
+            {/* Toda chave editada NESTA seção precisa estar em
+                CHAVES_PAGAMENTO.roteamento: o Salvar manda uma lista explícita,
+                e o que ficar de fora é marcado na tela e nunca gravado. */}
+            {salvarSecao('roteamento')}
           </div>
-        </CardBody>
-      </Card>
+      </SecaoRecolhivel>
+      </GrupoPagamento>
 
-      {/* ── 2. Integração: Mercado Pago ─────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2 border-l-2 border-sky-500/70 pl-2">
-            <CreditCard size={16} className="text-sky-400" />
-            <h2 className="text-sm font-semibold text-gray-200">Integração — Mercado Pago</h2>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300">Conta da plataforma</span>
-          </div>
-        </CardHeader>
-        <CardBody>
+      {/* ── Gateways: uma seção por gateway, com o uso de cada um no título ── */}
+      <GrupoPagamento titulo="Gateways">
+      <SecaoRecolhivel grupo="pagamentos" id="mercadopago" icone={CreditCard} corIcone="text-sky-400"
+        titulo="Mercado Pago" selos={selosGateway('mercado_pago', 'azul', 'mercadopago')} resumo={resumoMercadoPago}>
           <div className="space-y-4">
             {/* Credenciais do gateway padrão. Elas são genéricas no banco
                 (payment_gateway_api_key), mas na prática só valem para o
                 gateway escolhido acima — por isso o aviso muda com ele. */}
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-300">Credenciais</p>
+              <p className="text-xs font-semibold text-gray-300">Credenciais da conta da plataforma</p>
               <p className="text-xs text-gray-500 leading-relaxed">
                 No Mercado Pago o servidor usa o Access Token da variável
                 <code className="mx-1 text-gray-400">MERCADO_PAGO_ACCESS_TOKEN</code>
@@ -1044,7 +1142,7 @@ function TabPagamentos({ settings, qc }) {
             </div>
 
             {/* ── Onde o cartão é digitado ──────────────────────────────── */}
-            <div className="border-t border-gray-800 pt-4">
+            <div className="border-t border-gray-700 pt-4">
               <p className="text-xs font-semibold text-gray-300 mb-3">Como o cartão é cobrado</p>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
@@ -1142,63 +1240,16 @@ function TabPagamentos({ settings, qc }) {
               )}
             </div>
 
-            {/* ── Split: para onde o dinheiro vai ───────────────────────── */}
-            <div className="border-t border-gray-800 pt-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.payment_split_single_operator === 'true'}
-                  onChange={(e) => set('payment_split_single_operator', e.target.checked ? 'true' : 'false')}
-                  className="mt-1 w-4 h-4 accent-brand shrink-0"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-gray-200">
-                    Dividir a cobrança no ato (split — Mercado Pago e Pagar.me)
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                    <b className="text-gray-400">Ligado:</b> o operador recebe a parte dele
-                    direto no gateway (Mercado Pago ou Pagar.me), na conta dele, no momento do
-                    pagamento. A plataforma fica só com a comissão. Não há repasse a fazer.<br />
-                    <b className="text-gray-400">Desligado:</b> a plataforma recebe 100% e você
-                    paga cada operador depois, dando baixa na tela de Repasses.
-                  </p>
-                  <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
-                    Esta chave vale para os DOIS gateways: desligada, nem o Mercado Pago nem o
-                    Pagar.me dividem no ato — a plataforma recebe 100% e o repasse é manual.
-                    Só divide reserva de UM operador com recebedor cadastrado no gateway e cujo
-                    modal não tenha executor fixo. Combo continua sempre manual. Não ligue antes
-                    de uma cobrança real ter funcionado do início ao fim.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            <SaveRow
-              onSave={() => saveSection(
-                ['payment_gateway_api_key', 'payment_gateway_webhook_secret',
-                 'payment_card_flow', 'payment_mp_wallet_only',
-                 'payment_card_form_inline', 'payment_split_single_operator'],
-                'mercadopago',
-              )}
-              pending={saveMut.isPending}
-              saved={savedSection === 'mercadopago'}
-              erro={erroSecao?.secao === 'mercadopago' ? erroSecao.mensagem : null}
-            />
+            {/* O "split no ato" saiu daqui: ele vale para os DOIS gateways e
+                agora mora em Recebimento e repasse › Divisão de recebimento. */}
+            {salvarSecao('mercadopago')}
           </div>
-        </CardBody>
-      </Card>
+      </SecaoRecolhivel>
 
-      {/* ── 3. Integração: Pagar.me (Stone) ─────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2 border-l-2 border-emerald-500/70 pl-2">
-            <CreditCard size={16} className="text-emerald-400" />
-            <h2 className="text-sm font-semibold text-gray-200">Integração — Pagar.me (Stone)</h2>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">Conta da plataforma</span>
-          </div>
-        </CardHeader>
-        <CardBody>
+      <SecaoRecolhivel grupo="pagamentos" id="pagarme" icone={CreditCard} corIcone="text-emerald-400"
+        titulo="Pagar.me (Stone)" selos={selosGateway('pagarme', 'verde', 'pagarme')} resumo={resumoPagarme}>
           <div className="space-y-4">
+            <p className="text-xs font-semibold text-gray-300">Credenciais da conta da plataforma</p>
             {/* A chave do Pagar.me tem campo PRÓPRIO: a do card do Mercado Pago
                 é a do gateway padrão. Usar aquela para chamar o Pagar.me
                 mandaria o token do MP no Authorization deles. */}
@@ -1230,7 +1281,7 @@ function TabPagamentos({ settings, qc }) {
               {' '}<code className="text-gray-400">PAGARME_PUBLIC_KEY</code> no servidor.
             </p>
 
-            <div className="border-t border-gray-800 pt-4 space-y-3">
+            <div className="border-t border-gray-700 pt-4 space-y-3">
               <p className="text-xs font-semibold text-gray-300">Split</p>
               {/* Sem este id o split não fecha 100% e a cobrança é RECUSADA
                   antes de sair (fail-closed em pagarmeSplit.js). O campo
@@ -1248,14 +1299,14 @@ function TabPagamentos({ settings, qc }) {
                 taxa do gateway e absorve o arredondamento. O operador recebe a fatia dele limpa.
               </p>
               <p className="text-xs text-amber-500/80 leading-relaxed">
-                O percentual é o <b>mesmo</b> da Divisão de Recebimento abaixo (com os
-                overrides por operador) — não há regra separada aqui. Sem este recebedor,
+                O percentual é o <b>mesmo</b> da Divisão de recebimento, em Recebimento e
+                repasse (com os overrides por operador) — não há regra separada aqui. Sem este recebedor,
                 ou sem o recebedor do operador cadastrado, a cobrança pelo Pagar.me é
                 recusada antes de chegar ao gateway, em vez de entrar inteira numa conta só.
               </p>
             </div>
 
-            <div className="border-t border-gray-800 pt-4">
+            <div className="border-t border-gray-700 pt-4">
               <p className="text-xs font-semibold text-gray-300 mb-2">Webhook</p>
               <p className="text-xs text-gray-500 leading-relaxed">
                 Cadastrar no painel do Pagar.me:
@@ -1265,29 +1316,15 @@ function TabPagamentos({ settings, qc }) {
               </p>
             </div>
 
-            <SaveRow
-              onSave={() => saveSection(
-                ['payment_pagarme_api_key', 'payment_pagarme_public_key',
-                 'payment_pagarme_platform_recipient_id'],
-                'pagarme',
-              )}
-              pending={saveMut.isPending}
-              saved={savedSection === 'pagarme'}
-              erro={erroSecao?.secao === 'pagarme' ? erroSecao.mensagem : null}
-            />
+            {salvarSecao('pagarme')}
           </div>
-        </CardBody>
-      </Card>
+      </SecaoRecolhivel>
+      </GrupoPagamento>
 
-      {/* Split */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <SplitSquareHorizontal size={16} className="text-gray-500" />
-            <h2 className="text-sm font-semibold text-gray-200">Divisão de Recebimento</h2>
-          </div>
-        </CardHeader>
-        <CardBody>
+      {/* ── Recebimento e repasse: vale para todos os gateways ───────────── */}
+      <GrupoPagamento titulo="Recebimento e repasse">
+      <SecaoRecolhivel grupo="pagamentos" id="divisao" icone={SplitSquareHorizontal} corIcone="text-gray-400"
+        titulo="Divisão de recebimento" selos={seloNaoSalvo('divisao')} resumo={resumoDivisao}>
           <div className="space-y-4">
             <p className="text-xs text-gray-500 leading-relaxed">
               Define como cada pagamento é dividido entre a plataforma e o operador.
@@ -1320,15 +1357,43 @@ function TabPagamentos({ settings, qc }) {
               <p>→ Plataforma recebe <span className="text-brand">R$ {(500 * adminPct / 100).toFixed(2)}</span></p>
               <p>→ Operador recebe <span className="text-green-400">R$ {(500 * operatorPct / 100).toFixed(2)}</span></p>
             </div>
-            <SaveRow
-              onSave={() => saveSection(['payment_split_admin_pct'], 'split')}
-              pending={saveMut.isPending}
-              saved={savedSection === 'split'}
-              erro={erroSecao?.secao === 'split' ? erroSecao.mensagem : null}
-            />
+
+            {/* ── Split no ato: para onde o dinheiro vai ─────────────────
+                Vale para os DOIS gateways — por isso mora aqui, e não dentro
+                do Mercado Pago (onde ficava). */}
+            <div className="border-t border-gray-700 pt-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.payment_split_single_operator === 'true'}
+                  onChange={(e) => set('payment_split_single_operator', e.target.checked ? 'true' : 'false')}
+                  className="mt-1 w-4 h-4 accent-brand shrink-0"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-gray-200">
+                    Dividir a cobrança no ato (split — Mercado Pago e Pagar.me)
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    <b className="text-gray-400">Ligado:</b> o operador recebe a parte dele
+                    direto no gateway (Mercado Pago ou Pagar.me), na conta dele, no momento do
+                    pagamento. A plataforma fica só com a comissão. Não há repasse a fazer.<br />
+                    <b className="text-gray-400">Desligado:</b> a plataforma recebe 100% e você
+                    paga cada operador depois, dando baixa na tela de Repasses.
+                  </p>
+                  <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
+                    Esta chave vale para os DOIS gateways: desligada, nem o Mercado Pago nem o
+                    Pagar.me dividem no ato — a plataforma recebe 100% e o repasse é manual.
+                    Só divide reserva de UM operador com recebedor cadastrado no gateway e cujo
+                    modal não tenha executor fixo. Combo continua sempre manual. Não ligue antes
+                    de uma cobrança real ter funcionado do início ao fim.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {salvarSecao('divisao')}
           </div>
-        </CardBody>
-      </Card>
+      </SecaoRecolhivel>
 
       {/* Split por operador */}
       <SplitPorOperador globalAdminPct={adminPct} qc={qc} />
@@ -1337,14 +1402,8 @@ function TabPagamentos({ settings, qc }) {
       <ServicosStandalone qc={qc} />
 
       {/* Conta de recebimento da plataforma */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Landmark size={16} className="text-gray-500" />
-            <h2 className="text-sm font-semibold text-gray-200">Conta de Recebimento da Plataforma</h2>
-          </div>
-        </CardHeader>
-        <CardBody>
+      <SecaoRecolhivel grupo="pagamentos" id="conta" icone={Landmark} corIcone="text-gray-400"
+        titulo="Conta de recebimento da plataforma" selos={seloNaoSalvo('conta')} resumo={resumoConta}>
           <div className="space-y-4">
             <p className="text-xs text-gray-500">
               Dados bancários e PIX da conta que recebe os pagamentos da plataforma.
@@ -1412,23 +1471,15 @@ function TabPagamentos({ settings, qc }) {
               className="max-w-xs"
             />
 
-            <SaveRow
-              onSave={() => saveSection([
-                'payment_admin_pix_key_type', 'payment_admin_pix_key',
-                'payment_admin_bank_name', 'payment_admin_bank_agency',
-                'payment_admin_bank_account', 'payment_admin_bank_account_type',
-                'payment_admin_bank_document',
-              ], 'conta')}
-              pending={saveMut.isPending}
-              saved={savedSection === 'conta'}
-              erro={erroSecao?.secao === 'conta' ? erroSecao.mensagem : null}
-            />
+            {salvarSecao('conta')}
           </div>
-        </CardBody>
-      </Card>
+      </SecaoRecolhivel>
+      </GrupoPagamento>
 
-      {/* Diagnóstico do WhatsApp (Z-API) */}
-      <WhatsappDiag />
+      {/* WhatsApp não é pagamento: fica à parte, no fim da aba. */}
+      <GrupoPagamento titulo="Outras integrações">
+        <WhatsappDiag />
+      </GrupoPagamento>
     </div>
   )
 }
@@ -1462,14 +1513,12 @@ function WhatsappDiag() {
   )
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <MessageCircle size={16} className="text-gray-500" />
-          <h2 className="text-sm font-semibold text-gray-200">Integração — WhatsApp (Z-API)</h2>
-        </div>
-      </CardHeader>
-      <CardBody>
+    <SecaoRecolhivel grupo="pagamentos" id="whatsapp" icone={MessageCircle} corIcone="text-gray-400"
+      titulo="WhatsApp (Z-API)"
+      selos={!isLoading && (enabled ? <Selo cor="verde">Ativo</Selo> : <Selo cor="ambar">Desligado</Selo>)}
+      resumo={isLoading ? 'Carregando status…' : enabled
+        ? 'Credenciais configuradas no servidor · teste de envio aqui'
+        : 'Faltam credenciais no servidor (Render)'}>
         {isLoading ? (
           <p className="text-xs text-gray-500">Carregando status…</p>
         ) : (
@@ -1557,8 +1606,7 @@ function WhatsappDiag() {
             </div>
           </div>
         )}
-      </CardBody>
-    </Card>
+    </SecaoRecolhivel>
   )
 }
 
@@ -1930,16 +1978,15 @@ function ServicosStandalone({ qc }) {
 
   if (isLoading || !lista.length || !local) return null
   const dirty = lista.some((m) => !!local[m.id] !== !!m.is_standalone)
+  // Resumo da seção recolhida: o que está GRAVADO (não o que foi marcado).
+  const isolados = lista.filter((m) => m.is_standalone).map((m) => m.name || m.slug)
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <SplitSquareHorizontal size={16} className="text-gray-500" />
-          <h2 className="text-sm font-semibold text-gray-200">Serviços solicitados separadamente</h2>
-        </div>
-      </CardHeader>
-      <CardBody>
+    <SecaoRecolhivel grupo="pagamentos" id="separados" icone={SplitSquareHorizontal} corIcone="text-gray-400"
+      titulo="Serviços solicitados separadamente"
+      selos={dirty && <Selo cor="ambar">Não salvo</Selo>}
+      resumo={isolados.length ? `Cobrados à parte: ${isolados.join(', ')}` : 'Todos os modais entram em combo'}>
+      <div>
         <p className="text-xs text-gray-400 mb-3 leading-relaxed">
           Marque os modais que <b>não entram em combo</b> — cada serviço vira uma solicitação/cobrança
           própria. Ideal para o aéreo (valor alto, executor único): isolado, o cartão divide direto
@@ -1972,8 +2019,8 @@ function ServicosStandalone({ qc }) {
           )}
         </div>
         {err && <p className="text-sm text-red-400 mt-2">{err}</p>}
-      </CardBody>
-    </Card>
+      </div>
+    </SecaoRecolhivel>
   )
 }
 
@@ -1998,21 +2045,23 @@ export default function Configuracoes() {
 
   return (
     <div className="space-y-5">
-      {/* Tab nav */}
-      <div className="flex gap-1 bg-gray-800 rounded-xl p-1 w-fit">
+      {/* Tab nav — no celular ocupa a largura toda, sem os ícones (com eles
+          a barra passava da borda da tela e "Pagamentos" ficava cortado). */}
+      <div className="flex gap-1 bg-gray-800 rounded-xl p-1 w-full sm:w-fit overflow-x-auto scrollbar-hide">
         {TABS.map((t) => {
           const Icon = t.icon
           return (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              aria-pressed={tab === t.id}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 whitespace-nowrap px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 tab === t.id
                   ? 'bg-gray-700 text-gray-100'
                   : 'text-gray-500 hover:text-gray-300'
               }`}
             >
-              <Icon size={15} />
+              <Icon size={15} className="hidden sm:block shrink-0" />
               {t.label}
             </button>
           )

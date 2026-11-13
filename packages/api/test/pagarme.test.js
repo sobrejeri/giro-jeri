@@ -415,8 +415,10 @@ test('as chaves novas do cartão são realmente gravadas pelo admin', async () =
   const jsx = await readFile(
     new URL('../../admin/src/pages/Configuracoes.jsx', import.meta.url), 'utf8')
   const salvas = new Set(
-    [...jsx.matchAll(/saveSection\(\s*(?:\/\/[^\n]*\n\s*)*\[([\s\S]*?)\]/g)]
-      .flatMap((m) => [...m[1].matchAll(/'(payment_[a-z0-9_]+)'/g)].map((k) => k[1])))
+    // Cada Salvar grava a lista da sua seção em CHAVES_PAGAMENTO.
+    [...jsx.slice(jsx.indexOf('const CHAVES_PAGAMENTO'), jsx.indexOf('function GrupoPagamento'))
+      .replace(/^\s*\/\/.*$/gm, '')
+      .matchAll(/'(payment_[a-z0-9_]+)'/g)].map((k) => k[1]))
   for (const k of ['payment_card_acquirers', 'payment_pagarme_api_key', 'payment_mp_wallet_only']) {
     assert.ok(salvas.has(k), `${k} é editável mas não está na lista do Salvar`)
   }
