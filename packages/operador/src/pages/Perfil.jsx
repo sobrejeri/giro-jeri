@@ -569,6 +569,12 @@ export default function Perfil() {
         ? { ...form.recipient_kyc, kind: form.document_type === 'cnpj' ? 'company' : 'individual' }
         : undefined,
     }
+    if (profile?.company_id) {
+      for (const field of ['pix_key_type', 'pix_key', 'bank_name', 'bank_agency',
+        'bank_account_number', 'bank_account_type', 'bank_document', 'recipient_kyc']) {
+        delete payload[field]
+      }
+    }
     // Só envia o username se REALMENTE mudou — evita reprocessar a unicidade.
     if ((form.username || '') !== (profile?.username || '')) {
       payload.username = form.username?.trim() ? form.username.trim() : null
@@ -623,7 +629,16 @@ export default function Perfil() {
       <MeuLink slug={profile?.partner_slug} />
 
       {/* Recebimento via Mercado Pago (split — divisão automática) */}
-      <MercadoPagoConnect />
+      {profile?.company_id ? (
+        <Card>
+          <CardBody>
+            <h2 className="text-sm font-semibold text-gray-700">Recebimento pela empresa</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              {profile.receiving_company || 'A empresa vinculada'} administra os dados de recebimento.
+            </p>
+          </CardBody>
+        </Card>
+      ) : <MercadoPagoConnect />}
 
       {/* Dados Pessoais */}
       <Card>
@@ -739,7 +754,7 @@ export default function Perfil() {
       </Card>
 
       {/* Chave PIX para receber o repasse (pagamento manual) */}
-      <Card>
+      {!profile?.company_id && <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <Wallet size={16} className="text-gray-400" />
@@ -779,12 +794,12 @@ export default function Perfil() {
             </div>
           </div>
         </CardBody>
-      </Card>
+      </Card>}
 
       {/* Recebimento automático via Pagar.me (split) — só quando a plataforma
           habilitou a chave. Coleta o KYC completo (PF/PJ) que o Pagar.me exige
           para VALIDAR o recebedor e, num clique, salva e envia para validação. */}
-      {recipientStatus?.configured && (
+      {!profile?.company_id && recipientStatus?.configured && (
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
