@@ -269,18 +269,15 @@ export async function gerarRepasses(booking, total) {
     // deposita a parte dele na cobrança. Lançar a comissão aqui faria o admin
     // pagar de novo o que já saiu — o erro mais caro possível nesta parte do
     // sistema, e silencioso: as duas linhas parecem corretas isoladamente.
-    let jaPagoPeloGateway = false;
-    try {
-      const { data: pg } = await supabase
-        .from('payments').select('split_operator_id')
-        .eq('booking_id', booking.id)
-        .not('split_operator_id', 'is', null)
-        .limit(1);
-      jaPagoPeloGateway = (pg || []).some((p) => p.split_operator_id === booking.operator_id);
-    } catch (e) {
-      // 42703 = coluna ausente (087 pendente): não houve split, segue normal.
-      if (e?.code !== '42703') console.error('[payouts] leitura do split falhou:', e?.message);
-    }
+    let splitPago = supabase.from('payments').select('split_operator_id')
+      .eq('status', 'approved')
+      .eq('split_operator_id', booking.operator_id);
+    splitPago = booking.order_group_id
+      ? splitPago.or(`booking_id.eq.${booking.id},order_group_id.eq.${booking.order_group_id}`)
+      : splitPago.eq('booking_id', booking.id);
+    const { data: pagamentosDivididos, error: splitError } = await splitPago.limit(1);
+    if (splitError && splitError.code !== '42703') throw splitError;
+    const jaPagoPeloGateway = Boolean(pagamentosDivididos?.length);
 
     const { modal, geral } = await contextoDoRateio(booking);
     let repasses = calcularRepasses(total, booking.operator_id, modal, geral);
