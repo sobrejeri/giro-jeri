@@ -1722,3 +1722,14 @@ enxerga o trabalho do outro no próximo `git fetch`.
   desde jul/2026 (rascunhos antigos são hidratados na edição).
 - Pendências conhecidas: rotacionar SUPABASE_SERVICE_ROLE_KEY (exposta em
   chat — ação do usuário); E2E de pagamento/split em staging.
+
+- **2026-11-13 · Empresa 1/5 (vínculo operador → empresa, continuação do PR #62)** —
+  Os dois rascunhos `20261113120719_operator_company_link` e
+  `20261113131855_company_commission_recipient` viraram a migração **129**
+  (`129_empresa_vinculo_e_comissao.sql`, re-executável; exige o enum `company`
+  rodado antes, sozinho). Toda leitura de `users.company_id` passa por
+  `packages/api/src/lib/vinculoEmpresa.js` (tolerante à 129 pendente: coluna
+  ausente = ninguém vinculado) — **não** selecione `company_id` junto com outras
+  colunas em rota de pagamento/perfil. Operador vinculado nunca entra em split
+  no ato; a comissão nasce em nome da empresa pelo gatilho do banco
+  (`booking_payouts.origin_operator_id` guarda quem originou).

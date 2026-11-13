@@ -1,4 +1,3 @@
-import { requireIndependentReceiving } from '../middleware/independentReceiving.js';
 /**
  * /api/operator — Perfil e preferências de serviço do operador/operador
  * GET   /api/operator/profile               — dados pessoais + conta de recebimento
@@ -6,6 +5,8 @@ import { requireIndependentReceiving } from '../middleware/independentReceiving.
  * GET   /api/operator/preferences           — lista preferências de serviço
  * PUT   /api/operator/preferences/:type/:id — ativa ou desativa um serviço
  */
+import { requireIndependentReceiving } from '../middleware/independentReceiving.js';
+import { empresaDoOperador } from '../lib/vinculoEmpresa.js';
 import { Router } from 'express';
 import { z }      from 'zod';
 import dayjs      from 'dayjs';
@@ -74,7 +75,7 @@ const PROFILE_FIELDS = `
   user_type, profile_photo_url, address, cep, partner_slug,
   pix_key_type, pix_key,
   bank_name, bank_agency, bank_account_number, bank_account_type, bank_document,
-  gateway_recipient_id, company_id
+  gateway_recipient_id
 `.trim();
 
 // KYC do recebedor (register_information do Pagar.me). Guardado como JSONB em
@@ -420,14 +421,17 @@ router.get('/profile', async (req, res, next) => {
     const { data: k, error: kErr } = await supabase
       .from('users').select('recipient_kyc').eq('id', req.user.id).single();
     if (!kErr) recipient_kyc = k?.recipient_kyc ?? null;
+    // Vínculo com empresa (migração 129) lido à parte: sem a coluna, o perfil
+    // continua abrindo normalmente.
+    const company_id = await empresaDoOperador(req.user.id);
     let receiving_company = null;
-    if (data.company_id) {
+    if (company_id) {
       const { data: company, error: companyError } = await supabase.from('users')
-        .select('full_name').eq('id', data.company_id).eq('user_type', 'company').maybeSingle();
+        .select('full_name').eq('id', company_id).eq('user_type', 'company').maybeSingle();
       if (companyError) throw companyError;
       receiving_company = company?.full_name || null;
     }
-    res.json({ ...data, recipient_kyc, receiving_company });
+    res.json({ ...data, recipient_kyc, company_id, receiving_company });
   } catch (err) { next(err); }
 });
 

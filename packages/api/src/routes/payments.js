@@ -18,6 +18,7 @@ import {
   MARCA_FALHA_MP,
 } from '../services/paymentFlow.js'
 import { checkQuoteOnly } from '../services/sobCotacao.js'
+import { algumOperadorVinculado } from '../lib/vinculoEmpresa.js'
 
 export const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -481,12 +482,14 @@ async function splitDoPagarme(bookings, cfg) {
     return { erro: 'recebedor da PLATAFORMA não configurado em Configurações → Pagamentos' }
   }
 
-  const { data: op, error } = await supabase.from('users')
-    .select('gateway_recipient_id, platform_split_pct, company_id').eq('id', operatorId).maybeSingle()
-  if (error) throw error
-  if (op?.company_id) {
+  // Operador vinculado a uma empresa nunca recebe no ato: a comissão vai para
+  // a EMPRESA, pela tela de Repasses.
+  if (await algumOperadorVinculado([operatorId])) {
     return { erro: 'operador vinculado a empresa — repasse manual pela plataforma' }
   }
+  const { data: op, error } = await supabase.from('users')
+    .select('gateway_recipient_id, platform_split_pct').eq('id', operatorId).maybeSingle()
+  if (error) throw error
   const recebedorOperador = String(op?.gateway_recipient_id || '').trim()
   if (!recebedorOperador) {
     return { erro: `operador ${operatorId} não tem recebedor cadastrado no gateway` }
@@ -526,14 +529,9 @@ export function mediaPonderadaDoPercentual(modais, pctDoOperador, cfg) {
   return somaValor > 0 ? somaPeso / somaValor : geral
 }
 
-async function hasCompanyLinkedOperator(operatorIds) {
-  const ids = [...new Set(operatorIds.filter(Boolean))]
-  if (!ids.length) return false
-  const { data, error } = await supabase.from('users').select('id')
-    .in('id', ids).not('company_id', 'is', null).limit(1)
-  if (error) throw error
-  return Boolean(data?.length)
-}
+// Tolerante à migração 129 ainda não rodada (ver lib/vinculoEmpresa.js): sem a
+// coluna ninguém está vinculado e a cobrança segue como sempre foi.
+const hasCompanyLinkedOperator = algumOperadorVinculado
 
 async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg, metodo = 'credit_card') {
   if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return null

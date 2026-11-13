@@ -1,8 +1,9 @@
-import { requireIndependentReceiving } from '../middleware/independentReceiving.js';
 // ── mpOauth.js ─────────────────────────────────────────
 // OAuth do Mercado Pago para o split de pagamentos (marketplace).
 // O operador conecta a própria conta MP; guardamos os tokens para criar os
 // pagamentos NA conta dela com a comissão da plataforma (application_fee).
+import { requireIndependentReceiving } from '../middleware/independentReceiving.js';
+import { empresaDoOperador } from '../lib/vinculoEmpresa.js';
 import { Router } from 'express'
 import crypto     from 'node:crypto'
 import { supabase } from '../supabase.js'
@@ -115,9 +116,13 @@ router.get('/callback', async (req, res) => {
     if (!operatorId)      return back({ mp: 'erro', motivo: 'sessao' })
     if (!req.query.code)  return back({ mp: 'erro', motivo: 'sem_codigo' })
 
+    // Operador vinculado a empresa não conecta conta própria (quem recebe é a
+    // empresa). O vínculo é lido à parte: tolera a migração 129 pendente.
     const { data: operator, error: lookupError } = await supabase.from('users')
-      .select('company_id, is_active').eq('id', operatorId).single()
-    if (lookupError || !operator?.is_active || operator.company_id) return back({ mp: 'erro', motivo: 'recebimento' })
+      .select('is_active').eq('id', operatorId).single()
+    if (lookupError || !operator?.is_active || await empresaDoOperador(operatorId)) {
+      return back({ mp: 'erro', motivo: 'recebimento' })
+    }
 
     const tok = await exchangeOAuthCode({ code: String(req.query.code), redirectUri: redirectUri() })
     const expiresAt = tok.expires_in
@@ -131,7 +136,7 @@ router.get('/callback', async (req, res) => {
       mp_public_key:       tok.public_key    || null,
       mp_token_expires_at: expiresAt,
       mp_connected_at:     new Date().toISOString(),
-    }).eq('id', operatorId).is('company_id', null).eq('is_active', true).select('id').maybeSingle()
+    }).eq('id', operatorId).eq('is_active', true).select('id').maybeSingle()
     if (saveError || !saved) return back({ mp: 'erro', motivo: 'recebimento' })
 
     return back({ mp: 'connected' })

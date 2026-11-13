@@ -14,6 +14,7 @@ import { jaCreditado } from '../services/settlement.js';
 import { notifyDispatchOS } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
 import crypto from 'node:crypto';
+import { empresaDoOperador, semVinculoNoBanco, MSG_MIGRACAO_EMPRESA } from '../lib/vinculoEmpresa.js';
 import { montarLinhaFila, conciliarReserva, ORDEM_CONCILIACAO } from '../services/payoutQueue.js';
 
 const router = Router();
@@ -442,6 +443,7 @@ router.post('/users', requireAdmin, async (req, res, next) => {
 
     if (profileError) {
       await supabase.auth.admin.deleteUser(authData.user.id);
+      if (semVinculoNoBanco(profileError)) return res.status(409).json({ error: MSG_MIGRACAO_EMPRESA });
       return res.status(400).json({ error: profileError.message });
     }
 
@@ -742,11 +744,21 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
     );
 
     if ('company_id' in updates || 'user_type' in updates) {
-      const { data: current, error: fetchErr } = await supabase.from('users').select('id, user_type, company_id').eq('id', req.params.id).maybeSingle();
+      const { data: current, error: fetchErr } = await supabase.from('users').select('id, user_type').eq('id', req.params.id).maybeSingle();
       if (fetchErr) throw fetchErr;
       if (!current) return res.status(404).json({ error: 'Usuário não encontrado' });
+      // Vínculo atual lido à parte: com a migração 129 pendente a coluna não
+      // existe — ninguém está vinculado, e trocar o TIPO continua funcionando.
+      const { data: vinc, error: vincErr } = await supabase.from('users').select('company_id').eq('id', req.params.id).maybeSingle();
+      const semColuna = semVinculoNoBanco(vincErr);
+      if (vincErr && !semColuna) throw vincErr;
+      if (semColuna) {
+        if (updates.company_id) return res.status(409).json({ error: MSG_MIGRACAO_EMPRESA });
+        delete updates.company_id;
+      }
+      if (updates.company_id === '') updates.company_id = null;
       const targetRole = updates.user_type ?? current.user_type;
-      const companyId = updates.company_id === undefined ? current.company_id : updates.company_id;
+      const companyId = updates.company_id === undefined ? (vinc?.company_id ?? null) : updates.company_id;
       if (companyId && targetRole !== 'operator') return res.status(400).json({ error: 'Somente operadores podem ser vinculados a uma empresa.' });
       if ('company_id' in updates && companyId !== null) {
         if (!z.string().uuid().safeParse(companyId).success) return res.status(400).json({ error: 'Empresa inválida.' });
@@ -771,6 +783,14 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
     }
     const { data, error } = upd;
 
+    // Regras do vínculo garantidas pelo BANCO (migração 129) — com mensagem que
+    // o admin entende, em vez de "usuário não encontrado".
+    if (error?.code === '23503' && /company/.test(error.message || '')) {
+      return res.status(409).json({ error: 'Esta empresa tem operadores vinculados. Desvincule os operadores antes de mudar o tipo dela.' });
+    }
+    if (error?.code === '23514' && /company/.test(error.message || '')) {
+      return res.status(400).json({ error: 'Somente operadores podem ser vinculados a uma empresa.' });
+    }
     if (error || !data) return res.status(404).json({ error: 'Usuário não encontrado' });
 
     // Se o TIPO mudou, o IDENTIFICADOR DE LOGIN muda junto: operador/agência loga
@@ -816,14 +836,14 @@ router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next
   try {
     const { data: user, error: uErr } = await supabase
       .from('users')
-      .select(`id, full_name, email, phone, user_type, company_id, document_type, document_number,
+      .select(`id, full_name, email, phone, user_type, document_type, document_number,
                pix_key_type, pix_key, bank_name, bank_agency,
                bank_account_number, bank_account_type, bank_document`)
       .eq('id', req.params.id)
       .single();
 
     if (uErr || !user) return res.status(404).json({ error: 'Usuário não encontrado' });
-    if (user.company_id) return res.status(409).json({ error: 'O recebimento é administrado pela empresa vinculada.' });
+    if (await empresaDoOperador(user.id)) return res.status(409).json({ error: 'O recebimento é administrado pela empresa vinculada.' });
     if (user.user_type !== 'operator') {
       return res.status(400).json({ error: 'Apenas operadores podem ser registradas como recebedoras' });
     }

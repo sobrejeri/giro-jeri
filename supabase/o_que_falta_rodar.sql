@@ -85,6 +85,8 @@ WITH esperado(tabela, coluna, migration) AS (VALUES
   ('tours', 'quote_stops', '128_cotacao_por_passeio_e_rota.sql'),
   ('transfer_quotes', 'route_id', '128_cotacao_por_passeio_e_rota.sql'),
   ('transfer_routes', 'quote_only', '128_cotacao_por_passeio_e_rota.sql'),
+  ('booking_payouts', 'origin_operator_id', '129_empresa_vinculo_e_comissao.sql'),
+  ('users', 'company_id', '129_empresa_vinculo_e_comissao.sql'),
   ('users', 'address', '016_operator_address.sql'),
   ('users', 'affiliate_code', '055_affiliate_program.sql'),
   ('users', 'affiliate_pix_key', '056_affiliate_pix_key.sql'),

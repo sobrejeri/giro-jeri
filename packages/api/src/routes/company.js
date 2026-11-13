@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
+import { semVinculoNoBanco } from '../lib/vinculoEmpresa.js';
 
 const router = Router();
 router.use(authenticate, requireRole('company'));
@@ -51,8 +52,10 @@ router.get('/commissions', async (req, res, next) => {
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(50);
-    if (error) throw error;
     res.set('Cache-Control', 'no-store');
+    // Migração 129 ainda não rodada: sem vínculo não há comissão da empresa.
+    if (semVinculoNoBanco(error)) return res.json({ rows: [], pendente: true });
+    if (error) throw error;
     res.json({ rows: data || [] });
   } catch (err) { next(err); }
 });

@@ -23,7 +23,8 @@ test('createUserSchema aceita CPF cru (11 díg.), não exige 14', () => {
 test('o handler ainda valida o documento (11 ou 14 dígitos) de verdade', () => {
   const i = admin.indexOf("router.post('/users'")
   assert.notEqual(i, -1)
-  const r = admin.slice(i, i + 1500)
+  // Janela até o fim do handler (o vínculo com empresa entrou antes da validação).
+  const r = admin.slice(i, admin.indexOf("router.post('/users/:id/reset-password'"))
   assert.ok(/digits\.length === 11 \? 'cpf' : digits\.length === 14 \? 'cnpj' : null/.test(r),
     'o handler continua conferindo CPF (11) ou CNPJ (14)')
   assert.ok(/validateBrDoc/.test(r), 'e valida o documento com validateBrDoc')

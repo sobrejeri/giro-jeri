@@ -28,7 +28,7 @@ export default function Empresa() {
   const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 bg-white'
   return <main className="min-h-screen bg-gray-50 p-4 flex justify-center"><section className="w-full max-w-xl mt-8">
     <div className="flex items-center justify-between gap-4"><h1 className="text-xl font-bold text-gray-900">{user.full_name}</h1><button onClick={logout} className="text-sm text-orange-600">Sair</button></div>
-    <div className="bg-white border rounded-xl p-5 mt-5"><h2 className="font-semibold">Conta de recebimento</h2><p className="text-sm text-gray-600 mt-2">Cadastre os dados da empresa para os repasses manuais. A vinculação aos operadores ainda está em desenvolvimento.</p>
+    <div className="bg-white border rounded-xl p-5 mt-5"><h2 className="font-semibold">Conta de recebimento</h2><p className="text-sm text-gray-600 mt-2">Cadastre os dados da empresa para receber os repasses. As comissões dos operadores vinculados à empresa são pagas nesta conta.</p>
     {loading ? <p className="mt-4 text-sm">Carregando…</p> : <form onSubmit={save} className="space-y-3 mt-4">
       {fields.map(([key, label]) => <label key={key} className="block text-sm text-gray-700">{label}<input className={input} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>)}
       <label className="block text-sm text-gray-700">Tipo de conta<select className={input} value={form.bank_account_type} onChange={e => setForm({ ...form, bank_account_type: e.target.value })}><option value="">Selecione</option><option value="corrente">Corrente</option><option value="poupanca">Poupança</option></select></label>
