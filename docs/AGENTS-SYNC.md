@@ -1748,3 +1748,10 @@ enxerga o trabalho do outro no próximo `git fetch`.
   em `routes/externalBookings.js`, tela `/vendas-externas`, só no menu de
   operador vinculado). Venda externa é só registro: não cobra, não gera
   comissão nem repasse.
+
+- **2026-11-13 · Empresa 4/5 (repasses a executores)** — `GET/PATCH
+  /api/company/executor-payouts` (`routes/companyPayouts.js`, regras puras em
+  `services/repasseExecutor.js`): a empresa vê os despachos da equipe e dá
+  baixa manual no que pagou a motorista/guia/tripulação. Mesmas colunas
+  `operational_assignments.driver_payout_*` (066) que o operador usa em
+  "Repasses aos motoristas" — fonte única; sem migração nova.

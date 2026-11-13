@@ -153,6 +153,8 @@ export const api = {
   setCompanyOperatorPassword: (id, new_password) => request(`/api/company/team/${id}/password`, { method: 'POST', body: { new_password } }),
   removeCompanyOperator: (id)       => request(`/api/company/team/${id}`, { method: 'DELETE' }),
   getCompanyBookings:    ({ from, to } = {}) => request(`/api/company/bookings?${new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) })}`),
+  getCompanyExecutorPayouts: (params = {}) => request(`/api/company/executor-payouts?${new URLSearchParams(params)}`),
+  updateCompanyExecutorPayout: (id, body) => request(`/api/company/executor-payouts/${id}`, { method: 'PATCH', body }),
   // Vendas feitas fora da plataforma (registro do operador)
   getExternalBookings:   ()         => request('/api/operator/external-bookings'),
   createExternalBooking: (body)     => request('/api/operator/external-bookings', { method: 'POST', body }),

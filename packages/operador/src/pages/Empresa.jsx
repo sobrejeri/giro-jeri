@@ -1,16 +1,18 @@
 // Painel da EMPRESA: equipe de operadores, comissões e conta de recebimento.
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Users, Wallet, Landmark, LogOut, CalendarCheck } from 'lucide-react'
+import { Users, Wallet, Landmark, LogOut, CalendarCheck, Banknote } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import Equipe from './empresa/Equipe'
 import Reservas from './empresa/Reservas'
+import Repasses from './empresa/Repasses'
 import Comissoes from './empresa/Comissoes'
 import Conta from './empresa/Conta'
 
 const ABAS = [
   { id: 'equipe',    rotulo: 'Equipe',    Icone: Users,    Tela: Equipe },
   { id: 'reservas',  rotulo: 'Reservas',  Icone: CalendarCheck, Tela: Reservas },
+  { id: 'repasses',  rotulo: 'Repasses',  Icone: Banknote, Tela: Repasses },
   { id: 'comissoes', rotulo: 'Comissões', Icone: Wallet,   Tela: Comissoes },
   { id: 'conta',     rotulo: 'Conta',     Icone: Landmark, Tela: Conta },
 ]
@@ -39,12 +41,12 @@ export default function Empresa() {
               <LogOut size={16} /> Sair
             </button>
           </div>
-          <nav className="flex gap-1 mt-3 -mb-px" role="tablist" aria-label="Seções da empresa">
+          <nav className="flex gap-1 mt-3 -mb-px overflow-x-auto scrollbar-hide" role="tablist" aria-label="Seções da empresa">
             {ABAS.map(({ id, rotulo, Icone }) => (
               <button key={id} role="tab" aria-selected={aba === id} onClick={() => trocar(id)}
-                className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2.5 text-sm whitespace-nowrap font-medium border-b-2 transition-colors ${
+                className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-1 sm:px-3 py-2.5 text-[13px] sm:text-sm whitespace-nowrap font-medium border-b-2 transition-colors ${
                   aba === id ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
-                <Icone size={16} className="hidden min-[420px]:block shrink-0" /> {rotulo}
+                <Icone size={16} className="hidden sm:block shrink-0" /> {rotulo}
               </button>
             ))}
           </nav>
