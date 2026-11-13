@@ -14,15 +14,17 @@ import Reputacao from './pages/Reputacao'
 import Publicacoes from './pages/Publicacoes'
 import OsPublica from './pages/OsPublica'
 import UpdatePrompt from './components/UpdatePrompt'
+import Empresa from './pages/Empresa'
 
 function PrivateRoute({ children }) {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const location = useLocation()
   // Guarda o destino para voltar após login (deep link do WhatsApp deslogado).
   if (!token) {
     const next = location.pathname + location.search
     return <Navigate to="/login" replace state={{ from: next }} />
   }
+  if (user?.user_type === 'company') return <Navigate to="/empresa" replace />
   return children
 }
 
@@ -58,6 +60,7 @@ export default function App() {
     <UpdatePrompt />
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/empresa" element={<Empresa />} />
       {/* PÚBLICA: link da OS enviado no WhatsApp do cliente e do motorista —
           eles não têm conta, então fica FORA do PrivateRoute. */}
       <Route path="/os/:token" element={<OsPublica />} />
