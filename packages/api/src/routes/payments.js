@@ -481,8 +481,12 @@ async function splitDoPagarme(bookings, cfg) {
     return { erro: 'recebedor da PLATAFORMA não configurado em Configurações → Pagamentos' }
   }
 
-  const { data: op } = await supabase.from('users')
-    .select('gateway_recipient_id, platform_split_pct').eq('id', operatorId).maybeSingle()
+  const { data: op, error } = await supabase.from('users')
+    .select('gateway_recipient_id, platform_split_pct, company_id').eq('id', operatorId).maybeSingle()
+  if (error) throw error
+  if (op?.company_id) {
+    return { erro: 'operador vinculado a empresa — repasse manual pela plataforma' }
+  }
   const recebedorOperador = String(op?.gateway_recipient_id || '').trim()
   if (!recebedorOperador) {
     return { erro: `operador ${operatorId} não tem recebedor cadastrado no gateway` }
