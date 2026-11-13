@@ -193,7 +193,7 @@ router.get('/auth-orphans', requireAdmin, async (req, res, next) => {
 const importAuthSchema = z.object({
   auth_id:   z.string().uuid(),
   full_name: z.string().min(2).max(200),
-  user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
+  user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate', 'company']),
   cnpj:      z.string().optional(),
 });
 
@@ -341,12 +341,13 @@ const createUserSchema = z.object({
   // O tipo real é validado no handler (validateBrDoc). min(14) barrava o CPF cru.
   cnpj:      z.string().min(11).max(18).optional(),
   password:  z.string().min(6),
-  user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']),
+  user_type: z.enum(['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate', 'company']),
   // Municípios que o operador atende (migration 106). Filtra as solicitações
   // que ele recebe — opt-in estrito: sem município, não recebe nada.
   region_ids: z.array(z.string().uuid()).optional(),
 }).refine((d) => {
   if (d.user_type === 'operator') return !!d.cnpj;
+  if (d.user_type === 'company') return !!d.email;
   return d.email || d.phone;
 }, { message: 'Operador requer CNPJ; outros perfis requerem email ou telefone' });
 
