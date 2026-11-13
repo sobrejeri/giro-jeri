@@ -16,3 +16,12 @@ export function snapshotPayoutBeneficiary(operator, company = null) {
   }
   return { ok: true, operatorId: operator.id, beneficiaryId: company.id, beneficiaryType: 'company' }
 }
+
+/** Retorna linhas prontas para persistência; não modifica as linhas originais. */
+export function assignCommissionBeneficiary(rows, snapshot) {
+  if (!snapshot?.ok) throw new Error('Não foi possível identificar o beneficiário do repasse.')
+  return rows.map(row => {
+    if (row.kind !== 'commission' || row.payee_user_id !== snapshot.operatorId) return { ...row }
+    return { ...row, payee_user_id: snapshot.beneficiaryId, origin_operator_id: snapshot.operatorId }
+  })
+}
