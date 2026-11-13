@@ -20,7 +20,7 @@ import MunicipiosSelector from '../components/MunicipiosSelector'
 import { fleetCopy } from '../copy/fleet'
 import { useAuth } from '../contexts/AuthContext'
 
-const USER_TYPES = ['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate']
+const USER_TYPES = ['tourist', 'operator', 'agency', 'admin', 'finance', 'affiliate', 'company']
 
 // Só os três que existem de verdade na operação. Os outros papéis do enum
 // (agency, finance, affiliate) continuam válidos no cadastro, mas dar uma aba a
@@ -50,6 +50,7 @@ const USER_TYPE_LABELS = {
   admin:     'Administrador',
   finance:   'Financeiro',
   affiliate: 'Afiliado',
+  company:   'Empresa',
 }
 
 const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist', region_ids: [] }
@@ -568,8 +569,9 @@ export default function Usuarios() {
               <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>
             ))}
           </Select>
+          {createForm.user_type === 'company' && <p className="text-sm text-amber-300">O cadastro já pode ser criado. O acesso da empresa e a gestão da equipe ainda não estão disponíveis.</p>}
           <Input
-            label="Nome completo"
+            label={createForm.user_type === 'company' ? 'Nome da empresa' : 'Nome completo'}
             value={createForm.full_name}
             onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
             required
@@ -600,7 +602,8 @@ export default function Usuarios() {
                 type="email"
                 value={createForm.email}
                 onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                placeholder="Obrigatório se não informar telefone"
+                placeholder={createForm.user_type === 'company' ? 'Obrigatório para a empresa' : 'Obrigatório se não informar telefone'}
+                required={createForm.user_type === 'company'}
               />
               <Input
                 label="Telefone / WhatsApp"
