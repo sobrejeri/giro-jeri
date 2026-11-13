@@ -1,3 +1,4 @@
+import { requireIndependentReceiving } from '../middleware/independentReceiving.js';
 // ── mpOauth.js ─────────────────────────────────────────
 // OAuth do Mercado Pago para o split de pagamentos (marketplace).
 // O operador conecta a própria conta MP; guardamos os tokens para criar os
@@ -44,7 +45,7 @@ const returnUrl   = () => (process.env.MP_OAUTH_RETURN_URL || process.env.COOP_U
 
 // ── GET /api/mp/connect-url ────────────────────────────
 // Devolve a URL de autorização do Mercado Pago para o operador logado.
-router.get('/connect-url', authenticate, requireOperator, (req, res) => {
+router.get('/connect-url', authenticate, requireOperator, requireIndependentReceiving, (req, res) => {
   const missing = []
   if (!process.env.MP_CLIENT_ID && !process.env.MP_MARKETPLACE_CLIENT_ID)         missing.push('MP_CLIENT_ID')
   if (!process.env.MP_CLIENT_SECRET && !process.env.MP_MARKETPLACE_CLIENT_SECRET) missing.push('MP_CLIENT_SECRET')
@@ -92,7 +93,7 @@ router.get('/status', authenticate, requireOperator, async (req, res, next) => {
 })
 
 // ── POST /api/mp/disconnect ────────────────────────────
-router.post('/disconnect', authenticate, requireOperator, async (req, res, next) => {
+router.post('/disconnect', authenticate, requireOperator, requireIndependentReceiving, async (req, res, next) => {
   try {
     await supabase.from('users').update({
       mp_user_id: null, mp_access_token: null, mp_refresh_token: null,
@@ -114,19 +115,24 @@ router.get('/callback', async (req, res) => {
     if (!operatorId)      return back({ mp: 'erro', motivo: 'sessao' })
     if (!req.query.code)  return back({ mp: 'erro', motivo: 'sem_codigo' })
 
+    const { data: operator, error: lookupError } = await supabase.from('users')
+      .select('company_id, is_active').eq('id', operatorId).single()
+    if (lookupError || !operator?.is_active || operator.company_id) return back({ mp: 'erro', motivo: 'recebimento' })
+
     const tok = await exchangeOAuthCode({ code: String(req.query.code), redirectUri: redirectUri() })
     const expiresAt = tok.expires_in
       ? new Date(Date.now() + Number(tok.expires_in) * 1000).toISOString()
       : null
 
-    await supabase.from('users').update({
+    const { data: saved, error: saveError } = await supabase.from('users').update({
       mp_user_id:          tok.user_id != null ? String(tok.user_id) : null,
       mp_access_token:     tok.access_token  || null,
       mp_refresh_token:    tok.refresh_token || null,
       mp_public_key:       tok.public_key    || null,
       mp_token_expires_at: expiresAt,
       mp_connected_at:     new Date().toISOString(),
-    }).eq('id', operatorId)
+    }).eq('id', operatorId).is('company_id', null).eq('is_active', true).select('id').maybeSingle()
+    if (saveError || !saved) return back({ mp: 'erro', motivo: 'recebimento' })
 
     return back({ mp: 'connected' })
   } catch (err) {
