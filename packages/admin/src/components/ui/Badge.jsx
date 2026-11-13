@@ -1,4 +1,5 @@
 const styles = {
+  company: 'bg-indigo-900/40 text-indigo-300',
   draft:           'bg-gray-700 text-gray-300',
   pending_payment:  'bg-amber-900/40 text-amber-400',
   awaiting_acceptance: 'bg-sky-900/40 text-sky-400',
@@ -37,6 +38,7 @@ const styles = {
 }
 
 const labels = {
+  company: 'Empresa',
   draft: 'Rascunho', awaiting_acceptance: 'Ag. Aceite', pending_payment: 'Ag. Pagamento', awaiting_payment: 'Ag. Pagamento', paid: 'Pago',
   payment_failed: 'Falha Pgto', cancelled: 'Cancelado', refunded: 'Reembolsado',
   new: 'Novo', awaiting_dispatch: 'Ag. Despacho', confirmed: 'Confirmado',
