@@ -35,5 +35,51 @@ export default function Empresa() {
       <label className="block text-sm text-gray-700">Tipo da chave PIX<select className={input} value={form.pix_key_type} onChange={e => setForm({ ...form, pix_key_type: e.target.value })}><option value="">Selecione</option><option value="cpf">CPF</option><option value="cnpj">CNPJ</option><option value="email">E-mail</option><option value="phone">Telefone</option><option value="random_key">Aleatória</option></select></label>
       <button className="bg-orange-600 text-white rounded-lg px-4 py-2 disabled:opacity-50" disabled={busy || loadFailed}>{busy ? 'Salvando…' : 'Salvar dados'}</button>
     </form>}{message && <p role="status" className="mt-3 text-sm text-gray-700">{message}</p>}</div>
+    <CompanyCommissions key={user.id} />
   </section></main>
+}
+
+
+const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const payoutStatus = { pending: 'Pendente', paid: 'Pago', cancelled: 'Cancelado' }
+
+function CompanyCommissions() {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    api.getCompanyCommissions().then(result => {
+      if (active) setRows(result?.rows || [])
+    }).catch(() => {
+      if (active) setError(true)
+    })
+    return () => { active = false }
+  }, [])
+
+  return (
+    <section className="bg-white border rounded-xl p-5 mt-5" aria-label="Comissões da empresa">
+      <h2 className="font-semibold">Comissões da empresa</h2>
+      {error && <p role="alert" className="mt-2 text-sm text-red-700">Não foi possível carregar as comissões.</p>}
+      {!error && rows === null && <p className="mt-2 text-sm text-gray-600">Carregando comissões…</p>}
+      {rows?.length === 0 && <p className="mt-2 text-sm text-gray-600">Nenhuma comissão registrada.</p>}
+      {rows?.length > 0 && <>
+        <p className="mt-2 text-sm text-gray-600">Até 50 lançamentos mais recentes.</p>
+        <ul className="divide-y mt-2">
+          {rows.map(row => (
+            <li key={row.id} className="flex justify-between gap-3 py-3 text-sm">
+              <div>
+                <p className="font-medium">{row.bookings?.booking_code || 'Reserva'}</p>
+                <p className="text-gray-600">{row.operator?.full_name || 'Operador indisponível'}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-medium">{currency.format(row.amount)}</p>
+                <p className="text-gray-600">{payoutStatus[row.status] || row.status}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </>}
+    </section>
+  )
 }
