@@ -1,14 +1,39 @@
+import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { api } from '../lib/api'
 
+const empty = { bank_name: '', bank_agency: '', bank_account_number: '', bank_account_type: '', bank_document: '', pix_key_type: '', pix_key: '' }
+const fields = [['bank_name', 'Banco'], ['bank_agency', 'Agência'], ['bank_account_number', 'Conta'], ['bank_document', 'CPF ou CNPJ do titular'], ['pix_key', 'Chave PIX']]
 export default function Empresa() {
   const { user, token, logout } = useAuth()
+  const [form, setForm] = useState(empty)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [message, setMessage] = useState('')
+  useEffect(() => {
+    if (!token || user?.user_type !== 'company') return
+    let mounted = true
+    api.getCompanyAccount().then(data => { if (mounted) { setForm(Object.fromEntries(Object.keys(empty).map(k => [k, data?.[k] || '']))); setLoading(false) } }).catch(err => { if (mounted) { setMessage(err.message); setLoadFailed(true); setLoading(false) } })
+    return () => { mounted = false }
+  }, [token, user?.user_type])
   if (!token) return <Navigate to="/login" replace />
   if (user?.user_type !== 'company') return <Navigate to="/" replace />
-  return <main className="min-h-screen bg-gray-50 p-4 flex justify-center">
-    <section className="w-full max-w-xl mt-8">
-      <div className="flex items-center justify-between gap-4"><h1 className="text-xl font-bold text-gray-900">Olá, {user.full_name}</h1><button onClick={logout} className="text-sm text-orange-600">Sair</button></div>
-      <div className="bg-white border rounded-xl p-5 mt-5"><h2 className="font-semibold">Painel da empresa</h2><p className="text-sm text-gray-600 mt-2">O acesso foi criado. O cadastro da conta de recebimento, a equipe e as reservas ainda estão em desenvolvimento.</p></div>
-    </section>
-  </main>
+  async function save(e) {
+    e.preventDefault(); setBusy(true); setMessage('')
+    try { await api.saveCompanyAccount(Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim() || null]))); setMessage('Dados de recebimento salvos.') }
+    catch (err) { setMessage(err.message) } finally { setBusy(false) }
+  }
+  const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 bg-white'
+  return <main className="min-h-screen bg-gray-50 p-4 flex justify-center"><section className="w-full max-w-xl mt-8">
+    <div className="flex items-center justify-between gap-4"><h1 className="text-xl font-bold text-gray-900">{user.full_name}</h1><button onClick={logout} className="text-sm text-orange-600">Sair</button></div>
+    <div className="bg-white border rounded-xl p-5 mt-5"><h2 className="font-semibold">Conta de recebimento</h2><p className="text-sm text-gray-600 mt-2">Cadastre os dados da empresa para os repasses manuais. A vinculação aos operadores ainda está em desenvolvimento.</p>
+    {loading ? <p className="mt-4 text-sm">Carregando…</p> : <form onSubmit={save} className="space-y-3 mt-4">
+      {fields.map(([key, label]) => <label key={key} className="block text-sm text-gray-700">{label}<input className={input} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>)}
+      <label className="block text-sm text-gray-700">Tipo de conta<select className={input} value={form.bank_account_type} onChange={e => setForm({ ...form, bank_account_type: e.target.value })}><option value="">Selecione</option><option value="corrente">Corrente</option><option value="poupanca">Poupança</option></select></label>
+      <label className="block text-sm text-gray-700">Tipo da chave PIX<select className={input} value={form.pix_key_type} onChange={e => setForm({ ...form, pix_key_type: e.target.value })}><option value="">Selecione</option><option value="cpf">CPF</option><option value="cnpj">CNPJ</option><option value="email">E-mail</option><option value="phone">Telefone</option><option value="random_key">Aleatória</option></select></label>
+      <button className="bg-orange-600 text-white rounded-lg px-4 py-2 disabled:opacity-50" disabled={busy || loadFailed}>{busy ? 'Salvando…' : 'Salvar dados'}</button>
+    </form>}{message && <p role="status" className="mt-3 text-sm text-gray-700">{message}</p>}</div>
+  </section></main>
 }
