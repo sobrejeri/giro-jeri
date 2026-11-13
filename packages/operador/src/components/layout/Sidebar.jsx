@@ -1,5 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare, Home, Wallet, Settings, ImagePlus } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../lib/api'
+import { LayoutDashboard, Truck, Car, BarChart3, LogOut, Compass, MapPin, UserCircle, CalendarCheck, Star, X, ParkingSquare, Home, Wallet, Settings, ImagePlus, ClipboardList } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePendencias } from '../../lib/pendencias'
 
@@ -25,6 +27,8 @@ const NAV = [
   { to: '/passeios',   icon: Compass,         label: 'Passeios',     seg: 'tours'   },
   { to: '/rotas',      icon: MapPin,          label: 'Rotas',        seg: 'tours'   },
   { to: '/financeiro', icon: BarChart3,       label: 'Financeiro',   seg: 'tours'   },
+  // Só para operador vinculado a uma empresa (ver `daEmpresa` abaixo).
+  { to: '/vendas-externas', icon: ClipboardList, label: 'Vendas externas', seg: 'tours', empresa: true },
   { to: '/reputacao',  icon: Star,            label: 'Reputação',    seg: 'tours'   },
   { to: '/publicacoes', icon: ImagePlus,         label: 'Publicações',  seg: 'both'    },
   { to: '/perfil',     icon: UserCircle,      label: 'Meu Perfil',   seg: 'both'    },
@@ -40,7 +44,15 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
   // Operador comum segue o seu operator_segment, como antes.
   const ehParking = isAdmin ? adminPanel === 'parking' : user?.operator_segment === 'parking'
   const segmento = ehParking ? 'parking' : 'tours'
-  const nav = ehParking ? NAV_PARKING : NAV.filter((i) => i.seg === 'both' || i.seg === segmento)
+  // Operador de uma EMPRESA registra as vendas feitas por fora, para a empresa
+  // ver o desempenho da equipe. Mesma chave do Perfil (o react-query deduplica).
+  const { data: perfil } = useQuery({
+    queryKey: ['operator-profile'], queryFn: () => api.getProfile(),
+    enabled: user?.user_type === 'operator', staleTime: 5 * 60 * 1000,
+  })
+  const daEmpresa = !!perfil?.company_id
+  const nav = ehParking ? NAV_PARKING
+    : NAV.filter((i) => (i.seg === 'both' || i.seg === segmento) && (!i.empresa || daEmpresa))
   // Bolinha vermelha em cada painel com solicitação pendente — inclusive no que
   // não está aberto, para o admin saber que tem algo esperando do outro lado.
   const pendencias = usePendencias({ ativo: isAdmin })

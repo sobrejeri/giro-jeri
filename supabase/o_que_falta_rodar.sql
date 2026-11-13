@@ -88,6 +88,7 @@ WITH esperado(tabela, coluna, migration) AS (VALUES
   ('booking_payouts', 'origin_operator_id', '129_empresa_vinculo_e_comissao.sql'),
   ('users', 'company_id', '129_empresa_vinculo_e_comissao.sql'),
   ('users', 'company_removed_at', '130_empresa_equipe.sql'),
+  ('external_bookings', 'operator_id', '131_reservas_externas.sql'),
   ('users', 'address', '016_operator_address.sql'),
   ('users', 'affiliate_code', '055_affiliate_program.sql'),
   ('users', 'affiliate_pix_key', '056_affiliate_pix_key.sql'),

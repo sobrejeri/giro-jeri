@@ -15,6 +15,7 @@ import Publicacoes from './pages/Publicacoes'
 import OsPublica from './pages/OsPublica'
 import UpdatePrompt from './components/UpdatePrompt'
 import Empresa from './pages/Empresa'
+import VendasExternas from './pages/VendasExternas'
 
 function PrivateRoute({ children }) {
   const { token, user } = useAuth()
@@ -86,6 +87,7 @@ export default function App() {
         <Route path="rotas"      element={<Rotas />} />
         <Route path="reputacao"  element={<Reputacao />} />
         <Route path="publicacoes" element={<Publicacoes />} />
+        <Route path="vendas-externas" element={<VendasExternas />} />
         <Route path="perfil"     element={<Perfil />} />
       </Route>
       <Route path="*" element={<HomeRedirect />} />

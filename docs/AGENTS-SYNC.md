@@ -1740,3 +1740,11 @@ enxerga o trabalho do outro no próximo `git fetch`.
   remove operadores DELA. Remover = `is_active=false` + `company_removed_at`
   (migração **130**), mantendo `company_id` para preservar o histórico. Painel
   da empresa virou abas (`pages/Empresa.jsx` + `pages/empresa/*`).
+
+- **2026-11-13 · Empresa 3/5 (reservas e desempenho)** — `GET /api/company/bookings`
+  (`routes/companyBookings.js`; regras puras e testadas em
+  `services/desempenhoEquipe.js`) junta reservas da plataforma da equipe com as
+  **vendas externas** (`external_bookings`, migração **131**; rotas do operador
+  em `routes/externalBookings.js`, tela `/vendas-externas`, só no menu de
+  operador vinculado). Venda externa é só registro: não cobra, não gera
+  comissão nem repasse.

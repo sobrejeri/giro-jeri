@@ -7,6 +7,7 @@
  */
 import { requireIndependentReceiving } from '../middleware/independentReceiving.js';
 import { empresaDoOperador } from '../lib/vinculoEmpresa.js';
+import externalBookings from './externalBookings.js';
 import { Router } from 'express';
 import { z }      from 'zod';
 import dayjs      from 'dayjs';
@@ -278,6 +279,7 @@ router.get('/:id/public', async (req, res, next) => {
 });
 
 router.use(authenticate, requireOperator);
+router.use(externalBookings);   // /external-bookings — vendas fora da plataforma
 
 // ── GET /api/operator/reviews ──────────────────────────
 // Reputação DESTA operador: resumo (média, total, distribuição de estrelas)
