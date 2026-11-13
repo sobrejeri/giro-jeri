@@ -27,7 +27,7 @@ export function AuthProvider({ children }) {
     try { return localStorage.getItem(STORAGE.adminPanel) || 'tours' } catch { return 'tours' }
   })
   const setAdminPanel = useCallback((mode) => {
-    const m = mode === 'parking' ? 'parking' : 'tours'
+    const m = ['parking', 'company'].includes(mode) ? mode : 'tours'
     setAdminPanelState(m)
     try { localStorage.setItem(STORAGE.adminPanel, m) } catch { /* ignore */ }
   }, [])

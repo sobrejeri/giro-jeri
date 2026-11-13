@@ -1764,3 +1764,11 @@ enxerga o trabalho do outro no próximo `git fetch`.
   regrava SÓ sem o papel (não descarta PIX/documento). No turista, passeio com
   embarque fixo (124) mostra o ponto e não pede "local de saída"
   (`lib/embarqueFixo.js`).
+
+- **2026-11-13 · Painel Empresa para o admin** — no app do operador, o seletor
+  "Painel (admin)" ganhou **Empresa** (ao lado de Passeios e Estacionamento).
+  O admin escolhe a empresa e opera o painel dela: `/api/company/*` aceita
+  admin com o cabeçalho `X-Company-Id` (middleware `empresaAlvo` em
+  `company.js` troca `req.user.id` pela empresa e guarda o admin em
+  `req.actorId`, que é quem vai para a auditoria). `GET /api/company/companies`
+  lista as empresas (só admin).

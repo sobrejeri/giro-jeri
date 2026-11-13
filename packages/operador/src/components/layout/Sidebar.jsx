@@ -58,9 +58,9 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
   const pendencias = usePendencias({ ativo: isAdmin })
 
   function trocarPainel(mode) {
-    if (mode === adminPanel) return
+    if (mode === adminPanel && mode !== 'company') return
     setAdminPanel(mode)
-    navigate(mode === 'parking' ? '/estacionamento' : '/dashboard')
+    navigate(mode === 'company' ? '/empresa' : mode === 'parking' ? '/estacionamento' : '/dashboard')
     onClose()
   }
 
@@ -96,14 +96,14 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
           <div className="px-3 pt-3">
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1 px-1">Painel (admin)</p>
             <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-              {[['tours', 'Passeios'], ['parking', 'Estacionamento']].map(([m, label]) => {
+              {[['tours', 'Passeios'], ['parking', 'Estacionamento'], ['company', 'Empresa']].map(([m, label]) => {
                 const n = pendencias[m]
                 return (
                   <button
                     key={m}
                     onClick={() => trocarPainel(m)}
                     aria-label={n > 0 ? `${label} — ${n} ${n === 1 ? 'pendente' : 'pendentes'}` : label}
-                    className={`flex-1 text-xs font-medium px-2 py-1.5 rounded-md transition-colors ${
+                    className={`flex-auto text-[11px] font-medium px-1 py-1.5 rounded-md transition-colors whitespace-nowrap ${
                       adminPanel === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >

@@ -33,6 +33,8 @@ function PrivateRoute({ children }) {
 // Operações. O ADMIN abre conforme o painel que escolheu (padrão: passeios).
 function HomeRedirect() {
   const { user, adminPanel } = useAuth()
+  // Admin que deixou o painel em "Empresa" volta para ele ao abrir o app.
+  if (user?.user_type === 'admin' && adminPanel === 'company') return <Navigate to="/empresa" replace />
   const ehParking = user?.user_type === 'admin'
     ? adminPanel === 'parking'
     : user?.operator_segment === 'parking'

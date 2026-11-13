@@ -102,6 +102,8 @@ async function request(path, options = {}, isRetry = false) {
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // Admin operando o painel de uma empresa: diz ao servidor QUAL.
+        ...(empresaDoAdmin && path.startsWith('/api/company/') ? { 'X-Company-Id': empresaDoAdmin } : {}),
       },
       ...options,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -144,7 +146,12 @@ async function request(path, options = {}, isRetry = false) {
   return data
 }
 
+// Empresa que o ADMIN está operando no painel Empresa (null para os demais).
+let empresaDoAdmin = null
+export function setEmpresaDoAdmin(id) { empresaDoAdmin = id || null }
+
 export const api = {
+  getCompanies: () => request('/api/company/companies'),
   getCompanyCommissions: () => request('/api/company/commissions'),
   // Equipe da empresa (operadores vinculados)
   getCompanyTeam:        ()         => request('/api/company/team'),

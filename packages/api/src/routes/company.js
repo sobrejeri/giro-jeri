@@ -8,7 +8,39 @@ import companyBookings from './companyBookings.js';
 import companyPayouts from './companyPayouts.js';
 
 const router = Router();
-router.use(authenticate, requireRole('company'));
+// Empresa logada — ou o ADMIN operando uma empresa (como já faz com os painéis
+// de passeios e estacionamento). O admin diz QUAL empresa no cabeçalho
+// X-Company-Id; daí em diante as rotas enxergam `req.user.id` = a empresa, e o
+// admin de verdade fica em `req.actorId` (é ele quem vai para a auditoria).
+router.use(authenticate, requireRole('company', 'admin'));
+
+// Lista para o admin escolher a empresa. Vem ANTES de `empresaAlvo`.
+router.get('/companies', async (req, res, next) => {
+  try {
+    if (req.user.user_type !== 'admin') return res.status(403).json({ error: 'Acesso restrito.' });
+    const { data, error } = await supabase.from('users').select('id, full_name, is_active')
+      .eq('user_type', 'company').order('full_name', { ascending: true }).limit(500);
+    if (error) throw error;
+    res.set('Cache-Control', 'no-store');
+    res.json({ companies: data || [] });
+  } catch (err) { next(err); }
+});
+
+async function empresaAlvo(req, res, next) {
+  try {
+    if (req.user.user_type !== 'admin') return next();
+    const id = String(req.get('X-Company-Id') || '');
+    if (!z.string().uuid().safeParse(id).success) return res.status(400).json({ error: 'Escolha a empresa.' });
+    const { data: empresa, error } = await supabase.from('users').select('id, full_name')
+      .eq('id', id).eq('user_type', 'company').maybeSingle();
+    if (error) throw error;
+    if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada.' });
+    req.actorId = req.user.id;
+    req.user = { ...req.user, id: empresa.id, user_type: 'company', full_name: empresa.full_name };
+    next();
+  } catch (err) { next(err); }
+}
+router.use(empresaAlvo);
 router.use(companyTeam);   // /team — equipe de operadores da empresa
 router.use(companyBookings);   // /bookings — reservas e desempenho da equipe
 router.use(companyPayouts);   // /executor-payouts — repasses a quem executou
@@ -43,7 +75,7 @@ router.put('/account', async (req, res, next) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Empresa não encontrada.' });
     // Não registrar dados bancários ou chave PIX no histórico.
-    await supabase.from('audit_logs').insert({ user_id: req.user.id, entity_type: 'users', entity_id: req.user.id, action_type: 'update', new_values_json: { company_receiving_account_updated: true } });
+    await supabase.from('audit_logs').insert({ user_id: req.actorId || req.user.id, entity_type: 'users', entity_id: req.user.id, action_type: 'update', new_values_json: { company_receiving_account_updated: true, ...(req.actorId ? { por_admin: true } : {}) } });
     res.set('Cache-Control', 'no-store');
     res.json({ ok: true });
   } catch (err) { next(err); }

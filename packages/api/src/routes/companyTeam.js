@@ -62,8 +62,8 @@ function falhou(res, next, error) {
 }
 
 const auditar = (req, entityId, action, valores) => supabase.from('audit_logs').insert({
-  user_id: req.user.id, entity_type: 'users', entity_id: entityId,
-  action_type: action, new_values_json: { por_empresa: true, ...valores },
+  user_id: req.actorId || req.user.id, entity_type: 'users', entity_id: entityId,
+  action_type: action, new_values_json: { por_empresa: true, company_id: req.user.id, ...(req.actorId ? { por_admin: true } : {}), ...valores },
 }).then(() => {}, () => {});
 
 // ── GET /team ────────────────────────────────────────────────────────────────

@@ -65,7 +65,7 @@ test('repasse: split já pago pelo gateway nunca gera comissão de novo (inclusi
 
 test('painel da empresa: comissões só da própria empresa, e vazio (não erro) sem a migração', () => {
   const src = ler('../src/routes/company.js')
-  assert.match(src, /router\.use\(authenticate, requireRole\('company'\)\)/)
+  assert.match(src, /router\.use\(authenticate, requireRole\('company', 'admin'\)\)/)
   const rota = src.slice(src.indexOf("router.get('/commissions'"))
   assert.match(rota, /\.eq\('payee_user_id', req\.user\.id\)\s*\.eq\('kind', 'commission'\)/)
   assert.match(rota, /if \(semVinculoNoBanco\(error\)\) return res\.json\(\{ rows: \[\], pendente: true \}\)/)

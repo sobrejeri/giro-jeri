@@ -113,8 +113,8 @@ router.patch('/executor-payouts/:id', async (req, res, next) => {
     if (!data) return res.status(404).json({ error: 'Repasse não encontrado.' });
 
     await supabase.from('audit_logs').insert({
-      user_id: req.user.id, entity_type: 'operational_assignments', entity_id: asg.id, action_type: 'update',
-      new_values_json: { por_empresa: true, repasse_executor: { amount: data.driver_payout_amount, status: data.driver_payout_status } },
+      user_id: req.actorId || req.user.id, entity_type: 'operational_assignments', entity_id: asg.id, action_type: 'update',
+      new_values_json: { por_empresa: true, company_id: req.user.id, ...(req.actorId ? { por_admin: true } : {}), repasse_executor: { amount: data.driver_payout_amount, status: data.driver_payout_status } },
     }).then(() => {}, () => {});
     res.json(data);
   } catch (err) { next(err); }
