@@ -73,7 +73,7 @@ const PROFILE_FIELDS = `
   user_type, profile_photo_url, address, cep, partner_slug,
   pix_key_type, pix_key,
   bank_name, bank_agency, bank_account_number, bank_account_type, bank_document,
-  gateway_recipient_id
+  gateway_recipient_id, company_id
 `.trim();
 
 // KYC do recebedor (register_information do Pagar.me). Guardado como JSONB em
@@ -419,7 +419,14 @@ router.get('/profile', async (req, res, next) => {
     const { data: k, error: kErr } = await supabase
       .from('users').select('recipient_kyc').eq('id', req.user.id).single();
     if (!kErr) recipient_kyc = k?.recipient_kyc ?? null;
-    res.json({ ...data, recipient_kyc });
+    let receiving_company = null;
+    if (data.company_id) {
+      const { data: company, error: companyError } = await supabase.from('users')
+        .select('full_name').eq('id', data.company_id).eq('user_type', 'company').maybeSingle();
+      if (companyError) throw companyError;
+      receiving_company = company?.full_name || null;
+    }
+    res.json({ ...data, recipient_kyc, receiving_company });
   } catch (err) { next(err); }
 });
 
