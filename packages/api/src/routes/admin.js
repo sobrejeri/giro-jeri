@@ -345,6 +345,7 @@ const createUserSchema = z.object({
   // Municípios que o operador atende (migration 106). Filtra as solicitações
   // que ele recebe — opt-in estrito: sem município, não recebe nada.
   region_ids: z.array(z.string().uuid()).optional(),
+  company_id: z.string().uuid().nullable().optional(),
 }).refine((d) => {
   if (d.user_type === 'operator') return !!d.cnpj;
   if (d.user_type === 'company') return !!d.email;
@@ -354,6 +355,12 @@ const createUserSchema = z.object({
 router.post('/users', requireAdmin, async (req, res, next) => {
   try {
     const body = createUserSchema.parse(req.body);
+    if (body.company_id) {
+      if (body.user_type !== 'operator') return res.status(400).json({ error: 'Somente operadores podem ser vinculados.' });
+      const { data: company, error } = await supabase.from('users').select('id').eq('id', body.company_id).eq('user_type', 'company').eq('is_active', true).maybeSingle();
+      if (error) throw error;
+      if (!company) return res.status(400).json({ error: 'Empresa inválida ou inativa.' });
+    }
 
     // Operador precisa de e-mail real: o login é pelo documento, mas o perfil
     // não pode subir em branco — o admin informa o e-mail do operador.
@@ -416,6 +423,7 @@ router.post('/users', requireAdmin, async (req, res, next) => {
       user_type:       body.user_type,
       document_number: docNumber,
       document_type:   docType,
+      ...(body.company_id ? { company_id: body.company_id } : {}),
     };
     // Municípios de atuação só valem para operador/agência (migration 106).
     const ehOperador = body.user_type === 'operator' || body.user_type === 'agency';
@@ -728,11 +736,25 @@ router.delete('/users/:id', requireAdmin, async (req, res, next) => {
 // ── PATCH /api/admin/users/:id ─────────────────────────
 router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   try {
-    const allowed = ['user_type', 'is_active', 'phone', 'email', 'platform_split_pct', 'mp_payout_exempt', 'region_ids', 'operator_segment'];
+    const allowed = ['user_type', 'is_active', 'phone', 'email', 'platform_split_pct', 'mp_payout_exempt', 'region_ids', 'operator_segment', 'company_id'];
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))
     );
 
+    if ('company_id' in updates || 'user_type' in updates) {
+      const { data: current, error: fetchErr } = await supabase.from('users').select('id, user_type, company_id').eq('id', req.params.id).maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!current) return res.status(404).json({ error: 'Usuário não encontrado' });
+      const targetRole = updates.user_type ?? current.user_type;
+      const companyId = updates.company_id === undefined ? current.company_id : updates.company_id;
+      if (companyId && targetRole !== 'operator') return res.status(400).json({ error: 'Somente operadores podem ser vinculados a uma empresa.' });
+      if ('company_id' in updates && companyId !== null) {
+        if (!z.string().uuid().safeParse(companyId).success) return res.status(400).json({ error: 'Empresa inválida.' });
+        const { data: company, error: companyErr } = await supabase.from('users').select('id').eq('id', companyId).eq('user_type', 'company').eq('is_active', true).maybeSingle();
+        if (companyErr) throw companyErr;
+        if (!company) return res.status(400).json({ error: 'Empresa inválida ou inativa.' });
+      }
+    }
     let upd = await supabase.from('users').update(updates).eq('id', req.params.id).select().single();
     // Colunas de migrations recentes ausentes (region_ids/106, operator_segment/114)
     // → refaz sem a coluna reclamada para não travar as demais edições.
