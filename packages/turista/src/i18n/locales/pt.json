@@ -582,7 +582,9 @@
       "fromLabel": "A partir de",
       "perPersonSuffix": "por pessoa",
       "viewOptions": "Ver opções",
-      "favoriteAria": "Salvar nos favoritos"
+      "favoriteAria": "Salvar nos favoritos",
+      "quoteOnly": "Sob cotação",
+      "quoteCta": "Peça seu valor"
     },
     "page": {
       "title": "Passeios em {{region}}",
@@ -1074,7 +1076,11 @@
     "departingFrom": "Saindo de {{place}}",
     "noRoutesFromHere": "Nenhuma rota saindo daqui por enquanto.",
     "exclusiveBadge": "Exclusivo",
-    "exclusiveTransfer": "Translado exclusivo"
+    "exclusiveTransfer": "Translado exclusivo",
+    "quoteOnly": "Sob cotação",
+    "quoteCta": "Peça seu valor",
+    "quoteTagTitle": "Rota escolhida · sob cotação",
+    "quoteTagDesc": "Origem e destino já preenchidos. Escolha data, horário e passageiros — a cooperativa envia o valor."
   },
   "cartPg": {
     "editSheet": {

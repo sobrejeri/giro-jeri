@@ -17,6 +17,7 @@ import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
 import { getPlaceSuggestions, getPlaceDetails } from '../lib/geoServices'
 import { filtrarPontos, normalizarLugar, pontosDaRegiao } from '../lib/pontosTuristicos'
 import { useLocaisProximos } from '../lib/locaisProximos'
+import { ehSobCotacao } from '../lib/sobCotacao'
 import TransfersDesktop from './TransfersDesktop'
 import FilterChip from '../components/tours/FilterChip'
 import './ToursVisual2026.css'
@@ -273,6 +274,9 @@ function FavToggle({ isFav, onFav }) {
 function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggleCart, isFav, onFav }) {
   const { t } = useTranslation()
   const img = route.cover_image_url
+  // Rota sob cotação (128): sem preço e sem carrinho — o toque abre o
+  // translado personalizado já com origem e destino.
+  const sobCotacao = ehSobCotacao(route)
   // Prévia da descrição no card, igual aos passeios: a da ROTA quando existe,
   // senão a da categoria.
   const desc = route.description || route.transfers?.full_description || route.transfers?.short_description
@@ -291,7 +295,7 @@ function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggl
           {t('transfersPg.privateBadge')}
         </span>
         {onFav && <FavToggle isFav={isFav} onFav={onFav} />}
-        {onToggleCart && <CartToggle inCart={inCart} onToggle={onToggleCart} />}
+        {onToggleCart && !sobCotacao && <CartToggle inCart={inCart} onToggle={onToggleCart} />}
       </div>
 
       <div className="p-3 flex-1 flex flex-col">
@@ -305,9 +309,9 @@ function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggl
           <p className="text-[11.5px] text-gray-500 leading-snug mt-1.5 line-clamp-2">{desc}</p>
         )}
         <div className="mt-auto pt-2.5 border-t border-gray-100">
-          <p className="h-[12px] text-[10px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
+          <p className="h-[12px] text-[10px] text-gray-400 leading-none">{sobCotacao ? t('transfersPg.quoteCta') : t('transfersPg.startingFrom')}</p>
           <p className="whitespace-nowrap text-[16px] font-extrabold text-brand leading-none mt-1">
-            R$ {Number(route.default_price).toLocaleString('pt-BR')}
+            {sobCotacao ? t('transfersPg.quoteOnly') : `R$ ${Number(route.default_price).toLocaleString('pt-BR')}`}
           </p>
         </div>
       </div>
@@ -323,7 +327,9 @@ function PresetCard({ route, bg, active, onSelect, full = false, inCart, onToggl
  * do avião, para não virar um cartão vazio no meio dos que têm imagem.
  */
 function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, onFav }) {
+  const { t } = useTranslation()
   const img = route.cover_image_url
+  const sobCotacao = ehSobCotacao(route)
   const desc = route.description || route.transfers?.full_description || route.transfers?.short_description
   return (
     <div
@@ -342,7 +348,7 @@ function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, o
           Exclusivo
         </span>
         {onFav && <FavToggle isFav={isFav} onFav={onFav} />}
-        {onToggleCart && <CartToggle inCart={inCart} onToggle={onToggleCart} />}
+        {onToggleCart && !sobCotacao && <CartToggle inCart={inCart} onToggle={onToggleCart} />}
       </div>
 
       <div className="p-3 flex-1 flex flex-col">
@@ -356,9 +362,9 @@ function ExclusiveCard({ route, active, onSelect, inCart, onToggleCart, isFav, o
           <p className="text-[11.5px] text-gray-500 leading-snug mt-1.5 line-clamp-2">{desc}</p>
         )}
         <div className="mt-auto pt-2.5 border-t border-gray-100">
-          <p className="h-[12px] text-[10px] text-gray-400 leading-none">por voo</p>
+          <p className="h-[12px] text-[10px] text-gray-400 leading-none">{sobCotacao ? t('transfersPg.quoteCta') : 'por voo'}</p>
           <p className="whitespace-nowrap text-[16px] font-extrabold text-brand leading-none mt-1">
-            R$ {Number(route.default_price).toLocaleString('pt-BR')}
+            {sobCotacao ? t('transfersPg.quoteOnly') : `R$ ${Number(route.default_price).toLocaleString('pt-BR')}`}
           </p>
         </div>
       </div>
@@ -606,6 +612,25 @@ export default function Transfers() {
   const [customLoading,  setCustomLoading]  = useState(false)
   const [customSuccess,  setCustomSuccess]  = useState(false)
   const [customError,    setCustomError]    = useState('')
+  // Rota SOB COTAÇÃO escolhida na vitrine (128): o personalizado abre com a
+  // origem e o destino dela, e o pedido sai com a etiqueta da rota — enquanto
+  // o cliente não trocar origem ou destino (aí já é outro translado).
+  const [customRoute,    setCustomRoute]    = useState(null)
+  const rotaDaVitrine = customRoute
+    && customOrigin === customRoute.origin_name && customDest === customRoute.destination_name
+    ? customRoute : null
+  const abrirCotacaoDaRota = useCallback((r) => {
+    const ponto = (lat, lon) => (lat != null && lon != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lon))
+      ? { lat: Number(lat), lon: Number(lon) } : null)
+    setCustomOrigin(r.origin_name || '')
+    setCustomDest(r.destination_name || '')
+    setCustomOriginMeta(ponto(r.origin_latitude, r.origin_longitude))
+    setCustomDestMeta(ponto(r.destination_latitude, r.destination_longitude))
+    setCustomRoute(r)
+    setCustomSuccess(false); setCustomError('')
+    setMode('custom')
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
 
   async function handleRequestQuote() {
     if (!token) { navigate('/login', { state: { from: '/transfers' } }); return }
@@ -630,6 +655,7 @@ export default function Transfers() {
         people_count:             customPeople,
         luggage_count:            0,
         special_notes:            customNotes.trim() || undefined,
+        ...(rotaDaVitrine ? { route_id: rotaDaVitrine.id } : {}),
       })
       setCustomSuccess(true)
     } catch (err) {
@@ -650,6 +676,15 @@ export default function Transfers() {
   })
   const todasRotas = Array.isArray(routesData?.routes) ? routesData.routes
                    : Array.isArray(routesData) ? routesData : []
+
+  // Veio de um atalho de rota SOB COTAÇÃO (ex.: página inicial no PC):
+  // abre direto o personalizado com essa rota, uma vez só.
+  const cotacaoAberta = useRef(false)
+  useEffect(() => {
+    if (cotacaoAberta.current || !navState?.cotacaoRotaId || !todasRotas.length) return
+    const r = todasRotas.find((x) => x.id === navState.cotacaoRotaId)
+    if (r && ehSobCotacao(r)) { cotacaoAberta.current = true; abrirCotacaoDaRota(r) }
+  }, [navState?.cotacaoRotaId, todasRotas, abrirCotacaoDaRota])
 
   // Translado EXCLUSIVO (ex.: helicóptero) sai da lista comum e ganha carrossel
   // próprio: misturar um trecho de R$ 3.000 com um de R$ 200 na mesma lista
@@ -1037,7 +1072,7 @@ export default function Transfers() {
                 {t('transfersPg.viewQuotes')}
               </button>
               <button
-                onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes('') }}
+                onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes(''); setCustomRoute(null) }}
                 className="mt-3 text-[13px] text-gray-400 underline"
               >
                 {t('transfersPg.requestAnother')}
@@ -1045,6 +1080,22 @@ export default function Transfers() {
             </div>
           ) : (
             <>
+              {/* Rota da vitrine (sob cotação): a etiqueta que acompanha o pedido. */}
+              {rotaDaVitrine && (
+                <section className="t2026-quote-tag bg-white rounded-2xl border border-brand/25 p-3 flex items-center gap-3">
+                  {rotaDaVitrine.cover_image_url
+                    ? <img src={rotaDaVitrine.cover_image_url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0 bg-gray-100" />
+                    : <span className="w-14 h-14 rounded-xl bg-brand/10 flex items-center justify-center shrink-0"><Route size={20} className="text-brand" /></span>}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-brand">{t('transfersPg.quoteTagTitle')}</p>
+                    <p className="text-[14px] font-extrabold text-gray-900 leading-snug">
+                      {shortPlace(rotaDaVitrine.origin_name)} → {shortPlace(rotaDaVitrine.destination_name)}
+                    </p>
+                    <p className="text-[11px] text-gray-500 leading-snug mt-0.5">{t('transfersPg.quoteTagDesc')}</p>
+                  </div>
+                </section>
+              )}
+
               <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
                 <Zap size={14} className="text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-[12px] text-amber-700 leading-relaxed">
@@ -1228,9 +1279,9 @@ export default function Transfers() {
                   full
                   bg={GRADIENTS[i % GRADIENTS.length]}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => setSheetRoute(r)}
+                  onSelect={() => (ehSobCotacao(r) ? abrirCotacaoDaRota(r) : setSheetRoute(r))}
                   inCart={cartIds.has(r.id)}
-                  onToggleCart={() => toggleRouteInCart(r)}
+                  onToggleCart={ehSobCotacao(r) ? undefined : () => toggleRouteInCart(r)}
                   isFav={favs.has(r.id)}
                   onFav={() => toggleFav(r.id)}
                 />
@@ -1244,9 +1295,9 @@ export default function Transfers() {
                   route={r}
                   bg={GRADIENTS[i % GRADIENTS.length]}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => setSheetRoute(r)}
+                  onSelect={() => (ehSobCotacao(r) ? abrirCotacaoDaRota(r) : setSheetRoute(r))}
                   inCart={cartIds.has(r.id)}
-                  onToggleCart={() => toggleRouteInCart(r)}
+                  onToggleCart={ehSobCotacao(r) ? undefined : () => toggleRouteInCart(r)}
                   isFav={favs.has(r.id)}
                   onFav={() => toggleFav(r.id)}
                 />
@@ -1274,9 +1325,9 @@ export default function Transfers() {
                   key={r.id}
                   route={r}
                   active={origin === r.origin_name && dest === r.destination_name}
-                  onSelect={() => setSheetRoute(r)}
+                  onSelect={() => (ehSobCotacao(r) ? abrirCotacaoDaRota(r) : setSheetRoute(r))}
                   inCart={cartIds.has(r.id)}
-                  onToggleCart={() => toggleRouteInCart(r)}
+                  onToggleCart={ehSobCotacao(r) ? undefined : () => toggleRouteInCart(r)}
                   isFav={favs.has(r.id)}
                   onFav={() => toggleFav(r.id)}
                 />

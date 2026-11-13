@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Route, ImagePlus, X, Car, Users, ChevronDown, MapPin, Eye, EyeOff, ToggleLeft, ToggleRight, UserRound } from 'lucide-react'
+import { Plus, Route, ImagePlus, X, Car, Users, ChevronDown, ChevronUp, MapPin, Eye, EyeOff, ToggleLeft, ToggleRight, UserRound } from 'lucide-react'
 import { api } from '../lib/api'
 import { PageSpinner } from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
@@ -132,6 +132,9 @@ const TOUR_EMPTY = {
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '',
   meeting_point_name: '', meeting_latitude: '', meeting_longitude: '',
   display_order: 0,
+  // Sob cotação (migração 128): sem preço na vitrine; o cliente pede o valor no
+  // "Montar meu passeio", que já abre com estas paradas.
+  quote_only: false, quote_stops: [],
 }
 const TRANSFER_EMPTY = {
   name: '', short_description: '', pricing_mode: 'fixed_route', is_active: true,
@@ -139,7 +142,7 @@ const TRANSFER_EMPTY = {
   latitude: null, longitude: null, service_radius_km: null,
   booking_cutoff_time: '', min_advance_hours: '', service_window_start: '', service_window_end: '', region_ids: [],
 }
-const ROUTE_EMPTY   = { transfer_id: '', origin_name: '', destination_name: '', default_price: '', cover_image_url: '', description: '', is_active: true, is_featured: false }
+const ROUTE_EMPTY   = { transfer_id: '', origin_name: '', destination_name: '', default_price: '', cover_image_url: '', description: '', is_active: true, is_featured: false, quote_only: false }
 // Categoria de PASSEIO — o equivalente ao que `transfers` faz nos translados:
 // agrupa e, marcada, vira carrossel próprio no app. Só o essencial para criar:
 // nome, descrição, ordem e as duas caixas.
@@ -231,6 +234,93 @@ const TABS = [
 // Peças reutilizadas pelas três abas para a lista ler limpa e escanear bem no
 // celular: resumo em números no topo, regiões colapsadas (em vez do muro de
 // municípios), seção recolhível e ações atrás de um menu "⋯".
+
+// "Valor fixo" ou "Sob cotação" (migração 128) — o mesmo controle no passeio e
+// na rota: duas opções lado a lado, cada uma dizendo o que acontece no app.
+function EscolhaPreco({ sobCotacao, onChange, textoFixo, textoCotacao }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium text-gray-400">Preço</p>
+      <div role="radiogroup" aria-label="Preço" className="grid grid-cols-2 gap-2">
+        {[
+          { valor: false, titulo: 'Valor fixo',  texto: textoFixo },
+          { valor: true,  titulo: 'Sob cotação', texto: textoCotacao },
+        ].map((op) => {
+          const on = !!sobCotacao === op.valor
+          return (
+            <button key={op.titulo} type="button" role="radio" aria-checked={on} onClick={() => onChange(op.valor)}
+              className={`text-left rounded-xl border p-3 transition-colors ${
+                on ? 'border-brand bg-brand/10' : 'border-gray-700 hover:border-gray-500'
+              }`}>
+              <span className={`block text-sm font-semibold ${on ? 'text-brand' : 'text-gray-200'}`}>{op.titulo}</span>
+              <span className="block text-[11px] text-gray-500 mt-0.5 leading-snug">{op.texto}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Selo "Sob cotação" nas listas do catálogo.
+const SeloCotacao = () => (
+  <span className="inline-flex items-center text-[10px] font-semibold leading-none px-1.5 py-1 rounded bg-sky-500/15 text-sky-300 align-middle whitespace-nowrap">
+    Sob cotação
+  </span>
+)
+
+// Paradas do roteiro de um passeio sob cotação: escolhidas da lista do admin
+// (aba Paradas), na ordem em que chegam prontas ao "Montar meu passeio".
+function ParadasDoRoteiro({ valor = [], opcoes = [], onChange }) {
+  const usadas = new Set(valor.map((p) => p.stop_id).filter(Boolean))
+  const disponiveis = opcoes.filter((o) => o.is_active !== false && !usadas.has(o.id))
+  const mover = (i, d) => {
+    const j = i + d
+    if (j < 0 || j >= valor.length) return
+    const nova = [...valor]; [nova[i], nova[j]] = [nova[j], nova[i]]
+    onChange(nova)
+  }
+  return (
+    <div className="space-y-2 rounded-xl border border-gray-700 bg-gray-900/40 p-3">
+      <div>
+        <p className="text-xs font-medium text-gray-300">Paradas do roteiro</p>
+        <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+          Chegam prontas no "Montar meu passeio" do cliente, nesta ordem — ele ainda pode ajustar.
+          A cooperativa recebe a cotação com o nome deste passeio.
+        </p>
+      </div>
+      {valor.length > 0 && (
+        <ol className="space-y-1.5">
+          {valor.map((p, i) => (
+            <li key={`${p.stop_id || p.name}-${i}`} className="flex items-center gap-2 rounded-lg bg-gray-800 px-2.5 py-1.5">
+              <span className="w-5 h-5 rounded-full bg-brand/15 text-brand text-[11px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+              <span className="flex-1 min-w-0 text-sm text-gray-200">{p.name}</span>
+              <button type="button" onClick={() => mover(i, -1)} disabled={i === 0} aria-label={`Subir ${p.name}`}
+                className="p-1 text-gray-500 hover:text-gray-200 disabled:opacity-30"><ChevronUp size={14} /></button>
+              <button type="button" onClick={() => mover(i, 1)} disabled={i === valor.length - 1} aria-label={`Descer ${p.name}`}
+                className="p-1 text-gray-500 hover:text-gray-200 disabled:opacity-30"><ChevronDown size={14} /></button>
+              <button type="button" onClick={() => onChange(valor.filter((_, k) => k !== i))} aria-label={`Tirar ${p.name}`}
+                className="p-1 text-gray-500 hover:text-red-400"><X size={14} /></button>
+            </li>
+          ))}
+        </ol>
+      )}
+      {opcoes.length === 0 ? (
+        <p className="text-[11px] text-amber-400/90">Nenhuma parada cadastrada — cadastre na aba "Paradas".</p>
+      ) : disponiveis.length > 0 && (
+        <select value="" aria-label="Adicionar parada"
+          onChange={(e) => {
+            const o = opcoes.find((x) => x.id === e.target.value)
+            if (o) onChange([...valor, { name: o.name, stop_id: o.id }])
+          }}
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-brand">
+          <option value="">+ Adicionar parada…</option>
+          {disponiveis.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+      )}
+    </div>
+  )
+}
 
 // Resumo em números por aba (ex.: "18 passeios · 15 ativos · 5 categorias").
 // Numa linha só também no celular: em 2×2 os quatro números ocupavam meia tela
@@ -419,6 +509,14 @@ export default function Catalogo() {
   // Desativada some da lista, mas continua no <select> se algum passeio ainda
   // aponta para ela — senão editar esse passeio apagaria a categoria em silêncio.
   const categoriasAtivas = categorias.filter((c) => c.is_active)
+
+  // Paradas cadastradas (aba Paradas) — de onde sai o roteiro do passeio sob
+  // cotação. Mesma consulta (e chave) da aba, então não busca duas vezes.
+  const { data: paradasData } = useQuery({
+    queryKey: ['tour-stops-admin'],
+    queryFn:  () => api.getTourStopsAdmin(),
+  })
+  const paradasCadastradas = Array.isArray(paradasData?.data) ? paradasData.data : []
   const passeiosPorCategoria = (id) => tours.filter((t) => temCategoria(t, id)).length
 
   const byRegion = (item) => !filterRegion || (item.region_ids || []).includes(filterRegion)
@@ -935,7 +1033,7 @@ export default function Catalogo() {
                   <div className="w-10 h-10 rounded-lg bg-gray-700 shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-200">{t.name}</p>
+                  <p className="text-sm font-medium text-gray-200">{t.name}{t.quote_only && <> <SeloCotacao /></>}</p>
                   <p className="text-xs text-gray-500">
                     {fmtDur(t.duration_hours)} · cap. {t.max_people}
                     {t.is_private_enabled && ' · Privativo'}
@@ -1075,9 +1173,13 @@ export default function Catalogo() {
                       <p className="text-xs text-gray-500 mt-0.5">{r.transfers?.name}</p>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className={`text-sm font-bold text-brand ${inativa ? 'opacity-60' : ''}`}>
-                        {Number(r.default_price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
+                      {r.quote_only ? (
+                        <span className={inativa ? 'opacity-60' : ''}><SeloCotacao /></span>
+                      ) : (
+                        <span className={`text-sm font-bold text-brand ${inativa ? 'opacity-60' : ''}`}>
+                          {Number(r.default_price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      )}
                       {/* Liga/desliga a rota na vitrine — botão SEMPRE visível, 1 clique.
                           (Antes ficava escondido no menu ⋮ e era difícil de achar para
                           reativar.) */}
@@ -1535,6 +1637,20 @@ export default function Catalogo() {
                 value={form.max_people || ''} onChange={(e) => setForm({ ...form, max_people: e.target.value })} />
             </div>
 
+            <EscolhaPreco
+              sobCotacao={form.quote_only}
+              onChange={(v) => setForm({ ...form, quote_only: v })}
+              textoFixo="O cliente reserva e paga o preço do Motor de Preços."
+              textoCotacao="Sem preço na vitrine: o cliente pede o valor no Montar meu passeio, já com este roteiro."
+            />
+
+            {form.quote_only ? (
+              <ParadasDoRoteiro
+                valor={form.quote_stops || []}
+                opcoes={paradasCadastradas}
+                onChange={(lista) => setForm({ ...form, quote_stops: lista })}
+              />
+            ) : (<>
             <div className="space-y-2">
               <p className="text-xs font-medium text-gray-400">Modalidades</p>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -1556,6 +1672,7 @@ export default function Catalogo() {
                 value={form.shared_price_per_person || ''}
                 onChange={(e) => setForm({ ...form, shared_price_per_person: e.target.value })} />
             )}
+            </>)}
 
             {/* Horário limite de solicitação */}
             <div>
@@ -1914,8 +2031,18 @@ export default function Catalogo() {
           </Select>
           <Input label="Origem" value={routeForm.origin_name || ''} onChange={(e) => setRouteForm({ ...routeForm, origin_name: e.target.value })} required />
           <Input label="Destino" value={routeForm.destination_name || ''} onChange={(e) => setRouteForm({ ...routeForm, destination_name: e.target.value })} required />
-          <Input label="Preço padrão (R$)" type="number" min={0} step={0.01}
-            value={routeForm.default_price || ''} onChange={(e) => setRouteForm({ ...routeForm, default_price: e.target.value })} required />
+          <EscolhaPreco
+            sobCotacao={routeForm.quote_only}
+            onChange={(v) => setRouteForm({ ...routeForm, quote_only: v })}
+            textoFixo="O cliente escolhe a rota e paga o preço padrão."
+            textoCotacao="Na vitrine sem preço: abre o translado personalizado com origem e destino preenchidos."
+          />
+          {/* Sob cotação o preço não aparece nem é cobrado (o servidor recusa
+              reservar pelo valor fixo) — o campo some para não confundir. */}
+          {!routeForm.quote_only && (
+            <Input label="Preço padrão (R$)" type="number" min={0} step={0.01}
+              value={routeForm.default_price || ''} onChange={(e) => setRouteForm({ ...routeForm, default_price: e.target.value })} required />
+          )}
           <Textarea
             label="Descrição da rota"
             rows={3}

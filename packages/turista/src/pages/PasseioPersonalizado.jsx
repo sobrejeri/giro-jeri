@@ -5,13 +5,13 @@
 // A cooperativa precifica (app do operador), o cliente aceita e paga em
 // "Minhas reservas", e a cotação vira uma reserva normal (service_type='tour').
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format, startOfDay, isToday, isSameDay, addDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   ChevronLeft, ChevronDown, ChevronUp, Calendar, Clock, Users, Plus, Minus, X,
-  Zap, Info, CheckCircle2, Car, Loader2, Send, Check, UserRound,
+  Zap, Info, CheckCircle2, Car, Loader2, Send, Check, UserRound, Sparkles,
 } from 'lucide-react'
 import { PlaceInput } from './Transfers'
 import DateSheet from '../components/DateSheet'
@@ -111,6 +111,34 @@ export default function PasseioPersonalizado() {
   const [origin, setOrigin] = useState('')
   const [originMeta, setOriginMeta] = useState(null)
   const [stops, setStops] = useState(() => [novaParada()])
+
+  // Passeio SOB COTAÇÃO escolhido na vitrine (?passeio=<id>, migração 128): o
+  // roteiro dele chega pronto e o pedido sai com a etiqueta do passeio — a
+  // cooperativa sabe de qual passeio é, mesmo que o cliente ajuste as paradas.
+  const [params] = useSearchParams()
+  const passeioId = params.get('passeio')
+  const { data: passeio } = useQuery({
+    queryKey:  ['tour', passeioId],
+    queryFn:   () => api.getTour(passeioId),
+    enabled:   !!passeioId,
+    staleTime: 5 * 60_000,
+  })
+  const preenchidoCom = useRef(null)   // id do passeio cujo roteiro já entrou
+  useEffect(() => {
+    if (!passeio?.id || preenchidoCom.current === passeio.id) return
+    preenchidoCom.current = passeio.id
+    const paradas = Array.isArray(passeio.quote_stops) ? passeio.quote_stops.filter((p) => p?.name) : []
+    if (paradas.length) {
+      // Parada da lista do admin leva o id; sem id, vai como destino escrito.
+      setStops(paradas.map((p) => ({ id: nextId.current++, name: p.name, stopId: p.stop_id || null, outro: !p.stop_id })))
+    }
+    // Saída fixa do passeio (ex.: heliponto) já entra como ponto de partida.
+    if (passeio.meeting_point_name) {
+      setOrigin(passeio.meeting_point_name)
+      const lat = Number(passeio.meeting_latitude), lon = Number(passeio.meeting_longitude)
+      setOriginMeta(passeio.meeting_latitude != null && Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null)
+    }
+  }, [passeio])
   const [qtdVeiculos, setQtdVeiculos] = useState({})   // id do veículo → quantidade
   const [verVeiculos, setVerVeiculos] = useState(false) // lista de veículos aberta ("Ver tudo")
   const [servicosOn, setServicosOn] = useState({})     // id do serviço (guia) → incluído
@@ -198,10 +226,13 @@ export default function PasseioPersonalizado() {
     setOrigin(''); setOriginMeta(null); setStops([novaParada()])
     setQtdVeiculos({}); setVerVeiculos(false); setServicosOn({}); setVehicleText(''); setPeople(2); setNotes('')
     setSuccess(false); setError('')
+    // "Montar outro passeio" começa do zero, sem o passeio da vitrine.
+    if (passeioId) { preenchidoCom.current = null; navigate('/passeio-personalizado', { replace: true }) }
   }
 
   async function handleSubmit() {
-    if (!token) { navigate('/login', { state: { from: '/passeio-personalizado' } }); return }
+    // Volta para ESTA tela depois do login — com o passeio escolhido, se houver.
+    if (!token) { navigate('/login', { state: { from: `/passeio-personalizado${passeioId ? `?passeio=${encodeURIComponent(passeioId)}` : ''}` } }); return }
     if (!canSubmit) return
     setLoading(true); setError('')
     // Veículos para a cooperativa: "2× Buggy + 1× Quadriciclo". O campo aceita
@@ -239,6 +270,8 @@ export default function PasseioPersonalizado() {
         service_time:  time,
         people_count:  people,
         special_notes: observacoes,
+        // Etiqueta do passeio da vitrine (sob cotação), quando veio de um.
+        ...(passeio?.id ? { tour_id: passeio.id } : {}),
       })
       setSuccess(true)
     } catch (err) {
@@ -282,6 +315,22 @@ export default function PasseioPersonalizado() {
           </div>
         ) : (
           <>
+            {/* Passeio escolhido na vitrine: a etiqueta que acompanha o pedido. */}
+            {passeio?.id && (
+              <section className="t2026-quote-tag bg-white rounded-2xl border border-brand/25 p-3 flex items-center gap-3">
+                {passeio.cover_image_url
+                  ? <img src={passeio.cover_image_url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0 bg-gray-100" />
+                  : <span className="w-14 h-14 rounded-xl bg-brand/10 flex items-center justify-center shrink-0"><Sparkles size={20} className="text-brand" /></span>}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-brand">Passeio escolhido · sob cotação</p>
+                  <p className="text-[14px] font-extrabold text-gray-900 leading-snug">{passeio.name}</p>
+                  <p className="text-[11px] text-gray-500 leading-snug mt-0.5">
+                    Roteiro já preenchido — ajuste se quiser. A cooperativa envia o valor.
+                  </p>
+                </div>
+              </section>
+            )}
+
             <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
               <Zap size={14} className="text-amber-500 shrink-0 mt-0.5" />
               <p className="text-[12px] text-amber-700 leading-relaxed">

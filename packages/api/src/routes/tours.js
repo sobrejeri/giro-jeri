@@ -152,6 +152,26 @@ router.get('/', async (req, res, next) => {
       filtered = (filtered || []).map((t) => ({ ...t, categorias: t.categories ? [t.categories] : [] }));
     }
 
+    // Passeio SOB COTAÇÃO (migration 128): o cartão mostra "Sob cotação" e
+    // leva ao "Montar meu passeio" com as paradas do roteiro. Consulta à parte
+    // e tolerante, como as categorias: sem a migration a lista sai como sempre.
+    try {
+      const ids = (filtered || []).map((t) => t.id).filter(Boolean);
+      if (ids.length) {
+        const { data: cot, error: eCot } = await supabase
+          .from('tours').select('id, quote_only, quote_stops').in('id', ids);
+        if (eCot) throw eCot;
+        const porId = new Map((cot || []).map((c) => [c.id, c]));
+        filtered = filtered.map((t) => {
+          const c = porId.get(t.id);
+          if (!c?.quote_only) return t;
+          return { ...t, quote_only: true, quote_stops: Array.isArray(c.quote_stops) ? c.quote_stops : [] };
+        });
+      }
+    } catch (e) {
+      console.warn('[tours] sob cotação indisponível (128 pendente?):', e.message);
+    }
+
     res.json(filtered);
   } catch (err) { next(err); }
 });

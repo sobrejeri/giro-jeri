@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -13,6 +13,7 @@ import {
 import { PlaceInput, suggestVehicles, VehicleRow, shortPlace } from './Transfers'
 import { pontosDaRegiao } from '../lib/pontosTuristicos'
 import { useLocaisProximos } from '../lib/locaisProximos'
+import { ehSobCotacao } from '../lib/sobCotacao'
 import { isHighSeasonIso } from '../lib/season'
 import { horasDeAntecedencia, primeiroReservavel, HORAS_PADRAO_TRANSFER } from '../lib/antecedencia'
 import { useCart } from '../contexts/CartContext'
@@ -85,12 +86,20 @@ function RouteCard({ route, bg, active, onSelect }) {
           <p className="text-[12px] text-gray-500 leading-snug mt-1.5 line-clamp-2">{desc}</p>
         )}
         <div className="flex items-end justify-between mt-3 pt-3 border-t border-gray-50">
+          {ehSobCotacao(route) ? (
+            // Rota sob cotação (128): sem preço; o clique abre o personalizado.
+            <div>
+              <p className="text-[10px] text-gray-400 leading-none">{t('transfersPg.quoteCta')}</p>
+              <p className="text-[16px] font-extrabold text-brand leading-tight mt-1">{t('transfersPg.quoteOnly')}</p>
+            </div>
+          ) : (
           <div>
             <p className="text-[10px] text-gray-400 leading-none">{t('transfersPg.startingFrom')}</p>
             <p className="text-[17px] font-extrabold text-gray-900 leading-tight mt-1">
               R$ {Number(route.default_price).toLocaleString('pt-BR')}
             </p>
           </div>
+          )}
           <span className="text-[12px] font-bold text-brand shrink-0 flex items-center gap-1">
             {active
               ? <><Check size={13} /> {t('transfersPg.selected')}</>
@@ -144,6 +153,25 @@ export default function TransfersDesktop() {
   const [customLoading, setCustomLoading] = useState(false)
   const [customSuccess, setCustomSuccess] = useState(false)
   const [customError,   setCustomError]   = useState('')
+  // Rota SOB COTAÇÃO da vitrine (128) — mesma regra do celular: abre o
+  // personalizado com origem e destino dela e o pedido leva a etiqueta,
+  // enquanto o cliente não trocar origem ou destino.
+  const [customRoute,   setCustomRoute]   = useState(null)
+  const rotaDaVitrine = customRoute
+    && customOrigin === customRoute.origin_name && customDest === customRoute.destination_name
+    ? customRoute : null
+  const abrirCotacaoDaRota = useCallback((r) => {
+    const ponto = (lat, lon) => (lat != null && lon != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lon))
+      ? { lat: Number(lat), lon: Number(lon) } : null)
+    setCustomOrigin(r.origin_name || '')
+    setCustomDest(r.destination_name || '')
+    setCustomOriginMeta(ponto(r.origin_latitude, r.origin_longitude))
+    setCustomDestMeta(ponto(r.destination_latitude, r.destination_longitude))
+    setCustomRoute(r)
+    setCustomSuccess(false); setCustomError('')
+    setMode('custom')
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
 
   /* ── Queries ── */
   const { data: routesData } = useQuery({
@@ -157,6 +185,15 @@ export default function TransfersDesktop() {
         : Array.isArray(routesData) ? routesData : [],
     [routesData],
   )
+
+  // Veio de um atalho de rota SOB COTAÇÃO (página inicial): abre direto o
+  // personalizado com essa rota, uma vez só.
+  const cotacaoAberta = useRef(false)
+  useEffect(() => {
+    if (cotacaoAberta.current || !navState?.cotacaoRotaId || !todasRotas.length) return
+    const r = todasRotas.find((x) => x.id === navState.cotacaoRotaId)
+    if (r && ehSobCotacao(r)) { cotacaoAberta.current = true; abrirCotacaoDaRota(r) }
+  }, [navState?.cotacaoRotaId, todasRotas, abrirCotacaoDaRota])
 
   // Translado EXCLUSIVO (ex.: helicóptero) sai da lista comum e ganha vitrine
   // própria, como no celular: misturar um trecho de R$ 15.000 com um de R$ 120
@@ -185,6 +222,7 @@ export default function TransfersDesktop() {
   // clicava no helicóptero seguia com o preço e a frota do carro.
   const [routeId, setRouteId] = useState('')
   const escolherRota = (r) => {
+    if (ehSobCotacao(r)) { abrirCotacaoDaRota(r); return }
     setRouteId(r.id)
     setOrigin(r.origin_name)
     setDest(r.destination_name)
@@ -470,6 +508,7 @@ export default function TransfersDesktop() {
         people_count:             customPeople,
         luggage_count:            0,
         special_notes:            customNotes.trim() || undefined,
+        ...(rotaDaVitrine ? { route_id: rotaDaVitrine.id } : {}),
       })
       setCustomSuccess(true)
     } catch (err) {
@@ -789,7 +828,7 @@ export default function TransfersDesktop() {
                   {t('transfersPg.viewQuotes')} <ChevronRight size={16} />
                 </button>
                 <button
-                  onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes('') }}
+                  onClick={() => { setCustomSuccess(false); setCustomOrigin(''); setCustomDest(''); setCustomOriginMeta(null); setCustomDestMeta(null); setCustomNotes(''); setCustomRoute(null) }}
                   className="text-[14px] text-gray-500 font-semibold hover:text-gray-700"
                 >
                   {t('transfersPg.requestAnother')}
@@ -805,6 +844,20 @@ export default function TransfersDesktop() {
                   <p className="text-[13px] text-gray-500">{t('transfersPg.customIntroDesktop')}</p>
                 </div>
               </div>
+
+              {/* Rota da vitrine (sob cotação): a etiqueta que acompanha o pedido. */}
+              {rotaDaVitrine && (
+                <div className="t2026-quote-tag rounded-xl border border-brand/25 bg-brand/5 p-3 flex items-center gap-3">
+                  {rotaDaVitrine.cover_image_url
+                    ? <img src={rotaDaVitrine.cover_image_url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0 bg-gray-100" />
+                    : <span className="w-14 h-14 rounded-xl bg-brand/10 flex items-center justify-center shrink-0"><Route size={20} className="text-brand" /></span>}
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-brand">{t('transfersPg.quoteTagTitle')}</p>
+                    <p className="text-[14px] font-extrabold text-gray-900 leading-snug">{rotaDaVitrine.origin_name} → {rotaDaVitrine.destination_name}</p>
+                    <p className="text-[12px] text-gray-500 leading-snug mt-0.5">{t('transfersPg.quoteTagDesc')}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { precoDeEntrada } from '../lib/precoCartao'
+import { ehSobCotacao, linkCotacaoDoPasseio } from '../lib/sobCotacao'
 import { api } from '../lib/api'
 import { useRegion } from '../contexts/RegionContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -136,7 +137,13 @@ function TourCard({ tour, badge, gradient, active, isFav, onToggleFav, onSelect 
             )}
           </div>
           <div className="text-right shrink-0">
-            {precoEntrada ? (
+            {ehSobCotacao(tour) ? (
+              // Sob cotação (128): sem preço; o clique leva ao pedido de cotação.
+              <>
+                <p className="text-brand font-extrabold text-[15px] leading-tight">{t('toursPg.card.quoteOnly')}</p>
+                <p className="text-[10px] text-gray-400 leading-none mt-0.5">{t('toursPg.card.quoteCta')}</p>
+              </>
+            ) : precoEntrada ? (
               <>
                 <p className="text-[10px] text-gray-400 leading-none">{t('toursPg.card.fromLabel')}</p>
                 <p className="text-gray-900 font-extrabold text-[17px] leading-tight">{fmtPrice(precoEntrada.valor)}</p>
@@ -355,6 +362,9 @@ export default function ToursDesktop() {
   const grandTotal = mode === 'shared' ? sharedTotal : cartTotal
 
   function selectTour(tour) {
+    // Sob cotação: em vez do painel de reserva, o pedido de cotação com o
+    // roteiro do passeio já preenchido.
+    if (ehSobCotacao(tour)) { navigate(linkCotacaoDoPasseio(tour)); return }
     setSelectedId(tour.id)
     setCart({})
     // Rola o topo do painel à vista em telas menores (o sticky cuida do resto).

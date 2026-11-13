@@ -8,6 +8,7 @@ import { useRegion } from '../contexts/RegionContext'
 import { PageSpinner } from '../components/ui/Spinner'
 import TourCard from '../components/tours/TourCard'
 import './ToursVisual2026.css'
+import { ehSobCotacao, linkCotacaoDoPasseio } from '../lib/sobCotacao'
 
 export default function Favoritos() {
   const { t } = useTranslation()
@@ -70,7 +71,9 @@ export default function Favoritos() {
                 tour={tour}
                 isFav={favs.has(tour.id)}
                 onFav={() => toggleFav(tour.id)}
-                onSelect={() => navigate('/passeios', { state: { selectedId: tour.id } })}
+                onSelect={() => (ehSobCotacao(tour)
+                  ? navigate(linkCotacaoDoPasseio(tour))
+                  : navigate('/passeios', { state: { selectedId: tour.id } }))}
               />
             ))}
           </div>

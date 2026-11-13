@@ -21,7 +21,8 @@ test('Serviços: rota com o nome na largura toda e preço + liga/desliga numa li
   assert.match(lista, /className="flex items-start gap-3 p-3 rounded-xl/, 'menu e miniatura alinhados ao topo')
   assert.match(lista, /<p className="text-sm font-medium text-gray-200 leading-snug">\{r\.origin_name\}\{'\\u00a0'\}→ \{r\.destination_name\}<\/p>/,
     'a seta nunca abre linha sozinha')
-  assert.match(lista, /<div className="mt-2 flex items-center justify-between gap-2">\s*<span className=\{`text-sm font-bold text-brand/,
+  // (Rota sob cotação mostra o selo no lugar do preço — mesma linha.)
+  assert.match(lista, /<div className="mt-2 flex items-center justify-between gap-2">\s*\{r\.quote_only \? \(\s*<span className=\{inativa \? 'opacity-60' : ''\}><SeloCotacao \/><\/span>\s*\) : \(\s*<span className=\{`text-sm font-bold text-brand/,
     'preço numa linha própria, embaixo do nome')
   // O botão de ativar/desativar continua à vista, com 1 toque.
   assert.match(lista, /onClick=\{\(\) => toggleRouteMut\.mutate\(\{ id: r\.id, is_active: inativa \}\)\}/)

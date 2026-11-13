@@ -45,7 +45,7 @@ const VEHICLE_TYPE_LABEL = {
 
 const USER_TYPE_LABELS = {
   tourist:   'Turista',
-  operator:  'Operador (Operador)',
+  operator:  'Operador',   // era "Operador (Operador)": a palavra saía repetida na lista
   agency:    'Agência',
   admin:     'Administrador',
   finance:   'Financeiro',

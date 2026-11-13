@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { rolarAteAncora } from '../lib/ancora'
 import { precoDeEntrada } from '../lib/precoCartao'
+import { ehSobCotacao, linkCotacaoDoPasseio } from '../lib/sobCotacao'
 import { duracao } from '../lib/formato'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
@@ -91,7 +92,7 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
               <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(precoEntrada.valor)}</p>
             </div>
           ) : (
-            <p className="text-[12px] text-brand font-bold">{t('homePg.checkPrices')}</p>
+            <p className="text-[12px] text-brand font-bold">{ehSobCotacao(tour) ? t('toursPg.card.quoteOnly') : t('homePg.checkPrices')}</p>
           )}
           <span className="text-[11px] text-brand font-semibold">{t('homePg.reserveArrow')}</span>
         </div>
@@ -103,7 +104,8 @@ function MiniTourCard({ tour, isFav, onToggleFav, gradient, onClick }) {
 /* ── Card de rota de transfer em destaque (Serviços em destaque) ── */
 function RouteMiniCard({ route, gradient, onClick }) {
   const { t } = useTranslation()
-  const price = Number(route.default_price) || 0
+  // Rota sob cotação (128): sem preço — o clique abre o translado personalizado.
+  const price = ehSobCotacao(route) ? 0 : (Number(route.default_price) || 0)
   return (
     <button
       onClick={onClick}
@@ -135,7 +137,7 @@ function RouteMiniCard({ route, gradient, onClick }) {
               <p className="text-brand font-extrabold text-[15px] leading-tight mt-0.5">{fmtPrice(price)}</p>
             </div>
           ) : (
-            <p className="text-[12px] text-brand font-bold">{t('homePg.checkPrices')}</p>
+            <p className="text-[12px] text-brand font-bold">{ehSobCotacao(route) ? t('transfersPg.quoteOnly') : t('homePg.checkPrices')}</p>
           )}
           <span className="text-[11px] text-brand font-semibold">{t('homePg.reserveArrow')}</span>
         </div>
@@ -189,7 +191,7 @@ function FeaturedCard({ tour, tag, gradient, isFav, onToggleFav, onClick }) {
                 </p>
               </>
             ) : (
-              <p className="text-brand font-bold text-[14px]">{t('homePg.checkPrices')}</p>
+              <p className="text-brand font-bold text-[14px]">{ehSobCotacao(tour) ? t('toursPg.card.quoteOnly') : t('homePg.checkPrices')}</p>
             )}
           </div>
           <span className="inline-flex items-center gap-1 text-brand font-bold text-[13px] border border-brand/30 bg-brand/5 group-hover:bg-brand/10 rounded-xl px-4 py-2 transition-colors shrink-0">
@@ -630,7 +632,7 @@ export default function HomeDesktop() {
                 gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
                 isFav={favs?.has?.(tour.id)}
                 onToggleFav={toggleFav}
-                onClick={() => navigate(`/passeios/${tour.id}`)}
+                onClick={() => navigate(ehSobCotacao(tour) ? linkCotacaoDoPasseio(tour) : `/passeios/${tour.id}`)}
               />
             ))}
           </div>
@@ -661,7 +663,7 @@ export default function HomeDesktop() {
                 isFav={favs?.has?.(tour.id)}
                 onToggleFav={toggleFav}
                 gradient={FALLBACK_GRADIENTS[i % FALLBACK_GRADIENTS.length]}
-                onClick={() => navigate(`/passeios/${tour.id}`)}
+                onClick={() => navigate(ehSobCotacao(tour) ? linkCotacaoDoPasseio(tour) : `/passeios/${tour.id}`)}
               />
             ))}
             {featuredRoutes.map((r, i) => (
@@ -669,7 +671,10 @@ export default function HomeDesktop() {
                 key={`route-${r.id}`}
                 route={r}
                 gradient={FALLBACK_GRADIENTS[(i + 1) % FALLBACK_GRADIENTS.length]}
-                onClick={() => navigate('/transfers', { state: { origin: r.origin_name, dest: r.destination_name } })}
+                // Rota sob cotação: Translados abre direto no personalizado,
+                // com origem e destino desta rota (cotacaoRotaId).
+                onClick={() => navigate('/transfers', { state: { origin: r.origin_name, dest: r.destination_name,
+                  ...(ehSobCotacao(r) ? { cotacaoRotaId: r.id } : {}) } })}
               />
             ))}
             {/* Fecha a última fileira: com 1 ou 2 cartões sobrando, um cartão

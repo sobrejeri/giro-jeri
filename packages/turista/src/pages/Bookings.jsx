@@ -424,6 +424,11 @@ function fmtDate(d) {
 // Cotação é de passeio personalizado (roteiro origem → paradas) ou de translado
 // (origem → destino). O rótulo e a rota mudam conforme o tipo.
 const quoteIsTour = (q) => q?._kind === 'tour'
+// Nome da cotação: o passeio/rota da vitrine de onde ela nasceu (sob cotação,
+// migração 128), senão o tipo — "Passeio personalizado" / "Translado personalizado".
+const quoteTitulo = (q) => (quoteIsTour(q)
+  ? (q?.tour_name || 'Passeio personalizado')
+  : (q?.route_label ? 'Translado sob cotação' : 'Translado personalizado'))
 function quoteRouteText(q) {
   if (quoteIsTour(q)) {
     const stops = Array.isArray(q.stops) ? q.stops.map((s) => s?.name).filter(Boolean) : []
@@ -453,7 +458,7 @@ function QuoteDetailDialog({ quote, onClose }) {
         <div className="flex items-center justify-between mb-4 gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <Car size={16} className="text-brand shrink-0" />
-            <h3 className="font-bold text-gray-900 truncate">{isTour ? 'Passeio personalizado' : 'Translado personalizado'}</h3>
+            <h3 className="font-bold text-gray-900 truncate">{quoteTitulo(quote)}</h3>
           </div>
           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${badge.bg} ${badge.text}`}>{badge.label}</span>
         </div>
@@ -504,7 +509,7 @@ function QuoteCard({ quote, onAccept, onCancel, onPay, onDetail, acceptLoading, 
         {/* categoria */}
         <div className="absolute top-3 left-3">
           <span className="flex items-center gap-1 bg-black/40 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-            <Car size={10} /> {isTour ? 'Passeio personalizado' : 'Translado personalizado'}
+            <Car size={10} /> {quoteTitulo(quote)}
           </span>
         </div>
 

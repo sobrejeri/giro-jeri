@@ -47,6 +47,21 @@ enxerga o trabalho do outro no próximo `git fetch`.
 
 ## Diário (mais recente primeiro)
 
+- **2026-11-13 · Claude (vitrine sob cotação)** — Passeio e rota de translado
+  podem ser **"valor fixo" ou "sob cotação"** (escolha no cadastro do admin).
+  Sob cotação o item fica na vitrine sem preço e o toque cai no fluxo de
+  cotação que já existia, preenchido: passeio → "Montar meu passeio" com as
+  paradas do roteiro (`tours.quote_stops`, da lista de Paradas) e a etiqueta
+  `tour_quotes.tour_id`; rota → translado personalizado com origem/destino e
+  `transfer_quotes.route_id`. A cooperativa vê "Passeio: X" / "Rota da vitrine".
+  **Migration 128** (`128_cotacao_por_passeio_e_rota.sql`): só ADD COLUMN, tudo
+  nasce desligado. Sem ela a API segue funcionando (consultas tolerantes; a
+  etiqueta vai nas observações) e ligar a opção no admin devolve 409 pedindo a
+  migração. `services/sobCotacao.js` (`checkQuoteOnly`) recusa reservar pelo
+  valor fixo item sob cotação em `/payments` (intent, request, carrinho) e em
+  `POST /bookings` — a rota sob cotação pode ter `default_price` zero.
+  **Próximo número livre: 129.**
+
 - **2026-08-25 · Agente B (área de controle de repasses)** — Fecha o modelo da
   079: a plataforma recebe 100%, e agora existe onde ver o que ela DEVE.
   **Migration 080**: `booking_payouts` — até dois repasses por reserva,

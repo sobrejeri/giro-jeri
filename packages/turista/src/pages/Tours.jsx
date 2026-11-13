@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { somenteTransporte, capacidadeDaCombinacao } from '../lib/transporte'
 import { duracao } from '../lib/formato'
 import { dificuldade } from '../lib/dificuldade'
+import { ehSobCotacao, linkCotacaoDoPasseio } from '../lib/sobCotacao'
 import { useRegion } from '../contexts/RegionContext'
 import { useFavorites } from '../contexts/FavoritesContext'
 import { useCart } from '../contexts/CartContext'
@@ -818,6 +819,13 @@ export default function Tours({ visual2026 = false }) {
   // Uma vitrine por categoria marcada, com o NOME da categoria no título —
   // igual aos translados. Ficam logo abaixo da lista comum, antes do bloco do
   // passeio selecionado.
+  // Toque no cartão: abre a folha do passeio — ou, se ele é SOB COTAÇÃO,
+  // vai direto ao "Montar meu passeio" com o roteiro dele já preenchido.
+  const abrirPasseio = (tour) => {
+    if (ehSobCotacao(tour)) { navigate(linkCotacaoDoPasseio(tour)); return }
+    setSelectedId(tour.id); setSheetTourId(tour.id); setCart({})
+  }
+
   const carrosseisDeCategoria = !toursLoading && categoriasCarrossel.length > 0 ? (
     categoriasCarrossel.map((cat) => (
       <section key={cat.id}>
@@ -834,11 +842,11 @@ export default function Tours({ visual2026 = false }) {
               tour={tour}
               mode={mode}
               selected={selectedTour?.id === tour.id}
-              onSelect={() => { setSelectedId(tour.id); setSheetTourId(tour.id); setCart({}) }}
+              onSelect={() => abrirPasseio(tour)}
               isFav={favs.has(tour.id)}
               onFav={() => toggleFav(tour.id)}
               inCart={cartIds.has(tour.id)}
-              onToggleCart={() => toggleCart(tour)}
+              onToggleCart={ehSobCotacao(tour) ? undefined : () => toggleCart(tour)}
             />
           ))}
         </div>
@@ -1024,11 +1032,11 @@ export default function Tours({ visual2026 = false }) {
                   tour={tour}
                   mode={mode}
                   selected={selectedTour?.id === tour.id}
-                  onSelect={() => { setSelectedId(tour.id); setSheetTourId(tour.id); setCart({}) }}
+                  onSelect={() => abrirPasseio(tour)}
                   isFav={favs.has(tour.id)}
                   onFav={() => toggleFav(tour.id)}
                   inCart={cartIds.has(tour.id)}
-                  onToggleCart={() => toggleCart(tour)}
+                  onToggleCart={ehSobCotacao(tour) ? undefined : () => toggleCart(tour)}
                 />
               ))}
             </div>

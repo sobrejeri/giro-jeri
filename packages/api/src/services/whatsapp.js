@@ -353,7 +353,8 @@ export async function notifyOperatorsNewQuote(supabase, quote) {
   const message =
     `*TURIVA* · Nova cotação 💸\n` +
     `\n` +
-    `Translado privativo${rota ? `\n${rota}` : ''}\n` +
+    // Rota sob cotação (128): a vitrine já tinha esta rota — diz qual é.
+    `${quote.route_label ? 'Translado da vitrine (sob cotação)' : 'Translado privativo'}${rota ? `\n${rota}` : ''}\n` +
     `🗓 ${data}${hora}\n` +
     `👥 ${quote.people_count || 1} passageiro(s)\n` +
     `\n` +
@@ -389,7 +390,8 @@ export async function notifyOperatorsNewTourQuote(supabase, quote) {
   const message =
     `*TURIVA* · Nova cotação de passeio 💸\n` +
     `\n` +
-    `Passeio personalizado${rota ? `\n${rota}` : ''}\n` +
+    // Passeio sob cotação (128): o nome do passeio é a etiqueta do pedido.
+    `${quote.tour_name ? `Passeio: ${quote.tour_name}` : 'Passeio personalizado'}${rota ? `\n${rota}` : ''}\n` +
     `🗓 ${data}${hora}\n` +
     (quote.vehicle_type ? `🚗 ${quote.vehicle_type}\n` : '') +
     `👥 ${quote.people_count || 1} passageiro(s)\n` +

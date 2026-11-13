@@ -17,6 +17,7 @@ import {
   statusInicialDoPagamento,
   MARCA_FALHA_MP,
 } from '../services/paymentFlow.js'
+import { checkQuoteOnly } from '../services/sobCotacao.js'
 
 export const intentSchema = z.object({
   service_type:        z.enum(['tour', 'transfer']).optional(),
@@ -1226,6 +1227,8 @@ router.post('/intent', authenticate, async (req, res, next) => {
     // R6: reserva nova (não repagamento nem grupo) respeita o cutoff do serviço.
     // Grupo já validou cutoff/antecedência na criação (cart-request).
     if (!existing_booking_id && !isGroup) {
+      const cotacaoErr = await checkQuoteOnly({ service_type, service_id })
+      if (cotacaoErr) return res.status(400).json({ error: cotacaoErr })
       const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
       if (cutoffErr) return res.status(400).json({ error: cutoffErr })
       const windowErr = await checkServiceWindow({ service_type, service_id, service_time })
@@ -2460,6 +2463,10 @@ router.post('/request', authenticate, async (req, res, next) => {
       await validateAdvance(service_type, service_date_iso, service_time || '00:00', { serviceId: service_id })
     }
 
+    // Sob cotação (128): não se reserva pelo valor fixo.
+    const cotacaoErr = await checkQuoteOnly({ service_type, service_id })
+    if (cotacaoErr) return res.status(400).json({ error: cotacaoErr })
+
     // R6: respeita o horário limite de solicitação do serviço.
     const cutoffErr = await checkBookingCutoff({ service_type, service_id, service_date_iso })
     if (cutoffErr) return res.status(400).json({ error: cutoffErr })
@@ -2645,6 +2652,8 @@ router.post('/cart-request', authenticate, async (req, res, next) => {
         if (it.service_date_iso) {
           await validateAdvance(it.service_type, it.service_date_iso, it.service_time || '00:00', { serviceId: it.service_id })
         }
+        const cotacaoErr = await checkQuoteOnly({ service_type: it.service_type, service_id: it.service_id })
+        if (cotacaoErr) throw { status: 400, message: cotacaoErr }
         const cutoffErr = await checkBookingCutoff({
           service_type: it.service_type, service_id: it.service_id, service_date_iso: it.service_date_iso,
         })

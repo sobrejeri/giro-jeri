@@ -15,6 +15,7 @@ import { cancelExpiredUnpaidBookings } from '../services/bookingExpiry.js';
 import { reconciliarPagamentosDoCliente } from '../services/paymentReconcile.js';
 import { onPaymentApproved, getOperatorMp } from './payments.js';
 import dayjs from 'dayjs';
+import { checkQuoteOnly } from '../services/sobCotacao.js';
 
 const serviceLabelBk = (t) => (t === 'transfer' ? 'translado' : 'passeio');
 
@@ -158,6 +159,13 @@ const createBookingSchema = z.object({
 router.post('/', authenticate, async (req, res, next) => {
   try {
     const body = createBookingSchema.parse(req.body);
+
+    // Sob cotação (128): passeio/rota sem valor fixo não se reserva por aqui.
+    const cotacaoErr = await checkQuoteOnly({
+      service_type: body.service_type,
+      service_id:   body.service_type === 'transfer' ? body.route_id : body.service_id,
+    });
+    if (cotacaoErr) return res.status(400).json({ error: cotacaoErr });
 
     // ── Calcula preço no backend (única fonte de verdade) ──
     let pricing;

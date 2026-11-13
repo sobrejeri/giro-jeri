@@ -582,7 +582,9 @@
       "fromLabel": "From",
       "perPersonSuffix": "per person",
       "viewOptions": "See options",
-      "favoriteAria": "Save to favorites"
+      "favoriteAria": "Save to favorites",
+      "quoteOnly": "Price on request",
+      "quoteCta": "Get your quote"
     },
     "page": {
       "title": "Tours in {{region}}",
@@ -1074,7 +1076,11 @@
     "departingFrom": "Departing from {{place}}",
     "noRoutesFromHere": "No routes departing from here yet.",
     "exclusiveBadge": "Exclusive",
-    "exclusiveTransfer": "Exclusive transfer"
+    "exclusiveTransfer": "Exclusive transfer",
+    "quoteOnly": "Price on request",
+    "quoteCta": "Get your quote",
+    "quoteTagTitle": "Chosen route · price on request",
+    "quoteTagDesc": "Pickup and destination are filled in. Choose date, time and passengers — the cooperative sends the price."
   },
   "cartPg": {
     "editSheet": {

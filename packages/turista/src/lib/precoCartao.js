@@ -20,6 +20,9 @@
  */
 export function precoDeEntrada(tour) {
   if (!tour) return null
+  // Passeio SOB COTAÇÃO (migração 128): o valor vem da cooperativa, na
+  // cotação. Regras antigas do Motor de Preços não valem para ele.
+  if (tour.quote_only === true) return null
 
   const porPessoa = Number(tour.shared_price_per_person) || 0
   if (tour.is_shared_enabled && porPessoa > 0) {

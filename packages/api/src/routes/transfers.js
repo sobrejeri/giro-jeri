@@ -10,6 +10,7 @@ import {
 import { filterByRadius } from '../services/geo.js';
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js';
 import { notifyOperatorsNewQuote, notifyClientQuoteReady } from '../services/whatsapp.js';
+import { colunaFaltante } from '../lib/colunaFaltante.js';
 import dayjs from 'dayjs';
 
 const router = Router();
@@ -413,7 +414,38 @@ const quoteSchema = z.object({
   people_count:             z.number().int().min(1).max(50),
   luggage_count:            z.number().int().min(0).max(20).default(0),
   special_notes:            z.string().optional(),
+  // Rota SOB COTAÇÃO da vitrine (128) de onde o pedido nasceu — a etiqueta
+  // que mostra à cooperativa qual rota o cliente escolheu.
+  route_id:                 z.string().uuid().optional().nullable(),
 });
+
+const rotuloDaRota = (r) => (r ? `${r.origin_name} → ${r.destination_name}` : null);
+
+// Etiqueta da rota em cada cotação: { route_id, route_label }. Consulta à parte
+// e tolerante — a view do operador não tem a coluna, e sem a migração 128 a
+// lista sai como sempre (sem etiqueta).
+async function comEtiquetaDaRota(linhas) {
+  const lista = linhas || [];
+  const ids = lista.map((q) => q.id).filter(Boolean);
+  if (!ids.length) return lista;
+  try {
+    const { data: refs, error } = await supabase.from('transfer_quotes').select('id, route_id').in('id', ids);
+    if (error) throw error;
+    const rotaIds = [...new Set((refs || []).map((r) => r.route_id).filter(Boolean))];
+    if (!rotaIds.length) return lista;
+    const { data: rotas } = await supabase
+      .from('transfer_routes').select('id, origin_name, destination_name').in('id', rotaIds);
+    const porId = new Map((rotas || []).map((r) => [r.id, r]));
+    const porCotacao = new Map((refs || []).map((r) => [r.id, r.route_id]));
+    return lista.map((q) => {
+      const rotaId = porCotacao.get(q.id);
+      return rotaId ? { ...q, route_id: rotaId, route_label: rotuloDaRota(porId.get(rotaId)) } : q;
+    });
+  } catch (e) {
+    console.warn('[transfers] etiqueta da rota indisponível (128 pendente?):', e.message);
+    return lista;
+  }
+}
 
 // ── POST /api/transfers/quotes ─────────────────────────
 router.post('/quotes', authenticate, async (req, res, next) => {
@@ -423,16 +455,30 @@ router.post('/quotes', authenticate, async (req, res, next) => {
     // Valida antecedência mínima de 4h
     await validateTransferAdvance(body.service_date, body.service_time);
 
-    const { data, error } = await supabase
+    // Rota sob cotação de onde o pedido veio: confere que existe (id inventado
+    // não vira etiqueta) e guarda o rótulo para os avisos.
+    let rota = null;
+    if (body.route_id) {
+      const { data: r } = await supabase
+        .from('transfer_routes').select('id, origin_name, destination_name')
+        .eq('id', body.route_id).eq('is_active', true).maybeSingle();
+      rota = r || null;
+    }
+    const { route_id: _routeId, ...semEtiqueta } = body;
+    const linha = { ...semEtiqueta, user_id: req.user.id, source_channel: 'app', status: 'pending_quote' };
+
+    let { data, error } = await supabase
       .from('transfer_quotes')
-      .insert({
-        ...body,
-        user_id:        req.user.id,
-        source_channel: 'app',
-        status:         'pending_quote',
-      })
+      .insert(rota ? { ...linha, route_id: rota.id } : linha)
       .select()
       .single();
+    // Sem a migração 128 (coluna route_id): a etiqueta vai nas observações,
+    // que a cooperativa já lê.
+    if (error && rota && colunaFaltante(error) === 'route_id') {
+      const obs = [`Rota da vitrine: ${rotuloDaRota(rota)}`, linha.special_notes].filter(Boolean).join(' · ');
+      ({ data, error } = await supabase
+        .from('transfer_quotes').insert({ ...linha, special_notes: obs }).select().single());
+    }
 
     if (error) throw error;
 
@@ -442,13 +488,13 @@ router.post('/quotes', authenticate, async (req, res, next) => {
       fleetModalSlug: 'terrestre',
       templateKey: 'new_transfer_quote',
       title:       'Nova cotação de translado',
-      body:        `${req.user.full_name} pediu um translado personalizado: ${body.origin_place_name} → ${body.destination_place_name} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
+      body:        `${req.user.full_name} pediu ${rota ? 'o translado da vitrine (sob cotação)' : 'um translado personalizado'}: ${body.origin_place_name} → ${body.destination_place_name} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
     });
 
     // WhatsApp pras operadores (fire-and-forget) — mesma estratégia da
     // solicitação normal, mas com mensagem indicando que é cotação personalizada
     // e que precisa enviar valor (não só aceitar).
-    notifyOperatorsNewQuote(supabase, data).catch((err) =>
+    notifyOperatorsNewQuote(supabase, { ...data, route_label: rotuloDaRota(rota) }).catch((err) =>
       console.error('[whatsapp] notificação de cotação falhou:', err.message));
 
     res.status(201).json(data);
@@ -470,7 +516,7 @@ router.get('/quotes', authenticate, async (req, res, next) => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.json(data);
+    res.json(await comEtiquetaDaRota(data));
   } catch (err) { next(err); }
 });
 
@@ -502,7 +548,7 @@ router.get('/quotes/pending', authenticate, requireOperator, async (req, res, ne
       .order('service_date');
 
     if (error) throw error;
-    res.json(esconderContatoDaCotacao(data));
+    res.json(esconderContatoDaCotacao(await comEtiquetaDaRota(data)));
   } catch (err) { next(err); }
 });
 

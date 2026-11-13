@@ -13,6 +13,7 @@ import { supabase } from '../supabase.js'
 import { authenticate, requireOperator } from '../middleware/auth.js'
 import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { notifyOperatorsNewTourQuote, notifyClientTourQuoteReady } from '../services/whatsapp.js'
+import { colunaFaltante } from '../lib/colunaFaltante.js'
 import dayjs from 'dayjs'
 
 const router = Router()
@@ -39,6 +40,9 @@ const createSchema = z.object({
   service_time:      z.string().regex(/^\d{2}:\d{2}$/, 'Horário inválido (HH:MM)'),
   people_count:      z.number({ coerce: true }).int().min(1).max(200),
   special_notes:     z.string().max(2000).optional().nullable(),
+  // Passeio SOB COTAÇÃO (128) de onde o pedido nasceu: a etiqueta que diz à
+  // cooperativa "este é o Litoral Leste", mesmo que o cliente mude paradas.
+  tour_id:           z.string().uuid().optional().nullable(),
 })
 
 // Roteiro em texto (ponto de partida → paradas) para notificações e para o
@@ -50,6 +54,31 @@ function roteiroTexto(q, { marcarOutro = false } = {}) {
     ? q.stops.filter((s) => s?.name).map((s) => (marcarOutro && s.outro ? `${s.name} (outro destino)` : s.name))
     : []
   return [q?.origin_place_name, ...paradas].filter(Boolean).join(' → ')
+}
+
+// Etiqueta do passeio pré-definido em cada cotação: { tour_id, tour_name }.
+// Consulta à parte e tolerante — a view do operador não tem a coluna, e sem a
+// migração 128 a lista sai como sempre (sem etiqueta).
+async function comEtiquetaDoPasseio(linhas) {
+  const lista = linhas || []
+  const ids = lista.map((q) => q.id).filter(Boolean)
+  if (!ids.length) return lista
+  try {
+    const { data: refs, error } = await supabase.from('tour_quotes').select('id, tour_id').in('id', ids)
+    if (error) throw error
+    const tourIds = [...new Set((refs || []).map((r) => r.tour_id).filter(Boolean))]
+    if (!tourIds.length) return lista
+    const { data: tours } = await supabase.from('tours').select('id, name').in('id', tourIds)
+    const nome = new Map((tours || []).map((t) => [t.id, t.name]))
+    const porCotacao = new Map((refs || []).map((r) => [r.id, r.tour_id]))
+    return lista.map((q) => {
+      const tourId = porCotacao.get(q.id)
+      return tourId ? { ...q, tour_id: tourId, tour_name: nome.get(tourId) || null } : q
+    })
+  } catch (e) {
+    console.warn('[tour-quotes] etiqueta do passeio indisponível (128 pendente?):', e.message)
+    return lista
+  }
 }
 
 // Esconde o contato do cliente até a cotação virar reserva PAGA (igual translado:
@@ -69,23 +98,43 @@ router.post('/', authenticate, async (req, res, next) => {
     if (dayjs(`${body.service_date}T${body.service_time}`).isBefore(dayjs())) {
       return res.status(400).json({ error: 'A data e o horário do passeio já passaram. Escolha outro.' })
     }
-    const { data, error } = await supabase
+
+    // Passeio sob cotação de onde o pedido veio: confere que existe (id
+    // inventado não vira etiqueta) e guarda o nome para os avisos.
+    let passeio = null
+    if (body.tour_id) {
+      const { data: t } = await supabase
+        .from('tours').select('id, name').eq('id', body.tour_id).eq('is_active', true).maybeSingle()
+      passeio = t || null
+    }
+    const { tour_id: _tourId, ...semEtiqueta } = body
+    const linha = { ...semEtiqueta, user_id: req.user.id, source_channel: 'app', status: 'pending_quote' }
+
+    let { data, error } = await supabase
       .from('tour_quotes')
-      .insert({ ...body, user_id: req.user.id, source_channel: 'app', status: 'pending_quote' })
+      .insert(passeio ? { ...linha, tour_id: passeio.id } : linha)
       .select()
       .single()
+    // Sem a migração 128 (coluna tour_id): a etiqueta vai nas observações, que
+    // a cooperativa já lê — o pedido não se perde nem chega sem o passeio.
+    if (error && passeio && colunaFaltante(error) === 'tour_id') {
+      const obs = [`Passeio escolhido: ${passeio.name}`, linha.special_notes].filter(Boolean).join(' · ')
+      ;({ data, error } = await supabase
+        .from('tour_quotes').insert({ ...linha, special_notes: obs }).select().single())
+    }
     if (error) throw error
 
     // Central do app — operadores de rua (buggy/4x4) + admin. Mesmo corte do
     // translado personalizado (fleetModalSlug 'terrestre').
+    const oQue = passeio ? `o passeio "${passeio.name}"` : 'um passeio personalizado'
     await notifyOperatorsAndAdmin({
       fleetModalSlug: 'terrestre',
       templateKey:    'new_transfer_quote',
       title:          'Nova cotação de passeio',
-      body:           `${req.user.full_name} pediu um passeio personalizado: ${roteiroTexto(data, { marcarOutro: true })} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
+      body:           `${req.user.full_name} pediu ${oQue}: ${roteiroTexto(data, { marcarOutro: true })} em ${dayjs(body.service_date).format('DD/MM')} às ${body.service_time}. Abra para cotar.`,
     })
     // WhatsApp pras operadores (fire-and-forget).
-    notifyOperatorsNewTourQuote(supabase, data).catch((err) =>
+    notifyOperatorsNewTourQuote(supabase, { ...data, tour_name: passeio?.name || null }).catch((err) =>
       console.error('[whatsapp] cotação de passeio falhou:', err.message))
 
     res.status(201).json(data)
@@ -102,7 +151,7 @@ router.get('/', authenticate, async (req, res, next) => {
       .from('tour_quotes').select('*').eq('user_id', req.user.id)
       .order('created_at', { ascending: false })
     if (error) throw error
-    res.json(data)
+    res.json(await comEtiquetaDoPasseio(data))
   } catch (err) { next(err) }
 })
 
@@ -113,7 +162,7 @@ router.get('/pending', authenticate, requireOperator, async (req, res, next) => 
       .from('v_tour_quotes_dashboard').select('*')
       .order('is_urgent', { ascending: false }).order('service_date')
     if (error) throw error
-    res.json(esconderContato(data))
+    res.json(esconderContato(await comEtiquetaDoPasseio(data)))
   } catch (err) { next(err) }
 })
 
@@ -169,7 +218,18 @@ router.post('/:id/accept', authenticate, async (req, res, next) => {
 
     // Reserva já atribuída ao operador que cotou (preço e prestador negociados).
     const bookingCode = `GJ${Date.now().toString(36).toUpperCase().slice(-6)}`
-    const notes = [quote.vehicle_type ? `Veículo: ${quote.vehicle_type}` : null, quote.special_notes].filter(Boolean).join(' · ') || null
+    // Passeio sob cotação: o nome segue para a reserva (motorista e operador
+    // veem qual passeio é, não só o roteiro).
+    let nomePasseio = null
+    if (quote.tour_id) {
+      const { data: t } = await supabase.from('tours').select('name').eq('id', quote.tour_id).maybeSingle()
+      nomePasseio = t?.name || null
+    }
+    const notes = [
+      nomePasseio ? `Passeio: ${nomePasseio}` : null,
+      quote.vehicle_type ? `Veículo: ${quote.vehicle_type}` : null,
+      quote.special_notes,
+    ].filter(Boolean).join(' · ') || null
     const baseBooking = {
       booking_code:       bookingCode,
       user_id:            req.user.id,

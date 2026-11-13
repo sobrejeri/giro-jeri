@@ -582,7 +582,9 @@
       "fromLabel": "Desde",
       "perPersonSuffix": "por persona",
       "viewOptions": "Ver opciones",
-      "favoriteAria": "Guardar en favoritos"
+      "favoriteAria": "Guardar en favoritos",
+      "quoteOnly": "Bajo cotización",
+      "quoteCta": "Pide tu precio"
     },
     "page": {
       "title": "Paseos en {{region}}",
@@ -1074,7 +1076,11 @@
     "departingFrom": "Saliendo de {{place}}",
     "noRoutesFromHere": "Todavía no hay rutas saliendo desde aquí.",
     "exclusiveBadge": "Exclusivo",
-    "exclusiveTransfer": "Traslado exclusivo"
+    "exclusiveTransfer": "Traslado exclusivo",
+    "quoteOnly": "Bajo cotización",
+    "quoteCta": "Pide tu precio",
+    "quoteTagTitle": "Ruta elegida · bajo cotización",
+    "quoteTagDesc": "Origen y destino ya completados. Elige fecha, hora y pasajeros — la cooperativa envía el precio."
   },
   "cartPg": {
     "editSheet": {

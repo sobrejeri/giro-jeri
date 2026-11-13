@@ -595,7 +595,13 @@ function QuoteRequestCard({ quote, onQuote }) {
           {isTour ? (
             <>
               <span className="bg-emerald-100 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded-full">Passeio</span>
-              <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Passeio personalizado</span>
+              {/* Etiqueta do passeio da vitrine (sob cotação): diz QUAL passeio
+                  o cliente escolheu — o roteiro abaixo pode ter sido ajustado. */}
+              {quote.tour_name ? (
+                <span className="bg-sky-100 text-sky-700 text-[11px] font-bold px-2 py-0.5 rounded-full max-w-full">Passeio: {quote.tour_name}</span>
+              ) : (
+                <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Passeio personalizado</span>
+              )}
               {temOutroDestino(quote) && (
                 <span className="bg-amber-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full">Destino fora da lista</span>
               )}
@@ -609,7 +615,11 @@ function QuoteRequestCard({ quote, onQuote }) {
           ) : (
             <>
               <span className="bg-brand/10 text-brand text-[11px] font-bold px-2 py-0.5 rounded-full">Transfer</span>
-              <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Translado personalizado</span>
+              {quote.route_label ? (
+                <span className="bg-sky-100 text-sky-700 text-[11px] font-bold px-2 py-0.5 rounded-full max-w-full">Rota da vitrine (sob cotação)</span>
+              ) : (
+                <span className="bg-gray-100 text-gray-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">Translado personalizado</span>
+              )}
             </>
           )}
         </div>
@@ -1254,6 +1264,13 @@ export default function Reservas({ soNovas = false }) {
               <p className="font-medium text-gray-900">
                 {quoteModal.client_name || quoteModal.users?.full_name || quoteModal.user_name || 'Cliente'}
               </p>
+              {/* Etiqueta do item da vitrine (sob cotação) de onde a cotação nasceu. */}
+              {quoteModal._kind === 'tour' && quoteModal.tour_name && (
+                <p className="text-sky-700 font-semibold">Passeio: {quoteModal.tour_name}</p>
+              )}
+              {quoteModal._kind !== 'tour' && quoteModal.route_label && (
+                <p className="text-sky-700 font-semibold">Rota da vitrine (sob cotação)</p>
+              )}
               <p className="text-gray-500">
                 {quoteModal._kind === 'tour'
                   ? [quoteModal.origin_place_name, ...(Array.isArray(quoteModal.stops) ? quoteModal.stops.filter((s) => s?.name).map(nomeDaParada) : [])].join(' → ')

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link, Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -14,6 +14,7 @@ import { useMoeda } from '../lib/moeda'
 import { setSEO } from '../lib/seo'
 import { trackViewContent } from '../lib/marketing'
 import { precoDeEntrada } from '../lib/precoCartao'
+import { ehSobCotacao, linkCotacaoDoPasseio } from '../lib/sobCotacao'
 import { duracao, hora } from '../lib/formato'
 import {
   Clock, Users, ChevronLeft, CheckCircle, XCircle,
@@ -291,6 +292,9 @@ export default function TourDetail() {
       {t('tourDetailPg.notFound')}
     </div>
   )
+  // Sob cotação (128): não há reserva por valor fixo — link direto (busca,
+  // compartilhamento, página inicial no PC) cai no pedido de cotação.
+  if (ehSobCotacao(tour)) return <Navigate to={linkCotacaoDoPasseio(tour)} replace />
 
   const sharedPrice = tour.shared_price_per_person ? Number(tour.shared_price_per_person) : null
   const sharedTotal = sharedPrice ? sharedPrice * people : 0

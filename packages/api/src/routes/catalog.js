@@ -5,6 +5,7 @@
  */
 import { Router } from 'express';
 import { authenticate, requireOperator, requireAdmin } from '../middleware/auth.js';
+import { colunaFaltante } from '../lib/colunaFaltante.js';
 
 const router = Router();
 router.use(authenticate);
@@ -31,7 +32,37 @@ const ROUTE_COLS = [
   'origin_latitude', 'origin_longitude', 'destination_latitude', 'destination_longitude',
   'default_price', 'extra_stop_price', 'night_fee', 'is_active', 'is_featured',
   'cover_image_url', 'description',
+  // Rota "sob cotação" (128): fica na vitrine sem valor e leva ao translado
+  // personalizado com origem e destino preenchidos.
+  'quote_only',
 ]
+
+// ── "Sob cotação" (migração 128) ──────────────────────────
+// As outras colunas opcionais são gravadas "sem elas" quando a migração ainda
+// não rodou. Estas não: se o admin LIGOU a opção e o banco não tem a coluna,
+// salvar em silêncio faria a tela mostrar "sob cotação" enquanto o app segue
+// cobrando valor fixo. Nesse caso o save para e diz o que falta.
+const COLUNAS_COTACAO = new Set(['quote_only', 'quote_stops'])
+const MSG_MIGRACAO_128 = 'Para usar "Sob cotação", rode antes a migração 128 '
+  + '(supabase/migrations/128_cotacao_por_passeio_e_rota.sql) no SQL Editor do Supabase.'
+// Só o liga/desliga decide: paradas guardadas com a opção desligada não valem
+// nada no app, e podem ser descartadas como qualquer coluna opcional.
+const ligouCotacao = (p) => p.quote_only === true
+
+// Roteiro pré-definido do passeio sob cotação: paradas da lista do admin
+// (tour_stop_options, 127), na ordem em que o cliente vai recebê-las no
+// "Montar meu passeio". Só nome + id da parada.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function limparParadasCotacao(lista) {
+  if (!Array.isArray(lista)) return []
+  return lista
+    .map((p) => ({
+      name:    String(p?.name || '').trim().slice(0, 150),
+      stop_id: typeof p?.stop_id === 'string' && UUID_RE.test(p.stop_id) ? p.stop_id : null,
+    }))
+    .filter((p) => p.name)
+    .slice(0, 20)
+}
 
 // Colunas graváveis de transfers (serviço-pai)
 const TRANSFER_COLS = [
@@ -362,16 +393,8 @@ router.delete('/categories/:id', requireAdmin, async (req, res, next) => {
 // tela (e integrações) mandam só `category_id`. A primeira do array é a
 // PRINCIPAL e vai também para `category_id`, que continua existindo para quem
 // só sabe ler uma categoria.
-// Extrai o nome da coluna ausente de um erro de coluna do Postgres (42703) ou
-// do PostgREST ("Could not find the 'X' column ... schema cache", PGRST204).
-// Devolve null quando o erro não é de coluna faltante.
-function colunaFaltante(error) {
-  if (!error) return null
-  const msg = String(error.message || '')
-  const m = msg.match(/Could not find the '([^']+)' column/i)
-    || msg.match(/column "?([a-z0-9_]+)"? .* does not exist/i)
-  return m ? m[1] : null
-}
+// colunaFaltante (lib/colunaFaltante.js): nome da coluna que o banco ainda não
+// tem (42703 do Postgres ou PGRST204 do PostgREST) — migração atrasada.
 
 function normalizarCategorias({ category_ids, category_id }) {
   const lista = Array.isArray(category_ids)
@@ -405,6 +428,7 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
       booking_cutoff_time, min_advance_hours, is_exclusive,
       service_window_start, service_window_end,
       meeting_point_name, meeting_latitude, meeting_longitude,
+      quote_only, quote_stops,
     } = req.body;
 
     const slug = `${slugify(name)}-${Date.now().toString(36)}`;
@@ -436,7 +460,18 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
     if (meeting_point_name) linha.meeting_point_name = meeting_point_name;
     if (meeting_latitude  != null && meeting_latitude  !== '') linha.meeting_latitude  = Number(meeting_latitude);
     if (meeting_longitude != null && meeting_longitude !== '') linha.meeting_longitude = Number(meeting_longitude);
+    // Sob cotação (128): mesma regra do ponto de embarque — só entra quando
+    // ligado, para criar passeio de valor fixo nunca depender da migração.
+    if (quote_only) linha.quote_only = true;
+    const paradasCotacao = limparParadasCotacao(quote_stops);
+    if (paradasCotacao.length) linha.quote_stops = paradasCotacao;
     const { data, error } = await req.supabase.from('tours').insert(linha).select().single();
+
+    // Ligou "sob cotação" sem a migração 128: não cria um passeio de valor
+    // fixo fingindo que é sob cotação.
+    if (error && COLUNAS_COTACAO.has(colunaFaltante(error)) && ligouCotacao(linha)) {
+      return res.status(409).json({ error: MSG_MIGRACAO_128 });
+    }
 
     // Banco ainda sem a migration 083/124: insere sem o array (e sem o ponto de
     // embarque) e mantém a categoria única. Melhor um passeio com uma categoria
@@ -444,6 +479,9 @@ router.post('/tours', requireAdmin, async (req, res, next) => {
     if (error?.code === '42703') {
       const { category_ids: _drop, meeting_point_name: _m, meeting_latitude: _ml, meeting_longitude: _mg, ...semArray } = linha;
       const retry = await req.supabase.from('tours').insert(semArray).select().single();
+      if (retry.error && COLUNAS_COTACAO.has(colunaFaltante(retry.error)) && ligouCotacao(semArray)) {
+        return res.status(409).json({ error: MSG_MIGRACAO_128 });
+      }
       if (retry.error) throw retry.error;
       return res.status(201).json(retry.data);
     }
@@ -462,6 +500,7 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
       booking_cutoff_time, min_advance_hours, is_exclusive,
       service_window_start, service_window_end,
       meeting_point_name, meeting_latitude, meeting_longitude,
+      quote_only, quote_stops,
     } = req.body;
 
     const update = {};
@@ -495,6 +534,10 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
     if (meeting_point_name !== undefined) update.meeting_point_name      = meeting_point_name || null;
     if (meeting_latitude   !== undefined) update.meeting_latitude        = meeting_latitude  === '' || meeting_latitude  === null ? null : Number(meeting_latitude);
     if (meeting_longitude  !== undefined) update.meeting_longitude       = meeting_longitude === '' || meeting_longitude === null ? null : Number(meeting_longitude);
+    // Sob cotação (128): o loop abaixo só descarta estas colunas quando a opção
+    // está DESLIGADA (o padrão) — ligada sem a migração, o save avisa.
+    if (quote_only         !== undefined) update.quote_only              = !!quote_only;
+    if (quote_stops        !== undefined) update.quote_stops             = limparParadasCotacao(quote_stops);
 
     // Salva tolerando colunas ausentes (migração atrasada): se o banco/PostgREST
     // reclamar de uma coluna que não existe, remove SÓ ela e tenta de novo, até
@@ -507,6 +550,9 @@ router.put('/tours/:id', requireAdmin, async (req, res, next) => {
         .from('tours').update(payloadUpd).eq('id', req.params.id).select().single());
       if (!error) break;
       const faltante = colunaFaltante(error);
+      if (faltante && COLUNAS_COTACAO.has(faltante) && ligouCotacao(payloadUpd)) {
+        return res.status(409).json({ error: MSG_MIGRACAO_128 });
+      }
       if (faltante && faltante in payloadUpd) {
         console.warn('[catalog] tours sem a coluna %s — salvando sem ela (migração pendente)', faltante);
         delete payloadUpd[faltante];
@@ -685,6 +731,7 @@ router.post('/transfer-routes', requireAdmin, async (req, res, next) => {
   try {
     const body = pick(req.body, ROUTE_COLS);
     if (body.default_price != null) body.default_price = Number(body.default_price);
+    if (body.quote_only !== undefined) body.quote_only = !!body.quote_only;
     // Salva tolerando coluna ausente (ex.: `description` antes da migração 126):
     // remove SÓ a coluna que o banco não conhece e tenta de novo.
     let payload = { ...body };
@@ -694,6 +741,11 @@ router.post('/transfer-routes', requireAdmin, async (req, res, next) => {
         .from('transfer_routes').insert(payload).select().single());
       if (!error) break;
       const faltante = colunaFaltante(error);
+      // Rota marcada "sob cotação" sem a migração 128: avisa em vez de criar
+      // uma rota de valor fixo (com preço zero) na vitrine.
+      if (faltante && COLUNAS_COTACAO.has(faltante) && ligouCotacao(payload)) {
+        return res.status(409).json({ error: MSG_MIGRACAO_128 });
+      }
       if (faltante && faltante in payload) { delete payload[faltante]; continue; }
       break;
     }
@@ -706,6 +758,7 @@ router.put('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
   try {
     const body = pick(req.body, ROUTE_COLS);
     if (body.default_price != null) body.default_price = Number(body.default_price);
+    if (body.quote_only !== undefined) body.quote_only = !!body.quote_only;
     // Tolera coluna ausente (ex.: `description` antes da migração 126): tira SÓ
     // a que falta e tenta de novo, para o save funcionar mesmo com a migração
     // atrasada em relação ao deploy.
@@ -716,6 +769,9 @@ router.put('/transfer-routes/:id', requireAdmin, async (req, res, next) => {
         .from('transfer_routes').update(payload).eq('id', req.params.id).select().maybeSingle());
       if (!error) break;
       const faltante = colunaFaltante(error);
+      if (faltante && COLUNAS_COTACAO.has(faltante) && ligouCotacao(payload)) {
+        return res.status(409).json({ error: MSG_MIGRACAO_128 });
+      }
       if (faltante && faltante in payload) { delete payload[faltante]; continue; }
       break;
     }

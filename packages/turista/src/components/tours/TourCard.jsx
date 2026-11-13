@@ -4,6 +4,7 @@ import { precoDeEntrada } from '../../lib/precoCartao'
 import { duracao as fmtDuracao } from '../../lib/formato'
 import { useMoeda } from '../../lib/moeda'
 import { dificuldade } from '../../lib/dificuldade'
+import { ehSobCotacao } from '../../lib/sobCotacao'
 
 /* ── Degradê de reserva para passeio sem foto ────────────────────────────── */
 const GRADS = [
@@ -49,9 +50,12 @@ function etiquetaDe(tour) {
 export default function TourCard({ tour, mode = 'private', selected, onSelect, isFav, onFav, inCart, onToggleCart }) {
   const { t } = useTranslation()
   const { aprox } = useMoeda()
-  const { valor, rotulo } = precoDe(tour, mode, t)
-  const precoNum = precoDeEntrada(tour)?.valor
-  const aproxTxt = aprox(precoNum)
+  // Sob cotação (migração 128): sem preço e sem atalho de carrinho — o toque
+  // leva ao pedido de cotação (quem decide é a tela que usa o cartão).
+  const sobCotacao = ehSobCotacao(tour)
+  const { valor, rotulo } = sobCotacao ? { valor: null, rotulo: null } : precoDe(tour, mode, t)
+  const precoNum = sobCotacao ? null : precoDeEntrada(tour)?.valor
+  const aproxTxt = sobCotacao ? t('toursPg.card.quoteCta') : aprox(precoNum)
   const dur  = fmtDuracao(tour.duration_hours)
   const dif  = dificuldade(tour.difficulty_level, t)
   const selo = etiquetaDe(tour)
@@ -112,7 +116,7 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
         {/* Atalho para o carrinho: marca vários passeios de uma vez sem abrir
             cada um. O que falta (data, horário, veículos) é pedido no carrinho.
             Tocar de novo tira do carrinho. */}
-        {onToggleCart && (
+        {onToggleCart && !sobCotacao && (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleCart() }}
             aria-label={inCart ? 'Remover do carrinho' : 'Adicionar ao carrinho'}
@@ -183,7 +187,7 @@ export default function TourCard({ tour, mode = 'private', selected, onSelect, i
           <div className="flex flex-wrap items-end justify-between gap-x-1 gap-y-1 mt-1">
             <div className="shrink-0 min-w-0">
               <p className="whitespace-nowrap text-[16px] font-extrabold text-brand leading-none">
-                {valor || t('toursPg.card.onRequest')}
+                {sobCotacao ? t('toursPg.card.quoteOnly') : (valor || t('toursPg.card.onRequest'))}
               </p>
               {aproxTxt && <p className="text-[10px] text-gray-400 leading-none mt-0.5">{aproxTxt}</p>}
             </div>
