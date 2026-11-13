@@ -42,4 +42,19 @@ router.put('/account', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get('/commissions', async (req, res, next) => {
+  try {
+    const { data, error } = await supabase.from('booking_payouts')
+      .select('id, amount, status, paid_at, created_at, operator:users!booking_payouts_origin_operator_id_fkey(full_name), bookings(booking_code,service_date)')
+      .eq('payee_user_id', req.user.id)
+      .eq('kind', 'commission')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    res.set('Cache-Control', 'no-store');
+    res.json({ rows: data || [] });
+  } catch (err) { next(err); }
+});
+
 export default router;
