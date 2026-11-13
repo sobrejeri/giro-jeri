@@ -526,6 +526,15 @@ export function mediaPonderadaDoPercentual(modais, pctDoOperador, cfg) {
   return somaValor > 0 ? somaPeso / somaValor : geral
 }
 
+async function hasCompanyLinkedOperator(operatorIds) {
+  const ids = [...new Set(operatorIds.filter(Boolean))]
+  if (!ids.length) return false
+  const { data, error } = await supabase.from('users').select('id')
+    .in('id', ids).not('company_id', 'is', null).limit(1)
+  if (error) throw error
+  return Boolean(data?.length)
+}
+
 async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg, metodo = 'credit_card') {
   if (String(cfg?.payment_split_single_operator ?? 'false') !== 'true') return null
 
@@ -534,6 +543,8 @@ async function contextoSplitOperadorUnico(bookings, chargedTotal, cfg, metodo = 
   const ops = [...new Set(lista.map((b) => b.operator_id).filter(Boolean))]
   if (ops.length !== 1 || lista.some((b) => !b.operator_id)) return null
   const operatorId = ops[0]
+
+  if (await hasCompanyLinkedOperator([operatorId])) return null
 
   const modais = await modaisDasReservas(lista)
   if (!modais) {
@@ -614,6 +625,7 @@ async function getSplitContext(booking, chargedTotal, cfg, metodo = 'credit_card
   // Sem a 079 ligada, o comportamento antigo: split para todo operador
   // conectado, pelo percentual dele.
   if (!plataformaRecebeTudo(cfg)) {
+    if (await hasCompanyLinkedOperator([booking?.operator_id])) return null
     const opMp = await getOperatorMp(booking?.operator_id)
     if (!opMp) return null
     const pct = (opMp.platformPct != null ? Number(opMp.platformPct) : Number(cfg?.payment_split_admin_pct)) || 0
@@ -686,6 +698,12 @@ async function getSplitContextForBooking(booking, chargedTotal, cfg) {
     const [operatorId] = [...byOperator.keys()]
     const legacy = await getSplitContext({ ...booking, operator_id: operatorId }, chargedTotal, cfg)
     return legacy ? { ...legacy, mode: 'single' } : null
+  }
+
+  if (await hasCompanyLinkedOperator([...byOperator.keys()])) {
+    const error = new Error('Esta reserva tem vários operadores e inclui uma empresa com repasse manual. Entre em contato com a Turiva para concluir o pagamento.')
+    error.status = 422
+    throw error
   }
 
   // N recebedores — todas os operadores precisam ter conta MP conectada
