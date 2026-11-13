@@ -32,6 +32,8 @@ export default function Login() {
   const rawNext = location.state?.from || new URLSearchParams(location.search).get('next')
   const from    = (rawNext && /^\/(?!\/)/.test(rawNext)) ? rawNext : '/dashboard'
   const [form, setForm]       = useState({ cnpj: '', password: '' })
+  const [companyLogin, setCompanyLogin] = useState(false)
+  const [companyEmail, setCompanyEmail] = useState('')
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -71,19 +73,19 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const data = await api.login({ cnpj: form.cnpj, password: form.password })
+      const data = await api.login(companyLogin ? { email: companyEmail.trim(), password: form.password } : { cnpj: form.cnpj, password: form.password })
       if (!data) throw new Error('Credenciais inválidas')
 
       const user = data.user
       if (!user) {
         throw new Error('Perfil não encontrado. Contate o administrador.')
       }
-      if (!['operator', 'admin'].includes(user.user_type)) {
+      if (!(companyLogin ? user.user_type === 'company' : ['operator', 'admin'].includes(user.user_type))) {
         throw new Error(`Acesso restrito a operadores. (tipo atual: ${user.user_type})`)
       }
 
       login(user, data.token, data.refresh_token)
-      navigate(from, { replace: true })
+      navigate(user.user_type === 'company' ? '/empresa' : from, { replace: true })
     } catch (err) {
       setError(err.message || 'Erro ao entrar')
     } finally {
@@ -106,15 +108,7 @@ export default function Login() {
           {view === 'login' ? (
             <>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <Input
-                  label="CNPJ ou CPF"
-                  value={form.cnpj}
-                  onChange={handleDoc}
-                  placeholder="CNPJ do operador ou seu CPF"
-                  inputMode="numeric"
-                  required
-                  autoFocus
-                />
+                {companyLogin ? <Input label="E-mail da empresa" type="email" value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} required autoFocus /> : <Input label="CNPJ ou CPF" value={form.cnpj} onChange={handleDoc} placeholder="CNPJ do operador ou seu CPF" inputMode="numeric" required autoFocus />}
                 <Input
                   label="Senha"
                   type="password"
@@ -129,11 +123,10 @@ export default function Login() {
                   {loading ? 'Entrando…' : 'Entrar'}
                 </Button>
               </form>
-              <p className="mt-5 text-center text-xs text-gray-400">
-                Acesso com o CNPJ ou CPF cadastrado pelo administrador da plataforma.
-              </p>
+              <button type="button" onClick={() => { setCompanyLogin(!companyLogin); setError('') }} className="block mx-auto mt-5 text-sm text-brand hover:underline">{companyLogin ? 'Entrar como operador' : 'Entrar como empresa'}</button>
+              <p className="mt-3 text-center text-xs text-gray-400">{companyLogin ? 'Use o e-mail e senha cadastrados pelo administrador.' : 'Acesso com o CNPJ ou CPF cadastrado pelo administrador da plataforma.'}</p>
 
-              <button
+              {!companyLogin && <button
                 type="button"
                 onClick={() => {
                   setForgotDoc(form.cnpj)
@@ -143,7 +136,8 @@ export default function Login() {
                 className="block mx-auto mt-2 text-xs text-brand hover:underline"
               >
                 Esqueci minha senha
-              </button>
+              </button>}
+              {companyLogin && <p className="mt-3 text-center text-xs text-gray-500">Para redefinir sua senha, entre em contato com o administrador.</p>}
             </>
           ) : (
             <form onSubmit={handleForgot} className="space-y-4">
