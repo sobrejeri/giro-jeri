@@ -3,9 +3,11 @@ import { z } from 'zod';
 import { supabase } from '../supabase.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { semVinculoNoBanco } from '../lib/vinculoEmpresa.js';
+import companyTeam from './companyTeam.js';
 
 const router = Router();
 router.use(authenticate, requireRole('company'));
+router.use(companyTeam);   // /team — equipe de operadores da empresa
 const FIELDS = 'bank_name, bank_agency, bank_account_number, bank_account_type, bank_document, pix_key_type, pix_key';
 const accountSchema = z.object({
   bank_name: z.string().trim().max(100).nullable(),

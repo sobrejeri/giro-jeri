@@ -146,6 +146,12 @@ async function request(path, options = {}, isRetry = false) {
 
 export const api = {
   getCompanyCommissions: () => request('/api/company/commissions'),
+  // Equipe da empresa (operadores vinculados)
+  getCompanyTeam:        ()         => request('/api/company/team'),
+  createCompanyOperator: (body)     => request('/api/company/team', { method: 'POST', body }),
+  updateCompanyOperator: (id, body) => request(`/api/company/team/${id}`, { method: 'PATCH', body }),
+  setCompanyOperatorPassword: (id, new_password) => request(`/api/company/team/${id}/password`, { method: 'POST', body: { new_password } }),
+  removeCompanyOperator: (id)       => request(`/api/company/team/${id}`, { method: 'DELETE' }),
   getCompanyAccount: () => request('/api/company/account'),
   saveCompanyAccount: (body) => request('/api/company/account', { method: 'PUT', body }),
   // Auth

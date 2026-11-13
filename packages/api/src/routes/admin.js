@@ -768,6 +768,11 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
       }
     }
     let upd = await supabase.from('users').update(updates).eq('id', req.params.id).select().single();
+    // Admin (re)vinculou o operador a uma empresa: ele volta para a equipe. A
+    // marca de "removido" (migração 130) sai à parte — a coluna pode não existir.
+    if (!upd.error && updates.company_id) {
+      await supabase.from('users').update({ company_removed_at: null }).eq('id', req.params.id).then(() => {}, () => {});
+    }
     // Colunas de migrations recentes ausentes (region_ids/106, operator_segment/114)
     // → refaz sem a coluna reclamada para não travar as demais edições.
     if (upd.error && (upd.error.code === 'PGRST204' || upd.error.code === '42703')) {

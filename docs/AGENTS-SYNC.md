@@ -1733,3 +1733,10 @@ enxerga o trabalho do outro no próximo `git fetch`.
   colunas em rota de pagamento/perfil. Operador vinculado nunca entra em split
   no ato; a comissão nasce em nome da empresa pelo gatilho do banco
   (`booking_payouts.origin_operator_id` guarda quem originou).
+
+- **2026-11-13 · Empresa 2/5 (equipe)** — `/api/company/team` (rotas em
+  `routes/companyTeam.js`, montadas em `company.js` atrás de
+  `requireRole('company')`): a empresa cria, edita, bloqueia, troca senha e
+  remove operadores DELA. Remover = `is_active=false` + `company_removed_at`
+  (migração **130**), mantendo `company_id` para preservar o histórico. Painel
+  da empresa virou abas (`pages/Empresa.jsx` + `pages/empresa/*`).
