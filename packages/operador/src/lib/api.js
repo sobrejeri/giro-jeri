@@ -145,6 +145,8 @@ async function request(path, options = {}, isRetry = false) {
 }
 
 export const api = {
+  getCompanyAccount: () => request('/api/company/account'),
+  saveCompanyAccount: (body) => request('/api/company/account', { method: 'PUT', body }),
   // Auth
   login: (body) => request('/api/auth/login', { method: 'POST', body }),
   me:    () => request('/api/auth/me'),
