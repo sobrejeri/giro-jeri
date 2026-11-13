@@ -816,13 +816,14 @@ router.post('/users/:id/register-recipient', requireAdmin, async (req, res, next
   try {
     const { data: user, error: uErr } = await supabase
       .from('users')
-      .select(`id, full_name, email, phone, user_type, document_type, document_number,
+      .select(`id, full_name, email, phone, user_type, company_id, document_type, document_number,
                pix_key_type, pix_key, bank_name, bank_agency,
                bank_account_number, bank_account_type, bank_document`)
       .eq('id', req.params.id)
       .single();
 
     if (uErr || !user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (user.company_id) return res.status(409).json({ error: 'O recebimento é administrado pela empresa vinculada.' });
     if (user.user_type !== 'operator') {
       return res.status(400).json({ error: 'Apenas operadores podem ser registradas como recebedoras' });
     }
