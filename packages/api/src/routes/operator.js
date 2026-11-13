@@ -1,3 +1,4 @@
+import { requireIndependentReceiving } from '../middleware/independentReceiving.js';
 /**
  * /api/operator — Perfil e preferências de serviço do operador/operador
  * GET   /api/operator/profile               — dados pessoais + conta de recebimento
@@ -624,7 +625,7 @@ router.get('/recipient-status', async (req, res, next) => {
 // Gera o link de verificação (KYC) do recebedor do operador. É como ele resolve
 // pendências sem acesso ao painel do Pagar.me (que é só da plataforma). Só do
 // PRÓPRIO recebedor (req.user.id).
-router.post('/recipient-kyc-link', async (req, res, next) => {
+router.post('/recipient-kyc-link', requireIndependentReceiving, async (req, res, next) => {
   try {
     const { data: user } = await supabase
       .from('users')
@@ -658,7 +659,7 @@ router.post('/recipient-kyc-link', async (req, res, next) => {
 // preencheu no perfil. Sem isso o split não fecha e a venda cai inteira na
 // plataforma (repasse manual). É self-service e só com os dados do PRÓPRIO
 // operador (req.user.id) — nunca de outro.
-router.post('/register-recipient', async (req, res, next) => {
+router.post('/register-recipient', requireIndependentReceiving, async (req, res, next) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
@@ -724,7 +725,7 @@ router.post('/register-recipient', async (req, res, next) => {
 // num recebedor já criado. São independentes: a transferência costuma ligar sem
 // contrato; a antecipação depende do contrato da conta master. Devolve o
 // resultado de cada uma para a tela informar o que ficou pendente.
-router.post('/recipient/anticipation', async (req, res, next) => {
+router.post('/recipient/anticipation', requireIndependentReceiving, async (req, res, next) => {
   try {
     const { data: user } = await supabase
       .from('users').select('gateway_recipient_id').eq('id', req.user.id).single()
