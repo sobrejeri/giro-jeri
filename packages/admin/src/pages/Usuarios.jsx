@@ -53,7 +53,7 @@ const USER_TYPE_LABELS = {
   company:   'Empresa',
 }
 
-const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist', region_ids: [] }
+const CREATE_EMPTY = { full_name: '', email: '', phone: '', cnpj: '', password: '', user_type: 'tourist', region_ids: [], company_id: '' }
 const IMPORT_EMPTY = { full_name: '', user_type: 'tourist', cnpj: '' }
 
 function genPassword(len = 10) {
@@ -100,6 +100,28 @@ export default function Usuarios() {
     }),
     keepPreviousData: true,
   })
+
+  const companySelectorOpen = (modal?.mode === 'create' && createForm.user_type === 'operator')
+    || (modal?.mode === 'edit' && form.user_type === 'operator')
+  const { data: companies = [], isPending: companiesPending, isError: companiesError } = useQuery({
+    queryKey: ['users', 'active-companies'],
+    enabled: companySelectorOpen,
+    queryFn: async () => {
+      const first = await api.getUsers({ user_type: 'company', is_active: true, page: 1, limit: 100 })
+      const pages = Math.ceil(first.total / 100)
+      const rest = await Promise.all(Array.from({ length: Math.max(0, pages - 1) }, (_, i) =>
+        api.getUsers({ user_type: 'company', is_active: true, page: i + 2, limit: 100 })))
+      return [first, ...rest].flatMap(result => result.data || [])
+    },
+  })
+
+  function companySelect(value, onChange) {
+    return <Select label="Empresa vinculada" value={value} onChange={onChange} disabled={companiesPending || companiesError}>
+      <option value="">{companiesError ? 'Erro ao carregar empresas' : companiesPending ? 'Carregando empresas…' : 'Sem empresa'}</option>
+      {value && !companies.some(company => company.id === value) && <option value={value}>Empresa vinculada atual</option>}
+      {companies.map(company => <option key={company.id} value={company.id}>{company.full_name}</option>)}
+    </Select>
+  }
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...body }) => api.updateUser(id, body),
@@ -229,7 +251,7 @@ export default function Usuarios() {
 
   function openEdit(u) {
     setModal({ mode: 'edit', user: u })
-    setForm({ user_type: u.user_type, is_active: u.is_active, region_ids: u.region_ids || [], operator_segment: u.operator_segment || 'tours_transfers' })
+    setForm({ user_type: u.user_type, is_active: u.is_active, region_ids: u.region_ids || [], operator_segment: u.operator_segment || 'tours_transfers', company_id: u.company_id || '' })
   }
 
   function openFleet(u) {
@@ -272,7 +294,11 @@ export default function Usuarios() {
 
   function handleSubmit(e) {
     e.preventDefault()
-    updateMut.mutate({ id: modal.user.id, ...form, is_active: form.is_active === 'true' || form.is_active === true })
+    const { company_id, ...profile } = form
+    const link = company_id !== (modal.user.company_id || '') || (modal.user.company_id && form.user_type !== 'operator')
+      ? { company_id: form.user_type === 'operator' ? company_id || null : null }
+      : {}
+    updateMut.mutate({ id: modal.user.id, ...profile, ...link, is_active: form.is_active === 'true' || form.is_active === true })
   }
 
   function handleCreate(e) {
@@ -283,6 +309,7 @@ export default function Usuarios() {
       full_name: createForm.full_name,
       password:  createForm.password,
       user_type: createForm.user_type,
+      ...(isOp && createForm.company_id ? { company_id: createForm.company_id } : {}),
       ...(isOp
         ? { cnpj: createForm.cnpj, ...(createForm.email ? { email: createForm.email } : {}) }
         : {
@@ -622,6 +649,7 @@ export default function Usuarios() {
             minLength={6}
             placeholder="Mínimo 6 caracteres"
           />
+          {createForm.user_type === 'operator' && companySelect(createForm.company_id, e => setCreateForm({ ...createForm, company_id: e.target.value }))}
           {(createForm.user_type === 'operator' || createForm.user_type === 'agency') && (
             <MunicipiosSelector
               value={createForm.region_ids}
@@ -667,6 +695,7 @@ export default function Usuarios() {
               <option value="true">Ativo</option>
               <option value="false">Inativo</option>
             </Select>
+            {form.user_type === 'operator' && companySelect(form.company_id, e => setForm({ ...form, company_id: e.target.value }))}
             {/* Segmento do operador — define o menu do painel (exclusivo) */}
             {form.user_type === 'operator' && (
               <Select
