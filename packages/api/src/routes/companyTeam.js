@@ -19,11 +19,14 @@ import { z } from 'zod';
 import { supabase } from '../supabase.js';
 import { colunaFaltante } from '../lib/colunaFaltante.js';
 import { semVinculoNoBanco, MSG_MIGRACAO_EMPRESA } from '../lib/vinculoEmpresa.js';
+import { lerPercentual } from '../services/comissaoVendedor.js';
+import { materializarComissoes } from './companySellerPayouts.js';
 
 const router = Router();
 
 const CAMPOS = 'id, full_name, email, phone, document_type, document_number, is_active, created_at';
-const OPCIONAIS = ['region_ids', 'company_removed_at'];   // migrações 106 e 130
+const OPCIONAIS = ['region_ids', 'company_removed_at', 'company_commission_pct'];   // migrações 106, 130 e 133
+const MSG_133 = 'O percentual do operador ainda não foi ativado no banco (migração 133). Avise a Turiva.';
 
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 
@@ -54,6 +57,7 @@ const publico = (u) => ({
   is_active: u.is_active === true, created_at: u.created_at,
   region_ids: u.region_ids || [],
   removed_at: u.company_removed_at || null,
+  commission_pct: u.company_commission_pct == null ? null : Number(u.company_commission_pct),
 });
 
 function falhou(res, next, error) {
@@ -94,6 +98,7 @@ const criarSchema = z.object({
   document:   z.string().trim().min(11).max(18),
   password:   z.string().min(6).max(72),
   region_ids: z.array(z.string().uuid()).max(50).optional(),
+  commission_pct: z.union([z.number(), z.null()]).optional(),
 }).strict();
 
 router.post('/team', async (req, res, next) => {
@@ -113,6 +118,14 @@ router.post('/team', async (req, res, next) => {
     const { data: jaExiste } = await supabase.from('users').select('id').eq('document_number', digits).maybeSingle();
     if (jaExiste) return res.status(409).json({ error: 'Já existe uma conta com este CPF/CNPJ. Peça à Turiva para vincular o operador à sua empresa.' });
 
+    const lido = lerPercentual(body.commission_pct);
+    if (lido.erro) return res.status(400).json({ error: lido.erro });
+    const pctNovo = lido.pct;
+    if (pctNovo != null) {   // coluna do percentual existe? (migração 133)
+      const s133 = await supabase.from('users').select('company_commission_pct').eq('id', req.user.id).maybeSingle();
+      if (s133.error) return res.status(409).json({ error: MSG_133 });
+    }
+
     // A coluna do vínculo existe? Conferir ANTES de criar o login evita deixar
     // uma conta de acesso órfã quando a migração 129 ainda não rodou.
     const sonda = await supabase.from('users').select('company_id').eq('id', req.user.id).maybeSingle();
@@ -127,6 +140,7 @@ router.post('/team', async (req, res, next) => {
     }
 
     const linha = {
+      ...(pctNovo != null ? { company_commission_pct: pctNovo, company_commission_since: new Date().toISOString() } : {}),
       auth_id: authData.user.id, full_name: body.full_name, email: body.email.toLowerCase(),
       phone: body.phone || null, user_type: 'operator',
       document_number: digits, document_type: tipo,
@@ -157,6 +171,7 @@ const editarSchema = z.object({
   phone:      z.string().trim().min(10).max(30).nullable(),
   region_ids: z.array(z.string().uuid()).max(50),
   is_active:  z.boolean(),
+  commission_pct: z.union([z.number(), z.null()]),
 }).partial().strict().refine((v) => Object.keys(v).length > 0, { message: 'Nada para alterar.' });
 
 router.patch('/team/:id', async (req, res, next) => {
@@ -168,8 +183,23 @@ router.patch('/team/:id', async (req, res, next) => {
     if (!op) return res.status(404).json({ error: 'Operador não encontrado na sua equipe.' });
     if (op.company_removed_at) return res.status(409).json({ error: 'Este operador foi removido da equipe.' });
 
-    const mudancas = { ...parsed.data };
+    const { commission_pct, ...mudancas } = parsed.data;
     if (mudancas.email) mudancas.email = mudancas.email.toLowerCase();
+    // Percentual do operador sobre as vendas (133). Só mexe se MUDOU: o novo
+    // vale para as reservas criadas daqui em diante, e as que já eram devidas
+    // no percentual antigo são lançadas antes da troca.
+    if (commission_pct !== undefined) {
+      const lido = lerPercentual(commission_pct);
+      if (lido.erro) return res.status(400).json({ error: lido.erro });
+      if (!('company_commission_pct' in op)) return res.status(409).json({ error: MSG_133 });
+      const atual = op.company_commission_pct == null ? null : Number(op.company_commission_pct);
+      if (lido.pct !== atual) {
+        await materializarComissoes(req.user.id);
+        mudancas.company_commission_pct = lido.pct;
+        mudancas.company_commission_since = new Date().toISOString();
+      }
+    }
+    if (Object.keys(mudancas).length === 0) return res.json(publico(op));
     let upd = await supabase.from('users').update({ ...mudancas, updated_at: new Date().toISOString() })
       .eq('id', op.id).eq('company_id', req.user.id).select('id').maybeSingle();
     if (upd.error && colunaFaltante(upd.error) === 'region_ids') {
@@ -178,7 +208,7 @@ router.patch('/team/:id', async (req, res, next) => {
     if (upd.error) throw upd.error;
     if (!upd.data) return res.status(404).json({ error: 'Operador não encontrado na sua equipe.' });
 
-    await auditar(req, op.id, 'update', { campos: Object.keys(parsed.data), ...('is_active' in parsed.data ? { is_active: parsed.data.is_active } : {}) });
+    await auditar(req, op.id, 'update', { campos: Object.keys(parsed.data), ...('is_active' in parsed.data ? { is_active: parsed.data.is_active } : {}), ...('company_commission_pct' in mudancas ? { commission_pct: mudancas.company_commission_pct } : {}) });
     const depois = await operadorDaEquipe(req.user.id, op.id);
     res.json(publico(depois.op || { ...op, ...mudancas }));
   } catch (err) { next(err); }

@@ -21,14 +21,38 @@ const SITUACAO = {
   cancelled: ['Cancelado', 'bg-gray-100 text-gray-500'],
 }
 
+// Os dois repasses que a empresa paga por fora, com a mesma mecânica de baixa.
+const TIPOS = {
+  executor: {
+    rotulo: 'Quem executou', chave: 'company-executor-payouts',
+    listar: (p) => api.getCompanyExecutorPayouts(p), salvar: (id, b) => api.updateCompanyExecutorPayout(id, b),
+    texto: 'Motoristas, guias e tripulações dos despachos da equipe.',
+    vazio: 'Os repasses aparecem quando um operador da equipe despacha uma reserva informando quem vai executar.',
+    rotuloValor: 'Valor combinado (R$)', erroValor: 'Informe o valor combinado com quem executou.',
+  },
+  vendedor: {
+    rotulo: 'Quem vendeu', chave: 'company-seller-payouts',
+    listar: (p) => api.getCompanySellerPayouts(p), salvar: (id, b) => api.updateCompanySellerPayout(id, b),
+    texto: 'Comissão dos operadores da equipe sobre as reservas que venderam, pelo percentual definido no cadastro de cada um.',
+    vazio: 'A comissão aparece quando uma reserva vendida por um operador com percentual definido é paga pelo cliente.',
+    rotuloValor: 'Valor da comissão (R$)', erroValor: 'Informe o valor da comissão.',
+  },
+}
+const CHAVE_TIPO = 'empresa_repasses_tipo'
+const tipoSalvo = () => { try { return sessionStorage.getItem(CHAVE_TIPO) } catch { return null } }
+
 export default function Repasses() {
   const qc = useQueryClient()
+  const [tipo, setTipo] = useState(() => (TIPOS[tipoSalvo()] ? tipoSalvo() : 'executor'))
+  const T = TIPOS[tipo]
   const [status, setStatus] = useState('pending')
   const { data, isPending, isError } = useQuery({
-    queryKey: ['company-executor-payouts', status],
-    queryFn: () => api.getCompanyExecutorPayouts(status === 'all' ? {} : { status }),
-    placeholderData: (prev) => prev,
+    queryKey: [T.chave, status],
+    queryFn: () => T.listar(status === 'all' ? {} : { status }),
+    // Ao trocar de tipo não reaproveita a lista do outro.
+    placeholderData: (prev, q) => (q?.queryKey[0] === T.chave ? prev : undefined),
   })
+  const trocarTipo = (t) => { setTipo(t); setErro(''); try { sessionStorage.setItem(CHAVE_TIPO, t) } catch { /* sem armazenamento */ } }
   const [modal, setModal] = useState(null)        // { r, baixa: bool }
   const [valor, setValor] = useState('')
   const [obs, setObs] = useState('')
@@ -45,15 +69,15 @@ export default function Repasses() {
   async function executar(id, body) {
     setBusy(true); setErro('')
     try {
-      await api.updateCompanyExecutorPayout(id, body)
-      await qc.invalidateQueries({ queryKey: ['company-executor-payouts'] })
+      await T.salvar(id, body)
+      await qc.invalidateQueries({ queryKey: [T.chave] })
       setModal(null)
     } catch (e) { setErro(e.message || 'Não foi possível salvar.') } finally { setBusy(false) }
   }
   const salvar = (e) => {
     e.preventDefault()
     const v = lerValor(valor)
-    if (!Number.isFinite(v) || v < 0 || (modal.baixa && !(v > 0))) return setErro('Informe o valor combinado com quem executou.')
+    if (!Number.isFinite(v) || v < 0 || (modal.baixa && !(v > 0))) return setErro(T.erroValor)
     return executar(modal.r.id, { amount: v, notes: obs, ...(modal.baixa ? { status: 'paid' } : {}) })
   }
   const copiar = async (r) => {
@@ -63,9 +87,19 @@ export default function Repasses() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="font-semibold text-gray-900">Repasses a quem executou</h2>
-        <p className="text-sm text-gray-600">Motoristas, guias e tripulações dos despachos da equipe. O pagamento é feito por você, fora da plataforma — aqui fica o controle.</p>
+        <h2 className="font-semibold text-gray-900">Repasses</h2>
+        <p className="text-sm text-gray-600">O que a empresa paga à equipe. O pagamento é feito por você, fora da plataforma — aqui fica o controle.</p>
       </div>
+
+      <div className="grid grid-cols-2 gap-1 bg-gray-100 p-1 rounded-xl" role="group" aria-label="Tipo de repasse">
+        {Object.entries(TIPOS).map(([id, t]) => (
+          <button key={id} aria-pressed={tipo === id} onClick={() => trocarTipo(id)}
+            className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${tipo === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t.rotulo}
+          </button>
+        ))}
+      </div>
+      <p className="text-sm text-gray-600">{T.texto}</p>
 
       {totals && !data.pendente && (
         <div className="grid grid-cols-2 gap-3">
@@ -97,7 +131,7 @@ export default function Repasses() {
       {data && !data.pendente && rows.length === 0 && (
         <Card><CardBody className="text-center py-8">
           <p className="font-medium text-gray-900">Nada por aqui</p>
-          <p className="text-sm text-gray-600 mt-1">Os repasses aparecem quando um operador da equipe despacha uma reserva informando quem vai executar.</p>
+          <p className="text-sm text-gray-600 mt-1">{data.sem_percentual ? 'Nenhum operador da equipe tem percentual de comissão. Defina em Equipe › Editar.' : T.vazio}</p>
         </CardBody></Card>
       )}
 
@@ -111,7 +145,7 @@ export default function Repasses() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-gray-900 truncate">{r.executor}</p>
-                  <p className="text-sm text-gray-600 truncate">{[papelExecutor(r.executor_role).nome, r.veiculo, r.executor_phone].filter(Boolean).join(' · ')}</p>
+                  <p className="text-sm text-gray-600 truncate">{r.executor_role === 'seller' ? 'Operador que vendeu' : [papelExecutor(r.executor_role).nome, r.veiculo, r.executor_phone].filter(Boolean).join(' · ')}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`font-semibold ${semValor ? 'text-gray-400' : 'text-gray-900'}`}>{semValor ? 'Sem valor' : moeda(r.driver_payout_amount)}</p>
@@ -120,7 +154,9 @@ export default function Repasses() {
               </div>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 text-sm">
                 <div className="min-w-0"><dt className="text-xs text-gray-500">Serviço</dt><dd className="text-gray-800">{r.booking_code}<span className="block text-xs text-gray-500">{dia(r.service_date)}</span></dd></div>
-                <div className="min-w-0"><dt className="text-xs text-gray-500">Despachado por</dt><dd className="text-gray-800 truncate">{r.operador}</dd></div>
+                {r.executor_role === 'seller'
+                  ? <div className="min-w-0"><dt className="text-xs text-gray-500">Cálculo</dt><dd className="text-gray-800">{String(r.pct).replace('.', ',')}% de {moeda(r.base_amount)}</dd></div>
+                  : <div className="min-w-0"><dt className="text-xs text-gray-500">Despachado por</dt><dd className="text-gray-800 truncate">{r.operador}</dd></div>}
               </dl>
               {r.trajeto && <p className="text-xs text-gray-500 mt-1 truncate">{r.trajeto}</p>}
               {r.driver_payout_status === 'paid' && r.driver_paid_at && <p className="text-xs text-gray-500 mt-1">Pago em {dia(r.driver_paid_at)}{r.driver_payout_notes ? ` · ${r.driver_payout_notes}` : ''}</p>}
@@ -149,7 +185,7 @@ export default function Repasses() {
         <form onSubmit={salvar} className="space-y-3">
           <p className="text-sm text-gray-600"><strong>{modal?.r.executor}</strong> · {modal?.r.booking_code} · {dia(modal?.r.service_date)}</p>
           {modal?.baixa && modal?.r.pix_key && <p className="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 break-all">PIX: {modal.r.pix_key}</p>}
-          <Input label="Valor combinado (R$)" required inputMode="decimal" placeholder="0,00" value={valor} onChange={(e) => setValor(e.target.value)} />
+          <Input label={T.rotuloValor} required inputMode="decimal" placeholder="0,00" value={valor} onChange={(e) => setValor(e.target.value)} />
           <Textarea label="Observação" rows={2} maxLength={1000} placeholder="Ex.: PIX feito em 13/11" value={obs} onChange={(e) => setObs(e.target.value)} />
           {modal?.baixa && <p className="text-xs text-gray-500">A baixa só registra que você já pagou. Nenhum dinheiro é movimentado pela plataforma.</p>}
           {erro && <p role="alert" className="text-sm text-red-700">{erro}</p>}

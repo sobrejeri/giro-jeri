@@ -48,10 +48,10 @@ test('criar: o vínculo vem da sessão e o corpo não aceita campos a mais', () 
   assert.ok(criar.indexOf("select('company_id').eq('id', req.user.id)") < criar.indexOf('auth.admin.createUser'))
 })
 
-test('editar: só dados de contato, municípios e bloqueio', () => {
+test('editar: só dados de contato, municípios, bloqueio e o percentual do operador', () => {
   const editar = trecho('const editarSchema', "router.patch('/team/:id'")
   const campos = [...editar.matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1])
-  assert.deepEqual(campos, ['full_name', 'email', 'phone', 'region_ids', 'is_active'])
+  assert.deepEqual(campos, ['full_name', 'email', 'phone', 'region_ids', 'is_active', 'commission_pct'])
   assert.match(editar, /\.partial\(\)\.strict\(\)/)
   assert.doesNotMatch(rotas, /pix_key|bank_|gateway_recipient_id|platform_split_pct/, 'recebimento e percentual não são da empresa')
 })

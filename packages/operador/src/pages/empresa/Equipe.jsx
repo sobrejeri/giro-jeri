@@ -17,7 +17,15 @@ export function formatarDocumento(v) {
   if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
   return v || ''
 }
-const NOVO = { full_name: '', document: '', email: '', phone: '', password: '', region_ids: [] }
+const NOVO = { full_name: '', document: '', email: '', phone: '', password: '', region_ids: [], commission_pct: '' }
+// "12,5" → 12.5 · vazio → null (sem comissão) · inválido → undefined
+export function lerPct(t) {
+  const s = String(t ?? '').trim().replace('%', '').replace(',', '.')
+  if (!s) return null
+  const n = Number(s)
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : undefined
+}
+const mostrarPct = (n) => `${String(n).replace('.', ',')}%`
 
 function Municipios({ regions, value, onChange }) {
   if (!regions.length) return null
@@ -60,7 +68,7 @@ export default function Equipe() {
 
   const abrir = (modo, op = null) => {
     setErro(''); setSenha('')
-    setForm(op ? { full_name: op.full_name || '', email: op.email || '', phone: op.phone || '', region_ids: op.region_ids || [] } : NOVO)
+    setForm(op ? { full_name: op.full_name || '', email: op.email || '', phone: op.phone || '', region_ids: op.region_ids || [], commission_pct: op.commission_pct == null ? '' : String(op.commission_pct).replace('.', ',') } : NOVO)
     setModal({ modo, op })
   }
   const fechar = () => { if (!busy) setModal(null) }
@@ -77,16 +85,21 @@ export default function Equipe() {
 
   const salvar = (e) => {
     e.preventDefault()
+    const pct = lerPct(form.commission_pct)
+    if (pct === undefined) return setErro('A comissão do operador deve ser um percentual entre 0 e 100.')
     if (modal.modo === 'novo') {
       return executar(() => api.createCompanyOperator({
         full_name: form.full_name.trim(), document: form.document.trim(), email: form.email.trim(),
         password: form.password, region_ids: form.region_ids,
+        ...(pct != null ? { commission_pct: pct } : {}),
         ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
       }), 'Operador criado. Ele já pode entrar com o CPF/CNPJ e a senha definida.')
     }
     return executar(() => api.updateCompanyOperator(modal.op.id, {
       full_name: form.full_name.trim(), email: form.email.trim(),
       phone: form.phone.trim() || null, region_ids: form.region_ids,
+      // Só envia se mudou: mexer no percentual reinicia a data a partir da qual ele vale.
+      ...(pct !== (modal.op.commission_pct ?? null) ? { commission_pct: pct } : {}),
     }), 'Dados do operador atualizados.')
   }
   const alternarBloqueio = (op) => executar(
@@ -140,6 +153,11 @@ export default function Equipe() {
                   ? op.region_ids.map(nomeMunicipio).filter(Boolean).join(', ') || `${op.region_ids.length} município(s)`
                   : <span className="text-amber-700">Sem município — não recebe solicitações</span>}
               </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {op.commission_pct != null && op.commission_pct > 0
+                  ? <>Comissão sobre as vendas: <strong className="text-gray-700">{mostrarPct(op.commission_pct)}</strong></>
+                  : <span className="text-amber-700">Comissão sobre as vendas não definida</span>}
+              </p>
               <div className="flex flex-wrap gap-2 mt-3">
                 <Button variant="secondary" size="sm" onClick={() => abrir('editar', op)}><Pencil size={14} /> Editar</Button>
                 <Button variant="secondary" size="sm" disabled={busy} onClick={() => alternarBloqueio(op)}>
@@ -180,6 +198,13 @@ export default function Equipe() {
           <Input label="E-mail" type="email" required {...campo('email')} />
           <Input label="Telefone / WhatsApp" inputMode="tel" placeholder="(88) 90000-0000" {...campo('phone')} />
           {modal?.modo === 'novo' && <Input label="Senha de acesso" type="text" required minLength={6} placeholder="Mínimo 6 caracteres" autoComplete="off" {...campo('password')} />}
+          <div>
+            <Input label="Comissão do operador sobre as vendas (%)" inputMode="decimal" placeholder="Ex.: 10" {...campo('commission_pct')} />
+            <p className="text-xs text-gray-500 mt-1">
+              Percentual do valor de cada reserva que ele vender. Você paga por fora e dá baixa em Repasses.
+              {modal?.modo === 'editar' ? ' Mudar o percentual vale para as próximas vendas.' : ' Deixe em branco se não houver comissão.'}
+            </p>
+          </div>
           <Municipios regions={regions} value={form.region_ids} onChange={(region_ids) => setForm({ ...form, region_ids })} />
           {modal?.modo === 'novo' && <p className="text-xs text-gray-500">As comissões deste operador são pagas à empresa, na conta cadastrada em "Conta".</p>}
           {erro && <p role="alert" className="text-sm text-red-700">{erro}</p>}

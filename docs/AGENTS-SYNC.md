@@ -1772,3 +1772,13 @@ enxerga o trabalho do outro no próximo `git fetch`.
   `company.js` troca `req.user.id` pela empresa e guarda o admin em
   `req.actorId`, que é quem vai para a auditoria). `GET /api/company/companies`
   lista as empresas (só admin).
+
+- **2026-11-14 · Comissão do operador que vendeu (empresa → operador)** —
+  migração **133**: `users.company_commission_pct` / `company_commission_since`
+  (a empresa define em Equipe) e tabela `company_seller_payouts` (uma linha por
+  reserva paga, foto do percentual; `UNIQUE (booking_id)`). Lançamento
+  idempotente ao abrir `GET /api/company/seller-payouts`
+  (`materializarComissoes`, regras puras em `services/comissaoVendedor.js`);
+  baixa manual em `PATCH /seller-payouts/:id`. Não toca em `booking_payouts`
+  nem em pagamentos: é o acerto interno da empresa, pago por fora. Aba
+  Repasses da empresa alterna "Quem executou" / "Quem vendeu".
