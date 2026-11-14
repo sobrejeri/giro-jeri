@@ -3,18 +3,20 @@ import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, setEmpresaDoAdmin } from '../lib/api'
-import { Users, Wallet, Landmark, LogOut, CalendarCheck, Banknote } from 'lucide-react'
+import { Users, Wallet, Landmark, LogOut, CalendarCheck, Banknote, BarChart3 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import Equipe from './empresa/Equipe'
 import Reservas from './empresa/Reservas'
 import Repasses from './empresa/Repasses'
 import Comissoes from './empresa/Comissoes'
 import Conta from './empresa/Conta'
+import Relatorio from './empresa/Relatorio'
 
 const ABAS = [
   { id: 'equipe',    rotulo: 'Equipe',    Icone: Users,    Tela: Equipe },
   { id: 'reservas',  rotulo: 'Reservas',  Icone: CalendarCheck, Tela: Reservas },
   { id: 'repasses',  rotulo: 'Repasses',  Icone: Banknote, Tela: Repasses },
+  { id: 'relatorio', rotulo: 'Relatório', Icone: BarChart3, Tela: Relatorio },
   { id: 'comissoes', rotulo: 'Comissões', Icone: Wallet,   Tela: Comissoes },
   { id: 'conta',     rotulo: 'Conta',     Icone: Landmark, Tela: Conta },
 ]
@@ -91,7 +93,7 @@ export default function Empresa() {
               <LogOut size={16} /> Sair
             </button>
           </div>
-          <nav className="flex gap-1 mt-3 -mb-px overflow-x-auto scrollbar-hide" role="tablist" aria-label="Seções da empresa">
+          <nav className="grid grid-cols-3 sm:flex gap-x-1 mt-3 -mb-px" role="tablist" aria-label="Seções da empresa">
             {ABAS.map(({ id, rotulo, Icone }) => (
               <button key={id} role="tab" aria-selected={aba === id} onClick={() => trocar(id)}
                 className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-1 sm:px-3 py-2.5 text-[13px] sm:text-sm whitespace-nowrap font-medium border-b-2 transition-colors ${
@@ -111,7 +113,7 @@ export default function Empresa() {
           </div>
         ) : (
           // key: trocar de empresa remonta a tela (nada da empresa anterior fica).
-          <Tela key={empresaId || 'propria'} />
+          <Tela key={empresaId || 'propria'} empresa={nome} />
         )}
       </section>
     </main>

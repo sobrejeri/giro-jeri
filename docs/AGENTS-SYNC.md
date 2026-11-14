@@ -1782,3 +1782,12 @@ enxerga o trabalho do outro no próximo `git fetch`.
   baixa manual em `PATCH /seller-payouts/:id`. Não toca em `booking_payouts`
   nem em pagamentos: é o acerto interno da empresa, pago por fora. Aba
   Repasses da empresa alterna "Quem executou" / "Quem vendeu".
+
+- **2026-11-14 · Relatório da empresa (Excel e PDF)** — aba **Relatório** no
+  painel da empresa: período por data do serviço, contabilidade por operador
+  (vendas + comissão dele) e por executor (serviços + repasse). Sem rota nova:
+  a tela chama `/company/bookings`, `/executor-payouts` e `/seller-payouts` com
+  `from`/`to` e soma em `operador/src/lib/relatorioEmpresa.js` (regras puras,
+  testadas). Excel via `lib/xlsx.js` (cópia do helper do admin, `fflate`
+  adicionado ao operador); PDF via jsPDF em `lib/relatorioPDF.js`. As 6 abas da
+  empresa ficam em 2 linhas de 3 no celular.
