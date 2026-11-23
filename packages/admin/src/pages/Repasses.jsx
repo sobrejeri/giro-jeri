@@ -377,7 +377,7 @@ function FilaLiberacao() {
                     <UserIdentity name={r.operador?.nome} userType={r.operador?.user_type} photo={r.operador?.photo} size={24} nameClass="text-gray-300" />
                     {/* Para onde mandar o PIX manual — só aparece nos prontos. */}
                     {r.elegivel_liberar && (
-                      <span className="block mt-0.5 text-[11px] text-gray-400">Recebe: <strong className="text-gray-200">{r.beneficiario?.nome}</strong>{r.beneficiario?.user_type === 'company' ? ' (empresa)' : ''}<ChavePix chave={r.beneficiario?.pix_key} tipo={r.beneficiario?.pix_key_type} /></span>
+                      <div className="block mt-0.5 text-[11px] text-gray-400">Recebe: <strong className="text-gray-200">{r.beneficiario?.nome}</strong>{r.beneficiario?.user_type === 'company' ? ' (empresa)' : ''}<ChavePix chave={r.beneficiario?.pix_key} tipo={r.beneficiario?.pix_key_type} /></div>
                     )}
                   </td>
                   <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{fmtDataHora(r.completed_at)}</td>
