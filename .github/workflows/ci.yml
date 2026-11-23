@@ -28,5 +28,12 @@ jobs:
           node --check packages/api/src/routes/admin.js
           node --check packages/api/src/lib/goLiveDiagnostics.js
 
-      - name: Test go-live diagnostics (no credentials required)
-        run: node --test packages/api/test/goLiveDiagnostics.test.js
+      - name: Test go-live and company controls (no credentials required)
+        run: |
+          node --test \
+            packages/api/test/goLiveDiagnostics.test.js \
+            packages/api/test/empresaEquipe.test.js \
+            packages/api/test/empresaVinculo.test.js \
+            packages/api/test/empresaRepasses.test.js \
+            packages/api/test/companyPayout.test.js \
+            packages/api/test/relatorioEmpresa.test.js
