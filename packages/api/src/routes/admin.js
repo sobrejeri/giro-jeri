@@ -3058,6 +3058,17 @@ router.get('/payouts', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Caminhos legados de baixa (PUT individual e POST em lote) não passam pela
+// classificação da fila. Aplicar o mesmo bloqueio de credor cadastrado inativo
+// evita que essas rotas contornem o controle do GET/liberar.
+async function beneficiarioCadastradoAtivo(payeeUserId) {
+  if (!payeeUserId) return true; // executor avulso, sem cadastro, continua permitido
+  const { data: usuario, error } = await supabase.from('users')
+    .select('is_active').eq('id', payeeUserId).maybeSingle();
+  if (error) throw error;
+  return usuario?.is_active === true;
+}
+
 // ── PUT /api/admin/payouts/:id ─────────────────────────
 const payoutSchema = z.object({
   status: z.enum(['pending', 'paid', 'cancelled']),
@@ -3075,7 +3086,10 @@ router.put('/payouts/:id', requireAdmin, async (req, res, next) => {
     // Confere no servidor para não depender da tela.
     if (body.status === 'paid') {
       const { data: po } = await supabase
-        .from('booking_payouts').select('booking_id').eq('id', req.params.id).maybeSingle();
+        .from('booking_payouts').select('booking_id, payee_user_id').eq('id', req.params.id).maybeSingle();
+      if (po?.payee_user_id && !(await beneficiarioCadastradoAtivo(po.payee_user_id))) {
+        return res.status(409).json({ error: 'Beneficiário inativo ou não confirmado. Revise a conta antes de registrar a baixa.' });
+      }
       if (po?.booking_id) {
         const { data: bk } = await supabase
           .from('bookings').select('status_operational').eq('id', po.booking_id).maybeSingle();
@@ -3134,6 +3148,9 @@ router.post('/payouts/pay-all', requireAdmin, async (req, res, next) => {
     const nome = (payee_name || '').trim();
     if (!payee_user_id && !nome) {
       return res.status(400).json({ error: 'Informe o operador ou o nome de quem recebe.' });
+    }
+    if (payee_user_id && !(await beneficiarioCadastradoAtivo(payee_user_id))) {
+      return res.status(409).json({ error: 'Beneficiário inativo ou não confirmado. Revise a conta antes de registrar a baixa.' });
     }
 
     // 1) Seleciona os PENDENTES do destinatário JÁ com o status da reserva —
