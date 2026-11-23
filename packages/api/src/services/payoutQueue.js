@@ -46,6 +46,7 @@ export function montarLinhaFila(b) {
     id: payee.id,
     nome: payee.full_name || null,
     user_type: payee.user_type || null,
+    ativo: payee.is_active === true,
     pix_key: payee.pix_key || null,
     pix_key_type: payee.pix_key_type || null,
   } : null;
@@ -82,6 +83,12 @@ export function montarLinhaFila(b) {
     // Sem conseguir conferir o verdadeiro credor, bloquear baixa manual.
     situacao = 'conciliacao';
     motivoBloqueio = 'beneficiário do repasse não identificado — conferir antes de baixar';
+  } else if (!beneficiario.ativo) {
+    // Conta bloqueada, desativada ou estado nao confirmado: o historico do
+    // repasse permanece, mas nao pode ser baixado como pagamento manual sem
+    // verificacao administrativa. O recebedor e a empresa, quando vinculada.
+    situacao = 'conciliacao';
+    motivoBloqueio = 'beneficiário inativo ou não confirmado — verificar conta antes da baixa';
   } else {
     situacao = 'pronto_para_liberar'; elegivel = true;   // concluído + pago + pendente
   }

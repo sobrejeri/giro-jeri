@@ -17,7 +17,7 @@ import fs from 'node:fs'
 import { montarLinhaFila, conciliarReserva } from '../src/services/payoutQueue.js'
 
 // ── Fábricas: uma reserva no formato que o SELECT da fila entrega ─────────────
-const OPERADOR = { id: 'op-1', full_name: 'Cooperativa Sol', pix_key: 'sol@x.com', pix_key_type: 'email' }
+const OPERADOR = { id: 'op-1', full_name: 'Cooperativa Sol', is_active: true, pix_key: 'sol@x.com', pix_key_type: 'email' }
 
 function reserva(over = {}) {
   return {
@@ -45,7 +45,7 @@ test('reserva concluída, paga e com comissão pendente é elegível', () => {
 })
 
 test('operador vinculado: repasse vai para PIX da EMPRESA, não do operador', () => {
-  const empresa = { id: 'empresa-qa', full_name: 'Empresa TURIVA QA', user_type: 'company', pix_key: 'empresa@exemplo.com', pix_key_type: 'email' }
+  const empresa = { id: 'empresa-qa', full_name: 'Empresa TURIVA QA', user_type: 'company', is_active: true, pix_key: 'empresa@exemplo.com', pix_key_type: 'email' }
   const l = montarLinhaFila(reserva({
     booking_payouts: [{
       id: 'po-empresa', kind: 'commission', amount: 800, status: 'pending',
@@ -75,12 +75,58 @@ test('empresa identificada sem PIX continua visível para acerto bancário manua
     booking_payouts: [{
       id: 'po-empresa', kind: 'commission', amount: 800, status: 'pending',
       payee_user_id: 'empresa-qa',
-      payee: { id: 'empresa-qa', full_name: 'TURIVA QA', user_type: 'company' },
+      payee: { id: 'empresa-qa', full_name: 'TURIVA QA', user_type: 'company', is_active: true },
     }],
   }))
   assert.equal(l.elegivel_liberar, true)
   assert.equal(l.beneficiario.nome, 'TURIVA QA')
   assert.equal(l.beneficiario.pix_key, null)
+})
+
+test('beneficiário EMPRESA inativa não pode receber baixa manual de comissão', () => {
+  const r = montarLinhaFila(reserva({
+    booking_payouts: [{
+      id: 'po-inativo', kind: 'commission', amount: 800, status: 'pending',
+      payee_user_id: 'empresa-inativa',
+      payee: { id: 'empresa-inativa', full_name: 'Empresa bloqueada', user_type: 'company', is_active: false, pix_key: 'empresa@pix.teste' },
+    }],
+  }))
+  assert.equal(r.situacao, 'conciliacao')
+  assert.equal(r.elegivel_liberar, false)
+  assert.equal(r.beneficiario.ativo, false)
+  assert.match(r.motivo_bloqueio, /beneficiário inativo/)
+})
+
+test('beneficiário sem status confirmado é tratado como inativo (fail-closed)', () => {
+  const r = montarLinhaFila(reserva({
+    booking_payouts: [{
+      id: 'po-incerto', kind: 'commission', amount: 800, status: 'pending',
+      payee_user_id: 'empresa-incerta',
+      payee: { id: 'empresa-incerta', full_name: 'Empresa sem status', user_type: 'company', pix_key: 'chave@teste' },
+    }],
+  }))
+  assert.equal(r.situacao, 'conciliacao')
+  assert.equal(r.elegivel_liberar, false)
+})
+
+test('operador pessoal inativo com comissão própria não é elegível', () => {
+  const r = montarLinhaFila(reserva({ operator: { ...OPERADOR, is_active: false } }))
+  assert.equal(r.elegivel_liberar, false)
+  assert.equal(r.situacao, 'conciliacao')
+})
+
+test('operador desativado mas empresa beneficiária ativa permanece elegível', () => {
+  const empresa = { id: 'empresa-ativa', full_name: 'Empresa credora', user_type: 'company', is_active: true }
+  const r = montarLinhaFila(reserva({
+    operator: { ...OPERADOR, is_active: false },
+    booking_payouts: [{
+      id: 'po-vinculado', kind: 'commission', amount: 800, status: 'pending',
+      payee_user_id: empresa.id, payee: empresa,
+    }],
+  }))
+  assert.equal(r.elegivel_liberar, true)
+  assert.equal(r.beneficiario.ativo, true)
+  assert.equal(r.beneficiario.nome, 'Empresa credora')
 })
 
 test('reserva cancelada/estornada/contestada NUNCA é elegível', () => {
@@ -233,7 +279,7 @@ test('a falha de auditoria é conferida, não engolida', () => {
 })
 
 test('fila e liberação consultam o beneficiário real nos três SELECTs', () => {
-  const joins = adminSrc.match(/payee:payee_user_id \( id, full_name, user_type, pix_key, pix_key_type \)/g) || []
+  const joins = adminSrc.match(/payee:payee_user_id \( id, full_name, user_type, is_active, pix_key, pix_key_type \)/g) || []
   assert.ok(joins.length >= 3, 'fila, indicadores e baixa devem usar join de beneficiário')
   const inicio = adminSrc.indexOf("router.post('/payouts/liberar'")
   const bloco = adminSrc.slice(inicio, adminSrc.indexOf("router.get('/payouts/conciliacao'", inicio))
@@ -247,4 +293,10 @@ test('painel admin usa PIX e nome do beneficiário, nunca PIX pessoal do operado
   assert.match(tela, /r\.beneficiario\?\.nome/)
   assert.match(tela, /r\.beneficiario\?\.pix_key/)
   assert.doesNotMatch(tela, /ChavePix chave=\{r\.operador\?\.pix_key\}/)
+})
+
+test('os três endpoints de repasse consultam estado ativo do beneficiário', () => {
+  const joins = adminSrc.match(/payee:payee_user_id \( id, full_name, user_type, is_active, pix_key, pix_key_type \)/g) || []
+  assert.equal(joins.length, 3, 'fila, indicadores e baixa devem trazer is_active do beneficiário')
+  assert.match(adminSrc, /operator:operator_id \( id, full_name, is_active \)/)
 })
