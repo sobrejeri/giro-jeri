@@ -62,3 +62,22 @@ test('PATCH /driver-payouts/:id só baixa (paid) se a reserva estiver concluída
   assert.ok(/status === 'paid'/.test(r) && /status_operational !== 'completed'/.test(r),
     'o repasse do motorista precisa exigir reserva concluída')
 })
+
+test('baixa por ID também barra beneficiário cadastrado inativo', () => {
+  const bloco = admin.slice(admin.indexOf("router.put('/payouts/:id'"), admin.indexOf("router.post('/payouts/pay-all'"))
+  assert.match(bloco, /select\('booking_id, payee_user_id'\)/)
+  assert.match(bloco, /beneficiarioCadastradoAtivo\(po\.payee_user_id\)/)
+  assert.match(bloco, /res\.status\(409\)/)
+})
+
+test('baixa em lote também barra destinatário cadastrado inativo', () => {
+  const bloco = admin.slice(admin.indexOf("router.post('/payouts/pay-all'"), admin.indexOf("router.get('/operators/:operatorId/modals'"))
+  assert.match(bloco, /beneficiarioCadastradoAtivo\(payee_user_id\)/)
+  assert.match(bloco, /res\.status\(409\)/)
+})
+
+test('consulta de destinatário inativo só libera conta confirmada como ativa', () => {
+  const helper = admin.slice(admin.indexOf('async function beneficiarioCadastradoAtivo'), admin.indexOf("router.put('/payouts/:id'"))
+  assert.match(helper, /usuario\?\.is_active === true/)
+  assert.match(helper, /if \(!payeeUserId\) return true/, 'repasses avulsos sem cadastro continuam permitidos')
+})
