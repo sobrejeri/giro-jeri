@@ -1055,8 +1055,14 @@ router.get('/diagnostico/go-live', requireAdmin, async (_req, res, next) => {
       mpProd ? 'produção' : (mpToken ? 'MODO TESTE — dinheiro fictício' : 'não configurado'))
     add('credencial', 'Webhook do Mercado Pago', has('MERCADO_PAGO_WEBHOOK_SECRET'), 'critico',
       has('MERCADO_PAGO_WEBHOOK_SECRET') ? 'assinatura configurada' : 'sem assinatura do webhook')
-    add('credencial', 'Segredos de segurança (OTP/cadastro)', has('OTP_PEPPER', 'SIGNUP_TOKEN_SECRET'), 'critico',
-      has('OTP_PEPPER', 'SIGNUP_TOKEN_SECRET') ? 'definidos' : 'faltam OTP_PEPPER / SIGNUP_TOKEN_SECRET')
+    // O OTP e os tokens aceitam chaves próprias OU derivação segura da service role.
+    // Exigir os dois segredos dedicados aqui gerava falso crítico em instalações válidas.
+    const otpSeguro = has('OTP_PEPPER') || has('SUPABASE_SERVICE_ROLE_KEY')
+    const cadastroSeguro = has('SIGNUP_TOKEN_SECRET') || has('SUPABASE_SERVICE_ROLE_KEY')
+    const segredosDedicados = has('OTP_PEPPER', 'SIGNUP_TOKEN_SECRET')
+    add('credencial', 'Segredos de segurança (OTP/cadastro)', otpSeguro && cadastroSeguro, 'critico',
+      segredosDedicados ? 'segredos dedicados definidos'
+        : (otpSeguro && cadastroSeguro ? 'chaves ausentes derivadas da service role' : 'sem segredos seguros disponíveis'))
     add('credencial', 'Banco de dados (Supabase)', has('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'), 'critico',
       has('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY') ? 'conectado' : 'não configurado')
     add('credencial', 'E-mail (Brevo ou Resend)', !!(env.BREVO_API_KEY || env.RESEND_API_KEY) && has('EMAIL_FROM'), 'importante',
@@ -1071,18 +1077,19 @@ router.get('/diagnostico/go-live', requireAdmin, async (_req, res, next) => {
       has('GEOAPIFY_API_KEY') ? 'configurado' : 'opcional — só o diretório de lugares')
 
     // ── Migrações críticas (prova o schema real) ──
-    const colExists = async (table, col) => {
+    // Nunca considere OK uma consulta que falhou por permissão, conexão ou
+    // schema desatualizado. A verificação é somente leitura (HEAD).
+    const colsExist = async (table, cols) => {
       try {
-        const { error } = await supabase.from(table).select(col).limit(1)
-        if (error && (error.code === '42703' || error.code === '42P01' || /does not exist|schema cache|not find/i.test(error.message || ''))) return false
-        return true
+        const { error } = await supabase.from(table).select(cols.join(', '), { head: true }).limit(1)
+        return !error
       } catch { return false }
     }
+    const colExists = (table, col) => colsExist(table, [col])
     const tableExists = async (table) => {
       try {
         const { error } = await supabase.from(table).select('id', { head: true, count: 'exact' }).limit(1)
-        if (error && (error.code === '42P01' || /does not exist|schema cache|not find/i.test(error.message || ''))) return false
-        return true
+        return !error
       } catch { return false }
     }
     add('migracao', 'Afiliados (055)',                    await colExists('users', 'affiliate_code'),     'importante', 'tabela/colunas do programa de afiliados')
@@ -1091,6 +1098,32 @@ router.get('/diagnostico/go-live', requireAdmin, async (_req, res, next) => {
     add('migracao', 'Alta temporada do estacionamento (121)', await tableExists('parking_season_rules'),             'importante', 'regras de temporada/feriado')
     add('migracao', 'Embarque fixo do passeio (124)',     await colExists('tours', 'meeting_latitude'),   'importante', 'ponto de embarque do helicóptero')
     add('migracao', 'Passeio personalizado (125)',        await tableExists('tour_quotes'),               'opcional',   'só se for ligar a cotação de passeio')
+
+    // Migrações 128–133: checam objetos essenciais, sem consultar dados privados.
+    // A presença de tabelas/colunas não substitui validação de triggers e RLS.
+    const mig128 = await colsExist('tours', ['quote_only', 'quote_stops'])
+      && await colExists('transfer_routes', 'quote_only')
+      && await colExists('tour_quotes', 'tour_id')
+      && await colExists('transfer_quotes', 'route_id')
+    const mig129 = await colsExist('users', ['company_id', 'company_role'])
+      && await colExists('booking_payouts', 'origin_operator_id')
+    const mig130 = await colExists('users', 'company_removed_at')
+    const mig131 = await tableExists('external_bookings')
+    const mig132 = await colExists('operational_assignments', 'executor_role')
+    const mig133 = await colsExist('users', ['company_commission_pct', 'company_commission_since'])
+      && await tableExists('company_seller_payouts')
+    add('migracao', 'Cotação por passeio e rota (128)', mig128, 'importante',
+      mig128 ? 'estrutura encontrada' : 'confira 128_cotacao_por_passeio_e_rota.sql')
+    add('migracao', 'Vínculo de empresa e comissão (129)', mig129, 'importante',
+      mig129 ? 'estrutura encontrada' : 'confira 129_empresa_vinculo_e_comissao.sql')
+    add('migracao', 'Equipe da empresa (130)', mig130, 'importante',
+      mig130 ? 'estrutura encontrada' : 'confira 130_empresa_equipe.sql')
+    add('migracao', 'Reservas externas (131)', mig131, 'importante',
+      mig131 ? 'estrutura encontrada' : 'confira 131_reservas_externas.sql')
+    add('migracao', 'Papel do executor (132)', mig132, 'importante',
+      mig132 ? 'estrutura encontrada' : 'confira 132_papel_do_executor.sql')
+    add('migracao', 'Comissão de quem vendeu (133)', mig133, 'importante',
+      mig133 ? 'estrutura encontrada' : 'confira 133_comissao_do_vendedor.sql')
 
     // ── Conteúdo / operação mínima ──
     const contar = async (table, filtros = {}) => {
@@ -1109,6 +1142,18 @@ router.get('/diagnostico/go-live', requireAdmin, async (_req, res, next) => {
     add('conteudo', 'Rotas de translado',     (rotas || 0) > 0,    'importante', `${rotas ?? '—'} cadastrada(s)`)
     add('conteudo', 'Estacionamentos ativos', (estac || 0) > 0,    'opcional',   `${estac ?? '—'} ativo(s)`)
     add('conteudo', 'Operadores ativos',      (opers || 0) > 0,    'critico',    `${opers ?? '—'} ativo(s)`)
+    const operadoresVinculados = await (async () => {
+      try {
+        const { count, error } = await supabase.from('users')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_type', 'operator').eq('is_active', true)
+          .not('company_id', 'is', null)
+        return error ? null : (count ?? 0)
+      } catch { return null }
+    })()
+    add('conteudo', 'Operadores ativos vinculados a empresa',
+      (operadoresVinculados || 0) > 0, 'importante',
+      `${operadoresVinculados ?? '—'} vinculado(s) — necessário para testar o painel Empresa`)
 
     const criticosPendentes = checagens.filter((c) => c.sev === 'critico' && !c.ok).length
     const importantesPendentes = checagens.filter((c) => c.sev === 'importante' && !c.ok).length
