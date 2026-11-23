@@ -2554,7 +2554,8 @@ router.get('/payouts/fila', requireAdmin, async (req, res, next) => {
       id, booking_code, service_type, service_date,
       total_amount, status_commercial, status_operational, completed_at,
       operator:operator_id ( id, full_name, phone, pix_key, pix_key_type, user_type, profile_photo_url ),
-      booking_payouts ( id, kind, amount, status, payee_user_id, paid_at ),
+      booking_payouts ( id, kind, amount, status, payee_user_id, paid_at,
+        payee:payee_user_id ( id, full_name, user_type, pix_key, pix_key_type ) ),
       payments ( id, gateway_name, amount_gross, status, paid_at, split_operator_id )
     `;
     let consulta = recorte(supabase.from('bookings').select(SELECT));
@@ -2597,7 +2598,8 @@ router.get('/payouts/indicadores', requireAdmin, async (req, res, next) => {
       id, booking_code, service_type, service_date, total_amount,
       status_commercial, status_operational, completed_at,
       operator:operator_id ( id, full_name ),
-      booking_payouts ( id, kind, amount, status, payee_user_id ),
+      booking_payouts ( id, kind, amount, status, payee_user_id,
+        payee:payee_user_id ( id, full_name, user_type, pix_key, pix_key_type ) ),
       payments ( id, gateway_name, amount_gross, status, split_operator_id )
     `;
     const { data: concluidas, error } = await supabase
@@ -2671,7 +2673,8 @@ router.post('/payouts/liberar', requireAdmin, async (req, res, next) => {
       id, booking_code, service_type, service_date,
       total_amount, status_commercial, status_operational, completed_at,
       operator:operator_id ( id, full_name, phone, pix_key, pix_key_type, user_type, profile_photo_url ),
-      booking_payouts ( id, kind, amount, status, payee_user_id, paid_at ),
+      booking_payouts ( id, kind, amount, status, payee_user_id, paid_at,
+        payee:payee_user_id ( id, full_name, user_type, pix_key, pix_key_type ) ),
       payments ( id, gateway_name, amount_gross, status, paid_at, split_operator_id )
     `;
     const { data: rows, error } = await supabase
@@ -2705,6 +2708,7 @@ router.post('/payouts/liberar', requireAdmin, async (req, res, next) => {
         booking_code: linha.booking_code,
         payout_id:    linha.payout_id,
         operador:     linha.operador?.nome || null,
+        beneficiario: linha.beneficiario?.nome || null,
         gateway:      linha.gateway,
       });
     }
@@ -2749,6 +2753,7 @@ router.post('/payouts/liberar', requireAdmin, async (req, res, next) => {
         payout_id:    p.id,
         amount:       Number(p.amount),
         operador:     e.operador,
+        beneficiario: e.beneficiario,
       });
       // action_type usa 'manual_override' (valor VÁLIDO do enum audit_action_type)
       // — 'payout_release' NÃO existe no enum e o insert falharia em silêncio
