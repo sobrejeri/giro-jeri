@@ -1,0 +1,48 @@
+name: Dependency security audit
+
+on:
+  push:
+    branches:
+      - security/npm-audit-*
+  pull_request:
+    branches:
+      - claude/giro-jeri-platform-GFBFR
+
+jobs:
+  audit:
+    name: Dependency inventory (read-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Install from lockfile without package scripts
+        run: npm ci --ignore-scripts
+      - name: Audit all dependencies and production dependencies
+        shell: bash
+        run: |
+          npm audit --json > audit-full.json || true
+          npm audit --omit=dev --json > audit-prod.json || true
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          for (const [label, file] of [
+            ['ALL', 'audit-full.json'],
+            ['PRODUCTION', 'audit-prod.json'],
+          ]) {
+            const audit = JSON.parse(fs.readFileSync(file, 'utf8'))
+            const counts = audit.metadata?.vulnerabilities || {}
+            console.log('AUDIT_' + label + '_TOTAL', counts.total ?? '?')
+            console.log('AUDIT_' + label + '_LEVELS', JSON.stringify(counts))
+            const vulnerabilities = audit.vulnerabilities || {}
+            for (const [name, v] of Object.entries(vulnerabilities).sort((a,b) =>
+              ['critical','high','moderate','low'].indexOf(a[1].severity)
+              - ['critical','high','moderate','low'].indexOf(b[1].severity))) {
+              console.log('AUDIT_' + label + '_PACKAGE', JSON.stringify({
+                name, severity: v.severity, isDirect: v.isDirect,
+                via: (v.via || []).map(x => typeof x === 'string' ? x : (x.name || x.title)),
+                range: v.range, fixAvailable: v.fixAvailable,
+              }))
+            }
+          }
+          NODE
